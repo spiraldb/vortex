@@ -1,16 +1,20 @@
 use std::mem;
 
+use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
-use vortex::array::varbin::builder::VarBinBuilder;
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
-use vortex_dtype::{DType, Nullability};
+use vortex_buffer::io_buf::IoBuf;
+use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_flatbuffers::WriteFlatBuffer;
 
+use crate::file::layouts::{ChunkedLayout, FlatLayout, Layout, StructLayout};
+use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
 use crate::writer::ChunkLayout;
 use crate::MessageWriter;
@@ -22,6 +26,33 @@ pub struct FileWriter<W> {
 
     dtype: Option<DType>,
     column_chunks: Vec<ChunkLayout>,
+}
+
+pub struct Footer {
+    layout: Layout,
+}
+
+impl Footer {
+    pub fn new(layout: Layout) -> Self {
+        Self { layout }
+    }
+}
+
+impl WriteFlatBuffer for Footer {
+    type Target<'a> = fb::Footer<'a>;
+
+    fn write_flatbuffer<'fb>(
+        &self,
+        fbb: &mut FlatBufferBuilder<'fb>,
+    ) -> WIPOffset<Self::Target<'fb>> {
+        let layout_offset = self.layout.write_flatbuffer(fbb);
+        fb::Footer::create(
+            fbb,
+            &fb::FooterArgs {
+                layout: Some(layout_offset),
+            },
+        )
+    }
 }
 
 impl<W: VortexWrite> FileWriter<W> {
@@ -117,15 +148,16 @@ impl<W: VortexWrite> FileWriter<W> {
         }
     }
 
-    async fn write_metadata_arrays(&mut self) -> VortexResult<Array> {
-        let DType::Struct(s, _) = self.dtype.as_ref().expect("Should have written values") else {
+    async fn write_metadata_arrays(&mut self) -> VortexResult<StructLayout> {
+        let DType::Struct(..) = self.dtype.as_ref().expect("Should have written values") else {
             unreachable!("Values are a structarray")
         };
 
-        let mut column_names = VarBinBuilder::<u32>::with_capacity(s.names().len());
-        let mut metadata_offsets = Vec::new();
+        let mut column_layouts = Vec::with_capacity(self.column_chunks.len());
 
-        for (name, mut chunk) in s.names().iter().zip(mem::take(&mut self.column_chunks)) {
+        for mut chunk in mem::take(&mut self.column_chunks) {
+            let mut chunks = Vec::new();
+
             let len = chunk.byte_offsets.len() - 1;
             let byte_counts = chunk
                 .byte_offsets
@@ -134,6 +166,13 @@ impl<W: VortexWrite> FileWriter<W> {
                 .zip(chunk.byte_offsets.iter())
                 .map(|(a, b)| a - b)
                 .collect_vec();
+            chunks.extend(
+                chunk
+                    .byte_offsets
+                    .iter()
+                    .zip(chunk.byte_offsets.iter().skip(1))
+                    .map(|(begin, end)| Layout::Flat(FlatLayout::new(*begin, *end))),
+            );
             let row_counts = chunk
                 .row_offsets
                 .iter()
@@ -162,48 +201,43 @@ impl<W: VortexWrite> FileWriter<W> {
                 Validity::NonNullable,
             )?;
 
-            column_names.push_value(name.as_bytes());
-            metadata_offsets.push(self.msgs.tell());
+            let metadata_table_begin = self.msgs.tell();
             self.msgs.write_dtype(metadata_array.dtype()).await?;
             self.msgs.write_chunk(metadata_array.into_array()).await?;
+            chunks.push(Layout::Flat(FlatLayout::new(
+                metadata_table_begin,
+                self.msgs.tell(),
+            )));
+            column_layouts.push(Layout::Chunked(ChunkedLayout::new(chunks)));
         }
 
-        let meta_array = StructArray::try_new(
-            ["names".into(), "metadata_offsets".into()].into(),
-            vec![
-                column_names
-                    .finish(DType::Utf8(Nullability::NonNullable))
-                    .into_array(),
-                metadata_offsets.into_array(),
-            ],
-            s.names().len(),
-            Validity::NonNullable,
-        )
-        .unwrap()
-        .into_array();
-
-        Ok(meta_array)
+        Ok(StructLayout::new(column_layouts))
     }
 
-    async fn write_metadata_offsets(&mut self, metadata_offsets: Array) -> VortexResult<u64> {
-        let offset = self.msgs.tell();
-
-        self.msgs.write_dtype(metadata_offsets.dtype()).await?;
-        self.msgs.write_chunk(metadata_offsets).await?;
-        Ok(offset)
-    }
-
-    async fn write_file_trailer(self, metadata_offsets_offset: u64) -> VortexResult<W> {
+    async fn write_file_trailer(self, footer: Footer, schema_offset: u64) -> VortexResult<W> {
+        let footer_offset = self.msgs.tell();
         let mut w = self.msgs.into_inner();
-        w.write_all(metadata_offsets_offset.to_le_bytes()).await?;
+
+        let mut fbb = FlatBufferBuilder::new();
+        footer.write_flatbuffer(&mut fbb);
+        let (buffer, buffer_begin) = fbb.collapse();
+        let buffer_end = buffer.len();
+
+        w.write_all(buffer.slice(buffer_begin, buffer_end)).await?;
+        w.write_all(schema_offset.to_le_bytes()).await?;
+        w.write_all(footer_offset.to_le_bytes()).await?;
         w.write_all(MAGIC_BYTES).await?;
         Ok(w)
     }
 
     pub async fn finalize(mut self) -> VortexResult<W> {
-        let metadata_offsets = self.write_metadata_arrays().await?;
-        let metadata_offsets = self.write_metadata_offsets(metadata_offsets).await?;
-        self.write_file_trailer(metadata_offsets).await
+        let top_level_layout = self.write_metadata_arrays().await?;
+        let schema_offset = self.msgs.tell();
+        self.msgs
+            .write_dtype(self.dtype.as_ref().expect("Should have gotten a schema"))
+            .await?;
+        self.write_file_trailer(Footer::new(Layout::Struct(top_level_layout)), schema_offset)
+            .await
     }
 }
 

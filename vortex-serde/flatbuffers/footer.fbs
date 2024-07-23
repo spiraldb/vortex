@@ -1,17 +1,18 @@
-namespace vortex.serde;
+namespace vortex.footer;
 
-table OpaqueLayout {
-    byte_offset: uint64;
+table FlatLayout {
+    begin: uint64;
+    end: uint64;
 }
 
-table ArrayLayout {
+table NestedLayout {
     children: [Layout];
     encoding: uint16;
 }
 
 union LayoutVariant {
-    OpaqueLayout,
-    ArrayLayout,
+    FlatLayout,
+    NestedLayout,
 }
 
 table Layout {
@@ -19,7 +20,7 @@ table Layout {
 }
 
 table Footer {
-    layout: ArrayLayout;
+    layout: Layout;
 }
 
 root_type Footer;

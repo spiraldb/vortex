@@ -22,10 +22,10 @@ impl<R: VortexReadAt> FileReader<R> {
     }
 
     pub async fn read_metadata(&mut self, _columns: &[&str]) -> VortexResult<FileMetadata> {
-        let mut buf = BytesMut::with_capacity(Self::FOOTER_READ_SIZE);
-        unsafe { buf.set_len(Self::FOOTER_READ_SIZE) }
+        let mut _buf = BytesMut::with_capacity(Self::FOOTER_READ_SIZE);
+        unsafe { _buf.set_len(Self::FOOTER_READ_SIZE) }
         let read_offset = self.len().await - Self::FOOTER_READ_SIZE as u64;
-        buf = self.read.read_at_into(read_offset, buf).await?;
+        _buf = self.read.read_at_into(read_offset, _buf).await?;
 
         // Ok(FileMetadata {})
         todo!()

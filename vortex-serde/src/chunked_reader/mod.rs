@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use vortex::compute::unary::scalar_at::scalar_at;
+use vortex::compute::unary::scalar_at;
 use vortex::stream::ArrayStream;
 use vortex::{Array, Context};
 use vortex_dtype::DType;

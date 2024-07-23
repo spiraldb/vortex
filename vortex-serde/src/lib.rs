@@ -13,14 +13,23 @@ pub mod writer;
 pub const ALIGNMENT: usize = 64;
 
 pub mod flatbuffers {
-    pub use generated::vortex::*;
+    pub use generated_footer::vortex::*;
+    pub use generated_message::vortex::*;
 
     #[allow(unused_imports)]
     #[allow(dead_code)]
     #[allow(non_camel_case_types)]
     #[allow(clippy::all)]
-    mod generated {
+    mod generated_message {
         include!(concat!(env!("OUT_DIR"), "/flatbuffers/message.rs"));
+    }
+
+    #[allow(unused_imports)]
+    #[allow(dead_code)]
+    #[allow(non_camel_case_types)]
+    #[allow(clippy::all)]
+    mod generated_footer {
+        include!(concat!(env!("OUT_DIR"), "/flatbuffers/footer.rs"));
     }
 
     mod deps {
