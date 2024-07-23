@@ -82,11 +82,11 @@ impl ArrayVariants for ByteBoolArray {
 }
 
 impl BoolArrayTrait for ByteBoolArray {
-    fn indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
+    fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
         todo!()
     }
 
-    fn slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
+    fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
         todo!()
     }
 }

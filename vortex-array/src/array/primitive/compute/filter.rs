@@ -1,6 +1,3 @@
-use arrow_array::BooleanArray;
-use arrow_buffer::bit_iterator::BitIndexIterator;
-use arrow_select::filter::SlicesIterator;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 
 use crate::array::bool::BoolArray;
@@ -8,6 +5,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::compute::FilterFn;
 use crate::stats::ArrayStatistics;
 use crate::validity::filter_validity;
+use crate::variants::BoolArrayTrait;
 use crate::{Array, IntoArray};
 
 impl FilterFn for PrimitiveArray {
@@ -28,17 +26,17 @@ fn filter_select_primitive(arr: &PrimitiveArray, bools: &BoolArray) -> Primitive
 
 pub fn filter_primitive_slice<T: NativePType>(
     arr: &[T],
-    bools: &BoolArray,
+    predicate: &BoolArray,
     selection_count: usize,
 ) -> Vec<T> {
     let mut _start_pos = 0;
     let mut chunks = Vec::with_capacity(selection_count);
-    if selection_count * 2 > bools.len() {
-        for (start, end) in SlicesIterator::new(&BooleanArray::new(bools.boolean_buffer(), None)) {
+    if selection_count * 2 > predicate.len() {
+        predicate.maybe_null_slices_iter().for_each(|(start, end)| {
             chunks.extend_from_slice(&arr[start..end]);
-        }
+        });
     } else {
-        chunks.extend(BitIndexIterator::new(bools.buffer(), 0, bools.len()).map(|idx| arr[idx]));
+        chunks.extend(predicate.maybe_null_indices_iter().map(|idx| arr[idx]));
     }
     chunks
 }

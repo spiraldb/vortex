@@ -80,7 +80,7 @@ impl ArrayVariants for ConstantArray {
 impl NullArrayTrait for ConstantArray {}
 
 impl BoolArrayTrait for ConstantArray {
-    fn indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
+    fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
         let value = self.scalar().value().as_bool().unwrap().unwrap();
         if value {
             Box::new(iter::successors(Some(0), |x| Some(*x + 1)).take(self.len()))
@@ -89,7 +89,7 @@ impl BoolArrayTrait for ConstantArray {
         }
     }
 
-    fn slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
+    fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         // Must be a non-nullable boolean scalar
         let value = self.scalar().value().as_bool().unwrap().unwrap();
 
@@ -132,14 +132,14 @@ mod test {
     #[test]
     fn constant_iter_true_test() {
         let arr = ConstantArray::new(Scalar::bool(true, Nullability::NonNullable), 3);
-        assert_eq!(vec![0, 1, 2], arr.indices_iter().collect_vec());
-        assert_eq!(vec![(0, 3)], arr.slices_iter().collect_vec());
+        assert_eq!(vec![0, 1, 2], arr.maybe_null_indices_iter().collect_vec());
+        assert_eq!(vec![(0, 3)], arr.maybe_null_slices_iter().collect_vec());
     }
 
     #[test]
     fn constant_iter_false_test() {
         let arr = ConstantArray::new(Scalar::bool(false, Nullability::NonNullable), 3);
-        assert_eq!(0, arr.indices_iter().collect_vec().len());
-        assert_eq!(0, arr.slices_iter().collect_vec().len());
+        assert_eq!(0, arr.maybe_null_indices_iter().collect_vec().len());
+        assert_eq!(0, arr.maybe_null_slices_iter().collect_vec().len());
     }
 }
