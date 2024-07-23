@@ -2,13 +2,13 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
+use crate::{
+    Array, ArrayData, ArrayDType, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata, IntoArray,
+    IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
+};
 use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, EncodingId, EncodingRef};
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
-use crate::{
-    Array, ArrayDType, ArrayData, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata, IntoArray,
-    IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
-};
 
 /// Trait the defines the set of types relating to an array.
 /// Because it has associated types it can't be used as a trait object.
@@ -184,13 +184,14 @@ impl<T: AsArray> ArrayStatistics for T {
 
 impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoArrayData for T {
     fn into_array_data(self) -> ArrayData {
-        let encoding = self.encoding();
+        // TODO: move metadata call `Array::View` match
         let metadata = self.metadata();
-        let stats = self.statistics().to_set();
         let array = self.into_array();
         match array {
             Array::Data(d) => d,
-            Array::View(_) => {
+            Array::View(ref view) => {
+                let encoding = view.encoding();
+                let stats = view.statistics().to_set();
                 struct Visitor {
                     buffer: Option<Buffer>,
                     children: Vec<Array>,
