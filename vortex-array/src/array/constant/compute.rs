@@ -6,8 +6,9 @@ use vortex_scalar::Scalar;
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::ScalarAtFn;
 use crate::compute::{
-    ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
+    ArrayCompute, FilterFn, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
 };
+use crate::stats::ArrayStatistics;
 use crate::{Array, IntoArray};
 
 impl ArrayCompute for ConstantArray {
@@ -43,6 +44,16 @@ impl TakeFn for ConstantArray {
 impl SliceFn for ConstantArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::new(self.scalar().clone(), stop - start).into_array())
+    }
+}
+
+impl FilterFn for ConstantArray {
+    fn filter(&self, predicate: &Array) -> Array {
+        Self::new(
+            self.scalar().clone(),
+            predicate.statistics().compute_true_count().unwrap(),
+        )
+        .into_array()
     }
 }
 

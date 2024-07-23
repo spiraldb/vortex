@@ -1,11 +1,11 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
 
-use crate::{Array, IntoArray, ToArray};
 use crate::array::bool::BoolArray;
 use crate::compute::FilterFn;
 use crate::stats::ArrayStatistics;
 use crate::validity::filter_validity;
 use crate::variants::BoolArrayTrait;
+use crate::{Array, IntoArray, ToArray};
 
 impl FilterFn for BoolArray {
     fn filter(&self, predicate: &Array) -> Array {
@@ -52,10 +52,10 @@ fn filter_select_bool_by_index(
 mod test {
     use itertools::Itertools;
 
-    use crate::array::bool::BoolArray;
     use crate::array::bool::compute::filter::{
         filter_select_bool, filter_select_bool_by_index, filter_select_bool_by_slice,
     };
+    use crate::array::bool::BoolArray;
 
     #[test]
     fn filter_bool_test() {
