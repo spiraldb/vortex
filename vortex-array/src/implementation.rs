@@ -184,13 +184,14 @@ impl<T: AsArray> ArrayStatistics for T {
 
 impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoArrayData for T {
     fn into_array_data(self) -> ArrayData {
-        let encoding = self.encoding();
+        // TODO: move metadata call `Array::View` match
         let metadata = self.metadata();
-        let stats = self.statistics().to_set();
         let array = self.into_array();
         match array {
             Array::Data(d) => d,
-            Array::View(_) => {
+            Array::View(ref view) => {
+                let encoding = view.encoding();
+                let stats = view.statistics().to_set();
                 struct Visitor {
                     buffer: Option<Buffer>,
                     children: Vec<Array>,

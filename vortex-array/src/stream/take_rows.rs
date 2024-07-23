@@ -72,13 +72,14 @@ impl<R: ArrayStream> Stream for TakeRows<R> {
 
         while let Some(batch) = ready!(this.reader.as_mut().poll_next(cx)?) {
             let curr_offset = *this.row_offset;
-            let left = search_sorted(this.indices, curr_offset, SearchSortedSide::Left)?.to_index();
+            let left = search_sorted(this.indices, curr_offset, SearchSortedSide::Left)?
+                .to_zero_offset_index();
             let right = search_sorted(
                 this.indices,
                 curr_offset + batch.len(),
                 SearchSortedSide::Left,
             )?
-            .to_index();
+            .to_zero_offset_index();
 
             *this.row_offset += batch.len();
 

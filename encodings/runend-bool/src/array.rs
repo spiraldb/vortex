@@ -14,7 +14,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::compress::runend_bool_decode;
 
-impl_encoding!("vortex.runendbool", 22u16, RunEndBool);
+impl_encoding!("vortex.runendbool", 23u16, RunEndBool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEndBoolMetadata {
@@ -71,7 +71,7 @@ impl RunEndBoolArray {
             vortex_bail!("Index must be in array slice",);
         }
         search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
-            .map(|s| s.to_index())
+            .map(|s| s.to_non_zero_offset_index(self.ends().len()))
     }
 
     pub fn validity(&self) -> Validity {

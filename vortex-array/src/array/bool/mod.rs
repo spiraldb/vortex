@@ -32,7 +32,7 @@ impl BoolArray {
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
         BooleanBuffer::new(
-            self.buffer().clone().into(),
+            self.buffer().clone().into_arrow(),
             self.metadata().bit_offset,
             self.len(),
         )

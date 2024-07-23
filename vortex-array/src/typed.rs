@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
@@ -10,7 +10,7 @@ use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserial
 #[derive(Debug, Clone)]
 pub struct TypedArray<D: ArrayDef> {
     array: Array,
-    metadata: D::Metadata,
+    lazy_metadata: OnceLock<D::Metadata>,
 }
 
 impl<D: ArrayDef> TypedArray<D> {
@@ -26,16 +26,24 @@ impl<D: ArrayDef> TypedArray<D> {
             D::ENCODING,
             dtype,
             len,
-            Arc::new(metadata.clone()),
+            Arc::new(metadata),
             buffer,
             children,
             stats,
         )?);
-        Ok(Self { array, metadata })
+        Ok(Self {
+            array,
+            lazy_metadata: OnceLock::new(),
+        })
     }
 
     pub fn metadata(&self) -> &D::Metadata {
-        &self.metadata
+        match &self.array {
+            Array::Data(d) => d.metadata().as_any().downcast_ref::<D::Metadata>().unwrap(),
+            Array::View(v) => self
+                .lazy_metadata
+                .get_or_init(|| D::Metadata::try_deserialize_metadata(v.metadata()).unwrap()),
+        }
     }
 }
 
@@ -56,16 +64,10 @@ impl<D: ArrayDef> TryFrom<Array> for TypedArray<D> {
                 D::ENCODING.id().as_ref(),
             );
         }
-        let metadata = match &array {
-            Array::Data(d) => d
-                .metadata()
-                .as_any()
-                .downcast_ref::<D::Metadata>()
-                .unwrap()
-                .clone(),
-            Array::View(v) => D::Metadata::try_deserialize_metadata(v.metadata())?,
-        };
-        Ok(Self { array, metadata })
+        Ok(Self {
+            array,
+            lazy_metadata: OnceLock::new(),
+        })
     }
 }
 

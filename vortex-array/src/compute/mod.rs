@@ -7,7 +7,8 @@
 //! implementations of these operators, else we will decode, and perform the equivalent operator
 //! from Arrow.
 
-pub use compare::{compare, CompareFn};
+pub use boolean::{and, or, AndFn, OrFn};
+pub use compare::{compare, scalar_cmp, CompareFn};
 pub use filter::{filter, FilterFn};
 pub use filter_indices::{filter_indices, FilterIndicesFn};
 pub use search_sorted::*;
@@ -15,13 +16,14 @@ pub use slice::{slice, SliceFn};
 pub use take::{take, TakeFn};
 use unary::{CastFn, FillForwardFn, ScalarAtFn, SubtractScalarFn};
 
+mod boolean;
 mod compare;
 mod filter;
 mod filter_indices;
+mod search_sorted;
 mod slice;
 mod take;
 
-mod search_sorted;
 pub mod unary;
 
 /// Trait providing compute functions on top of Vortex arrays.
@@ -93,6 +95,20 @@ pub trait ArrayCompute {
     ///
     /// See: [TakeFn].
     fn take(&self) -> Option<&dyn TakeFn> {
+        None
+    }
+
+    /// Perform a boolean AND operation over two arrays
+    ///
+    /// See: [AndFn].
+    fn and(&self) -> Option<&dyn AndFn> {
+        None
+    }
+
+    /// Perform a boolean OR operation over two arrays
+    ///
+    /// See: [OrFn].
+    fn or(&self) -> Option<&dyn OrFn> {
         None
     }
 }
