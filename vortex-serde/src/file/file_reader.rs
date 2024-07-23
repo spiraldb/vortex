@@ -2,12 +2,14 @@ use bytes::BytesMut;
 use flatbuffers::root;
 use futures::Stream;
 use vortex::Array;
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
 use super::layouts::Layout;
+use super::FULL_FOOTER_SIZE;
 use crate::file::file_writer::MAGIC_BYTES;
 use crate::file::footer::Footer;
-use crate::flatbuffers::footer as fb;
+use crate::flatbuffers as fb;
 use crate::io::VortexReadAt;
 
 pub struct FileReader<R> {
@@ -87,14 +89,26 @@ impl<R: VortexReadAt> FileReader<R> {
         }
     }
 
-    async fn layout(&mut self, footer: Footer) -> VortexResult<Layout> {
-        let leftover_footer_offset = dbg!(footer.leftovers_footer_offset());
-        let end = dbg!(footer.leftovers.len() - 20);
-        let footer_bytes = &footer.leftovers[leftover_footer_offset..end];
-        let fb_footer = root::<fb::Footer>(footer_bytes)?;
+    pub async fn layout(&mut self, footer: &Footer) -> VortexResult<Layout> {
+        let start_offset = footer.leftovers_footer_offset();
+        let end_offset = footer.leftovers.len() - FULL_FOOTER_SIZE;
+        let layout_bytes = &footer.leftovers[start_offset..end_offset];
+        let fb_footer = root::<fb::footer::Footer>(layout_bytes)?;
         let fb_layout = fb_footer.layout().unwrap();
 
         Layout::try_from(fb_layout)
+    }
+
+    pub async fn dtype(&mut self, footer: &Footer) -> VortexResult<DType> {
+        let start_offset = footer.leftovers_schema_offset();
+        let end_offset = footer.leftovers_footer_offset();
+        let dtype_bytes = &footer.leftovers[start_offset..end_offset];
+
+        let fb_schema = root::<fb::serde::Schema>(dtype_bytes)?;
+
+        let fb_dtype = fb_schema.dtype().unwrap();
+
+        DType::try_from(fb_dtype)
     }
 }
 
@@ -143,7 +157,8 @@ mod tests {
 
         dbg!(footer.schema_offset);
         dbg!(footer.footer_offset);
-        dbg!(reader.layout(footer).await.unwrap());
+        dbg!(reader.layout(&footer).await.unwrap());
+        dbg!(reader.dtype(&footer).await.unwrap());
 
         while let Some(array) = reader.next().await {
             let _array = array.unwrap();
