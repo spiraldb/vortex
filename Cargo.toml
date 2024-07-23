@@ -116,3 +116,14 @@ warnings = "deny"
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
 or_fun_call = "deny"
+
+[patch.crates-io]
+arrow-array = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-buffer = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-cast = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-csv = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-data = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-ipc = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-ord = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-schema = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
+arrow-select = { git = "https://github.com/apache/arrow-rs.git", branch = "53.0.0-dev" }
