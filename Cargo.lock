@@ -2187,6 +2187,7 @@ version = "1.0.0"
 source = "git+https://github.com/duckdb/duckdb-rs.git?rev=1c73aef679d0a33f380861c8061c82bf6edbda07#1c73aef679d0a33f380861c8061c82bf6edbda07"
 dependencies = [
  "autocfg",
+ "cc",
  "flate2",
  "pkg-config",
  "serde",

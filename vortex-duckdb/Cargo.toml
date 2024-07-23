@@ -17,7 +17,7 @@ crate-type = ["cdylib"]
 vortex-array = { path = "../vortex-array" }
 vortex-dtype = { path = "../vortex-dtype" }
 
-duckdb = { workspace = true, features = ["vtab", "vtab-loadable"] }
+duckdb = { workspace = true, features = ["vtab", "vtab-loadable", "bundled"] }
 duckdb-loadable-macros = { workspace = true }
 
 [lints]
