@@ -2,7 +2,7 @@ use vortex::array::datetime::{TemporalArray, TimeUnit};
 use vortex::array::primitive::PrimitiveArray;
 use vortex::compute::unary::try_cast;
 use vortex::{Array, IntoArray, IntoArrayVariant};
-use vortex_dtype::{DType, Nullability, PType};
+use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 
 /// Compress a `TemporalArray` into day, second, and subsecond components.
@@ -10,11 +10,7 @@ use vortex_error::{vortex_bail, VortexResult};
 /// Splitting the components by granularity creates more small values, which enables better
 /// cascading compression.
 pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Array)> {
-    let timestamps = try_cast(
-        &array.temporal_values(),
-        &DType::Primitive(PType::I64, Nullability::Nullable),
-    )?
-    .into_primitive()?;
+    let timestamps = try_cast(&array.temporal_values(), PType::I64.into())?.into_primitive()?;
     let divisor = match array.temporal_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,
         TimeUnit::Us => 1_000_000,
@@ -28,7 +24,6 @@ pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Ar
     let mut seconds = Vec::with_capacity(length);
     let mut subsecond = Vec::with_capacity(length);
 
-    // Store if the array timestamp is valid or not.
     for &t in timestamps.maybe_null_slice::<i64>().iter() {
         days.push(t / (86_400 * divisor));
         seconds.push((t % (86_400 * divisor)) / divisor);

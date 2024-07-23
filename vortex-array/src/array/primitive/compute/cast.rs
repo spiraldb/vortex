@@ -21,7 +21,6 @@ impl CastFn for PrimitiveArray {
         }
 
         // FIXME(ngates): #260 - check validity and nullability
-        // TODO(aduffy): if casting from nullable -> non-nullable, throw if not AllValid.
         match_each_native_ptype!(ptype, |$T| {
             Ok(PrimitiveArray::from_vec(
                 cast::<$T>(self)?,
