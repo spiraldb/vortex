@@ -38,7 +38,7 @@ impl WriteFlatBuffer for Layout {
 
 #[derive(Debug, Copy, Clone)]
 pub struct FlatLayout {
-    range: ByteRange,
+    pub(crate) range: ByteRange,
 }
 
 impl WriteFlatBuffer for FlatLayout {
@@ -68,7 +68,7 @@ impl FlatLayout {
 
 #[derive(Debug, Clone)]
 pub struct ChunkedLayout {
-    children: Vec<Layout>,
+    pub(crate) children: Vec<Layout>,
 }
 
 impl WriteFlatBuffer for ChunkedLayout {
@@ -110,7 +110,7 @@ impl ChunkedLayout {
 // TODO(robert): Should struct layout store a schema? How do you pick a child by name
 #[derive(Debug, Clone)]
 pub struct StructLayout {
-    children: Vec<Layout>,
+    pub(crate) children: Vec<Layout>,
 }
 
 impl WriteFlatBuffer for StructLayout {

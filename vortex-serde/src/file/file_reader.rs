@@ -1,3 +1,5 @@
+use std::ops::DerefMut;
+
 use bytes::BytesMut;
 use flatbuffers::root;
 use futures::Stream;
@@ -13,7 +15,7 @@ use crate::flatbuffers as fb;
 use crate::io::VortexReadAt;
 
 pub struct FileReader<R> {
-    read: R,
+    inner: R,
     len: Option<u64>,
 }
 
@@ -37,7 +39,7 @@ impl<R: VortexReadAt> FileReaderBuilder<R> {
 
     pub fn build(self) -> FileReader<R> {
         FileReader {
-            read: self.inner,
+            inner: self.inner,
             len: self.len,
         }
     }
@@ -53,7 +55,7 @@ impl<R: VortexReadAt> FileReader<R> {
 
         // TODO: Handle cases if there's less than 8MB of total data
         let read_offset = self.len().await - read_size as u64;
-        buf = self.read.read_at_into(read_offset, buf).await?;
+        buf = self.inner.read_at_into(read_offset, buf).await?;
 
         let magic_bytes_loc = self.len().await as usize - MAGIC_BYTES.len();
 
@@ -82,7 +84,7 @@ impl<R: VortexReadAt> FileReader<R> {
     async fn len(&mut self) -> u64 {
         match self.len {
             None => {
-                self.len = Some(self.read.len().await);
+                self.len = Some(self.inner.len().await);
                 self.len.unwrap()
             }
             Some(l) => l,
@@ -104,21 +106,67 @@ impl<R: VortexReadAt> FileReader<R> {
         let end_offset = footer.leftovers_footer_offset();
         let dtype_bytes = &footer.leftovers[start_offset..end_offset];
 
-        let fb_schema = root::<fb::serde::Schema>(dtype_bytes)?;
-
-        let fb_dtype = fb_schema.dtype().unwrap();
+        let fb_dtype = root::<vortex_dtype::flatbuffers::DType>(dtype_bytes)?;
 
         DType::try_from(fb_dtype)
     }
+
+    async fn into_stream(mut self) -> VortexResult<FileReaderStream<R>> {
+        let footer = self.read_footer().await?;
+        let layout = self.layout(&footer).await?;
+        let dtype = self.dtype(&footer).await?;
+
+        Ok(FileReaderStream {
+            footer,
+            layout,
+            dtype,
+            inner: self.inner,
+            layout_ptr: None,
+            depth: 0,
+        })
+    }
 }
 
-impl<R: VortexReadAt> Stream for FileReader<R> {
+pub struct FileReaderStream<R> {
+    footer: Footer,
+    layout: Layout,
+    dtype: DType,
+    inner: R,
+    depth: usize,
+    layout_ptr: Option<Layout>,
+}
+
+impl<R> FileReaderStream<R> {}
+
+impl<R: VortexReadAt + Unpin> Stream for FileReaderStream<R> {
     type Item = VortexResult<Array>;
 
     fn poll_next(
-        self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
+        // let this = self.deref_mut();
+
+        // let mut arrs = Vec::default();
+
+        // if let Layout::Struct(layout) = self.layout {
+        //     for c_layout in layout.children.iter() {
+        //         match c_layout {
+        //             Layout::Chunked(l) => {
+        //                 let l = l.children[self.depth].clone();
+        //                 self.depth += 1;
+        //             }
+        //             Layout::Flat(l) => l,
+        //             Layout::Struct(l) => unreachable!(),
+        //         }
+        //     }
+        // } else {
+        //     unreachable!()
+        // }
+        // match this.layout_ptr.as_mut() {
+        //     Some(layout) => todo!(),
+        //     None => todo!(),
+        // }
         todo!()
     }
 }
@@ -160,7 +208,9 @@ mod tests {
         dbg!(reader.layout(&footer).await.unwrap());
         dbg!(reader.dtype(&footer).await.unwrap());
 
-        while let Some(array) = reader.next().await {
+        let mut stream = reader.into_stream().await.unwrap();
+
+        while let Some(array) = stream.next().await {
             let _array = array.unwrap();
             println!("got an array");
         }
