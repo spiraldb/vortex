@@ -3,11 +3,12 @@ use std::mem;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
+
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -16,8 +17,8 @@ use vortex_flatbuffers::WriteFlatBuffer;
 use crate::file::layouts::{ChunkedLayout, FlatLayout, Layout, StructLayout};
 use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
-use crate::writer::ChunkLayout;
 use crate::MessageWriter;
+use crate::writer::ChunkLayout;
 
 pub const MAGIC_BYTES: [u8; 4] = *b"SP1R";
 
@@ -214,17 +215,31 @@ impl<W: VortexWrite> FileWriter<W> {
         Ok(StructLayout::new(column_layouts))
     }
 
-    async fn write_file_trailer(self, footer: Footer, schema_offset: u64) -> VortexResult<W> {
-        let footer_offset = self.msgs.tell();
+    async fn write_file_trailer(self, footer: Footer) -> VortexResult<W> {
+        let schema_offset = self.msgs.tell();
         let mut w = self.msgs.into_inner();
+
+        let mut fbb = FlatBufferBuilder::new();
+        let dtype_fbb_offset = self
+            .dtype
+            .expect("Needed a schema at this point")
+            .write_flatbuffer(&mut fbb);
+        fbb.finish_minimal(dtype_fbb_offset);
+        let (buffer, buffer_begin) = fbb.collapse();
+        let buffer_end = buffer.len();
+        let sliced_buf = buffer.slice(buffer_begin, buffer_end);
+        let dtype_len = sliced_buf.as_slice().len() as u64;
+        w.write_all(sliced_buf).await?;
+
+        let footer_offset = schema_offset + dtype_len;
 
         let mut fbb = FlatBufferBuilder::new();
         let footer_fbb_offset = footer.write_flatbuffer(&mut fbb);
         fbb.finish_minimal(footer_fbb_offset);
         let (buffer, buffer_begin) = fbb.collapse();
         let buffer_end = buffer.len();
-
         w.write_all(buffer.slice(buffer_begin, buffer_end)).await?;
+
         w.write_all(schema_offset.to_le_bytes()).await?;
         w.write_all(footer_offset.to_le_bytes()).await?;
         w.write_all(MAGIC_BYTES).await?;
@@ -233,11 +248,7 @@ impl<W: VortexWrite> FileWriter<W> {
 
     pub async fn finalize(mut self) -> VortexResult<W> {
         let top_level_layout = self.write_metadata_arrays().await?;
-        let schema_offset = self.msgs.tell();
-        self.msgs
-            .write_dtype(self.dtype.as_ref().expect("Should have gotten a schema"))
-            .await?;
-        self.write_file_trailer(Footer::new(Layout::Struct(top_level_layout)), schema_offset)
+        self.write_file_trailer(Footer::new(Layout::Struct(top_level_layout)))
             .await
     }
 }
@@ -245,11 +256,12 @@ impl<W: VortexWrite> FileWriter<W> {
 #[cfg(test)]
 mod tests {
     use futures_executor::block_on;
+
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::validity::Validity;
     use vortex::IntoArray;
+    use vortex::validity::Validity;
 
     use crate::file::file_writer::FileWriter;
 
