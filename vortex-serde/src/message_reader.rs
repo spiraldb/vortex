@@ -22,6 +22,19 @@ pub struct MessageReader<R> {
     finished: bool,
 }
 
+impl<'a, R: VortexRead> MessageReader<&'a mut R> {
+    pub async fn try_new_borrowed(read: &'a mut R) -> VortexResult<Self> {
+        let mut reader = Self {
+            read,
+            message: BytesMut::new(),
+            prev_message: BytesMut::new(),
+            finished: false,
+        };
+        reader.load_next_message().await?;
+        Ok(reader)
+    }
+}
+
 impl<R: VortexRead> MessageReader<R> {
     pub async fn try_new(read: R) -> VortexResult<Self> {
         let mut reader = Self {

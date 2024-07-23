@@ -2,15 +2,16 @@ use std::io;
 
 use flatbuffers::FlatBufferBuilder;
 use itertools::Itertools;
+
 use vortex::Array;
-use vortex_buffer::io_buf::IoBuf;
 use vortex_buffer::Buffer;
+use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_flatbuffers::WriteFlatBuffer;
 
+use crate::ALIGNMENT;
 use crate::io::VortexWrite;
 use crate::messages::{IPCBatch, IPCMessage, IPCPage, IPCSchema};
-use crate::ALIGNMENT;
 
 const ZEROS: [u8; 512] = [0u8; 512];
 
@@ -18,18 +19,27 @@ const ZEROS: [u8; 512] = [0u8; 512];
 pub struct MessageWriter<W> {
     write: W,
     pos: u64,
-    alignment: usize,
+    alignment: Option<usize>,
 
     scratch: Option<Vec<u8>>,
 }
 
 impl<W: VortexWrite> MessageWriter<W> {
+    pub fn new_unaligned(write: W) -> Self {
+        Self {
+            write,
+            pos: 0,
+            alignment: None,
+            scratch: Some(Vec::new()),
+        }
+    }
+
     pub fn new(write: W) -> Self {
         assert!(ALIGNMENT <= ZEROS.len(), "ALIGNMENT must be <= 512");
         Self {
             write,
             pos: 0,
-            alignment: ALIGNMENT,
+            alignment: Some(ALIGNMENT),
             scratch: Some(Vec::new()),
         }
     }
@@ -49,7 +59,7 @@ impl<W: VortexWrite> MessageWriter<W> {
     }
 
     pub async fn write_chunk(&mut self, chunk: Array) -> io::Result<()> {
-        let buffer_offsets = chunk.all_buffer_offsets(self.alignment);
+        let buffer_offsets = chunk.all_buffer_offsets(self.alignment.or(Some(ALIGNMENT)));
 
         // Serialize the Chunk message.
         self.write_message(IPCMessage::Batch(IPCBatch(&chunk)))
@@ -78,7 +88,10 @@ impl<W: VortexWrite> MessageWriter<W> {
         let buffer_len = buffer.len();
         self.write_all(buffer).await?;
 
-        let aligned_size = (buffer_len + (self.alignment - 1)) & !(self.alignment - 1);
+        let aligned_size = self
+            .alignment
+            .map(|align| (buffer_len + (align - 1)) & !(align - 1))
+            .unwrap_or(buffer_len);
         let padding = aligned_size - buffer_len;
         self.write_all(&ZEROS[0..padding]).await?;
 
@@ -104,8 +117,12 @@ impl<W: VortexWrite> MessageWriter<W> {
         let buffer_end = buffer.len();
         let buffer_len = buffer_end - buffer_begin;
 
-        let aligned_size = (4 + buffer_len + (self.alignment - 1)) & !(self.alignment - 1);
-        let padding_bytes = aligned_size - buffer_len - 4;
+        let unaligned_size = 4 + buffer_len;
+        let aligned_size = self
+            .alignment
+            .map(|align| (unaligned_size + (align - 1)) & !(align - 1))
+            .unwrap_or(unaligned_size);
+        let padding_bytes = aligned_size - unaligned_size;
 
         // Write the size as u32, followed by the buffer, followed by padding.
         self.write_all(((aligned_size - 4) as u32).to_le_bytes())
@@ -116,7 +133,9 @@ impl<W: VortexWrite> MessageWriter<W> {
             .into_inner();
         self.write_all(&ZEROS[0..padding_bytes]).await?;
 
-        assert_eq!(self.pos % self.alignment as u64, 0);
+        if let Some(align) = self.alignment {
+            assert_eq!(self.pos % align as u64, 0);
+        }
 
         // Replace the scratch buffer
         self.scratch = Some(buffer);

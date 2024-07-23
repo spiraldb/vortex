@@ -13,11 +13,12 @@ use std::fmt::{Debug, Display, Formatter};
 use std::future::ready;
 
 pub use ::paste;
+use itertools::Itertools;
+
 pub use canonical::*;
 pub use context::*;
 pub use data::*;
 pub use implementation::*;
-use itertools::Itertools;
 pub use metadata::*;
 pub use typed::*;
 pub use view::*;
@@ -139,7 +140,7 @@ impl Array {
 
     /// Return the buffer offsets and the total length of all buffers, assuming the given alignment.
     /// This includes all child buffers.
-    pub fn all_buffer_offsets(&self, alignment: usize) -> Vec<u64> {
+    pub fn all_buffer_offsets(&self, alignment: Option<usize>) -> Vec<u64> {
         let mut offsets = vec![];
         let mut offset = 0;
 
@@ -148,7 +149,9 @@ impl Array {
                 offsets.push(offset as u64);
 
                 let buffer_size = buffer.len();
-                let aligned_size = (buffer_size + (alignment - 1)) & !(alignment - 1);
+                let aligned_size = alignment
+                    .map(|align| (buffer_size + (align - 1)) & !(align - 1))
+                    .unwrap_or(buffer_size);
                 offset += aligned_size;
             }
         }
