@@ -1,16 +1,19 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use futures_util::stream::try_unfold;
 use futures_util::Stream;
-use vortex::stream::ArrayStream;
+use futures_util::stream::try_unfold;
+
 use vortex::Context;
+use vortex::stream::ArrayStream;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
 use crate::io::VortexRead;
 use crate::MessageReader;
+
+mod in_memory;
 
 pub struct StreamArrayReader<R: VortexRead> {
     msgs: MessageReader<R>,
@@ -27,12 +30,10 @@ impl<R: VortexRead> StreamArrayReader<R> {
         })
     }
 
-    pub fn with_dtype(self, dtype: Arc<DType>) -> Self {
+    pub fn with_dtype(mut self, dtype: Arc<DType>) -> Self {
         assert!(self.dtype.is_none(), "DType already set");
-        Self {
-            dtype: Some(dtype),
-            ..self
-        }
+        self.dtype = Some(dtype);
+        self
     }
 
     pub async fn load_dtype(mut self) -> VortexResult<Self> {

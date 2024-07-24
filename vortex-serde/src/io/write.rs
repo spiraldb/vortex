@@ -1,4 +1,4 @@
-use std::future::{Future, ready};
+use std::future::{ready, Future};
 use std::io;
 
 use vortex_buffer::io_buf::IoBuf;

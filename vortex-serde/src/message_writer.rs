@@ -58,7 +58,7 @@ impl<W: VortexWrite> MessageWriter<W> {
             .await
     }
 
-    pub async fn write_chunk(&mut self, chunk: Array) -> io::Result<()> {
+    pub async fn write_batch(&mut self, chunk: Array) -> io::Result<()> {
         let buffer_offsets = chunk.all_buffer_offsets(self.alignment.or(Some(ALIGNMENT)));
 
         // Serialize the Chunk message.

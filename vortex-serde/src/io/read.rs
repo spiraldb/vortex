@@ -4,8 +4,11 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use bytes::BytesMut;
+
 use vortex_buffer::Buffer;
 use vortex_error::vortex_err;
+
+use crate::io::sync::VortexSyncRead;
 
 pub trait VortexRead {
     fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = io::Result<BytesMut>>;
@@ -46,24 +49,17 @@ impl<T: VortexReadAt> VortexReadAt for Arc<T> {
     }
 }
 
-impl VortexRead for BytesMut {
+impl<R: VortexSyncRead> VortexRead for R {
     async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
-        if buffer.len() > self.len() {
-            Err(io::Error::new(
-                io::ErrorKind::UnexpectedEof,
-                vortex_err!("unexpected eof"),
-            ))
-        } else {
-            Ok(self.split_to(buffer.len()))
-        }
+        R::read_into(self, buffer)
     }
 }
 
-impl<R: VortexRead> VortexRead for &mut R {
-    async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
-        R::read_into(*self, buffer).await
-    }
-}
+// impl<R: VortexRead> VortexRead for &mut R {
+//     async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
+//         R::read_into(*self, buffer).await
+//     }
+// }
 
 impl<R: VortexReadAt> VortexRead for Cursor<R> {
     async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
@@ -123,16 +119,6 @@ impl VortexReadAt for [u8] {
         self.len() as u64
     }
 }
-
-// impl VortexReadAt for &[u8] {
-//     async fn read_at_into(&self, pos: u64, buffer: BytesMut) -> io::Result<BytesMut> {
-//         VortexReadAt::read_at_into(*self, pos, buffer).await
-//     }
-//
-//     fn len(&self) -> usize {
-//         (*self).len()
-//     }
-// }
 
 impl VortexReadAt for Buffer {
     async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
