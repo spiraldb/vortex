@@ -57,13 +57,14 @@ impl<R: VortexReadAt> FileReader<R> {
 
     pub async fn read_footer(&mut self) -> VortexResult<Footer> {
         let read_size = Self::FOOTER_READ_SIZE.min(self.len().await as usize);
+        dbg!(read_size);
         let mut buf = BytesMut::with_capacity(read_size);
         unsafe { buf.set_len(read_size) }
 
         let read_offset = self.len().await - read_size as u64;
         buf = self.inner.read_at_into(read_offset, buf).await?;
 
-        let magic_bytes_loc = self.len().await as usize - MAGIC_BYTES.len();
+        let magic_bytes_loc = read_size - MAGIC_BYTES.len();
 
         let magic_number = &buf[magic_bytes_loc..];
         assert_eq!(magic_number, &MAGIC_BYTES);
@@ -218,8 +219,6 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                             buffers.push(buff);
                         }
 
-                        let buffers = buffers.into_iter().collect::<Vec<_>>();
-
                         VortexResult::Ok((buffers, reader))
                     }
                     .boxed();
@@ -277,7 +276,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                                     batch_len,
                                     Buffer::Bytes(fb_bytes),
                                     |flatbuffer| {
-                                        root::<crate::flatbuffers::serde::Message>(flatbuffer)
+                                        root::<crate::flatbuffers::serde::Message>(flatbuffer)?
                                             .header_as_batch()
                                             .expect("Header is not a batch")
                                             .array()

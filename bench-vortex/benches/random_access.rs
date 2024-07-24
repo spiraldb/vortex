@@ -23,7 +23,7 @@ const INDICES: [u64; 6] = [10, 11, 12, 13, 100_000, 3_000_000];
 ///
 /// environment variables and assume files to read are already present
 fn random_access_vortex(c: &mut Criterion) {
-    let mut group = c.benchmark_group("vortex");
+    let mut group = c.benchmark_group("random_access");
 
     let taxi_vortex = taxi_data_vortex();
     group.bench_function("tokio local disk", |b| {

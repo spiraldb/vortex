@@ -26,13 +26,15 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
+use vortex::compute::take;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
+use vortex::{Array, ArrayDType, IntoArray, IntoCanonical, ToArrayData};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::chunked_reader::ChunkedArrayReader;
+use vortex_serde::file::file_reader::FileReaderBuilder;
 use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
 use vortex_serde::writer::ArrayWriter;
 use vortex_serde::MessageReader;
@@ -177,10 +179,25 @@ pub async fn take_vortex_object_store<O: ObjectStore>(
 pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Array> {
     let len = File::open(path)?.metadata()?.len();
     let indices_array = indices.to_vec().into_array();
-    let taken = read_vortex_footer_format(TokioAdapter(tokio::fs::File::open(path).await?), len)
+
+    let file = TokioAdapter(tokio::fs::File::open(path).await?);
+    let reader = FileReaderBuilder::new(file).with_length(len).build();
+
+    use futures::StreamExt;
+    let data = reader
+        .into_stream()
         .await?
-        .take_rows(&indices_array)
-        .await?;
+        .collect::<Vec<_>>()
+        .await
+        .into_iter()
+        .collect::<VortexResult<Vec<_>>>()?;
+
+    let dtype = data[0].dtype().clone();
+
+    let data = ChunkedArray::try_new(data, dtype)?.into_array();
+
+    let taken = take(&data, &indices_array)?;
+
     // For equivalence.... we flatten to make sure we're not cheating too much.
     Ok(taken.into_canonical()?.into_array())
 }
