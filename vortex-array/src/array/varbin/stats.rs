@@ -84,7 +84,10 @@ impl<'a> VarBinAccumulator<'a> {
         }
 
         match val.cmp(self.last_value) {
-            Ordering::Less => self.is_sorted = false,
+            Ordering::Less => {
+                self.is_sorted = false;
+                self.is_strict_sorted = false;
+            }
             Ordering::Equal => {
                 self.is_strict_sorted = false;
                 return;
