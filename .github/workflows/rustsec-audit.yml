@@ -1,6 +1,3 @@
-# Taken from pola-rs/polars
-# Clearing caches regularly takes care of Rust caches growing to problematic size over time
-
 name: RustSec audit
 on:
   schedule:
