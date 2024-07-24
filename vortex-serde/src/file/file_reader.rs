@@ -7,7 +7,7 @@ use bytes::{Buf, BytesMut};
 use futures::future::BoxFuture;
 use futures::{ready, FutureExt, Stream};
 use vortex::array::struct_::StructArray;
-use vortex::{flatbuffers, Array, ArrayView, IntoArray};
+use vortex::{Array, ArrayView, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
@@ -116,7 +116,7 @@ impl<R: VortexReadAt> FileReader<R> {
         DType::try_from(fb_dtype)
     }
 
-    async fn into_stream(mut self) -> VortexResult<FileReaderStream<R>> {
+    pub async fn into_stream(mut self) -> VortexResult<FileReaderStream<R>> {
         let footer = self.read_footer().await?;
         let layout = self.layout(&footer).await?;
         let dtype = self.dtype(&footer).await?;
