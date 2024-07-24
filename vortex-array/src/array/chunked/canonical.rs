@@ -61,12 +61,12 @@ pub(crate) fn try_canonicalize_chunks(
                 .map(|chunk| chunk.clone().into_extension().unwrap().storage())
                 .collect();
             let storage_dtype = storage_chunks.first().unwrap().dtype().clone();
-            let canonical_storage =
-                try_canonicalize_chunks(storage_chunks, &storage_dtype)?.into_array();
+            let chunked_storage =
+                ChunkedArray::try_new(storage_chunks, storage_dtype)?.into_array();
 
             Ok(Canonical::Extension(ExtensionArray::new(
                 ext_dtype.clone(),
-                canonical_storage,
+                chunked_storage,
             )))
         }
 
