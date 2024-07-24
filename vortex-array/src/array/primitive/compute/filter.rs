@@ -58,10 +58,10 @@ mod test {
     #[test]
     fn filter_run_variant_mixed_test() {
         let filter = vec![true, true, false, true, true, true, false, true];
-        let bfilter = BoolArray::from(filter.clone());
         let arr = PrimitiveArray::from(vec![1u32, 24, 54, 2, 3, 2, 3, 2]);
 
-        let filtered = filter_select_primitive(&arr, bfilter.array()).unwrap();
+        let filtered =
+            filter_select_primitive(&arr, BoolArray::from(filter.clone()).array()).unwrap();
         assert_eq!(
             filtered.len(),
             filter.iter().filter(|x| **x).collect_vec().len()
