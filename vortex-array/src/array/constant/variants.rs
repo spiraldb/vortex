@@ -83,7 +83,7 @@ impl BoolArrayTrait for ConstantArray {
     fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
         let value = self.scalar().value().as_bool().unwrap();
         if value.unwrap_or(false) {
-            Box::new(iter::successors(Some(0), |x| Some(*x + 1)).take(self.len()))
+            Box::new((0..self.len()).into_iter())
         } else {
             Box::new(iter::empty())
         }
