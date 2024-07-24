@@ -20,6 +20,45 @@ pub struct SyncMessageReader<R> {
     finished: bool,
 }
 
+pub enum ReadState<T> {
+    Init,
+    ReadMore(u32),
+    Finished(T),
+}
+
+pub struct DTypeReader {
+    state: ReadState<DType>,
+    bytes_len: Option<u32>,
+}
+
+impl DTypeReader {
+    pub fn new() -> Self {
+        Self {
+            state: ReadState::Init,
+            bytes_len: None,
+        }
+    }
+
+    pub fn read(&mut self, mut buffer: BytesMut) -> VortexResult<ReadState<DType>> {
+        match self.state {
+            ReadState::Init => Ok(ReadState::ReadMore(4)),
+            ReadState::ReadMore(len) => {
+                if len as usize != buffer.len() {
+                    vortex_bail!("Expected to receive {len} bytes but got {}", buffer.len());
+                }
+
+                if self.bytes_len.is_some() {
+                } else {
+                    let bytes_to_read = buffer.get_u32_le();
+                    self.bytes_len = Some(bytes_to_read);
+                    Ok(ReadState::ReadMore(bytes_to_read))
+                }
+            }
+            ReadState::Finished(_) => {}
+        }
+    }
+}
+
 impl<R: VortexSyncRead> SyncMessageReader<R> {
     pub fn try_new(read: R) -> VortexResult<Self> {
         let mut reader = Self {
