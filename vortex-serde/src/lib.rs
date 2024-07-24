@@ -77,22 +77,8 @@ mod test {
         })
     }
 
-<<<<<<< HEAD:vortex-ipc/src/lib.rs
-    async fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
-        ArrayWriter::new(vec![])
-            .write_array(array.into_array())
-            .await
-            .unwrap()
-            .into_inner()
-    }
-
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn test_empty_index() -> VortexResult<()> {
-=======
     #[test]
     fn test_empty_index() -> VortexResult<()> {
->>>>>>> 7a239b3c (Add vortex file format):vortex-serde/src/lib.rs
         let data = PrimitiveArray::from((0i32..3_000_000).collect_vec());
         let buffer = write_ipc(data);
 
