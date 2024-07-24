@@ -1,0 +1,15 @@
+# Taken from pola-rs/polars
+# Clearing caches regularly takes care of Rust caches growing to problematic size over time
+
+name: RustSec audit
+on:
+  schedule:
+    - cron: '0 0 * * *'
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
