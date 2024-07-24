@@ -2,24 +2,26 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use ::flatbuffers::{root, root_unchecked};
+use ::flatbuffers::root;
 use bytes::{Buf, BytesMut};
+use futures::{FutureExt, ready, Stream};
 use futures::future::BoxFuture;
-use futures::{ready, FutureExt, Stream};
-use vortex::array::struct_::StructArray;
+
 use vortex::{Array, ArrayView, IntoArray};
+use vortex::array::struct_::StructArray;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 
-use super::layouts::Layout;
-use super::FULL_FOOTER_SIZE;
 use crate::file::file_writer::MAGIC_BYTES;
 use crate::file::footer::Footer;
 use crate::flatbuffers as fb;
 use crate::io::VortexReadAt;
 use crate::messages::IPCDType;
+
+use super::FULL_FOOTER_SIZE;
+use super::layouts::Layout;
 
 pub struct FileReader<R> {
     inner: R,
@@ -219,7 +221,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                             buffers.push(buff);
                         }
 
-                        VortexResult::Ok((buffers, reader))
+                        Ok((buffers, reader))
                     }
                     .boxed();
 
@@ -304,15 +306,17 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
+
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::validity::Validity;
     use vortex::IntoArray;
+    use vortex::validity::Validity;
+
+    use crate::file::file_writer::FileWriter;
 
     use super::*;
-    use crate::file::file_writer::FileWriter;
 
     #[tokio::test]
     async fn test_read_simple() {

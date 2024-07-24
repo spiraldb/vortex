@@ -197,7 +197,7 @@ impl TryFrom<fb::NestedLayout<'_>> for Layout {
             .children()
             .unwrap()
             .iter()
-            .map(|l| Layout::try_from(l))
+            .map(Layout::try_from)
             .collect::<VortexResult<Vec<_>>>()?;
         match value.encoding() {
             1 => Ok(Layout::Chunked(ChunkedLayout::new(children))),

@@ -5,9 +5,8 @@ use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use itertools::Itertools;
-
-use vortex::{Array, ArrayView, Context, IntoArray, ToArray};
 use vortex::stream::{ArrayStream, ArrayStreamAdapter};
+use vortex::{Array, ArrayView, Context, IntoArray, ToArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -271,7 +270,6 @@ mod test {
 
     use bytes::Bytes;
     use futures_executor::block_on;
-
     use vortex_buffer::Buffer;
 
     use crate::{MessageReader, MessageWriter};

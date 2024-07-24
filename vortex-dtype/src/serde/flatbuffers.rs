@@ -4,11 +4,10 @@ use std::sync::Arc;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
-use crate::{DType, ExtDType, ExtID, ExtMetadata, flatbuffers as fb, PType, StructDType};
+use crate::{flatbuffers as fb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
 impl TryFrom<fb::DType<'_>> for DType {
     type Error = VortexError;
@@ -225,11 +224,10 @@ mod test {
     use std::sync::Arc;
 
     use flatbuffers::root;
-
     use vortex_flatbuffers::FlatBufferToBytes;
 
-    use crate::{DType, flatbuffers as fb, PType, StructDType};
     use crate::nullability::Nullability;
+    use crate::{flatbuffers as fb, DType, PType, StructDType};
 
     fn roundtrip_dtype(dtype: DType) {
         let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());
