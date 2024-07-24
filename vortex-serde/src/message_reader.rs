@@ -104,23 +104,24 @@ impl<R: VortexRead> MessageReader<R> {
         ctx: Arc<Context>,
         dtype: DType,
     ) -> VortexResult<Option<Array>> {
-        let Some(chunk_msg) = self.peek().and_then(|m| m.header_as_batch()) else {
-            return Ok(None);
+        let all_buffers_size = match self.peek().and_then(|m| m.header_as_batch()) {
+            None => return Ok(None),
+            Some(chunk) => chunk.buffer_size() as usize,
         };
 
-        let all_buffers_size = chunk_msg.buffer_size();
-        let flatbuffer = self.next().await?;
-        let mut array_reader = ArrayBufferReader::from_fb_bytes(flatbuffer);
+        let mut array_reader =
+            ArrayBufferReader::from_fb_bytes(Buffer::from(self.message.clone().freeze()));
 
         // Issue a single read to grab all buffers
-        let mut all_buffers = BytesMut::with_capacity(all_buffers_size as usize);
-        unsafe { all_buffers.set_len(all_buffers_size as usize) };
+        let mut all_buffers = BytesMut::with_capacity(all_buffers_size);
+        unsafe { all_buffers.set_len(all_buffers_size) };
         let all_buffers = self.read.read_into(all_buffers).await?;
 
         if array_reader.read(all_buffers.freeze())?.is_some() {
             unreachable!("This is an implementaion bug")
         };
 
+        let _ = self.next().await?;
         array_reader.into_array(ctx, dtype).map(Some)
     }
 
