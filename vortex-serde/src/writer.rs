@@ -101,6 +101,12 @@ pub struct ByteRange {
     pub end: u64,
 }
 
+impl ByteRange {
+    pub fn size(&self) -> usize {
+        (self.end - self.begin) as usize
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ArrayLayout {
     pub dtype: ByteRange,

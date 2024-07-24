@@ -1,14 +1,16 @@
-use std::future::Future;
-use std::ops::DerefMut;
-use std::task::Poll;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use bytes::BytesMut;
-use flatbuffers::root;
+use ::flatbuffers::{root, root_unchecked};
+use bytes::{Buf, BytesMut};
 use futures::future::BoxFuture;
 use futures::{ready, FutureExt, Stream};
-use vortex::Array;
+use vortex::array::struct_::StructArray;
+use vortex::{flatbuffers, Array, ArrayView, IntoArray};
+use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexError, VortexResult};
 
 use super::layouts::Layout;
 use super::FULL_FOOTER_SIZE;
@@ -123,8 +125,9 @@ impl<R: VortexReadAt> FileReader<R> {
             footer,
             layout,
             dtype,
-            inner: self.inner,
+            inner: Some(self.inner),
             state: StreamingState::default(),
+            context: Default::default(),
         })
     }
 }
@@ -133,8 +136,9 @@ pub struct FileReaderStream<R> {
     footer: Footer,
     layout: Layout,
     dtype: DType,
-    inner: R,
+    inner: Option<R>,
     state: StreamingState,
+    context: Arc<vortex::Context>,
 }
 
 impl<R> FileReaderStream<R> {}
@@ -143,25 +147,37 @@ impl<R> FileReaderStream<R> {}
 enum StreamingState {
     #[default]
     Init,
-    Reading(BoxFuture<'static, VortexResult<Vec<BytesMut>>>),
-    Decoding(Vec<(Layout, DType)>),
+    Reading(BoxFuture<'static, VortexResult<Vec<(Arc<str>, BytesMut, DType)>>>),
+    Decoding(Vec<ColumnInfo>),
 }
 
-impl<R: VortexReadAt + Unpin> Stream for FileReaderStream<R> {
+struct ColumnInfo {
+    layout: Layout,
+    dtype: DType,
+    name: Arc<str>,
+}
+
+impl ColumnInfo {
+    fn new(name: Arc<str>, dtype: DType, layout: Layout) -> Self {
+        Self {
+            name,
+            layout,
+            dtype,
+        }
+    }
+}
+
+impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
     type Item = VortexResult<Array>;
 
-    fn poll_next(
-        mut self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> Poll<Option<Self::Item>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             match &mut self.state {
                 StreamingState::Init => {
                     let mut layouts = Vec::default();
+                    let struct_types = self.dtype.as_struct().unwrap().clone();
 
-                    let top_level = self.layout.as_struct_mut().unwrap();
-
-                    for c_layout in top_level.children.iter_mut() {
+                    for c_layout in self.layout.as_struct_mut().unwrap().children.iter_mut() {
                         let layout = c_layout.as_chunked_mut().unwrap();
 
                         if layout.children.len() == 1 {
@@ -171,44 +187,118 @@ impl<R: VortexReadAt + Unpin> Stream for FileReaderStream<R> {
                         }
                     }
 
-                    let struct_types = self.dtype.as_struct().unwrap();
+                    let names = struct_types.names().into_iter();
+                    let types = struct_types.dtypes().into_iter().cloned();
 
-                    let r = layouts
+                    let layouts = layouts
                         .into_iter()
-                        .zip(struct_types.dtypes().into_iter().cloned())
-                        .collect::<Vec<_>>();
+                        .zip(types)
+                        .zip(names)
+                        .map(|((layout, dtype), name)| ColumnInfo::new(name.clone(), dtype, layout))
+                        .collect();
 
-                    self.state = StreamingState::Decoding(r)
+                    self.state = StreamingState::Decoding(layouts);
                 }
                 StreamingState::Decoding(layouts) => {
-                    todo!("build the future")
+                    let layouts = std::mem::take(layouts);
+                    let reader = self.inner.take().expect("Reader should be here");
+
+                    let f = async move {
+                        let mut buffers = Vec::with_capacity(layouts.len());
+                        for col_info in layouts {
+                            let byte_range = col_info.layout.as_flat().unwrap().range;
+                            let mut buffer = BytesMut::with_capacity(byte_range.size());
+                            unsafe { buffer.set_len(byte_range.size()) };
+
+                            let buff = reader
+                                .read_at_into(byte_range.begin, buffer)
+                                .await
+                                .map_err(VortexError::from)
+                                .map(|b| (col_info.name, b, col_info.dtype));
+                            buffers.push(buff);
+                        }
+
+                        buffers.into_iter().collect::<VortexResult<Vec<_>>>()
+                    }
+                    .boxed();
+
+                    self.state = StreamingState::Reading(f)
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
-                    Ok(_bytes) => todo!(),
-                    Err(_e) => todo!(),
+                    Ok(bytes) => {
+                        let arr = bytes
+                            .into_iter()
+                            .map(|(name, buff, dtype)| {
+                                let mut buff = buff.freeze();
+                                let len =
+                                    u32::from_le_bytes(buff[0..4].try_into().unwrap()) as usize;
+                                buff.advance(4);
+
+                                let fb_bytes = buff.split_to(len);
+                                let buffers_total_len = buff.len();
+
+                                let ipc_buffers = root::<fb::serde::Message>(&fb_bytes)
+                                    .unwrap()
+                                    .header_as_batch()
+                                    .expect("Checked above in peek")
+                                    .buffers()
+                                    .unwrap_or_default();
+
+                                let buffers = ipc_buffers
+                                    .iter()
+                                    .zip(
+                                        ipc_buffers
+                                            .iter()
+                                            .map(|b| b.offset())
+                                            .skip(1)
+                                            .chain([buffers_total_len as u64]),
+                                    )
+                                    .map(|(buffer, next_offset)| {
+                                        let buffer_len =
+                                            next_offset - buffer.offset() - buffer.padding() as u64;
+
+                                        // Grab the buffer
+                                        let data_buffer = buff.split_to(buffer_len as usize);
+                                        // Strip off any padding from the previous buffer
+                                        buff.advance(buffer.padding() as usize);
+
+                                        Buffer::from(data_buffer)
+                                    })
+                                    .collect::<Vec<_>>();
+
+                                let array_view = ArrayView::try_new(
+                                    self.context.clone(),
+                                    dtype,
+                                    buff.len(),
+                                    Buffer::Bytes(fb_bytes),
+                                    |flatbuffer| {
+                                        unsafe {
+                                            root_unchecked::<crate::flatbuffers::serde::Message>(
+                                                flatbuffer,
+                                            )
+                                        }
+                                        .header_as_batch()
+                                        .unwrap()
+                                        .array()
+                                        .ok_or_else(|| vortex_err!("Chunk missing Array"))
+                                    },
+                                    buffers,
+                                )
+                                .unwrap()
+                                .into_array();
+
+                                (name, array_view)
+                            })
+                            .collect::<Vec<_>>();
+
+                        let s = StructArray::from_fields(arr.as_ref());
+                        self.state = StreamingState::Init;
+                        return Poll::Ready(Some(Ok(s.into_array())));
+                    }
+                    Err(e) => return Poll::Ready(Some(Err(e))),
                 },
             }
         }
-
-        // if let Layout::Struct(layout) = this.layout {
-        //     for c_layout in layout.children.iter_mut() {
-        //         match c_layout {
-        //             Layout::Chunked(l) => {
-        //                 let l = l.children[self.depth].clone();
-        //                 self.depth += 1;
-        //             }
-        //             Layout::Flat(l) => l,
-        //             Layout::Struct(l) => unreachable!(),
-        //         }
-        //     }
-        // } else {
-        //     unreachable!()
-        // }
-        // match this.layout_ptr.as_mut() {
-        //     Some(layout) => todo!(),
-        //     None => todo!(),
-        // }
-        todo!()
     }
 }
 

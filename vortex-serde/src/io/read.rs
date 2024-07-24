@@ -17,7 +17,7 @@ pub trait VortexReadAt {
         &self,
         pos: u64,
         buffer: BytesMut,
-    ) -> impl Future<Output = io::Result<BytesMut>>;
+    ) -> impl Future<Output = io::Result<BytesMut>> + Send;
 
     // TODO(ngates): the read implementation should be able to hint at its latency/throughput
     //  allowing the caller to make better decisions about how to coalesce reads.
@@ -29,8 +29,12 @@ pub trait VortexReadAt {
 }
 
 impl<T: VortexReadAt> VortexReadAt for Arc<T> {
-    async fn read_at_into(&self, pos: u64, buffer: BytesMut) -> io::Result<BytesMut> {
-        T::read_at_into(self, pos, buffer).await
+    fn read_at_into(
+        &self,
+        pos: u64,
+        buffer: BytesMut,
+    ) -> impl Future<Output = io::Result<BytesMut>> + Send {
+        T::read_at_into(self, pos, buffer)
     }
 
     fn performance_hint(&self) -> usize {
@@ -70,8 +74,12 @@ impl<R: VortexReadAt> VortexRead for Cursor<R> {
 }
 
 impl<R: ?Sized + VortexReadAt> VortexReadAt for &R {
-    async fn read_at_into(&self, pos: u64, buffer: BytesMut) -> io::Result<BytesMut> {
-        R::read_at_into(*self, pos, buffer).await
+    fn read_at_into(
+        &self,
+        pos: u64,
+        buffer: BytesMut,
+    ) -> impl Future<Output = io::Result<BytesMut>> + Send {
+        R::read_at_into(*self, pos, buffer)
     }
 
     fn performance_hint(&self) -> usize {
