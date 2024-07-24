@@ -80,7 +80,7 @@ impl ArrayVariants for ConstantArray {
 impl NullArrayTrait for ConstantArray {}
 
 impl BoolArrayTrait for ConstantArray {
-    fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item=usize>> {
+    fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
         let value = self.scalar().value().as_bool().unwrap();
         if value.unwrap_or(false) {
             Box::new(0..self.len())
@@ -89,7 +89,7 @@ impl BoolArrayTrait for ConstantArray {
         }
     }
 
-    fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item=(usize, usize)>> {
+    fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         // Must be a boolean scalar
         let value = self.scalar().value().as_bool().unwrap();
 
