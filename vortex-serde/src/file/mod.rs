@@ -1,4 +1,3 @@
-mod column_metadata;
 pub mod file_reader;
 pub mod file_writer;
 mod footer;
