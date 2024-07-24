@@ -70,13 +70,7 @@ where
         predicate.maybe_null_slices_iter().for_each(|(start, end)| {
             let null_sl = val.slice(start, end - start);
             if null_sl.null_count() == 0 {
-                let (offset_start, offset_end) = (offsets[start], offsets[end]);
-                let data = &data[offset_start.to_usize().unwrap()..offset_end.to_usize().unwrap()];
-                let offsets = offsets[start..end + 1]
-                    .iter()
-                    .map(|o| *o - offset_start)
-                    .dropping(1);
-                builder.push_values(data, offsets, end - start)
+                update_non_nullable_slice(data, offsets, &mut builder, start, end)
             } else {
                 null_sl.iter().enumerate().for_each(|(idx, valid)| {
                     if valid {
@@ -98,19 +92,30 @@ where
     let mut builder = VarBinBuilder::<O>::with_capacity(selection_count);
 
     predicate.maybe_null_slices_iter().for_each(|(start, end)| {
-        let (offset_start, offset_end) = (offsets[start], offsets[end]);
-        let data = &data[offset_start.to_usize().unwrap()..offset_end.to_usize().unwrap()];
-        let offsets = offsets[start..end + 1]
-            .iter()
-            .map(|o| *o - offset_start)
-            .dropping(1);
-        builder.push_values(data, offsets, end - start)
+        update_non_nullable_slice(data, offsets, &mut builder, start, end)
     });
 
     Ok(builder.finish(dtype))
 }
 
-// match over the offsets using prim.
+fn update_non_nullable_slice<O>(
+    data: &[u8],
+    offsets: &[O],
+    builder: &mut VarBinBuilder<O>,
+    start: usize,
+    end: usize,
+) where
+    O: NativePType + 'static + Zero + Copy,
+    usize: AsPrimitive<O>,
+{
+    let (offset_start, offset_end) = (&offsets[start], &offsets[end]);
+    let new_data = &data[offset_start.to_usize().unwrap()..offset_end.to_usize().unwrap()];
+    let new_offsets = offsets[start..end + 1]
+        .iter()
+        .map(|o| *o - *offset_start)
+        .dropping(1);
+    builder.push_values(new_data, new_offsets, end - start)
+}
 
 fn filter_select_var_bin_by_index(
     values: &VarBinArray,
