@@ -48,9 +48,30 @@ pub(crate) fn try_canonicalize_chunks(
             Ok(Canonical::Struct(struct_array))
         }
 
-        // Extension arrays should be treated as "value arrays" rather than "structural" for the
-        // purposes of canonical encoding.
-        // We delegate to the canonical format of the internal storage array for every chunk.
+        // Extension arrays are containers that wraps an inner storage array with some metadata.
+        // We delegate to the canonical format of the internal storage array for every chunk, and
+        // push the chunking down into the inner storage array.
+        //
+        //  Input:
+        //  ------
+        //
+        //                  ChunkedArray
+        //                 /            \
+        //                /              \
+        //         ExtensionArray     ExtensionArray
+        //             |                   |
+        //          storage             storage
+        //
+        //
+        //  Output:
+        //  ------
+        //
+        //                 ExtensionArray
+        //                      |
+        //                 ChunkedArray
+        //                /             \
+        //          storage             storage
+        //
         DType::Extension(ext_dtype, _) => {
             // Recursively apply canonicalization and packing to the storage array backing
             // each chunk of the extension array.
