@@ -240,12 +240,14 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                                 let fb_bytes = buff.split_to(len);
                                 let buffers_total_len = buff.len();
 
-                                let ipc_buffers = root::<fb::serde::Message>(&fb_bytes)
+                                let batch = root::<fb::serde::Message>(&fb_bytes)
                                     .unwrap()
                                     .header_as_batch()
-                                    .expect("Checked above in peek")
-                                    .buffers()
-                                    .unwrap_or_default();
+                                    .expect("Checked above in peek");
+
+                                let batch_len = batch.length() as usize;
+
+                                let ipc_buffers = batch.buffers().unwrap_or_default();
 
                                 let buffers = ipc_buffers
                                     .iter()
@@ -272,7 +274,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                                 let array_view = ArrayView::try_new(
                                     self.context.clone(),
                                     dtype,
-                                    buff.len(),
+                                    batch_len,
                                     Buffer::Bytes(fb_bytes),
                                     |flatbuffer| {
                                         unsafe {
@@ -308,6 +310,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
+    use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
@@ -319,12 +322,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_read_simple() {
-        let strings = VarBinArray::from(vec!["ab", "foo", "bar", "baz"]);
-        let numbers = PrimitiveArray::from(vec![1u32, 2, 3, 4]);
+        let strings = ChunkedArray::from_iter([
+            VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
+            VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
+        ])
+        .into_array();
+
+        let numbers = ChunkedArray::from_iter([
+            PrimitiveArray::from(vec![1u32, 2, 3, 4]).into_array(),
+            PrimitiveArray::from(vec![5u32, 6, 7, 8]).into_array(),
+        ])
+        .into_array();
+
         let st = StructArray::try_new(
             ["strings".into(), "numbers".into()].into(),
-            vec![strings.into_array(), numbers.into_array()],
-            4,
+            vec![strings, numbers],
+            8,
             Validity::NonNullable,
         )
         .unwrap();
@@ -336,17 +349,15 @@ mod tests {
         let mut reader = FileReaderBuilder::new(written).build();
 
         let footer = reader.read_footer().await.unwrap();
-
-        dbg!(footer.schema_offset);
-        dbg!(footer.footer_offset);
-        dbg!(reader.layout(&footer).await.unwrap());
-        dbg!(reader.dtype(&footer).await.unwrap());
+        let layout = reader.layout(&footer).await.unwrap();
+        dbg!(layout);
 
         let mut stream = reader.into_stream().await.unwrap();
 
         while let Some(array) = stream.next().await {
             let array = array.unwrap();
-            println!("{array:?}");
+            println!("got array of len {}", array.len());
+            println!("{array:?}")
         }
     }
 }

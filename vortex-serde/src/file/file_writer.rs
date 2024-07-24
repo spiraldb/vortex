@@ -94,9 +94,13 @@ impl<W: VortexWrite> FileWriter<W> {
         while let Some(columns) = array_stream.try_next().await? {
             let st = StructArray::try_from(&columns)?;
             for (i, field) in st.children().enumerate() {
-                let chunk_pos = self
-                    .write_column_chunks(field.into_array_stream(), i)
-                    .await?;
+                let chunk_pos = if let Ok(chunked_array) = ChunkedArray::try_from(field.clone()) {
+                    self.write_column_chunks(chunked_array.array_stream(), i)
+                        .await?
+                } else {
+                    self.write_column_chunks(field.into_array_stream(), i)
+                        .await?
+                };
 
                 self.merge_chunk_offsets(i, chunk_pos);
             }
@@ -166,6 +170,7 @@ impl<W: VortexWrite> FileWriter<W> {
                 .zip(chunk.byte_offsets.iter())
                 .map(|(a, b)| a - b)
                 .collect_vec();
+
             chunks.extend(
                 chunk
                     .byte_offsets
