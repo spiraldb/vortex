@@ -8,7 +8,6 @@ mod message_reader;
 mod message_writer;
 mod messages;
 pub mod stream_reader;
-mod sync_message_reader;
 pub mod writer;
 
 pub const ALIGNMENT: usize = 64;
@@ -54,19 +53,20 @@ mod test {
     use std::sync::Arc;
 
     use futures_executor::block_on;
-    use futures_util::io::Cursor;
     use futures_util::{pin_mut, StreamExt, TryStreamExt};
+    use futures_util::io::Cursor;
     use itertools::Itertools;
+
+    use vortex::{ArrayDType, Context, IntoArray};
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::ArrayEncoding;
     use vortex::stream::ArrayStreamExt;
-    use vortex::{ArrayDType, Context, IntoArray};
     use vortex_error::VortexResult;
 
     use crate::io::FuturesAdapter;
-    use crate::writer::ArrayWriter;
     use crate::MessageReader;
+    use crate::writer::ArrayWriter;
 
     fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
         block_on(async {

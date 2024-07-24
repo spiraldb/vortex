@@ -2,12 +2,13 @@
 
 use std::sync::Arc;
 
-use flatbuffers::{FlatBufferBuilder, Follow, WIPOffset};
+use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::{FlatBufferRoot, ReadFlatBuffer, WriteFlatBuffer};
 
-use crate::{flatbuffers as fb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
+
+use crate::{DType, ExtDType, ExtID, ExtMetadata, flatbuffers as fb, PType, StructDType};
 
 impl TryFrom<fb::DType<'_>> for DType {
     type Error = VortexError;
@@ -180,21 +181,6 @@ impl WriteFlatBuffer for DType {
     }
 }
 
-impl ReadFlatBuffer for DType {
-    type Source<'a> = fb::Schema<'a>;
-    type Error = VortexError;
-
-    fn read_flatbuffer<'buf>(
-        fb: &<Self::Source<'buf> as Follow<'buf>>::Inner,
-    ) -> Result<Self, Self::Error> {
-        DType::try_from(
-            fb.dtype()
-                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
-        )
-        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))
-    }
-}
-
 impl From<PType> for fb::PType {
     fn from(value: PType) -> Self {
         match value {
@@ -239,10 +225,11 @@ mod test {
     use std::sync::Arc;
 
     use flatbuffers::root;
+
     use vortex_flatbuffers::FlatBufferToBytes;
 
+    use crate::{DType, flatbuffers as fb, PType, StructDType};
     use crate::nullability::Nullability;
-    use crate::{flatbuffers as fb, DType, PType, StructDType};
 
     fn roundtrip_dtype(dtype: DType) {
         let bytes = dtype.with_flatbuffer_bytes(|bytes| bytes.to_vec());

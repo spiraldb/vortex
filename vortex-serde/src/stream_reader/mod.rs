@@ -1,18 +1,17 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use futures_util::stream::try_unfold;
 use futures_util::Stream;
-use vortex::stream::ArrayStream;
+use futures_util::stream::try_unfold;
+
 use vortex::Context;
+use vortex::stream::ArrayStream;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
 use crate::io::VortexRead;
 use crate::MessageReader;
-
-mod in_memory;
 
 pub struct StreamArrayReader<R: VortexRead> {
     msgs: MessageReader<R>,

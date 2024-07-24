@@ -3,11 +3,12 @@ use std::mem;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
+
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -16,8 +17,9 @@ use vortex_flatbuffers::WriteFlatBuffer;
 use crate::file::layouts::{ChunkedLayout, FlatLayout, Layout, StructLayout};
 use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
-use crate::writer::ChunkLayout;
+use crate::messages::IPCSchema;
 use crate::MessageWriter;
+use crate::writer::ChunkLayout;
 
 pub const MAGIC_BYTES: [u8; 4] = *b"SP1R";
 
@@ -224,9 +226,7 @@ impl<W: VortexWrite> FileWriter<W> {
         let mut w = self.msgs.into_inner();
 
         let mut fbb = FlatBufferBuilder::new();
-        let dtype_fbb_offset = self
-            .dtype
-            .expect("Needed a schema at this point")
+        let dtype_fbb_offset = IPCSchema(&self.dtype.expect("Needed a schema at this point"))
             .write_flatbuffer(&mut fbb);
         fbb.finish_minimal(dtype_fbb_offset);
         let (buffer, buffer_begin) = fbb.collapse();
@@ -260,11 +260,12 @@ impl<W: VortexWrite> FileWriter<W> {
 #[cfg(test)]
 mod tests {
     use futures_executor::block_on;
+
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::validity::Validity;
     use vortex::IntoArray;
+    use vortex::validity::Validity;
 
     use crate::file::file_writer::FileWriter;
 

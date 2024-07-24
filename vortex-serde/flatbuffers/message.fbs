@@ -11,6 +11,10 @@ enum Compression: uint8 {
     None = 0,
 }
 
+table Schema {
+    dtype: vortex.dtype.DType;
+}
+
 struct Buffer {
     offset: uint64;
     padding: uint16;
@@ -30,7 +34,7 @@ table Page {
 }
 
 union MessageHeader {
-    vortex.dtype.Schema,
+    Schema,
     Batch,
     Page,
 }

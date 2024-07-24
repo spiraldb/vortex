@@ -5,8 +5,9 @@ use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use itertools::Itertools;
-use vortex::stream::{ArrayStream, ArrayStreamAdapter};
+
 use vortex::{Array, ArrayView, Context, IntoArray, ToArray};
+use vortex::stream::{ArrayStream, ArrayStreamAdapter};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -14,6 +15,7 @@ use vortex_flatbuffers::ReadFlatBuffer;
 
 use crate::flatbuffers::serde as fb;
 use crate::io::VortexRead;
+use crate::messages::IPCDType;
 
 pub struct MessageReader<R> {
     read: R,
@@ -75,18 +77,7 @@ impl<R: VortexRead> MessageReader<R> {
         Some(unsafe { root_unchecked::<fb::Message>(&self.message) })
     }
 
-    async fn next(&mut self) -> VortexResult<fb::Message> {
-        if self.finished {
-            vortex_bail!("Reader is finished, should've checked peek!")
-        }
-        self.prev_message = self.message.split();
-        if !self.load_next_message().await? {
-            self.finished = true;
-        }
-        Ok(unsafe { root_unchecked::<fb::Message>(&self.prev_message) })
-    }
-
-    async fn next_raw(&mut self) -> VortexResult<Buffer> {
+    async fn next(&mut self) -> VortexResult<Buffer> {
         if self.finished {
             vortex_bail!("Reader is finished, should've checked peek!")
         }
@@ -145,17 +136,16 @@ impl<R: VortexRead> MessageReader<R> {
     }
 
     pub async fn read_dtype(&mut self) -> VortexResult<DType> {
-        if self
-            .peek()
-            .and_then(|m| m.header_as_vortex_dtype_schema())
-            .is_none()
-        {
+        if self.peek().and_then(|m| m.header_as_schema()).is_none() {
             vortex_bail!("Expected schema message")
         }
 
-        let schema_msg = self.next().await?.header_as_vortex_dtype_schema().unwrap();
+        let buf = self.next().await?;
+        let msg = unsafe { root_unchecked::<fb::Message>(&buf) }
+            .header_as_schema()
+            .expect("Checked earlier in the function");
 
-        DType::read_flatbuffer(&schema_msg)
+        Ok(IPCDType::read_flatbuffer(&msg)?.0)
     }
 
     pub async fn maybe_read_chunk(
@@ -169,7 +159,7 @@ impl<R: VortexRead> MessageReader<R> {
         };
 
         let buffers = self.read_buffers().await?;
-        let flatbuffer = self.next_raw().await?;
+        let flatbuffer = self.next().await?;
 
         let view = ArrayView::try_new(
             ctx,
@@ -281,6 +271,7 @@ mod test {
 
     use bytes::Bytes;
     use futures_executor::block_on;
+
     use vortex_buffer::Buffer;
 
     use crate::{MessageReader, MessageWriter};

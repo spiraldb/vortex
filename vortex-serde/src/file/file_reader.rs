@@ -7,10 +7,11 @@ use bytes::{Buf, BytesMut};
 use futures::future::BoxFuture;
 use futures::{ready, FutureExt, Stream};
 use vortex::array::struct_::StructArray;
-use vortex::{Array, ArrayView, ArrayView, IntoArray, IntoArray};
+use vortex::{Array, ArrayView, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_flatbuffers::ReadFlatBuffer;
 
 use super::layouts::Layout;
 use super::FULL_FOOTER_SIZE;
@@ -18,6 +19,7 @@ use crate::file::file_writer::MAGIC_BYTES;
 use crate::file::footer::Footer;
 use crate::flatbuffers as fb;
 use crate::io::VortexReadAt;
+use crate::messages::IPCDType;
 
 pub struct FileReader<R> {
     inner: R,
@@ -58,7 +60,6 @@ impl<R: VortexReadAt> FileReader<R> {
         let mut buf = BytesMut::with_capacity(read_size);
         unsafe { buf.set_len(read_size) }
 
-        // TODO: Handle cases if there's less than 8MB of total data
         let read_offset = self.len().await - read_size as u64;
         buf = self.inner.read_at_into(read_offset, buf).await?;
 
@@ -101,7 +102,7 @@ impl<R: VortexReadAt> FileReader<R> {
         let end_offset = footer.leftovers.len() - FULL_FOOTER_SIZE;
         let layout_bytes = &footer.leftovers[start_offset..end_offset];
         let fb_footer = root::<fb::footer::Footer>(layout_bytes)?;
-        let fb_layout = fb_footer.layout().unwrap();
+        let fb_layout = fb_footer.layout().expect("Footer must contain a layout");
 
         Layout::try_from(fb_layout)
     }
@@ -111,9 +112,7 @@ impl<R: VortexReadAt> FileReader<R> {
         let end_offset = footer.leftovers_footer_offset();
         let dtype_bytes = &footer.leftovers[start_offset..end_offset];
 
-        let fb_dtype = root::<vortex_dtype::flatbuffers::DType>(dtype_bytes)?;
-
-        DType::try_from(fb_dtype)
+        Ok(IPCDType::read_flatbuffer(&root::<fb::serde::Schema>(dtype_bytes)?)?.0)
     }
 
     pub async fn into_stream(mut self) -> VortexResult<FileReaderStream<R>> {
@@ -188,8 +187,8 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                         }
                     }
 
-                    let names = struct_types.names().into_iter();
-                    let types = struct_types.dtypes().into_iter().cloned();
+                    let names = struct_types.names().iter();
+                    let types = struct_types.dtypes().iter().cloned();
 
                     let layouts = layouts
                         .into_iter()
@@ -278,15 +277,11 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                                     batch_len,
                                     Buffer::Bytes(fb_bytes),
                                     |flatbuffer| {
-                                        unsafe {
-                                            root_unchecked::<crate::flatbuffers::serde::Message>(
-                                                flatbuffer,
-                                            )
-                                        }
-                                        .header_as_batch()
-                                        .expect("Header is not a batch")
-                                        .array()
-                                        .ok_or_else(|| vortex_err!("Chunk missing Array"))
+                                        root::<crate::flatbuffers::serde::Message>(flatbuffer)
+                                            .header_as_batch()
+                                            .expect("Header is not a batch")
+                                            .array()
+                                            .ok_or_else(|| vortex_err!("Chunk missing Array"))
                                     },
                                     buffers,
                                 )?

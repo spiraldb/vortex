@@ -74,9 +74,4 @@ table DType {
   type: Type;
 }
 
-table Schema {
-    dtype: vortex.dtype.DType;
-}
-
-root_type Schema;
 root_type DType;
