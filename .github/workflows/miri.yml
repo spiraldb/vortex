@@ -1,0 +1,31 @@
+name: Miri
+
+on:
+  push:
+    branches: [ "develop" ]
+  pull_request: { }
+  workflow_dispatch: { }
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  miri:
+    name: 'miri'
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: 1
+      MIRIFLAGS: -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check -Zmiri-backtrace=full
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/cleanup
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+
+      - uses: ./.github/actions/setup-rust
+
+      - name: Rust Miri
+        run: cargo +nightly miri test
