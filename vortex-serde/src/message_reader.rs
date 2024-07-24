@@ -5,12 +5,12 @@ use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use itertools::Itertools;
-
-use vortex::{Array, ArrayView, Context, IntoArray, ToArray};
 use vortex::stream::{ArrayStream, ArrayStreamAdapter};
+use vortex::{Array, ArrayView, Context, IntoArray, ToArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_flatbuffers::ReadFlatBuffer;
 
 use crate::flatbuffers::serde as fb;
 use crate::io::VortexRead;
@@ -145,20 +145,17 @@ impl<R: VortexRead> MessageReader<R> {
     }
 
     pub async fn read_dtype(&mut self) -> VortexResult<DType> {
-        if self.peek().and_then(|m| m.header_as_schema()).is_none() {
+        if self
+            .peek()
+            .and_then(|m| m.header_as_vortex_dtype_schema())
+            .is_none()
+        {
             vortex_bail!("Expected schema message")
         }
 
-        let schema_msg = self.next().await?.header_as_schema().unwrap();
+        let schema_msg = self.next().await?.header_as_vortex_dtype_schema().unwrap();
 
-        let dtype = DType::try_from(
-            schema_msg
-                .dtype()
-                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
-        )
-        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
-
-        Ok(dtype)
+        DType::read_flatbuffer(&schema_msg)
     }
 
     pub async fn maybe_read_chunk(
@@ -284,7 +281,6 @@ mod test {
 
     use bytes::Bytes;
     use futures_executor::block_on;
-
     use vortex_buffer::Buffer;
 
     use crate::{MessageReader, MessageWriter};

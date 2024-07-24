@@ -1,7 +1,6 @@
 use std::io;
 
 use bytes::BytesMut;
-
 use vortex_error::vortex_err;
 
 pub trait VortexSyncRead {

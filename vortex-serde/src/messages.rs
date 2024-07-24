@@ -3,7 +3,7 @@ use itertools::Itertools;
 use vortex::stats::ArrayStatistics;
 use vortex::{flatbuffers as fba, Array};
 use vortex_buffer::Buffer;
-use vortex_dtype::DType;
+use vortex_dtype::{flatbuffers as fbd, DType};
 use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
 use crate::flatbuffers::serde as fb;
@@ -49,14 +49,14 @@ impl WriteFlatBuffer for IPCMessage<'_> {
 }
 
 impl<'a> WriteFlatBuffer for IPCSchema<'a> {
-    type Target<'t> = fb::Schema<'t>;
+    type Target<'t> = fbd::Schema<'t>;
 
     fn write_flatbuffer<'fb>(
         &self,
         fbb: &mut FlatBufferBuilder<'fb>,
     ) -> WIPOffset<Self::Target<'fb>> {
         let dtype = Some(self.0.write_flatbuffer(fbb));
-        fb::Schema::create(fbb, &fb::SchemaArgs { dtype })
+        fbd::Schema::create(fbb, &fbd::SchemaArgs { dtype })
     }
 }
 

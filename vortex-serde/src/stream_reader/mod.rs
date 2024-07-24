@@ -1,11 +1,10 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use futures_util::Stream;
 use futures_util::stream::try_unfold;
-
-use vortex::Context;
+use futures_util::Stream;
 use vortex::stream::ArrayStream;
+use vortex::Context;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;

@@ -4,7 +4,6 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 use bytes::BytesMut;
-
 use vortex_buffer::Buffer;
 use vortex_error::vortex_err;
 

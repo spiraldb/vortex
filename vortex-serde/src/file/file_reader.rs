@@ -7,7 +7,7 @@ use bytes::{Buf, BytesMut};
 use futures::future::BoxFuture;
 use futures::{ready, FutureExt, Stream};
 use vortex::array::struct_::StructArray;
-use vortex::{Array, ArrayView, IntoArray};
+use vortex::{Array, ArrayView, ArrayView, IntoArray, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError, VortexResult};

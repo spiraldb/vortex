@@ -3,15 +3,14 @@ use std::sync::Arc;
 
 use bytes::{Buf, BytesMut};
 use flatbuffers::{root, root_unchecked};
-
-use vortex::{Array, ArrayView, Context, IntoArray};
 use vortex::iter::ArrayIterator;
+use vortex::{Array, ArrayView, Context, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::flatbuffers::serde as fb;
-use crate::io::VortexSyncRead;
+use crate::io::{VortexReadAt, VortexSyncRead};
 
 pub struct SyncMessageReader<R> {
     read: R,
@@ -20,42 +19,59 @@ pub struct SyncMessageReader<R> {
     finished: bool,
 }
 
-pub enum ReadState<T> {
-    Init,
+pub enum ReadResult<T> {
     ReadMore(u32),
     Finished(T),
 }
 
+pub enum ReadState {
+    Init,
+    Reading,
+    Finished,
+}
+
 pub struct DTypeReader {
-    state: ReadState<DType>,
-    bytes_len: Option<u32>,
+    state: ReadState,
 }
 
 impl DTypeReader {
     pub fn new() -> Self {
         Self {
             state: ReadState::Init,
-            bytes_len: None,
         }
     }
 
-    pub fn read(&mut self, mut buffer: BytesMut) -> VortexResult<ReadState<DType>> {
+    pub fn read(&mut self, mut buffer: BytesMut) -> VortexResult<ReadResult<DType>> {
         match self.state {
-            ReadState::Init => Ok(ReadState::ReadMore(4)),
-            ReadState::ReadMore(len) => {
-                if len as usize != buffer.len() {
-                    vortex_bail!("Expected to receive {len} bytes but got {}", buffer.len());
-                }
-
-                if self.bytes_len.is_some() {
+            ReadState::Init => {
+                self.state = ReadState::Reading;
+                Ok(ReadResult::ReadMore(4))
+            }
+            ReadState::Reading => {
+                // TODO(robert): Should this be a state?
+                if buffer.len() != 4 {
+                    let dtype = self.read_flatbuffer(buffer)?;
+                    self.state = ReadState::Finished;
+                    Ok(ReadResult::Finished(dtype))
                 } else {
-                    let bytes_to_read = buffer.get_u32_le();
-                    self.bytes_len = Some(bytes_to_read);
-                    Ok(ReadState::ReadMore(bytes_to_read))
+                    Ok(ReadResult::ReadMore(buffer.get_u32_le()))
                 }
             }
-            ReadState::Finished(_) => {}
+            ReadState::Finished => vortex_bail!("Reader is finished"),
         }
+    }
+
+    fn read_flatbuffer(&mut self, buffer: BytesMut) -> VortexResult<DType> {
+        let schema_msg = root::<fb::Message>(buffer.as_ref())?
+            .header_as_vortex_dtype_schema()
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Flatbuffer was not a schema"))?;
+
+        DType::try_from(
+            schema_msg
+                .dtype()
+                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
+        )
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))
     }
 }
 
@@ -182,11 +198,15 @@ impl<R: VortexSyncRead> SyncMessageReader<R> {
     }
 
     pub fn read_dtype(&mut self) -> VortexResult<DType> {
-        if self.peek().and_then(|m| m.header_as_schema()).is_none() {
+        if self
+            .peek()
+            .and_then(|m| m.header_as_vortex_dtype_schema())
+            .is_none()
+        {
             vortex_bail!("Expected schema message")
         }
 
-        let schema_msg = self.next()?.header_as_schema().unwrap();
+        let schema_msg = self.next()?.header_as_vortex_dtype_schema().unwrap();
 
         let dtype = DType::try_from(
             schema_msg

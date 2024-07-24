@@ -7,10 +7,6 @@ enum Version: uint8 {
     V0 = 0,
 }
 
-table Schema {
-    dtype: vortex.dtype.DType;
-}
-
 enum Compression: uint8 {
     None = 0,
 }
@@ -34,7 +30,7 @@ table Page {
 }
 
 union MessageHeader {
-    Schema,
+    vortex.dtype.Schema,
     Batch,
     Page,
 }

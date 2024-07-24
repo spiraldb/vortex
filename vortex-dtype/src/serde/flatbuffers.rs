@@ -2,10 +2,10 @@
 
 use std::sync::Arc;
 
-use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use flatbuffers::{FlatBufferBuilder, Follow, WIPOffset};
 use itertools::Itertools;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
+use vortex_flatbuffers::{FlatBufferRoot, ReadFlatBuffer, WriteFlatBuffer};
 
 use crate::{flatbuffers as fb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
@@ -177,6 +177,21 @@ impl WriteFlatBuffer for DType {
                 type_: Some(dtype_union),
             },
         )
+    }
+}
+
+impl ReadFlatBuffer for DType {
+    type Source<'a> = fb::Schema<'a>;
+    type Error = VortexError;
+
+    fn read_flatbuffer<'buf>(
+        fb: &<Self::Source<'buf> as Follow<'buf>>::Inner,
+    ) -> Result<Self, Self::Error> {
+        DType::try_from(
+            fb.dtype()
+                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
+        )
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))
     }
 }
 
