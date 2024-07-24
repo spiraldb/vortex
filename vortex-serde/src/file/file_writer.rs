@@ -225,29 +225,33 @@ impl<W: VortexWrite> FileWriter<W> {
         let schema_offset = self.msgs.tell();
         let mut w = self.msgs.into_inner();
 
+        let dtype_len = Self::write_flatbuffer(
+            &mut w,
+            &IPCSchema(&self.dtype.expect("Needed a schema at this point")),
+        )
+        .await?;
+        let _ = Self::write_flatbuffer(&mut w, &footer).await?;
+
+        w.write_all(schema_offset.to_le_bytes()).await?;
+        w.write_all((schema_offset + dtype_len).to_le_bytes())
+            .await?;
+        w.write_all(MAGIC_BYTES).await?;
+        Ok(w)
+    }
+
+    // TODO(robert): Remove this once messagewriter/reader can write non length prefixed messages
+    async fn write_flatbuffer<F: WriteFlatBuffer>(write: &mut W, fb: &F) -> VortexResult<u64> {
         let mut fbb = FlatBufferBuilder::new();
-        let dtype_fbb_offset = IPCSchema(&self.dtype.expect("Needed a schema at this point"))
-            .write_flatbuffer(&mut fbb);
-        fbb.finish_minimal(dtype_fbb_offset);
+        let fb_offset = fb.write_flatbuffer(&mut fbb);
+        fbb.finish_minimal(fb_offset);
+
         let (buffer, buffer_begin) = fbb.collapse();
         let buffer_end = buffer.len();
         let sliced_buf = buffer.slice(buffer_begin, buffer_end);
-        let dtype_len = sliced_buf.as_slice().len() as u64;
-        w.write_all(sliced_buf).await?;
+        let buf_len = sliced_buf.as_slice().len() as u64;
 
-        let footer_offset = schema_offset + dtype_len;
-
-        let mut fbb = FlatBufferBuilder::new();
-        let footer_fbb_offset = footer.write_flatbuffer(&mut fbb);
-        fbb.finish_minimal(footer_fbb_offset);
-        let (buffer, buffer_begin) = fbb.collapse();
-        let buffer_end = buffer.len();
-        w.write_all(buffer.slice(buffer_begin, buffer_end)).await?;
-
-        w.write_all(schema_offset.to_le_bytes()).await?;
-        w.write_all(footer_offset.to_le_bytes()).await?;
-        w.write_all(MAGIC_BYTES).await?;
-        Ok(w)
+        write.write_all(sliced_buf).await?;
+        Ok(buf_len)
     }
 
     pub async fn finalize(mut self) -> VortexResult<W> {
