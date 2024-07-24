@@ -28,7 +28,7 @@ jobs:
       - name: Python Lint - Format
         run: rye run ruff format --check .
       - name: Python Lint - Ruff
-        run: rye run ruff .
+        run: rye run ruff check .
 
       - name: Rust Lint - Format
         run: cargo fmt --all --check
