@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use arrow_array::Datum;
 use vortex_dtype::Nullability;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
@@ -69,7 +69,14 @@ impl FilterFn for ConstantArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         Ok(Self::new(
             self.scalar().clone(),
-            predicate.statistics().compute_true_count().unwrap(),
+            predicate.with_dyn(|p| {
+                p.as_bool_array()
+                    .ok_or(vortex_err!(
+                        NotImplemented: "as_bool_array",
+                        predicate.encoding().id()
+                    ))
+                    .map(|x| x.true_count())
+            })?,
         )
         .into_array())
     }

@@ -1,12 +1,11 @@
 use itertools::Itertools;
 use num_traits::{AsPrimitive, Zero};
 use vortex_dtype::{match_each_integer_ptype, DType, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::compute::FilterFn;
-use crate::stats::ArrayStatistics;
 use crate::validity::Validity;
 use crate::variants::BoolArrayTrait;
 use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
@@ -18,10 +17,14 @@ impl FilterFn for VarBinArray {
 }
 
 fn filter_select_var_bin(arr: &VarBinArray, predicate: &Array) -> VortexResult<VarBinArray> {
-    let selection_count = predicate.statistics().compute_true_count().unwrap();
     predicate.with_dyn(|p| {
-        let predicate = p.as_bool_array_unchecked();
-
+        let predicate = p.as_bool_array().ok_or_else(|| {
+            vortex_err!(
+                NotImplemented: "as_bool_array",
+                predicate.encoding().id()
+            )
+        })?;
+        let selection_count = predicate.true_count();
         if selection_count * 2 > predicate.len() {
             filter_select_var_bin_by_slice(arr, predicate, selection_count)
         } else {

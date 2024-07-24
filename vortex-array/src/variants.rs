@@ -75,6 +75,12 @@ pub trait ArrayVariants {
 pub trait NullArrayTrait: ArrayTrait {}
 
 pub trait BoolArrayTrait: ArrayTrait {
+    fn true_count(&self) -> usize {
+        self.statistics()
+            .compute_true_count()
+            .unwrap_or_else(|| self.maybe_null_indices_iter().count())
+    }
+
     // An iterator over the sorted indices of set values in the underlying boolean array
     // good to array with low number of set values.
     fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a>;

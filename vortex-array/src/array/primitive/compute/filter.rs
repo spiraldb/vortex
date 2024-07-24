@@ -1,9 +1,8 @@
 use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::FilterFn;
-use crate::stats::ArrayStatistics;
 use crate::validity::filter_validity;
 use crate::variants::BoolArrayTrait;
 use crate::{Array, IntoArray};
@@ -18,25 +17,17 @@ fn filter_select_primitive(
     arr: &PrimitiveArray,
     predicate: &Array,
 ) -> VortexResult<PrimitiveArray> {
-    let Some(selection_count) = predicate.statistics().compute_true_count() else {
-        vortex_bail!(
-            NotImplemented: "compute_true_count",
-            predicate.encoding().id()
-        )
-    };
     predicate.with_dyn(|b| {
         let validity = filter_validity(arr.validity(), predicate)?;
-        if let Some(bb) = b.as_bool_array() {
-            match_each_native_ptype!(arr.ptype(), |$T| {
-                let slice = arr.maybe_null_slice::<$T>();
-                Ok(PrimitiveArray::from_vec(filter_primitive_slice(slice, bb, selection_count), validity))
-            })
-        } else {
-            vortex_bail!(
+        let predicate = b.as_bool_array().ok_or_else(||vortex_err!(
                 NotImplemented: "as_bool_array",
                 predicate.encoding().id()
-            )
-        }
+            ))?;
+        let selection_count = predicate.true_count();
+        match_each_native_ptype!(arr.ptype(), |$T| {
+            let slice = arr.maybe_null_slice::<$T>();
+            Ok(PrimitiveArray::from_vec(filter_primitive_slice(slice, predicate, selection_count), validity))
+        })
     })
 }
 
