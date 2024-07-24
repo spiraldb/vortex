@@ -176,8 +176,9 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                 StreamingState::Init => {
                     let mut layouts = Vec::default();
                     let struct_types = self.dtype.as_struct().unwrap().clone();
+                    let top_level = self.layout.as_struct_mut().unwrap();
 
-                    for c_layout in self.layout.as_struct_mut().unwrap().children.iter_mut() {
+                    for c_layout in top_level.children.iter_mut() {
                         let layout = c_layout.as_chunked_mut().unwrap();
 
                         if layout.children.len() == 1 {
@@ -214,13 +215,13 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                                 .read_at_into(byte_range.begin, buffer)
                                 .await
                                 .map_err(VortexError::from)
-                                .map(|b| (col_info.name, b, col_info.dtype));
+                                .map(|b| (col_info.name, b, col_info.dtype))?;
                             buffers.push(buff);
                         }
 
-                        let buffers = buffers.into_iter().collect::<VortexResult<Vec<_>>>();
+                        let buffers = buffers.into_iter().collect::<Vec<_>>();
 
-                        buffers.map(|b| (b, reader))
+                        VortexResult::Ok((buffers, reader))
                     }
                     .boxed();
 
@@ -233,17 +234,17 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                             .into_iter()
                             .map(|(name, buff, dtype)| {
                                 let mut buff = buff.freeze();
+
+                                let len_header = buff.split_to(size_of::<u32>());
                                 let len =
-                                    u32::from_le_bytes(buff[0..4].try_into().unwrap()) as usize;
-                                buff.advance(4);
+                                    u32::from_le_bytes(len_header[..].try_into().unwrap()) as usize;
 
                                 let fb_bytes = buff.split_to(len);
                                 let buffers_total_len = buff.len();
 
-                                let batch = root::<fb::serde::Message>(&fb_bytes)
-                                    .unwrap()
+                                let batch = root::<fb::serde::Message>(&fb_bytes)?
                                     .header_as_batch()
-                                    .expect("Checked above in peek");
+                                    .unwrap();
 
                                 let batch_len = batch.length() as usize;
 
@@ -283,18 +284,17 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                                             )
                                         }
                                         .header_as_batch()
-                                        .unwrap()
+                                        .expect("Header is not a batch")
                                         .array()
                                         .ok_or_else(|| vortex_err!("Chunk missing Array"))
                                     },
                                     buffers,
-                                )
-                                .unwrap()
+                                )?
                                 .into_array();
 
-                                (name, array_view)
+                                Ok((name, array_view))
                             })
-                            .collect::<Vec<_>>();
+                            .collect::<VortexResult<Vec<_>>>()?;
 
                         let s = StructArray::from_fields(arr.as_ref());
                         self.state = StreamingState::Init;
@@ -354,10 +354,14 @@ mod tests {
 
         let mut stream = reader.into_stream().await.unwrap();
 
+        let mut cnt = 0;
+
         while let Some(array) = stream.next().await {
             let array = array.unwrap();
-            println!("got array of len {}", array.len());
-            println!("{array:?}")
+            assert_eq!(array.len(), 4);
+            cnt += 1;
         }
+
+        assert_eq!(cnt, 2);
     }
 }
