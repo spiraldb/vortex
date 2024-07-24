@@ -2,26 +2,19 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use ::flatbuffers::root;
-use bytes::{Buf, BytesMut};
-use futures::{FutureExt, ready, Stream};
+use bytes::{Bytes, BytesMut};
 use futures::future::BoxFuture;
-
-use vortex::{Array, ArrayView, IntoArray};
+use futures::{ready, FutureExt, Stream};
 use vortex::array::struct_::StructArray;
-use vortex_buffer::Buffer;
+use vortex::{Array, IntoArray};
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::ReadFlatBuffer;
+use vortex_error::{VortexError, VortexResult};
 
+use super::layouts::Layout;
 use crate::file::file_writer::MAGIC_BYTES;
 use crate::file::footer::Footer;
-use crate::flatbuffers as fb;
 use crate::io::VortexReadAt;
-use crate::messages::IPCDType;
-
-use super::FULL_FOOTER_SIZE;
-use super::layouts::Layout;
+use crate::{ArrayBufferReader, ReadResult};
 
 pub struct FileReader<R> {
     inner: R,
@@ -100,31 +93,14 @@ impl<R: VortexReadAt> FileReader<R> {
         }
     }
 
-    pub async fn layout(&mut self, footer: &Footer) -> VortexResult<Layout> {
-        let start_offset = footer.leftovers_footer_offset();
-        let end_offset = footer.leftovers.len() - FULL_FOOTER_SIZE;
-        let layout_bytes = &footer.leftovers[start_offset..end_offset];
-        let fb_footer = root::<fb::footer::Footer>(layout_bytes)?;
-        let fb_layout = fb_footer.layout().expect("Footer must contain a layout");
-
-        Layout::try_from(fb_layout)
-    }
-
-    pub async fn dtype(&mut self, footer: &Footer) -> VortexResult<DType> {
-        let start_offset = footer.leftovers_schema_offset();
-        let end_offset = footer.leftovers_footer_offset();
-        let dtype_bytes = &footer.leftovers[start_offset..end_offset];
-
-        Ok(IPCDType::read_flatbuffer(&root::<fb::serde::Schema>(dtype_bytes)?)?.0)
-    }
-
     pub async fn into_stream(mut self) -> VortexResult<FileReaderStream<R>> {
         let footer = self.read_footer().await?;
-        let layout = self.layout(&footer).await?;
-        let dtype = self.dtype(&footer).await?;
+        let layout_fut = footer.layout();
+        let dtype_fut = footer.dtype();
 
+        let layout = layout_fut.await?;
+        let dtype = dtype_fut.await?;
         Ok(FileReaderStream {
-            footer,
             layout,
             dtype,
             reader: Some(self.inner),
@@ -135,7 +111,6 @@ impl<R: VortexReadAt> FileReader<R> {
 }
 
 pub struct FileReaderStream<R> {
-    footer: Footer,
     layout: Layout,
     dtype: DType,
     reader: Option<R>,
@@ -143,13 +118,13 @@ pub struct FileReaderStream<R> {
     context: Arc<vortex::Context>,
 }
 
-impl<R> FileReaderStream<R> {}
+type StreamStateFuture<R> = BoxFuture<'static, VortexResult<(Vec<(Arc<str>, BytesMut, DType)>, R)>>;
 
 #[derive(Default)]
 enum StreamingState<R> {
     #[default]
     Init,
-    Reading(BoxFuture<'static, VortexResult<(Vec<(Arc<str>, BytesMut, DType)>, R)>>),
+    Reading(StreamStateFuture<R>),
     Decoding(Vec<ColumnInfo>),
 }
 
@@ -234,61 +209,17 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                             .into_iter()
                             .map(|(name, buff, dtype)| {
                                 let mut buff = buff.freeze();
+                                let mut array_reader = ArrayBufferReader::new();
+                                let mut read_buf = Bytes::new();
+                                while let Some(ReadResult::ReadMore(u)) =
+                                    array_reader.read(read_buf.clone())?
+                                {
+                                    read_buf = buff.split_to(u);
+                                }
 
-                                let len_header = buff.split_to(size_of::<u32>());
-                                let len =
-                                    u32::from_le_bytes(len_header[..].try_into().unwrap()) as usize;
-
-                                let fb_bytes = buff.split_to(len);
-                                let buffers_total_len = buff.len();
-
-                                let batch = root::<fb::serde::Message>(&fb_bytes)?
-                                    .header_as_batch()
-                                    .unwrap();
-
-                                let batch_len = batch.length() as usize;
-
-                                let ipc_buffers = batch.buffers().unwrap_or_default();
-
-                                let buffers = ipc_buffers
-                                    .iter()
-                                    .zip(
-                                        ipc_buffers
-                                            .iter()
-                                            .map(|b| b.offset())
-                                            .skip(1)
-                                            .chain([buffers_total_len as u64]),
-                                    )
-                                    .map(|(buffer, next_offset)| {
-                                        let buffer_len =
-                                            next_offset - buffer.offset() - buffer.padding() as u64;
-
-                                        // Grab the buffer
-                                        let data_buffer = buff.split_to(buffer_len as usize);
-                                        // Strip off any padding from the previous buffer
-                                        buff.advance(buffer.padding() as usize);
-
-                                        Buffer::from(data_buffer)
-                                    })
-                                    .collect::<Vec<_>>();
-
-                                let array_view = ArrayView::try_new(
-                                    self.context.clone(),
-                                    dtype,
-                                    batch_len,
-                                    Buffer::Bytes(fb_bytes),
-                                    |flatbuffer| {
-                                        root::<crate::flatbuffers::serde::Message>(flatbuffer)?
-                                            .header_as_batch()
-                                            .expect("Header is not a batch")
-                                            .array()
-                                            .ok_or_else(|| vortex_err!("Chunk missing Array"))
-                                    },
-                                    buffers,
-                                )?
-                                .into_array();
-
-                                Ok((name, array_view))
+                                array_reader
+                                    .into_array(self.context.clone(), dtype)
+                                    .map(|a| (name, a))
                             })
                             .collect::<VortexResult<Vec<_>>>()?;
 
@@ -306,17 +237,15 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
 #[cfg(test)]
 mod tests {
     use futures::StreamExt;
-
     use vortex::array::chunked::ChunkedArray;
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::IntoArray;
     use vortex::validity::Validity;
-
-    use crate::file::file_writer::FileWriter;
+    use vortex::IntoArray;
 
     use super::*;
+    use crate::file::file_writer::FileWriter;
 
     #[tokio::test]
     async fn test_read_simple() {
@@ -347,7 +276,7 @@ mod tests {
         let mut reader = FileReaderBuilder::new(written).build();
 
         let footer = reader.read_footer().await.unwrap();
-        let layout = reader.layout(&footer).await.unwrap();
+        let layout = footer.layout().await.unwrap();
         dbg!(layout);
 
         let mut stream = reader.into_stream().await.unwrap();
