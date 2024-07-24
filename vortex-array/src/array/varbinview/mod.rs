@@ -38,7 +38,6 @@ struct Inlined {
 }
 
 impl Inlined {
-    #[allow(dead_code)]
     pub fn new(value: &[u8]) -> Self {
         assert!(
             value.len() <= BinaryView::MAX_INLINED_SIZE,
@@ -106,7 +105,9 @@ impl Debug for BinaryView {
     }
 }
 
-pub const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
+// this is a hack; views are 16 bytes with 8-byte alignment
+pub(crate) const VIEW_SIZE_TO_U64_SIZE: usize =
+    mem::size_of::<BinaryView>() / mem::size_of::<u64>();
 
 impl_encoding!("vortex.varbinview", 5u16, VarBinView);
 
@@ -123,8 +124,11 @@ impl VarBinViewArray {
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !matches!(views.dtype(), &DType::BYTES) {
-            vortex_bail!(MismatchedTypes: "u8", views.dtype());
+        if !matches!(
+            views.dtype(),
+            &DType::Primitive(PType::U64, Nullability::NonNullable)
+        ) {
+            vortex_bail!(MismatchedTypes: "u64", views.dtype());
         }
 
         for d in data.iter() {
@@ -141,10 +145,9 @@ impl VarBinViewArray {
             vortex_bail!("incorrect validity {:?}", validity);
         }
 
-        let length = views.len() / VIEW_SIZE;
-
+        let num_views = views.len() / VIEW_SIZE_TO_U64_SIZE;
         let metadata = VarBinViewMetadata {
-            validity: validity.to_metadata(views.len() / VIEW_SIZE)?,
+            validity: validity.to_metadata(num_views)?,
             data_lens: data.iter().map(|a| a.len()).collect_vec(),
         };
 
@@ -155,7 +158,7 @@ impl VarBinViewArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, num_views, metadata, children.into(), StatsSet::new())
     }
 
     fn view_slice(&self) -> &[BinaryView] {
@@ -163,9 +166,9 @@ impl VarBinViewArray {
             slice::from_raw_parts(
                 PrimitiveArray::try_from(self.views())
                     .expect("Views must be a primitive array")
-                    .maybe_null_slice::<u8>()
+                    .maybe_null_slice::<u64>()
                     .as_ptr() as _,
-                self.views().len() / VIEW_SIZE,
+                self.views().len() / VIEW_SIZE_TO_U64_SIZE,
             )
         }
     }
@@ -177,7 +180,11 @@ impl VarBinViewArray {
     #[inline]
     pub fn views(&self) -> Array {
         self.array()
-            .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
+            .child(
+                0,
+                &DType::Primitive(PType::U64, Nullability::NonNullable),
+                self.len() * VIEW_SIZE_TO_U64_SIZE,
+            )
             .expect("missing views")
     }
 
@@ -254,7 +261,7 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
         .views()
         .into_primitive()
         .expect("views must be primitive");
-    assert_eq!(views.ptype(), PType::U8);
+    assert_eq!(views.ptype(), PType::U64);
     let nulls = var_bin_view
         .logical_validity()
         .to_null_buffer()
@@ -362,7 +369,7 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
 mod test {
     use vortex_scalar::Scalar;
 
-    use crate::array::varbinview::VarBinViewArray;
+    use crate::array::varbinview::{BinaryView, VarBinViewArray, VIEW_SIZE_TO_U64_SIZE};
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
     use crate::{Canonical, IntoArray, IntoCanonical};
@@ -407,5 +414,16 @@ mod test {
         let var_bin = flattened.into_array();
         assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
         assert_eq!(scalar_at(&var_bin, 1).unwrap(), Scalar::from("string2"));
+    }
+
+    #[test]
+    pub fn views_fit_in_u64() {
+        assert_eq!(VIEW_SIZE_TO_U64_SIZE, 2);
+        assert_eq!(std::mem::size_of::<BinaryView>(), 16);
+        assert_eq!(std::mem::align_of::<BinaryView>(), 8);
+        assert_eq!(
+            std::mem::size_of::<BinaryView>(),
+            std::mem::size_of::<u64>() * VIEW_SIZE_TO_U64_SIZE
+        );
     }
 }

@@ -6,7 +6,7 @@ use arrow_buffer::NullBufferBuilder;
 use vortex_dtype::DType;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
+use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE_TO_U64_SIZE};
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData, ToArray};
 
@@ -99,17 +99,17 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         };
 
         // convert Vec<BinaryView> to Vec<u8> which can be stored as an array
-        let views_u8: Vec<u8> = unsafe {
+        let views_u64: Vec<u64> = unsafe {
             let mut views_clone = ManuallyDrop::new(mem::take(&mut self.views));
             Vec::from_raw_parts(
                 views_clone.as_mut_ptr() as _,
-                views_clone.len() * VIEW_SIZE,
-                views_clone.capacity() * VIEW_SIZE,
+                views_clone.len() * VIEW_SIZE_TO_U64_SIZE,
+                views_clone.capacity() * VIEW_SIZE_TO_U64_SIZE,
             )
         };
 
         VarBinViewArray::try_new(
-            PrimitiveArray::from(views_u8).to_array(),
+            PrimitiveArray::from(views_u64).to_array(),
             completed,
             dtype,
             validity,
