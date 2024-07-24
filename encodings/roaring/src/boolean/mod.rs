@@ -73,7 +73,15 @@ impl ArrayVariants for RoaringBoolArray {
     }
 }
 
-impl BoolArrayTrait for RoaringBoolArray {}
+impl BoolArrayTrait for RoaringBoolArray {
+    fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
+        todo!()
+    }
+
+    fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
+        todo!()
+    }
+}
 
 impl AcceptArrayVisitor for RoaringBoolArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {

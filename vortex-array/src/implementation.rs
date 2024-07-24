@@ -6,8 +6,8 @@ use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, Encodin
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayDType, ArrayData, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata, IntoArray,
-    IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
+    Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata,
+    IntoArray, IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
 };
 
 /// Trait the defines the set of types relating to an array.
@@ -169,6 +169,22 @@ impl<T: AsArray> ArrayDType for T {
         match self.as_array_ref() {
             Array::Data(d) => d.dtype(),
             Array::View(v) => v.dtype(),
+        }
+    }
+}
+
+impl<T: AsArray> ArrayLen for T {
+    fn len(&self) -> usize {
+        match self.as_array_ref() {
+            Array::Data(d) => d.len(),
+            Array::View(v) => v.len(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self.as_array_ref() {
+            Array::Data(d) => d.is_empty(),
+            Array::View(v) => v.is_empty(),
         }
     }
 }

@@ -1,3 +1,4 @@
+use arrow_buffer::bit_iterator::{BitIndexIterator, BitSliceIterator};
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -83,7 +84,15 @@ impl ArrayVariants for BoolArray {
     }
 }
 
-impl BoolArrayTrait for BoolArray {}
+impl BoolArrayTrait for BoolArray {
+    fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
+        Box::new(BitIndexIterator::new(self.buffer(), 0, self.len()))
+    }
+
+    fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
+        Box::new(BitSliceIterator::new(self.buffer(), 0, self.len()))
+    }
+}
 
 impl From<BooleanBuffer> for BoolArray {
     fn from(value: BooleanBuffer) -> Self {
@@ -139,8 +148,11 @@ impl AcceptArrayVisitor for BoolArray {
 
 #[cfg(test)]
 mod tests {
+    use itertools::Itertools;
+
     use crate::array::bool::BoolArray;
     use crate::compute::unary::scalar_at;
+    use crate::variants::BoolArrayTrait;
     use crate::IntoArray;
 
     #[test]
@@ -169,5 +181,29 @@ mod tests {
 
         let scalar = scalar_at(&arr, 4).unwrap();
         assert!(scalar.is_null());
+    }
+
+    #[test]
+    fn constant_iter_true_test() {
+        let arr = BoolArray::from(vec![true, true, true]);
+        assert_eq!(vec![0, 1, 2], arr.maybe_null_indices_iter().collect_vec());
+        assert_eq!(vec![(0, 3)], arr.maybe_null_slices_iter().collect_vec());
+    }
+
+    #[test]
+    fn constant_iter_true_false_test() {
+        let arr = BoolArray::from(vec![true, false, true]);
+        assert_eq!(vec![0, 2], arr.maybe_null_indices_iter().collect_vec());
+        assert_eq!(
+            vec![(0, 1), (2, 3)],
+            arr.maybe_null_slices_iter().collect_vec()
+        );
+    }
+
+    #[test]
+    fn constant_iter_false_test() {
+        let arr = BoolArray::from(vec![false, false, false]);
+        assert_eq!(0, arr.maybe_null_indices_iter().collect_vec().len());
+        assert_eq!(0, arr.maybe_null_slices_iter().collect_vec().len());
     }
 }

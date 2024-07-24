@@ -231,6 +231,7 @@ pub trait ArrayTrait:
     ArrayEncodingRef
     + ArrayCompute
     + ArrayDType
+    + ArrayLen
     + ArrayVariants
     + IntoCanonical
     + ArrayValidity
@@ -249,6 +250,12 @@ pub trait ArrayTrait:
 pub trait ArrayDType {
     // TODO(ngates): move into ArrayTrait?
     fn dtype(&self) -> &DType;
+}
+
+pub trait ArrayLen {
+    fn len(&self) -> usize;
+
+    fn is_empty(&self) -> bool;
 }
 
 struct NBytesVisitor(usize);
