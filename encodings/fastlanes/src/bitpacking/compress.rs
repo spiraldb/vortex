@@ -320,8 +320,13 @@ mod test {
     }
 
     #[test]
-    fn test_compression_roundtrip() {
+    fn test_compression_roundtrip_fast() {
         compression_roundtrip(125);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)] // This test is too slow on miri
+    fn test_compression_roundtrip() {
         compression_roundtrip(1024);
         compression_roundtrip(10_000);
         compression_roundtrip(10_240);
