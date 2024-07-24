@@ -1,32 +1,47 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::bool::BoolArray;
 use crate::compute::FilterFn;
 use crate::stats::ArrayStatistics;
 use crate::validity::filter_validity;
 use crate::variants::BoolArrayTrait;
-use crate::{Array, IntoArray, ToArray};
+use crate::{Array, IntoArray};
 
 impl FilterFn for BoolArray {
-    fn filter(&self, predicate: &Array) -> Array {
-        let bool_array = BoolArray::try_from(predicate).unwrap();
-        filter_select_bool(self, &bool_array).into_array()
+    fn filter(&self, predicate: &Array) -> VortexResult<Array> {
+        filter_select_bool(self, predicate).map(|a| a.into_array())
     }
 }
 
-fn filter_select_bool(arr: &BoolArray, predicate: &BoolArray) -> BoolArray {
-    let selection_count = predicate.statistics().compute_true_count().unwrap();
-    let out = if selection_count * 2 > predicate.len() {
-        filter_select_bool_by_slice(&arr.boolean_buffer(), predicate, selection_count)
-    } else {
-        filter_select_bool_by_index(&arr.boolean_buffer(), predicate, selection_count)
+fn filter_select_bool(arr: &BoolArray, predicate: &Array) -> VortexResult<BoolArray> {
+    let Some(selection_count) = predicate.statistics().compute_true_count() else {
+        vortex_bail!(
+            NotImplemented: "compute_true_count",
+            predicate.encoding().id()
+        )
     };
-    BoolArray::try_new(out, filter_validity(arr.validity(), &predicate.to_array())).unwrap()
+    predicate.with_dyn(|b| {
+        let validity = filter_validity(arr.validity(), predicate)?;
+        if let Some(predicate) = b.as_bool_array() {
+            let out = if selection_count * 2 > arr.len() {
+                filter_select_bool_by_slice(&arr.boolean_buffer(), predicate, selection_count)
+            } else {
+                filter_select_bool_by_index(&arr.boolean_buffer(), predicate, selection_count)
+            };
+            BoolArray::try_new(out, validity)
+        } else {
+            vortex_bail!(
+                NotImplemented: "as_bool_array",
+                predicate.encoding().id()
+            )
+        }
+    })
 }
 
 fn filter_select_bool_by_slice(
     values: &BooleanBuffer,
-    predicate: &BoolArray,
+    predicate: &dyn BoolArrayTrait,
     selection_count: usize,
 ) -> BooleanBuffer {
     let mut out_buf = BooleanBufferBuilder::new(selection_count);
@@ -38,7 +53,7 @@ fn filter_select_bool_by_slice(
 
 fn filter_select_bool_by_index(
     values: &BooleanBuffer,
-    predicate: &BoolArray,
+    predicate: &dyn BoolArrayTrait,
     selection_count: usize,
 ) -> BooleanBuffer {
     let mut out_buf = BooleanBufferBuilder::new(selection_count);
@@ -56,13 +71,14 @@ mod test {
         filter_select_bool, filter_select_bool_by_index, filter_select_bool_by_slice,
     };
     use crate::array::bool::BoolArray;
+    use crate::ToArray;
 
     #[test]
     fn filter_bool_test() {
         let arr = BoolArray::from(vec![true, true, false]);
         let filter = BoolArray::from(vec![true, false, true]);
 
-        let filtered = filter_select_bool(&arr, &filter);
+        let filtered = filter_select_bool(&arr, &filter.to_array()).unwrap();
         assert_eq!(2, filtered.len());
 
         assert_eq!(

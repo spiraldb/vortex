@@ -1,5 +1,6 @@
 use arrow_buffer::NullBufferBuilder;
 use bytes::BytesMut;
+use num_traits::AsPrimitive;
 use vortex_dtype::{DType, NativePType};
 
 use crate::array::primitive::PrimitiveArray;
@@ -44,6 +45,18 @@ impl<O: NativePType> VarBinBuilder<O> {
     pub fn push_null(&mut self) {
         self.offsets.push(self.offsets[self.offsets.len() - 1]);
         self.validity.append_null();
+    }
+
+    #[inline]
+    pub fn push_values(&mut self, values: &[u8], end_offsets: impl Iterator<Item = O>, num: usize)
+    where
+        O: 'static,
+        usize: AsPrimitive<O>,
+    {
+        self.offsets
+            .extend(end_offsets.map(|offset| offset + self.data.len().as_()));
+        self.data.extend_from_slice(values);
+        self.validity.append_n_non_nulls(num);
     }
 
     pub fn finish(mut self, dtype: DType) -> VarBinArray {

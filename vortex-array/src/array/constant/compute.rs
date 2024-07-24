@@ -66,12 +66,12 @@ impl SliceFn for ConstantArray {
 }
 
 impl FilterFn for ConstantArray {
-    fn filter(&self, predicate: &Array) -> Array {
-        Self::new(
+    fn filter(&self, predicate: &Array) -> VortexResult<Array> {
+        Ok(Self::new(
             self.scalar().clone(),
             predicate.statistics().compute_true_count().unwrap(),
         )
-        .into_array()
+        .into_array())
     }
 }
 

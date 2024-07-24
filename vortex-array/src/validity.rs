@@ -289,9 +289,9 @@ impl IntoArray for LogicalValidity {
     }
 }
 
-pub fn filter_validity(validity: Validity, predicate: &Array) -> Validity {
+pub fn filter_validity(validity: Validity, predicate: &Array) -> VortexResult<Validity> {
     match validity {
-        v @ (Validity::NonNullable | Validity::AllValid | Validity::AllInvalid) => v,
-        Validity::Array(a) => Validity::Array(filter(&a, predicate).unwrap()),
+        v @ (Validity::NonNullable | Validity::AllValid | Validity::AllInvalid) => Ok(v),
+        Validity::Array(arr) => Ok(Validity::Array(filter(&arr, predicate)?)),
     }
 }
