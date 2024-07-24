@@ -12,6 +12,50 @@ pub enum Layout {
     Flat(FlatLayout),
 }
 
+impl Layout {
+    pub fn as_struct(&self) -> Option<&StructLayout> {
+        match self {
+            Self::Struct(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    pub fn as_struct_mut(&mut self) -> Option<&mut StructLayout> {
+        match self {
+            Self::Struct(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    pub fn as_flat(&self) -> Option<&FlatLayout> {
+        match self {
+            Self::Flat(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    pub fn as_flat_mut(&mut self) -> Option<&mut FlatLayout> {
+        match self {
+            Self::Flat(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    pub fn as_chunked(&self) -> Option<&ChunkedLayout> {
+        match self {
+            Self::Chunked(l) => Some(l),
+            _ => None,
+        }
+    }
+
+    pub fn as_chunked_mut(&mut self) -> Option<&mut ChunkedLayout> {
+        match self {
+            Self::Chunked(l) => Some(l),
+            _ => None,
+        }
+    }
+}
+
 impl WriteFlatBuffer for Layout {
     type Target<'a> = fb::Layout<'a>;
 

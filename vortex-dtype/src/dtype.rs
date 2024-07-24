@@ -87,6 +87,13 @@ impl DType {
     pub fn is_boolean(&self) -> bool {
         matches!(self, Bool(_))
     }
+
+    pub fn as_struct(&self) -> Option<&StructDType> {
+        match self {
+            Struct(s, _) => Some(s),
+            _ => None,
+        }
+    }
 }
 
 impl Display for DType {

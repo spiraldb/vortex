@@ -1,8 +1,11 @@
+use std::future::Future;
 use std::ops::DerefMut;
+use std::task::Poll;
 
 use bytes::BytesMut;
 use flatbuffers::root;
-use futures::Stream;
+use futures::future::BoxFuture;
+use futures::{ready, FutureExt, Stream};
 use vortex::Array;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
@@ -121,8 +124,7 @@ impl<R: VortexReadAt> FileReader<R> {
             layout,
             dtype,
             inner: self.inner,
-            layout_ptr: None,
-            depth: 0,
+            state: StreamingState::default(),
         })
     }
 }
@@ -132,11 +134,18 @@ pub struct FileReaderStream<R> {
     layout: Layout,
     dtype: DType,
     inner: R,
-    depth: usize,
-    layout_ptr: Option<Layout>,
+    state: StreamingState,
 }
 
 impl<R> FileReaderStream<R> {}
+
+#[derive(Default)]
+enum StreamingState {
+    #[default]
+    Init,
+    Reading(BoxFuture<'static, VortexResult<Vec<BytesMut>>>),
+    Decoding(Vec<(Layout, DType)>),
+}
 
 impl<R: VortexReadAt + Unpin> Stream for FileReaderStream<R> {
     type Item = VortexResult<Array>;
@@ -144,13 +153,45 @@ impl<R: VortexReadAt + Unpin> Stream for FileReaderStream<R> {
     fn poll_next(
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Option<Self::Item>> {
-        // let this = self.deref_mut();
+    ) -> Poll<Option<Self::Item>> {
+        loop {
+            match &mut self.state {
+                StreamingState::Init => {
+                    let mut layouts = Vec::default();
 
-        // let mut arrs = Vec::default();
+                    let top_level = self.layout.as_struct_mut().unwrap();
 
-        // if let Layout::Struct(layout) = self.layout {
-        //     for c_layout in layout.children.iter() {
+                    for c_layout in top_level.children.iter_mut() {
+                        let layout = c_layout.as_chunked_mut().unwrap();
+
+                        if layout.children.len() == 1 {
+                            return Poll::Ready(None);
+                        } else {
+                            layouts.push(layout.children.remove(0))
+                        }
+                    }
+
+                    let struct_types = self.dtype.as_struct().unwrap();
+
+                    let r = layouts
+                        .into_iter()
+                        .zip(struct_types.dtypes().into_iter().cloned())
+                        .collect::<Vec<_>>();
+
+                    self.state = StreamingState::Decoding(r)
+                }
+                StreamingState::Decoding(layouts) => {
+                    todo!("build the future")
+                }
+                StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
+                    Ok(_bytes) => todo!(),
+                    Err(_e) => todo!(),
+                },
+            }
+        }
+
+        // if let Layout::Struct(layout) = this.layout {
+        //     for c_layout in layout.children.iter_mut() {
         //         match c_layout {
         //             Layout::Chunked(l) => {
         //                 let l = l.children[self.depth].clone();
