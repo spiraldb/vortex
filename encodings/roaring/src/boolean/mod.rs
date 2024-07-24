@@ -137,6 +137,7 @@ mod test {
     use crate::RoaringBoolArray;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     pub fn iter() -> VortexResult<()> {
         let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool.into_array())?;
@@ -148,6 +149,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     pub fn test_scalar_at() -> VortexResult<()> {
         let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool.into_array())?;
