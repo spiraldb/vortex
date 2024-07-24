@@ -1,11 +1,11 @@
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
 
+use crate::{Array, IntoArray};
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::FilterFn;
 use crate::validity::filter_validity;
 use crate::variants::BoolArrayTrait;
-use crate::{Array, IntoArray};
 
 impl FilterFn for PrimitiveArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
@@ -61,7 +61,7 @@ mod test {
         let bfilter = BoolArray::from(filter.clone());
         let arr = PrimitiveArray::from(vec![1u32, 24, 54, 2, 3, 2, 3, 2]);
 
-        let filtered = filter_select_primitive(&arr, &bfilter.array()).unwrap();
+        let filtered = filter_select_primitive(&arr, bfilter.array()).unwrap();
         assert_eq!(
             filtered.len(),
             filter.iter().filter(|x| **x).collect_vec().len()
