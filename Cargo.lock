@@ -4323,6 +4323,7 @@ dependencies = [
 name = "vortex-sampling-compressor"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "log",
  "rand",
  "vortex-alp",
