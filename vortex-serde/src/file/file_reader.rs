@@ -125,7 +125,7 @@ impl<R: VortexReadAt> FileReader<R> {
             footer,
             layout,
             dtype,
-            inner: Some(self.inner),
+            reader: Some(self.inner),
             state: StreamingState::default(),
             context: Default::default(),
         })
@@ -136,18 +136,18 @@ pub struct FileReaderStream<R> {
     footer: Footer,
     layout: Layout,
     dtype: DType,
-    inner: Option<R>,
-    state: StreamingState,
+    reader: Option<R>,
+    state: StreamingState<R>,
     context: Arc<vortex::Context>,
 }
 
 impl<R> FileReaderStream<R> {}
 
 #[derive(Default)]
-enum StreamingState {
+enum StreamingState<R> {
     #[default]
     Init,
-    Reading(BoxFuture<'static, VortexResult<Vec<(Arc<str>, BytesMut, DType)>>>),
+    Reading(BoxFuture<'static, VortexResult<(Vec<(Arc<str>, BytesMut, DType)>, R)>>),
     Decoding(Vec<ColumnInfo>),
 }
 
@@ -201,7 +201,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                 }
                 StreamingState::Decoding(layouts) => {
                     let layouts = std::mem::take(layouts);
-                    let reader = self.inner.take().expect("Reader should be here");
+                    let reader = self.reader.take().expect("Reader should be here");
 
                     let f = async move {
                         let mut buffers = Vec::with_capacity(layouts.len());
@@ -218,14 +218,17 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                             buffers.push(buff);
                         }
 
-                        buffers.into_iter().collect::<VortexResult<Vec<_>>>()
+                        let buffers = buffers.into_iter().collect::<VortexResult<Vec<_>>>();
+
+                        buffers.map(|b| (b, reader))
                     }
                     .boxed();
 
                     self.state = StreamingState::Reading(f)
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
-                    Ok(bytes) => {
+                    Ok((bytes, reader)) => {
+                        self.reader = Some(reader);
                         let arr = bytes
                             .into_iter()
                             .map(|(name, buff, dtype)| {
@@ -315,7 +318,7 @@ mod tests {
     use crate::file::file_writer::FileWriter;
 
     #[tokio::test]
-    async fn read() {
+    async fn test_read_simple() {
         let strings = VarBinArray::from(vec!["ab", "foo", "bar", "baz"]);
         let numbers = PrimitiveArray::from(vec![1u32, 2, 3, 4]);
         let st = StructArray::try_new(
@@ -342,8 +345,8 @@ mod tests {
         let mut stream = reader.into_stream().await.unwrap();
 
         while let Some(array) = stream.next().await {
-            let _array = array.unwrap();
-            println!("got an array");
+            let array = array.unwrap();
+            println!("{array:?}");
         }
     }
 }
