@@ -510,6 +510,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_datafusion_pushdown() {
         let ctx = SessionContext::new();
 
@@ -538,6 +539,7 @@ mod test {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_datafusion_no_pushdown() {
         let ctx = SessionContext::new();
 
