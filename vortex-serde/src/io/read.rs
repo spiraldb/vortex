@@ -7,8 +7,6 @@ use bytes::BytesMut;
 use vortex_buffer::Buffer;
 use vortex_error::vortex_err;
 
-use crate::io::sync::VortexSyncRead;
-
 pub trait VortexRead {
     fn read_into(&mut self, buffer: BytesMut) -> impl Future<Output = io::Result<BytesMut>>;
 }
@@ -48,17 +46,18 @@ impl<T: VortexReadAt> VortexReadAt for Arc<T> {
     }
 }
 
-impl<R: VortexSyncRead> VortexRead for R {
+impl VortexRead for BytesMut {
     async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
-        R::read_into(self, buffer)
+        if buffer.len() > self.len() {
+            Err(io::Error::new(
+                io::ErrorKind::UnexpectedEof,
+                vortex_err!("unexpected eof"),
+            ))
+        } else {
+            Ok(self.split_to(buffer.len()))
+        }
     }
 }
-
-// impl<R: VortexRead> VortexRead for &mut R {
-//     async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
-//         R::read_into(*self, buffer).await
-//     }
-// }
 
 impl<R: VortexReadAt> VortexRead for Cursor<R> {
     async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {

@@ -139,7 +139,7 @@ impl Array {
 
     /// Return the buffer offsets and the total length of all buffers, assuming the given alignment.
     /// This includes all child buffers.
-    pub fn all_buffer_offsets(&self, alignment: Option<usize>) -> Vec<u64> {
+    pub fn all_buffer_offsets(&self, alignment: usize) -> Vec<u64> {
         let mut offsets = vec![];
         let mut offset = 0;
 
@@ -148,9 +148,7 @@ impl Array {
                 offsets.push(offset as u64);
 
                 let buffer_size = buffer.len();
-                let aligned_size = alignment
-                    .map(|align| (buffer_size + (align - 1)) & !(align - 1))
-                    .unwrap_or(buffer_size);
+                let aligned_size = (buffer_size + (alignment - 1)) & !(alignment - 1);
                 offset += aligned_size;
             }
         }
