@@ -62,4 +62,4 @@ jobs:
       - uses: ./.github/actions/setup-rust
 
       - name: Rust Miri
-        run: cargo +nightly miri test
+        run: cargo miri test

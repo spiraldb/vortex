@@ -105,7 +105,7 @@ impl Debug for BinaryView {
     }
 }
 
-// this is a hack; views are 16 bytes with 8-byte alignment
+// views are 16 bytes with 8-byte alignment; we transmute to u64 instead of u8 to preserve alignment
 pub(crate) const VIEW_SIZE_TO_U64_SIZE: usize =
     mem::size_of::<BinaryView>() / mem::size_of::<u64>();
 

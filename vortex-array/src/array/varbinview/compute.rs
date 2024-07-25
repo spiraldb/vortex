@@ -6,7 +6,7 @@ use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE_TO_U64_SIZE};
 use crate::compute::unary::ScalarAtFn;
 use crate::compute::{slice, ArrayCompute, SliceFn};
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, IntoArray, IntoArrayData};
+use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for VarBinViewArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -36,9 +36,7 @@ impl SliceFn for VarBinViewArray {
                 &self.views(),
                 start * VIEW_SIZE_TO_U64_SIZE,
                 stop * VIEW_SIZE_TO_U64_SIZE,
-            )?
-            .into_array_data()
-            .into_array(),
+            )?,
             (0..self.metadata().data_lens.len())
                 .map(|i| self.bytes(i))
                 .collect::<Vec<_>>(),
