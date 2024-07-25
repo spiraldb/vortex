@@ -13,7 +13,7 @@ use arrow_array::{
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use bytes::{Bytes, BytesMut};
-use futures::{stream, StreamExt};
+use futures::StreamExt;
 use itertools::Itertools;
 use log::info;
 use object_store::ObjectStore;
@@ -21,7 +21,6 @@ use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderB
 use parquet::arrow::async_reader::{AsyncFileReader, ParquetObjectReader};
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use serde::{Deserialize, Serialize};
-use stream::StreamExt;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
