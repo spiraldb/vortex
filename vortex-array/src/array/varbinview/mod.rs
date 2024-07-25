@@ -31,7 +31,7 @@ mod variants;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-pub struct Inlined {
+struct Inlined {
     size: u32,
     data: [u8; BinaryView::MAX_INLINED_SIZE],
 }
@@ -54,7 +54,7 @@ impl Inlined {
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-pub struct Ref {
+struct Ref {
     size: u32,
     prefix: [u8; 4],
     buffer_index: u32,
@@ -194,11 +194,9 @@ impl VarBinViewArray {
         ))
     }
 
-    const BUILDER_BLOCK_SIZE: u32 = 16 * 1024;
     pub fn from_iter_str<T: AsRef<str>, I: IntoIterator<Item = T>>(iter: I) -> Self {
         let iter = iter.into_iter();
-        let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0)
-            .with_block_size(Self::BUILDER_BLOCK_SIZE);
+        let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0);
         for s in iter {
             builder.append_value(s);
         }
@@ -210,8 +208,7 @@ impl VarBinViewArray {
         iter: I,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0)
-            .with_block_size(Self::BUILDER_BLOCK_SIZE);
+        let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
 
         let array_data = ArrayData::from_arrow(&builder.finish(), true);
@@ -220,8 +217,7 @@ impl VarBinViewArray {
 
     pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
         let iter = iter.into_iter();
-        let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0)
-            .with_block_size(Self::BUILDER_BLOCK_SIZE);
+        let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
         for b in iter {
             builder.append_value(b);
         }
@@ -233,8 +229,7 @@ impl VarBinViewArray {
         iter: I,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0)
-            .with_block_size(Self::BUILDER_BLOCK_SIZE);
+        let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
         let array_data = ArrayData::from_arrow(&builder.finish(), true);
         VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
