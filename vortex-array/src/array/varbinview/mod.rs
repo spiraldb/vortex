@@ -31,7 +31,7 @@ mod variants;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-struct Inlined {
+pub struct Inlined {
     size: u32,
     data: [u8; BinaryView::MAX_INLINED_SIZE],
 }
@@ -54,7 +54,7 @@ impl Inlined {
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-struct Ref {
+pub struct Ref {
     size: u32,
     prefix: [u8; 4],
     buffer_index: u32,
