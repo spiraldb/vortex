@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: ./.github/actions/cleanup
 
       - name: Install Protoc
@@ -61,5 +60,5 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      - name: Rust Miri
+      - name: Run tests with Miri
         run: cargo miri test
