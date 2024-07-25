@@ -39,8 +39,12 @@ jobs:
         run: cargo test --workspace --all-features
       - name: Rust Build
         run: cargo build --all-features --all-targets
+
       - name: License Check
         run: cargo install --locked cargo-deny && cargo deny check
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/
