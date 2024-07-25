@@ -1,5 +1,3 @@
-#![feature(allocator_api)]
-
 use std::cmp::Ordering;
 use std::ops::{Deref, Range};
 
