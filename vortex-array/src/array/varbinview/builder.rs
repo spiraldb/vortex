@@ -4,7 +4,6 @@ use std::mem;
 use std::sync::Arc;
 
 use arrow_buffer::{Buffer as ArrowBuffer, NullBufferBuilder};
-use vortex_buffer::allocator::MinAlignmentAllocator;
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, PType};
 
@@ -15,11 +14,9 @@ use crate::{ArrayData, IntoArray, IntoArrayData, ToArray};
 
 // BinaryView has 8 byte alignment (because that's what's in the arrow spec), but arrow-rs
 // erroneously requires 16 byte alignment.
-const BINARY_VIEW_ALLOCATOR: MinAlignmentAllocator =
-    MinAlignmentAllocator::new(size_of::<BinaryView>());
 
 pub struct VarBinViewBuilder<T: AsRef<[u8]>> {
-    views: Vec<BinaryView, MinAlignmentAllocator>,
+    views: Vec<BinaryView>,
     nulls: NullBufferBuilder,
     completed: Vec<ArrayData>,
     in_progress: Vec<u8>,
@@ -30,7 +27,7 @@ pub struct VarBinViewBuilder<T: AsRef<[u8]>> {
 impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            views: Vec::with_capacity_in(capacity, BINARY_VIEW_ALLOCATOR),
+            views: Vec::with_capacity(capacity),
             nulls: NullBufferBuilder::new(capacity),
             completed: Vec::new(),
             in_progress: Vec::new(),
@@ -109,7 +106,7 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         // convert Vec<BinaryView> to Vec<u8> which can be stored as an array
         // have to ensure that we use the correct allocator at deallocation time
         let views: Buffer = unsafe {
-            let mut views_clone = mem::replace(&mut self.views, Vec::new_in(BINARY_VIEW_ALLOCATOR));
+            let mut views_clone = mem::take(&mut self.views);
             let buf = ArrowBuffer::from_custom_allocation(
                 NonNull::new_unchecked(views_clone.as_mut_ptr() as *mut u8),
                 views_clone.len() * VIEW_SIZE,
