@@ -274,7 +274,7 @@ mod tests {
         let mut reader = FileReaderBuilder::new(written).build();
 
         let footer = reader.read_footer().await.unwrap();
-        let layout = footer.layout().await.unwrap();
+        let layout = footer.layout().unwrap();
         dbg!(layout);
 
         let mut stream = reader.into_stream().await.unwrap();
