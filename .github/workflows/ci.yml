@@ -55,7 +55,7 @@ jobs:
 
   miri:
     name: 'miri'
-    runs-on: ubuntu-latest-medium
+    runs-on: ubuntu-latest
     env:
       RUST_BACKTRACE: 1
       MIRIFLAGS: -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check -Zmiri-backtrace=full
