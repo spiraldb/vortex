@@ -172,6 +172,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // This test is too slow on miri
     fn take_random_indices() {
         let num_patches: usize = 128;
         let values = (0..u16::MAX as u32 + num_patches as u32).collect::<Vec<_>>();
