@@ -5,6 +5,7 @@ use crate::compute::{ArrayCompute, CompareFn, FilterIndicesFn, SearchSortedFn, S
 mod cast;
 mod compare;
 mod fill;
+mod filter;
 mod filter_indices;
 mod scalar_at;
 mod search_sorted;

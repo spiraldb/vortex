@@ -73,7 +73,15 @@ impl ArrayVariants for RoaringBoolArray {
     }
 }
 
-impl BoolArrayTrait for RoaringBoolArray {}
+impl BoolArrayTrait for RoaringBoolArray {
+    fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
+        todo!()
+    }
+
+    fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
+        todo!()
+    }
+}
 
 impl AcceptArrayVisitor for RoaringBoolArray {
     fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
@@ -129,6 +137,7 @@ mod test {
     use crate::RoaringBoolArray;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     pub fn iter() -> VortexResult<()> {
         let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool.into_array())?;
@@ -140,6 +149,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     pub fn test_scalar_at() -> VortexResult<()> {
         let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool.into_array())?;

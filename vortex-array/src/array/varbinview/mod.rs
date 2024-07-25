@@ -4,16 +4,16 @@ use std::sync::Arc;
 use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
+use arrow_array::builder::{BinaryViewBuilder, StringViewBuilder};
 use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
-use arrow_buffer::{Buffer, ScalarBuffer};
+use arrow_buffer::ScalarBuffer;
 use arrow_schema::DataType;
 use itertools::Itertools;
-use vortex_dtype::{DType, Nullability, PType};
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
-use crate::array::varbinview::builder::VarBinViewBuilder;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
 use crate::stats::StatsSet;
@@ -25,20 +25,18 @@ use crate::{
 };
 
 mod accessor;
-mod builder;
 mod compute;
 mod stats;
 mod variants;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-struct Inlined {
+pub struct Inlined {
     size: u32,
     data: [u8; BinaryView::MAX_INLINED_SIZE],
 }
 
 impl Inlined {
-    #[allow(dead_code)]
     pub fn new(value: &[u8]) -> Self {
         assert!(
             value.len() <= BinaryView::MAX_INLINED_SIZE,
@@ -56,7 +54,7 @@ impl Inlined {
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-struct Ref {
+pub struct Ref {
     size: u32,
     prefix: [u8; 4],
     buffer_index: u32,
@@ -106,7 +104,8 @@ impl Debug for BinaryView {
     }
 }
 
-pub const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
+// reminder: views are 16 bytes with 8-byte alignment
+pub(crate) const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
 
 impl_encoding!("vortex.varbinview", 5u16, VarBinView);
 
@@ -141,10 +140,9 @@ impl VarBinViewArray {
             vortex_bail!("incorrect validity {:?}", validity);
         }
 
-        let length = views.len() / VIEW_SIZE;
-
+        let num_views = views.len() / VIEW_SIZE;
         let metadata = VarBinViewMetadata {
-            validity: validity.to_metadata(views.len() / VIEW_SIZE)?,
+            validity: validity.to_metadata(num_views)?,
             data_lens: data.iter().map(|a| a.len()).collect_vec(),
         };
 
@@ -155,7 +153,7 @@ impl VarBinViewArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, num_views, metadata, children.into(), StatsSet::new())
     }
 
     fn view_slice(&self) -> &[BinaryView] {
@@ -196,24 +194,45 @@ impl VarBinViewArray {
         ))
     }
 
-    pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
-        let mut builder = VarBinViewBuilder::with_capacity(vec.len());
-        for v in vec {
-            builder.push_value(v)
+    pub fn from_iter_str<T: AsRef<str>, I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0);
+        for s in iter {
+            builder.append_value(s);
         }
-        builder.finish(dtype)
+        let array_data = ArrayData::from_arrow(&builder.finish(), false);
+        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
     }
 
-    pub fn from_iter<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
+    pub fn from_iter_nullable_str<T: AsRef<str>, I: IntoIterator<Item = Option<T>>>(
         iter: I,
-        dtype: DType,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(iter.size_hint().0);
-        for v in iter {
-            builder.push(v)
+        let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0);
+        builder.extend(iter);
+
+        let array_data = ArrayData::from_arrow(&builder.finish(), true);
+        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
+    }
+
+    pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
+        let iter = iter.into_iter();
+        let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
+        for b in iter {
+            builder.append_value(b);
         }
-        builder.finish(dtype)
+        let array_data = ArrayData::from_arrow(&builder.finish(), true);
+        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
+    }
+
+    pub fn from_iter_nullable_bin<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
+        iter: I,
+    ) -> Self {
+        let iter = iter.into_iter();
+        let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
+        builder.extend(iter);
+        let array_data = ArrayData::from_arrow(&builder.finish(), true);
+        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
     }
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
@@ -271,18 +290,18 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
 
     let data = data
         .iter()
-        .map(|p| Buffer::from(p.buffer()))
+        .map(|p| p.buffer().clone().into_arrow())
         .collect::<Vec<_>>();
 
     // Switch on Arrow DType.
     match var_bin_view.dtype() {
         DType::Binary(_) => Arc::new(BinaryViewArray::new(
-            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
             data,
             nulls,
         )),
         DType::Utf8(_) => Arc::new(StringViewArray::new(
-            ScalarBuffer::<u128>::from(Buffer::from(views.buffer())),
+            ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
             data,
             nulls,
         )),
@@ -310,51 +329,27 @@ impl AcceptArrayVisitor for VarBinViewArray {
     }
 }
 
-impl From<Vec<&[u8]>> for VarBinViewArray {
-    fn from(value: Vec<&[u8]>) -> Self {
-        Self::from_vec(value, DType::Binary(Nullability::NonNullable))
-    }
-}
-
-impl From<Vec<Vec<u8>>> for VarBinViewArray {
-    fn from(value: Vec<Vec<u8>>) -> Self {
-        Self::from_vec(value, DType::Binary(Nullability::NonNullable))
-    }
-}
-
-impl From<Vec<String>> for VarBinViewArray {
-    fn from(value: Vec<String>) -> Self {
-        Self::from_vec(value, DType::Utf8(Nullability::NonNullable))
-    }
-}
-
-impl From<Vec<&str>> for VarBinViewArray {
-    fn from(value: Vec<&str>) -> Self {
-        Self::from_vec(value, DType::Utf8(Nullability::NonNullable))
-    }
-}
-
 impl<'a> FromIterator<Option<&'a [u8]>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a [u8]>>>(iter: T) -> Self {
-        Self::from_iter(iter, DType::Binary(Nullability::NonNullable))
+        Self::from_iter_nullable_bin(iter)
     }
 }
 
 impl FromIterator<Option<Vec<u8>>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<Vec<u8>>>>(iter: T) -> Self {
-        Self::from_iter(iter, DType::Binary(Nullability::NonNullable))
+        Self::from_iter_nullable_bin(iter)
     }
 }
 
 impl FromIterator<Option<String>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<String>>>(iter: T) -> Self {
-        Self::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+        Self::from_iter_nullable_str(iter)
     }
 }
 
 impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
     fn from_iter<T: IntoIterator<Item = Option<&'a str>>>(iter: T) -> Self {
-        Self::from_iter(iter, DType::Utf8(Nullability::NonNullable))
+        Self::from_iter_nullable_str(iter)
     }
 }
 
@@ -362,7 +357,7 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
 mod test {
     use vortex_scalar::Scalar;
 
-    use crate::array::varbinview::VarBinViewArray;
+    use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
     use crate::{Canonical, IntoArray, IntoCanonical};
@@ -370,7 +365,7 @@ mod test {
     #[test]
     pub fn varbin_view() {
         let binary_arr =
-            VarBinViewArray::from(vec!["hello world", "hello world this is a long string"]);
+            VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]);
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
             scalar_at(binary_arr.array(), 0).unwrap(),
@@ -385,7 +380,7 @@ mod test {
     #[test]
     pub fn slice_array() {
         let binary_arr = slice(
-            &VarBinViewArray::from(vec!["hello world", "hello world this is a long string"])
+            &VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"])
                 .into_array(),
             1,
             2,
@@ -399,7 +394,7 @@ mod test {
 
     #[test]
     pub fn flatten_array() {
-        let binary_arr = VarBinViewArray::from(vec!["string1", "string2"]);
+        let binary_arr = VarBinViewArray::from_iter_str(["string1", "string2"]);
 
         let flattened = binary_arr.into_canonical().unwrap();
         assert!(matches!(flattened, Canonical::VarBin(_)));
@@ -407,5 +402,14 @@ mod test {
         let var_bin = flattened.into_array();
         assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
         assert_eq!(scalar_at(&var_bin, 1).unwrap(), Scalar::from("string2"));
+    }
+
+    #[test]
+    pub fn binary_view_size_and_alignment() {
+        assert_eq!(std::mem::size_of::<Inlined>(), 16);
+        assert_eq!(std::mem::size_of::<Ref>(), 16);
+        assert_eq!(std::mem::size_of::<BinaryView>(), VIEW_SIZE);
+        assert_eq!(std::mem::size_of::<BinaryView>(), 16);
+        assert_eq!(std::mem::align_of::<BinaryView>(), 8);
     }
 }

@@ -28,6 +28,10 @@ pub(crate) fn try_canonicalize_chunks(
     chunks: Vec<Array>,
     dtype: &DType,
 ) -> VortexResult<Canonical> {
+    if chunks.is_empty() {
+        vortex_bail!(InvalidArgument: "chunks must be non-empty")
+    }
+
     let mismatched = chunks
         .iter()
         .filter(|chunk| !chunk.dtype().eq(dtype))
@@ -44,15 +48,47 @@ pub(crate) fn try_canonicalize_chunks(
             Ok(Canonical::Struct(struct_array))
         }
 
-        // Extension arrays wrap an internal storage array, which can hold a ChunkedArray until
-        // it is safe to unpack them.
+        // Extension arrays are containers that wraps an inner storage array with some metadata.
+        // We delegate to the canonical format of the internal storage array for every chunk, and
+        // push the chunking down into the inner storage array.
+        //
+        //  Input:
+        //  ------
+        //
+        //                  ChunkedArray
+        //                 /            \
+        //                /              \
+        //         ExtensionArray     ExtensionArray
+        //             |                   |
+        //          storage             storage
+        //
+        //
+        //  Output:
+        //  ------
+        //
+        //                 ExtensionArray
+        //                      |
+        //                 ChunkedArray
+        //                /             \
+        //          storage             storage
+        //
         DType::Extension(ext_dtype, _) => {
-            let ext_array = ExtensionArray::new(
-                ext_dtype.clone(),
-                ChunkedArray::try_new(chunks, dtype.clone())?.into_array(),
-            );
+            // Recursively apply canonicalization and packing to the storage array backing
+            // each chunk of the extension array.
+            let storage_chunks: Vec<Array> = chunks
+                .iter()
+                // Extension-typed arrays can be compressed into something that is not an
+                // ExtensionArray, so we should canonicalize each chunk into ExtensionArray first.
+                .map(|chunk| chunk.clone().into_extension().unwrap().storage())
+                .collect();
+            let storage_dtype = storage_chunks.first().unwrap().dtype().clone();
+            let chunked_storage =
+                ChunkedArray::try_new(storage_chunks, storage_dtype)?.into_array();
 
-            Ok(Canonical::Extension(ext_array))
+            Ok(Canonical::Extension(ExtensionArray::new(
+                ext_dtype.clone(),
+                chunked_storage,
+            )))
         }
 
         // TODO(aduffy): better list support

@@ -6,8 +6,8 @@ use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, Encodin
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayDType, ArrayData, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata, IntoArray,
-    IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
+    Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata,
+    IntoArray, IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
 };
 
 /// Trait the defines the set of types relating to an array.
@@ -173,6 +173,22 @@ impl<T: AsArray> ArrayDType for T {
     }
 }
 
+impl<T: AsArray> ArrayLen for T {
+    fn len(&self) -> usize {
+        match self.as_array_ref() {
+            Array::Data(d) => d.len(),
+            Array::View(v) => v.len(),
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self.as_array_ref() {
+            Array::Data(d) => d.is_empty(),
+            Array::View(v) => v.is_empty(),
+        }
+    }
+}
+
 impl<T: AsArray> ArrayStatistics for T {
     fn statistics(&self) -> &(dyn Statistics + '_) {
         match self.as_array_ref() {
@@ -184,13 +200,14 @@ impl<T: AsArray> ArrayStatistics for T {
 
 impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoArrayData for T {
     fn into_array_data(self) -> ArrayData {
-        let encoding = self.encoding();
+        // TODO: move metadata call `Array::View` match
         let metadata = self.metadata();
-        let stats = self.statistics().to_set();
         let array = self.into_array();
         match array {
             Array::Data(d) => d,
-            Array::View(_) => {
+            Array::View(ref view) => {
+                let encoding = view.encoding();
+                let stats = view.statistics().to_set();
                 struct Visitor {
                     buffer: Option<Buffer>,
                     children: Vec<Array>,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use arrow_array::Datum;
 use vortex_dtype::Nullability;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
@@ -11,7 +11,7 @@ use crate::array::constant::ConstantArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::unary::{scalar_at, ScalarAtFn};
 use crate::compute::{
-    scalar_cmp, AndFn, ArrayCompute, CompareFn, OrFn, SearchResult, SearchSortedFn,
+    scalar_cmp, AndFn, ArrayCompute, CompareFn, FilterFn, OrFn, SearchResult, SearchSortedFn,
     SearchSortedSide, SliceFn, TakeFn,
 };
 use crate::stats::{ArrayStatistics, Stat};
@@ -62,6 +62,23 @@ impl TakeFn for ConstantArray {
 impl SliceFn for ConstantArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::new(self.scalar().clone(), stop - start).into_array())
+    }
+}
+
+impl FilterFn for ConstantArray {
+    fn filter(&self, predicate: &Array) -> VortexResult<Array> {
+        Ok(Self::new(
+            self.scalar().clone(),
+            predicate.with_dyn(|p| {
+                p.as_bool_array()
+                    .ok_or(vortex_err!(
+                        NotImplemented: "as_bool_array",
+                        predicate.encoding().id()
+                    ))
+                    .map(|x| x.true_count())
+            })?,
+        )
+        .into_array())
     }
 }
 

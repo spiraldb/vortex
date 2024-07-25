@@ -25,5 +25,8 @@ vortex-roaring = { path = "../encodings/roaring" }
 vortex-runend = { path = "../encodings/runend" }
 vortex-zigzag = { path = "../encodings/zigzag" }
 
+[dev-dependencies]
+chrono = { workspace = true }
+
 [lints]
 workspace = true

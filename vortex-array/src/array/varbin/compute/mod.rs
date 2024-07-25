@@ -7,6 +7,7 @@ use crate::compute::{ArrayCompute, SliceFn, TakeFn};
 use crate::validity::ArrayValidity;
 use crate::ArrayDType;
 
+mod filter;
 mod slice;
 mod take;
 

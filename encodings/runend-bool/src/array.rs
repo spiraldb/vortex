@@ -71,7 +71,7 @@ impl RunEndBoolArray {
             vortex_bail!("Index must be in array slice",);
         }
         search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
-            .map(|s| s.to_index())
+            .map(|s| s.to_non_zero_offset_index(self.ends().len()))
     }
 
     pub fn validity(&self) -> Validity {
@@ -98,7 +98,15 @@ impl RunEndBoolArray {
     }
 }
 
-impl BoolArrayTrait for RunEndBoolArray {}
+impl BoolArrayTrait for RunEndBoolArray {
+    fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
+        todo!()
+    }
+
+    fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
+        todo!()
+    }
+}
 
 impl ArrayVariants for RunEndBoolArray {
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
