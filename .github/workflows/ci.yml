@@ -39,6 +39,8 @@ jobs:
         run: cargo test --workspace --all-features
       - name: Rust Build
         run: cargo build --all-features --all-targets
+      - name: License Check
+        run: cargo install --locked cargo-deny && cargo deny check
 
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/
