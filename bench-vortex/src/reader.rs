@@ -13,7 +13,7 @@ use arrow_array::{
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use bytes::{Bytes, BytesMut};
-use futures::stream;
+use futures::{stream, StreamExt};
 use itertools::Itertools;
 use log::info;
 use object_store::ObjectStore;
@@ -183,7 +183,6 @@ pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Arr
     let file = TokioAdapter(tokio::fs::File::open(path).await?);
     let reader = FileReaderBuilder::new(file).with_length(len).build();
 
-    use futures::StreamExt;
     let data = reader
         .into_stream()
         .await?
