@@ -1,7 +1,6 @@
 use core::ptr::NonNull;
 use std::marker::PhantomData;
 use std::mem;
-use std::mem::ManuallyDrop;
 use std::sync::Arc;
 
 use arrow_buffer::{Buffer as ArrowBuffer, NullBufferBuilder};
@@ -110,20 +109,11 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         // convert Vec<BinaryView> to Vec<u8> which can be stored as an array
         // have to ensure that we use the correct allocator at deallocation time
         let views: Buffer = unsafe {
-            let mut views_clone = ManuallyDrop::new(mem::replace(
-                &mut self.views,
-                Vec::new_in(BINARY_VIEW_ALLOCATOR),
-            ));
-            let mut views_bytes: Vec<u8, MinAlignmentAllocator> = Vec::from_raw_parts_in(
-                views_clone.as_mut_ptr() as _,
-                views_clone.len() * VIEW_SIZE,
-                views_clone.capacity() * VIEW_SIZE,
-                BINARY_VIEW_ALLOCATOR,
-            );
+            let mut views_clone = mem::replace(&mut self.views, Vec::new_in(BINARY_VIEW_ALLOCATOR));
             let buf = ArrowBuffer::from_custom_allocation(
-                NonNull::new_unchecked(views_bytes.as_mut_ptr()),
-                views_bytes.len(),
-                Arc::new(views_bytes),
+                NonNull::new_unchecked(views_clone.as_mut_ptr() as *mut u8),
+                views_clone.len() * VIEW_SIZE,
+                Arc::new(views_clone),
             );
             Buffer::Arrow(buf)
         };
