@@ -24,7 +24,6 @@ unsafe impl Allocator for MinAlignmentAllocator {
 
 impl MinAlignmentAllocator {
     pub const fn new(min_alignment: usize) -> Self {
-        assert!(min_alignment.is_power_of_two());
         let min_alignment = min_alignment.next_power_of_two();
         Self { min_alignment }
     }
