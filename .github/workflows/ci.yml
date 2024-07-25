@@ -68,6 +68,6 @@ jobs:
         uses: arduino/setup-protoc@v3
 
       - uses: ./.github/actions/setup-rust
-      - uses: taiki-e/install-action@nextest
+
       - name: Run tests with Miri
-        run: cargo miri nextest run -j4
+        run: cargo miri test
