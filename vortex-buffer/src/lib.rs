@@ -1,9 +1,12 @@
+#![feature(allocator_api)]
+
 use std::cmp::Ordering;
 use std::ops::{Deref, Range};
 
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer};
 pub use string::*;
 
+pub mod allocator;
 mod flexbuffers;
 pub mod io_buf;
 mod string;

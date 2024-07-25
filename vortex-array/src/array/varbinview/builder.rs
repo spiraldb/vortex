@@ -1,17 +1,26 @@
+use core::ptr::NonNull;
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::ManuallyDrop;
+use std::sync::Arc;
 
-use arrow_buffer::NullBufferBuilder;
-use vortex_dtype::DType;
+use arrow_buffer::{Buffer as ArrowBuffer, NullBufferBuilder};
+use vortex_buffer::allocator::MinAlignmentAllocator;
+use vortex_buffer::Buffer;
+use vortex_dtype::{DType, PType};
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE_TO_U64_SIZE};
+use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData, ToArray};
 
+// BinaryView has 8 byte alignment (because that's what's in the arrow spec), but arrow-rs
+// erroneously requires 16 byte alignment.
+const BINARY_VIEW_ALLOCATOR: MinAlignmentAllocator =
+    MinAlignmentAllocator::new(size_of::<BinaryView>());
+
 pub struct VarBinViewBuilder<T: AsRef<[u8]>> {
-    views: Vec<BinaryView>,
+    views: Vec<BinaryView, MinAlignmentAllocator>,
     nulls: NullBufferBuilder,
     completed: Vec<ArrayData>,
     in_progress: Vec<u8>,
@@ -22,7 +31,7 @@ pub struct VarBinViewBuilder<T: AsRef<[u8]>> {
 impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            views: Vec::with_capacity(capacity),
+            views: Vec::with_capacity_in(capacity, BINARY_VIEW_ALLOCATOR),
             nulls: NullBufferBuilder::new(capacity),
             completed: Vec::new(),
             in_progress: Vec::new(),
@@ -99,17 +108,28 @@ impl<T: AsRef<[u8]>> VarBinViewBuilder<T> {
         };
 
         // convert Vec<BinaryView> to Vec<u8> which can be stored as an array
-        let views_u64: Vec<u64> = unsafe {
-            let mut views_clone = ManuallyDrop::new(mem::take(&mut self.views));
-            Vec::from_raw_parts(
+        // have to ensure that we use the correct allocator at deallocation time
+        let views: Buffer = unsafe {
+            let mut views_clone = ManuallyDrop::new(mem::replace(
+                &mut self.views,
+                Vec::new_in(BINARY_VIEW_ALLOCATOR),
+            ));
+            let mut views_bytes: Vec<u8, MinAlignmentAllocator> = Vec::from_raw_parts_in(
                 views_clone.as_mut_ptr() as _,
-                views_clone.len() * VIEW_SIZE_TO_U64_SIZE,
-                views_clone.capacity() * VIEW_SIZE_TO_U64_SIZE,
-            )
+                views_clone.len() * VIEW_SIZE,
+                views_clone.capacity() * VIEW_SIZE,
+                BINARY_VIEW_ALLOCATOR,
+            );
+            let buf = ArrowBuffer::from_custom_allocation(
+                NonNull::new_unchecked(views_bytes.as_mut_ptr()),
+                views_bytes.len(),
+                Arc::new(views_bytes),
+            );
+            Buffer::Arrow(buf)
         };
 
         VarBinViewArray::try_new(
-            PrimitiveArray::from(views_u64).to_array(),
+            PrimitiveArray::new(views, PType::U8, Validity::NonNullable).to_array(),
             completed,
             dtype,
             validity,
