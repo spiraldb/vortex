@@ -10,13 +10,15 @@ permissions:
   actions: read
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     name: 'build'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: ./.github/actions/cleanup
 
       - name: Install Protoc
@@ -40,9 +42,32 @@ jobs:
         run: cargo test --workspace --all-features
       - name: Rust Build
         run: cargo build --all-features --all-targets
+
       - name: License Check
         run: cargo install --locked cargo-deny && cargo deny check
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
+
+  miri:
+    name: 'miri'
+    runs-on: ubuntu-latest
+    env:
+      RUST_BACKTRACE: 1
+      MIRIFLAGS: -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check -Zmiri-backtrace=full
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/cleanup
+
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+
+      - uses: ./.github/actions/setup-rust
+
+      - name: Run tests with Miri
+        run: cargo miri test

@@ -24,6 +24,7 @@ use vortex_sampling_compressor::compressors::CompressorRef;
 use vortex_sampling_compressor::{CompressConfig, SamplingCompressor};
 
 #[test]
+#[cfg_attr(miri, ignore)] // This test is too slow on miri
 pub fn smoketest_compressor() {
     let compressor = SamplingCompressor::new_with_options(
         HashSet::from([

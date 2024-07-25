@@ -31,13 +31,12 @@ mod variants;
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-struct Inlined {
+pub struct Inlined {
     size: u32,
     data: [u8; BinaryView::MAX_INLINED_SIZE],
 }
 
 impl Inlined {
-    #[allow(dead_code)]
     pub fn new(value: &[u8]) -> Self {
         assert!(
             value.len() <= BinaryView::MAX_INLINED_SIZE,
@@ -55,7 +54,7 @@ impl Inlined {
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
-struct Ref {
+pub struct Ref {
     size: u32,
     prefix: [u8; 4],
     buffer_index: u32,
@@ -105,7 +104,8 @@ impl Debug for BinaryView {
     }
 }
 
-pub const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
+// reminder: views are 16 bytes with 8-byte alignment
+pub(crate) const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
 
 impl_encoding!("vortex.varbinview", 5u16, VarBinView);
 
@@ -140,10 +140,9 @@ impl VarBinViewArray {
             vortex_bail!("incorrect validity {:?}", validity);
         }
 
-        let length = views.len() / VIEW_SIZE;
-
+        let num_views = views.len() / VIEW_SIZE;
         let metadata = VarBinViewMetadata {
-            validity: validity.to_metadata(views.len() / VIEW_SIZE)?,
+            validity: validity.to_metadata(num_views)?,
             data_lens: data.iter().map(|a| a.len()).collect_vec(),
         };
 
@@ -154,7 +153,7 @@ impl VarBinViewArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
+        Self::try_from_parts(dtype, num_views, metadata, children.into(), StatsSet::new())
     }
 
     fn view_slice(&self) -> &[BinaryView] {
@@ -358,7 +357,7 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
 mod test {
     use vortex_scalar::Scalar;
 
-    use crate::array::varbinview::VarBinViewArray;
+    use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
     use crate::{Canonical, IntoArray, IntoCanonical};
@@ -403,5 +402,14 @@ mod test {
         let var_bin = flattened.into_array();
         assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
         assert_eq!(scalar_at(&var_bin, 1).unwrap(), Scalar::from("string2"));
+    }
+
+    #[test]
+    pub fn binary_view_size_and_alignment() {
+        assert_eq!(std::mem::size_of::<Inlined>(), 16);
+        assert_eq!(std::mem::size_of::<Ref>(), 16);
+        assert_eq!(std::mem::size_of::<BinaryView>(), VIEW_SIZE);
+        assert_eq!(std::mem::size_of::<BinaryView>(), 16);
+        assert_eq!(std::mem::align_of::<BinaryView>(), 8);
     }
 }
