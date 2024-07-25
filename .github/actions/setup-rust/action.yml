@@ -14,7 +14,7 @@ runs:
       if: steps.rustup-cache.outputs.cache-hit != 'true'
       with:
         toolchain: "${{ steps.rust-version.outputs.version }}"
-        components: clippy, rustfmt
+        components: clippy, rustfmt, miri
 
     - name: Rust Dependency Cache
       uses: Swatinem/rust-cache@v2
