@@ -10,6 +10,9 @@ permissions:
   actions: read
   contents: read
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     name: 'build'
@@ -52,7 +55,7 @@ jobs:
 
   miri:
     name: 'miri'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-medium
     env:
       RUST_BACKTRACE: 1
       MIRIFLAGS: -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check -Zmiri-backtrace=full
@@ -67,4 +70,4 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: taiki-e/install-action@nextest
       - name: Run tests with Miri
-        run: cargo miri nextest run
+        run: cargo miri nextest run -j4
