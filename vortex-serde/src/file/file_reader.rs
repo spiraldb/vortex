@@ -95,11 +95,9 @@ impl<R: VortexReadAt> FileReader<R> {
 
     pub async fn into_stream(mut self) -> VortexResult<FileReaderStream<R>> {
         let footer = self.read_footer().await?;
-        let layout_fut = footer.layout();
-        let dtype_fut = footer.dtype();
+        let layout = footer.layout()?;
+        let dtype = footer.dtype()?;
 
-        let layout = layout_fut.await?;
-        let dtype = dtype_fut.await?;
         Ok(FileReaderStream {
             layout,
             dtype,
@@ -161,7 +159,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                         if layout.children.len() == 1 {
                             return Poll::Ready(None);
                         } else {
-                            layouts.push(layout.children.remove(0))
+                            layouts.push(layout.children.remove(0));
                         }
                     }
 

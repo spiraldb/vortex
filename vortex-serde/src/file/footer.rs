@@ -25,7 +25,7 @@ impl Footer {
         (self.schema_offset - self.leftovers_offset) as usize
     }
 
-    pub async fn layout(&self) -> VortexResult<Layout> {
+    pub fn layout(&self) -> VortexResult<Layout> {
         let start_offset = self.leftovers_footer_offset();
         let end_offset = self.leftovers.len() - FULL_FOOTER_SIZE;
         let layout_bytes = &self.leftovers[start_offset..end_offset];
@@ -35,7 +35,7 @@ impl Footer {
         Layout::try_from(fb_layout)
     }
 
-    pub async fn dtype(&self) -> VortexResult<DType> {
+    pub fn dtype(&self) -> VortexResult<DType> {
         let start_offset = self.leftovers_schema_offset();
         let end_offset = self.leftovers_footer_offset();
         let dtype_bytes = &self.leftovers[start_offset..end_offset];
