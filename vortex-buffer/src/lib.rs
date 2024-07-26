@@ -33,6 +33,7 @@ impl Buffer {
         }
     }
 
+    #[allow(clippy::same_name_method)]
     pub fn slice(&self, range: Range<usize>) -> Self {
         match self {
             Self::Arrow(b) => {
@@ -42,6 +43,7 @@ impl Buffer {
         }
     }
 
+    #[allow(clippy::same_name_method)]
     pub fn as_slice(&self) -> &[u8] {
         match self {
             Self::Arrow(b) => b.as_ref(),

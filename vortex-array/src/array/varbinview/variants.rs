@@ -6,19 +6,11 @@ use crate::ArrayDType;
 
 impl ArrayVariants for VarBinViewArray {
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
-        if matches!(self.dtype(), DType::Utf8(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Utf8(..)).then_some(self)
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
-        if matches!(self.dtype(), DType::Binary(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Binary(..)).then_some(self)
     }
 }
 
