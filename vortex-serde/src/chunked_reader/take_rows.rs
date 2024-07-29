@@ -230,6 +230,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_take_rows() -> VortexResult<()> {
         let writer = chunked_array()?;
 
