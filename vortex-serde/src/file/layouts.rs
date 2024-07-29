@@ -192,13 +192,13 @@ impl StructLayout {
     }
 
     pub(crate) fn project(&self, projection: &Projection) -> StructLayout {
-        let mut new_childern = VecDeque::with_capacity(projection.indices().len());
+        let mut new_children = VecDeque::with_capacity(projection.indices().len());
 
         for &idx in projection.indices() {
-            new_childern.push_back(self.children[idx].clone());
+            new_children.push_back(self.children[idx].clone());
         }
 
-        StructLayout::new(new_childern)
+        StructLayout::new(new_children)
     }
 }
 
