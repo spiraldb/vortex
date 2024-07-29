@@ -8,7 +8,7 @@ use futures::{ready, FutureExt, Stream};
 use vortex::array::struct_::StructArray;
 use vortex::{Array, IntoArray};
 use vortex_dtype::DType;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use super::layouts::Layout;
 use crate::file::file_writer::MAGIC_BYTES;
@@ -49,20 +49,30 @@ impl<R: VortexReadAt> FileReaderBuilder<R> {
 
 impl<R: VortexReadAt> FileReader<R> {
     const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
+    const FOOTER_TRAILER_SIZE: usize = 20;
 
     pub async fn read_footer(&mut self) -> VortexResult<Footer> {
-        let read_size = Self::FOOTER_READ_SIZE.min(self.len().await as usize);
-        dbg!(read_size);
+        let file_len = self.len().await as usize;
+        if file_len < Self::FOOTER_TRAILER_SIZE {
+            vortex_bail!(
+                "Malformed vortex file, length {file_len} must be at least {}",
+                Self::FOOTER_TRAILER_SIZE
+            )
+        }
+
+        let read_size = Self::FOOTER_READ_SIZE.min(file_len as usize);
         let mut buf = BytesMut::with_capacity(read_size);
         unsafe { buf.set_len(read_size) }
 
-        let read_offset = self.len().await - read_size as u64;
+        let read_offset = (file_len - read_size) as u64;
         buf = self.inner.read_at_into(read_offset, buf).await?;
 
         let magic_bytes_loc = read_size - MAGIC_BYTES.len();
 
         let magic_number = &buf[magic_bytes_loc..];
-        assert_eq!(magic_number, &MAGIC_BYTES);
+        if magic_number != MAGIC_BYTES {
+            vortex_bail!("Malformed file, invalid magic bytes, got {magic_number:?}")
+        }
 
         let footer_offset = u64::from_le_bytes(
             buf[magic_bytes_loc - 8..magic_bytes_loc]
