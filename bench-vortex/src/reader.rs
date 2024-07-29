@@ -13,7 +13,7 @@ use arrow_array::{
 use arrow_select::concat::concat_batches;
 use arrow_select::take::take_record_batch;
 use bytes::{Bytes, BytesMut};
-use futures::StreamExt;
+use futures::stream;
 use itertools::Itertools;
 use log::info;
 use object_store::ObjectStore;
@@ -21,19 +21,18 @@ use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderB
 use parquet::arrow::async_reader::{AsyncFileReader, ParquetObjectReader};
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use serde::{Deserialize, Serialize};
+use stream::StreamExt;
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::primitive::PrimitiveArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
-use vortex::compute::take;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, ArrayDType, IntoArray, IntoCanonical, ToArrayData};
+use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::chunked_reader::ChunkedArrayReader;
-use vortex_serde::file::reader::VortexBatchReaderBuilder;
 use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
 use vortex_serde::writer::ArrayWriter;
 use vortex_serde::MessageReader;
@@ -178,26 +177,10 @@ pub async fn take_vortex_object_store<O: ObjectStore>(
 pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Array> {
     let len = File::open(path)?.metadata()?.len();
     let indices_array = indices.to_vec().into_array();
-
-    let file = TokioAdapter(tokio::fs::File::open(path).await?);
-    let stream = VortexBatchReaderBuilder::new(file)
-        .with_length(len)
-        .build()
-        .await
-        .unwrap();
-
-    let data = stream
-        .collect::<Vec<_>>()
-        .await
-        .into_iter()
-        .collect::<VortexResult<Vec<_>>>()?;
-
-    let dtype = data[0].dtype().clone();
-
-    let data = ChunkedArray::try_new(data, dtype)?.into_array();
-
-    let taken = take(&data, &indices_array)?;
-
+    let taken = read_vortex_footer_format(TokioAdapter(tokio::fs::File::open(path).await?), len)
+        .await?
+        .take_rows(&indices_array)
+        .await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
     Ok(taken.into_canonical()?.into_array())
 }
