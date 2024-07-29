@@ -191,6 +191,7 @@ impl StructLayout {
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn project(&self, projection: &Projection) -> StructLayout {
         let mut new_children = VecDeque::with_capacity(projection.indices().len());
 

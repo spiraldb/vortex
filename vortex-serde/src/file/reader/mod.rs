@@ -27,7 +27,7 @@ pub struct VortexBatchReaderBuilder<R> {
     reader: R,
     projection: Option<Projection>,
     len: Option<u64>,
-    mask: Option<Array>,
+    take_indices: Option<Array>,
     row_filter: Option<RowFilter>,
 }
 
@@ -41,7 +41,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
             projection: None,
             row_filter: None,
             len: None,
-            mask: None,
+            take_indices: None,
         }
     }
 
@@ -55,13 +55,13 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
         self
     }
 
-    pub fn with_mask(mut self, array: Array) -> Self {
+    pub fn with_take_indices(mut self, array: Array) -> Self {
         // TODO(#441): Allow providing boolean masks
         assert!(
             array.dtype().is_int(),
             "Mask arrays have to be integer arrays"
         );
-        self.mask = Some(array);
+        self.take_indices = Some(array);
         self
     }
 
@@ -74,25 +74,23 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
         let footer = self.read_footer().await?;
 
         // TODO(adamg): We probably want to unify everything that is going on here into a single type and implementation
-        let mut layout = if let Layout::Struct(s) = footer.layout()? {
+        let layout = if let Layout::Struct(s) = footer.layout()? {
             s
         } else {
             vortex_bail!("Top level layout must be a 'StructLayout'");
         };
-        let mut dtype = if let DType::Struct(s, _) = footer.dtype()? {
+        let dtype = if let DType::Struct(s, _) = footer.dtype()? {
             s
         } else {
             vortex_bail!("Top level dtype must be a 'StructDType'");
         };
 
-        if let Some(projection) = self.projection.as_ref() {
-            layout = layout.project(projection);
-            dtype = dtype.project(projection.indices())?;
-        }
-
         Ok(VortexBatchStream {
             layout,
             dtype,
+            projection: self.projection,
+            take_indices: self.take_indices,
+            row_filter: self.row_filter,
             reader: Some(self.reader),
             state: StreamingState::default(),
             context: Default::default(),
@@ -153,9 +151,14 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
     }
 }
 
+#[allow(dead_code)]
 pub struct VortexBatchStream<R> {
     layout: StructLayout,
     dtype: StructDType,
+    // TODO(robert): Have identity projection
+    projection: Option<Projection>,
+    take_indices: Option<Array>,
+    row_filter: Option<RowFilter>,
     reader: Option<R>,
     state: StreamingState<R>,
     context: Arc<vortex::Context>,
@@ -278,6 +281,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexBatchStream<R> {
                             .collect::<VortexResult<Vec<_>>>()?;
 
                         let s = StructArray::from_fields(arr.as_ref());
+                        // take -> filter -> project
                         self.state = StreamingState::Init;
                         return Poll::Ready(Some(Ok(s.into_array())));
                     }
@@ -302,6 +306,7 @@ mod tests {
     use crate::file::file_writer::FileWriter;
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_read_simple() {
         let strings = ChunkedArray::from_iter([
             VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
@@ -344,6 +349,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[cfg_attr(miri, ignore)]
     async fn test_read_projection() {
         let strings = ChunkedArray::from_iter([
             VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
