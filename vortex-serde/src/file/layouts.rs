@@ -4,6 +4,7 @@ use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
 
+use super::reader::projections::Projection;
 use crate::flatbuffers::footer as fb;
 use crate::writer::ByteRange;
 
@@ -188,6 +189,16 @@ impl StructLayout {
         Self {
             children: child_ranges,
         }
+    }
+
+    pub(crate) fn project(&self, projection: &Projection) -> StructLayout {
+        let mut new_childern = VecDeque::with_capacity(projection.indices().len());
+
+        for &idx in projection.indices() {
+            new_childern.push_back(self.children[idx].clone());
+        }
+
+        StructLayout::new(new_childern)
     }
 }
 
