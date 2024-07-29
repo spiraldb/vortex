@@ -96,6 +96,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
             take_indices: self.take_indices,
             row_filter: self.row_filter.unwrap_or_default(),
             reader: Some(self.reader),
+            metadata_layouts: None,
             state: StreamingState::default(),
             context: Default::default(),
             current_offset: 0,
@@ -167,6 +168,7 @@ pub struct VortexBatchStream<R> {
     reader: Option<R>,
     state: StreamingState<R>,
     context: Arc<vortex::Context>,
+    metadata_layouts: Option<Vec<Layout>>,
     current_offset: usize,
 }
 
@@ -230,20 +232,27 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexBatchStream<R> {
                 StreamingState::Init => {
                     let mut layouts = Vec::default();
 
-                    let _metadata_layouts = self
-                        .layout
-                        .children
-                        .iter_mut()
-                        .map(|c| c.as_chunked_mut().unwrap().children.pop_front().unwrap())
-                        .collect::<Vec<_>>();
+                    if self.metadata_layouts.is_none() {
+                        let metadata_layouts = self
+                            .layout
+                            .children
+                            .iter_mut()
+                            .map(|c| c.as_chunked_mut().unwrap().children.pop_front().unwrap())
+                            .collect::<Vec<_>>();
+
+                        self.metadata_layouts = Some(metadata_layouts);
+                    }
 
                     for c_layout in self.layout.children.iter_mut() {
                         let layout = c_layout.as_chunked_mut().unwrap();
 
-                        if layout.children.is_empty() {
-                            return Poll::Ready(None);
-                        } else {
-                            layouts.push(layout.children.pop_front().unwrap());
+                        match layout.children.pop_front() {
+                            Some(layout) => {
+                                layouts.push(layout);
+                            }
+                            None => {
+                                return Poll::Ready(None);
+                            }
                         }
                     }
 
