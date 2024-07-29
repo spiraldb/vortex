@@ -4,12 +4,11 @@ use std::mem;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
-
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::chunked::ChunkedArray;
 use vortex::array::struct_::StructArray;
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -19,8 +18,8 @@ use crate::file::layouts::{ChunkedLayout, FlatLayout, Layout, StructLayout};
 use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
 use crate::messages::IPCSchema;
-use crate::MessageWriter;
 use crate::writer::ChunkLayout;
+use crate::MessageWriter;
 
 pub const MAGIC_BYTES: [u8; 4] = *b"VRX1";
 
@@ -265,12 +264,11 @@ impl<W: VortexWrite> FileWriter<W> {
 #[cfg(test)]
 mod tests {
     use futures_executor::block_on;
-
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
     use vortex::array::varbin::VarBinArray;
-    use vortex::IntoArray;
     use vortex::validity::Validity;
+    use vortex::IntoArray;
 
     use crate::file::file_writer::FileWriter;
 
