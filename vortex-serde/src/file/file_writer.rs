@@ -211,7 +211,7 @@ impl<W: VortexWrite> FileWriter<W> {
             let metadata_table_begin = self.msgs.tell();
             self.msgs.write_dtype(metadata_array.dtype()).await?;
             self.msgs.write_batch(metadata_array.into_array()).await?;
-            chunks.push_back(Layout::Flat(FlatLayout::new(
+            chunks.push_front(Layout::Flat(FlatLayout::new(
                 metadata_table_begin,
                 self.msgs.tell(),
             )));

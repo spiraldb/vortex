@@ -193,10 +193,17 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexBatchStream<R> {
                 StreamingState::Init => {
                     let mut layouts = Vec::default();
 
+                    let _metadata_layouts = self
+                        .layout
+                        .children
+                        .iter_mut()
+                        .map(|c| c.as_chunked_mut().unwrap().children.pop_front().unwrap())
+                        .collect::<Vec<_>>();
+
                     for c_layout in self.layout.children.iter_mut() {
                         let layout = c_layout.as_chunked_mut().unwrap();
 
-                        if layout.children.len() == 1 {
+                        if layout.children.is_empty() {
                             return Poll::Ready(None);
                         } else {
                             layouts.push(layout.children.pop_front().unwrap());

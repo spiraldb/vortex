@@ -150,7 +150,7 @@ impl ChunkedLayout {
     }
 
     pub fn metadata_range(&self) -> &Layout {
-        &self.children[self.children.len() - 1]
+        &self.children[0]
     }
 }
 
