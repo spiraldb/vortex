@@ -15,7 +15,7 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
@@ -51,11 +51,11 @@ vortex-dict = { path = "../encodings/dict" }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-error = { path = "../vortex-error", features = ["parquet"] }
 vortex-fastlanes = { path = "../encodings/fastlanes" }
-vortex-ipc = { path = "../vortex-ipc", features = ["object_store"] }
 vortex-roaring = { path = "../encodings/roaring" }
 vortex-runend = { path = "../encodings/runend" }
 vortex-sampling-compressor = { path = "../vortex-sampling-compressor" }
-xshell = "0.2.6"
+vortex-serde = { path = "../vortex-serde", features = ["object_store"] }
+xshell = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }

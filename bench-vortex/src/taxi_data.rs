@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use futures::executor::block_on;
 use vortex_buffer::io_buf::IoBuf;
 use vortex_error::VortexError;
-use vortex_ipc::io::VortexWrite;
+use vortex_serde::io::VortexWrite;
 
 use crate::data_downloads::{data_vortex_uncompressed, download_data};
 use crate::reader::rewrite_parquet_as_vortex;

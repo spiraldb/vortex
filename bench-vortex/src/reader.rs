@@ -31,11 +31,11 @@ use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_ipc::chunked_reader::ChunkedArrayReader;
-use vortex_ipc::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
-use vortex_ipc::writer::ArrayWriter;
-use vortex_ipc::MessageReader;
 use vortex_sampling_compressor::SamplingCompressor;
+use vortex_serde::chunked_reader::ChunkedArrayReader;
+use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
+use vortex_serde::writer::ArrayWriter;
+use vortex_serde::MessageReader;
 
 use crate::{COMPRESSORS, CTX};
 
@@ -153,7 +153,7 @@ pub async fn read_vortex_footer_format<R: VortexReadAt>(
     ChunkedArrayReader::try_new(
         reader,
         CTX.clone(),
-        dtype,
+        dtype.into(),
         PrimitiveArray::from(footer.byte_offsets).into_array(),
         PrimitiveArray::from(footer.row_offsets).into_array(),
     )

@@ -55,7 +55,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
         while let Some(chunk) = stream.try_next().await? {
             row_offset += chunk.len() as u64;
             row_offsets.push(row_offset);
-            self.msgs.write_chunk(chunk).await?;
+            self.msgs.write_batch(chunk).await?;
             byte_offsets.push(self.msgs.tell());
         }
 
@@ -99,6 +99,12 @@ impl<W: VortexWrite> ArrayWriter<W> {
 pub struct ByteRange {
     pub begin: u64,
     pub end: u64,
+}
+
+impl ByteRange {
+    pub fn size(&self) -> usize {
+        (self.end - self.begin) as usize
+    }
 }
 
 #[derive(Clone, Debug)]

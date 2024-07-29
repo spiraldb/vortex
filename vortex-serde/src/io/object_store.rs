@@ -66,7 +66,7 @@ impl<'a, 'b, O: ObjectStore> ObjectStoreReadAt<'a, 'b, O> {
 }
 
 impl<'a, 'b, O: ObjectStore> VortexReadAt for ObjectStoreReadAt<'a, 'b, O> {
-    async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> std::io::Result<BytesMut> {
+    async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
         let start_range = pos as usize;
         let bytes = self
             .object_store
@@ -74,6 +74,10 @@ impl<'a, 'b, O: ObjectStore> VortexReadAt for ObjectStoreReadAt<'a, 'b, O> {
             .await?;
         buffer.as_mut().copy_from_slice(bytes.as_ref());
         Ok(buffer)
+    }
+
+    async fn size(&self) -> u64 {
+        self.object_store.head(self.location).await.unwrap().size as u64
     }
 }
 

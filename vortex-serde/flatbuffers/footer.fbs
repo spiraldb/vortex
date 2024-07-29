@@ -1,0 +1,26 @@
+namespace vortex.footer;
+
+table FlatLayout {
+    begin: uint64;
+    end: uint64;
+}
+
+table NestedLayout {
+    children: [Layout];
+    encoding: uint16;
+}
+
+union LayoutVariant {
+    FlatLayout,
+    NestedLayout,
+}
+
+table Layout {
+    layout: LayoutVariant;
+}
+
+table Footer {
+    layout: Layout;
+}
+
+root_type Footer;

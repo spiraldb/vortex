@@ -26,15 +26,11 @@ impl StructArray {
             self.len(),
         ))
     }
-}
 
-impl<'a> StructArray {
-    pub fn children(&'a self) -> impl Iterator<Item = Array> + '_ {
+    pub fn children(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nfields()).map(move |idx| self.field(idx).unwrap())
     }
-}
 
-impl StructArray {
     pub fn try_new(
         names: FieldNames,
         fields: Vec<Array>,
@@ -85,11 +81,8 @@ impl StructArray {
         Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)
             .expect("building StructArray with helper")
     }
-}
 
-impl StructArray {
     // TODO(aduffy): Add equivalent function to support field masks for nested column access.
-
     /// Return a new StructArray with the given projection applied.
     ///
     /// Projection does not copy data arrays. Projection is defined by an ordinal array slice

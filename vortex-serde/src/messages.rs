@@ -1,13 +1,14 @@
-use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use flatbuffers::{FlatBufferBuilder, Follow, WIPOffset};
 use itertools::Itertools;
 use vortex::stats::ArrayStatistics;
 use vortex::{flatbuffers as fba, Array};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
+use vortex_error::{vortex_err, VortexError};
+use vortex_flatbuffers::{FlatBufferRoot, ReadFlatBuffer, WriteFlatBuffer};
 
-use crate::flatbuffers::ipc as fb;
-use crate::flatbuffers::ipc::Compression;
+use crate::flatbuffers::serde as fb;
+use crate::flatbuffers::serde::Compression;
 use crate::ALIGNMENT;
 
 pub enum IPCMessage<'a> {
@@ -20,6 +21,8 @@ pub struct IPCSchema<'a>(pub &'a DType);
 pub struct IPCBatch<'a>(pub &'a Array);
 pub struct IPCArray<'a>(pub &'a Array);
 pub struct IPCPage<'a>(pub &'a Buffer);
+
+pub struct IPCDType(pub DType);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 
@@ -57,6 +60,23 @@ impl<'a> WriteFlatBuffer for IPCSchema<'a> {
     ) -> WIPOffset<Self::Target<'fb>> {
         let dtype = Some(self.0.write_flatbuffer(fbb));
         fb::Schema::create(fbb, &fb::SchemaArgs { dtype })
+    }
+}
+
+impl ReadFlatBuffer for IPCDType {
+    type Source<'t> = fb::Schema<'t>;
+    type Error = VortexError;
+
+    fn read_flatbuffer<'buf>(
+        fb: &<Self::Source<'buf> as Follow<'buf>>::Inner,
+    ) -> Result<Self, Self::Error> {
+        let dtype = DType::try_from(
+            fb.dtype()
+                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
+        )
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
+
+        Ok(IPCDType(dtype))
     }
 }
 

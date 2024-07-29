@@ -23,3 +23,17 @@ impl VortexWrite for Vec<u8> {
         ready(Ok(()))
     }
 }
+
+impl<W: VortexWrite> VortexWrite for &mut W {
+    fn write_all<B: IoBuf>(&mut self, buffer: B) -> impl Future<Output = io::Result<B>> {
+        (*self).write_all(buffer)
+    }
+
+    fn flush(&mut self) -> impl Future<Output = io::Result<()>> {
+        (*self).flush()
+    }
+
+    fn shutdown(&mut self) -> impl Future<Output = io::Result<()>> {
+        (*self).shutdown()
+    }
+}

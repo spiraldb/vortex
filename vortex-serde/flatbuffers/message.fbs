@@ -1,18 +1,18 @@
 include "vortex-array/flatbuffers/array.fbs";
 include "vortex-dtype/flatbuffers/dtype.fbs";
 
-namespace vortex.ipc;
+namespace vortex.serde;
 
 enum Version: uint8 {
     V0 = 0,
 }
 
-table Schema {
-    dtype: vortex.dtype.DType;
-}
-
 enum Compression: uint8 {
     None = 0,
+}
+
+table Schema {
+    dtype: vortex.dtype.DType;
 }
 
 struct Buffer {

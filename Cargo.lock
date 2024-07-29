@@ -456,10 +456,10 @@ dependencies = [
  "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
- "vortex-ipc",
  "vortex-roaring",
  "vortex-runend",
  "vortex-sampling-compressor",
+ "vortex-serde",
  "xshell",
 ]
 
@@ -4240,39 +4240,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vortex-ipc"
-version = "0.1.0"
-dependencies = [
- "arrow",
- "arrow-array",
- "arrow-ipc",
- "arrow-schema",
- "arrow-select",
- "build-vortex",
- "bytes",
- "criterion",
- "flatbuffers",
- "futures-executor",
- "futures-util",
- "itertools 0.13.0",
- "monoio",
- "object_store",
- "pin-project",
- "rand",
- "simplelog",
- "tokio",
- "vortex-alp",
- "vortex-array",
- "vortex-buffer",
- "vortex-dtype",
- "vortex-error",
- "vortex-fastlanes",
- "vortex-flatbuffers",
- "vortex-sampling-compressor",
- "vortex-scalar",
-]
-
-[[package]]
 name = "vortex-roaring"
 version = "0.1.0"
 dependencies = [
@@ -4355,6 +4322,40 @@ dependencies = [
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
+]
+
+[[package]]
+name = "vortex-serde"
+version = "0.1.0"
+dependencies = [
+ "arrow",
+ "arrow-array",
+ "arrow-ipc",
+ "arrow-schema",
+ "arrow-select",
+ "build-vortex",
+ "bytes",
+ "criterion",
+ "flatbuffers",
+ "futures",
+ "futures-executor",
+ "futures-util",
+ "itertools 0.13.0",
+ "monoio",
+ "object_store",
+ "pin-project",
+ "rand",
+ "simplelog",
+ "tokio",
+ "vortex-alp",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-fastlanes",
+ "vortex-flatbuffers",
+ "vortex-sampling-compressor",
+ "vortex-scalar",
 ]
 
 [[package]]

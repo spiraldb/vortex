@@ -48,7 +48,7 @@ impl<W: VortexWrite> MessageWriter<W> {
             .await
     }
 
-    pub async fn write_chunk(&mut self, chunk: Array) -> io::Result<()> {
+    pub async fn write_batch(&mut self, chunk: Array) -> io::Result<()> {
         let buffer_offsets = chunk.all_buffer_offsets(self.alignment);
 
         // Serialize the Chunk message.
@@ -104,8 +104,9 @@ impl<W: VortexWrite> MessageWriter<W> {
         let buffer_end = buffer.len();
         let buffer_len = buffer_end - buffer_begin;
 
-        let aligned_size = (4 + buffer_len + (self.alignment - 1)) & !(self.alignment - 1);
-        let padding_bytes = aligned_size - buffer_len - 4;
+        let unaligned_size = 4 + buffer_len;
+        let aligned_size = (unaligned_size + (self.alignment - 1)) & !(self.alignment - 1);
+        let padding_bytes = aligned_size - unaligned_size;
 
         // Write the size as u32, followed by the buffer, followed by padding.
         self.write_all(((aligned_size - 4) as u32).to_le_bytes())
