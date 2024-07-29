@@ -26,7 +26,7 @@ impl VortexReadAt for TokioAdapter<File> {
         Ok(buffer)
     }
 
-    async fn len(&self) -> u64 {
+    async fn size(&self) -> u64 {
         self.0.metadata().await.unwrap().len()
     }
 }

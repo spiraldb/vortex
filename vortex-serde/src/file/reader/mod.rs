@@ -36,6 +36,7 @@ pub struct VortexBatchReaderBuilder<R> {
 }
 
 impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
+    // Recommended read-size according to the AWS performance guide
     const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
     const FOOTER_TRAILER_SIZE: usize = 20;
 
@@ -106,7 +107,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
     async fn len(&self) -> usize {
         let len = match self.len {
             Some(l) => l,
-            None => self.reader.len().await,
+            None => self.reader.size().await,
         };
 
         len as usize

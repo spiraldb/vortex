@@ -29,7 +29,7 @@ impl<R: VortexReadAt> VortexReadAt for OffsetReadAt<R> {
         self.read.performance_hint()
     }
 
-    async fn len(&self) -> u64 {
-        self.read.len().await - self.offset
+    async fn size(&self) -> u64 {
+        self.read.size().await - self.offset
     }
 }

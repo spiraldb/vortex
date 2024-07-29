@@ -25,7 +25,7 @@ pub trait VortexReadAt {
         0
     }
 
-    fn len(&self) -> impl Future<Output = u64>;
+    fn size(&self) -> impl Future<Output = u64>;
 }
 
 impl<T: VortexReadAt> VortexReadAt for Arc<T> {
@@ -41,8 +41,8 @@ impl<T: VortexReadAt> VortexReadAt for Arc<T> {
         T::performance_hint(self)
     }
 
-    async fn len(&self) -> u64 {
-        T::len(self).await
+    async fn size(&self) -> u64 {
+        T::size(self).await
     }
 }
 
@@ -80,8 +80,8 @@ impl<R: ?Sized + VortexReadAt> VortexReadAt for &R {
         R::performance_hint(*self)
     }
 
-    async fn len(&self) -> u64 {
-        R::len(*self).await
+    async fn size(&self) -> u64 {
+        R::size(*self).await
     }
 }
 
@@ -94,7 +94,7 @@ impl VortexReadAt for Vec<u8> {
         VortexReadAt::read_at_into(self.as_slice(), pos, buffer)
     }
 
-    async fn len(&self) -> u64 {
+    async fn size(&self) -> u64 {
         self.len() as u64
     }
 }
@@ -113,7 +113,7 @@ impl VortexReadAt for [u8] {
         }
     }
 
-    async fn len(&self) -> u64 {
+    async fn size(&self) -> u64 {
         self.len() as u64
     }
 }
@@ -135,7 +135,7 @@ impl VortexReadAt for Buffer {
         }
     }
 
-    async fn len(&self) -> u64 {
+    async fn size(&self) -> u64 {
         self.len() as u64
     }
 }

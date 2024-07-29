@@ -76,7 +76,7 @@ impl<'a, 'b, O: ObjectStore> VortexReadAt for ObjectStoreReadAt<'a, 'b, O> {
         Ok(buffer)
     }
 
-    async fn len(&self) -> u64 {
+    async fn size(&self) -> u64 {
         self.object_store.head(self.location).await.unwrap().size as u64
     }
 }
