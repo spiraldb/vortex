@@ -180,7 +180,11 @@ pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Arr
     let indices_array = indices.to_vec().into_array();
 
     let file = TokioAdapter(tokio::fs::File::open(path).await?);
-    let reader = FileReaderBuilder::new(file).with_length(len).build();
+    let reader = FileReaderBuilder::new(file)
+        .with_length(len)
+        .build()
+        .await
+        .unwrap();
 
     let data = reader
         .into_stream()

@@ -18,20 +18,20 @@ use crate::{ArrayBufferReader, ReadResult};
 
 pub struct FileReader<R> {
     inner: R,
-    len: Option<u64>,
+    footer: Footer,
 }
 
 pub struct FileReaderBuilder<R> {
-    inner: R,
+    reader: R,
     len: Option<u64>,
 }
 
 impl<R: VortexReadAt> FileReaderBuilder<R> {
+    const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
+    const FOOTER_TRAILER_SIZE: usize = 20;
+
     pub fn new(reader: R) -> Self {
-        Self {
-            inner: reader,
-            len: None,
-        }
+        Self { reader, len: None }
     }
 
     pub fn with_length(mut self, len: u64) -> Self {
@@ -39,33 +39,41 @@ impl<R: VortexReadAt> FileReaderBuilder<R> {
         self
     }
 
-    pub fn build(self) -> FileReader<R> {
-        FileReader {
-            inner: self.inner,
-            len: self.len,
-        }
-    }
-}
+    pub async fn build(mut self) -> VortexResult<FileReader<R>> {
+        let footer = self.read_footer().await?;
 
-impl<R: VortexReadAt> FileReader<R> {
-    const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
-    const FOOTER_TRAILER_SIZE: usize = 20;
+        Ok(FileReader {
+            footer,
+            inner: self.reader,
+        })
+    }
+
+    async fn len(&self) -> usize {
+        let len = match self.len {
+            Some(l) => l,
+            None => self.reader.len().await,
+        };
+
+        len as usize
+    }
 
     pub async fn read_footer(&mut self) -> VortexResult<Footer> {
-        let file_len = self.len().await as usize;
-        if file_len < Self::FOOTER_TRAILER_SIZE {
+        let file_length = self.len().await;
+
+        if file_length < Self::FOOTER_TRAILER_SIZE {
             vortex_bail!(
-                "Malformed vortex file, length {file_len} must be at least {}",
-                Self::FOOTER_TRAILER_SIZE
+                "Malformed vortex file, length {} must be at least {}",
+                file_length,
+                Self::FOOTER_TRAILER_SIZE,
             )
         }
 
-        let read_size = Self::FOOTER_READ_SIZE.min(file_len as usize);
+        let read_size = Self::FOOTER_READ_SIZE.min(file_length);
         let mut buf = BytesMut::with_capacity(read_size);
         unsafe { buf.set_len(read_size) }
 
-        let read_offset = (file_len - read_size) as u64;
-        buf = self.inner.read_at_into(read_offset, buf).await?;
+        let read_offset = (file_length - read_size) as u64;
+        buf = self.reader.read_at_into(read_offset, buf).await?;
 
         let magic_bytes_loc = read_size - MAGIC_BYTES.len();
 
@@ -92,19 +100,11 @@ impl<R: VortexReadAt> FileReader<R> {
             leftovers_offset: read_offset,
         })
     }
+}
 
-    async fn len(&mut self) -> u64 {
-        match self.len {
-            None => {
-                self.len = Some(self.inner.len().await);
-                self.len.unwrap()
-            }
-            Some(l) => l,
-        }
-    }
-
-    pub async fn into_stream(mut self) -> VortexResult<FileReaderStream<R>> {
-        let footer = self.read_footer().await?;
+impl<R: VortexReadAt> FileReader<R> {
+    pub async fn into_stream(self) -> VortexResult<FileReaderStream<R>> {
+        let footer = self.footer;
         let layout = footer.layout()?;
         let dtype = footer.dtype()?;
 
@@ -281,10 +281,8 @@ mod tests {
         writer = writer.write_array_columns(st.into_array()).await.unwrap();
         let written = writer.finalize().await.unwrap();
 
-        let mut reader = FileReaderBuilder::new(written).build();
-
-        let footer = reader.read_footer().await.unwrap();
-        let layout = footer.layout().unwrap();
+        let reader = FileReaderBuilder::new(written).build().await.unwrap();
+        let layout = reader.footer.layout().unwrap();
         dbg!(layout);
 
         let mut stream = reader.into_stream().await.unwrap();
