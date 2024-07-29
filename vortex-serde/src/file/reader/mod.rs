@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use bytes::{Bytes, BytesMut};
+use filtering::RowFilter;
 use futures::future::BoxFuture;
 use futures::{ready, FutureExt, Stream};
 use projections::Projection;
@@ -18,6 +19,7 @@ use crate::file::footer::Footer;
 use crate::io::VortexReadAt;
 use crate::{ArrayBufferReader, ReadResult};
 
+pub mod filtering;
 pub mod projections;
 pub mod schema;
 
@@ -26,6 +28,7 @@ pub struct VortexBatchReaderBuilder<R> {
     projection: Option<Projection>,
     len: Option<u64>,
     mask: Option<Array>,
+    row_filter: Option<RowFilter>,
 }
 
 impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
@@ -36,6 +39,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
         Self {
             reader,
             projection: None,
+            row_filter: None,
             len: None,
             mask: None,
         }
@@ -58,6 +62,11 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
             "Mask arrays have to be integer arrays"
         );
         self.mask = Some(array);
+        self
+    }
+
+    pub fn with_row_filter(mut self, row_filter: RowFilter) -> Self {
+        self.row_filter = Some(row_filter);
         self
     }
 
