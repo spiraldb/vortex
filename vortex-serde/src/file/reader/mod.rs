@@ -5,6 +5,8 @@ use std::task::{Context, Poll};
 use bytes::{Bytes, BytesMut};
 use futures::future::BoxFuture;
 use futures::{ready, FutureExt, Stream};
+use projections::Projection;
+use schema::Schema;
 use vortex::array::struct_::StructArray;
 use vortex::{Array, IntoArray};
 use vortex_dtype::DType;
@@ -16,22 +18,25 @@ use crate::file::footer::Footer;
 use crate::io::VortexReadAt;
 use crate::{ArrayBufferReader, ReadResult};
 
-pub struct FileReader<R> {
-    inner: R,
-    footer: Footer,
-}
+pub mod projections;
+pub mod schema;
 
-pub struct FileReaderBuilder<R> {
+pub struct VortexStreamBuilder<R> {
     reader: R,
+    projection: Option<Projection>,
     len: Option<u64>,
 }
 
-impl<R: VortexReadAt> FileReaderBuilder<R> {
+impl<R: VortexReadAt> VortexStreamBuilder<R> {
     const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
     const FOOTER_TRAILER_SIZE: usize = 20;
 
     pub fn new(reader: R) -> Self {
-        Self { reader, len: None }
+        Self {
+            reader,
+            projection: None,
+            len: None,
+        }
     }
 
     pub fn with_length(mut self, len: u64) -> Self {
@@ -39,12 +44,24 @@ impl<R: VortexReadAt> FileReaderBuilder<R> {
         self
     }
 
-    pub async fn build(mut self) -> VortexResult<FileReader<R>> {
+    pub fn with_projection(mut self, projection: Projection) -> Self {
+        self.projection = Some(projection);
+        self
+    }
+
+    pub async fn build(mut self) -> VortexResult<VortexStream<R>> {
         let footer = self.read_footer().await?;
 
-        Ok(FileReader {
-            footer,
-            inner: self.reader,
+        let layout = footer.layout()?;
+        let dtype = footer.dtype()?;
+
+        Ok(VortexStream {
+            layout,
+            dtype,
+            projection: self.projection,
+            reader: Some(self.reader),
+            state: StreamingState::default(),
+            context: Default::default(),
         })
     }
 
@@ -102,28 +119,24 @@ impl<R: VortexReadAt> FileReaderBuilder<R> {
     }
 }
 
-impl<R: VortexReadAt> FileReader<R> {
-    pub async fn into_stream(self) -> VortexResult<FileReaderStream<R>> {
-        let footer = self.footer;
-        let layout = footer.layout()?;
-        let dtype = footer.dtype()?;
-
-        Ok(FileReaderStream {
-            layout,
-            dtype,
-            reader: Some(self.inner),
-            state: StreamingState::default(),
-            context: Default::default(),
-        })
-    }
-}
-
-pub struct FileReaderStream<R> {
+pub struct VortexStream<R> {
     layout: Layout,
     dtype: DType,
     reader: Option<R>,
+    projection: Option<Projection>,
     state: StreamingState<R>,
     context: Arc<vortex::Context>,
+}
+
+impl<R> VortexStream<R> {
+    pub fn schema(&self) -> VortexResult<Schema> {
+        let struct_schema = self.dtype.as_struct().cloned().unwrap();
+        let dtype = match self.projection.as_ref() {
+            Some(projection) => struct_schema.project(projection.indices())?,
+            None => struct_schema,
+        };
+        Ok(Schema(dtype))
+    }
 }
 
 type StreamStateFuture<R> = BoxFuture<'static, VortexResult<(Vec<(Arc<str>, BytesMut, DType)>, R)>>;
@@ -152,7 +165,7 @@ impl ColumnInfo {
     }
 }
 
-impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
+impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexStream<R> {
     type Item = VortexResult<Array>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -169,7 +182,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for FileReaderStream<R> {
                         if layout.children.len() == 1 {
                             return Poll::Ready(None);
                         } else {
-                            layouts.push(layout.children.remove(0));
+                            layouts.push(layout.children.pop_front().unwrap());
                         }
                     }
 
@@ -281,12 +294,11 @@ mod tests {
         writer = writer.write_array_columns(st.into_array()).await.unwrap();
         let written = writer.finalize().await.unwrap();
 
-        let reader = FileReaderBuilder::new(written).build().await.unwrap();
-        let layout = reader.footer.layout().unwrap();
+        let mut builder = VortexStreamBuilder::new(written);
+        let layout = builder.read_footer().await.unwrap().layout().unwrap();
         dbg!(layout);
 
-        let mut stream = reader.into_stream().await.unwrap();
-
+        let mut stream = builder.build().await.unwrap();
         let mut cnt = 0;
 
         while let Some(array) = stream.next().await {

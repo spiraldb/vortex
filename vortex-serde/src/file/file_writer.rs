@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::mem;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
@@ -158,10 +159,10 @@ impl<W: VortexWrite> FileWriter<W> {
             unreachable!("Values are a structarray")
         };
 
-        let mut column_layouts = Vec::with_capacity(self.column_chunks.len());
+        let mut column_layouts = VecDeque::with_capacity(self.column_chunks.len());
 
         for mut chunk in mem::take(&mut self.column_chunks) {
-            let mut chunks = Vec::new();
+            let mut chunks = VecDeque::new();
 
             let len = chunk.byte_offsets.len() - 1;
             let byte_counts = chunk
@@ -210,11 +211,11 @@ impl<W: VortexWrite> FileWriter<W> {
             let metadata_table_begin = self.msgs.tell();
             self.msgs.write_dtype(metadata_array.dtype()).await?;
             self.msgs.write_batch(metadata_array.into_array()).await?;
-            chunks.push(Layout::Flat(FlatLayout::new(
+            chunks.push_back(Layout::Flat(FlatLayout::new(
                 metadata_table_begin,
                 self.msgs.tell(),
             )));
-            column_layouts.push(Layout::Chunked(ChunkedLayout::new(chunks)));
+            column_layouts.push_back(Layout::Chunked(ChunkedLayout::new(chunks)));
         }
 
         Ok(StructLayout::new(column_layouts))

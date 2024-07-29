@@ -33,7 +33,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::chunked_reader::ChunkedArrayReader;
-use vortex_serde::file::file_reader::FileReaderBuilder;
+use vortex_serde::file::reader::VortexStreamBuilder;
 use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
 use vortex_serde::writer::ArrayWriter;
 use vortex_serde::MessageReader;
@@ -180,15 +180,13 @@ pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Arr
     let indices_array = indices.to_vec().into_array();
 
     let file = TokioAdapter(tokio::fs::File::open(path).await?);
-    let reader = FileReaderBuilder::new(file)
+    let stream = VortexStreamBuilder::new(file)
         .with_length(len)
         .build()
         .await
         .unwrap();
 
-    let data = reader
-        .into_stream()
-        .await?
+    let data = stream
         .collect::<Vec<_>>()
         .await
         .into_iter()

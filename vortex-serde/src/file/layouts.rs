@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
@@ -112,7 +114,7 @@ impl FlatLayout {
 
 #[derive(Debug, Clone)]
 pub struct ChunkedLayout {
-    pub(crate) children: Vec<Layout>,
+    pub(crate) children: VecDeque<Layout>,
 }
 
 impl WriteFlatBuffer for ChunkedLayout {
@@ -140,7 +142,7 @@ impl WriteFlatBuffer for ChunkedLayout {
 }
 
 impl ChunkedLayout {
-    pub fn new(child_ranges: Vec<Layout>) -> Self {
+    pub fn new(child_ranges: VecDeque<Layout>) -> Self {
         Self {
             children: child_ranges,
         }
@@ -154,7 +156,7 @@ impl ChunkedLayout {
 // TODO(robert): Should struct layout store a schema? How do you pick a child by name
 #[derive(Debug, Clone)]
 pub struct StructLayout {
-    pub(crate) children: Vec<Layout>,
+    pub(crate) children: VecDeque<Layout>,
 }
 
 impl WriteFlatBuffer for StructLayout {
@@ -182,7 +184,7 @@ impl WriteFlatBuffer for StructLayout {
 }
 
 impl StructLayout {
-    pub fn new(child_ranges: Vec<Layout>) -> Self {
+    pub fn new(child_ranges: VecDeque<Layout>) -> Self {
         Self {
             children: child_ranges,
         }
@@ -198,7 +200,7 @@ impl TryFrom<fb::NestedLayout<'_>> for Layout {
             .unwrap()
             .iter()
             .map(Layout::try_from)
-            .collect::<VortexResult<Vec<_>>>()?;
+            .collect::<VortexResult<VecDeque<_>>>()?;
         match value.encoding() {
             1 => Ok(Layout::Chunked(ChunkedLayout::new(children))),
             2 => Ok(Layout::Struct(StructLayout::new(children))),
