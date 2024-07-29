@@ -8,7 +8,7 @@ use futures::{ready, FutureExt, Stream};
 use projections::Projection;
 use schema::Schema;
 use vortex::array::struct_::StructArray;
-use vortex::{Array, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{DType, StructDType};
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
@@ -21,13 +21,14 @@ use crate::{ArrayBufferReader, ReadResult};
 pub mod projections;
 pub mod schema;
 
-pub struct VortexStreamBuilder<R> {
+pub struct VortexBatchReaderBuilder<R> {
     reader: R,
     projection: Option<Projection>,
     len: Option<u64>,
+    mask: Option<Array>,
 }
 
-impl<R: VortexReadAt> VortexStreamBuilder<R> {
+impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
     const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
     const FOOTER_TRAILER_SIZE: usize = 20;
 
@@ -36,6 +37,7 @@ impl<R: VortexReadAt> VortexStreamBuilder<R> {
             reader,
             projection: None,
             len: None,
+            mask: None,
         }
     }
 
@@ -49,7 +51,17 @@ impl<R: VortexReadAt> VortexStreamBuilder<R> {
         self
     }
 
-    pub async fn build(mut self) -> VortexResult<VortexStream<R>> {
+    pub fn with_mask(mut self, array: Array) -> Self {
+        // TODO(#441): Allow providing boolean masks
+        assert!(
+            array.dtype().is_int(),
+            "Mask arrays have to be integer arrays"
+        );
+        self.mask = Some(array);
+        self
+    }
+
+    pub async fn build(mut self) -> VortexResult<VortexBatchStream<R>> {
         let footer = self.read_footer().await?;
 
         // TODO(adamg): We probably want to unify everything that is going on here into a single type and implementation
@@ -69,7 +81,7 @@ impl<R: VortexReadAt> VortexStreamBuilder<R> {
             dtype = dtype.project(projection.indices())?;
         }
 
-        Ok(VortexStream {
+        Ok(VortexBatchStream {
             layout,
             dtype,
             reader: Some(self.reader),
@@ -132,7 +144,7 @@ impl<R: VortexReadAt> VortexStreamBuilder<R> {
     }
 }
 
-pub struct VortexStream<R> {
+pub struct VortexBatchStream<R> {
     layout: StructLayout,
     dtype: StructDType,
     reader: Option<R>,
@@ -140,7 +152,7 @@ pub struct VortexStream<R> {
     context: Arc<vortex::Context>,
 }
 
-impl<R> VortexStream<R> {
+impl<R> VortexBatchStream<R> {
     pub fn schema(&self) -> VortexResult<Schema> {
         Ok(Schema(self.dtype.clone()))
     }
@@ -172,7 +184,7 @@ impl ColumnInfo {
     }
 }
 
-impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexStream<R> {
+impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexBatchStream<R> {
     type Item = VortexResult<Array>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -299,7 +311,7 @@ mod tests {
         writer = writer.write_array_columns(st.into_array()).await.unwrap();
         let written = writer.finalize().await.unwrap();
 
-        let mut builder = VortexStreamBuilder::new(written);
+        let mut builder = VortexBatchReaderBuilder::new(written);
         let layout = builder.read_footer().await.unwrap().layout().unwrap();
         dbg!(layout);
 
@@ -341,7 +353,7 @@ mod tests {
         writer = writer.write_array_columns(st.into_array()).await.unwrap();
         let written = writer.finalize().await.unwrap();
 
-        let mut builder = VortexStreamBuilder::new(written);
+        let mut builder = VortexBatchReaderBuilder::new(written);
         let layout = builder.read_footer().await.unwrap().layout().unwrap();
         dbg!(layout);
 
