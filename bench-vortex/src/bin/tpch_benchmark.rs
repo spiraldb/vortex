@@ -21,13 +21,10 @@ async fn main() {
         Format::Vortex {
             disable_pushdown: false,
         },
+        Format::Vortex {
+            disable_pushdown: true,
+        },
         // Format::Parquet,
-        // Format::Vortex {
-        //     disable_pushdown: false,
-        // },
-        // Format::Vortex {
-        //     disable_pushdown: true,
-        // },
     ];
 
     // Load datasets
