@@ -131,7 +131,6 @@ async fn register_parquet(
     file: &Path,
     schema: &Schema,
 ) -> anyhow::Result<()> {
-
     let csv_file = file.to_str().unwrap();
     let pq_file = idempotent_async(
         &file.with_extension("").with_extension("parquet"),
