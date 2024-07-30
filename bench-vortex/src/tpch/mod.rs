@@ -7,13 +7,12 @@ use arrow_schema::Schema;
 use datafusion::dataframe::DataFrameWriteOptions;
 use datafusion::datasource::MemTable;
 use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
-use futures::executor::block_on;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
 
-use crate::idempotent;
+use crate::idempotent_async;
 
 pub mod dbgen;
 pub mod schema;
@@ -132,30 +131,33 @@ async fn register_parquet(
     file: &Path,
     schema: &Schema,
 ) -> anyhow::Result<()> {
-    // Idempotent conversion from TPCH CSV to Parquet.
-    let pq_file = idempotent(
+
+    let csv_file = file.to_str().unwrap();
+    let pq_file = idempotent_async(
         &file.with_extension("").with_extension("parquet"),
-        |pq_file| {
-            let df = block_on(
-                session.read_csv(
-                    file.to_str().unwrap(),
+        |pq_file| async move {
+            let df = session
+                .read_csv(
+                    csv_file,
                     CsvReadOptions::default()
                         .delimiter(b'|')
                         .has_header(false)
                         .file_extension("tbl")
                         .schema(schema),
-                ),
-            )
-            .unwrap();
+                )
+                .await?;
 
-            block_on(df.write_parquet(
-                pq_file.as_os_str().to_str().unwrap(),
+            df.write_parquet(
+                pq_file.as_path().as_os_str().to_str().unwrap(),
                 DataFrameWriteOptions::default(),
                 None,
-            ))
+            )
+            .await?;
+
+            Ok::<(), anyhow::Error>(())
         },
     )
-    .unwrap();
+    .await?;
 
     Ok(session
         .register_parquet(
