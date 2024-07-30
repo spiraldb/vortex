@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -91,6 +92,23 @@ pub fn idempotent<T, E, P: IdempotentPath + ?Sized>(
         let temp_path = temp_location.as_path();
         f(temp_path)?;
         std::fs::rename(temp_path, &data_path).unwrap();
+    }
+    Ok(data_path)
+}
+
+pub async fn idempotent_async<T, E, F, P>(
+    path: &P,
+    f: impl FnOnce(PathBuf) -> F,
+) -> Result<PathBuf, E>
+where
+    F: Future<Output = Result<T, E>>,
+    P: IdempotentPath + ?Sized,
+{
+    let data_path = path.to_data_path();
+    if !data_path.exists() {
+        let temp_location = path.to_temp_path();
+        f(temp_location.clone()).await?;
+        std::fs::rename(temp_location.as_path(), &data_path).unwrap();
     }
     Ok(data_path)
 }
