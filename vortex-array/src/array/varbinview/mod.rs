@@ -1,5 +1,4 @@
 use std::fmt::{Debug, Formatter};
-use std::ops::Deref;
 use std::sync::Arc;
 use std::{mem, slice};
 
@@ -7,13 +6,11 @@ use ::serde::{Deserialize, Serialize};
 use arrow_array::builder::{BinaryViewBuilder, StringViewBuilder};
 use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
-use arrow_schema::DataType;
 use itertools::Itertools;
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::VarBinArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
 use crate::stats::StatsSet;
@@ -50,6 +47,11 @@ impl Inlined {
         inlined.data[..value.len()].copy_from_slice(value);
         inlined
     }
+
+    #[inline]
+    pub fn value(&self) -> &[u8] {
+        &self.data[0..(self.size as usize)]
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -70,6 +72,21 @@ impl Ref {
             offset,
         }
     }
+
+    #[inline]
+    pub fn buffer_index(&self) -> u32 {
+        self.buffer_index
+    }
+
+    #[inline]
+    pub fn offset(&self) -> u32 {
+        self.offset
+    }
+
+    #[inline]
+    pub fn prefix(&self) -> &[u8; 4] {
+        &self.prefix
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -82,13 +99,50 @@ pub union BinaryView {
 impl BinaryView {
     pub const MAX_INLINED_SIZE: usize = 12;
 
-    #[inline]
-    pub fn size(&self) -> usize {
-        unsafe { self.inlined.size as usize }
+    pub fn new_inlined(value: &[u8]) -> Self {
+        assert!(
+            value.len() <= Self::MAX_INLINED_SIZE,
+            "expected inlined value to be <= 12 bytes, was {}",
+            value.len()
+        );
+
+        Self {
+            inlined: Inlined::new(value),
+        }
     }
 
+    /// Create a new view over bytes stored in a block.
+    pub fn new_view(len: u32, prefix: [u8; 4], block: u32, offset: u32) -> Self {
+        Self {
+            _ref: Ref::new(len, prefix, block, offset),
+        }
+    }
+
+    #[inline]
+    pub fn len(&self) -> u32 {
+        unsafe { self.inlined.size }
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len() > 0
+    }
+
+    #[inline]
     pub fn is_inlined(&self) -> bool {
-        unsafe { self.inlined.size <= Self::MAX_INLINED_SIZE as u32 }
+        self.len() <= (Self::MAX_INLINED_SIZE as u32)
+    }
+
+    pub fn as_inlined(&self) -> &Inlined {
+        unsafe { &self.inlined }
+    }
+
+    pub fn as_view(&self) -> &Ref {
+        unsafe { &self._ref }
+    }
+
+    pub fn as_u128(&self) -> u128 {
+        unsafe { mem::transmute::<BinaryView, u128>(*self) }
     }
 }
 
@@ -96,29 +150,53 @@ impl Debug for BinaryView {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let mut s = f.debug_struct("BinaryView");
         if self.is_inlined() {
-            s.field("inline", unsafe { &self.inlined });
+            s.field("inline", &"i".to_string());
         } else {
-            s.field("ref", unsafe { &self._ref });
+            s.field("ref", &"r".to_string());
         }
         s.finish()
     }
 }
 
 // reminder: views are 16 bytes with 8-byte alignment
-pub(crate) const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
+pub(crate) const VIEW_SIZE: usize = size_of::<BinaryView>();
 
 impl_encoding!("vortex.varbinview", 5u16, VarBinView);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VarBinViewMetadata {
+    // Validity metadata
     validity: ValidityMetadata,
-    data_lens: Vec<usize>,
+
+    // Length of each buffer. The buffers are primitive byte arrays containing the raw string/binary
+    // data referenced by views.
+    buffer_lens: Vec<usize>,
+}
+
+pub struct Buffers<'a> {
+    index: u32,
+    n_buffers: u32,
+    array: &'a VarBinViewArray,
+}
+
+impl<'a> Iterator for Buffers<'a> {
+    type Item = Array;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index >= self.n_buffers {
+            return None;
+        }
+
+        let bytes = self.array.buffer(self.index as usize);
+        self.index += 1;
+        Some(bytes)
+    }
 }
 
 impl VarBinViewArray {
     pub fn try_new(
         views: Array,
-        data: Vec<Array>,
+        buffers: Vec<Array>,
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
@@ -126,7 +204,7 @@ impl VarBinViewArray {
             vortex_bail!(MismatchedTypes: "u8", views.dtype());
         }
 
-        for d in data.iter() {
+        for d in buffers.iter() {
             if !matches!(d.dtype(), &DType::BYTES) {
                 vortex_bail!(MismatchedTypes: "u8", d.dtype());
             }
@@ -143,12 +221,12 @@ impl VarBinViewArray {
         let num_views = views.len() / VIEW_SIZE;
         let metadata = VarBinViewMetadata {
             validity: validity.to_metadata(num_views)?,
-            data_lens: data.iter().map(|a| a.len()).collect_vec(),
+            buffer_lens: buffers.iter().map(|a| a.len()).collect_vec(),
         };
 
-        let mut children = Vec::with_capacity(data.len() + 2);
+        let mut children = Vec::with_capacity(buffers.len() + 2);
         children.push(views);
-        children.extend(data);
+        children.extend(buffers);
         if let Some(a) = validity.into_array() {
             children.push(a)
         }
@@ -156,7 +234,16 @@ impl VarBinViewArray {
         Self::try_from_parts(dtype, num_views, metadata, children.into(), StatsSet::new())
     }
 
-    fn view_slice(&self) -> &[BinaryView] {
+    /// Number of raw string data buffers held by this array.
+    pub fn buffer_count(&self) -> usize {
+        self.metadata().buffer_lens.len()
+    }
+
+    /// Access to the underlying `views` child array as a slice of [BinaryView] structures.
+    ///
+    /// This is useful for iteration over the values, as well as for applying filters that may
+    /// only require hitting the prefixes or inline strings.
+    pub fn view_slice(&self) -> &[BinaryView] {
         unsafe {
             slice::from_raw_parts(
                 PrimitiveArray::try_from(self.views())
@@ -168,27 +255,58 @@ impl VarBinViewArray {
         }
     }
 
-    fn view_at(&self, index: usize) -> BinaryView {
+    pub fn view_at(&self, index: usize) -> BinaryView {
         self.view_slice()[index]
     }
 
+    /// Access to the primitive views array.
+    ///
+    /// Variable-sized binary view arrays contain a "view" child array, with 16-byte entries that
+    /// contain either a pointer into one of the array's owned `buffer`s OR an inlined copy of
+    /// the string (if the string has 12 bytes or fewer).
     #[inline]
     pub fn views(&self) -> Array {
         self.array()
             .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
-            .expect("missing views")
+            .unwrap()
     }
 
+    /// Access one of the backing data buffers.
+    ///
+    /// # Panics
+    ///
+    /// This method panics if the provided index is out of bounds for the set of buffers provided
+    /// at construction time.
     #[inline]
-    pub fn bytes(&self, idx: usize) -> Array {
+    pub fn buffer(&self, idx: usize) -> Array {
         self.array()
-            .child(idx + 1, &DType::BYTES, self.metadata().data_lens[idx])
+            .child(idx + 1, &DType::BYTES, self.metadata().buffer_lens[idx])
             .expect("Missing data buffer")
+    }
+
+    /// Retrieve an iterator over the raw data buffers.
+    /// These are the BYTE buffers that make up the array's contents.
+    ///
+    /// Example
+    ///
+    /// ```
+    /// use vortex::array::varbinview::VarBinViewArray;
+    /// let array = VarBinViewArray::from_iter_str(["a", "b", "c"]);
+    /// array.buffers().for_each(|block| {
+    ///     // Do something with the `block`
+    /// });
+    /// ```
+    pub fn buffers(&self) -> Buffers {
+        Buffers {
+            index: 0,
+            n_buffers: self.buffer_count().try_into().unwrap(),
+            array: self,
+        }
     }
 
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(self.array().child(
-            self.metadata().data_lens.len() + 1,
+            self.metadata().buffer_lens.len() + 1,
             &Validity::DTYPE,
             self.len(),
         ))
@@ -235,20 +353,21 @@ impl VarBinViewArray {
         VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
     }
 
+    // TODO(aduffy): do we really need to do this with copying?
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         let view = self.view_at(index);
-        unsafe {
-            if view.inlined.size > 12 {
-                let data_buf = slice(
-                    &self.bytes(view._ref.buffer_index as usize),
-                    view._ref.offset as usize,
-                    (view._ref.size + view._ref.offset) as usize,
-                )?
-                .into_primitive()?;
-                Ok(data_buf.maybe_null_slice::<u8>().to_vec())
-            } else {
-                Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
-            }
+        // Expect this to be the common case: strings > 12 bytes.
+        if !view.is_inlined() {
+            let view_ref = view.as_view();
+            let data_buf = slice(
+                &self.buffer(view_ref.buffer_index() as usize),
+                view_ref.offset() as usize,
+                (view.len() + view_ref.offset()) as usize,
+            )?
+            .into_primitive()?;
+            Ok(data_buf.maybe_null_slice::<u8>().to_vec())
+        } else {
+            Ok(view.as_inlined().value().to_vec())
         }
     }
 }
@@ -258,29 +377,30 @@ impl ArrayTrait for VarBinViewArray {}
 impl IntoCanonical for VarBinViewArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
         let nullable = self.dtype().is_nullable();
-        let arrow_self = as_arrow(self);
-        let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
-            .expect("Utf8View must cast to Ut8f");
-        let vortex_array = ArrayData::from_arrow(arrow_varbin, nullable).into_array();
+        let arrow_self = varbinview_as_arrow(self);
+        let vortex_array = ArrayData::from_arrow(arrow_self, nullable).into_array();
 
-        Ok(Canonical::VarBin(VarBinArray::try_from(&vortex_array)?))
+        Ok(Canonical::VarBinView(VarBinViewArray::try_from(
+            &vortex_array,
+        )?))
     }
 }
 
-fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
+pub(crate) fn varbinview_as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
     // Views should be buffer of u8
     let views = var_bin_view
         .views()
         .into_primitive()
         .expect("views must be primitive");
     assert_eq!(views.ptype(), PType::U8);
+
     let nulls = var_bin_view
         .logical_validity()
         .to_null_buffer()
         .expect("null buffer");
 
-    let data = (0..var_bin_view.metadata().data_lens.len())
-        .map(|i| var_bin_view.bytes(i).into_primitive())
+    let data = (0..var_bin_view.buffer_count())
+        .map(|i| var_bin_view.buffer(i).into_primitive())
         .collect::<VortexResult<Vec<_>>>()
         .expect("bytes arrays must be primitive");
     if !data.is_empty() {
@@ -295,16 +415,20 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
 
     // Switch on Arrow DType.
     match var_bin_view.dtype() {
-        DType::Binary(_) => Arc::new(BinaryViewArray::new(
-            ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
-            data,
-            nulls,
-        )),
-        DType::Utf8(_) => Arc::new(StringViewArray::new(
-            ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
-            data,
-            nulls,
-        )),
+        DType::Binary(_) => Arc::new(unsafe {
+            BinaryViewArray::new_unchecked(
+                ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
+                data,
+                nulls,
+            )
+        }),
+        DType::Utf8(_) => Arc::new(unsafe {
+            StringViewArray::new_unchecked(
+                ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
+                data,
+                nulls,
+            )
+        }),
         _ => panic!("expected utf8 or binary, got {}", var_bin_view.dtype()),
     }
 }
@@ -322,8 +446,8 @@ impl ArrayValidity for VarBinViewArray {
 impl AcceptArrayVisitor for VarBinViewArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("views", &self.views())?;
-        for i in 0..self.metadata().data_lens.len() {
-            visitor.visit_child(format!("bytes_{i}").as_str(), &self.bytes(i))?;
+        for i in 0..self.metadata().buffer_lens.len() {
+            visitor.visit_child(format!("bytes_{i}").as_str(), &self.buffer(i))?;
         }
         visitor.visit_validity(&self.validity())
     }
@@ -357,7 +481,7 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
 mod test {
     use vortex_scalar::Scalar;
 
-    use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
+    use crate::array::varbinview::{BinaryView, VarBinViewArray, VIEW_SIZE};
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
     use crate::{Canonical, IntoArray, IntoCanonical};
@@ -397,7 +521,7 @@ mod test {
         let binary_arr = VarBinViewArray::from_iter_str(["string1", "string2"]);
 
         let flattened = binary_arr.into_canonical().unwrap();
-        assert!(matches!(flattened, Canonical::VarBin(_)));
+        assert!(matches!(flattened, Canonical::VarBinView(_)));
 
         let var_bin = flattened.into_array();
         assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
@@ -406,10 +530,8 @@ mod test {
 
     #[test]
     pub fn binary_view_size_and_alignment() {
-        assert_eq!(std::mem::size_of::<Inlined>(), 16);
-        assert_eq!(std::mem::size_of::<Ref>(), 16);
-        assert_eq!(std::mem::size_of::<BinaryView>(), VIEW_SIZE);
-        assert_eq!(std::mem::size_of::<BinaryView>(), 16);
-        assert_eq!(std::mem::align_of::<BinaryView>(), 8);
+        assert_eq!(size_of::<BinaryView>(), VIEW_SIZE);
+        assert_eq!(size_of::<BinaryView>(), 16);
+        assert_eq!(align_of::<BinaryView>(), 8);
     }
 }

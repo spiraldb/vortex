@@ -2,7 +2,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::array::varbin::{VarBin, VarBinArray};
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
-use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray};
+use vortex_dict::{dict_encode_primitive, dict_encode, Dict, DictArray};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
@@ -49,7 +49,7 @@ impl EncodingCompressor for DictCompressor {
             }
             VarBin::ID => {
                 let vb = VarBinArray::try_from(array)?;
-                let (codes, values) = dict_encode_varbin(&vb);
+                let (codes, values) = dict_encode(&vb);
                 (codes.into_array(), values.into_array())
             }
 

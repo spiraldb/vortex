@@ -3,7 +3,7 @@ use rand::distributions::{Alphanumeric, Uniform};
 use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
 use vortex::array::primitive::PrimitiveArray;
-use vortex::array::varbin::VarBinArray;
+use vortex::array::varbinview::VarBinViewArray;
 use vortex::ArrayTrait;
 use vortex_dict::dict_encode_typed_primitive;
 use vortex_dtype::match_each_native_ptype;
@@ -17,7 +17,7 @@ fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
     PrimitiveArray::from(data)
 }
 
-fn gen_varbin_dict(len: usize, uniqueness: f64) -> VarBinArray {
+fn gen_varbinview_dict(len: usize, uniqueness: f64) -> VarBinViewArray {
     let mut rng = thread_rng();
     let uniq_cnt = (len as f64 * uniqueness) as usize;
     let dict: Vec<String> = (0..uniq_cnt)
@@ -32,7 +32,7 @@ fn gen_varbin_dict(len: usize, uniqueness: f64) -> VarBinArray {
     let words: Vec<&str> = (0..len)
         .map(|_| dict.choose(&mut rng).unwrap().as_str())
         .collect();
-    VarBinArray::from(words)
+    VarBinViewArray::from_iter_str(words)
 }
 
 fn dict_encode_primitive(arr: &PrimitiveArray) -> usize {
@@ -42,20 +42,20 @@ fn dict_encode_primitive(arr: &PrimitiveArray) -> usize {
     (codes.nbytes() + values.nbytes()) / arr.nbytes()
 }
 
-fn dict_encode_varbin(arr: &VarBinArray) -> usize {
-    let (codes, values) = vortex_dict::dict_encode_varbin(arr);
+fn dict_encode_varbinview(arr: &VarBinViewArray) -> usize {
+    let (codes, values) = vortex_dict::dict_encode(arr);
     (codes.nbytes() + values.nbytes()) / arr.nbytes()
 }
 
 fn dict_encode(c: &mut Criterion) {
     let primitive_arr = gen_primitive_dict(1_000_000, 0.00005);
-    let varbin_arr = gen_varbin_dict(1_000_000, 0.00005);
+    let varbinview_arr = gen_varbinview_dict(1_000_000, 0.00005);
 
     c.bench_function("dict_encode_primitives", |b| {
         b.iter(|| black_box(dict_encode_primitive(&primitive_arr)));
     });
     c.bench_function("dict_encode_varbin", |b| {
-        b.iter(|| black_box(dict_encode_varbin(&varbin_arr)));
+        b.iter(|| black_box(dict_encode_varbinview(&varbinview_arr)));
     });
 }
 

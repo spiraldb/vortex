@@ -12,8 +12,8 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
         f: F,
     ) -> VortexResult<R> {
         let views = self.view_slice();
-        let bytes: Vec<PrimitiveArray> = (0..self.metadata().data_lens.len())
-            .map(|i| self.bytes(i).into_primitive())
+        let bytes: Vec<PrimitiveArray> = (0..self.metadata().buffer_lens.len())
+            .map(|i| self.buffer(i).into_primitive())
             .collect::<VortexResult<Vec<_>>>()?;
         let validity = self.logical_validity().to_null_buffer()?;
 
@@ -21,13 +21,14 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
             None => {
                 let mut iter = views.iter().map(|view| {
                     if view.is_inlined() {
-                        Some(unsafe { &view.inlined.data as &[u8] })
+                        Some(view.as_inlined().value())
                     } else {
-                        let offset = unsafe { view._ref.offset as usize };
-                        let buffer_idx = unsafe { view._ref.buffer_index as usize };
+                        let view_ref = view.as_view();
+                        let buffer_idx = view_ref.buffer_index();
+                        let offset = view_ref.offset() as usize;
                         Some(
-                            &bytes[buffer_idx].maybe_null_slice::<u8>()
-                                [offset..offset + view.size()],
+                            &bytes[buffer_idx as usize].maybe_null_slice::<u8>()
+                                [offset..offset + (view.len() as usize)],
                         )
                     }
                 });
@@ -37,13 +38,14 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
                 let mut iter = views.iter().zip(validity.iter()).map(|(view, valid)| {
                     if valid {
                         if view.is_inlined() {
-                            Some(unsafe { &view.inlined.data as &[u8] })
+                            Some(view.as_inlined().value())
                         } else {
-                            let offset = unsafe { view._ref.offset as usize };
-                            let buffer_idx = unsafe { view._ref.buffer_index as usize };
+                            let view_ref = view.as_view();
+                            let buffer_idx = view_ref.buffer_index();
+                            let offset = view_ref.offset() as usize;
                             Some(
-                                &bytes[buffer_idx].maybe_null_slice::<u8>()
-                                    [offset..offset + view.size()],
+                                &bytes[buffer_idx as usize].maybe_null_slice::<u8>()
+                                    [offset..offset + (view.len() as usize)],
                             )
                         }
                     } else {

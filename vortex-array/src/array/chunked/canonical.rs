@@ -3,19 +3,18 @@ use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, ErrString, VortexResult};
 
-use crate::accessor::ArrayAccessor;
 use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
 use crate::array::extension::ExtensionArray;
 use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
-use crate::array::varbin::builder::VarBinBuilder;
-use crate::array::varbin::VarBinArray;
+use crate::array::varbinview::{BinaryView, VarBinViewArray};
 use crate::validity::Validity;
 use crate::variants::StructArrayTrait;
 use crate::{
-    Array, ArrayDType, ArrayValidity, Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
+    Array, ArrayDType, ArrayValidity, Canonical, IntoArray, IntoArrayData, IntoArrayVariant,
+    IntoCanonical,
 };
 
 impl IntoCanonical for ChunkedArray {
@@ -104,13 +103,9 @@ pub(crate) fn try_canonicalize_chunks(
             let prim_array = pack_primitives(chunks.as_slice(), *ptype, *nullability)?;
             Ok(Canonical::Primitive(prim_array))
         }
-        DType::Utf8(nullability) => {
-            let varbin_array = pack_varbin(chunks.as_slice(), dtype, *nullability)?;
-            Ok(Canonical::VarBin(varbin_array))
-        }
-        DType::Binary(nullability) => {
-            let varbin_array = pack_varbin(chunks.as_slice(), dtype, *nullability)?;
-            Ok(Canonical::VarBin(varbin_array))
+        DType::Utf8(nullability) | DType::Binary(nullability) => {
+            let varbinview_array = pack_views(chunks.as_slice(), dtype, *nullability)?;
+            Ok(Canonical::VarBinView(varbinview_array))
         }
         DType::Null => {
             let len = chunks.iter().map(|chunk| chunk.len()).sum();
@@ -196,29 +191,65 @@ fn pack_primitives(
     ))
 }
 
-/// Builds a new [VarBinArray] by repacking the values from the chunks into a single
+/// Builds a new [VarBinViewArray] by repacking the values from the chunks into a single
 /// contiguous array.
 ///
 /// It is expected this function is only called from [try_canonicalize_chunks], and thus all chunks have
 /// been checked to have the same DType already.
-fn pack_varbin(
+#[allow(unused)]
+fn pack_views(
     chunks: &[Array],
     dtype: &DType,
-    _nullability: Nullability,
-) -> VortexResult<VarBinArray> {
-    let len = chunks.iter().map(|chunk| chunk.len()).sum();
-    let mut builder = VarBinBuilder::<i32>::with_capacity(len);
-
+    nullability: Nullability,
+) -> VortexResult<VarBinViewArray> {
+    let length: usize = chunks.iter().map(|c| c.len()).sum();
+    let validity = validity_from_chunks(chunks, nullability);
+    let mut views = Vec::new();
+    let mut buffers = Vec::new();
     for chunk in chunks {
-        let chunk = chunk.clone().into_varbin()?;
-        chunk.with_iterator(|iter| {
-            for datum in iter {
-                builder.push(datum);
+        // Each chunk's views have block IDs that are zero-referenced.
+        // As part of the packing operation, we need to rewrite them to be referenced to the global
+        // merged blocks list.
+        let buffers_offset = buffers.len();
+        let canonical_chunk = chunk.clone().into_varbinview().unwrap();
+
+        for block in canonical_chunk.buffers() {
+            let canonical_buffer = block.into_canonical().unwrap().into_array();
+            buffers.push(canonical_buffer);
+        }
+
+        // Write a new primitive array with all of the view outputs.
+        for view in canonical_chunk.view_slice() {
+            if view.is_inlined() {
+                views.push(*view);
+            } else {
+                let view_ref = view.as_view();
+                views.push(BinaryView::new_view(
+                    view.len(),
+                    *view_ref.prefix(),
+                    (buffers_offset as u32) + view_ref.buffer_index(),
+                    view_ref.offset(),
+                ));
             }
-        })?;
+        }
     }
 
-    Ok(builder.finish(dtype.clone()))
+    let (view_ptr, view_len, view_cap) = views.into_raw_parts();
+    // Transmute the pointer to be to a set of u128, which is of identical size.
+    let views_u128 = unsafe {
+        Vec::from_raw_parts(
+            std::mem::transmute::<*mut BinaryView, *mut u128>(view_ptr),
+            view_len,
+            view_cap,
+        )
+    };
+
+    VarBinViewArray::try_new(
+        Buffer::from_vec(views_u128).into_array_data().into_array(),
+        buffers,
+        dtype.clone(),
+        validity,
+    )
 }
 
 fn validity_from_chunks(chunks: &[Array], nullability: Nullability) -> Validity {

@@ -46,12 +46,12 @@ impl SliceFn for DictArray {
 
 #[cfg(test)]
 mod test {
+    use vortex::accessor::ArrayAccessor;
     use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::varbin::VarBinArray;
+    use vortex::array::varbinview::VarBinViewArray;
     use vortex::{IntoArray, IntoArrayVariant, ToArray};
-    use vortex_dtype::{DType, Nullability};
 
-    use crate::{dict_encode_typed_primitive, dict_encode_varbin, DictArray};
+    use crate::{dict_encode, dict_encode_typed_primitive, DictArray};
 
     #[test]
     fn flatten_nullable_primitive() {
@@ -71,20 +71,40 @@ mod test {
 
     #[test]
     fn flatten_nullable_varbin() {
-        let reference = VarBinArray::from_iter(
-            vec![Some("a"), Some("b"), None, Some("a"), None, Some("b")],
-            DType::Utf8(Nullability::Nullable),
-        );
-        let (codes, values) = dict_encode_varbin(&reference);
+        let reference = VarBinViewArray::from_iter_nullable_str(vec![
+            Some("a"),
+            Some("b"),
+            None,
+            Some("c"),
+            None,
+            Some("d"),
+        ]);
+        let (codes, values) = dict_encode(&reference);
         let dict = DictArray::try_new(codes.into_array(), values.into_array()).unwrap();
-        let flattened_dict = dict.to_array().into_varbin().unwrap();
+        let flattened_dict = dict.to_array().into_varbinview().unwrap();
+
         assert_eq!(
-            flattened_dict.offsets().into_primitive().unwrap().buffer(),
-            reference.offsets().into_primitive().unwrap().buffer()
+            flattened_dict.views().into_primitive().unwrap().buffer(),
+            reference.views().into_primitive().unwrap().buffer(),
         );
+
+        // All values should be preserved here as well.
+        let data: Vec<Option<String>> = flattened_dict
+            .with_iterator(|iter| {
+                iter.map(|s| s.map(|i| String::from_utf8_lossy(i).to_string()))
+                    .collect()
+            })
+            .unwrap();
         assert_eq!(
-            flattened_dict.bytes().into_primitive().unwrap().buffer(),
-            reference.bytes().into_primitive().unwrap().buffer()
+            data,
+            vec![
+                Some("a".to_string()),
+                Some("b".to_string()),
+                None,
+                Some("c".to_string()),
+                None,
+                Some("d".to_string()),
+            ]
         );
     }
 }

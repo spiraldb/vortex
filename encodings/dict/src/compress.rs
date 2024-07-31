@@ -84,9 +84,9 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
-pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
+pub fn dict_encode<U: ArrayAccessor<[u8]> + ArrayDType>(array: &U) -> (PrimitiveArray, VarBinArray) {
     array
-        .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
+        .with_iterator(|iter| dict_encode_typed(array.dtype().clone(), iter))
         .unwrap()
 }
 
@@ -100,7 +100,7 @@ fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     &bytes[begin..end]
 }
 
-fn dict_encode_typed_varbin<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
+fn dict_encode_typed<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
 where
     I: Iterator<Item = Option<U>>,
     U: AsRef<[u8]>,
@@ -183,7 +183,7 @@ mod test {
     use vortex_dtype::{DType, PType};
     use vortex_scalar::Scalar;
 
-    use crate::compress::{dict_encode_typed_primitive, dict_encode_varbin};
+    use crate::compress::{dict_encode_typed_primitive, dict_encode};
 
     #[test]
     fn encode_primitive() {
@@ -224,7 +224,7 @@ mod test {
     #[test]
     fn encode_varbin() {
         let arr = VarBinArray::from(vec!["hello", "world", "hello", "again", "world"]);
-        let (codes, values) = dict_encode_varbin(&arr);
+        let (codes, values) = dict_encode(&arr);
         assert_eq!(codes.maybe_null_slice::<u64>(), &[0, 1, 0, 2, 1]);
         values
             .with_iterator(|iter| {
@@ -252,7 +252,7 @@ mod test {
         ]
         .into_iter()
         .collect();
-        let (codes, values) = dict_encode_varbin(&arr);
+        let (codes, values) = dict_encode(&arr);
         assert_eq!(codes.maybe_null_slice::<u64>(), &[1, 0, 2, 1, 0, 3, 2, 0]);
         assert_eq!(str::from_utf8(&values.bytes_at(0).unwrap()).unwrap(), "");
         values
@@ -269,7 +269,7 @@ mod test {
     #[test]
     fn repeated_values() {
         let arr = VarBinArray::from(vec!["a", "a", "b", "b", "a", "b", "a", "b"]);
-        let (codes, values) = dict_encode_varbin(&arr);
+        let (codes, values) = dict_encode(&arr);
         values
             .with_iterator(|iter| {
                 assert_eq!(

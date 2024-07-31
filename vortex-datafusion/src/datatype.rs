@@ -67,8 +67,8 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
             PType::F32 => DataType::Float32,
             PType::F64 => DataType::Float64,
         },
-        DType::Utf8(_) => DataType::Utf8,
-        DType::Binary(_) => DataType::Binary,
+        DType::Utf8(_) => DataType::Utf8View,
+        DType::Binary(_) => DataType::BinaryView,
         DType::Struct(struct_dtype, _) => {
             let mut fields = Vec::with_capacity(struct_dtype.names().len());
             for (field_name, field_dt) in struct_dtype

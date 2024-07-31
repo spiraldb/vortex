@@ -34,8 +34,8 @@ impl SliceFn for VarBinViewArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
             slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?,
-            (0..self.metadata().data_lens.len())
-                .map(|i| self.bytes(i))
+            (0..self.metadata().buffer_lens.len())
+                .map(|i| self.buffer(i))
                 .collect::<Vec<_>>(),
             self.dtype().clone(),
             self.validity().slice(start, stop)?,
