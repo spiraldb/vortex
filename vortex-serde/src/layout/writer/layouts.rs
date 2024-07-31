@@ -4,28 +4,27 @@ use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
 
-use super::reader::projections::Projection;
 use crate::flatbuffers::footer as fb;
 use crate::writer::ByteRange;
 
 #[derive(Debug, Clone)]
 pub enum Layout {
     Chunked(ChunkedLayout),
-    Struct(StructLayout),
+    Column(ColumnLayout),
     Flat(FlatLayout),
 }
 
 impl Layout {
-    pub fn as_struct(&self) -> Option<&StructLayout> {
+    pub fn as_column(&self) -> Option<&ColumnLayout> {
         match self {
-            Self::Struct(l) => Some(l),
+            Self::Column(l) => Some(l),
             _ => None,
         }
     }
 
-    pub fn as_struct_mut(&mut self) -> Option<&mut StructLayout> {
+    pub fn as_column_mut(&mut self) -> Option<&mut ColumnLayout> {
         match self {
-            Self::Struct(l) => Some(l),
+            Self::Column(l) => Some(l),
             _ => None,
         }
     }
@@ -68,14 +67,14 @@ impl WriteFlatBuffer for Layout {
     ) -> WIPOffset<Self::Target<'fb>> {
         let layout_variant = match self {
             Self::Chunked(l) => l.write_flatbuffer(fbb).as_union_value(),
-            Self::Struct(l) => l.write_flatbuffer(fbb).as_union_value(),
+            Self::Column(l) => l.write_flatbuffer(fbb).as_union_value(),
             Self::Flat(l) => l.write_flatbuffer(fbb).as_union_value(),
         };
 
         let mut layout = fb::LayoutBuilder::new(fbb);
         layout.add_layout_type(match self {
             Self::Chunked(_) => fb::LayoutVariant::NestedLayout,
-            Self::Struct(_) => fb::LayoutVariant::NestedLayout,
+            Self::Column(_) => fb::LayoutVariant::NestedLayout,
             Self::Flat(_) => fb::LayoutVariant::FlatLayout,
         });
         layout.add_layout(layout_variant);
@@ -156,11 +155,11 @@ impl ChunkedLayout {
 
 // TODO(robert): Should struct layout store a schema? How do you pick a child by name
 #[derive(Debug, Clone)]
-pub struct StructLayout {
+pub struct ColumnLayout {
     pub(crate) children: VecDeque<Layout>,
 }
 
-impl WriteFlatBuffer for StructLayout {
+impl WriteFlatBuffer for ColumnLayout {
     type Target<'a> = fb::NestedLayout<'a>;
 
     fn write_flatbuffer<'fb>(
@@ -184,26 +183,10 @@ impl WriteFlatBuffer for StructLayout {
     }
 }
 
-impl StructLayout {
+impl ColumnLayout {
     pub fn new(child_ranges: VecDeque<Layout>) -> Self {
         Self {
             children: child_ranges,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn project(&self, projection: &Projection) -> StructLayout {
-        match projection {
-            Projection::All => self.clone(),
-            Projection::Partial(indices) => {
-                let mut new_children = VecDeque::with_capacity(indices.len());
-
-                for &idx in indices.iter() {
-                    new_children.push_back(self.children[idx].clone());
-                }
-
-                StructLayout::new(new_children)
-            }
         }
     }
 }
@@ -220,7 +203,7 @@ impl TryFrom<fb::NestedLayout<'_>> for Layout {
             .collect::<VortexResult<VecDeque<_>>>()?;
         match value.encoding() {
             1 => Ok(Layout::Chunked(ChunkedLayout::new(children))),
-            2 => Ok(Layout::Struct(StructLayout::new(children))),
+            2 => Ok(Layout::Column(ColumnLayout::new(children))),
             _ => unreachable!(),
         }
     }

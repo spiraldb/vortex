@@ -1,13 +1,15 @@
+use std::sync::Arc;
+
 use futures::StreamExt;
+
+use vortex::{ArrayDType, Context, IntoArray, IntoArrayVariant};
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
-use vortex::validity::Validity;
-use vortex::variants::StructArrayTrait;
-use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 
-use crate::file::file_writer::FileWriter;
-use crate::file::reader::projections::Projection;
-use crate::file::reader::VortexBatchReaderBuilder;
+use crate::layout::{LayoutContext, LayoutReader};
+use crate::layout::reader::projections::Projection;
+use crate::layout::reader::VortexLayoutReaderBuilder;
+use crate::layout::writer::layout_writer::LayoutWriter;
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
@@ -24,19 +26,16 @@ async fn test_read_simple() {
     ])
     .into_array();
 
-    let st = StructArray::try_new(
-        ["strings".into(), "numbers".into()].into(),
-        vec![strings, numbers],
-        8,
-        Validity::NonNullable,
-    )
-    .unwrap();
+    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]);
     let buf = Vec::new();
-    let mut writer = FileWriter::new(buf);
+    let mut writer = LayoutWriter::new(buf);
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let mut stream = VortexBatchReaderBuilder::new(written)
+    let layout_ctx = Arc::new(LayoutContext::default());
+    let ctx = Arc::new(Context::default());
+    let layout_serde = LayoutReader::new(ctx, layout_ctx);
+    let mut stream = VortexLayoutReaderBuilder::new(written, layout_serde)
         .with_batch_size(5)
         .build()
         .await
@@ -69,19 +68,16 @@ async fn test_read_projection() {
     ])
     .into_array();
 
-    let st = StructArray::try_new(
-        ["strings".into(), "numbers".into()].into(),
-        vec![strings, numbers],
-        8,
-        Validity::NonNullable,
-    )
-    .unwrap();
+    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]);
     let buf = Vec::new();
-    let mut writer = FileWriter::new(buf);
+    let mut writer = LayoutWriter::new(buf);
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let mut stream = VortexBatchReaderBuilder::new(written)
+    let layout_ctx = Arc::new(LayoutContext::default());
+    let ctx = Arc::new(Context::default());
+    let layout_serde = LayoutReader::new(ctx, layout_ctx);
+    let mut stream = VortexLayoutReaderBuilder::new(written, layout_serde)
         .with_projection(Projection::new([0]))
         .with_batch_size(5)
         .build()
@@ -95,7 +91,6 @@ async fn test_read_projection() {
         item_count += array.len();
         batch_count += 1;
 
-        let array = array.into_struct().unwrap();
         let struct_dtype = array.dtype().as_struct().unwrap();
         assert_eq!(struct_dtype.dtypes().len(), 1);
         assert_eq!(struct_dtype.names()[0].as_ref(), "strings");
@@ -120,19 +115,16 @@ async fn unequal_batches() {
     ])
     .into_array();
 
-    let st = StructArray::try_new(
-        ["strings".into(), "numbers".into()].into(),
-        vec![strings, numbers],
-        10,
-        Validity::NonNullable,
-    )
-    .unwrap();
+    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]);
     let buf = Vec::new();
-    let mut writer = FileWriter::new(buf);
+    let mut writer = LayoutWriter::new(buf);
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let mut stream = VortexBatchReaderBuilder::new(written)
+    let layout_ctx = Arc::new(LayoutContext::default());
+    let ctx = Arc::new(Context::default());
+    let layout_serde = LayoutReader::new(ctx, layout_ctx);
+    let mut stream = VortexLayoutReaderBuilder::new(written, layout_serde)
         .with_batch_size(5)
         .build()
         .await
@@ -145,12 +137,10 @@ async fn unequal_batches() {
         item_count += array.len();
         batch_count += 1;
 
-        let numbers = StructArray::try_from(array)
-            .unwrap()
-            .field_by_name("numbers");
+        let numbers = array.with_dyn(|a| a.as_struct_array_unchecked().field_by_name("numbers"));
 
         if let Some(numbers) = numbers {
-            let numbers = numbers.as_primitive();
+            let numbers = numbers.into_primitive().unwrap();
             assert_eq!(numbers.ptype(), PType::U32);
         } else {
             panic!("Expected column doesn't exist")

@@ -7,10 +7,11 @@ use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
 use object_store::ObjectStore;
-use vortex::IntoCanonical;
-use vortex_serde::file::reader::projections::Projection;
-use vortex_serde::file::reader::VortexBatchReaderBuilder;
+use vortex::{Context, IntoCanonical};
 use vortex_serde::io::ObjectStoreReadAt;
+use vortex_serde::layout::reader::projections::Projection;
+use vortex_serde::layout::reader::VortexLayoutReaderBuilder;
+use vortex_serde::layout::{LayoutContext, LayoutReader};
 
 pub struct VortexFileOpener {
     pub object_store: Arc<dyn ObjectStore>,
@@ -24,7 +25,13 @@ impl FileOpener for VortexFileOpener {
         let read_at =
             ObjectStoreReadAt::new(self.object_store.clone(), file_meta.location().clone());
 
-        let mut builder = VortexBatchReaderBuilder::new(read_at);
+        let mut builder = VortexLayoutReaderBuilder::new(
+            read_at,
+            LayoutReader::new(
+                Arc::new(Context::default()),
+                Arc::new(LayoutContext::default()),
+            ),
+        );
 
         if let Some(batch_size) = self.batch_size {
             builder = builder.with_batch_size(batch_size);

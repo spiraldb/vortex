@@ -2,8 +2,8 @@ pub use message_reader::*;
 pub use message_writer::*;
 
 pub mod chunked_reader;
-pub mod file;
 pub mod io;
+pub mod layout;
 mod message_reader;
 mod message_writer;
 mod messages;

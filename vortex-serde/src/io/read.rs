@@ -12,7 +12,7 @@ pub trait VortexRead {
 }
 
 #[allow(clippy::len_without_is_empty)]
-pub trait VortexReadAt {
+pub trait VortexReadAt: Send + Sync {
     fn read_at_into(
         &self,
         pos: u64,

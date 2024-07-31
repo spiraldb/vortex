@@ -4,8 +4,7 @@ use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::ReadFlatBuffer;
 
-use crate::file::layouts::Layout;
-use crate::file::FULL_FOOTER_SIZE;
+use crate::layout::{Layout, LayoutReader, RelativeMessageCache, Scan, FULL_FOOTER_SIZE};
 use crate::messages::IPCDType;
 
 pub struct Footer {
@@ -14,6 +13,7 @@ pub struct Footer {
     pub(crate) footer_offset: u64,
     pub(crate) leftovers: Bytes,
     pub(crate) leftovers_offset: u64,
+    pub(crate) layout_serde: LayoutReader,
 }
 
 impl Footer {
@@ -25,14 +25,20 @@ impl Footer {
         (self.schema_offset - self.leftovers_offset) as usize
     }
 
-    pub fn layout(&self) -> VortexResult<Layout> {
+    pub fn layout(
+        &self,
+        scan: Scan,
+        message_cache: RelativeMessageCache,
+    ) -> VortexResult<Box<dyn Layout>> {
         let start_offset = self.leftovers_footer_offset();
         let end_offset = self.leftovers.len() - FULL_FOOTER_SIZE;
-        let layout_bytes = &self.leftovers[start_offset..end_offset];
-        let fb_footer = root::<crate::flatbuffers::footer::Footer>(layout_bytes)?;
-        let fb_layout = fb_footer.layout().expect("Footer must contain a layout");
+        let footer_bytes = self.leftovers.slice(start_offset..end_offset);
+        let fb_footer = root::<crate::flatbuffers::footer::Footer>(&footer_bytes)?;
 
-        Layout::try_from(fb_layout)
+        let fb_layout = fb_footer.layout().expect("Footer must contain a layout");
+        let loc = fb_layout._tab.loc();
+        self.layout_serde
+            .read(footer_bytes, loc, scan, message_cache)
     }
 
     pub fn dtype(&self) -> VortexResult<DType> {
