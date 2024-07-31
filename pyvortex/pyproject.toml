@@ -1,7 +1,7 @@
 [project]
 name = "vortex"
 version = "0.1.0"
-description = "Add your description here"
+description = "Vortex python bindings"
 authors = [
     { name = "Nicholas Gates", email = "nick@nickgates.com" }
 ]
@@ -24,3 +24,4 @@ dev-dependencies = [
 python-source = "python"
 module-name = "vortex._lib"
 features = ["pyo3/extension-module"]
+sdist-include = ["Cargo.lock"]
