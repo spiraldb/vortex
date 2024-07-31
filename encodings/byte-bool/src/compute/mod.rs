@@ -1,20 +1,18 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not};
-use std::sync::Arc;
 
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
 use vortex::compute::unary::{FillForwardFn, ScalarAtFn};
 use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 use vortex::encoding::ArrayEncodingRef;
-use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, Validity};
-use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayVariant, ToArrayData};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, ToArrayData};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 use vortex_expr::Operator;
 use vortex_scalar::{Scalar, ScalarValue};
 
-use super::{ByteBoolArray, ByteBoolMetadata};
+use super::ByteBoolArray;
 
 impl ArrayCompute for ByteBoolArray {
     fn compare(&self) -> Option<&dyn CompareFn> {
@@ -40,10 +38,6 @@ impl ArrayCompute for ByteBoolArray {
 
 impl ScalarAtFn for ByteBoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if index >= self.len() {
-            vortex_bail!(OutOfBounds: index, 0, self.len());
-        }
-
         let scalar = match self.is_valid(index).then(|| self.buffer()[index] == 1) {
             Some(b) => Scalar::new(self.dtype().clone(), ScalarValue::Bool(b)),
             None => Scalar::null(self.dtype().clone()),
@@ -55,24 +49,11 @@ impl ScalarAtFn for ByteBoolArray {
 
 impl SliceFn for ByteBoolArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        let length = stop - start;
-
-        let validity = self.validity().slice(start, stop)?;
-
-        let slice_metadata = Arc::new(ByteBoolMetadata {
-            validity: validity.to_metadata(length)?,
-        });
-
-        ArrayData::try_new(
-            self.encoding(),
-            self.dtype().clone(),
-            length,
-            slice_metadata,
-            Some(self.buffer().slice(start..stop)),
-            validity.into_array().into_iter().collect::<Vec<_>>().into(),
-            StatsSet::new(),
-        )
-        .map(Array::Data)
+        Ok(ByteBoolArray::try_new(
+            self.buffer().slice(start..stop),
+            self.validity().slice(start, stop)?,
+        )?
+        .into_array())
     }
 }
 
