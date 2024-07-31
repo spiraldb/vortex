@@ -4,7 +4,6 @@ use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
 use vortex::compute::unary::{FillForwardFn, ScalarAtFn};
 use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
-use vortex::encoding::ArrayEncodingRef;
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, ToArrayData};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
