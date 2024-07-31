@@ -43,17 +43,15 @@ jobs:
       - name: Rust Build
         run: cargo build --all-features --all-targets
 
-      - uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          rust-version: "${{ steps.rust-version.outputs.version }}"
-
-      - uses: rustsec/audit-check@v1.4.1
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Pytest - PyVortex
         run: rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
+
+      - name: License Check
+        run: cargo install --locked cargo-deny && cargo deny check
+      - uses: rustsec/audit-check@v1.4.1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   miri:
     name: 'miri'
