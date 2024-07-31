@@ -44,6 +44,8 @@ jobs:
         run: cargo build --all-features --all-targets
 
       - uses: EmbarkStudios/cargo-deny-action@v1
+        with:
+          rust-version: "${{ steps.rust-version.outputs.version }}"
 
       - uses: rustsec/audit-check@v1.4.1
         with:
