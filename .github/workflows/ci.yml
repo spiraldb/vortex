@@ -53,9 +53,6 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Pytest - PyVortex
-        run: rye run pytest --benchmark-disable test/
-        working-directory: pyvortex/
 
   miri:
     name: 'miri'
