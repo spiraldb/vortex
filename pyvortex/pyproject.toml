@@ -24,4 +24,3 @@ dev-dependencies = [
 python-source = "python"
 module-name = "vortex._lib"
 features = ["pyo3/extension-module"]
-sdist-include = ["Cargo.lock"]
