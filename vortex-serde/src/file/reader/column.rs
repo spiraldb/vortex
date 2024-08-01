@@ -103,8 +103,7 @@ impl ColumnReader {
         }
 
         match result.len() {
-            0 => Ok(None),
-            1 => Ok(Some(result.remove(0))),
+            0 | 1 => Ok(result.pop()),
             _ => Ok(Some(
                 ChunkedArray::try_new(result, self.dtype.clone())?.into_array(),
             )),
