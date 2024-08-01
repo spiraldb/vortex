@@ -26,8 +26,8 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
 
-      - name: Bench - Vortex TPC-H
-        run: cargo bench --bench tpch_benchmark | tee bench-tpch.txt
+      - name: Bench - Vortex
+        run: cargo bench | tee bench.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1.20.3
@@ -35,7 +35,7 @@ jobs:
           name: Vortex TPC-H Benchmarks
           tool: cargo
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: bench-tpch.txt
+          output-file-path: bench.txt
           summary-always: true
           auto-push: true
           fail-on-alert: false
