@@ -16,6 +16,9 @@ impl Schema {
     }
 
     pub fn project(&self, projection: Projection) -> VortexResult<Self> {
-        self.0.project(projection.indices()).map(Self)
+        match projection {
+            Projection::All => Ok(self.clone()),
+            Projection::Partial(indicies) => self.0.project(indicies.as_ref()).map(Self),
+        }
     }
 }

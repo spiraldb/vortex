@@ -30,6 +30,7 @@ pub mod projections;
 pub mod schema;
 
 const DEFAULT_BATCH_SIZE: usize = 65536;
+const DEFAULT_PROJECTION: Projection = Projection::All;
 
 pub struct VortexBatchReaderBuilder<R> {
     reader: R,
@@ -102,6 +103,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
         };
 
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
+        let projection = self.projection.unwrap_or(DEFAULT_PROJECTION);
 
         VortexBatchStream::try_new(
             self.reader,
@@ -109,7 +111,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
             dtype,
             self.row_filter.unwrap_or_default(),
             batch_size,
-            self.projection,
+            projection,
             self.take_indices,
         )
     }
@@ -170,8 +172,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
 
 pub struct VortexBatchStream<R> {
     dtype: StructDType,
-    // TODO(robert): Have identity projection
-    projection: Option<Projection>,
+    projection: Projection,
     take_indices: Option<Array>,
     row_filter: RowFilter,
     batch_reader: Option<BatchReader<R>>,
@@ -190,7 +191,7 @@ impl<R: VortexReadAt> VortexBatchStream<R> {
         dtype: StructDType,
         row_filter: RowFilter,
         batch_size: usize,
-        projection: Option<Projection>,
+        projection: Projection,
         take_indices: Option<Array>,
     ) -> VortexResult<Self> {
         let schema = Schema(dtype.clone());
@@ -297,17 +298,15 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexBatchStream<R> {
                         }
 
                         batch = filter(&batch, &current_predicate)?;
-                        let projected = self
-                            .projection
-                            .as_ref()
-                            .map(|p| {
-                                StructArray::try_from(batch.clone())
-                                    .unwrap()
-                                    .project(p.indices())
-                                    .unwrap()
-                                    .into_array()
-                            })
-                            .unwrap_or(batch);
+
+                        let projected = match &self.projection {
+                            Projection::All => batch,
+                            Projection::Partial(indices) => StructArray::try_from(batch.clone())
+                                .unwrap()
+                                .project(indices.as_ref())
+                                .unwrap()
+                                .into_array(),
+                        };
 
                         return Poll::Ready(Some(Ok(projected)));
                     }

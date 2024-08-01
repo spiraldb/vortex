@@ -193,13 +193,18 @@ impl StructLayout {
 
     #[allow(dead_code)]
     pub(crate) fn project(&self, projection: &Projection) -> StructLayout {
-        let mut new_children = VecDeque::with_capacity(projection.indices().len());
+        match projection {
+            Projection::All => self.clone(),
+            Projection::Partial(indices) => {
+                let mut new_children = VecDeque::with_capacity(indices.len());
 
-        for &idx in projection.indices() {
-            new_children.push_back(self.children[idx].clone());
+                for &idx in indices.iter() {
+                    new_children.push_back(self.children[idx].clone());
+                }
+
+                StructLayout::new(new_children)
+            }
         }
-
-        StructLayout::new(new_children)
     }
 }
 
