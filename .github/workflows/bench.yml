@@ -1,7 +1,3 @@
-# Run benchmarks M-F first thing in the morning BST.
-#
-# If the last commit that triggered a workflow run is the same as the HEAD, we do not run.
-
 name: Benchmarks
 
 on:
