@@ -84,7 +84,9 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
 }
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
-pub fn dict_encode<U: ArrayAccessor<[u8]> + ArrayDType>(array: &U) -> (PrimitiveArray, VarBinArray) {
+pub fn dict_encode<U: ArrayAccessor<[u8]> + ArrayDType>(
+    array: &U,
+) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed(array.dtype().clone(), iter))
         .unwrap()
@@ -183,7 +185,7 @@ mod test {
     use vortex_dtype::{DType, PType};
     use vortex_scalar::Scalar;
 
-    use crate::compress::{dict_encode_typed_primitive, dict_encode};
+    use crate::compress::{dict_encode, dict_encode_typed_primitive};
 
     #[test]
     fn encode_primitive() {

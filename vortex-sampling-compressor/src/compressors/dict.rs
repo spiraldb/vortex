@@ -2,7 +2,7 @@ use vortex::array::primitive::{Primitive, PrimitiveArray};
 use vortex::array::varbin::{VarBin, VarBinArray};
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
-use vortex_dict::{dict_encode_primitive, dict_encode, Dict, DictArray};
+use vortex_dict::{dict_encode, dict_encode_primitive, Dict, DictArray};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
