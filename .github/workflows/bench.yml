@@ -32,7 +32,7 @@ jobs:
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1.20.3
         with:
-          name: Vortex TPC-H Benchmarks
+          name: Vortex Benchmarks
           tool: cargo
           github-token: ${{ secrets.GITHUB_TOKEN }}
           output-file-path: bench.txt
