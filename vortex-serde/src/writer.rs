@@ -105,6 +105,10 @@ impl ByteRange {
     pub fn len(&self) -> usize {
         (self.end - self.begin) as usize
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[derive(Clone, Debug)]
