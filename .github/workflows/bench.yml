@@ -1,9 +1,13 @@
+# Run benchmarks M-F first thing in the morning BST.
+#
+# If the last commit that triggered a workflow run is the same as the HEAD, we do not run.
+
 name: Benchmarks
 
 on:
-  push:
-    branches: [ "develop" ]
-  workflow_dispatch: { }
+  schedule:
+    # Run M-F at 9:30 UTC (either 9:30 or 10:30 British time depending on season).
+    - cron: "30 9 * * 1-5"
 
 permissions:
   actions: read
@@ -26,8 +30,8 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
 
-      - name: Bench - Vortex
-        run: cargo bench | tee bench.txt
+      - name: Bench - Vortex TPC-H
+        run: cargo bench --bench tpch_benchmark | tee bench.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1.20.3
