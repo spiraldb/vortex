@@ -54,7 +54,13 @@ impl<R: VortexReadAt> BatchReader<R> {
         for (col_name, column_reader) in self.readers.iter_mut() {
             match column_reader.read_rows(batch_size) {
                 Ok(Some(array)) => final_columns.push((col_name.clone(), array)),
-                Ok(None) => return None,
+                Ok(None) => {
+                    debug_assert!(
+                        final_columns.is_empty(),
+                        "All columns should be empty together"
+                    );
+                    return None;
+                }
                 Err(e) => return Some(Err(e)),
             }
         }
