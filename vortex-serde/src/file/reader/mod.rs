@@ -194,7 +194,7 @@ impl<R: VortexReadAt> VortexBatchStream<R> {
         take_indices: Option<Array>,
     ) -> VortexResult<Self> {
         let schema = Schema(dtype.clone());
-        let mut batch_reader = BatchReader::new(reader, schema.clone());
+        let mut column_info = Vec::default();
 
         let metadata_layouts = layout
             .children
@@ -211,11 +211,11 @@ impl<R: VortexReadAt> VortexBatchStream<R> {
             let layout = c_layout.as_chunked_mut().unwrap();
             let chunked_children = std::mem::take(&mut layout.children);
 
-            batch_reader.add_column(col_name, dtype, chunked_children);
+            column_info.push((col_name, dtype, chunked_children));
         }
 
         Ok(VortexBatchStream {
-            batch_reader: Some(batch_reader),
+            batch_reader: Some(BatchReader::new(reader, schema, column_info.into_iter())),
             dtype,
             projection,
             take_indices,

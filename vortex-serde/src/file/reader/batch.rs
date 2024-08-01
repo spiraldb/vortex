@@ -18,17 +18,23 @@ pub(super) struct BatchReader<R> {
 }
 
 impl<R: VortexReadAt> BatchReader<R> {
-    pub fn new(reader: R, schema: Schema) -> Self {
+    pub fn new(
+        reader: R,
+        schema: Schema,
+        column_info: impl Iterator<Item = (Arc<str>, DType, VecDeque<Layout>)>,
+    ) -> Self {
         Self {
             reader,
             schema,
-            readers: Default::default(),
+            readers: column_info
+                .map(|(name, dtype, layouts)| {
+                    (
+                        name.clone(),
+                        ColumnReader::new(name.clone(), dtype.clone(), layouts),
+                    )
+                })
+                .collect(),
         }
-    }
-
-    pub fn add_column(&mut self, name: Arc<str>, dtype: DType, layouts: VecDeque<Layout>) {
-        self.readers
-            .insert(name.clone(), ColumnReader::new(name, dtype, layouts));
     }
 
     pub fn is_empty(&self) -> bool {
@@ -56,9 +62,9 @@ impl<R: VortexReadAt> BatchReader<R> {
             let column_reader = self.readers.get_mut(col_name).unwrap();
 
             match column_reader.read_rows(batch_size) {
-                Some(Ok(array)) => final_columns.push((col_name.clone(), array)),
-                Some(Err(e)) => return Some(Err(e)),
-                None => return None,
+                Ok(Some(array)) => final_columns.push((col_name.clone(), array)),
+                Ok(None) => return None,
+                Err(e) => return Some(Err(e)),
             }
         }
 

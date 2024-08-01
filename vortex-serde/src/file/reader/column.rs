@@ -79,9 +79,9 @@ impl ColumnReader {
         }
     }
 
-    pub fn read_rows(&mut self, mut rows_needed: usize) -> Option<VortexResult<Array>> {
+    pub fn read_rows(&mut self, mut rows_needed: usize) -> VortexResult<Option<Array>> {
         if self.buffered_row_count() == 0 && self.layouts.is_empty() {
-            return None;
+            return Ok(None);
         }
 
         if self.layouts.is_empty() {
@@ -99,8 +99,8 @@ impl ColumnReader {
                 None => break,
                 Some(array) => match array.len().cmp(&rows_needed) {
                     Ordering::Greater => {
-                        let taken = slice(&array, 0, rows_needed).unwrap();
-                        let leftover = slice(&array, rows_needed, array.len()).unwrap();
+                        let taken = slice(&array, 0, rows_needed)?;
+                        let leftover = slice(&array, rows_needed, array.len())?;
                         self.arrays.push_front(leftover);
                         rows_needed -= taken.len();
                         result.push(taken);
@@ -114,11 +114,11 @@ impl ColumnReader {
         }
 
         match result.len() {
-            0 => None,
-            1 => Some(Ok(result.remove(0))),
-            _ => Some(Ok(ChunkedArray::try_new(result, self.dtype.clone())
-                .unwrap()
-                .into_array())),
+            0 => Ok(None),
+            1 => Ok(Some(result.remove(0))),
+            _ => Ok(Some(
+                ChunkedArray::try_new(result, self.dtype.clone())?.into_array(),
+            )),
         }
     }
 }
