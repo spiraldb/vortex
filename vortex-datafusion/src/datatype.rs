@@ -154,12 +154,12 @@ mod test {
 
         assert_eq!(
             infer_data_type(&DType::Utf8(Nullability::NonNullable)),
-            DataType::Utf8
+            DataType::Utf8View
         );
 
         assert_eq!(
             infer_data_type(&DType::Binary(Nullability::NonNullable)),
-            DataType::Binary
+            DataType::BinaryView
         );
 
         assert_eq!(
@@ -184,7 +184,7 @@ mod test {
             )),
             DataType::Struct(Fields::from(vec![
                 FieldRef::from(Field::new("field_a", DataType::Boolean, false)),
-                FieldRef::from(Field::new("field_b", DataType::Utf8, true)),
+                FieldRef::from(Field::new("field_b", DataType::Utf8View, true)),
             ]))
         );
     }
@@ -207,7 +207,7 @@ mod test {
             infer_schema(&schema_nonnull),
             Schema::new(Fields::from(vec![
                 Field::new("field_a", DataType::Boolean, false),
-                Field::new("field_b", DataType::Utf8, false),
+                Field::new("field_b", DataType::Utf8View, false),
                 Field::new("field_c", DataType::Int32, true),
             ]))
         );

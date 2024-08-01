@@ -478,25 +478,21 @@ mod test {
     use datafusion_expr::{and, col, lit, BinaryExpr, Expr, Operator};
     use vortex::array::primitive::PrimitiveArray;
     use vortex::array::struct_::StructArray;
-    use vortex::array::varbin::VarBinArray;
+    use vortex::array::varbinview::VarBinViewArray;
     use vortex::validity::Validity;
     use vortex::{Array, IntoArray};
-    use vortex_dtype::{DType, Nullability};
 
     use crate::{can_be_pushed_down, SessionContextExt, VortexMemTableOptions};
 
     fn presidents_array() -> Array {
-        let names = VarBinArray::from_vec(
-            vec![
-                "Washington",
-                "Adams",
-                "Jefferson",
-                "Madison",
-                "Monroe",
-                "Adams",
-            ],
-            DType::Utf8(Nullability::NonNullable),
-        );
+        let names = VarBinViewArray::from_iter_str(vec![
+            "Washington",
+            "Adams",
+            "Jefferson",
+            "Madison",
+            "Monroe",
+            "Adams",
+        ]);
         let term_start = PrimitiveArray::from_vec(
             vec![1789u16, 1797, 1801, 1809, 1817, 1825],
             Validity::NonNullable,
