@@ -31,15 +31,15 @@ jobs:
         uses: arduino/setup-protoc@v3
 
       - name: Bench - Vortex TPC-H
-        run: cargo bench --bench tpch_benchmark | tee bench.txt
+        run: cargo bench --bench tpch_benchmark | tee bench-tpch.txt
 
       - name: Store benchmark result
         uses: benchmark-action/github-action-benchmark@v1.20.3
         with:
-          name: Vortex Benchmarks
+          name: Vortex TPC-H Benchmarks
           tool: cargo
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: bench.txt
+          output-file-path: bench-tpch.txt
           summary-always: true
           auto-push: true
           fail-on-alert: false
