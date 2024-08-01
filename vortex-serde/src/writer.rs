@@ -101,8 +101,9 @@ pub struct ByteRange {
     pub end: u64,
 }
 
+#[allow(clippy::len_without_is_empty)]
 impl ByteRange {
-    pub fn size(&self) -> usize {
+    pub fn len(&self) -> usize {
         (self.end - self.begin) as usize
     }
 }

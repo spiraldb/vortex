@@ -96,8 +96,7 @@ mod test {
         let result_iter = reader.take_rows(indices).unwrap();
         pin_mut!(result_iter);
 
-        let result = block_on(async { result_iter.next().await.unwrap().unwrap() });
-        println!("Taken {:?}", result);
+        let _result = block_on(async { result_iter.next().await.unwrap().unwrap() });
         Ok(())
     }
 

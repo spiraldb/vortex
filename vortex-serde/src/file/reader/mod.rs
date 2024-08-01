@@ -2,7 +2,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use bytes::{Bytes, BytesMut};
+use batch::BatchReader;
+use bytes::BytesMut;
 use filtering::RowFilter;
 use futures::future::BoxFuture;
 use futures::{ready, FutureExt, Stream};
@@ -14,18 +15,21 @@ use vortex::compute::unary::subtract_scalar;
 use vortex::compute::{and, filter, search_sorted, slice, take, SearchSortedSide};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType, StructDType};
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use super::layouts::{Layout, StructLayout};
 use crate::file::file_writer::MAGIC_BYTES;
 use crate::file::footer::Footer;
 use crate::io::VortexReadAt;
-use crate::{ArrayBufferReader, ReadResult};
 
+mod batch;
+mod column;
 pub mod filtering;
 pub mod projections;
 pub mod schema;
+
+const DEFAULT_BATCH_SIZE: usize = 65536;
 
 pub struct VortexBatchReaderBuilder<R> {
     reader: R,
@@ -33,6 +37,7 @@ pub struct VortexBatchReaderBuilder<R> {
     len: Option<u64>,
     take_indices: Option<Array>,
     row_filter: Option<RowFilter>,
+    batch_size: Option<usize>,
 }
 
 impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
@@ -47,6 +52,7 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
             row_filter: None,
             len: None,
             take_indices: None,
+            batch_size: None,
         }
     }
 
@@ -75,6 +81,11 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
         self
     }
 
+    pub fn with_batch_size(mut self, batch_size: usize) -> Self {
+        self.batch_size = Some(batch_size);
+        self
+    }
+
     pub async fn build(mut self) -> VortexResult<VortexBatchStream<R>> {
         let footer = self.read_footer().await?;
 
@@ -90,18 +101,17 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
             vortex_bail!("Top level dtype must be a 'StructDType'");
         };
 
-        Ok(VortexBatchStream {
+        let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
+
+        VortexBatchStream::try_new(
+            self.reader,
             layout,
             dtype,
-            projection: self.projection,
-            take_indices: self.take_indices,
-            row_filter: self.row_filter.unwrap_or_default(),
-            reader: Some(self.reader),
-            metadata_layouts: None,
-            state: StreamingState::default(),
-            context: Default::default(),
-            current_offset: 0,
-        })
+            self.row_filter.unwrap_or_default(),
+            batch_size,
+            self.projection,
+            self.take_indices,
+        )
     }
 
     async fn len(&self) -> usize {
@@ -158,24 +168,68 @@ impl<R: VortexReadAt> VortexBatchReaderBuilder<R> {
     }
 }
 
-#[allow(dead_code)]
 pub struct VortexBatchStream<R> {
-    layout: StructLayout,
     dtype: StructDType,
     // TODO(robert): Have identity projection
     projection: Option<Projection>,
     take_indices: Option<Array>,
     row_filter: RowFilter,
-    reader: Option<R>,
+    batch_reader: Option<BatchReader<R>>,
     state: StreamingState<R>,
     context: Arc<vortex::Context>,
+    #[allow(dead_code)]
     metadata_layouts: Option<Vec<Layout>>,
     current_offset: usize,
+    batch_size: usize,
 }
 
-impl<R> VortexBatchStream<R> {
-    pub fn schema(&self) -> VortexResult<Schema> {
-        Ok(Schema(self.dtype.clone()))
+impl<R: VortexReadAt> VortexBatchStream<R> {
+    fn try_new(
+        reader: R,
+        mut layout: StructLayout,
+        dtype: StructDType,
+        row_filter: RowFilter,
+        batch_size: usize,
+        projection: Option<Projection>,
+        take_indices: Option<Array>,
+    ) -> VortexResult<Self> {
+        let schema = Schema(dtype.clone());
+        let mut column_info = Vec::default();
+
+        let metadata_layouts = layout
+            .children
+            .iter_mut()
+            .map(|c| c.as_chunked_mut().unwrap().children.pop_front().unwrap())
+            .collect::<Vec<_>>();
+
+        for ((c_layout, col_name), dtype) in layout
+            .children
+            .iter_mut()
+            .zip(schema.fields().iter().cloned())
+            .zip(schema.types().iter().cloned())
+        {
+            let layout = c_layout.as_chunked_mut().unwrap();
+            let chunked_children = std::mem::take(&mut layout.children);
+
+            column_info.push((col_name, dtype, chunked_children));
+        }
+
+        Ok(VortexBatchStream {
+            batch_reader: Some(BatchReader::new(reader, column_info.into_iter())),
+            dtype,
+            projection,
+            take_indices,
+            row_filter,
+            batch_size,
+            metadata_layouts: Some(metadata_layouts),
+            current_offset: 0,
+            state: Default::default(),
+            context: Default::default(),
+        })
+    }
+
+    pub fn schema(&self) -> Schema {
+        Schema(self.dtype.clone())
     }
 
     fn take_batch(&mut self, batch: &Array) -> VortexResult<Array> {
@@ -198,264 +252,88 @@ impl<R> VortexBatchStream<R> {
     }
 }
 
-type StreamStateFuture<R> = BoxFuture<'static, VortexResult<(Vec<(Arc<str>, BytesMut, DType)>, R)>>;
+type StreamStateFuture<R> = BoxFuture<'static, VortexResult<(BatchReader<R>, Option<Array>)>>;
 
 #[derive(Default)]
 enum StreamingState<R> {
     #[default]
     Init,
     Reading(StreamStateFuture<R>),
-    Decoding(Vec<ColumnInfo>),
-}
-
-struct ColumnInfo {
-    layout: Layout,
-    dtype: DType,
-    name: Arc<str>,
-}
-
-impl ColumnInfo {
-    fn new(name: Arc<str>, dtype: DType, layout: Layout) -> Self {
-        Self {
-            name,
-            layout,
-            dtype,
-        }
-    }
+    Decoding(Option<Array>),
+    Error,
 }
 
 impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexBatchStream<R> {
     type Item = VortexResult<Array>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let batch_size = self.batch_size;
         loop {
             match &mut self.state {
                 StreamingState::Init => {
-                    let mut layouts = Vec::default();
+                    let mut batch_reader = self.batch_reader.take().expect("reader should be here");
 
-                    if self.metadata_layouts.is_none() {
-                        let metadata_layouts = self
-                            .layout
-                            .children
-                            .iter_mut()
-                            .map(|c| c.as_chunked_mut().unwrap().children.pop_front().unwrap())
-                            .collect::<Vec<_>>();
-
-                        self.metadata_layouts = Some(metadata_layouts);
-                    }
-
-                    for c_layout in self.layout.children.iter_mut() {
-                        let layout = c_layout.as_chunked_mut().unwrap();
-
-                        match layout.children.pop_front() {
-                            Some(layout) => {
-                                layouts.push(layout);
-                            }
-                            None => {
-                                return Poll::Ready(None);
-                            }
-                        }
-                    }
-
-                    let names = self.dtype.names().iter();
-                    let types = self.dtype.dtypes().iter().cloned();
-
-                    let layouts = layouts
-                        .into_iter()
-                        .zip(types)
-                        .zip(names)
-                        .map(|((layout, dtype), name)| ColumnInfo::new(name.clone(), dtype, layout))
-                        .collect();
-
-                    self.state = StreamingState::Decoding(layouts);
-                }
-                StreamingState::Decoding(layouts) => {
-                    let layouts = std::mem::take(layouts);
-                    let reader = self.reader.take().expect("Reader should be here");
+                    let context = self.context.clone();
 
                     let f = async move {
-                        let mut buffers = Vec::with_capacity(layouts.len());
-                        for col_info in layouts {
-                            let byte_range = col_info.layout.as_flat().unwrap().range;
-                            let mut buffer = BytesMut::with_capacity(byte_range.size());
-                            unsafe { buffer.set_len(byte_range.size()) };
-
-                            let buff = reader
-                                .read_at_into(byte_range.begin, buffer)
-                                .await
-                                .map_err(VortexError::from)
-                                .map(|b| (col_info.name, b, col_info.dtype))?;
-                            buffers.push(buff);
-                        }
-
-                        Ok((buffers, reader))
+                        batch_reader.load(batch_size, context).await?;
+                        let arr = batch_reader.next(batch_size).transpose()?;
+                        VortexResult::Ok((batch_reader, arr))
                     }
                     .boxed();
 
-                    self.state = StreamingState::Reading(f)
+                    self.state = StreamingState::Reading(f);
                 }
-                StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
-                    Ok((bytes, reader)) => {
-                        self.reader = Some(reader);
-                        let arr = bytes
-                            .into_iter()
-                            .map(|(name, buff, dtype)| {
-                                let mut buff = buff.freeze();
-                                let mut array_reader = ArrayBufferReader::new();
-                                let mut read_buf = Bytes::new();
-                                while let Some(ReadResult::ReadMore(u)) =
-                                    array_reader.read(read_buf.clone())?
-                                {
-                                    read_buf = buff.split_to(u);
-                                }
-
-                                array_reader
-                                    .into_array(self.context.clone(), dtype)
-                                    .map(|a| (name, a))
-                            })
-                            .collect::<VortexResult<Vec<_>>>()?;
-
-                        let mut s = StructArray::from_fields(arr.as_ref()).into_array();
-
-                        s = if self.take_indices.is_some() {
-                            self.take_batch(&s)?
-                        } else {
-                            s
-                        };
-
-                        let mut current_predicate = ConstantArray::new(true, s.len()).into_array();
+                StreamingState::Decoding(arr) => match arr.take() {
+                    Some(mut batch) => {
+                        if self.take_indices.is_some() {
+                            batch = self.take_batch(&batch)?;
+                        }
+                        let mut current_predicate =
+                            ConstantArray::new(true, batch.len()).into_array();
                         for pred in self.row_filter._filters.iter_mut() {
-                            let filter_bitmap = pred.evaluate(&s)?;
+                            let filter_bitmap = pred.evaluate(&batch)?;
                             current_predicate = and(&current_predicate, &filter_bitmap)?;
                         }
 
-                        s = filter(&s, &current_predicate)?;
+                        batch = filter(&batch, &current_predicate)?;
                         let projected = self
                             .projection
                             .as_ref()
                             .map(|p| {
-                                StructArray::try_from(s.clone())
+                                StructArray::try_from(batch.clone())
                                     .unwrap()
                                     .project(p.indices())
                                     .unwrap()
                                     .into_array()
                             })
-                            .unwrap_or(s);
-                        self.state = StreamingState::Init;
+                            .unwrap_or(batch);
+
                         return Poll::Ready(Some(Ok(projected)));
                     }
-                    Err(e) => return Poll::Ready(Some(Err(e))),
+
+                    None => {
+                        if let Some(reader) = self.batch_reader.as_ref() {
+                            if reader.is_empty() {
+                                return Poll::Ready(None);
+                            }
+                        }
+
+                        self.state = StreamingState::Init;
+                    }
                 },
+                StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
+                    Ok((batch_reader, arr)) => {
+                        self.batch_reader = Some(batch_reader);
+                        self.state = StreamingState::Decoding(arr)
+                    }
+                    Err(e) => {
+                        self.state = StreamingState::Error;
+                        return Poll::Ready(Some(Err(e)));
+                    }
+                },
+                StreamingState::Error => return Poll::Ready(None),
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use futures::StreamExt;
-    use vortex::array::chunked::ChunkedArray;
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::struct_::StructArray;
-    use vortex::array::varbin::VarBinArray;
-    use vortex::validity::Validity;
-    use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
-
-    use super::*;
-    use crate::file::file_writer::FileWriter;
-
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn test_read_simple() {
-        let strings = ChunkedArray::from_iter([
-            VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
-            VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
-        ])
-        .into_array();
-
-        let numbers = ChunkedArray::from_iter([
-            PrimitiveArray::from(vec![1u32, 2, 3, 4]).into_array(),
-            PrimitiveArray::from(vec![5u32, 6, 7, 8]).into_array(),
-        ])
-        .into_array();
-
-        let st = StructArray::try_new(
-            ["strings".into(), "numbers".into()].into(),
-            vec![strings, numbers],
-            8,
-            Validity::NonNullable,
-        )
-        .unwrap();
-        let buf = Vec::new();
-        let mut writer = FileWriter::new(buf);
-        writer = writer.write_array_columns(st.into_array()).await.unwrap();
-        let written = writer.finalize().await.unwrap();
-
-        let mut builder = VortexBatchReaderBuilder::new(written);
-        let layout = builder.read_footer().await.unwrap().layout().unwrap();
-        dbg!(layout);
-
-        let mut stream = builder.build().await.unwrap();
-        let mut cnt = 0;
-
-        while let Some(array) = stream.next().await {
-            let array = array.unwrap();
-            assert_eq!(array.len(), 4);
-            cnt += 1;
-        }
-
-        assert_eq!(cnt, 2);
-    }
-
-    #[tokio::test]
-    #[cfg_attr(miri, ignore)]
-    async fn test_read_projection() {
-        let strings = ChunkedArray::from_iter([
-            VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
-            VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
-        ])
-        .into_array();
-
-        let numbers = ChunkedArray::from_iter([
-            PrimitiveArray::from(vec![1u32, 2, 3, 4]).into_array(),
-            PrimitiveArray::from(vec![5u32, 6, 7, 8]).into_array(),
-        ])
-        .into_array();
-
-        let st = StructArray::try_new(
-            ["strings".into(), "numbers".into()].into(),
-            vec![strings, numbers],
-            8,
-            Validity::NonNullable,
-        )
-        .unwrap();
-        let buf = Vec::new();
-        let mut writer = FileWriter::new(buf);
-        writer = writer.write_array_columns(st.into_array()).await.unwrap();
-        let written = writer.finalize().await.unwrap();
-
-        let mut builder = VortexBatchReaderBuilder::new(written);
-        let layout = builder.read_footer().await.unwrap().layout().unwrap();
-        dbg!(layout);
-
-        let mut stream = builder
-            .with_projection(Projection::new([0]))
-            .build()
-            .await
-            .unwrap();
-        let mut cnt = 0;
-
-        while let Some(array) = stream.next().await {
-            let array = array.unwrap();
-            assert_eq!(array.len(), 4);
-
-            let array = array.into_struct().unwrap();
-            let struct_dtype = array.dtype().as_struct().unwrap();
-            assert_eq!(struct_dtype.dtypes().len(), 1);
-            assert_eq!(struct_dtype.names()[0].as_ref(), "strings");
-            cnt += 1;
-        }
-
-        assert_eq!(cnt, 2);
     }
 }
