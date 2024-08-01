@@ -29,7 +29,7 @@ pub mod filtering;
 pub mod projections;
 pub mod schema;
 
-const DEFAULT_BATCH_SIZE: usize = 1024;
+const DEFAULT_BATCH_SIZE: usize = 65536;
 
 pub struct VortexBatchReaderBuilder<R> {
     reader: R,
