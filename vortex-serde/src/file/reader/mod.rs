@@ -215,7 +215,7 @@ impl<R: VortexReadAt> VortexBatchStream<R> {
         }
 
         Ok(VortexBatchStream {
-            batch_reader: Some(BatchReader::new(reader, schema, column_info.into_iter())),
+            batch_reader: Some(BatchReader::new(reader, column_info.into_iter())),
             dtype,
             projection,
             take_indices,
