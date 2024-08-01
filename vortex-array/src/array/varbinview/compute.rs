@@ -3,7 +3,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
-use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
+use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE_BYTES};
 use crate::arrow::FromArrowArray;
 use crate::compute::unary::ScalarAtFn;
 use crate::compute::{slice, ArrayCompute, SliceFn, TakeFn};
@@ -38,7 +38,11 @@ impl ScalarAtFn for VarBinViewArray {
 impl SliceFn for VarBinViewArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
-            slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?,
+            slice(
+                &self.views(),
+                start * VIEW_SIZE_BYTES,
+                stop * VIEW_SIZE_BYTES,
+            )?,
             (0..self.metadata().buffer_lens.len())
                 .map(|i| self.buffer(i))
                 .collect::<Vec<_>>(),

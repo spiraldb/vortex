@@ -4099,6 +4099,7 @@ dependencies = [
  "rand",
  "rstest",
  "serde",
+ "static_assertions",
  "tokio",
  "vortex-buffer",
  "vortex-dtype",

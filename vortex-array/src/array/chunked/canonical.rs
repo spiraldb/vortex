@@ -196,33 +196,32 @@ fn pack_primitives(
 ///
 /// It is expected this function is only called from [try_canonicalize_chunks], and thus all chunks have
 /// been checked to have the same DType already.
-#[allow(unused)]
 fn pack_views(
     chunks: &[Array],
     dtype: &DType,
     nullability: Nullability,
 ) -> VortexResult<VarBinViewArray> {
-    let length: usize = chunks.iter().map(|c| c.len()).sum();
     let validity = validity_from_chunks(chunks, nullability);
     let mut views = Vec::new();
     let mut buffers = Vec::new();
     for chunk in chunks {
-        // Each chunk's views have block IDs that are zero-referenced.
+        // Each chunk's views have buffer IDs that are zero-referenced.
         // As part of the packing operation, we need to rewrite them to be referenced to the global
-        // merged blocks list.
+        // merged buffers list.
         let buffers_offset = buffers.len();
         let canonical_chunk = chunk.clone().into_varbinview().unwrap();
 
-        for block in canonical_chunk.buffers() {
-            let canonical_buffer = block.into_canonical().unwrap().into_array();
+        for buffer in canonical_chunk.buffers() {
+            let canonical_buffer = buffer.into_canonical().unwrap().into_array();
             buffers.push(canonical_buffer);
         }
 
-        // Write a new primitive array with all of the view outputs.
         for view in canonical_chunk.view_slice() {
             if view.is_inlined() {
+                // Inlined views can be copied directly into the output
                 views.push(*view);
             } else {
+                // Referencing views must have their buffer_index adjusted with new offsets
                 let view_ref = view.as_view();
                 views.push(BinaryView::new_view(
                     view.len(),
@@ -235,7 +234,8 @@ fn pack_views(
     }
 
     let (view_ptr, view_len, view_cap) = views.into_raw_parts();
-    // Transmute the pointer to be to a set of u128, which is of identical size.
+    // Transmute the pointer to target type u128, which is of identical size and is
+    // an Arrow native type.
     let views_u128 = unsafe {
         Vec::from_raw_parts(
             std::mem::transmute::<*mut BinaryView, *mut u128>(view_ptr),

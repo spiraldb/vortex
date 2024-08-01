@@ -7,6 +7,7 @@ use arrow_array::builder::{BinaryViewBuilder, StringViewBuilder};
 use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
+use static_assertions::{assert_eq_align, assert_eq_size};
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
@@ -96,6 +97,12 @@ pub union BinaryView {
     _ref: Ref,
 }
 
+/// BinaryView must be 16 bytes and have 8 byte alignment
+assert_eq_size!(BinaryView, [u8; 16]);
+assert_eq_size!(Inlined, [u8; 16]);
+assert_eq_size!(Ref, [u8; 16]);
+assert_eq_align!(BinaryView, u64);
+
 impl BinaryView {
     pub const MAX_INLINED_SIZE: usize = 12;
 
@@ -159,7 +166,7 @@ impl Debug for BinaryView {
 }
 
 // reminder: views are 16 bytes with 8-byte alignment
-pub(crate) const VIEW_SIZE: usize = size_of::<BinaryView>();
+pub(crate) const VIEW_SIZE_BYTES: usize = size_of::<BinaryView>();
 
 impl_encoding!("vortex.varbinview", 5u16, VarBinView);
 
@@ -218,7 +225,7 @@ impl VarBinViewArray {
             vortex_bail!("incorrect validity {:?}", validity);
         }
 
-        let num_views = views.len() / VIEW_SIZE;
+        let num_views = views.len() / VIEW_SIZE_BYTES;
         let metadata = VarBinViewMetadata {
             validity: validity.to_metadata(num_views)?,
             buffer_lens: buffers.iter().map(|a| a.len()).collect_vec(),
@@ -250,7 +257,7 @@ impl VarBinViewArray {
                     .expect("Views must be a primitive array")
                     .maybe_null_slice::<u8>()
                     .as_ptr() as _,
-                self.views().len() / VIEW_SIZE,
+                self.views().len() / VIEW_SIZE_BYTES,
             )
         }
     }
@@ -267,7 +274,7 @@ impl VarBinViewArray {
     #[inline]
     pub fn views(&self) -> Array {
         self.array()
-            .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
+            .child(0, &DType::BYTES, self.len() * VIEW_SIZE_BYTES)
             .unwrap()
     }
 
@@ -481,7 +488,7 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinViewArray {
 mod test {
     use vortex_scalar::Scalar;
 
-    use crate::array::varbinview::{BinaryView, VarBinViewArray, VIEW_SIZE};
+    use crate::array::varbinview::{BinaryView, VarBinViewArray, VIEW_SIZE_BYTES};
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
     use crate::{Canonical, IntoArray, IntoCanonical};
@@ -530,7 +537,7 @@ mod test {
 
     #[test]
     pub fn binary_view_size_and_alignment() {
-        assert_eq!(size_of::<BinaryView>(), VIEW_SIZE);
+        assert_eq!(size_of::<BinaryView>(), VIEW_SIZE_BYTES);
         assert_eq!(size_of::<BinaryView>(), 16);
         assert_eq!(align_of::<BinaryView>(), 8);
     }
