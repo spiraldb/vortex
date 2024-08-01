@@ -2,7 +2,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use vortex::array::struct_::StructArray;
-use vortex::{Array, IntoArray};
+use vortex::{Array, Context, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
@@ -28,10 +28,7 @@ impl<R: VortexReadAt> BatchReader<R> {
             schema,
             readers: column_info
                 .map(|(name, dtype, layouts)| {
-                    (
-                        name.clone(),
-                        ColumnReader::new(name.clone(), dtype.clone(), layouts),
-                    )
+                    (name.clone(), ColumnReader::new(dtype.clone(), layouts))
                 })
                 .collect(),
         }
@@ -41,11 +38,7 @@ impl<R: VortexReadAt> BatchReader<R> {
         self.readers.values().all(|c| c.is_empty())
     }
 
-    pub async fn load(
-        &mut self,
-        batch_size: usize,
-        context: Arc<vortex::Context>,
-    ) -> VortexResult<()> {
+    pub async fn load(&mut self, batch_size: usize, context: Arc<Context>) -> VortexResult<()> {
         for column_reader in self.readers.values_mut() {
             column_reader
                 .load(&mut self.reader, batch_size, context.clone())
