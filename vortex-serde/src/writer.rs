@@ -102,7 +102,7 @@ pub struct ByteRange {
 }
 
 impl ByteRange {
-    pub fn size(&self) -> usize {
+    pub fn len(&self) -> usize {
         (self.end - self.begin) as usize
     }
 }
