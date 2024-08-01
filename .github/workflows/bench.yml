@@ -1,9 +1,9 @@
 name: Benchmarks
 
 on:
-  push:
-    branches: [ "develop" ]
-  workflow_dispatch: { }
+  schedule:
+    # Run M-F at 9:30 UTC (either 9:30 or 10:30 British time depending on season).
+    - cron: "30 9 * * 1-5"
 
 permissions:
   actions: read
@@ -13,7 +13,7 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest-large
-    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[benchmark]') && github.ref_name == 'develop') }}
+    if: ${{ github.ref_name == 'develop' }}
     steps:
       - uses: actions/checkout@v4
         with:
