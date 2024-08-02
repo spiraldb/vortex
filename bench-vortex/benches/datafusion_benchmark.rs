@@ -16,7 +16,7 @@ use lazy_static::lazy_static;
 use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, Context, IntoArray, ToArrayData};
-use vortex_datafusion::{VortexMemTable, VortexMemTableOptions};
+use vortex_datafusion::memory::{VortexMemTable, VortexMemTableOptions};
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
