@@ -12,15 +12,19 @@ use std::task::{Context, Poll};
 use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
 use arrow_schema::{DataType, SchemaRef};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
+use datafusion::prelude::{DataFrame, SessionContext};
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
 use datafusion_expr::{Expr, Operator};
 use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 use futures::Stream;
+use memory::{VortexMemTable, VortexMemTableOptions};
 use vortex::array::chunked::ChunkedArray;
-use vortex::{ArrayDType, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
+use vortex_dtype::DType;
 
 pub mod memory;
+pub mod persistent;
 
 mod datatype;
 mod eval;
@@ -47,6 +51,59 @@ fn supported_data_types(dt: DataType) -> bool {
         || dt == DataType::Binary
         || dt == DataType::BinaryView
         || dt == DataType::Utf8View
+}
+
+pub trait SessionContextExt {
+    fn register_vortex<S: AsRef<str>>(&self, name: S, array: Array) -> DFResult<()> {
+        self.register_vortex_opts(name, array, VortexMemTableOptions::default())
+    }
+
+    fn register_vortex_opts<S: AsRef<str>>(
+        &self,
+        name: S,
+        array: Array,
+        options: VortexMemTableOptions,
+    ) -> DFResult<()>;
+
+    fn read_vortex(&self, array: Array) -> DFResult<DataFrame> {
+        self.read_vortex_opts(array, VortexMemTableOptions::default())
+    }
+
+    fn read_vortex_opts(&self, array: Array, options: VortexMemTableOptions)
+        -> DFResult<DataFrame>;
+}
+
+impl SessionContextExt for SessionContext {
+    fn register_vortex_opts<S: AsRef<str>>(
+        &self,
+        name: S,
+        array: Array,
+        options: VortexMemTableOptions,
+    ) -> DFResult<()> {
+        assert!(
+            matches!(array.dtype(), DType::Struct(_, _)),
+            "Vortex arrays must have struct type"
+        );
+
+        let vortex_table = VortexMemTable::new(array, options);
+        self.register_table(name.as_ref(), Arc::new(vortex_table))
+            .map(|_| ())
+    }
+
+    fn read_vortex_opts(
+        &self,
+        array: Array,
+        options: VortexMemTableOptions,
+    ) -> DFResult<DataFrame> {
+        assert!(
+            matches!(array.dtype(), DType::Struct(_, _)),
+            "Vortex arrays must have struct type"
+        );
+
+        let vortex_table = VortexMemTable::new(array, options);
+
+        self.read_table(Arc::new(vortex_table))
+    }
 }
 
 fn can_be_pushed_down(expr: &Expr) -> bool {
