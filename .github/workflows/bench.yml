@@ -34,7 +34,7 @@ jobs:
             --project vortex \
             --token "${BENCHER_TOKEN}" \
             --adapter rust_criterion \
-            --testbed "github-actions"
+            --testbed "github-actions" \
             "cargo bench -p bench-vortex"
         env:
           BENCHER_TOKEN: ${{ secrets.BENCHER_TOKEN }}
