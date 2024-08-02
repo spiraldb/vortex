@@ -48,9 +48,17 @@ const SUPPORTED_BINARY_OPS: &[Operator] = &[
 ];
 
 /// Optional configurations to pass when loading a [VortexMemTable].
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct VortexMemTableOptions {
     pub enable_pushdown: bool,
+}
+
+impl Default for VortexMemTableOptions {
+    fn default() -> Self {
+        Self {
+            enable_pushdown: true,
+        }
+    }
 }
 
 impl VortexMemTableOptions {
