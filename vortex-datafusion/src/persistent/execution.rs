@@ -4,9 +4,9 @@ use datafusion::datasource::physical_plan::{FileScanConfig, FileStream};
 use datafusion_common::Result as DFResult;
 use datafusion_execution::{SendableRecordBatchStream, TaskContext};
 use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
-use datafusion_physical_plan::{DisplayAs, ExecutionPlan, PlanProperties};
+use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 
-use crate::persistent::VortexFileOpener;
+use crate::persistent::opener::VortexFileOpener;
 
 #[derive(Debug)]
 pub struct VortexExec {
@@ -15,11 +15,7 @@ pub struct VortexExec {
 }
 
 impl DisplayAs for VortexExec {
-    fn fmt_as(
-        &self,
-        _t: datafusion_physical_plan::DisplayFormatType,
-        _f: &mut std::fmt::Formatter,
-    ) -> std::fmt::Result {
+    fn fmt_as(&self, _t: DisplayFormatType, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
         todo!()
     }
 }
@@ -51,9 +47,12 @@ impl ExecutionPlan for VortexExec {
     fn execute(
         &self,
         partition: usize,
-        _context: Arc<TaskContext>,
+        context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        let opener = VortexFileOpener {};
+        let object_store = context
+            .runtime_env()
+            .object_store(&self.file_scan_config.object_store_url)?;
+        let opener = VortexFileOpener { object_store };
         let stream = FileStream::new(&self.file_scan_config, partition, opener, &self.metrics)?;
 
         Ok(Box::pin(stream))

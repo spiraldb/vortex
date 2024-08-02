@@ -4131,6 +4131,7 @@ dependencies = [
  "futures",
  "itertools 0.13.0",
  "lazy_static",
+ "object_store",
  "pin-project",
  "tokio",
  "vortex-array",

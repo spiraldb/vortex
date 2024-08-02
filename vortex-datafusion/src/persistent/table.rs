@@ -11,8 +11,9 @@ use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
 use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::ExecutionPlan;
 
-use super::VortexFileOpener;
+use super::opener::VortexFileOpener;
 
+#[allow(dead_code)]
 pub struct VortexFileTableProvider {
     schema_ref: SchemaRef,
     file_scan_config: FileScanConfig,
@@ -39,15 +40,6 @@ impl TableProvider for VortexFileTableProvider {
         _filters: &[Expr],
         _limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        let opener = VortexFileOpener {};
-
-        let _stream = FileStream::new(
-            &self.file_scan_config,
-            0,
-            opener,
-            &ExecutionPlanMetricsSet::new(),
-        )?;
-
         todo!()
     }
 
