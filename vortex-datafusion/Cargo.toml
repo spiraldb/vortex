@@ -10,11 +10,16 @@ include.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[lib]
+name = "vortex_datafusion"
+path = "src/lib.rs"
+
 [dependencies]
 vortex-array = { path = "../vortex-array" }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-expr = { path = "../vortex-expr" }
 vortex-error = { path = "../vortex-error" }
+vortex-serde = { path = "../vortex-serde" }
 vortex-scalar = { path = "../vortex-scalar", features = ["datafusion"] }
 
 arrow-array = { workspace = true }
@@ -31,6 +36,7 @@ futures = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 pin-project = { workspace = true }
+
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

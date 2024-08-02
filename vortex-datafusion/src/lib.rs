@@ -18,10 +18,10 @@ use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult
 use datafusion_expr::{Expr, Operator};
 use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 use futures::Stream;
+use itertools::Itertools;
 use memory::{VortexMemTable, VortexMemTableOptions};
 use vortex::array::chunked::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
-use vortex_dtype::DType;
 
 pub mod memory;
 pub mod persistent;
@@ -81,7 +81,7 @@ impl SessionContextExt for SessionContext {
         options: VortexMemTableOptions,
     ) -> DFResult<()> {
         assert!(
-            matches!(array.dtype(), DType::Struct(_, _)),
+            array.dtype().is_struct(),
             "Vortex arrays must have struct type"
         );
 
@@ -96,7 +96,7 @@ impl SessionContextExt for SessionContext {
         options: VortexMemTableOptions,
     ) -> DFResult<DataFrame> {
         assert!(
-            matches!(array.dtype(), DType::Struct(_, _)),
+            array.dtype().is_struct(),
             "Vortex arrays must have struct type"
         );
 
@@ -117,6 +117,19 @@ fn can_be_pushed_down(expr: &Expr) -> bool {
         Expr::Literal(lit) => supported_data_types(lit.data_type()),
         _ => false,
     }
+}
+
+fn get_filter_projection(exprs: &[Expr], schema: SchemaRef) -> Vec<usize> {
+    let referenced_columns: HashSet<String> =
+        exprs.iter().flat_map(get_column_references).collect();
+
+    let projection: Vec<usize> = referenced_columns
+        .iter()
+        .map(|col_name| schema.column_with_name(col_name).unwrap().0)
+        .sorted()
+        .collect();
+
+    projection
 }
 
 /// Extract out the columns from our table referenced by the expression.

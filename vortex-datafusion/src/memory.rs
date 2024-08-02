@@ -1,5 +1,4 @@
 use std::any::Any;
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow_schema::SchemaRef;
@@ -18,7 +17,7 @@ use vortex_dtype::DType;
 
 use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
-use crate::{can_be_pushed_down, get_column_references, VortexScanExec};
+use crate::{can_be_pushed_down, get_filter_projection, VortexScanExec};
 
 /// A [`TableProvider`] that exposes an existing Vortex Array to the DataFusion SQL engine.
 ///
@@ -82,19 +81,6 @@ impl TableProvider for VortexMemTable {
         filters: &[Expr],
         _limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        fn get_filter_projection(exprs: &[Expr], schema: SchemaRef) -> Vec<usize> {
-            let referenced_columns: HashSet<String> =
-                exprs.iter().flat_map(get_column_references).collect();
-
-            let projection: Vec<usize> = referenced_columns
-                .iter()
-                .map(|col_name| schema.column_with_name(col_name).unwrap().0)
-                .sorted()
-                .collect();
-
-            projection
-        }
-
         let filter_exprs = if filters.is_empty() {
             None
         } else {
@@ -176,9 +162,17 @@ impl TableProvider for VortexMemTable {
 }
 
 /// Optional configurations to pass when loading a [VortexMemTable].
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Clone)]
 pub struct VortexMemTableOptions {
     pub enable_pushdown: bool,
+}
+
+impl Default for VortexMemTableOptions {
+    fn default() -> Self {
+        Self {
+            enable_pushdown: true,
+        }
+    }
 }
 
 impl VortexMemTableOptions {

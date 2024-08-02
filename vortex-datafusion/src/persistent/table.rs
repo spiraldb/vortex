@@ -3,13 +3,20 @@ use std::sync::Arc;
 
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
+use datafusion::datasource::physical_plan::{FileScanConfig, FileStream};
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion_common::{Result as DFResult, Statistics};
 use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
+use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::ExecutionPlan;
 
-pub struct VortexFileTableProvider {}
+use super::VortexFileOpener;
+
+pub struct VortexFileTableProvider {
+    schema_ref: SchemaRef,
+    file_scan_config: FileScanConfig,
+}
 
 #[async_trait]
 impl TableProvider for VortexFileTableProvider {
@@ -18,11 +25,11 @@ impl TableProvider for VortexFileTableProvider {
     }
 
     fn schema(&self) -> SchemaRef {
-        todo!()
+        Arc::clone(&self.schema_ref)
     }
 
     fn table_type(&self) -> TableType {
-        todo!()
+        TableType::Base
     }
 
     async fn scan(
@@ -32,6 +39,15 @@ impl TableProvider for VortexFileTableProvider {
         _filters: &[Expr],
         _limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
+        let opener = VortexFileOpener {};
+
+        let _stream = FileStream::new(
+            &self.file_scan_config,
+            0,
+            opener,
+            &ExecutionPlanMetricsSet::new(),
+        )?;
+
         todo!()
     }
 
@@ -49,6 +65,3 @@ impl TableProvider for VortexFileTableProvider {
         None
     }
 }
-
-#[cfg(test)]
-mod tests {}
