@@ -20,7 +20,7 @@ async fn main() {
         Format::Arrow,
         Format::Parquet,
         Format::Vortex {
-            disable_pushdown: false,
+            enable_pushdown: false,
         },
     ];
 

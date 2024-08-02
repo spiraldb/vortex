@@ -22,7 +22,7 @@ pub enum Format {
     Csv,
     Arrow,
     Parquet,
-    Vortex { disable_pushdown: bool },
+    Vortex { enable_pushdown: bool },
 }
 
 // Generate table dataset.
@@ -51,14 +51,14 @@ pub async fn load_datasets<P: AsRef<Path>>(
                     register_parquet(&context, stringify!($name), &$name, $schema).await
                 }
                 Format::Vortex {
-                    disable_pushdown, ..
+                    enable_pushdown, ..
                 } => {
                     register_vortex(
                         &context,
                         stringify!($name),
                         &$name,
                         $schema,
-                        disable_pushdown,
+                        enable_pushdown,
                     )
                     .await
                 }
@@ -172,7 +172,7 @@ async fn register_vortex(
     name: &str,
     file: &Path,
     schema: &Schema,
-    disable_pushdown: bool,
+    enable_pushdown: bool,
 ) -> anyhow::Result<()> {
     let record_batches = session
         .read_csv(
@@ -201,7 +201,7 @@ async fn register_vortex(
     session.register_vortex_opts(
         name,
         chunked_array,
-        VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
+        VortexMemTableOptions::default().with_pushdown(enable_pushdown),
     )?;
 
     Ok(())
