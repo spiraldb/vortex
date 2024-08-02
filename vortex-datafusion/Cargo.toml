@@ -19,7 +19,7 @@ vortex-array = { path = "../vortex-array" }
 vortex-dtype = { path = "../vortex-dtype" }
 vortex-expr = { path = "../vortex-expr" }
 vortex-error = { path = "../vortex-error" }
-vortex-serde = { path = "../vortex-serde" }
+vortex-serde = { path = "../vortex-serde", features = ["object_store"] }
 vortex-scalar = { path = "../vortex-scalar", features = ["datafusion"] }
 
 arrow-array = { workspace = true }

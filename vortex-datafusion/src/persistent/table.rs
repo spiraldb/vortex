@@ -3,15 +3,12 @@ use std::sync::Arc;
 
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
-use datafusion::datasource::physical_plan::{FileScanConfig, FileStream};
+use datafusion::datasource::physical_plan::FileScanConfig;
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
 use datafusion_common::{Result as DFResult, Statistics};
 use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
-use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::ExecutionPlan;
-
-use super::opener::VortexFileOpener;
 
 #[allow(dead_code)]
 pub struct VortexFileTableProvider {
