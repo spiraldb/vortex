@@ -177,7 +177,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-pushdown-compressed"),
         &SessionContext::new(),
-        false,
+        true,
         true,
     );
 
@@ -185,7 +185,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-pushdown-uncompressed"),
         &SessionContext::new(),
-        false,
+        true,
         false,
     );
 
@@ -193,7 +193,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-nopushdown-compressed"),
         &SessionContext::new(),
-        true,
+        false,
         true,
     );
 
@@ -201,7 +201,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-nopushdown-uncompressed"),
         &SessionContext::new(),
-        true,
+        false,
         false,
     );
 }
