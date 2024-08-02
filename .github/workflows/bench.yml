@@ -1,9 +1,8 @@
 name: Benchmarks
 
 on:
-  schedule:
-    # Run M-F at 9:30 UTC (either 9:30 or 10:30 British time depending on season).
-    - cron: "30 9 * * 1-5"
+  push:
+    branches: [develop]
 
 permissions:
   actions: read
