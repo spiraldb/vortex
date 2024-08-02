@@ -159,8 +159,8 @@ pub async fn read_vortex_footer_format<R: VortexReadAt>(
     )
 }
 
-pub async fn take_vortex_object_store<O: ObjectStore>(
-    fs: &O,
+pub async fn take_vortex_object_store(
+    fs: &Arc<dyn ObjectStore>,
     path: &object_store::path::Path,
     indices: &[u64],
 ) -> VortexResult<Array> {
