@@ -158,13 +158,13 @@ fn bench_arrow<M: Measurement>(mut group: BenchmarkGroup<M>, session: &SessionCo
 fn bench_vortex<M: Measurement>(
     mut group: BenchmarkGroup<M>,
     session: &SessionContext,
-    disable_pushdown: bool,
+    enable_pushdown: bool,
     compress: bool,
 ) {
     let vortex_dataset = toy_dataset_vortex(compress);
     let vortex_table = Arc::new(VortexMemTable::new(
         vortex_dataset,
-        VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
+        VortexMemTableOptions::default().with_pushdown(enable_pushdown),
     ));
 
     measure_provider(&mut group, session, vortex_table);
