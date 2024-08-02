@@ -548,7 +548,7 @@ mod test {
                 presidents_array(),
                 // Disable pushdown. We run this test to make sure that the naive codepath also
                 // produces correct results and does not panic anywhere.
-                VortexMemTableOptions::default().with_pushdown(true),
+                VortexMemTableOptions::default().with_pushdown(false),
             )
             .unwrap();
 
