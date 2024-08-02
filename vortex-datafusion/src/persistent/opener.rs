@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
-use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
-use arrow_schema::ArrowError;
+use arrow_array::cast::as_struct_array;
+use arrow_array::RecordBatch;
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::Result as DFResult;
 use futures::{FutureExt as _, TryStreamExt};
@@ -21,23 +21,18 @@ impl FileOpener for VortexFileOpener {
             async move {
                 let read_at = ObjectStoreReadAt::new(object_store, file_meta.location().clone());
 
-                let reader = VortexBatchReaderBuilder::new(read_at)
-                    .build()
-                    .await
-                    .unwrap();
+                let reader = VortexBatchReaderBuilder::new(read_at).build().await?;
 
                 let stream = reader
-                    .map_ok(|a| {
-                        RecordBatch::from(
-                            a.into_canonical()
-                                .expect("struct arrays must canonicalize")
-                                .into_arrow()
-                                .as_any()
-                                .downcast_ref::<ArrowStructArray>()
-                                .expect("vortex StructArray must convert to arrow StructArray"),
-                        )
+                    .map_ok(|array| {
+                        let arrow = array
+                            .into_canonical()
+                            .expect("struct arrays must canonicalize")
+                            .into_arrow();
+                        let struct_array = as_struct_array(arrow.as_ref());
+                        RecordBatch::from(struct_array)
                     })
-                    .map_err(|e| ArrowError::from_external_error(Box::new(e)));
+                    .map_err(|e| e.into());
 
                 DFResult::Ok(Box::pin(stream) as _)
             }

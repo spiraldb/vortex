@@ -1,3 +1,4 @@
+use std::fmt;
 use std::sync::Arc;
 
 use datafusion::datasource::physical_plan::{FileScanConfig, FileStream};
@@ -15,7 +16,7 @@ pub struct VortexExec {
 }
 
 impl DisplayAs for VortexExec {
-    fn fmt_as(&self, _t: DisplayFormatType, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt_as(&self, _t: DisplayFormatType, _f: &mut fmt::Formatter) -> fmt::Result {
         todo!()
     }
 }
