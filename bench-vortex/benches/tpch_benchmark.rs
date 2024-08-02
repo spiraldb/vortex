@@ -13,7 +13,7 @@ fn benchmark(c: &mut Criterion) {
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
-                disable_pushdown: true,
+                enable_pushdown: false,
             },
         ))
         .unwrap();
@@ -21,7 +21,7 @@ fn benchmark(c: &mut Criterion) {
         .block_on(load_datasets(
             &data_dir,
             Format::Vortex {
-                disable_pushdown: false,
+                enable_pushdown: true,
             },
         ))
         .unwrap();

@@ -155,7 +155,7 @@ impl TableProvider for VortexMemTable {
     ) -> DFResult<Vec<TableProviderFilterPushDown>> {
         // In the case the caller has configured this provider with filter pushdown disabled,
         // do not attempt to apply any filters at scan time.
-        if self.options.disable_pushdown {
+        if !self.options.enable_pushdown {
             return Ok(filters
                 .iter()
                 .map(|_| TableProviderFilterPushDown::Unsupported)
@@ -178,12 +178,12 @@ impl TableProvider for VortexMemTable {
 /// Optional configurations to pass when loading a [VortexMemTable].
 #[derive(Default, Debug, Clone)]
 pub struct VortexMemTableOptions {
-    pub disable_pushdown: bool,
+    pub enable_pushdown: bool,
 }
 
 impl VortexMemTableOptions {
-    pub fn with_disable_pushdown(mut self, disable_pushdown: bool) -> Self {
-        self.disable_pushdown = disable_pushdown;
+    pub fn with_pushdown(mut self, enable_pushdown: bool) -> Self {
+        self.enable_pushdown = enable_pushdown;
         self
     }
 }
@@ -351,7 +351,7 @@ mod test {
                 presidents_array(),
                 // Disable pushdown. We run this test to make sure that the naive codepath also
                 // produces correct results and does not panic anywhere.
-                VortexMemTableOptions::default().with_disable_pushdown(true),
+                VortexMemTableOptions::default().with_pushdown(false),
             )
             .unwrap();
 
