@@ -26,7 +26,10 @@ jobs:
       - name: Install Protoc
         uses: arduino/setup-protoc@v3
 
-      - name: Bencher - Vortex
+      - name: Setup bencher.dev CLI
+        uses: bencherdev/bencher@main
+
+      - name: Upload Vortex Benchmarks
         run: |
           bencher run \
             --project vortex \
