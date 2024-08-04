@@ -1,6 +1,8 @@
 name: Benchmarks
 
 on:
+  # TODO(aduffy): delete this
+  pull_request: {}
   push:
     branches: [develop]
 
@@ -27,6 +29,12 @@ jobs:
 
       - name: Setup bencher.dev CLI
         uses: bencherdev/bencher@main
+
+      # The compression benchmarks rely on DuckDB being installed to convert CSV to Parquet
+      - name: Install DuckDB
+        uses: opt-nc/setup-duckdb-action@v1.0.7
+        with:
+          version: v0.10.1
 
       - name: Upload Vortex Benchmarks
         run: |
