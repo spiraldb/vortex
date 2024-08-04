@@ -69,7 +69,7 @@ impl DBGen {
         // Generate the files using Docker container.
         cmd!(
             sh,
-            "docker run --rm -v {tpch_path}:/data ghcr.io/scalytics/tpch-docker:main -s {scale_factor} -v -f"
+            "docker run -u root --rm -v {tpch_path}:/data ghcr.io/scalytics/tpch-docker:main -s {scale_factor} -v -f"
         )
             .run()?;
 
