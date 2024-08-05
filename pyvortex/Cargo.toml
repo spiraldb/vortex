@@ -20,19 +20,19 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 arrow = { workspace = true }
-vortex-array = { path = "../vortex-array" }
-vortex-alp = { path = "../encodings/alp" }
-vortex-dict = { path = "../encodings/dict" }
-vortex-error = { path = "../vortex-error" }
-vortex-fastlanes = { path = "../encodings/fastlanes" }
-vortex-runend = { path = "../encodings/runend" }
-vortex-roaring = { path = "../encodings/roaring" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-zigzag = { path = "../encodings/zigzag" }
 log = { workspace = true }
 paste = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-log = { workspace = true }
+vortex-alp = { path = "../encodings/alp" }
+vortex-array = { path = "../vortex-array" }
+vortex-dict = { path = "../encodings/dict" }
+vortex-dtype = { path = "../vortex-dtype" }
+vortex-error = { path = "../vortex-error" }
+vortex-fastlanes = { path = "../encodings/fastlanes" }
+vortex-roaring = { path = "../encodings/roaring" }
+vortex-runend = { path = "../encodings/runend" }
+vortex-zigzag = { path = "../encodings/zigzag" }
 
 # We may need this workaround?
 # https://pyo3.rs/v0.20.2/faq.html#i-cant-run-cargo-test-or-i-cant-build-in-a-cargo-workspace-im-having-linker-issues-like-symbol-not-found-or-undefined-reference-to-_pyexc_systemerror

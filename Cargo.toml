@@ -11,8 +11,8 @@ members = [
     "vortex-error",
     "vortex-expr",
     "vortex-flatbuffers",
-    "vortex-serde",
     "vortex-sampling-compressor",
+    "vortex-serde",
 ]
 resolver = "2"
 

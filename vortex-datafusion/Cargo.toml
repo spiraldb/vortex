@@ -1,36 +1,29 @@
 [package]
 name = "vortex-datafusion"
-version.workspace = true
-homepage.workspace = true
-repository.workspace = true
-authors.workspace = true
-license.workspace = true
-keywords.workspace = true
-include.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+
+version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [lib]
 name = "vortex_datafusion"
 path = "src/lib.rs"
 
 [dependencies]
-vortex-array = { path = "../vortex-array" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-expr = { path = "../vortex-expr" }
-vortex-error = { path = "../vortex-error", features = ["datafusion"] }
-vortex-serde = { path = "../vortex-serde", features = ["object_store"] }
-vortex-scalar = { path = "../vortex-scalar", features = ["datafusion"] }
-
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-trait = { workspace = true }
-
 chrono = { workspace = true }
 datafusion = { workspace = true }
 datafusion-common = { workspace = true }
-datafusion-expr = { workspace = true }
 datafusion-execution = { workspace = true }
+datafusion-expr = { workspace = true }
 datafusion-physical-expr = { workspace = true }
 datafusion-physical-plan = { workspace = true }
 futures = { workspace = true }
@@ -39,13 +32,18 @@ lazy_static = { workspace = true }
 log = { workspace = true }
 object_store = { workspace = true }
 pin-project = { workspace = true }
-
+vortex-array = { path = "../vortex-array" }
+vortex-dtype = { path = "../vortex-dtype" }
+vortex-error = { path = "../vortex-error", features = ["datafusion"] }
+vortex-expr = { path = "../vortex-expr" }
+vortex-scalar = { path = "../vortex-scalar", features = ["datafusion"] }
+vortex-serde = { path = "../vortex-serde", features = ["object_store"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-url = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }
+url = { workspace = true }
 
 [lints]
 workspace = true
