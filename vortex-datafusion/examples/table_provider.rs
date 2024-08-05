@@ -1,4 +1,3 @@
-use std::env::temp_dir;
 use std::sync::Arc;
 
 use arrow_schema::{DataType, Field, Schema};
@@ -7,6 +6,7 @@ use datafusion_execution::object_store::ObjectStoreUrl;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path;
 use object_store::ObjectStore;
+use tempfile::tempdir;
 use tokio::fs::OpenOptions;
 use url::Url;
 use vortex::array::chunked::ChunkedArray;
@@ -21,7 +21,7 @@ use vortex_serde::file::file_writer::FileWriter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let tmp_path = temp_dir();
+    let temp_dir = tempdir()?;
     let strings = ChunkedArray::from_iter([
         VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
         VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
@@ -42,23 +42,26 @@ async fn main() -> anyhow::Result<()> {
     )
     .unwrap();
 
+    let filepath = temp_dir.path().join("a.vtx");
+
     let f = OpenOptions::new()
         .write(true)
         .truncate(true)
-        .open(tmp_path.join("a.vtx"))
+        .create(true)
+        .open(&filepath)
         .await?;
 
     let writer = FileWriter::new(f);
     let writer = writer.write_array_columns(st.into_array()).await?;
     writer.finalize().await?;
 
-    let f = tokio::fs::File::open(tmp_path.join("a.vtx")).await?;
+    let f = tokio::fs::File::open(&filepath).await?;
     let file_size = f.metadata().await?.len();
 
     let object_store: Arc<dyn ObjectStore> = Arc::new(LocalFileSystem::new());
     let url = ObjectStoreUrl::local_filesystem();
 
-    let p = Path::from_filesystem_path(tmp_path.join("a.vtx"))?;
+    let p = Path::from_filesystem_path(filepath)?;
 
     let config = VortexTableConfig::new(
         Arc::new(Schema::new(vec![
