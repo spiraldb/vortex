@@ -21,15 +21,15 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 arrow = { workspace = true }
-vortex-array = { path = "../vortex-array" }
-vortex-alp = { path = "../encodings/alp" }
-vortex-dict = { path = "../encodings/dict" }
-vortex-error = { path = "../vortex-error" }
-vortex-fastlanes = { path = "../encodings/fastlanes" }
-vortex-runend = { path = "../encodings/runend" }
-vortex-roaring = { path = "../encodings/roaring" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-zigzag = { path = "../encodings/zigzag" }
+vortex-array = { workspace = true }
+vortex-alp = { workspace = true }
+vortex-dict = { workspace = true }
+vortex-error = { workspace = true }
+vortex-fastlanes = { workspace = true }
+vortex-runend = { workspace = true }
+vortex-roaring = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-zigzag = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
 pyo3 = { workspace = true }

@@ -11,11 +11,11 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-vortex-array = { path = "../vortex-array" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-expr = { path = "../vortex-expr" }
-vortex-error = { path = "../vortex-error" }
-vortex-scalar = { path = "../vortex-scalar", features = ["datafusion"] }
+vortex-array = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-expr = { workspace = true }
+vortex-error = { workspace = true }
+vortex-scalar = { workspace = true, features = ["datafusion"] }
 
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }

@@ -11,13 +11,14 @@ members = [
     "vortex-error",
     "vortex-expr",
     "vortex-flatbuffers",
+    "vortex-scalar",
     "vortex-serde",
     "vortex-sampling-compressor",
 ]
 resolver = "2"
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 homepage = "https://github.com/spiraldb/vortex"
 repository = "https://github.com/spiraldb/vortex"
 authors = [
@@ -110,6 +111,31 @@ thiserror = "1.0.58"
 tokio = "1.37.0"
 uninit = "0.6.2"
 uuid = "1.8.0"
+
+# BEGIN crates published by this project
+bench-vortex = { version = "0.2.0", path = "./bench-vortex" }
+build-vortex = { version = "0.2.0", path = "./build-vortex" }
+vortex-alp = { version = "0.2.0", path = "./encodings/alp" }
+vortex-array = { version = "0.2.0", path = "./vortex-array" }
+vortex-buffer = { version = "0.2.0", path = "./vortex-buffer" }
+vortex-byte-bool = { version = "0.2.0", path = "./encodings/byte-bool" }
+vortex-datafusion = { version = "0.2.0", path = "./vortex-datafusion" }
+vortex-datetime-parts = { version = "0.2.0", path = "./encodings/datetime-parts" }
+vortex-dict = { version = "0.2.0", path = "./encodings/dict" }
+vortex-dtype = { version = "0.2.0", path = "./vortex-dtype" }
+vortex-error = { version = "0.2.0", path = "./vortex-error" }
+vortex-expr = { version = "0.2.0", path = "./vortex-expr" }
+vortex-flatbuffers = { version = "0.2.0", path = "./vortex-flatbuffers" }
+vortex-fastlanes = { version = "0.2.0", path = "./encodings/fastlanes" }
+vortex-roaring = { version = "0.2.0", path = "./encodings/roaring" }
+vortex-runend = { version = "0.2.0", path = "./encodings/runend" }
+vortex-runend-bool = { version = "0.2.0", path = "./encodings/runend-bool" }
+vortex-scalar = { version = "0.2.0", path = "./vortex-scalar" }
+vortex-serde = { version = "0.2.0", path = "./vortex-serde" }
+vortex-sampling-compressor = { version = "0.2.0", path = "./vortex-sampling-compressor" }
+vortex-zigzag = { version = "0.2.0", path = "./encodings/zigzag" }
+# END crates published by this project
+
 walkdir = "2.5.0"
 worker = "0.3.0"
 xshell = "0.2.6"
