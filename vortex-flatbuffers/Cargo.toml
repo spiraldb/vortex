@@ -1,5 +1,6 @@
 [package]
 name = "vortex-flatbuffers"
+description = "Flatbuffers definitions for Vortex types"
 version = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
