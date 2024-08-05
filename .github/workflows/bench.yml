@@ -1,9 +1,6 @@
 name: Benchmarks
 
 on:
-  # TODO(aduffy): delete this
-  pull_request: {}
-
   push:
     branches: [develop]
 
@@ -15,7 +12,6 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest-large
-      #if: ${{ github.ref_name == 'develop' }}
     steps:
       - uses: actions/checkout@v4
         with:
