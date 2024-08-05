@@ -22,15 +22,15 @@ itertools = { workspace = true }
 num-traits = { workspace = true }
 prost = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["rc", "derive"] }
-vortex-error = { path = "../vortex-error" }
-vortex-flatbuffers = { path = "../vortex-flatbuffers" }
+vortex-error = { workspace = true }
+vortex-flatbuffers = { workspace = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
 serde_test = { workspace = true }
 
 [build-dependencies]
-build-vortex = { path = "../build-vortex" }
+build-vortex = { workspace = true }
 
 [lints]
 workspace = true

@@ -41,12 +41,12 @@ paste = { workspace = true }
 pin-project = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-vortex-buffer = { path = "../vortex-buffer" }
-vortex-dtype = { path = "../vortex-dtype", features = ["flatbuffers", "serde"] }
-vortex-error = { path = "../vortex-error", features = ["flexbuffers"] }
-vortex-expr = { path = "../vortex-expr" }
-vortex-flatbuffers = { path = "../vortex-flatbuffers" }
-vortex-scalar = { path = "../vortex-scalar", features = [
+vortex-buffer = { workspace = true }
+vortex-dtype = { workspace = true, features = ["flatbuffers", "serde"] }
+vortex-error = { workspace = true, features = ["flexbuffers"] }
+vortex-expr = { workspace = true }
+vortex-flatbuffers = { workspace = true }
+vortex-scalar = { workspace = true, features = [
     "flatbuffers",
     "serde",
 ] }
@@ -56,7 +56,7 @@ vortex-scalar = { path = "../vortex-scalar", features = [
 getrandom = { workspace = true, features = ["js"] }
 
 [build-dependencies]
-build-vortex = { path = "../build-vortex" }
+build-vortex = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

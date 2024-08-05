@@ -21,15 +21,15 @@ monoio = { workspace = true, optional = true, features = ["bytes"] }
 object_store = { workspace = true, optional = true }
 pin-project = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "fs"], optional = true }
-vortex-array = { path = "../vortex-array" }
-vortex-buffer = { path = "../vortex-buffer" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-error = { path = "../vortex-error", features = ["object_store"] }
-vortex-flatbuffers = { path = "../vortex-flatbuffers" }
-vortex-scalar = { path = "../vortex-scalar" }
+vortex-array = { workspace = true }
+vortex-buffer = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true, features = ["object_store"] }
+vortex-flatbuffers = { workspace = true }
+vortex-scalar = { workspace = true }
 
 [build-dependencies]
-build-vortex = { path = "../build-vortex" }
+build-vortex = { workspace = true }
 
 [dev-dependencies]
 arrow = { workspace = true }
@@ -42,9 +42,9 @@ futures-executor = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-vortex-alp = { path = "../encodings/alp" }
-vortex-fastlanes = { path = "../encodings/fastlanes" }
-vortex-sampling-compressor = { path = "../vortex-sampling-compressor" }
+vortex-alp = { workspace = true }
+vortex-fastlanes = { workspace = true }
+vortex-sampling-compressor = { workspace = true }
 
 [lints]
 workspace = true
