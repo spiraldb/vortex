@@ -29,7 +29,7 @@ vortex-flatbuffers = { workspace = true }
 vortex-scalar = { workspace = true }
 
 [build-dependencies]
-build-vortex = { workspace = true }
+vortex-build = { workspace = true }
 
 [dev-dependencies]
 arrow = { workspace = true }

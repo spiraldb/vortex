@@ -30,7 +30,7 @@ serde_json = { workspace = true }
 serde_test = { workspace = true }
 
 [build-dependencies]
-build-vortex = { workspace = true }
+vortex-build = { workspace = true }
 
 [lints]
 workspace = true

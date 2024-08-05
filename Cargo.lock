@@ -530,15 +530,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "build-vortex"
-version = "0.1.0"
-dependencies = [
- "cargo_metadata",
- "prost-build",
- "walkdir",
-]
-
-[[package]]
 name = "bumpalo"
 version = "3.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4106,7 +4097,6 @@ dependencies = [
  "arrow-ord",
  "arrow-schema",
  "arrow-select",
- "build-vortex",
  "bytes",
  "criterion",
  "enum-iterator",
@@ -4127,6 +4117,7 @@ dependencies = [
  "serde",
  "tokio",
  "vortex-buffer",
+ "vortex-build",
  "vortex-dtype",
  "vortex-error",
  "vortex-expr",
@@ -4141,6 +4132,15 @@ dependencies = [
  "arrow-buffer",
  "bytes",
  "flexbuffers",
+]
+
+[[package]]
+name = "vortex-build"
+version = "0.1.0"
+dependencies = [
+ "cargo_metadata",
+ "prost-build",
+ "walkdir",
 ]
 
 [[package]]
@@ -4220,7 +4220,6 @@ dependencies = [
 name = "vortex-dtype"
 version = "0.1.0"
 dependencies = [
- "build-vortex",
  "flatbuffers",
  "half",
  "itertools 0.13.0",
@@ -4229,6 +4228,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_test",
+ "vortex-build",
  "vortex-error",
  "vortex-flatbuffers",
 ]
@@ -4250,11 +4250,11 @@ dependencies = [
 name = "vortex-expr"
 version = "0.1.0"
 dependencies = [
- "build-vortex",
  "datafusion-common",
  "datafusion-expr",
  "prost",
  "serde",
+ "vortex-build",
  "vortex-dtype",
  "vortex-error",
  "vortex-scalar",
@@ -4354,7 +4354,6 @@ name = "vortex-scalar"
 version = "0.1.0"
 dependencies = [
  "arrow-array",
- "build-vortex",
  "datafusion-common",
  "flatbuffers",
  "flexbuffers",
@@ -4365,6 +4364,7 @@ dependencies = [
  "prost-types",
  "serde",
  "vortex-buffer",
+ "vortex-build",
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",
@@ -4379,7 +4379,6 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
- "build-vortex",
  "bytes",
  "criterion",
  "flatbuffers",
@@ -4396,6 +4395,7 @@ dependencies = [
  "vortex-alp",
  "vortex-array",
  "vortex-buffer",
+ "vortex-build",
  "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",

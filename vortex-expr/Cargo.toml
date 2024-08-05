@@ -24,7 +24,7 @@ vortex-error = { workspace = true }
 vortex-scalar = { workspace = true }
 
 [build-dependencies]
-build-vortex = { workspace = true }
+vortex-build = { workspace = true }
 
 [features]
 default = ["proto"]

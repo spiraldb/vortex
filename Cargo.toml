@@ -1,10 +1,10 @@
 [workspace]
 members = [
     "bench-vortex",
-    "build-vortex",
     "encodings/*",
     "pyvortex",
     "vortex-array",
+    "vortex-build",
     "vortex-buffer",
     "vortex-datafusion",
     "vortex-dtype",
@@ -113,11 +113,10 @@ uninit = "0.6.2"
 uuid = "1.8.0"
 
 # BEGIN crates published by this project
-bench-vortex = { version = "0.1.0", path = "./bench-vortex" }
-build-vortex = { version = "0.1.0", path = "./build-vortex" }
 vortex-alp = { version = "0.1.0", path = "./encodings/alp" }
 vortex-array = { version = "0.1.0", path = "./vortex-array" }
 vortex-buffer = { version = "0.1.0", path = "./vortex-buffer" }
+vortex-build = { version = "0.1.0", path = "./vortex-build" }
 vortex-byte-bool = { version = "0.1.0", path = "./encodings/byte-bool" }
 vortex-datafusion = { version = "0.1.0", path = "./vortex-datafusion" }
 vortex-datetime-parts = { version = "0.1.0", path = "./encodings/datetime-parts" }
