@@ -43,8 +43,8 @@ pin-project = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-url = "2"
-tempfile = "3"
+url = { workspace = true }
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }
 
 [lints]
