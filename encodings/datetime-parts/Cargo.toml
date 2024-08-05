@@ -1,5 +1,6 @@
 [package]
 name = "vortex-datetime-parts"
+description = "Vortex physical encoding that compresses temporal components individually"
 version = { workspace = true }
 edition = "2021"
 license = { workspace = true }
