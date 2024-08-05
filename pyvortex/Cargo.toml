@@ -1,5 +1,6 @@
 [package]
 name = "pyvortex"
+publish = false
 version = { workspace = true }
 description = "Vortex python bindings"
 homepage = { workspace = true }
