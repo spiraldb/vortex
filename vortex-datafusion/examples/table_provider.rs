@@ -76,7 +76,11 @@ async fn main() -> anyhow::Result<()> {
     let url = Url::try_from("file://").unwrap();
     ctx.register_object_store(&url, object_store);
 
-    ctx.sql("SELECT * from vortex_tbl").await?.show().await?;
+    ctx.sql("SELECT numbers, strings from vortex_tbl")
+        .await?
+        .show()
+        .await?;
+
     ctx.sql("SELECT * from vortex_tbl where numbers % 2 == 0")
         .await?
         .show()

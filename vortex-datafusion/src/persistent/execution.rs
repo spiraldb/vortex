@@ -16,7 +16,7 @@ use crate::persistent::opener::VortexFileOpener;
 pub struct VortexExec {
     file_scan_config: FileScanConfig,
     metrics: ExecutionPlanMetricsSet,
-    _predicate: Option<Arc<dyn PhysicalExpr>>,
+    predicate: Option<Arc<dyn PhysicalExpr>>,
     plan_properties: PlanProperties,
     projection: Option<Vec<usize>>,
 }
@@ -39,7 +39,7 @@ impl VortexExec {
         Ok(Self {
             file_scan_config,
             metrics,
-            _predicate: predicate,
+            predicate,
             projection,
             plan_properties,
         })
@@ -91,7 +91,7 @@ impl ExecutionPlan for VortexExec {
             object_store,
             projection: self.projection.clone(),
             batch_size: None,
-            predicate: None,
+            predicate: self.predicate.clone(),
         };
         let stream = FileStream::new(&self.file_scan_config, partition, opener, &self.metrics)?;
 

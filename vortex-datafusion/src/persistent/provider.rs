@@ -70,7 +70,8 @@ impl TableProvider for VortexFileTableProvider {
                     .cloned()
                     .map(|f| f.into())
                     .collect(),
-            );
+            )
+            .with_projection(projection.cloned());
 
         let exec =
             VortexExec::try_new(file_scan_config, metrics, projection, predicate)?.into_arc();
@@ -82,10 +83,7 @@ impl TableProvider for VortexFileTableProvider {
         &self,
         filters: &[&Expr],
     ) -> DFResult<Vec<TableProviderFilterPushDown>> {
-        Ok(vec![
-            TableProviderFilterPushDown::Unsupported;
-            filters.len()
-        ])
+        Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()])
     }
 
     fn statistics(&self) -> Option<Statistics> {

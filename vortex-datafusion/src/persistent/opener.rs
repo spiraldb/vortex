@@ -31,7 +31,7 @@ impl FileOpener for VortexFileOpener {
         }
 
         if let Some(_predicate) = self.predicate.as_ref() {
-            unimplemented!("Missing logic to turn a physical expression into a RowFilter");
+            log::warn!("Missing logic to turn a physical expression into a RowFilter");
         }
 
         if let Some(projection) = self.projection.as_ref() {

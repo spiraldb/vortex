@@ -4179,6 +4179,7 @@ dependencies = [
  "futures",
  "itertools 0.13.0",
  "lazy_static",
+ "log",
  "object_store",
  "pin-project",
  "tempfile",
