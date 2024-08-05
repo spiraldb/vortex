@@ -11,6 +11,11 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
+[lib]
+name = "vortex_dtype"
+path = "src/lib.rs"
+bench = false
+
 [dependencies]
 flatbuffers = { workspace = true, optional = true }
 half = { workspace = true, features = ["num-traits"] }
