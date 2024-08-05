@@ -12,7 +12,6 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest-large
-    if: ${{ github.ref_name == 'develop' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +27,12 @@ jobs:
       - name: Setup bencher.dev CLI
         uses: bencherdev/bencher@main
 
+      # The compression benchmarks rely on DuckDB being installed to convert CSV to Parquet
+      - name: Install DuckDB
+        uses: opt-nc/setup-duckdb-action@v1.0.7
+        with:
+          version: v1.0.0
+
       - name: Upload Vortex Benchmarks
         run: |
           bencher run \
@@ -38,4 +43,10 @@ jobs:
             "cargo bench -p bench-vortex"
         env:
           BENCHER_TOKEN: ${{ secrets.BENCHER_TOKEN }}
+          # AWS Credentials for R2 storage tests
+          AWS_BUCKET: vortex-test
+          AWS_ENDPOINT: ${{ secrets.AWS_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
 
