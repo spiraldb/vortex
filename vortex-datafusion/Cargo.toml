@@ -1,21 +1,16 @@
 [package]
 name = "vortex-datafusion"
-version.workspace = true
-homepage.workspace = true
-repository.workspace = true
-authors.workspace = true
-license.workspace = true
-keywords.workspace = true
-include.workspace = true
-edition.workspace = true
-rust-version.workspace = true
+version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 
 [dependencies]
-vortex-array = { workspace = true }
-vortex-dtype = { workspace = true }
-vortex-expr = { workspace = true }
-vortex-error = { workspace = true }
-vortex-scalar = { workspace = true, features = ["datafusion"] }
 
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
@@ -23,14 +18,19 @@ async-trait = { workspace = true }
 
 datafusion = { workspace = true }
 datafusion-common = { workspace = true }
-datafusion-expr = { workspace = true }
 datafusion-execution = { workspace = true }
+datafusion-expr = { workspace = true }
 datafusion-physical-expr = { workspace = true }
 datafusion-physical-plan = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
 pin-project = { workspace = true }
+vortex-array = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
+vortex-expr = { workspace = true }
+vortex-scalar = { workspace = true, features = ["datafusion"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

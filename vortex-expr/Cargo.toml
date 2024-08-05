@@ -18,10 +18,10 @@ workspace = true
 datafusion-common = { workspace = true, optional = true }
 datafusion-expr = { workspace = true, optional = true }
 prost = { workspace = true, optional = true }
+serde = { workspace = true, optional = true, features = ["derive"] }
 vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
 vortex-scalar = { workspace = true }
-serde = { workspace = true, optional = true, features = ["derive"] }
 
 [build-dependencies]
 build-vortex = { workspace = true }

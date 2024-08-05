@@ -22,10 +22,10 @@ num-traits = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-array = { workspace = true }
 vortex-buffer = { workspace = true }
-vortex-error = { workspace = true }
 vortex-dtype = { workspace = true }
-vortex-scalar = { workspace = true }
+vortex-error = { workspace = true }
 vortex-expr = { workspace = true }
+vortex-scalar = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }

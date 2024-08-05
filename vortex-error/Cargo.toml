@@ -19,10 +19,10 @@ path = "src/lib.rs"
 arrow-schema = { workspace = true }
 flatbuffers = { workspace = true }
 flexbuffers = { workspace = true, optional = true }
+object_store = { workspace = true, optional = true }
 parquet = { workspace = true, optional = true }
 thiserror = { workspace = true }
 worker = { workspace = true, optional = true }
-object_store = { workspace = true, optional = true }
 
 [lints]
 workspace = true
