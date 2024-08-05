@@ -38,24 +38,22 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_projection(Projection::new(projection))
         }
 
-        DFResult::Ok(
-            async move {
-                let reader = builder.build().await?;
+        Ok(async move {
+            let reader = builder.build().await?;
 
-                let stream = reader
-                    .map_ok(|array| {
-                        let arrow = array
-                            .into_canonical()
-                            .expect("struct arrays must canonicalize")
-                            .into_arrow();
-                        let struct_array = as_struct_array(arrow.as_ref());
-                        RecordBatch::from(struct_array)
-                    })
-                    .map_err(|e| e.into());
+            let stream = reader
+                .map_ok(|array| {
+                    let arrow = array
+                        .into_canonical()
+                        .expect("struct arrays must canonicalize")
+                        .into_arrow();
+                    let struct_array = as_struct_array(arrow.as_ref());
+                    RecordBatch::from(struct_array)
+                })
+                .map_err(|e| e.into());
 
-                DFResult::Ok(Box::pin(stream) as _)
-            }
-            .boxed(),
-        )
+            Ok(Box::pin(stream) as _)
+        }
+        .boxed())
     }
 }
