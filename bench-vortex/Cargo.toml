@@ -26,6 +26,7 @@ datafusion = { workspace = true }
 enum-iterator = { workspace = true }
 flexbuffers = { workspace = true }
 futures = { workspace = true, features = ["executor"] }
+homedir = { workspace = true }
 humansize = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
@@ -40,6 +41,7 @@ rayon = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 simplelog = { workspace = true }
+tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features = ["v4"] }
 vortex-alp = { path = "../encodings/alp" }
@@ -59,6 +61,11 @@ xshell = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
+
+[[bin]]
+name = "tpch_benchmark"
+test = false
+bench = false
 
 [[bench]]
 name = "compress_benchmark"
