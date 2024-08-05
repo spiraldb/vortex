@@ -14,15 +14,12 @@ jobs:
     runs-on: ubuntu-latest-large
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
       - uses: ./.github/actions/cleanup
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
 
       - name: Setup bencher.dev CLI
         uses: bencherdev/bencher@main
