@@ -76,12 +76,20 @@ async fn main() -> anyhow::Result<()> {
     let url = Url::try_from("file://").unwrap();
     ctx.register_object_store(&url, object_store);
 
-    ctx.sql("SELECT numbers, strings from vortex_tbl")
-        .await?
-        .show()
-        .await?;
+    run_query(
+        &ctx,
+        "SELECT strings from vortex_tbl where numbers % 2 == 0",
+    )
+    .await?;
 
-    ctx.sql("SELECT * from vortex_tbl where numbers % 2 == 0")
+    Ok(())
+}
+
+async fn run_query(ctx: &SessionContext, query_string: impl AsRef<str>) -> anyhow::Result<()> {
+    let query_string = query_string.as_ref();
+    ctx.sql(query_string).await?.show().await?;
+
+    ctx.sql(&format!("EXPLAIN {query_string}"))
         .await?
         .show()
         .await?;

@@ -50,8 +50,11 @@ impl VortexExec {
 }
 
 impl DisplayAs for VortexExec {
-    fn fmt_as(&self, _t: DisplayFormatType, _f: &mut fmt::Formatter) -> fmt::Result {
-        todo!()
+    fn fmt_as(&self, t: DisplayFormatType, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "VortexExec: ")?;
+        self.file_scan_config.fmt_as(t, f)?;
+
+        Ok(())
     }
 }
 
