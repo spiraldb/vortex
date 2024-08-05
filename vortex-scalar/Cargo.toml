@@ -28,7 +28,7 @@ vortex-error = { workspace = true }
 vortex-flatbuffers = { workspace = true }
 
 [build-dependencies]
-build-vortex = { workspace = true }
+vortex-build = { workspace = true }
 
 [lints]
 workspace = true

@@ -56,7 +56,7 @@ vortex-scalar = { workspace = true, features = [
 getrandom = { workspace = true, features = ["js"] }
 
 [build-dependencies]
-build-vortex = { workspace = true }
+vortex-build = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
