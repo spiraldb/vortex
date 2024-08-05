@@ -1,6 +1,7 @@
 [package]
 name = "bench-vortex"
 version = { workspace = true }
+publish = false
 description = "End to end vortex benchmarks"
 homepage = { workspace = true }
 repository = { workspace = true }
