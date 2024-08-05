@@ -4,8 +4,6 @@ use datafusion::datasource::listing::PartitionedFile;
 use object_store::path::Path;
 use object_store::ObjectMeta;
 
-pub struct Placeholder;
-
 #[derive(Clone)]
 pub struct VortexFile {
     pub(crate) object_meta: ObjectMeta,

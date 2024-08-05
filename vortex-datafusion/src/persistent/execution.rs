@@ -12,12 +12,11 @@ use datafusion_physical_plan::{
 
 use crate::persistent::opener::VortexFileOpener;
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct VortexExec {
     file_scan_config: FileScanConfig,
     metrics: ExecutionPlanMetricsSet,
-    predicate: Option<Arc<dyn PhysicalExpr>>,
+    _predicate: Option<Arc<dyn PhysicalExpr>>,
     plan_properties: PlanProperties,
     projection: Option<Vec<usize>>,
 }
@@ -40,7 +39,7 @@ impl VortexExec {
         Ok(Self {
             file_scan_config,
             metrics,
-            predicate,
+            _predicate: predicate,
             projection,
             plan_properties,
         })

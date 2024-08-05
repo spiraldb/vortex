@@ -16,7 +16,6 @@ use datafusion_physical_plan::ExecutionPlan;
 use super::config::VortexTableConfig;
 use crate::persistent::execution::VortexExec;
 
-#[allow(dead_code)]
 pub struct VortexFileTableProvider {
     schema_ref: SchemaRef,
     object_store_url: ObjectStoreUrl,
