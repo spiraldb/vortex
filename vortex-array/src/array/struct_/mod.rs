@@ -124,10 +124,9 @@ impl ArrayVariants for StructArray {
 
 impl StructArrayTrait for StructArray {
     fn field(&self, idx: usize) -> Option<Array> {
-        let dtype = self.dtypes().get(idx);
-        dtype
-            .map(|dtype| self.array().child(idx, dtype, self.len()))
-            .flatten()
+        self.dtypes()
+            .get(idx)
+            .and_then(|dtype| self.array().child(idx, dtype, self.len()))
     }
 }
 
