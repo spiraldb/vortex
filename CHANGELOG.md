@@ -6,6 +6,133 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-runend-bool-v0.2.0) - 2024-08-05
+
+### Other
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Added bool iterators index and slice and filtering across some array types ([#505](https://github.com/spiraldb/vortex/pull/505))
+- Fix out ouf bounds when taking from run end arrays ([#501](https://github.com/spiraldb/vortex/pull/501))
+- Change codes for runendbool so it doesn't conflict with datetimeparts ([#498](https://github.com/spiraldb/vortex/pull/498))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- use FQDNs in impl_encoding macro ([#490](https://github.com/spiraldb/vortex/pull/490))
+
+## `vortex-bytebool` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-bytebool-v0.2.0) - 2024-08-05
+
+### Other
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Simpler ByteBool slice ([#527](https://github.com/spiraldb/vortex/pull/527))
+- Added bool iterators index and slice and filtering across some array types ([#505](https://github.com/spiraldb/vortex/pull/505))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- use FQDNs in impl_encoding macro ([#490](https://github.com/spiraldb/vortex/pull/490))
+
+## `vortex-serde` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-serde-v0.2.0) - 2024-08-05
+
+### Other
+- build-vortex -> vortex-build ([#552](https://github.com/spiraldb/vortex/pull/552))
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Add identity projection to the file reader ([#532](https://github.com/spiraldb/vortex/pull/532))
+- Support reading unaligned chunks across columns ([#531](https://github.com/spiraldb/vortex/pull/531))
+- Initial version of simple FileReader/Writer ([#516](https://github.com/spiraldb/vortex/pull/516))
+
+## `vortex-sampling-compressor` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-sampling-compressor-v0.2.0) - 2024-08-05
+
+### Fixed
+- fix UB and run tests with miri ([#517](https://github.com/spiraldb/vortex/pull/517))
+
+### Other
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- FoR will compress signed array when min == 0 now ([#511](https://github.com/spiraldb/vortex/pull/511))
+- Smoketest for SamplingCompressor, fix bug in varbin stats ([#510](https://github.com/spiraldb/vortex/pull/510))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- Remove LocalDateTimeArray, introduce TemporalArray ([#480](https://github.com/spiraldb/vortex/pull/480))
+- DType variant traits ([#473](https://github.com/spiraldb/vortex/pull/473))
+- Slightly nicer use statements for compute functions ([#466](https://github.com/spiraldb/vortex/pull/466))
+- Array Length ([#445](https://github.com/spiraldb/vortex/pull/445))
+- Split compression from encodings ([#422](https://github.com/spiraldb/vortex/pull/422))
+
+## `vortex-runend` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-runend-v0.2.0) - 2024-08-05
+
+### Other
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Fix out ouf bounds when taking from run end arrays ([#501](https://github.com/spiraldb/vortex/pull/501))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- use FQDNs in impl_encoding macro ([#490](https://github.com/spiraldb/vortex/pull/490))
+- demo module level imports granularity ([#485](https://github.com/spiraldb/vortex/pull/485))
+- DType variant traits ([#473](https://github.com/spiraldb/vortex/pull/473))
+- Slightly nicer use statements for compute functions ([#466](https://github.com/spiraldb/vortex/pull/466))
+- Use shorthand canonicalize methods ([#460](https://github.com/spiraldb/vortex/pull/460))
+- Array Length ([#445](https://github.com/spiraldb/vortex/pull/445))
+- Remove ViewContext and assign stable ids to encodings ([#433](https://github.com/spiraldb/vortex/pull/433))
+- Split compression from encodings ([#422](https://github.com/spiraldb/vortex/pull/422))
+- Rename flatten -> canonicalize + bugfix + a secret third thing ([#402](https://github.com/spiraldb/vortex/pull/402))
+- ArrayData can contain child Arrays instead of just ArrayData ([#391](https://github.com/spiraldb/vortex/pull/391))
+- Rename typed_data to maybe_null_slice ([#386](https://github.com/spiraldb/vortex/pull/386))
+- Move encodings into directory ([#379](https://github.com/spiraldb/vortex/pull/379))
+
+## `vortex-datafusion` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-datafusion-v0.2.0) - 2024-08-05
+
+### Fixed
+- fix UB and run tests with miri ([#517](https://github.com/spiraldb/vortex/pull/517))
+
+### Other
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Follow up for 537 ([#538](https://github.com/spiraldb/vortex/pull/538))
+- Rename the pushdown config into a positive boolean value ([#537](https://github.com/spiraldb/vortex/pull/537))
+- Ignore tests that miri can't run ([#514](https://github.com/spiraldb/vortex/pull/514))
+- Add and/or compute functions ([#481](https://github.com/spiraldb/vortex/pull/481))
+- demo module level imports granularity ([#485](https://github.com/spiraldb/vortex/pull/485))
+- Remove LocalDateTimeArray, introduce TemporalArray ([#480](https://github.com/spiraldb/vortex/pull/480))
+- Expand pushdown support with more comparison and logical operations ([#478](https://github.com/spiraldb/vortex/pull/478))
+- Debug compilation caching ([#475](https://github.com/spiraldb/vortex/pull/475))
+- Basic predicate pushdown support for Datafusion ([#472](https://github.com/spiraldb/vortex/pull/472))
+- Slightly nicer use statements for compute functions ([#466](https://github.com/spiraldb/vortex/pull/466))
+- Run tpch_benchmark queries single-threaded in rayon pool ([#463](https://github.com/spiraldb/vortex/pull/463))
+- Update datafusion to v40 (major) ([#455](https://github.com/spiraldb/vortex/pull/455))
+- Make into_arrow truly zero-copy, rewrite DataFusion operators ([#451](https://github.com/spiraldb/vortex/pull/451))
+- Setup TPC-H benchmark infra ([#444](https://github.com/spiraldb/vortex/pull/444))
+- v0 Datafusion with late materialization ([#414](https://github.com/spiraldb/vortex/pull/414))
+- Rename flatten -> canonicalize + bugfix + a secret third thing ([#402](https://github.com/spiraldb/vortex/pull/402))
+- DataFusion TableProvider for memory arrays ([#384](https://github.com/spiraldb/vortex/pull/384))
+
+## `vortex-scalar` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-scalar-v0.2.0) - 2024-08-05
+
+### Other
+- build-vortex -> vortex-build ([#552](https://github.com/spiraldb/vortex/pull/552))
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Initial version of simple FileReader/Writer ([#516](https://github.com/spiraldb/vortex/pull/516))
+- More specialized compare functions ([#488](https://github.com/spiraldb/vortex/pull/488))
+- demo module level imports granularity ([#485](https://github.com/spiraldb/vortex/pull/485))
+- Basic predicate pushdown support for Datafusion ([#472](https://github.com/spiraldb/vortex/pull/472))
+- DType variant traits ([#473](https://github.com/spiraldb/vortex/pull/473))
+- FoR encoding doesn't panic if array min > i64::MAX ([#406](https://github.com/spiraldb/vortex/pull/406))
+- Add `ByteBoolArray` type and fixe a bug in `BoolArray` ([#383](https://github.com/spiraldb/vortex/pull/383))
+- FoR array holds encoded values as unsinged ([#401](https://github.com/spiraldb/vortex/pull/401))
+- DataFusion expr conversion ([#349](https://github.com/spiraldb/vortex/pull/349))
+- Fix FOR bug, also fix bench to compile ([#341](https://github.com/spiraldb/vortex/pull/341))
+- Implement StructValue proto serde without google.protobuf.Value ([#343](https://github.com/spiraldb/vortex/pull/343))
+- Random access benchmarks are runnable again ([#330](https://github.com/spiraldb/vortex/pull/330))
+- define ScalarValue in VortexScalar protobuf ([#323](https://github.com/spiraldb/vortex/pull/323))
+- Proto Refactor ([#325](https://github.com/spiraldb/vortex/pull/325))
+- IPC Bench ([#319](https://github.com/spiraldb/vortex/pull/319))
+- Static ArrayView ([#310](https://github.com/spiraldb/vortex/pull/310))
+- StatsView2 ([#305](https://github.com/spiraldb/vortex/pull/305))
+- Add ScalarView ([#301](https://github.com/spiraldb/vortex/pull/301))
+- DType Serialization ([#298](https://github.com/spiraldb/vortex/pull/298))
+- OwnedBuffer ([#300](https://github.com/spiraldb/vortex/pull/300))
+- Add validity to Struct arrays ([#289](https://github.com/spiraldb/vortex/pull/289))
+- Extension Array ([#287](https://github.com/spiraldb/vortex/pull/287))
+- Remove composite and decimal ([#285](https://github.com/spiraldb/vortex/pull/285))
+- Add convenience stats retrieval functions and avoid needless copy when unwrapping stat value ([#279](https://github.com/spiraldb/vortex/pull/279))
+- Scalar subtraction ([#270](https://github.com/spiraldb/vortex/pull/270))
+- Add ExtDType ([#281](https://github.com/spiraldb/vortex/pull/281))
+- Refactor for DType::Primitive ([#276](https://github.com/spiraldb/vortex/pull/276))
+- Extract a vortex-scalar crate ([#275](https://github.com/spiraldb/vortex/pull/275))
+
 ## `vortex-runend-bool` - [0.2.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.1.0...vortex-runend-bool-v0.2.0) - 2024-08-05
 
 ### Other
