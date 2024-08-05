@@ -26,6 +26,7 @@ arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-trait = { workspace = true }
 
+chrono = { workspace = true }
 datafusion = { workspace = true }
 datafusion-common = { workspace = true }
 datafusion-expr = { workspace = true }
@@ -40,7 +41,11 @@ pin-project = { workspace = true }
 
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+anyhow = { workspace = true }
+url = "2"
+tempfile = "3"
+tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }
 
-[lints]
-workspace = true
+
+# [lints]
+# workspace = true

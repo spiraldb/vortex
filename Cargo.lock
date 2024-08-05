@@ -4119,9 +4119,11 @@ dependencies = [
 name = "vortex-datafusion"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "arrow-array",
  "arrow-schema",
  "async-trait",
+ "chrono",
  "datafusion",
  "datafusion-common",
  "datafusion-execution",
@@ -4133,7 +4135,9 @@ dependencies = [
  "lazy_static",
  "object_store",
  "pin-project",
+ "tempfile",
  "tokio",
+ "url",
  "vortex-array",
  "vortex-dtype",
  "vortex-error",

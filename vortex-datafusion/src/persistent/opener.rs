@@ -4,24 +4,43 @@ use arrow_array::cast::as_struct_array;
 use arrow_array::RecordBatch;
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::Result as DFResult;
+use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
 use object_store::ObjectStore;
 use vortex::IntoCanonical;
+use vortex_serde::file::reader::projections::Projection;
 use vortex_serde::file::reader::VortexBatchReaderBuilder;
 use vortex_serde::io::ObjectStoreReadAt;
 
 pub struct VortexFileOpener {
     pub object_store: Arc<dyn ObjectStore>,
+    pub batch_size: Option<usize>,
+    pub projection: Option<Vec<usize>>,
+    pub predicate: Option<Arc<dyn PhysicalExpr>>,
 }
 
 impl FileOpener for VortexFileOpener {
     fn open(&self, file_meta: FileMeta) -> DFResult<FileOpenFuture> {
-        let object_store = self.object_store.clone();
+        let read_at =
+            ObjectStoreReadAt::new(self.object_store.clone(), file_meta.location().clone());
+
+        let mut builder = VortexBatchReaderBuilder::new(read_at);
+
+        if let Some(batch_size) = self.batch_size {
+            builder = builder.with_batch_size(batch_size);
+        }
+
+        if let Some(_predicate) = self.predicate.as_ref() {
+            unimplemented!("Missing logic to turn a physical expression into a RowFilter");
+        }
+
+        if let Some(projection) = self.projection.as_ref() {
+            builder = builder.with_projection(Projection::new(projection))
+        }
+
         DFResult::Ok(
             async move {
-                let read_at = ObjectStoreReadAt::new(object_store, file_meta.location().clone());
-
-                let reader = VortexBatchReaderBuilder::new(read_at).build().await?;
+                let reader = builder.build().await?;
 
                 let stream = reader
                     .map_ok(|array| {
