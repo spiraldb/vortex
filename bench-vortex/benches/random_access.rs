@@ -8,6 +8,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use mimalloc::MiMalloc;
 use object_store::aws::AmazonS3Builder;
 use object_store::local::LocalFileSystem;
+use object_store::ObjectStore;
 use tokio::runtime::Runtime;
 
 #[global_allocator]
@@ -31,7 +32,7 @@ fn random_access_vortex(c: &mut Criterion) {
             .iter(|| async { black_box(take_vortex_tokio(&taxi_vortex, &INDICES).await.unwrap()) })
     });
 
-    let local_fs = LocalFileSystem::new();
+    let local_fs = Arc::new(LocalFileSystem::new()) as Arc<dyn ObjectStore>;
     let local_fs_path = object_store::path::Path::from_filesystem_path(&taxi_vortex).unwrap();
     group.bench_function("localfs", |b| {
         b.to_async(Runtime::new().unwrap()).iter(|| async {
@@ -43,7 +44,7 @@ fn random_access_vortex(c: &mut Criterion) {
         })
     });
 
-    let r2_fs = AmazonS3Builder::from_env().build().unwrap();
+    let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap()) as Arc<dyn ObjectStore>;
     let r2_path =
         object_store::path::Path::from_url_path(taxi_vortex.file_name().unwrap().to_str().unwrap())
             .unwrap();
