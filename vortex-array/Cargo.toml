@@ -14,6 +14,7 @@ rust-version = { workspace = true }
 [lib]
 name = "vortex"
 path = "src/lib.rs"
+bench = false
 
 [lints]
 workspace = true
@@ -42,16 +43,24 @@ pin-project = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-buffer = { workspace = true }
-vortex-dtype = { workspace = true, features = ["flatbuffers", "serde"] }
+vortex-dtype = { workspace = true }
 vortex-error = { workspace = true, features = ["flexbuffers"] }
 vortex-expr = { workspace = true }
-vortex-flatbuffers = { workspace = true }
-vortex-scalar = { workspace = true, features = ["flatbuffers", "serde"] }
+vortex-flatbuffers = { workspace = true, optional = true }
+vortex-scalar = { workspace = true }
 
 [features]
-default = ["flatbuffers"]
+default = ["flatbuffers", "serde"]
 # exists for vortex-build script
-flatbuffers = ["vortex-dtype/flatbuffers", "vortex-scalar/flatbuffers"]
+flatbuffers = [
+  "dep:vortex-flatbuffers",
+  "vortex-dtype/flatbuffers",
+  "vortex-scalar/flatbuffers",
+]
+serde = [
+  "vortex-dtype/serde",
+  "vortex-scalar/serde",
+]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Enable the JS feature of getrandom (via rand) to supprt wasm32 target

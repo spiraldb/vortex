@@ -72,10 +72,15 @@ pub fn build_flatbuffers() {
         .packages
         .iter()
         .filter(|&pkg| {
-            pkg.features.contains_key(&fbs_feature)
-                || pkg.id == metadata.root_package().unwrap().id
+            pkg.features.contains_key(&fbs_feature) || pkg.id == metadata.root_package().unwrap().id
         })
-        .map(|pkg| pkg.manifest_path.parent().unwrap().join("flatbuffers").into_std_path_buf())
+        .map(|pkg| {
+            pkg.manifest_path
+                .parent()
+                .unwrap()
+                .join("flatbuffers")
+                .into_std_path_buf()
+        })
         .collect::<Vec<_>>();
 
     let fbs_files = walk_files(&flatbuffers_dir, "fbs");

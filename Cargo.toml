@@ -121,7 +121,7 @@ vortex-byte-bool = { version = "0.4.5", path = "./encodings/byte-bool" }
 vortex-datafusion = { version = "0.4.5", path = "./vortex-datafusion" }
 vortex-datetime-parts = { version = "0.4.5", path = "./encodings/datetime-parts" }
 vortex-dict = { version = "0.4.5", path = "./encodings/dict" }
-vortex-dtype = { version = "0.4.5", path = "./vortex-dtype" }
+vortex-dtype = { version = "0.4.5", path = "./vortex-dtype", default-features = false }
 vortex-error = { version = "0.4.5", path = "./vortex-error" }
 vortex-expr = { version = "0.4.5", path = "./vortex-expr" }
 vortex-flatbuffers = { version = "0.4.5", path = "./vortex-flatbuffers" }
@@ -129,7 +129,7 @@ vortex-fastlanes = { version = "0.4.5", path = "./encodings/fastlanes" }
 vortex-roaring = { version = "0.4.5", path = "./encodings/roaring" }
 vortex-runend = { version = "0.4.5", path = "./encodings/runend" }
 vortex-runend-bool = { version = "0.4.5", path = "./encodings/runend-bool" }
-vortex-scalar = { version = "0.4.5", path = "./vortex-scalar" }
+vortex-scalar = { version = "0.4.5", path = "./vortex-scalar", default-features = false }
 vortex-serde = { version = "0.4.5", path = "./vortex-serde", default-features = false }
 vortex-sampling-compressor = { version = "0.4.5", path = "./vortex-sampling-compressor" }
 vortex-zigzag = { version = "0.4.5", path = "./encodings/zigzag" }
