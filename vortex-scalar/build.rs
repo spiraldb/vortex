@@ -1,3 +1,3 @@
 fn main() {
-    build_vortex::build();
+    vortex_build::build();
 }

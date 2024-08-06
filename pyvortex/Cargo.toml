@@ -1,5 +1,6 @@
 [package]
 name = "pyvortex"
+publish = false
 version = { workspace = true }
 description = "Vortex python bindings"
 homepage = { workspace = true }
@@ -24,15 +25,15 @@ log = { workspace = true }
 paste = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-log = { workspace = true }
-vortex-alp = { path = "../encodings/alp" }
-vortex-array = { path = "../vortex-array" }
-vortex-dict = { path = "../encodings/dict" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-error = { path = "../vortex-error" }
-vortex-fastlanes = { path = "../encodings/fastlanes" }
-vortex-roaring = { path = "../encodings/roaring" }
-vortex-runend = { path = "../encodings/runend" }
-vortex-zigzag = { path = "../encodings/zigzag" }
+vortex-alp = { workspace = true }
+vortex-array = { workspace = true }
+vortex-dict = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
+vortex-fastlanes = { workspace = true }
+vortex-roaring = { workspace = true }
+vortex-runend = { workspace = true }
+vortex-zigzag = { workspace = true }
 
 # We may need this workaround?
 # https://pyo3.rs/v0.20.2/faq.html#i-cant-run-cargo-test-or-i-cant-build-in-a-cargo-workspace-im-having-linker-issues-like-symbol-not-found-or-undefined-reference-to-_pyexc_systemerror

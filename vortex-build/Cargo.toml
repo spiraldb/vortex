@@ -1,6 +1,6 @@
 [package]
-name = "build-vortex"
-publish = false
+name = "vortex-build"
+description = "Helpers used in build.rs file for the Vortex project"
 version = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }

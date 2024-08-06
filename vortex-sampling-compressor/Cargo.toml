@@ -14,16 +14,16 @@ rust-version = { workspace = true }
 [dependencies]
 log = { workspace = true }
 rand = { workspace = true }
-vortex-alp = { path = "../encodings/alp" }
-vortex-array = { path = "../vortex-array" }
-vortex-datetime-parts = { path = "../encodings/datetime-parts" }
-vortex-dict = { path = "../encodings/dict" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-error = { path = "../vortex-error" }
-vortex-fastlanes = { path = "../encodings/fastlanes" }
-vortex-roaring = { path = "../encodings/roaring" }
-vortex-runend = { path = "../encodings/runend" }
-vortex-zigzag = { path = "../encodings/zigzag" }
+vortex-alp = { workspace = true }
+vortex-array = { workspace = true }
+vortex-datetime-parts = { workspace = true }
+vortex-dict = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
+vortex-fastlanes = { workspace = true }
+vortex-roaring = { workspace = true }
+vortex-runend = { workspace = true }
+vortex-zigzag = { workspace = true }
 
 [dev-dependencies]
 chrono = { workspace = true }

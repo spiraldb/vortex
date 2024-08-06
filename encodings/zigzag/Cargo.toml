@@ -13,14 +13,14 @@ rust-version = { workspace = true }
 
 [dependencies]
 serde = { workspace = true, features = ["derive"] }
-vortex-array = { path = "../../vortex-array" }
-vortex-dtype = { path = "../../vortex-dtype" }
-vortex-error = { path = "../../vortex-error" }
-vortex-scalar = { path = "../../vortex-scalar" }
+vortex-array = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
+vortex-scalar = { workspace = true }
 zigzag = { workspace = true }
 
 [dev-dependencies]
-vortex-fastlanes = { path = "../fastlanes" }
+vortex-fastlanes = { workspace = true }
 
 [lints]
 workspace = true

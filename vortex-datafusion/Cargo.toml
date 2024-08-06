@@ -1,6 +1,6 @@
 [package]
 name = "vortex-datafusion"
-
+description = "Apache Datafusion integration for Vortex"
 version = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
@@ -32,12 +32,12 @@ lazy_static = { workspace = true }
 log = { workspace = true }
 object_store = { workspace = true }
 pin-project = { workspace = true }
-vortex-array = { path = "../vortex-array" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-error = { path = "../vortex-error", features = ["datafusion"] }
-vortex-expr = { path = "../vortex-expr" }
-vortex-scalar = { path = "../vortex-scalar", features = ["datafusion"] }
-vortex-serde = { path = "../vortex-serde", features = ["object_store"] }
+vortex-array = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true, features = ["datafusion"] }
+vortex-expr = { workspace = true }
+vortex-scalar = { workspace = true, features = ["datafusion"] }
+vortex-serde = { workspace = true, features = ["object_store"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }

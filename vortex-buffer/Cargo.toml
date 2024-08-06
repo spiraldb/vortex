@@ -11,6 +11,9 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
+[features]
+flexbuffers = ["dep:flexbuffers"]
+
 [dependencies]
 arrow-buffer = { workspace = true }
 bytes = { workspace = true }
