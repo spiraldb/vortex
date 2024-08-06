@@ -417,7 +417,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bench-vortex"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "anyhow",
  "arrow-array",
@@ -2930,7 +2930,7 @@ dependencies = [
 
 [[package]]
 name = "pyvortex"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow",
  "log",
@@ -4074,7 +4074,7 @@ checksum = "49874b5167b65d7193b8aba1567f5c7d93d001cafc34600cee003eda787e483f"
 
 [[package]]
 name = "vortex-alp"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "divan",
  "itertools 0.13.0",
@@ -4088,7 +4088,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-array"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-arith",
  "arrow-array",
@@ -4127,7 +4127,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-buffer"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-buffer",
  "bytes",
@@ -4136,7 +4136,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-build"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "cargo_metadata",
  "prost-build",
@@ -4145,7 +4145,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-bytebool"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -4163,7 +4163,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-datafusion"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -4188,7 +4188,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-datetime-parts"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "log",
  "serde",
@@ -4200,7 +4200,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-dict"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "ahash",
  "criterion",
@@ -4218,7 +4218,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-dtype"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "flatbuffers",
  "half",
@@ -4235,7 +4235,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-error"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-schema",
  "flatbuffers",
@@ -4248,7 +4248,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-expr"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "datafusion-common",
  "datafusion-expr",
@@ -4262,7 +4262,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-fastlanes"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrayref",
  "criterion",
@@ -4280,14 +4280,14 @@ dependencies = [
 
 [[package]]
 name = "vortex-flatbuffers"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "flatbuffers",
 ]
 
 [[package]]
 name = "vortex-roaring"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-buffer",
  "croaring",
@@ -4303,7 +4303,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-runend"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "itertools 0.13.0",
  "num-traits",
@@ -4316,7 +4316,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-runend-bool"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-buffer",
  "criterion",
@@ -4332,7 +4332,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-sampling-compressor"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "chrono",
  "log",
@@ -4351,7 +4351,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-scalar"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow-array",
  "datafusion-common",
@@ -4372,7 +4372,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-serde"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -4406,7 +4406,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-zigzag"
-version = "0.4.5"
+version = "0.4.6"
 dependencies = [
  "serde",
  "vortex-array",
