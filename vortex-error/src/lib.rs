@@ -63,6 +63,7 @@ pub enum VortexError {
         #[backtrace]
         arrow_schema::ArrowError,
     ),
+    #[cfg(feature = "flatbuffers")]
     #[error(transparent)]
     FlatBuffersError(
         #[from]

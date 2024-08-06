@@ -196,4 +196,3 @@ data/
 
 # vscode
 .vscode/
-Cargo.lock

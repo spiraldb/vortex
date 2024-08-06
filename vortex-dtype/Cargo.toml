@@ -24,7 +24,7 @@ num-traits = { workspace = true }
 prost = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["rc", "derive"] }
 vortex-error = { workspace = true }
-vortex-flatbuffers = { workspace = true }
+vortex-flatbuffers = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
@@ -38,7 +38,7 @@ workspace = true
 
 [features]
 # Uncomment for improved IntelliJ support
-default = ["flatbuffers", "proto", "serde"]
-flatbuffers = ["dep:flatbuffers"]
+#default = ["flatbuffers", "proto", "serde"]
+flatbuffers = ["dep:flatbuffers", "dep:vortex-flatbuffers", "vortex-error/flatbuffers"]
 proto = ["dep:prost"]
 serde = ["dep:serde"]
