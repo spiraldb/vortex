@@ -23,10 +23,10 @@ pin-project = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "fs"], optional = true }
 vortex-array = { workspace = true }
 vortex-buffer = { workspace = true }
-vortex-dtype = { workspace = true }
+vortex-dtype = { workspace = true, features = ["flatbuffers"] }
 vortex-error = { workspace = true, features = ["object_store"] }
 vortex-flatbuffers = { workspace = true }
-vortex-scalar = { workspace = true }
+vortex-scalar = { workspace = true, features = ["flatbuffers"] }
 
 [build-dependencies]
 vortex-build = { workspace = true }

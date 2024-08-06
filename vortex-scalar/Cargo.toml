@@ -7,7 +7,7 @@ repository = { workspace = true }
 authors = { workspace = true }
 license = { workspace = true }
 keywords = { workspace = true }
-#include = { workspace = true }
+include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
