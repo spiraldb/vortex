@@ -10,7 +10,8 @@ use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray};
-use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
+use vortex_datafusion::memory::VortexMemTableOptions;
+use vortex_datafusion::SessionContextExt;
 
 use crate::idempotent_async;
 

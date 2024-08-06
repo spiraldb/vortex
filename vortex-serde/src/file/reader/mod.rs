@@ -299,16 +299,19 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexBatchStream<R> {
 
                         batch = filter(&batch, &current_predicate)?;
 
-                        let projected = match &self.projection {
-                            Projection::All => batch,
-                            Projection::Partial(indices) => StructArray::try_from(batch.clone())
-                                .unwrap()
-                                .project(indices.as_ref())
-                                .unwrap()
-                                .into_array(),
+                        let projected = {
+                            let array = match &self.projection {
+                                Projection::All => batch,
+                                Projection::Partial(indices) => {
+                                    StructArray::try_from(batch.clone())?
+                                        .project(indices.as_ref())?
+                                        .into_array()
+                                }
+                            };
+                            Ok(array)
                         };
 
-                        return Poll::Ready(Some(Ok(projected)));
+                        return Poll::Ready(Some(projected));
                     }
 
                     None => {

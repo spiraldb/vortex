@@ -3,7 +3,7 @@ use vortex_error::VortexResult;
 
 use super::projections::Projection;
 
-pub trait FilteringPredicate {
+pub trait FilteringPredicate: Send + Sync {
     fn projection(&self) -> &Projection;
     fn evaluate(&mut self, array: &Array) -> VortexResult<Array>;
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -97,12 +97,12 @@ impl StructArray {
         let mut children = Vec::with_capacity(projection.len());
         let mut names = Vec::with_capacity(projection.len());
 
-        for column_idx in projection {
+        for &column_idx in projection {
             children.push(
-                self.field(*column_idx)
-                    .expect("column must not exceed bounds"),
+                self.field(column_idx)
+                    .ok_or(vortex_err!(OutOfBounds: column_idx, 0, self.dtypes().len()))?,
             );
-            names.push(self.names()[*column_idx].clone());
+            names.push(self.names()[column_idx].clone());
         }
 
         StructArray::try_new(
@@ -124,7 +124,9 @@ impl ArrayVariants for StructArray {
 
 impl StructArrayTrait for StructArray {
     fn field(&self, idx: usize) -> Option<Array> {
-        self.array().child(idx, &self.dtypes()[idx], self.len())
+        self.dtypes()
+            .get(idx)
+            .and_then(|dtype| self.array().child(idx, dtype, self.len()))
     }
 }
 

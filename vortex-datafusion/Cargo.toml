@@ -11,12 +11,15 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
-[dependencies]
+[lib]
+name = "vortex_datafusion"
+path = "src/lib.rs"
 
+[dependencies]
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-trait = { workspace = true }
-
+chrono = { workspace = true }
 datafusion = { workspace = true }
 datafusion-common = { workspace = true }
 datafusion-execution = { workspace = true }
@@ -26,15 +29,21 @@ datafusion-physical-plan = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
+log = { workspace = true }
+object_store = { workspace = true }
 pin-project = { workspace = true }
 vortex-array = { workspace = true }
 vortex-dtype = { workspace = true }
-vortex-error = { workspace = true }
+vortex-error = { workspace = true, features = ["datafusion"] }
 vortex-expr = { workspace = true }
 vortex-scalar = { workspace = true, features = ["datafusion"] }
+vortex-serde = { workspace = true, features = ["object_store"] }
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+anyhow = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }
+url = { workspace = true }
 
 [lints]
 workspace = true

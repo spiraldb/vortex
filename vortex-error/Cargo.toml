@@ -15,8 +15,12 @@ rust-version = { workspace = true }
 name = "vortex_error"
 path = "src/lib.rs"
 
+[features]
+datafusion = ["datafusion-common"]
+
 [dependencies]
 arrow-schema = { workspace = true }
+datafusion-common = { workspace = true, optional = true }
 flatbuffers = { workspace = true }
 flexbuffers = { workspace = true, optional = true }
 object_store = { workspace = true, optional = true }
