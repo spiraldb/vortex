@@ -7,7 +7,7 @@ use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata,
-    IntoArray, IntoArrayData, ToArrayData, TryDeserializeArrayMetadata,
+    IntoArray, ToArrayData, TryDeserializeArrayMetadata,
 };
 
 /// Trait the defines the set of types relating to an array.
@@ -108,6 +108,12 @@ macro_rules! impl_encoding {
                     $crate::TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
             }
+            impl<'a> Into<$crate::Array> for [<$Name Array>] {
+                fn into(self) -> $crate::Array {
+                    use $crate::IntoArray;
+                    self.typed.into_array()
+                }
+            }
 
             /// The array encoding
             #[derive(std::fmt::Debug)]
@@ -198,11 +204,14 @@ impl<T: AsArray> ArrayStatistics for T {
     }
 }
 
-impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoArrayData for T {
-    fn into_array_data(self) -> ArrayData {
+impl<D> From<D> for ArrayData
+where
+    D: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata,
+{
+    fn from(value: D) -> Self {
         // TODO: move metadata call `Array::View` match
-        let metadata = self.metadata();
-        let array = self.into_array();
+        let metadata = value.metadata();
+        let array = value.into_array();
         match array {
             Array::Data(d) => d,
             Array::View(ref view) => {
@@ -246,8 +255,8 @@ impl<T: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata> IntoA
     }
 }
 
-impl<T: IntoArrayData + Clone> ToArrayData for T {
+impl<T: Into<ArrayData> + Clone> ToArrayData for T {
     fn to_array_data(&self) -> ArrayData {
-        self.clone().into_array_data()
+        self.clone().into()
     }
 }

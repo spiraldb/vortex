@@ -99,7 +99,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = record_batch.to_array_data().into_array();
+            let vortex_array = record_batch.to_array_data().into();
             compressor.compress(&vortex_array).unwrap()
         })
         .collect_vec();
@@ -171,7 +171,7 @@ pub async fn take_vortex_object_store(
         .take_rows(&indices_array)
         .await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    Ok(taken.into_canonical()?.into_array())
+    Ok(taken.into_canonical()?.into())
 }
 
 pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Array> {
@@ -182,7 +182,7 @@ pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Arr
         .take_rows(&indices_array)
         .await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    Ok(taken.into_canonical()?.into_array())
+    Ok(taken.into_canonical()?.into())
 }
 
 pub async fn take_parquet_object_store(

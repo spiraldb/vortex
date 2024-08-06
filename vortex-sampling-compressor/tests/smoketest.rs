@@ -8,7 +8,7 @@ use vortex::array::primitive::PrimitiveArray;
 use vortex::array::struct_::StructArray;
 use vortex::array::varbin::builder::VarBinBuilder;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayData};
+use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability};
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
@@ -121,7 +121,10 @@ fn make_timestamp_column(count: usize) -> Array {
 
     let storage_array = PrimitiveArray::from_vec(timestamps, Validity::NonNullable).into_array();
 
-    TemporalArray::new_timestamp(storage_array, TimeUnit::Ms, None)
-        .into_array_data()
-        .into_array()
+    ArrayData::from(TemporalArray::new_timestamp(
+        storage_array,
+        TimeUnit::Ms,
+        None,
+    ))
+    .into()
 }

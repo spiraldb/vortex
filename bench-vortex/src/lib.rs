@@ -19,7 +19,7 @@ use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;
-use vortex::{Array, Context, IntoArray, ToArrayData};
+use vortex::{Array, Context, IntoArray};
 use vortex_alp::ALPEncoding;
 use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
@@ -188,7 +188,7 @@ pub fn compress_taxi_data() -> Array {
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(|batch| batch.to_array_data().into_array())
+        .map(|batch| Array::from(batch))
         .map(|array| {
             uncompressed_size += array.nbytes();
             compressor.compress(&array).unwrap()
@@ -262,7 +262,7 @@ mod test {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
     use vortex::compress::CompressionStrategy;
-    use vortex::{ArrayData, IntoArray, IntoCanonical};
+    use vortex::{Array, ArrayData, IntoCanonical};
     use vortex_sampling_compressor::SamplingCompressor;
 
     use crate::taxi_data::taxi_data_parquet;
@@ -285,7 +285,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
+            let vortex_array: Array = ArrayData::from_arrow(arrow_array.clone(), false).into();
             let vortex_as_arrow = vortex_array.into_canonical().unwrap().into_arrow();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
@@ -304,7 +304,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
+            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into();
 
             let compressed = compressor.compress(&vortex_array).unwrap();
             let compressed_as_arrow = compressed.into_canonical().unwrap().into_arrow();

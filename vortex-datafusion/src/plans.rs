@@ -23,7 +23,7 @@ use pin_project::pin_project;
 use vortex::array::chunked::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
-use vortex::{ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
 
 use crate::datatype::infer_schema;
 use crate::eval::ExpressionEvaluator;
@@ -345,9 +345,9 @@ where
             "input yielded too many RecordBatches"
         );
 
-        let row_indices =
+        let row_indices: Array =
             ArrayData::from_arrow(record_batch.column(0).as_primitive::<UInt64Type>(), false)
-                .into_array();
+                .into();
 
         // If no columns in the output projection, we send back a RecordBatch with empty schema.
         // This is common for COUNT queries.

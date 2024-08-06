@@ -217,10 +217,6 @@ pub trait ToArrayData {
     fn to_array_data(&self) -> ArrayData;
 }
 
-pub trait IntoArrayData {
-    fn into_array_data(self) -> ArrayData;
-}
-
 pub trait AsArray {
     fn as_array_ref(&self) -> &Array;
 }
@@ -322,14 +318,5 @@ impl Display for Array {
             self.dtype(),
             self.len()
         )
-    }
-}
-
-impl IntoArrayData for Array {
-    fn into_array_data(self) -> ArrayData {
-        match self {
-            Self::Data(d) => d,
-            Self::View(_) => self.with_dyn(|a| a.to_array_data()),
-        }
     }
 }

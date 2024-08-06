@@ -118,7 +118,7 @@ impl CompareFn for ConstantArray {
                 Operator::Lte => arrow_ord::cmp::lt_eq(datum.as_ref(), &rhs)?,
             };
 
-            Ok(ArrayData::from_arrow(&boolean_array, true).into_array())
+            Ok(ArrayData::from_arrow(&boolean_array, true).into())
         }
     }
 }

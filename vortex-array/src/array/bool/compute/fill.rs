@@ -9,7 +9,7 @@ use crate::{Array, ArrayDType, IntoArray, ToArrayData};
 impl FillForwardFn for BoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         if self.dtype().nullability() == Nullability::NonNullable {
-            return Ok(self.to_array_data().into_array());
+            return Ok(self.to_array_data().into());
         }
 
         let validity = self.logical_validity().to_null_buffer()?.unwrap();

@@ -193,7 +193,7 @@ async fn register_vortex(
         .iter()
         .cloned()
         .map(StructArray::from)
-        .map(|struct_array| ArrayData::from_arrow(&struct_array, false).into_array())
+        .map(|struct_array| ArrayData::from_arrow(&struct_array, false).into())
         .collect();
 
     let dtype = chunks[0].dtype().clone();

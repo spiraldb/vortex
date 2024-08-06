@@ -10,7 +10,7 @@ impl FillForwardFn for PrimitiveArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         let validity = self.logical_validity();
         let Some(nulls) = validity.to_null_buffer()? else {
-            return Ok(self.to_array_data().into_array());
+            return Ok(self.to_array_data().into());
         };
         match_each_native_ptype!(self.ptype(), |$T| {
             let maybe_null_slice = self.maybe_null_slice::<$T>();
