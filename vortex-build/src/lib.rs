@@ -63,14 +63,34 @@ pub fn build_proto() {
 
 pub fn build_flatbuffers() {
     let flatbuffers_dir = manifest_dir().join("flatbuffers");
+    let metadata = MetadataCommand::new()
+        .manifest_path(manifest_dir().join("Cargo.toml"))
+        .exec()
+        .unwrap();
+    let fbs_feature = "flatbuffers".to_string();
+    let fbs_includes = metadata
+        .packages
+        .iter()
+        .filter(|&pkg| {
+            pkg.features.contains_key(&fbs_feature)
+                || pkg.id == metadata.root_package().unwrap().id
+        })
+        .map(|pkg| pkg.manifest_path.parent().unwrap().join("flatbuffers").into_std_path_buf())
+        .collect::<Vec<_>>();
+
     let fbs_files = walk_files(&flatbuffers_dir, "fbs");
+
+    let include_args: Vec<String> = fbs_includes
+        .iter()
+        .flat_map(|path| vec!["-I".to_string(), path.to_str().unwrap().to_string()])
+        .collect();
+
     check_call(
         Command::new("flatc")
             .arg("--rust")
             .arg("--filename-suffix")
             .arg("")
-            .arg("-I")
-            .arg(flatbuffers_dir.join("../../"))
+            .args(include_args)
             .arg("--include-prefix")
             .arg("flatbuffers::deps")
             .arg("-o")

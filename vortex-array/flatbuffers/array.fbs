@@ -1,4 +1,4 @@
-include "vortex-scalar/flatbuffers/scalar.fbs";
+include "scalar.fbs";
 
 namespace vortex.array;
 
