@@ -64,7 +64,6 @@ pub fn build_proto() {
 pub fn build_flatbuffers() {
     let flatbuffers_dir = manifest_dir().join("flatbuffers");
     let fbs_files = walk_files(&flatbuffers_dir, "fbs");
-    println!("cargo:warn=fbs_files={fbs_files:?}");
     check_call(
         Command::new("flatc")
             .arg("--rust")
