@@ -1,13 +1,11 @@
 use paste::paste;
 use pyo3::prelude::*;
-use vortex::array::bool::{Bool, BoolArray, BoolEncoding};
-use vortex::array::chunked::{Chunked, ChunkedArray, ChunkedEncoding};
-use vortex::array::constant::{Constant, ConstantArray, ConstantEncoding};
-use vortex::array::primitive::{Primitive, PrimitiveArray, PrimitiveEncoding};
-use vortex::array::sparse::{Sparse, SparseArray, SparseEncoding};
-use vortex::array::struct_::{Struct, StructArray, StructEncoding};
-use vortex::array::varbin::{VarBin, VarBinArray, VarBinEncoding};
-use vortex::array::varbinview::{VarBinView, VarBinViewArray, VarBinViewEncoding};
+use vortex::array::{
+    Bool, BoolArray, BoolEncoding, Chunked, ChunkedArray, ChunkedEncoding, Constant, ConstantArray,
+    ConstantEncoding, Primitive, PrimitiveArray, PrimitiveEncoding, Sparse, SparseArray,
+    SparseEncoding, Struct, StructArray, StructEncoding, VarBin, VarBinArray, VarBinEncoding,
+    VarBinView, VarBinViewArray, VarBinViewEncoding,
+};
 use vortex::compute::take;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDType, ArrayData, ArrayDef, IntoArray, IntoArrayData, ToArray};

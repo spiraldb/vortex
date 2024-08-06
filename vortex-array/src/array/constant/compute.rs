@@ -175,7 +175,7 @@ fn constant_array_bool_impl(
 mod test {
     use rstest::rstest;
 
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::array::constant::ConstantArray;
     use crate::compute::unary::scalar_at;
     use crate::compute::{and, or, search_sorted, SearchResult, SearchSortedSide};

@@ -51,7 +51,7 @@ pub fn filter_primitive_slice<T: NativePType>(
 mod test {
     use itertools::Itertools;
 
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::array::primitive::compute::filter::filter_select_primitive;
     use crate::array::primitive::PrimitiveArray;
 

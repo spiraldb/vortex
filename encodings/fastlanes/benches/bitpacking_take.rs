@@ -2,8 +2,8 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::SparseArray;
+use vortex::array::PrimitiveArray;
+use vortex::array::SparseArray;
 use vortex::compute::take;
 use vortex_fastlanes::{find_best_bit_width, BitPackedArray};
 

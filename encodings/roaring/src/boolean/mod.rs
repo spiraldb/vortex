@@ -4,7 +4,7 @@ use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
 pub use compress::*;
 pub use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
-use vortex::array::bool::{Bool, BoolArray};
+use vortex::array::{Bool, BoolArray};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
@@ -128,7 +128,7 @@ impl IntoCanonical for RoaringBoolArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::array::bool::BoolArray;
+    use vortex::array::BoolArray;
     use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
     use vortex_error::VortexResult;

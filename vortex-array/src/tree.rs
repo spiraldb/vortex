@@ -5,7 +5,7 @@ use serde::ser::Error;
 use vortex_buffer::Buffer;
 use vortex_error::{VortexError, VortexResult};
 
-use crate::array::chunked::ChunkedArray;
+use crate::array::ChunkedArray;
 use crate::visitor::ArrayVisitor;
 use crate::{Array, ToArrayData};
 

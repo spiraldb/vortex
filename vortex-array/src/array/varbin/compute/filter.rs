@@ -165,7 +165,7 @@ mod test {
     use vortex_dtype::Nullability::{NonNullable, Nullable};
     use vortex_scalar::Scalar;
 
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::compute::filter::{
         filter_select_var_bin_by_index, filter_select_var_bin_by_slice,

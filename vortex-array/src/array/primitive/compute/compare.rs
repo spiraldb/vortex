@@ -5,7 +5,7 @@ use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 use vortex_expr::Operator;
 
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::CompareFn;
 use crate::{Array, IntoArray, IntoArrayVariant};

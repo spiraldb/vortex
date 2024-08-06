@@ -4,7 +4,7 @@ use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::{Array, IntoCanonical};
 
 pub fn map_arrow_err(error: ArrowError) -> PyErr {

@@ -5,8 +5,7 @@ use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
 use num_traits::AsPrimitive;
 use vortex::accessor::ArrayAccessor;
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::varbin::VarBinArray;
+use vortex::array::{PrimitiveArray, VarBinArray};
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArray};
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, ToBytes};
@@ -175,8 +174,8 @@ mod test {
     use std::str;
 
     use vortex::accessor::ArrayAccessor;
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::varbin::VarBinArray;
+    use vortex::array::PrimitiveArray;
+    use vortex::array::VarBinArray;
     use vortex::compute::unary::scalar_at;
     use vortex::ToArray;
     use vortex_dtype::Nullability::Nullable;

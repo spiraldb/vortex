@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use arrow_buffer::BooleanBuffer;
 use vortex_error::VortexResult;
 
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::{ArrayDType, IntoArrayVariant};
@@ -134,7 +134,7 @@ mod test {
     use vortex_dtype::Nullability::Nullable;
     use vortex_scalar::Scalar;
 
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::stats::{ArrayStatistics, Stat};
 
     #[test]

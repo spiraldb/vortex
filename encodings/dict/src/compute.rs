@@ -46,8 +46,8 @@ impl SliceFn for DictArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::varbin::VarBinArray;
+    use vortex::array::VarBinArray;
+    use vortex::array::PrimitiveArray;
     use vortex::{IntoArray, IntoArrayVariant, ToArray};
     use vortex_dtype::{DType, Nullability};
 

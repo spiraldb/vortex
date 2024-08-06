@@ -3,7 +3,7 @@ use std::fmt::Debug;
 pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
-use vortex::array::primitive::{Primitive, PrimitiveArray};
+use vortex::array::{Primitive, PrimitiveArray};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -103,7 +103,7 @@ impl ArrayStatisticsCompute for RoaringIntArray {}
 
 #[cfg(test)]
 mod test {
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
     use vortex_error::VortexResult;

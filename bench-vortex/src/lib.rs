@@ -15,7 +15,7 @@ use log::{info, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;

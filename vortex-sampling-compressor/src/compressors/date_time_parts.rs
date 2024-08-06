@@ -1,5 +1,5 @@
-use vortex::array::datetime::temporal::TemporalMetadata;
-use vortex::array::datetime::TemporalArray;
+use vortex::array::temporal::TemporalMetadata;
+use vortex::array::TemporalArray;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
 use vortex_datetime_parts::{compress_temporal, DateTimeParts, DateTimePartsArray};
 use vortex_error::VortexResult;

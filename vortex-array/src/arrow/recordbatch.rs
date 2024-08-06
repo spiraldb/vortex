@@ -1,7 +1,7 @@
 use arrow_array::RecordBatch;
 use itertools::Itertools;
 
-use crate::array::struct_::StructArray;
+use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
 use crate::{ArrayData, IntoArray, IntoArrayData, ToArrayData};

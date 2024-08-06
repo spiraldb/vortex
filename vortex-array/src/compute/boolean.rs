@@ -61,7 +61,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::compute::unary::scalar_at;
     use crate::IntoArray;
 
