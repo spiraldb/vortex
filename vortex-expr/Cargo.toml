@@ -32,7 +32,6 @@ vortex-scalar = { workspace = true }
 vortex-build = { workspace = true }
 
 [features]
-default = ["proto"]
 datafusion = ["dep:datafusion-common", "dep:datafusion-expr", "vortex-scalar/datafusion"]
 proto = ["dep:prost", "vortex-dtype/proto", "vortex-scalar/proto"]
 serde = ["dep:serde", "vortex-dtype/serde", "vortex-scalar/serde"]

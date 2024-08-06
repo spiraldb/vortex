@@ -115,21 +115,21 @@ uuid = "1.8.0"
 # BEGIN crates published by this project
 vortex-alp = { version = "0.4.2", path = "./encodings/alp" }
 vortex-array = { version = "0.4.2", path = "./vortex-array" }
-vortex-buffer = { version = "0.4.2", path = "./vortex-buffer", default-features = false }
+vortex-buffer = { version = "0.4.2", path = "./vortex-buffer" }
 vortex-build = { version = "0.4.2", path = "./vortex-build" }
 vortex-byte-bool = { version = "0.4.2", path = "./encodings/byte-bool" }
 vortex-datafusion = { version = "0.4.2", path = "./vortex-datafusion" }
 vortex-datetime-parts = { version = "0.4.2", path = "./encodings/datetime-parts" }
 vortex-dict = { version = "0.4.2", path = "./encodings/dict" }
-vortex-dtype = { version = "0.4.2", path = "./vortex-dtype", default-features = false }
-vortex-error = { version = "0.4.2", path = "./vortex-error", default-features = false }
-vortex-expr = { version = "0.4.2", path = "./vortex-expr", default-features = false }
+vortex-dtype = { version = "0.4.2", path = "./vortex-dtype" }
+vortex-error = { version = "0.4.2", path = "./vortex-error" }
+vortex-expr = { version = "0.4.2", path = "./vortex-expr" }
 vortex-flatbuffers = { version = "0.4.2", path = "./vortex-flatbuffers" }
 vortex-fastlanes = { version = "0.4.2", path = "./encodings/fastlanes" }
 vortex-roaring = { version = "0.4.2", path = "./encodings/roaring" }
 vortex-runend = { version = "0.4.2", path = "./encodings/runend" }
 vortex-runend-bool = { version = "0.4.2", path = "./encodings/runend-bool" }
-vortex-scalar = { version = "0.4.2", path = "./vortex-scalar", default-features = false }
+vortex-scalar = { version = "0.4.2", path = "./vortex-scalar" }
 vortex-serde = { version = "0.4.2", path = "./vortex-serde", default-features = false }
 vortex-sampling-compressor = { version = "0.4.2", path = "./vortex-sampling-compressor" }
 vortex-zigzag = { version = "0.4.2", path = "./encodings/zigzag" }
