@@ -3,7 +3,7 @@ use vortex_dtype::{DType, ExtDType, ExtID};
 
 use crate::array::datetime::TimeUnit;
 use crate::array::extension::ExtensionArray;
-use crate::{Array, ArrayDType, ArrayData};
+use crate::{Array, ArrayDType, ArrayData, IntoArray};
 
 mod from;
 
@@ -227,5 +227,11 @@ impl TemporalArray {
 impl From<TemporalArray> for ArrayData {
     fn from(value: TemporalArray) -> Self {
         value.ext.into()
+    }
+}
+
+impl From<TemporalArray> for Array {
+    fn from(value: TemporalArray) -> Self {
+        value.ext.into_array()
     }
 }
