@@ -4,12 +4,12 @@ use vortex_error::VortexResult;
 use crate::array::BoolArray;
 use crate::compute::unary::FillForwardFn;
 use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, IntoArray, ToArrayData};
+use crate::{Array, ArrayDType, IntoArray};
 
 impl FillForwardFn for BoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         if self.dtype().nullability() == Nullability::NonNullable {
-            return Ok(self.to_array_data().into());
+            return Ok(self.clone().into());
         }
 
         let validity = self.logical_validity().to_null_buffer()?.unwrap();

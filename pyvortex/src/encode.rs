@@ -7,7 +7,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vortex::array::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
-use vortex::{ArrayData, ToArrayData};
+use vortex::{Array, ArrayData};
 use vortex_dtype::DType;
 
 use crate::array::PyArray;
@@ -52,7 +52,7 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| b.map(|bb| bb.to_array_data().into()).map_err(map_arrow_err))
+            .map(|b| b.map(Array::from).map_err(map_arrow_err))
             .collect::<PyResult<Vec<_>>>()?;
         PyArray::wrap(
             obj.py(),

@@ -108,9 +108,9 @@ impl ToArray for ArrayData {
 
 impl From<Array> for ArrayData {
     fn from(value: Array) -> ArrayData {
-        match value {
-            Array::Data(d) => d,
-            Array::View(_) => value.with_dyn(|a| a.to_array_data()),
+        match &value {
+            Array::Data(d) => d.clone(),
+            Array::View(_) => value.clone().into(),
         }
     }
 }

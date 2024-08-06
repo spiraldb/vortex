@@ -4,13 +4,13 @@ use vortex_error::VortexResult;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::FillForwardFn;
 use crate::validity::ArrayValidity;
-use crate::{Array, IntoArray, ToArrayData};
+use crate::{Array, IntoArray};
 
 impl FillForwardFn for PrimitiveArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         let validity = self.logical_validity();
         let Some(nulls) = validity.to_null_buffer()? else {
-            return Ok(self.to_array_data().into());
+            return Ok(self.clone().into());
         };
         match_each_native_ptype!(self.ptype(), |$T| {
             let maybe_null_slice = self.maybe_null_slice::<$T>();

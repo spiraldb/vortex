@@ -26,7 +26,7 @@ use vortex::array::{ChunkedArray, PrimitiveArray};
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
+use vortex::{Array, IntoArray, IntoCanonical};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
@@ -98,7 +98,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = record_batch.to_array_data().into();
+            let vortex_array = Array::from(record_batch);
             compressor.compress(&vortex_array).unwrap()
         })
         .collect_vec();

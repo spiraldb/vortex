@@ -7,7 +7,7 @@ use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata,
-    IntoArray, ToArrayData, TryDeserializeArrayMetadata,
+    IntoArray, TryDeserializeArrayMetadata,
 };
 
 /// Trait the defines the set of types relating to an array.
@@ -252,11 +252,5 @@ where
                 .unwrap()
             }
         }
-    }
-}
-
-impl<T: Into<ArrayData> + Clone> ToArrayData for T {
-    fn to_array_data(&self) -> ArrayData {
-        self.clone().into()
     }
 }
