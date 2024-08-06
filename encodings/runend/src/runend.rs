@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
-use vortex::array::primitive::{Primitive, PrimitiveArray};
+use vortex::array::{Primitive, PrimitiveArray};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};

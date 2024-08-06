@@ -1,4 +1,4 @@
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::PrimitiveArray;
 use vortex::validity::Validity;
 use vortex::IntoArray;
 use vortex_dtype::{NativePType, PType};

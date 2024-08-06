@@ -9,7 +9,7 @@ use bzip2::read::BzDecoder;
 use log::info;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::{IntoArray, ToArrayData};
 use vortex_dtype::DType;

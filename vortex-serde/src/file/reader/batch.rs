@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::sync::Arc;
 
-use vortex::array::struct_::StructArray;
+use vortex::array::StructArray;
 use vortex::{Array, Context, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::VortexResult;

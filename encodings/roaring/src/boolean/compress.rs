@@ -1,5 +1,5 @@
 use croaring::Bitmap;
-use vortex::array::bool::BoolArray;
+use vortex::array::BoolArray;
 use vortex_error::VortexResult;
 
 use crate::RoaringBoolArray;

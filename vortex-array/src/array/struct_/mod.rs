@@ -163,10 +163,10 @@ impl ArrayStatisticsCompute for StructArray {}
 mod test {
     use vortex_dtype::{DType, FieldName, FieldNames, Nullability};
 
-    use crate::array::bool::BoolArray;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::struct_::StructArray;
     use crate::array::varbin::VarBinArray;
+    use crate::array::BoolArray;
     use crate::validity::Validity;
     use crate::variants::StructArrayTrait;
     use crate::IntoArray;

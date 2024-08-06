@@ -1,4 +1,4 @@
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::PrimitiveArray;
 use vortex::stats::{trailing_zeros, ArrayStatistics};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDef, IntoArray};

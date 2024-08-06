@@ -1,7 +1,7 @@
 use arrayref::{array_mut_ref, array_ref};
 use fastlanes::{Delta, Transpose};
 use num_traits::{WrappingAdd, WrappingSub};
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::PrimitiveArray;
 use vortex::compute::unary::fill_forward;
 use vortex::validity::Validity;
 use vortex::IntoArrayVariant;

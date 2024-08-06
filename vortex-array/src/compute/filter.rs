@@ -49,8 +49,7 @@ pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolArray;
-    use crate::array::primitive::PrimitiveArray;
+    use crate::array::{BoolArray, PrimitiveArray};
     use crate::compute::filter::filter;
     use crate::validity::Validity;
     use crate::{IntoArray, IntoCanonical};

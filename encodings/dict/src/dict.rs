@@ -2,7 +2,7 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 use vortex::accessor::ArrayAccessor;
-use vortex::array::bool::BoolArray;
+use vortex::array::BoolArray;
 use vortex::compute::take;
 use vortex::compute::unary::scalar_at;
 use vortex::stats::StatsSet;

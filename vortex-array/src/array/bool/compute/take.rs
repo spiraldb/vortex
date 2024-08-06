@@ -3,7 +3,7 @@ use num_traits::AsPrimitive;
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::compute::TakeFn;
 use crate::{Array, AsArray, IntoArray, IntoArrayVariant};
 
@@ -26,8 +26,8 @@ fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolArray;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::BoolArray;
     use crate::compute::take;
     use crate::IntoArray;
 

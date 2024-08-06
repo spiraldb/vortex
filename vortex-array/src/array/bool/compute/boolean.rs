@@ -2,7 +2,7 @@ use arrow_arith::boolean;
 use arrow_array::cast::AsArray as _;
 use vortex_error::VortexResult;
 
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::{AndFn, OrFn};
 use crate::{Array, ArrayData, IntoArray, IntoCanonical};

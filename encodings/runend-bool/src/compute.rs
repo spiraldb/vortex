@@ -1,4 +1,4 @@
-use vortex::array::bool::BoolArray;
+use vortex::array::BoolArray;
 use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::{slice, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray, IntoArrayVariant, ToArray};

@@ -1,4 +1,4 @@
-use vortex::array::constant::{Constant, ConstantArray};
+use vortex::array::{Constant, ConstantArray};
 use vortex::compute::unary::scalar_at;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};

@@ -11,7 +11,7 @@ use datafusion_expr::{TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanProperties};
 use itertools::Itertools;
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
 use vortex_dtype::DType;
 
@@ -272,9 +272,7 @@ mod test {
     use datafusion::prelude::SessionContext;
     use datafusion_common::{Column, TableReference};
     use datafusion_expr::{and, col, lit, BinaryExpr, Expr, Operator};
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::struct_::StructArray;
-    use vortex::array::varbin::VarBinArray;
+    use vortex::array::{PrimitiveArray, StructArray, VarBinArray};
     use vortex::validity::Validity;
     use vortex::{Array, IntoArray};
     use vortex_dtype::{DType, Nullability};

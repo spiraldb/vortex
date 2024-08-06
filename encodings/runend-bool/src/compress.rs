@@ -2,8 +2,7 @@ use std::cmp::min;
 
 use arrow_buffer::buffer::BooleanBuffer;
 use num_traits::{AsPrimitive, FromPrimitive};
-use vortex::array::bool::BoolArray;
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::validity::Validity;
 use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::VortexResult;
@@ -84,7 +83,7 @@ mod test {
     use itertools::Itertools;
     use rand::prelude::StdRng;
     use rand::{Rng, SeedableRng};
-    use vortex::array::bool::BoolArray;
+    use vortex::array::BoolArray;
     use vortex::compute::SliceFn;
     use vortex::validity::Validity;
     use vortex::IntoArrayVariant;

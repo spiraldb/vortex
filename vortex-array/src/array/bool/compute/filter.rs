@@ -1,7 +1,7 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::compute::FilterFn;
 use crate::validity::filter_validity;
 use crate::variants::BoolArrayTrait;
@@ -61,7 +61,7 @@ mod test {
     use crate::array::bool::compute::filter::{
         filter_select_bool, filter_select_bool_by_index, filter_select_bool_by_slice,
     };
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::ToArray;
 
     #[test]
