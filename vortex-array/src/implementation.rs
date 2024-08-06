@@ -108,10 +108,10 @@ macro_rules! impl_encoding {
                     $crate::TypedArray::<$Name>::try_from(array).map(Self::from)
                 }
             }
-            impl<'a> Into<$crate::Array> for [<$Name Array>] {
-                fn into(self) -> $crate::Array {
+            impl From<[<$Name Array>]> for $crate::Array {
+                fn from(value: [<$Name Array>]) -> $crate::Array {
                     use $crate::IntoArray;
-                    self.typed.into_array()
+                    value.typed.into_array()
                 }
             }
 
