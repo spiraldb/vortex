@@ -1,8 +1,5 @@
 use futures::StreamExt;
-use vortex::array::ChunkedArray;
-use vortex::array::PrimitiveArray;
-use vortex::array::StructArray;
-use vortex::array::VarBinArray;
+use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
 use vortex::validity::Validity;
 use vortex::variants::StructArrayTrait;
 use vortex::{ArrayDType, IntoArray, IntoArrayVariant};

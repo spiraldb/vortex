@@ -5,8 +5,8 @@ use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::{Disjunction, Predicate, Value};
 
-use crate::array::BoolArray;
 use crate::array::primitive::PrimitiveArray;
+use crate::array::BoolArray;
 use crate::compute::FilterIndicesFn;
 use crate::{Array, IntoArray};
 

@@ -165,12 +165,12 @@ mod test {
     use vortex_dtype::Nullability::{NonNullable, Nullable};
     use vortex_scalar::Scalar;
 
-    use crate::array::BoolArray;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::varbin::compute::filter::{
         filter_select_var_bin_by_index, filter_select_var_bin_by_slice,
     };
     use crate::array::varbin::VarBinArray;
+    use crate::array::BoolArray;
     use crate::compute::unary::scalar_at;
     use crate::validity::Validity;
     use crate::ToArray;

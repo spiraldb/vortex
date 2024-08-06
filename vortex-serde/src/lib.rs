@@ -56,8 +56,7 @@ mod test {
     use futures_util::io::Cursor;
     use futures_util::{pin_mut, StreamExt, TryStreamExt};
     use itertools::Itertools;
-    use vortex::array::ChunkedArray;
-    use vortex::array::{PrimitiveArray, PrimitiveEncoding};
+    use vortex::array::{ChunkedArray, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::ArrayEncoding;
     use vortex::stream::ArrayStreamExt;
     use vortex::{ArrayDType, Context, IntoArray};

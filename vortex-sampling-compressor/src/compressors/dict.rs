@@ -1,5 +1,4 @@
-use vortex::array::{Primitive, PrimitiveArray};
-use vortex::array::{VarBin, VarBinArray};
+use vortex::array::{Primitive, PrimitiveArray, VarBin, VarBinArray};
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray};

@@ -26,8 +26,8 @@ fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec
 
 #[cfg(test)]
 mod test {
-    use crate::array::BoolArray;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::BoolArray;
     use crate::compute::take;
     use crate::IntoArray;
 

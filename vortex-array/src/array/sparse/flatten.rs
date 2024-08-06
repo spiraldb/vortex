@@ -4,9 +4,9 @@ use vortex_dtype::{match_each_native_ptype, DType, NativePType};
 use vortex_error::{VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::array::BoolArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
+use crate::array::BoolArray;
 use crate::validity::Validity;
 use crate::{ArrayDType, Canonical, IntoArrayVariant, IntoCanonical};
 
@@ -94,8 +94,8 @@ fn canonicalize_sparse_primitives<
 mod test {
     use vortex_dtype::{DType, Nullability};
 
-    use crate::array::BoolArray;
     use crate::array::sparse::SparseArray;
+    use crate::array::BoolArray;
     use crate::validity::Validity;
     use crate::{ArrayDType, Canonical, IntoArray, IntoCanonical};
 

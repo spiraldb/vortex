@@ -207,8 +207,7 @@ mod test {
 
     use futures_executor::block_on;
     use itertools::Itertools;
-    use vortex::array::ChunkedArray;
-    use vortex::array::PrimitiveArray;
+    use vortex::array::{ChunkedArray, PrimitiveArray};
     use vortex::{Context, IntoArray, IntoArrayVariant};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;

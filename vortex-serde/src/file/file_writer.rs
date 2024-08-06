@@ -263,9 +263,7 @@ impl<W: VortexWrite> FileWriter<W> {
 #[cfg(test)]
 mod tests {
     use futures_executor::block_on;
-    use vortex::array::PrimitiveArray;
-    use vortex::array::StructArray;
-    use vortex::array::VarBinArray;
+    use vortex::array::{PrimitiveArray, StructArray, VarBinArray};
     use vortex::validity::Validity;
     use vortex::IntoArray;
 

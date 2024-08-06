@@ -174,8 +174,7 @@ mod test {
     use std::str;
 
     use vortex::accessor::ArrayAccessor;
-    use vortex::array::PrimitiveArray;
-    use vortex::array::VarBinArray;
+    use vortex::array::{PrimitiveArray, VarBinArray};
     use vortex::compute::unary::scalar_at;
     use vortex::ToArray;
     use vortex_dtype::Nullability::Nullable;

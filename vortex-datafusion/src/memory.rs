@@ -272,9 +272,7 @@ mod test {
     use datafusion::prelude::SessionContext;
     use datafusion_common::{Column, TableReference};
     use datafusion_expr::{and, col, lit, BinaryExpr, Expr, Operator};
-    use vortex::array::StructArray;
-    use vortex::array::VarBinArray;
-    use vortex::array::PrimitiveArray;
+    use vortex::array::{PrimitiveArray, StructArray, VarBinArray};
     use vortex::validity::Validity;
     use vortex::{Array, IntoArray};
     use vortex_dtype::{DType, Nullability};

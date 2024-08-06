@@ -403,8 +403,7 @@ mod test {
     use arrow_array::{RecordBatch, UInt64Array};
     use datafusion_expr::{and, col, lit};
     use itertools::Itertools;
-    use vortex::array::StructArray;
-    use vortex::array::{BoolArray, ChunkedArray, PrimitiveArray};
+    use vortex::array::{BoolArray, ChunkedArray, PrimitiveArray, StructArray};
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray};
     use vortex_dtype::FieldName;
