@@ -19,7 +19,10 @@ pub use implementation::*;
 use itertools::Itertools;
 pub use metadata::*;
 pub use typed::*;
+
+#[cfg(feature = "flatbuffers")]
 pub use view::*;
+
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
@@ -52,9 +55,11 @@ mod typed;
 pub mod validity;
 pub mod variants;
 pub mod vendored;
+#[cfg(feature = "flatbuffers")]
 mod view;
 pub mod visitor;
 
+#[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     pub use generated::vortex::array::*;
 
@@ -82,6 +87,7 @@ pub mod flatbuffers {
 #[derive(Debug, Clone)]
 pub enum Array {
     Data(ArrayData),
+    #[cfg(feature = "flatbuffers")]
     View(ArrayView),
 }
 

@@ -11,6 +11,7 @@ use vortex_scalar::Scalar;
 
 use crate::Array;
 
+#[cfg(feature = "flatbuffers")]
 pub mod flatbuffers;
 mod statsset;
 

@@ -1,3 +1,3 @@
 fn main() {
-    vortex_build::build_flatbuffers();
+    vortex_build::build();
 }

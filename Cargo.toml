@@ -26,7 +26,7 @@ authors = [
 ]
 license = "Apache-2.0"
 keywords = ["vortex"]
-include = ["benches/*.rs", "build.rs", "src/**/*.rs", "Cargo.toml", "proto/**/*.proto", "flatbuffers/**/*.fbs"]
+include = ["benches/*.rs", "build.rs", "src/**/*.rs", "Cargo.toml", "proto/**/*.proto", "flatbuffers/*.fbs"]
 edition = "2021"
 rust-version = "1.76"
 
