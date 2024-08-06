@@ -1,4 +1,4 @@
-use vortex::array::sparse::{Sparse, SparseArray};
+use vortex::array::{Sparse, SparseArray};
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 

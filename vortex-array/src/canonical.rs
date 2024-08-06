@@ -17,14 +17,11 @@ use arrow_schema::{Field, Fields};
 use vortex_dtype::{DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::array::bool::BoolArray;
-use crate::array::datetime::temporal::{is_temporal_ext_type, TemporalMetadata};
-use crate::array::datetime::{TemporalArray, TimeUnit};
-use crate::array::extension::ExtensionArray;
-use crate::array::null::NullArray;
-use crate::array::primitive::PrimitiveArray;
-use crate::array::struct_::StructArray;
-use crate::array::varbin::VarBinArray;
+use crate::array::temporal::{is_temporal_ext_type, TemporalMetadata};
+use crate::array::{
+    BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray, TemporalArray, TimeUnit,
+    VarBinArray,
+};
 use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::try_cast;
 use crate::encoding::ArrayEncoding;
@@ -450,9 +447,7 @@ mod test {
     use vortex_dtype::Nullability;
     use vortex_scalar::Scalar;
 
-    use crate::array::primitive::PrimitiveArray;
-    use crate::array::sparse::SparseArray;
-    use crate::array::struct_::StructArray;
+    use crate::array::{PrimitiveArray, SparseArray, StructArray};
     use crate::validity::Validity;
     use crate::{IntoArray, IntoCanonical};
 

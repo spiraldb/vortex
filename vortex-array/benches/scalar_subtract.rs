@@ -2,7 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::IntoArray;
 use vortex_error::VortexError;
 

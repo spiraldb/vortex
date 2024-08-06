@@ -7,7 +7,7 @@ use arrow_schema::Schema;
 use datafusion::dataframe::DataFrameWriteOptions;
 use datafusion::datasource::MemTable;
 use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex_datafusion::memory::VortexMemTableOptions;

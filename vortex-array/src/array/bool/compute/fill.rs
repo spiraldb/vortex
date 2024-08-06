@@ -1,7 +1,7 @@
 use vortex_dtype::Nullability;
 use vortex_error::VortexResult;
 
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::compute::unary::FillForwardFn;
 use crate::validity::ArrayValidity;
 use crate::{Array, ArrayDType, IntoArray, ToArrayData};
@@ -31,7 +31,7 @@ impl FillForwardFn for BoolArray {
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::validity::Validity;
     use crate::{compute, IntoArray};
 

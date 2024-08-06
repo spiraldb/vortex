@@ -4,8 +4,7 @@ use std::ops::Range;
 use bytes::BytesMut;
 use futures_util::{stream, StreamExt, TryStreamExt};
 use itertools::Itertools;
-use vortex::array::chunked::ChunkedArray;
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{ChunkedArray, PrimitiveArray};
 use vortex::compute::unary::{subtract_scalar, try_cast};
 use vortex::compute::{search_sorted, slice, take, SearchResult, SearchSortedSide};
 use vortex::stats::ArrayStatistics;
@@ -208,8 +207,7 @@ mod test {
 
     use futures_executor::block_on;
     use itertools::Itertools;
-    use vortex::array::chunked::ChunkedArray;
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::{ChunkedArray, PrimitiveArray};
     use vortex::{Context, IntoArray, IntoArrayVariant};
     use vortex_buffer::Buffer;
     use vortex_dtype::PType;

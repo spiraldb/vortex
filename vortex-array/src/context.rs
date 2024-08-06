@@ -1,14 +1,9 @@
 use std::collections::HashMap;
 
-use crate::array::bool::BoolEncoding;
-use crate::array::chunked::ChunkedEncoding;
-use crate::array::constant::ConstantEncoding;
-use crate::array::extension::ExtensionEncoding;
-use crate::array::primitive::PrimitiveEncoding;
-use crate::array::sparse::SparseEncoding;
-use crate::array::struct_::StructEncoding;
-use crate::array::varbin::VarBinEncoding;
-use crate::array::varbinview::VarBinViewEncoding;
+use crate::array::{
+    BoolEncoding, ChunkedEncoding, ConstantEncoding, ExtensionEncoding, PrimitiveEncoding,
+    SparseEncoding, StructEncoding, VarBinEncoding, VarBinViewEncoding,
+};
 use crate::encoding::EncodingRef;
 
 #[derive(Debug, Clone)]

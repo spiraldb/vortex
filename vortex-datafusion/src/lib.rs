@@ -20,7 +20,7 @@ use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, Plan
 use futures::Stream;
 use itertools::Itertools;
 use memory::{VortexMemTable, VortexMemTableOptions};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 
 pub mod memory;

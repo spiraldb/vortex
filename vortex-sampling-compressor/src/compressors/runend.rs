@@ -1,4 +1,4 @@
-use vortex::array::primitive::Primitive;
+use vortex::array::Primitive;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;

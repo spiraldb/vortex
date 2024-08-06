@@ -32,8 +32,8 @@ impl FillForwardFn for PrimitiveArray {
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolArray;
     use crate::array::primitive::PrimitiveArray;
+    use crate::array::BoolArray;
     use crate::compute::unary::fill_forward;
     use crate::validity::{ArrayValidity, Validity};
     use crate::IntoArray;

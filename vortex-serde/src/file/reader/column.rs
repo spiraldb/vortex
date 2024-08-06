@@ -2,7 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::compute::slice;
 use vortex::{Array, Context, IntoArray};
 use vortex_dtype::DType;

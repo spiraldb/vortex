@@ -2,8 +2,7 @@ use std::fs::File;
 use std::os::unix::prelude::MetadataExt;
 use std::path::PathBuf;
 
-use vortex::array::chunked::ChunkedArray;
-use vortex::array::struct_::StructArray;
+use vortex::array::{ChunkedArray, StructArray};
 use vortex::variants::StructArrayTrait;
 use vortex::ArrayDType;
 use vortex_dtype::DType;

@@ -4,7 +4,6 @@ use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, ErrString, VortexResult};
 
 use crate::accessor::ArrayAccessor;
-use crate::array::bool::BoolArray;
 use crate::array::chunked::ChunkedArray;
 use crate::array::extension::ExtensionArray;
 use crate::array::null::NullArray;
@@ -12,6 +11,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
+use crate::array::BoolArray;
 use crate::validity::Validity;
 use crate::variants::StructArrayTrait;
 use crate::{

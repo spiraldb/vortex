@@ -2,11 +2,8 @@ use std::collections::HashSet;
 use std::ops::Add;
 
 use chrono::TimeDelta;
-use vortex::array::bool::BoolArray;
-use vortex::array::datetime::{TemporalArray, TimeUnit};
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::struct_::StructArray;
-use vortex::array::varbin::builder::VarBinBuilder;
+use vortex::array::builder::VarBinBuilder;
+use vortex::array::{BoolArray, PrimitiveArray, StructArray, TemporalArray, TimeUnit};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayData, IntoArray};
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability};

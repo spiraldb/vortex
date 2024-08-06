@@ -19,14 +19,10 @@ use arrow_schema::{DataType, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 use vortex_dtype::{DType, NativePType, PType};
 
-use crate::array::bool::BoolArray;
-use crate::array::datetime::temporal::TemporalArray;
-use crate::array::datetime::TimeUnit;
-use crate::array::null::NullArray;
-use crate::array::primitive::PrimitiveArray;
-use crate::array::struct_::StructArray;
-use crate::array::varbin::VarBinArray;
-use crate::array::varbinview::VarBinViewArray;
+use crate::array::temporal::TemporalArray;
+use crate::array::{
+    BoolArray, NullArray, PrimitiveArray, StructArray, TimeUnit, VarBinArray, VarBinViewArray,
+};
 use crate::arrow::FromArrowArray;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;

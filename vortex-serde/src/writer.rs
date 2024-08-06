@@ -1,5 +1,5 @@
 use futures_util::{Stream, TryStreamExt};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::stream::ArrayStream;
 use vortex::Array;
 use vortex_buffer::Buffer;
