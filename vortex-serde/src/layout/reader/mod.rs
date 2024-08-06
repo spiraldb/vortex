@@ -1,29 +1,30 @@
 use std::mem;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 use bytes::{Bytes, BytesMut};
 use futures::{FutureExt, Stream};
-use futures_util::future::BoxFuture;
 use futures_util::{stream, StreamExt, TryStreamExt};
+use futures_util::future::BoxFuture;
+
 use projections::Projection;
 use schema::Schema;
-use vortex::array::StructArray;
-use vortex::compute::unary::subtract_scalar;
-use vortex::compute::{filter, filter_indices, search_sorted, slice, take, SearchSortedSide};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
-use vortex_dtype::{match_each_integer_ptype, DType};
+use vortex::array::StructArray;
+use vortex::compute::{filter, filter_indices, search_sorted, SearchSortedSide, slice, take};
+use vortex::compute::unary::subtract_scalar;
+use vortex_dtype::{DType, match_each_integer_ptype};
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
-use crate::layout::footer::Footer;
-use crate::layout::reader::filtering::RowFilter;
-use crate::layout::writer::layout_writer::MAGIC_BYTES;
 use crate::layout::{
     Layout, LayoutReader, MessageId, MessagesCache, ReadResult, RelativeMessageCache, Scan,
 };
+use crate::layout::footer::Footer;
+use crate::layout::reader::filtering::RowFilter;
+use crate::layout::writer::layout_writer::MAGIC_BYTES;
 
 pub mod batch;
 pub mod buffered;
@@ -103,7 +104,7 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
             batch_size,
         };
 
-        let message_cache = Arc::new(RwLock::new(MessagesCache::new()));
+        let message_cache = Arc::new(RwLock::new(MessagesCache::default()));
         let layouts_cache =
             RelativeMessageCache::new(footer.dtype()?, message_cache.clone(), Vec::new());
 

@@ -2,12 +2,14 @@ use std::collections::VecDeque;
 use std::fmt::Debug;
 use std::sync::{Arc, RwLock};
 
-use ahash::{HashMap, HashMapExt};
+use ahash::HashMap;
 use bytes::Bytes;
+
 use vortex::{Array, Context};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
+use crate::ArrayBufferReader;
 use crate::flatbuffers::footer as fb;
 use crate::flatbuffers::footer::LayoutVariant;
 use crate::layout::reader::batch::BatchReader;
@@ -15,7 +17,6 @@ use crate::layout::reader::buffered::BufferedLayoutReader;
 use crate::layout::reader::filtering::RowFilter;
 use crate::layout::reader::projections::Projection;
 use crate::writer::ByteRange;
-use crate::ArrayBufferReader;
 
 mod footer;
 pub mod reader;
@@ -148,24 +149,12 @@ pub enum PlanResult {
     Batch(Vec<MessageId>, Array),
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub struct MessagesCache {
     cache: HashMap<Vec<MessageId>, Bytes>,
 }
 
-impl Default for MessagesCache {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl MessagesCache {
-    pub fn new() -> Self {
-        Self {
-            cache: HashMap::new(),
-        }
-    }
-
     pub fn get(&self, path: &[MessageId]) -> Option<Bytes> {
         self.cache.get(path).cloned()
     }
