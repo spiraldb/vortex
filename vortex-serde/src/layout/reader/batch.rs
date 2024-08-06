@@ -1,8 +1,8 @@
 use std::mem;
 use std::sync::Arc;
 
-use vortex::{Array, IntoArray};
 use vortex::array::StructArray;
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::layout::{Layout, ReadResult};

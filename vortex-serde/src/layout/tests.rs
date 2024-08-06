@@ -1,15 +1,14 @@
 use std::sync::Arc;
 
 use futures::StreamExt;
-
-use vortex::{ArrayDType, Context, IntoArray, IntoArrayVariant};
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
+use vortex::{ArrayDType, Context, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 
-use crate::layout::{LayoutContext, LayoutReader};
 use crate::layout::reader::projections::Projection;
 use crate::layout::reader::VortexLayoutReaderBuilder;
 use crate::layout::writer::layout_writer::LayoutWriter;
+use crate::layout::{LayoutContext, LayoutReader};
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]

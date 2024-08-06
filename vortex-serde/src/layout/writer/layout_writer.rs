@@ -4,8 +4,6 @@ use std::mem;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
-
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::{ChunkedArray, StructArray};
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
@@ -266,15 +264,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
 #[cfg(test)]
 mod tests {
     use futures_executor::block_on;
-<<<<<<< HEAD
-
     use vortex::array::{PrimitiveArray, StructArray, VarBinArray};
-    use vortex::IntoArray;
-=======
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::struct_::StructArray;
-    use vortex::array::varbin::VarBinArray;
->>>>>>> a97576cb (more)
     use vortex::validity::Validity;
     use vortex::IntoArray;
 

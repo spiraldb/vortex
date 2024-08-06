@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::compute::slice;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
