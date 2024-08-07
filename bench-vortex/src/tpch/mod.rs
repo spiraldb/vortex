@@ -9,7 +9,7 @@ use datafusion::datasource::MemTable;
 use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
-use vortex::{Array, ArrayDType, ArrayData, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_datafusion::memory::VortexMemTableOptions;
 use vortex_datafusion::SessionContextExt;
 
@@ -193,7 +193,7 @@ async fn register_vortex(
         .iter()
         .cloned()
         .map(StructArray::from)
-        .map(|struct_array| ArrayData::from_arrow(&struct_array, false).into())
+        .map(|struct_array| Array::from_arrow(&struct_array, false))
         .collect();
 
     let dtype = chunks[0].dtype().clone();

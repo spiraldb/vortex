@@ -7,7 +7,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vortex::array::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
-use vortex::{Array, ArrayData};
+use vortex::Array;
 use vortex_dtype::DType;
 
 use crate::array::PyArray;
@@ -25,8 +25,8 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
 
     if obj.is_instance(&pa_array)? {
         let arrow_array = ArrowArrayData::from_pyarrow_bound(obj).map(make_array)?;
-        let enc_array = ArrayData::from_arrow(arrow_array, false);
-        PyArray::wrap(obj.py(), enc_array)
+        let enc_array = Array::from_arrow(arrow_array, false);
+        PyArray::wrap(obj.py(), enc_array.into())
     } else if obj.is_instance(&chunked_array)? {
         let chunks: Vec<Bound<PyAny>> = obj.getattr("chunks")?.extract()?;
         let encoded_chunks = chunks
@@ -34,7 +34,7 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
             .map(|a| {
                 ArrowArrayData::from_pyarrow_bound(a)
                     .map(make_array)
-                    .map(|a| ArrayData::from_arrow(a, false).into())
+                    .map(|a| Array::from_arrow(a, false))
             })
             .collect::<PyResult<Vec<_>>>()?;
         let dtype: DType = obj

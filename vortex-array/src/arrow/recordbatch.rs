@@ -4,9 +4,9 @@ use itertools::Itertools;
 use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
-use crate::{Array, ArrayData};
+use crate::Array;
 
-impl From<RecordBatch> for ArrayData {
+impl From<RecordBatch> for Array {
     fn from(value: RecordBatch) -> Self {
         StructArray::try_new(
             value
@@ -20,21 +20,12 @@ impl From<RecordBatch> for ArrayData {
                 .columns()
                 .iter()
                 .zip(value.schema().fields())
-                .map(|(array, field)| {
-                    ArrayData::from_arrow(array.clone(), field.is_nullable()).into()
-                })
+                .map(|(array, field)| Array::from_arrow(array.clone(), field.is_nullable()))
                 .collect(),
             value.num_rows(),
             Validity::AllValid,
         )
         .unwrap()
         .into()
-    }
-}
-
-impl From<RecordBatch> for Array {
-    fn from(value: RecordBatch) -> Self {
-        let data = ArrayData::from(value);
-        data.into()
     }
 }

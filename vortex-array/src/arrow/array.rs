@@ -26,7 +26,7 @@ use crate::array::{
 use crate::arrow::FromArrowArray;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
-use crate::ArrayData;
+use crate::{Array, ArrayData};
 
 impl From<Buffer> for ArrayData {
     fn from(value: Buffer) -> Self {
@@ -68,20 +68,19 @@ where
     }
 }
 
-impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for ArrayData
+impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for Array
 where
     <T as ArrowPrimitiveType>::Native: NativePType,
 {
     fn from_arrow(value: &ArrowPrimitiveArray<T>, nullable: bool) -> Self {
-        let arr: ArrayData = PrimitiveArray::new(
+        let arr = PrimitiveArray::new(
             value.values().clone().into_inner().into(),
             T::Native::PTYPE,
             nulls(value.nulls(), nullable),
-        )
-        .into();
+        );
 
         if T::DATA_TYPE.is_numeric() {
-            return arr;
+            return arr.into();
         }
 
         match T::DATA_TYPE {
@@ -104,7 +103,7 @@ where
     }
 }
 
-impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayData
+impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for Array
 where
     <T as ByteArrayType>::Offset: NativePType,
 {
@@ -125,7 +124,7 @@ where
     }
 }
 
-impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
+impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
     fn from_arrow(value: &GenericByteViewArray<T>, nullable: bool) -> Self {
         let dtype = match T::DATA_TYPE {
             DataType::BinaryView => DType::Binary(nullable.into()),
@@ -147,7 +146,7 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
     }
 }
 
-impl FromArrowArray<&ArrowBooleanArray> for ArrayData {
+impl FromArrowArray<&ArrowBooleanArray> for Array {
     fn from_arrow(value: &ArrowBooleanArray, nullable: bool) -> Self {
         BoolArray::try_new(value.values().clone(), nulls(value.nulls(), nullable))
             .unwrap()
@@ -155,7 +154,7 @@ impl FromArrowArray<&ArrowBooleanArray> for ArrayData {
     }
 }
 
-impl FromArrowArray<&ArrowStructArray> for ArrayData {
+impl FromArrowArray<&ArrowStructArray> for Array {
     fn from_arrow(value: &ArrowStructArray, nullable: bool) -> Self {
         // TODO(ngates): how should we deal with Arrow "logical nulls"?
         assert!(!nullable);
@@ -170,7 +169,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 .columns()
                 .iter()
                 .zip(value.fields())
-                .map(|(c, field)| Self::from_arrow(c.clone(), field.is_nullable()).into())
+                .map(|(c, field)| Self::from_arrow(c.clone(), field.is_nullable()))
                 .collect(),
             value.len(),
             nulls(value.nulls(), nullable),
@@ -180,7 +179,7 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
     }
 }
 
-impl FromArrowArray<&ArrowNullArray> for ArrayData {
+impl FromArrowArray<&ArrowNullArray> for Array {
     fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
         NullArray::new(value.len()).into()
@@ -204,7 +203,7 @@ fn nulls(nulls: Option<&NullBuffer>, nullable: bool) -> Validity {
     }
 }
 
-impl FromArrowArray<ArrowArrayRef> for ArrayData {
+impl FromArrowArray<ArrowArrayRef> for Array {
     fn from_arrow(array: ArrowArrayRef, nullable: bool) -> Self {
         match array.data_type() {
             DataType::Boolean => Self::from_arrow(array.as_boolean(), nullable),

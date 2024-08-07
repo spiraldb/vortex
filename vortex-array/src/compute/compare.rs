@@ -5,7 +5,7 @@ use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::arrow::FromArrowArray;
-use crate::{Array, ArrayDType, ArrayData, IntoCanonical};
+use crate::{Array, ArrayDType, IntoCanonical};
 
 pub trait CompareFn {
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;
@@ -47,7 +47,7 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         Operator::Lte => cmp::lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
     };
 
-    Ok(ArrayData::from_arrow(&array, true).into())
+    Ok(Array::from_arrow(&array, true))
 }
 
 pub fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {

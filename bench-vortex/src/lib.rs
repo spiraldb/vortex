@@ -262,7 +262,7 @@ mod test {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
     use vortex::compress::CompressionStrategy;
-    use vortex::{Array, ArrayData, IntoCanonical};
+    use vortex::{Array, IntoCanonical};
     use vortex_sampling_compressor::SamplingCompressor;
 
     use crate::taxi_data::taxi_data_parquet;
@@ -285,7 +285,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array: Array = ArrayData::from_arrow(arrow_array.clone(), false).into();
+            let vortex_array = Array::from_arrow(arrow_array.clone(), false);
             let vortex_as_arrow = vortex_array.into_canonical().unwrap().into_arrow();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
@@ -304,7 +304,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into();
+            let vortex_array = Array::from_arrow(arrow_array.clone(), false);
 
             let compressed = compressor.compress(&vortex_array).unwrap();
             let compressed_as_arrow = compressed.into_canonical().unwrap().into_arrow();

@@ -20,7 +20,7 @@ use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayData, ArrayDef, ArrayTrait, Canonical, IntoArrayVariant,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArrayVariant,
     IntoCanonical,
 };
 
@@ -200,7 +200,7 @@ impl VarBinViewArray {
         for s in iter {
             builder.append_value(s);
         }
-        let array = Array::from(ArrayData::from_arrow(&builder.finish(), false));
+        let array = Array::from_arrow(&builder.finish(), false);
         VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
@@ -211,7 +211,7 @@ impl VarBinViewArray {
         let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
 
-        let array = Array::from(ArrayData::from_arrow(&builder.finish(), true));
+        let array = Array::from_arrow(&builder.finish(), true);
         VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
@@ -221,7 +221,7 @@ impl VarBinViewArray {
         for b in iter {
             builder.append_value(b);
         }
-        let array = Array::from(ArrayData::from_arrow(&builder.finish(), true));
+        let array = Array::from_arrow(&builder.finish(), true);
         VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
@@ -231,7 +231,7 @@ impl VarBinViewArray {
         let iter = iter.into_iter();
         let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
-        let array = Array::from(ArrayData::from_arrow(&builder.finish(), true));
+        let array = Array::from_arrow(&builder.finish(), true);
         VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
@@ -261,7 +261,7 @@ impl IntoCanonical for VarBinViewArray {
         let arrow_self = as_arrow(self);
         let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
             .expect("Utf8View must cast to Ut8f");
-        let vortex_array = Array::from(ArrayData::from_arrow(arrow_varbin, nullable));
+        let vortex_array = Array::from_arrow(arrow_varbin, nullable);
 
         Ok(Canonical::VarBin(VarBinArray::try_from(&vortex_array)?))
     }
