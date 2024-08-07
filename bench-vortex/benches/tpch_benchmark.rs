@@ -32,7 +32,12 @@ fn benchmark(c: &mut Criterion) {
         .block_on(load_datasets(&data_dir, Format::Parquet))
         .unwrap();
     let persistent_vortex_ctx = runtime
-        .block_on(load_datasets(&data_dir, Format::OnDiskVortex))
+        .block_on(load_datasets(
+            &data_dir,
+            Format::OnDiskVortex {
+                enable_compression: true,
+            },
+        ))
         .unwrap();
 
     for (q, query) in tpch_queries() {
@@ -87,7 +92,7 @@ fn benchmark(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("persistent_vortex", |b| {
+        group.bench_function("persistent_compressed_vortex", |b| {
             b.to_async(&runtime).iter(|| async {
                 persistent_vortex_ctx
                     .sql(&query)

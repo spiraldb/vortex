@@ -18,6 +18,7 @@ use vortex_datafusion::memory::VortexMemTableOptions;
 use vortex_datafusion::persistent::config::{VortexFile, VortexTableOptions};
 use vortex_datafusion::SessionContextExt;
 use vortex_dtype::DType;
+use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::layouts::writer::LayoutWriter;
 
 use crate::idempotent_async;
@@ -31,7 +32,7 @@ pub enum Format {
     Arrow,
     Parquet,
     InMemoryVortex { enable_pushdown: bool },
-    OnDiskVortex,
+    OnDiskVortex { enable_compression: bool },
 }
 
 // Generate table dataset.
@@ -71,8 +72,15 @@ pub async fn load_datasets<P: AsRef<Path>>(
                     )
                     .await
                 }
-                Format::OnDiskVortex => {
-                    register_vortex_file(&context, stringify!($name), &$name, $schema).await
+                Format::OnDiskVortex { enable_compression } => {
+                    register_vortex_file(
+                        &context,
+                        stringify!($name),
+                        &$name,
+                        $schema,
+                        enable_compression,
+                    )
+                    .await
                 }
             }
         };
@@ -184,6 +192,7 @@ async fn register_vortex_file(
     name: &str,
     file: &Path,
     schema: &Schema,
+    enable_compression: bool,
 ) -> anyhow::Result<()> {
     let vtx_file = idempotent_async(
         &file.with_extension("").with_extension("vtx"),
@@ -241,6 +250,13 @@ async fn register_vortex_file(
                 .collect::<Vec<_>>();
 
             let data = vortex::array::StructArray::from_fields(&fields).into_array();
+
+            let data = if enable_compression {
+                let compressor = SamplingCompressor::default();
+                compressor.compress(&data, None)?.into_array()
+            } else {
+                data
+            };
 
             let f = OpenOptions::new()
                 .write(true)
