@@ -89,10 +89,7 @@ impl TableProvider for VortexFileTableProvider {
         &self,
         filters: &[&Expr],
     ) -> DFResult<Vec<TableProviderFilterPushDown>> {
-        Ok(vec![
-            TableProviderFilterPushDown::Unsupported;
-            filters.len()
-        ])
+        Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()])
     }
 
     fn statistics(&self) -> Option<Statistics> {
