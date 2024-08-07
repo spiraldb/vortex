@@ -15,11 +15,14 @@ use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskCo
 use datafusion::prelude::{DataFrame, SessionContext};
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
+use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_expr::{Expr, Operator};
 use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 use futures::Stream;
 use itertools::Itertools;
 use memory::{VortexMemTable, VortexMemTableOptions};
+use persistent::config::VortexTableOptions;
+use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
 
@@ -30,6 +33,8 @@ mod datatype;
 mod eval;
 mod expr;
 mod plans;
+
+pub use datatype::infer_schema;
 
 const SUPPORTED_BINARY_OPS: &[Operator] = &[
     Operator::Eq,
@@ -54,27 +59,51 @@ fn supported_data_types(dt: DataType) -> bool {
 }
 
 pub trait SessionContextExt {
-    fn register_vortex<S: AsRef<str>>(&self, name: S, array: Array) -> DFResult<()> {
-        self.register_vortex_opts(name, array, VortexMemTableOptions::default())
+    fn register_mem_vortex<S: AsRef<str>>(&self, name: S, array: Array) -> DFResult<()> {
+        self.register_mem_vortex_opts(name, array, VortexMemTableOptions::default())
     }
 
-    fn register_vortex_opts<S: AsRef<str>>(
+    fn register_mem_vortex_opts<S: AsRef<str>>(
         &self,
         name: S,
         array: Array,
         options: VortexMemTableOptions,
     ) -> DFResult<()>;
 
-    fn read_vortex(&self, array: Array) -> DFResult<DataFrame> {
-        self.read_vortex_opts(array, VortexMemTableOptions::default())
+    fn read_mem_vortex(&self, array: Array) -> DFResult<DataFrame> {
+        self.read_mem_vortex_opts(array, VortexMemTableOptions::default())
     }
 
-    fn read_vortex_opts(&self, array: Array, options: VortexMemTableOptions)
-        -> DFResult<DataFrame>;
+    fn read_mem_vortex_opts(
+        &self,
+        array: Array,
+        options: VortexMemTableOptions,
+    ) -> DFResult<DataFrame>;
+
+    fn register_disk_vortex<S: AsRef<str>>(&self, name: S, url: ObjectStoreUrl) -> DFResult<()> {
+        self.register_disk_vortex_opts(name, url, VortexTableOptions::default())
+    }
+
+    fn register_disk_vortex_opts<S: AsRef<str>>(
+        &self,
+        name: S,
+        url: ObjectStoreUrl,
+        options: VortexTableOptions,
+    ) -> DFResult<()>;
+
+    fn read_disk_vortex(&self, url: ObjectStoreUrl) -> DFResult<DataFrame> {
+        self.read_disk_vortex_opts(url, VortexTableOptions::default())
+    }
+
+    fn read_disk_vortex_opts(
+        &self,
+        url: ObjectStoreUrl,
+        options: VortexTableOptions,
+    ) -> DFResult<DataFrame>;
 }
 
 impl SessionContextExt for SessionContext {
-    fn register_vortex_opts<S: AsRef<str>>(
+    fn register_mem_vortex_opts<S: AsRef<str>>(
         &self,
         name: S,
         array: Array,
@@ -90,7 +119,7 @@ impl SessionContextExt for SessionContext {
             .map(|_| ())
     }
 
-    fn read_vortex_opts(
+    fn read_mem_vortex_opts(
         &self,
         array: Array,
         options: VortexMemTableOptions,
@@ -103,6 +132,27 @@ impl SessionContextExt for SessionContext {
         let vortex_table = VortexMemTable::new(array, options);
 
         self.read_table(Arc::new(vortex_table))
+    }
+
+    fn register_disk_vortex_opts<S: AsRef<str>>(
+        &self,
+        name: S,
+        url: ObjectStoreUrl,
+        options: VortexTableOptions,
+    ) -> DFResult<()> {
+        let provider = Arc::new(VortexFileTableProvider::try_new(url, options)?);
+        self.register_table(name.as_ref(), provider as _)?;
+
+        Ok(())
+    }
+
+    fn read_disk_vortex_opts(
+        &self,
+        url: ObjectStoreUrl,
+        options: VortexTableOptions,
+    ) -> DFResult<DataFrame> {
+        let provider = Arc::new(VortexFileTableProvider::try_new(url, options)?);
+        self.read_table(provider)
     }
 }
 

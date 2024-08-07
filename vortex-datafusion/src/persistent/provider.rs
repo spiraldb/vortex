@@ -13,17 +13,17 @@ use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
 use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::ExecutionPlan;
 
-use super::config::VortexTableConfig;
+use super::config::VortexTableOptions;
 use crate::persistent::execution::VortexExec;
 
 pub struct VortexFileTableProvider {
     schema_ref: SchemaRef,
     object_store_url: ObjectStoreUrl,
-    config: VortexTableConfig,
+    config: VortexTableOptions,
 }
 
 impl VortexFileTableProvider {
-    pub fn try_new(object_store_url: ObjectStoreUrl, config: VortexTableConfig) -> DFResult<Self> {
+    pub fn try_new(object_store_url: ObjectStoreUrl, config: VortexTableOptions) -> DFResult<Self> {
         Ok(Self {
             schema_ref: config.schema.clone().unwrap(),
             object_store_url,
@@ -53,7 +53,13 @@ impl TableProvider for VortexFileTableProvider {
         filters: &[Expr],
         _limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        let df_schema = DFSchema::try_from(self.schema())?;
+        let projected_schema = if let Some(projection) = projection {
+            Arc::new(self.schema().project(projection)?)
+        } else {
+            self.schema()
+        };
+
+        let df_schema = DFSchema::try_from(projected_schema.clone())?;
         let predicate = conjunction(filters.to_vec());
         let predicate = predicate
             .map(|predicate| state.create_physical_expr(predicate, &df_schema))
@@ -83,7 +89,10 @@ impl TableProvider for VortexFileTableProvider {
         &self,
         filters: &[&Expr],
     ) -> DFResult<Vec<TableProviderFilterPushDown>> {
-        Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()])
+        Ok(vec![
+            TableProviderFilterPushDown::Unsupported;
+            filters.len()
+        ])
     }
 
     fn statistics(&self) -> Option<Statistics> {

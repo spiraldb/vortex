@@ -49,7 +49,9 @@ impl FileOpener for VortexFileOpener {
                         .expect("struct arrays must canonicalize")
                         .into_arrow();
                     let struct_array = as_struct_array(arrow.as_ref());
-                    RecordBatch::from(struct_array)
+                    let rb = RecordBatch::from(struct_array);
+
+                    rb
                 })
                 .map_err(|e| e.into());
 

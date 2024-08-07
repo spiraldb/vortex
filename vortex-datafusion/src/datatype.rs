@@ -25,7 +25,7 @@ use vortex_dtype::{DType, Nullability, PType};
 ///
 /// This function will panic if the provided `dtype` is not a StructDType, or if the struct DType
 /// has top-level nullability.
-pub(crate) fn infer_schema(dtype: &DType) -> Schema {
+pub fn infer_schema(dtype: &DType) -> Schema {
     let DType::Struct(struct_dtype, nullable) = dtype else {
         panic!("only DType::Struct can be converted to arrow schema");
     };
@@ -136,7 +136,7 @@ mod test {
         DType, ExtDType, ExtID, FieldName, FieldNames, Nullability, PType, StructDType,
     };
 
-    use crate::datatype::{infer_data_type, infer_schema};
+    use super::*;
 
     #[test]
     fn test_dtype_conversion_success() {

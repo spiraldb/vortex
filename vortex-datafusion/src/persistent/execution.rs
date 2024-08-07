@@ -29,8 +29,15 @@ impl VortexExec {
         predicate: Option<Arc<dyn PhysicalExpr>>,
     ) -> DFResult<Self> {
         let partitioning = Partitioning::UnknownPartitioning(1);
+
+        let projected_schema = if let Some(projection) = projection {
+            Arc::new(file_scan_config.file_schema.clone().project(projection)?)
+        } else {
+            file_scan_config.file_schema.clone()
+        };
+
         let plan_properties = PlanProperties::new(
-            EquivalenceProperties::new(file_scan_config.file_schema.clone()),
+            EquivalenceProperties::new(projected_schema),
             partitioning,
             ExecutionMode::Bounded,
         );

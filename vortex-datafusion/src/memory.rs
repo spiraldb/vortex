@@ -13,11 +13,9 @@ use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanP
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
-use vortex_dtype::DType;
 
-use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
-use crate::{can_be_pushed_down, get_filter_projection, VortexScanExec};
+use crate::{can_be_pushed_down, get_filter_projection, infer_schema, VortexScanExec};
 
 /// A [`TableProvider`] that exposes an existing Vortex Array to the DataFusion SQL engine.
 ///
@@ -182,59 +180,6 @@ impl VortexMemTableOptions {
     }
 }
 
-pub trait SessionContextExt {
-    fn register_vortex<S: AsRef<str>>(&self, name: S, array: Array) -> DFResult<()> {
-        self.register_vortex_opts(name, array, VortexMemTableOptions::default())
-    }
-
-    fn register_vortex_opts<S: AsRef<str>>(
-        &self,
-        name: S,
-        array: Array,
-        options: VortexMemTableOptions,
-    ) -> DFResult<()>;
-
-    fn read_vortex(&self, array: Array) -> DFResult<DataFrame> {
-        self.read_vortex_opts(array, VortexMemTableOptions::default())
-    }
-
-    fn read_vortex_opts(&self, array: Array, options: VortexMemTableOptions)
-        -> DFResult<DataFrame>;
-}
-
-impl SessionContextExt for SessionContext {
-    fn register_vortex_opts<S: AsRef<str>>(
-        &self,
-        name: S,
-        array: Array,
-        options: VortexMemTableOptions,
-    ) -> DFResult<()> {
-        assert!(
-            matches!(array.dtype(), DType::Struct(_, _)),
-            "Vortex arrays must have struct type"
-        );
-
-        let vortex_table = VortexMemTable::new(array, options);
-        self.register_table(name.as_ref(), Arc::new(vortex_table))
-            .map(|_| ())
-    }
-
-    fn read_vortex_opts(
-        &self,
-        array: Array,
-        options: VortexMemTableOptions,
-    ) -> DFResult<DataFrame> {
-        assert!(
-            matches!(array.dtype(), DType::Struct(_, _)),
-            "Vortex arrays must have struct type"
-        );
-
-        let vortex_table = VortexMemTable::new(array, options);
-
-        self.read_table(Arc::new(vortex_table))
-    }
-}
-
 /// Construct an operator plan that executes in two stages.
 ///
 /// The first plan stage only materializes the columns related to the provided set of filter
@@ -277,8 +222,8 @@ mod test {
     use vortex::{Array, IntoArray};
     use vortex_dtype::{DType, Nullability};
 
-    use crate::can_be_pushed_down;
-    use crate::memory::{SessionContextExt as _, VortexMemTableOptions};
+    use crate::memory::VortexMemTableOptions;
+    use crate::{can_be_pushed_down, SessionContextExt as _};
 
     fn presidents_array() -> Array {
         let names = VarBinArray::from_vec(
@@ -309,7 +254,7 @@ mod test {
     async fn test_datafusion_pushdown() {
         let ctx = SessionContext::new();
 
-        let df = ctx.read_vortex(presidents_array()).unwrap();
+        let df = ctx.read_mem_vortex(presidents_array()).unwrap();
 
         let distinct_names = df
             .filter(col("term_start").gt_eq(lit(1795)))
@@ -339,7 +284,7 @@ mod test {
         let ctx = SessionContext::new();
 
         let df = ctx
-            .read_vortex_opts(
+            .read_mem_vortex_opts(
                 presidents_array(),
                 // Disable pushdown. We run this test to make sure that the naive codepath also
                 // produces correct results and does not panic anywhere.

@@ -3,6 +3,7 @@ use vortex_dtype::{DType, ExtDType, ExtID};
 
 use crate::array::datetime::TimeUnit;
 use crate::array::extension::ExtensionArray;
+use crate::encoding::{ArrayEncodingRef, EncodingRef};
 use crate::{Array, ArrayDType, ArrayData, IntoArray};
 
 mod from;
@@ -221,6 +222,12 @@ impl TemporalArray {
     /// Retrieve the extension DType associated with the underlying array.
     pub fn ext_dtype(&self) -> &ExtDType {
         self.ext.ext_dtype()
+    }
+}
+
+impl ArrayEncodingRef for TemporalArray {
+    fn encoding(&self) -> EncodingRef {
+        self.ext.encoding()
     }
 }
 

@@ -12,7 +12,7 @@ use url::Url;
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
 use vortex::validity::Validity;
 use vortex::IntoArray;
-use vortex_datafusion::persistent::config::{VortexFile, VortexTableConfig};
+use vortex_datafusion::persistent::config::{VortexFile, VortexTableOptions};
 use vortex_datafusion::persistent::provider::VortexFileTableProvider;
 use vortex_serde::layouts::writer::LayoutWriter;
 
@@ -60,7 +60,7 @@ async fn main() -> anyhow::Result<()> {
 
     let p = Path::from_filesystem_path(filepath)?;
 
-    let config = VortexTableConfig::new(
+    let config = VortexTableOptions::new(
         Arc::new(Schema::new(vec![
             Field::new("strings", DataType::Utf8, false),
             Field::new("numbers", DataType::UInt32, false),
