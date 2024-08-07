@@ -9,7 +9,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use crate::flatbuffers::footer as fb;
 use crate::layouts::reader::batch::BatchReader;
 use crate::layouts::reader::buffered::BufferedReader;
-use crate::layouts::reader::context::{LayoutId, LayoutReader, LayoutSpec};
+use crate::layouts::reader::context::{LayoutDeserializer, LayoutId, LayoutSpec};
 use crate::layouts::reader::{Layout, ReadResult, RelativeLayoutCache, Scan};
 use crate::writer::ByteRange;
 use crate::ArrayBufferReader;
@@ -92,7 +92,7 @@ impl LayoutSpec for ColumnLayoutSpec {
         fb_bytes: Bytes,
         fb_loc: usize,
         scan: Scan,
-        layout_serde: LayoutReader,
+        layout_serde: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
     ) -> Box<dyn Layout> {
         Box::new(ColumnLayout::new(
@@ -111,12 +111,15 @@ pub enum ColumnLayoutState {
     ReadColumns(BatchReader),
 }
 
+/// In memory representation of Columnar NestedLayout.
+///
+/// Each child represents a column
 #[derive(Debug)]
 pub struct ColumnLayout {
     fb_bytes: Bytes,
     fb_loc: usize,
     scan: Scan,
-    layout_serde: LayoutReader,
+    layout_serde: LayoutDeserializer,
     message_cache: RelativeLayoutCache,
     state: ColumnLayoutState,
 }
@@ -127,7 +130,7 @@ impl ColumnLayout {
         fb_loc: usize,
         scan: Scan,
 
-        layout_serde: LayoutReader,
+        layout_serde: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
     ) -> Self {
         Self {
@@ -164,7 +167,7 @@ impl Layout for ColumnLayout {
                     .enumerate()
                     .zip(s.dtypes().iter().cloned())
                     .map(|((idx, child), dtype)| {
-                        self.layout_serde.read(
+                        self.layout_serde.read_layout(
                             self.fb_bytes.clone(),
                             child._tab.loc(),
                             self.scan.clone(),
@@ -200,7 +203,7 @@ impl LayoutSpec for ChunkedLayoutSpec {
         fb_bytes: Bytes,
         fb_loc: usize,
         scan: Scan,
-        layout_serde: LayoutReader,
+        layout_serde: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
     ) -> Box<dyn Layout> {
         Box::new(ChunkedLayout::new(
@@ -219,12 +222,16 @@ pub enum ChunkedLayoutState {
     ReadChunks(BufferedReader),
 }
 
+/// In memory representation of Chunked NestedLayout.
+///
+/// First child in the list is the metadata table
+/// Subsequent children are consecutive chunks of this layout
 #[derive(Debug)]
 pub struct ChunkedLayout {
     fb_bytes: Bytes,
     fb_loc: usize,
     scan: Scan,
-    layout_serde: LayoutReader,
+    layout_builder: LayoutDeserializer,
     message_cache: RelativeLayoutCache,
     state: ChunkedLayoutState,
 }
@@ -234,14 +241,14 @@ impl ChunkedLayout {
         fb_bytes: Bytes,
         fb_loc: usize,
         scan: Scan,
-        layout_serde: LayoutReader,
+        layout_serde: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
     ) -> Self {
         Self {
             fb_bytes,
             fb_loc,
             scan,
-            layout_serde,
+            layout_builder: layout_serde,
             message_cache,
             state: ChunkedLayoutState::Init,
         }
@@ -269,7 +276,7 @@ impl Layout for ChunkedLayout {
                     // Skip over the metadata table of this layout
                     .skip(1)
                     .map(|(i, c)| {
-                        self.layout_serde.read(
+                        self.layout_builder.read_layout(
                             self.fb_bytes.clone(),
                             c._tab.loc(),
                             self.scan.clone(),

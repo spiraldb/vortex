@@ -22,7 +22,7 @@ pub trait LayoutSpec: Debug + Send + Sync {
         fb_bytes: Bytes,
         fb_loc: usize,
         scan: Scan,
-        layout_reader: LayoutReader,
+        layout_reader: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
     ) -> Box<dyn Layout>;
 }
@@ -56,17 +56,17 @@ impl Default for LayoutContext {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct LayoutReader {
+pub struct LayoutDeserializer {
     ctx: Arc<Context>,
     layout_ctx: Arc<LayoutContext>,
 }
 
-impl LayoutReader {
+impl LayoutDeserializer {
     pub fn new(ctx: Arc<Context>, layout_ctx: Arc<LayoutContext>) -> Self {
         Self { ctx, layout_ctx }
     }
 
-    pub fn read(
+    pub fn read_layout(
         &self,
         fb_bytes: Bytes,
         fb_loc: usize,

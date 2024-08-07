@@ -10,7 +10,7 @@ use object_store::ObjectStore;
 use vortex::IntoCanonical;
 use vortex_serde::io::ObjectStoreReadAt;
 use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
-use vortex_serde::layouts::reader::context::LayoutReader;
+use vortex_serde::layouts::reader::context::LayoutDeserializer;
 use vortex_serde::layouts::reader::projections::Projection;
 
 pub struct VortexFileOpener {
@@ -25,7 +25,7 @@ impl FileOpener for VortexFileOpener {
         let read_at =
             ObjectStoreReadAt::new(self.object_store.clone(), file_meta.location().clone());
 
-        let mut builder = VortexLayoutReaderBuilder::new(read_at, LayoutReader::default());
+        let mut builder = VortexLayoutReaderBuilder::new(read_at, LayoutDeserializer::default());
 
         if let Some(batch_size) = self.batch_size {
             builder = builder.with_batch_size(batch_size);

@@ -4,7 +4,7 @@ use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 
 use crate::layouts::reader::builder::VortexLayoutReaderBuilder;
-use crate::layouts::reader::context::LayoutReader;
+use crate::layouts::reader::context::LayoutDeserializer;
 use crate::layouts::reader::projections::Projection;
 use crate::layouts::writer::LayoutWriter;
 
@@ -29,7 +29,7 @@ async fn test_read_simple() {
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutReader::default())
+    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutDeserializer::default())
         .with_batch_size(5)
         .build()
         .await
@@ -68,7 +68,7 @@ async fn test_read_projection() {
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutReader::default())
+    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutDeserializer::default())
         .with_projection(Projection::new([0]))
         .with_batch_size(5)
         .build()
@@ -112,7 +112,7 @@ async fn unequal_batches() {
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutReader::default())
+    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutDeserializer::default())
         .with_batch_size(5)
         .build()
         .await

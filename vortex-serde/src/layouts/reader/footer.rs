@@ -4,7 +4,7 @@ use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::ReadFlatBuffer;
 
-use crate::layouts::reader::context::LayoutReader;
+use crate::layouts::reader::context::LayoutDeserializer;
 use crate::layouts::reader::{Layout, RelativeLayoutCache, Scan};
 use crate::messages::IPCDType;
 
@@ -16,7 +16,7 @@ pub struct Footer {
     pub(crate) footer_offset: u64,
     pub(crate) leftovers: Bytes,
     pub(crate) leftovers_offset: u64,
-    pub(crate) layout_serde: LayoutReader,
+    pub(crate) layout_serde: LayoutDeserializer,
 }
 
 impl Footer {
@@ -41,7 +41,7 @@ impl Footer {
         let fb_layout = fb_footer.layout().expect("Footer must contain a layout");
         let loc = fb_layout._tab.loc();
         self.layout_serde
-            .read(footer_bytes, loc, scan, message_cache)
+            .read_layout(footer_bytes, loc, scan, message_cache)
     }
 
     pub fn dtype(&self) -> VortexResult<DType> {

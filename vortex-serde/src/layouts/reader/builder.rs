@@ -5,7 +5,7 @@ use vortex::{Array, ArrayDType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::io::VortexReadAt;
-use crate::layouts::reader::context::LayoutReader;
+use crate::layouts::reader::context::LayoutDeserializer;
 use crate::layouts::reader::filtering::RowFilter;
 use crate::layouts::reader::footer::Footer;
 use crate::layouts::reader::projections::Projection;
@@ -15,7 +15,7 @@ use crate::layouts::MAGIC_BYTES;
 
 pub struct VortexLayoutReaderBuilder<R> {
     reader: R,
-    layout_serde: LayoutReader,
+    layout_serde: LayoutDeserializer,
     projection: Option<Projection>,
     len: Option<u64>,
     indices: Option<Array>,
@@ -28,7 +28,7 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
     const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
     const FOOTER_TRAILER_SIZE: usize = 20;
 
-    pub fn new(reader: R, layout_serde: LayoutReader) -> Self {
+    pub fn new(reader: R, layout_serde: LayoutDeserializer) -> Self {
         Self {
             reader,
             layout_serde,
