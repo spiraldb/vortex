@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
-use arrow_array::{RecordBatch, StructArray as ArrowStructArray};
+use arrow_array::RecordBatch;
 use arrow_schema::{DataType, SchemaRef};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::{DataFrame, SessionContext};
@@ -24,7 +24,7 @@ use memory::{VortexMemTable, VortexMemTableOptions};
 use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArrayVariant};
 
 pub mod memory;
 pub mod persistent;
