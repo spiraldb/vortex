@@ -100,6 +100,8 @@ pub fn build_flatbuffers() {
         .flat_map(|path| vec!["-I".to_string(), path.to_str().unwrap().to_string()])
         .collect();
 
+    println!("cargo:warning=flatc {:?}", include_args);
+
     check_call(
         Command::new("flatc")
             .arg("--rust")
