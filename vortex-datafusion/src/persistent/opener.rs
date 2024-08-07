@@ -2,17 +2,16 @@ use std::sync::Arc;
 
 use arrow_array::cast::as_struct_array;
 use arrow_array::RecordBatch;
-use datafusion::datasource::physical_plan::{FileMeta, FileOpener, FileOpenFuture};
+use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
 use object_store::ObjectStore;
-
-use vortex::{Context, IntoCanonical};
+use vortex::IntoCanonical;
 use vortex_serde::io::ObjectStoreReadAt;
-use vortex_serde::layouts::{LayoutContext, LayoutReader};
+use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
+use vortex_serde::layouts::reader::context::LayoutReader;
 use vortex_serde::layouts::reader::projections::Projection;
-use vortex_serde::layouts::reader::VortexLayoutReaderBuilder;
 
 pub struct VortexFileOpener {
     pub object_store: Arc<dyn ObjectStore>,
@@ -26,13 +25,7 @@ impl FileOpener for VortexFileOpener {
         let read_at =
             ObjectStoreReadAt::new(self.object_store.clone(), file_meta.location().clone());
 
-        let mut builder = VortexLayoutReaderBuilder::new(
-            read_at,
-            LayoutReader::new(
-                Arc::new(Context::default()),
-                Arc::new(LayoutContext::default()),
-            ),
-        );
+        let mut builder = VortexLayoutReaderBuilder::new(read_at, LayoutReader::default());
 
         if let Some(batch_size) = self.batch_size {
             builder = builder.with_batch_size(batch_size);

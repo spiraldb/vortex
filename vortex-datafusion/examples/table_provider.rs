@@ -4,15 +4,14 @@ use arrow_schema::{DataType, Field, Schema};
 use datafusion::prelude::SessionContext;
 use datafusion_execution::object_store::ObjectStoreUrl;
 use object_store::local::LocalFileSystem;
-use object_store::ObjectStore;
 use object_store::path::Path;
+use object_store::ObjectStore;
 use tempfile::tempdir;
 use tokio::fs::OpenOptions;
 use url::Url;
-
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
-use vortex::IntoArray;
 use vortex::validity::Validity;
+use vortex::IntoArray;
 use vortex_datafusion::persistent::config::{VortexFile, VortexTableConfig};
 use vortex_datafusion::persistent::provider::VortexFileTableProvider;
 use vortex_serde::layouts::writer::layout_writer::LayoutWriter;

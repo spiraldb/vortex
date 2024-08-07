@@ -1,42 +1,41 @@
 use std::mem;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
-use std::task::{Context, Poll, ready};
+use std::task::{ready, Context, Poll};
 
 use bytes::{Bytes, BytesMut};
 use futures::Stream;
-use futures_util::{FutureExt, stream, StreamExt, TryStreamExt};
 use futures_util::future::BoxFuture;
-
-use vortex::{Array, IntoArray, IntoArrayVariant};
+use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
 use vortex::array::StructArray;
-use vortex::compute::{filter, filter_indices, search_sorted, SearchSortedSide, slice, take};
 use vortex::compute::unary::subtract_scalar;
-use vortex_dtype::{DType, match_each_integer_ptype};
+use vortex::compute::{filter, filter_indices, search_sorted, slice, take, SearchSortedSide};
+use vortex::{Array, IntoArray, IntoArrayVariant};
+use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
-use crate::layouts::{Layout, MessageId, MessagesCache, ReadResult, Scan};
 use crate::layouts::reader::projections::Projection;
 use crate::layouts::reader::schema::Schema;
+use crate::layouts::reader::{Layout, LayoutMessageCache, MessageId, ReadResult, Scan};
 use crate::writer::ByteRange;
 
 pub struct VortexLayoutBatchStream<R> {
     reader: Option<R>,
     layout: Box<dyn Layout>,
     scan: Scan,
-    messages_cache: Arc<RwLock<MessagesCache>>,
+    messages_cache: Arc<RwLock<LayoutMessageCache>>,
     state: StreamingState<R>,
     dtype: DType,
     current_offset: usize,
 }
 
 impl<R: VortexReadAt> VortexLayoutBatchStream<R> {
-    fn try_new(
+    pub fn try_new(
         reader: R,
         layout: Box<dyn Layout>,
-        messages_cache: Arc<RwLock<MessagesCache>>,
+        messages_cache: Arc<RwLock<LayoutMessageCache>>,
         dtype: DType,
         scan: Scan,
     ) -> VortexResult<Self> {
@@ -75,7 +74,7 @@ impl<R: VortexReadAt> VortexLayoutBatchStream<R> {
     }
 }
 
-type StreamStateFuture<R> = BoxFuture<'static, VortexResult<(R, Vec<(Vec<MessageId>, Bytes)>)>>;
+type StreamStateFuture<R> = BoxFuture<'static, VortexResult<(R, Vec<(MessageId, Bytes)>)>>;
 
 #[derive(Default)]
 enum StreamingState<R> {
@@ -96,8 +95,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                     let rr = self.layout.read()?;
                     if let Some(read) = rr {
                         match read {
-                            ReadResult::GetMsgs(r1, r2) => {
-                                assert!(r2.is_empty(), "Read ahead not supported");
+                            ReadResult::GetMsgs(r1) => {
                                 let reader =
                                     mem::take(&mut self.reader).expect("Invalid state transition");
                                 let read_future = read_ranges(reader, r1).boxed();
@@ -153,8 +151,8 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
 
 async fn read_ranges<R: VortexReadAt>(
     reader: R,
-    ranges: Vec<(Vec<MessageId>, ByteRange)>,
-) -> VortexResult<(R, Vec<(Vec<MessageId>, Bytes)>)> {
+    ranges: Vec<(MessageId, ByteRange)>,
+) -> VortexResult<(R, Vec<(MessageId, Bytes)>)> {
     stream::iter(ranges.into_iter())
         .map(|(id, range)| {
             let mut buf = BytesMut::with_capacity(range.len());

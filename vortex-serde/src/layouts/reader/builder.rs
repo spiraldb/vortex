@@ -1,16 +1,18 @@
 use std::sync::{Arc, RwLock};
 
 use bytes::BytesMut;
-
-use vortex::Array;
+use vortex::{Array, ArrayDType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::io::VortexReadAt;
-use crate::layouts::{LayoutReader, MessagesCache, RelativeMessageCache, Scan};
-use crate::layouts::footer::Footer;
-use crate::layouts::reader::{DEFAULT_BATCH_SIZE, DEFAULT_PROJECTION, VortexLayoutBatchStream};
+use crate::layouts::reader::context::LayoutReader;
 use crate::layouts::reader::filtering::RowFilter;
+use crate::layouts::reader::footer::Footer;
 use crate::layouts::reader::projections::Projection;
+use crate::layouts::reader::stream::VortexLayoutBatchStream;
+use crate::layouts::reader::{
+    LayoutMessageCache, RelativeLayoutCache, Scan, DEFAULT_BATCH_SIZE, DEFAULT_PROJECTION,
+};
 use crate::layouts::writer::layout_writer::MAGIC_BYTES;
 
 pub struct VortexLayoutReaderBuilder<R> {
@@ -82,9 +84,9 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
             batch_size,
         };
 
-        let message_cache = Arc::new(RwLock::new(MessagesCache::default()));
+        let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
         let layouts_cache =
-            RelativeMessageCache::new(footer.dtype()?, message_cache.clone(), Vec::new());
+            RelativeLayoutCache::new(footer.dtype()?, message_cache.clone(), Vec::new());
 
         let layout = footer.layout(scan.clone(), layouts_cache)?;
 

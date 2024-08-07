@@ -1,11 +1,11 @@
 use std::collections::VecDeque;
 
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::ChunkedArray;
 use vortex::compute::slice;
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
-use crate::layouts::{Layout, ReadResult};
+use crate::layouts::reader::{Layout, ReadResult};
 
 #[derive(Debug)]
 pub struct BufferedReader {

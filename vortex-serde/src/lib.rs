@@ -53,19 +53,18 @@ mod test {
     use std::sync::Arc;
 
     use futures_executor::block_on;
-    use futures_util::{pin_mut, StreamExt, TryStreamExt};
     use futures_util::io::Cursor;
+    use futures_util::{pin_mut, StreamExt, TryStreamExt};
     use itertools::Itertools;
-
-    use vortex::{ArrayDType, Context, IntoArray};
     use vortex::array::{ChunkedArray, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::ArrayEncoding;
     use vortex::stream::ArrayStreamExt;
+    use vortex::{ArrayDType, Context, IntoArray};
     use vortex_error::VortexResult;
 
     use crate::io::FuturesAdapter;
-    use crate::MessageReader;
     use crate::writer::ArrayWriter;
+    use crate::MessageReader;
 
     fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
         block_on(async {

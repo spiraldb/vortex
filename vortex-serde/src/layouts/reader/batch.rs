@@ -5,7 +5,7 @@ use vortex::{Array, IntoArray};
 use vortex::array::StructArray;
 use vortex_error::VortexResult;
 
-use crate::layouts::{Layout, ReadResult};
+use crate::layouts::reader::{Layout, ReadResult};
 
 #[derive(Debug)]
 pub struct BatchReader {
@@ -26,37 +26,31 @@ impl BatchReader {
 
     pub fn read(&mut self) -> VortexResult<Option<ReadResult>> {
         let mut rr1 = Vec::new();
-        let mut rr2 = Vec::new();
-        for (i, column_reader) in self.children.iter_mut().enumerate() {
-            if self.arrays[i].is_none() {
-                match column_reader.read() {
-                    Ok(Some(rr)) => match rr {
-                        ReadResult::GetMsgs(r1, r2) => {
-                            // rewrite the path here
-                            rr1.extend(r1);
-                            rr2.extend(r2);
-                        }
-                        ReadResult::Batch(a) => self.arrays[i] = Some(a),
-                    },
-                    Ok(None) => {
-                        if self.arrays.iter().all(|a| a.is_none()) {
-                            return Ok(None);
-                        }
-                        debug_assert!(
-                            self.arrays[i].is_some(),
-                            "Expected layout to produce an array but it was empty"
-                        );
+        for (i, child_array) in self
+            .arrays
+            .iter_mut()
+            .enumerate()
+            .filter(|(_, a)| a.is_none())
+        {
+            match self.children[i].read() {
+                Ok(Some(rr)) => match rr {
+                    ReadResult::GetMsgs(r1) => {
+                        rr1.extend(r1);
                     }
-                    Err(e) => return Err(e),
+                    ReadResult::Batch(a) => *child_array = Some(a),
+                },
+                Ok(None) => {
+                    debug_assert!(
+                        self.arrays.iter().all(|a| a.is_none()),
+                        "Expected layout to produce an array but it was empty"
+                    );
+                    return Ok(None);
                 }
+                Err(e) => return Err(e),
             }
         }
 
-        if self.arrays.iter().all(|a| a.is_some()) {
-            debug_assert!(
-                rr1.is_empty() && rr2.is_empty(),
-                "Expected read only if there's arrays missing"
-            );
+        if rr1.is_empty() {
             let child_arrays = mem::replace(&mut self.arrays, vec![None; self.children.len()])
                 .into_iter()
                 .map(|a| a.unwrap());
@@ -64,10 +58,8 @@ impl BatchReader {
                 StructArray::from_fields(&self.names.iter().zip(child_arrays).collect::<Vec<_>>())
                     .into_array(),
             )));
-        } else if rr1.is_empty() && rr2.is_empty() {
-            Ok(None)
         } else {
-            Ok(Some(ReadResult::GetMsgs(rr1, rr2)))
+            Ok(Some(ReadResult::GetMsgs(rr1)))
         }
     }
 }

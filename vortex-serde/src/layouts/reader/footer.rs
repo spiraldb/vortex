@@ -1,12 +1,14 @@
 use bytes::Bytes;
 use flatbuffers::root;
-
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::ReadFlatBuffer;
 
-use crate::layouts::{FULL_FOOTER_SIZE, Layout, LayoutReader, RelativeMessageCache, Scan};
+use crate::layouts::reader::context::LayoutReader;
+use crate::layouts::reader::{Layout, RelativeLayoutCache, Scan};
 use crate::messages::IPCDType;
+
+pub const FULL_FOOTER_SIZE: usize = 20;
 
 pub struct Footer {
     pub(crate) schema_offset: u64,
@@ -29,7 +31,7 @@ impl Footer {
     pub fn layout(
         &self,
         scan: Scan,
-        message_cache: RelativeMessageCache,
+        message_cache: RelativeLayoutCache,
     ) -> VortexResult<Box<dyn Layout>> {
         let start_offset = self.leftovers_footer_offset();
         let end_offset = self.leftovers.len() - FULL_FOOTER_SIZE;

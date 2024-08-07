@@ -1,14 +1,11 @@
-use std::sync::Arc;
-
 use futures::StreamExt;
-
-use vortex::{ArrayDType, Context, IntoArray, IntoArrayVariant};
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
+use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 
-use crate::layouts::{LayoutContext, LayoutReader};
+use crate::layouts::reader::builder::VortexLayoutReaderBuilder;
+use crate::layouts::reader::context::LayoutReader;
 use crate::layouts::reader::projections::Projection;
-use crate::layouts::reader::VortexLayoutReaderBuilder;
 use crate::layouts::writer::layout_writer::LayoutWriter;
 
 #[tokio::test]
@@ -32,10 +29,7 @@ async fn test_read_simple() {
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let layout_ctx = Arc::new(LayoutContext::default());
-    let ctx = Arc::new(Context::default());
-    let layout_serde = LayoutReader::new(ctx, layout_ctx);
-    let mut stream = VortexLayoutReaderBuilder::new(written, layout_serde)
+    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutReader::default())
         .with_batch_size(5)
         .build()
         .await
@@ -74,10 +68,7 @@ async fn test_read_projection() {
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let layout_ctx = Arc::new(LayoutContext::default());
-    let ctx = Arc::new(Context::default());
-    let layout_serde = LayoutReader::new(ctx, layout_ctx);
-    let mut stream = VortexLayoutReaderBuilder::new(written, layout_serde)
+    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutReader::default())
         .with_projection(Projection::new([0]))
         .with_batch_size(5)
         .build()
@@ -121,10 +112,7 @@ async fn unequal_batches() {
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let layout_ctx = Arc::new(LayoutContext::default());
-    let ctx = Arc::new(Context::default());
-    let layout_serde = LayoutReader::new(ctx, layout_ctx);
-    let mut stream = VortexLayoutReaderBuilder::new(written, layout_serde)
+    let mut stream = VortexLayoutReaderBuilder::new(written, LayoutReader::default())
         .with_batch_size(5)
         .build()
         .await

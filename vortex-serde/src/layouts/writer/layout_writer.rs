@@ -4,11 +4,10 @@ use std::mem;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
-
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::{ChunkedArray, StructArray};
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -16,11 +15,11 @@ use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
-use crate::layouts::{ChunkedLayoutDefinition, ColumnLayoutDefinition};
+use crate::layouts::reader::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use crate::layouts::writer::layouts::{FlatLayout, Layout, NestedLayout};
 use crate::messages::IPCSchema;
-use crate::MessageWriter;
 use crate::writer::ChunkOffsets;
+use crate::MessageWriter;
 
 pub const MAGIC_BYTES: [u8; 4] = *b"VRX1";
 
@@ -219,14 +218,11 @@ impl<W: VortexWrite> LayoutWriter<W> {
             )));
             column_layouts.push_back(Layout::Nested(NestedLayout::new(
                 chunks,
-                ChunkedLayoutDefinition::ID,
+                ChunkedLayoutSpec::ID,
             )));
         }
 
-        Ok(NestedLayout::new(
-            column_layouts,
-            ColumnLayoutDefinition::ID,
-        ))
+        Ok(NestedLayout::new(column_layouts, ColumnLayoutSpec::ID))
     }
 
     async fn write_file_trailer(self, footer: Footer) -> VortexResult<W> {
@@ -272,10 +268,9 @@ impl<W: VortexWrite> LayoutWriter<W> {
 #[cfg(test)]
 mod tests {
     use futures_executor::block_on;
-
     use vortex::array::{PrimitiveArray, StructArray, VarBinArray};
-    use vortex::IntoArray;
     use vortex::validity::Validity;
+    use vortex::IntoArray;
 
     use crate::layouts::writer::layout_writer::LayoutWriter;
 
