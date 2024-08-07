@@ -83,8 +83,7 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
         };
 
         let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let layouts_cache =
-            RelativeLayoutCache::new(footer.dtype()?, message_cache.clone(), Vec::new());
+        let layouts_cache = RelativeLayoutCache::new(message_cache.clone(), footer.dtype()?);
 
         let layout = footer.layout(scan.clone(), layouts_cache)?;
 
