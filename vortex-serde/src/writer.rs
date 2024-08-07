@@ -44,7 +44,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
         Ok(ByteRange { begin, end })
     }
 
-    async fn write_array_chunks<S>(&mut self, mut stream: S) -> VortexResult<ChunkLayout>
+    async fn write_array_chunks<S>(&mut self, mut stream: S) -> VortexResult<ChunkOffsets>
     where
         S: Stream<Item = VortexResult<Array>> + Unpin,
     {
@@ -59,7 +59,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
             byte_offsets.push(self.msgs.tell());
         }
 
-        Ok(ChunkLayout {
+        Ok(ChunkOffsets {
             byte_offsets,
             row_offsets,
         })
@@ -111,11 +111,11 @@ impl ByteRange {
 #[derive(Clone, Debug)]
 pub struct ArrayLayout {
     pub dtype: ByteRange,
-    pub chunks: ChunkLayout,
+    pub chunks: ChunkOffsets,
 }
 
 #[derive(Clone, Debug)]
-pub struct ChunkLayout {
+pub struct ChunkOffsets {
     pub byte_offsets: Vec<u64>,
     pub row_offsets: Vec<u64>,
 }

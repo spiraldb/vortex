@@ -1,4 +1,4 @@
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub enum Projection {
     #[default]
     All,

@@ -13,22 +13,23 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
 
-use crate::file::layouts::{ChunkedLayout, FlatLayout, Layout, StructLayout};
 use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
+use crate::layouts::reader::{ChunkedLayoutSpec, ColumnLayoutSpec};
+use crate::layouts::writer::layouts::{FlatLayout, Layout, NestedLayout};
+use crate::layouts::MAGIC_BYTES;
 use crate::messages::IPCSchema;
-use crate::writer::ChunkLayout;
+use crate::writer::ChunkOffsets;
 use crate::MessageWriter;
 
-pub const MAGIC_BYTES: [u8; 4] = *b"VRX1";
-
-pub struct FileWriter<W> {
+pub struct LayoutWriter<W> {
     msgs: MessageWriter<W>,
 
     dtype: Option<DType>,
-    column_chunks: Vec<ChunkLayout>,
+    column_chunks: Vec<ChunkOffsets>,
 }
 
+#[derive(Debug)]
 pub struct Footer {
     layout: Layout,
 }
@@ -56,9 +57,9 @@ impl WriteFlatBuffer for Footer {
     }
 }
 
-impl<W: VortexWrite> FileWriter<W> {
+impl<W: VortexWrite> LayoutWriter<W> {
     pub fn new(write: W) -> Self {
-        FileWriter {
+        LayoutWriter {
             msgs: MessageWriter::new(write),
             dtype: None,
             column_chunks: Vec::new(),
@@ -114,7 +115,7 @@ impl<W: VortexWrite> FileWriter<W> {
         &mut self,
         mut stream: S,
         column_idx: usize,
-    ) -> VortexResult<ChunkLayout>
+    ) -> VortexResult<ChunkOffsets>
     where
         S: Stream<Item = VortexResult<Array>> + Unpin,
     {
@@ -138,13 +139,13 @@ impl<W: VortexWrite> FileWriter<W> {
             byte_offsets.push(self.msgs.tell());
         }
 
-        Ok(ChunkLayout {
+        Ok(ChunkOffsets {
             byte_offsets,
             row_offsets,
         })
     }
 
-    fn merge_chunk_offsets(&mut self, column_idx: usize, chunk_pos: ChunkLayout) {
+    fn merge_chunk_offsets(&mut self, column_idx: usize, chunk_pos: ChunkOffsets) {
         if let Some(chunk) = self.column_chunks.get_mut(column_idx) {
             chunk.byte_offsets.extend(chunk_pos.byte_offsets);
             chunk.row_offsets.extend(chunk_pos.row_offsets);
@@ -153,7 +154,7 @@ impl<W: VortexWrite> FileWriter<W> {
         }
     }
 
-    async fn write_metadata_arrays(&mut self) -> VortexResult<StructLayout> {
+    async fn write_metadata_arrays(&mut self) -> VortexResult<NestedLayout> {
         let DType::Struct(..) = self.dtype.as_ref().expect("Should have written values") else {
             unreachable!("Values are a structarray")
         };
@@ -214,10 +215,13 @@ impl<W: VortexWrite> FileWriter<W> {
                 metadata_table_begin,
                 self.msgs.tell(),
             )));
-            column_layouts.push_back(Layout::Chunked(ChunkedLayout::new(chunks)));
+            column_layouts.push_back(Layout::Nested(NestedLayout::new(
+                chunks,
+                ChunkedLayoutSpec::ID,
+            )));
         }
 
-        Ok(StructLayout::new(column_layouts))
+        Ok(NestedLayout::new(column_layouts, ColumnLayoutSpec::ID))
     }
 
     async fn write_file_trailer(self, footer: Footer) -> VortexResult<W> {
@@ -255,7 +259,7 @@ impl<W: VortexWrite> FileWriter<W> {
 
     pub async fn finalize(mut self) -> VortexResult<W> {
         let top_level_layout = self.write_metadata_arrays().await?;
-        self.write_file_trailer(Footer::new(Layout::Struct(top_level_layout)))
+        self.write_file_trailer(Footer::new(Layout::Nested(top_level_layout)))
             .await
     }
 }
@@ -267,7 +271,7 @@ mod tests {
     use vortex::validity::Validity;
     use vortex::IntoArray;
 
-    use crate::file::file_writer::FileWriter;
+    use crate::layouts::writer::layout_writer::LayoutWriter;
 
     #[test]
     fn write_columns() {
@@ -281,7 +285,7 @@ mod tests {
         )
         .unwrap();
         let buf = Vec::new();
-        let mut writer = FileWriter::new(buf);
+        let mut writer = LayoutWriter::new(buf);
         writer = block_on(async { writer.write_array_columns(st.into_array()).await }).unwrap();
         let written = block_on(async { writer.finalize().await }).unwrap();
         assert!(!written.is_empty());

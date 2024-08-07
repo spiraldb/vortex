@@ -1,3 +1,5 @@
+#![cfg(feature = "object_store")]
+
 use std::future::Future;
 use std::io::Cursor;
 use std::ops::Range;

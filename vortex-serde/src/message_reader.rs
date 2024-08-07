@@ -15,6 +15,8 @@ use crate::flatbuffers::serde as fb;
 use crate::io::VortexRead;
 use crate::messages::IPCDType;
 
+const FLATBUFFER_SIZE_LENGTH: usize = 4;
+
 pub struct MessageReader<R> {
     read: R,
     message: BytesMut,
@@ -36,7 +38,7 @@ impl<R: VortexRead> MessageReader<R> {
 
     async fn load_next_message(&mut self) -> VortexResult<bool> {
         let mut buffer = std::mem::take(&mut self.message);
-        buffer.resize(4, 0);
+        buffer.resize(FLATBUFFER_SIZE_LENGTH, 0);
         let mut buffer = match self.read.read_into(buffer).await {
             Ok(b) => b,
             Err(e) => {
@@ -118,7 +120,7 @@ impl<R: VortexRead> MessageReader<R> {
         let all_buffers = self.read.read_into(all_buffers).await?;
 
         if array_reader.read(all_buffers.freeze())?.is_some() {
-            unreachable!("This is an implementaion bug")
+            unreachable!("This is an implementation bug")
         };
 
         let _ = self.next().await?;
@@ -222,10 +224,6 @@ pub struct ArrayBufferReader {
     buffers: Vec<Buffer>,
 }
 
-pub enum ReadResult {
-    ReadMore(usize),
-}
-
 impl Default for ArrayBufferReader {
     fn default() -> Self {
         Self::new()
@@ -249,15 +247,15 @@ impl ArrayBufferReader {
         }
     }
 
-    pub fn read(&mut self, mut bytes: Bytes) -> VortexResult<Option<ReadResult>> {
+    pub fn read(&mut self, mut bytes: Bytes) -> VortexResult<Option<usize>> {
         match self.state {
             ReadState::Init => {
                 self.state = ReadState::ReadingLength;
-                Ok(Some(ReadResult::ReadMore(4)))
+                Ok(Some(FLATBUFFER_SIZE_LENGTH))
             }
             ReadState::ReadingLength => {
                 self.state = ReadState::ReadingFb;
-                Ok(Some(ReadResult::ReadMore(bytes.get_u32_le() as usize)))
+                Ok(Some(bytes.get_u32_le() as usize))
             }
             ReadState::ReadingFb => {
                 let batch = root::<fb::Message>(&bytes)?
@@ -266,7 +264,7 @@ impl ArrayBufferReader {
                 let buffer_size = batch.buffer_size() as usize;
                 self.fb_msg = Some(Buffer::from(bytes));
                 self.state = ReadState::ReadingBuffers;
-                Ok(Some(ReadResult::ReadMore(buffer_size)))
+                Ok(Some(buffer_size))
             }
             ReadState::ReadingBuffers => {
                 // Split out into individual buffers

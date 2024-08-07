@@ -14,7 +14,7 @@ use vortex::validity::Validity;
 use vortex::IntoArray;
 use vortex_datafusion::persistent::config::{VortexFile, VortexTableConfig};
 use vortex_datafusion::persistent::provider::VortexFileTableProvider;
-use vortex_serde::file::file_writer::FileWriter;
+use vortex_serde::layouts::writer::LayoutWriter;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -48,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
         .open(&filepath)
         .await?;
 
-    let writer = FileWriter::new(f);
+    let writer = LayoutWriter::new(f);
     let writer = writer.write_array_columns(st.into_array()).await?;
     writer.finalize().await?;
 
