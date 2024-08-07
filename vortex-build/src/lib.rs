@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use cargo_metadata::MetadataCommand;
+//use cargo_metadata::{CargoOpt, MetadataCommand};
 use walkdir::WalkDir;
 
 fn manifest_dir() -> PathBuf {
@@ -42,17 +43,22 @@ pub fn build_proto() {
     // transitive dependencies.
     let metadata = MetadataCommand::new()
         .manifest_path(manifest_dir().join("Cargo.toml"))
+        .no_deps()
         .exec()
         .unwrap();
     let proto_feature = "proto".to_string();
+    let pkg_name = env::var("CARGO_PKG_NAME").unwrap();
     let proto_includes = metadata
-        .packages
+        .workspace_packages()
         .iter()
         .filter(|&pkg| {
             pkg.features.contains_key(&proto_feature)
-                || pkg.id == metadata.root_package().unwrap().id
+                || pkg.name == pkg_name
         })
-        .map(|pkg| pkg.manifest_path.parent().unwrap().join("proto"))
+        .map(|pkg| {
+            println!("cargo:warning=using proto files from {:?}", pkg.name);
+            pkg.manifest_path.parent().unwrap().join("proto")
+        })
         .collect::<Vec<_>>();
 
     prost_build::Config::new()
@@ -65,16 +71,20 @@ pub fn build_flatbuffers() {
     let flatbuffers_dir = manifest_dir().join("flatbuffers");
     let metadata = MetadataCommand::new()
         .manifest_path(manifest_dir().join("Cargo.toml"))
+        .no_deps()
         .exec()
         .unwrap();
     let fbs_feature = "flatbuffers".to_string();
+    let pkg_name = env::var("CARGO_PKG_NAME").unwrap();
     let fbs_includes = metadata
-        .packages
+        .workspace_packages()
         .iter()
         .filter(|&pkg| {
-            pkg.features.contains_key(&fbs_feature) || pkg.id == metadata.root_package().unwrap().id
+            // pkg.features.contains_key(&fbs_feature) || pkg.id == metadata.root_package().unwrap().id
+            pkg.features.contains_key(&fbs_feature) || pkg.name == pkg_name
         })
         .map(|pkg| {
+            println!("cargo:warning=using fbs files from {:?}", pkg.name);
             pkg.manifest_path
                 .parent()
                 .unwrap()

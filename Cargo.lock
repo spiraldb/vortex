@@ -417,7 +417,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bench-vortex"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "anyhow",
  "arrow-array",
@@ -608,9 +608,9 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.1.7"
+version = "1.1.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26a5c3fd7bfa1ce3897a3a3501d362b2d87b7f2583ebcb4a949ec25911025cbc"
+checksum = "504bdec147f2cc13c8b57ed9401fd8a147cc66b67ad5cb241394244f2c947549"
 dependencies = [
  "jobserver",
  "libc",
@@ -2427,9 +2427,9 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "object"
-version = "0.36.2"
+version = "0.36.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f203fa8daa7bb185f760ae12bd8e097f63d17041dcdcaf675ac54cdf863170e"
+checksum = "27b64972346851a39438c60b341ebc01bba47464ae329e55cf343eb93964efd9"
 dependencies = [
  "memchr",
 ]
@@ -2931,7 +2931,7 @@ dependencies = [
 
 [[package]]
 name = "pyvortex"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow",
  "log",
@@ -3689,15 +3689,15 @@ checksum = "61c41af27dd6d1e27b1b16b489db798443478cef1f06a660c96db617ba5de3b1"
 
 [[package]]
 name = "tempfile"
-version = "3.11.0"
+version = "3.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8fcd239983515c23a32fb82099f97d0b11b8c72f654ed659363a95c3dad7a53"
+checksum = "04cbcdd0c794ebb0d4cf35e88edd2f7d2c4c3e9a5a6dab322839b321c6a87a64"
 dependencies = [
  "cfg-if",
  "fastrand",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -4078,7 +4078,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vortex-alp"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "divan",
  "itertools 0.13.0",
@@ -4092,7 +4092,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-array"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-arith",
  "arrow-array",
@@ -4130,7 +4130,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-buffer"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-buffer",
  "bytes",
@@ -4139,7 +4139,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-build"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "cargo_metadata",
  "prost-build",
@@ -4148,7 +4148,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-bytebool"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-array",
  "arrow-buffer",
@@ -4166,7 +4166,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-datafusion"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-array",
  "arrow-schema",
@@ -4191,7 +4191,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-datetime-parts"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "log",
  "serde",
@@ -4203,7 +4203,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-dict"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "ahash",
  "criterion",
@@ -4221,7 +4221,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-dtype"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "flatbuffers",
  "half",
@@ -4238,7 +4238,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-error"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-schema",
  "flatbuffers",
@@ -4251,7 +4251,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-expr"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "datafusion-common",
  "datafusion-expr",
@@ -4265,7 +4265,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-fastlanes"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrayref",
  "criterion",
@@ -4283,14 +4283,14 @@ dependencies = [
 
 [[package]]
 name = "vortex-flatbuffers"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "flatbuffers",
 ]
 
 [[package]]
 name = "vortex-roaring"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-buffer",
  "croaring",
@@ -4306,7 +4306,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-runend"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "itertools 0.13.0",
  "num-traits",
@@ -4319,7 +4319,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-runend-bool"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-buffer",
  "criterion",
@@ -4335,7 +4335,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-sampling-compressor"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "chrono",
  "log",
@@ -4354,7 +4354,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-scalar"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow-array",
  "datafusion-common",
@@ -4375,7 +4375,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-serde"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -4409,7 +4409,7 @@ dependencies = [
 
 [[package]]
 name = "vortex-zigzag"
-version = "0.4.8"
+version = "0.4.9"
 dependencies = [
  "serde",
  "vortex-array",
@@ -4802,9 +4802,9 @@ dependencies = [
 
 [[package]]
 name = "worker"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c0a229b4d95f00cda5b229afe91b733714b79558c6b02830bb5c5bb1d32922f7"
+checksum = "3cda58fc54ac88c54387c3a48f46fa066ccb48f2d81f7514dc6c240a2a13bf4e"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4848,9 +4848,9 @@ dependencies = [
 
 [[package]]
 name = "worker-macros"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7ed257c9a7ebb524d03e109ac5c5ad0168e2ea79e647e0aaad90a9b0b90fb30"
+checksum = "cc9b615cb8673627508ceab81cd3a6080ff53d8de696bd5f5a08ac8bb1491a9c"
 dependencies = [
  "async-trait",
  "proc-macro2",
@@ -4864,9 +4864,9 @@ dependencies = [
 
 [[package]]
 name = "worker-sys"
-version = "0.3.2"
+version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac736bbe32f34a9299a1d094dbc06733a7e68844e224f34580574e5b1c432d46"
+checksum = "3ef1e184943d021cf4511d29ddf411a8e75ee511d4fc587f207b60ddcb9698a2"
 dependencies = [
  "cfg-if",
  "js-sys",
