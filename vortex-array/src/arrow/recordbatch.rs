@@ -1,10 +1,11 @@
+use arrow_array::cast::as_struct_array;
 use arrow_array::RecordBatch;
 use itertools::Itertools;
 
 use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
-use crate::Array;
+use crate::{Array, IntoArray, IntoCanonical};
 
 impl From<RecordBatch> for Array {
     fn from(value: RecordBatch) -> Self {
@@ -27,5 +28,22 @@ impl From<RecordBatch> for Array {
         )
         .unwrap()
         .into()
+    }
+}
+
+impl From<Array> for RecordBatch {
+    fn from(value: Array) -> Self {
+        let array_ref = value
+            .into_canonical()
+            .expect("struct arrays must canonicalize")
+            .into_arrow();
+        let struct_array = as_struct_array(array_ref.as_ref());
+        RecordBatch::from(struct_array)
+    }
+}
+
+impl From<StructArray> for RecordBatch {
+    fn from(value: StructArray) -> Self {
+        RecordBatch::from(value.into_array())
     }
 }

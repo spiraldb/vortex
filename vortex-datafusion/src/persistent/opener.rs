@@ -1,13 +1,11 @@
 use std::sync::Arc;
 
-use arrow_array::cast::as_struct_array;
 use arrow_array::RecordBatch;
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
 use object_store::ObjectStore;
-use vortex::IntoCanonical;
 use vortex_serde::io::ObjectStoreReadAt;
 use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
 use vortex_serde::layouts::reader::context::LayoutDeserializer;
@@ -42,17 +40,7 @@ impl FileOpener for VortexFileOpener {
         Ok(async move {
             let reader = builder.build().await?;
 
-            let stream = reader
-                .map_ok(|array| {
-                    let arrow = array
-                        .into_canonical()
-                        .expect("struct arrays must canonicalize")
-                        .into_arrow();
-                    let struct_array = as_struct_array(arrow.as_ref());
-                    RecordBatch::from(struct_array)
-                })
-                .map_err(|e| e.into());
-
+            let stream = reader.map_ok(RecordBatch::from).map_err(|e| e.into());
             Ok(Box::pin(stream) as _)
         }
         .boxed())

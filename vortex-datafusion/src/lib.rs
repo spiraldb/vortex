@@ -24,7 +24,7 @@ use memory::{VortexMemTable, VortexMemTableOptions};
 use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
-use vortex::{Array, ArrayDType, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
 
 pub mod memory;
 pub mod persistent;
@@ -262,17 +262,7 @@ impl Stream for VortexRecordBatchStream {
                     exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
                 })?;
 
-        let batch = RecordBatch::from(
-            projected_struct
-                .into_canonical()
-                .expect("struct arrays must canonicalize")
-                .into_arrow()
-                .as_any()
-                .downcast_ref::<ArrowStructArray>()
-                .expect("vortex StructArray must convert to arrow StructArray"),
-        );
-
-        Poll::Ready(Some(Ok(batch)))
+        Poll::Ready(Some(Ok(projected_struct.into())))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
