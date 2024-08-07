@@ -66,7 +66,7 @@ impl Layout for FlatLayout {
                     read_buf = buf.split_to(u);
                 }
 
-                let array = array_reader.into_array(self.ctx.clone(), self.cache.get_dtype())?;
+                let array = array_reader.into_array(self.ctx.clone(), self.cache.dtype())?;
                 self.state = FlatLayoutState::Finished;
                 Ok(Some(ReadResult::Batch(array)))
             }
@@ -153,7 +153,7 @@ impl Layout for ColumnLayout {
     fn read(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ColumnLayoutState::Init => {
-                let DType::Struct(s, ..) = self.message_cache.get_dtype() else {
+                let DType::Struct(s, ..) = self.message_cache.dtype() else {
                     vortex_bail!("Column layout must have struct dtype")
                 };
 
@@ -274,7 +274,7 @@ impl Layout for ChunkedLayout {
                             c._tab.loc(),
                             self.scan.clone(),
                             self.message_cache
-                                .relative(i as u16, self.message_cache.get_dtype().clone()),
+                                .relative(i as u16, self.message_cache.dtype().clone()),
                         )
                     })
                     .collect::<VortexResult<VecDeque<_>>>()?;

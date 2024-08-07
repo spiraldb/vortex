@@ -6,7 +6,7 @@ use vortex_dtype::PType;
 use crate::layouts::reader::builder::VortexLayoutReaderBuilder;
 use crate::layouts::reader::context::LayoutReader;
 use crate::layouts::reader::projections::Projection;
-use crate::layouts::writer::layout_writer::LayoutWriter;
+use crate::layouts::writer::LayoutWriter;
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]

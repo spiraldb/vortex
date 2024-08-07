@@ -15,6 +15,8 @@ use crate::flatbuffers::serde as fb;
 use crate::io::VortexRead;
 use crate::messages::IPCDType;
 
+const FLATBUFFER_SIZE_LENGTH: usize = 4;
+
 pub struct MessageReader<R> {
     read: R,
     message: BytesMut,
@@ -36,7 +38,7 @@ impl<R: VortexRead> MessageReader<R> {
 
     async fn load_next_message(&mut self) -> VortexResult<bool> {
         let mut buffer = std::mem::take(&mut self.message);
-        buffer.resize(4, 0);
+        buffer.resize(FLATBUFFER_SIZE_LENGTH, 0);
         let mut buffer = match self.read.read_into(buffer).await {
             Ok(b) => b,
             Err(e) => {
@@ -249,7 +251,7 @@ impl ArrayBufferReader {
         match self.state {
             ReadState::Init => {
                 self.state = ReadState::ReadingLength;
-                Ok(Some(4))
+                Ok(Some(FLATBUFFER_SIZE_LENGTH))
             }
             ReadState::ReadingLength => {
                 self.state = ReadState::ReadingFb;

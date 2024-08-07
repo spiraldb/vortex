@@ -10,10 +10,8 @@ use crate::layouts::reader::filtering::RowFilter;
 use crate::layouts::reader::footer::Footer;
 use crate::layouts::reader::projections::Projection;
 use crate::layouts::reader::stream::VortexLayoutBatchStream;
-use crate::layouts::reader::{
-    LayoutMessageCache, RelativeLayoutCache, Scan, DEFAULT_BATCH_SIZE, DEFAULT_PROJECTION,
-};
-use crate::layouts::writer::layout_writer::MAGIC_BYTES;
+use crate::layouts::reader::{LayoutMessageCache, RelativeLayoutCache, Scan, DEFAULT_BATCH_SIZE};
+use crate::layouts::MAGIC_BYTES;
 
 pub struct VortexLayoutReaderBuilder<R> {
     reader: R,
@@ -74,7 +72,7 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
 
     pub async fn build(mut self) -> VortexResult<VortexLayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
-        let projection = self.projection.unwrap_or(DEFAULT_PROJECTION);
+        let projection = self.projection.unwrap_or_default();
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
         let scan = Scan {

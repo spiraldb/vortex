@@ -24,7 +24,6 @@ pub mod schema;
 pub mod stream;
 
 const DEFAULT_BATCH_SIZE: usize = 65536;
-const DEFAULT_PROJECTION: Projection = Projection::All;
 
 #[derive(Debug, Clone)]
 pub struct Scan {
@@ -65,35 +64,39 @@ impl LayoutMessageCache {
 
 #[derive(Debug)]
 pub struct RelativeLayoutCache {
-    parent: Arc<RwLock<LayoutMessageCache>>,
-    path: MessageId,
+    root: Arc<RwLock<LayoutMessageCache>>,
     dtype: DType,
+    path: MessageId,
 }
 
 impl RelativeLayoutCache {
-    pub fn new(dtype: DType, parent: Arc<RwLock<LayoutMessageCache>>, path: MessageId) -> Self {
+    pub fn new(root: Arc<RwLock<LayoutMessageCache>>, dtype: DType) -> Self {
         Self {
-            parent,
-            path,
+            root,
             dtype,
+            path: Vec::new(),
         }
     }
 
     pub fn relative(&self, id: LayoutPartId, dtype: DType) -> Self {
         let mut new_path = self.path.clone();
         new_path.push(id);
-        Self::new(dtype, self.parent.clone(), new_path)
+        Self {
+            root: self.root.clone(),
+            path: new_path,
+            dtype,
+        }
     }
 
     pub fn get(&self, path: &[LayoutPartId]) -> Option<Bytes> {
-        self.parent.read().unwrap().get(&self.absolute_id(path))
+        self.root.read().unwrap().get(&self.absolute_id(path))
     }
 
     pub fn remove(&mut self, path: &[LayoutPartId]) -> Option<Bytes> {
-        self.parent.write().unwrap().remove(&self.absolute_id(path))
+        self.root.write().unwrap().remove(&self.absolute_id(path))
     }
 
-    pub fn get_dtype(&self) -> DType {
+    pub fn dtype(&self) -> DType {
         self.dtype.clone()
     }
 

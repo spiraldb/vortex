@@ -92,8 +92,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
         loop {
             match &mut self.state {
                 StreamingState::Init => {
-                    let rr = self.layout.read()?;
-                    if let Some(read) = rr {
+                    if let Some(read) = self.layout.read()? {
                         match read {
                             ReadResult::GetMsgs(r1) => {
                                 let reader =

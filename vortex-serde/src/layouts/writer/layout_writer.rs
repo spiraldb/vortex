@@ -17,11 +17,10 @@ use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
 use crate::layouts::reader::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use crate::layouts::writer::layouts::{FlatLayout, Layout, NestedLayout};
+use crate::layouts::MAGIC_BYTES;
 use crate::messages::IPCSchema;
 use crate::writer::ChunkOffsets;
 use crate::MessageWriter;
-
-pub const MAGIC_BYTES: [u8; 4] = *b"VRX1";
 
 pub struct LayoutWriter<W> {
     msgs: MessageWriter<W>,

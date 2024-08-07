@@ -1,8 +1,8 @@
 use std::mem;
 use std::sync::Arc;
 
-use vortex::{Array, IntoArray};
 use vortex::array::StructArray;
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::layouts::reader::{Layout, ReadResult};
@@ -32,21 +32,20 @@ impl BatchReader {
             .enumerate()
             .filter(|(_, a)| a.is_none())
         {
-            match self.children[i].read() {
-                Ok(Some(rr)) => match rr {
+            match self.children[i].read()? {
+                Some(rr) => match rr {
                     ReadResult::GetMsgs(r1) => {
                         rr1.extend(r1);
                     }
                     ReadResult::Batch(a) => *child_array = Some(a),
                 },
-                Ok(None) => {
+                None => {
                     debug_assert!(
                         self.arrays.iter().all(|a| a.is_none()),
                         "Expected layout to produce an array but it was empty"
                     );
                     return Ok(None);
                 }
-                Err(e) => return Err(e),
             }
         }
 
