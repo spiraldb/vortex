@@ -1,20 +1,20 @@
 use std::collections::VecDeque;
 
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::ChunkedArray;
 use vortex::compute::slice;
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
-use crate::layout::{Layout, ReadResult};
+use crate::layouts::{Layout, ReadResult};
 
 #[derive(Debug)]
-pub struct BufferedLayoutReader {
+pub struct BufferedReader {
     layouts: VecDeque<Box<dyn Layout>>,
     arrays: VecDeque<Array>,
     batch_size: usize,
 }
 
-impl BufferedLayoutReader {
+impl BufferedReader {
     pub fn new(layouts: VecDeque<Box<dyn Layout>>, batch_size: usize) -> Self {
         Self {
             layouts,

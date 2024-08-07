@@ -1,10 +1,11 @@
 use bytes::Bytes;
 use flatbuffers::root;
+
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 use vortex_flatbuffers::ReadFlatBuffer;
 
-use crate::layout::{Layout, LayoutReader, RelativeMessageCache, Scan, FULL_FOOTER_SIZE};
+use crate::layouts::{FULL_FOOTER_SIZE, Layout, LayoutReader, RelativeMessageCache, Scan};
 use crate::messages::IPCDType;
 
 pub struct Footer {

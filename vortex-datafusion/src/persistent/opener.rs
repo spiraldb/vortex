@@ -2,16 +2,17 @@ use std::sync::Arc;
 
 use arrow_array::cast::as_struct_array;
 use arrow_array::RecordBatch;
-use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
+use datafusion::datasource::physical_plan::{FileMeta, FileOpener, FileOpenFuture};
 use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
 use object_store::ObjectStore;
+
 use vortex::{Context, IntoCanonical};
 use vortex_serde::io::ObjectStoreReadAt;
-use vortex_serde::layout::reader::projections::Projection;
-use vortex_serde::layout::reader::VortexLayoutReaderBuilder;
-use vortex_serde::layout::{LayoutContext, LayoutReader};
+use vortex_serde::layouts::{LayoutContext, LayoutReader};
+use vortex_serde::layouts::reader::projections::Projection;
+use vortex_serde::layouts::reader::VortexLayoutReaderBuilder;
 
 pub struct VortexFileOpener {
     pub object_store: Arc<dyn ObjectStore>,

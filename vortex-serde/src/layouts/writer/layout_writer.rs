@@ -4,10 +4,11 @@ use std::mem;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
+
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex::array::{ChunkedArray, StructArray};
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
@@ -15,10 +16,11 @@ use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::flatbuffers::footer as fb;
 use crate::io::VortexWrite;
-use crate::layout::writer::layouts::{ChunkedLayout, ColumnLayout, FlatLayout, Layout};
+use crate::layouts::{ChunkedLayoutDefinition, ColumnLayoutDefinition};
+use crate::layouts::writer::layouts::{FlatLayout, Layout, NestedLayout};
 use crate::messages::IPCSchema;
-use crate::writer::ChunkOffsets;
 use crate::MessageWriter;
+use crate::writer::ChunkOffsets;
 
 pub const MAGIC_BYTES: [u8; 4] = *b"VRX1";
 
@@ -154,7 +156,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
         }
     }
 
-    async fn write_metadata_arrays(&mut self) -> VortexResult<ColumnLayout> {
+    async fn write_metadata_arrays(&mut self) -> VortexResult<NestedLayout> {
         let DType::Struct(..) = self.dtype.as_ref().expect("Should have written values") else {
             unreachable!("Values are a structarray")
         };
@@ -215,10 +217,16 @@ impl<W: VortexWrite> LayoutWriter<W> {
                 metadata_table_begin,
                 self.msgs.tell(),
             )));
-            column_layouts.push_back(Layout::Chunked(ChunkedLayout::new(chunks)));
+            column_layouts.push_back(Layout::Nested(NestedLayout::new(
+                chunks,
+                ChunkedLayoutDefinition::ID,
+            )));
         }
 
-        Ok(ColumnLayout::new(column_layouts))
+        Ok(NestedLayout::new(
+            column_layouts,
+            ColumnLayoutDefinition::ID,
+        ))
     }
 
     async fn write_file_trailer(self, footer: Footer) -> VortexResult<W> {
@@ -256,7 +264,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
 
     pub async fn finalize(mut self) -> VortexResult<W> {
         let top_level_layout = self.write_metadata_arrays().await?;
-        self.write_file_trailer(Footer::new(Layout::Column(top_level_layout)))
+        self.write_file_trailer(Footer::new(Layout::Nested(top_level_layout)))
             .await
     }
 }
@@ -264,11 +272,12 @@ impl<W: VortexWrite> LayoutWriter<W> {
 #[cfg(test)]
 mod tests {
     use futures_executor::block_on;
-    use vortex::array::{PrimitiveArray, StructArray, VarBinArray};
-    use vortex::validity::Validity;
-    use vortex::IntoArray;
 
-    use crate::layout::writer::layout_writer::LayoutWriter;
+    use vortex::array::{PrimitiveArray, StructArray, VarBinArray};
+    use vortex::IntoArray;
+    use vortex::validity::Validity;
+
+    use crate::layouts::writer::layout_writer::LayoutWriter;
 
     #[test]
     fn write_columns() {

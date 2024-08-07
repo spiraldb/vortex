@@ -4,18 +4,19 @@ use std::sync::{Arc, RwLock};
 
 use ahash::HashMap;
 use bytes::Bytes;
+
 use vortex::{Array, Context};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
+use crate::ArrayBufferReader;
 use crate::flatbuffers::footer as fb;
 use crate::flatbuffers::footer::LayoutVariant;
-use crate::layout::reader::batch::BatchReader;
-use crate::layout::reader::buffered::BufferedLayoutReader;
-use crate::layout::reader::filtering::RowFilter;
-use crate::layout::reader::projections::Projection;
+use crate::layouts::reader::batch::BatchReader;
+use crate::layouts::reader::buffered::BufferedReader;
+use crate::layouts::reader::filtering::RowFilter;
+use crate::layouts::reader::projections::Projection;
 use crate::writer::ByteRange;
-use crate::ArrayBufferReader;
 
 mod footer;
 pub mod reader;
@@ -418,7 +419,7 @@ impl LayoutSpec for ChunkedLayoutDefinition {
 #[derive(Debug)]
 pub enum ChunkedLayoutState {
     Init,
-    ReadChunks(BufferedLayoutReader),
+    ReadChunks(BufferedReader),
 }
 
 #[derive(Debug)]
@@ -479,7 +480,7 @@ impl Layout for ChunkedLayout {
                         )
                     })
                     .collect::<VortexResult<VecDeque<_>>>()?;
-                let mut reader = BufferedLayoutReader::new(children, self.scan.batch_size);
+                let mut reader = BufferedReader::new(children, self.scan.batch_size);
                 let rr = reader.read();
                 self.state = ChunkedLayoutState::ReadChunks(reader);
                 rr
