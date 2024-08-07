@@ -49,7 +49,7 @@ pub fn build_proto() {
     let proto_feature = "proto".to_string();
     let pkg_name = env::var("CARGO_PKG_NAME").unwrap();
     let proto_includes = metadata
-        .workspace_packages()
+        .packages
         .iter()
         .filter(|&pkg| {
             pkg.features.contains_key(&proto_feature)
@@ -77,7 +77,7 @@ pub fn build_flatbuffers() {
     let fbs_feature = "flatbuffers".to_string();
     let pkg_name = env::var("CARGO_PKG_NAME").unwrap();
     let fbs_includes = metadata
-        .workspace_packages()
+        .packages
         .iter()
         .filter(|&pkg| {
             // pkg.features.contains_key(&fbs_feature) || pkg.id == metadata.root_package().unwrap().id
