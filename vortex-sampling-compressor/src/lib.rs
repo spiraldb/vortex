@@ -298,7 +298,7 @@ fn sampled_compression<'a>(
         array.dtype().clone(),
     )?
     .into_canonical()?
-    .into_array();
+    .into();
 
     find_best_compression(candidates, &sample, compressor)?
         .into_path()

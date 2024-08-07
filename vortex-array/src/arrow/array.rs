@@ -26,44 +26,49 @@ use crate::array::{
 use crate::arrow::FromArrowArray;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
-use crate::{ArrayData, IntoArray, IntoArrayData};
+use crate::{Array, ArrayData};
 
-impl IntoArrayData for Buffer {
-    fn into_array_data(self) -> ArrayData {
-        PrimitiveArray::new(self.into(), PType::U8, Validity::NonNullable).into_array_data()
+impl From<Buffer> for ArrayData {
+    fn from(value: Buffer) -> Self {
+        PrimitiveArray::new(value.into(), PType::U8, Validity::NonNullable).into()
     }
 }
 
-impl IntoArrayData for NullBuffer {
-    fn into_array_data(self) -> ArrayData {
-        BoolArray::try_new(self.into_inner(), Validity::NonNullable)
+impl From<NullBuffer> for ArrayData {
+    fn from(value: NullBuffer) -> Self {
+        BoolArray::try_new(value.into_inner(), Validity::NonNullable)
             .unwrap()
-            .into_array_data()
+            .into()
     }
 }
 
-impl<T: ArrowNativeType + NativePType> IntoArrayData for ScalarBuffer<T> {
-    fn into_array_data(self) -> ArrayData {
-        PrimitiveArray::new(self.into_inner().into(), T::PTYPE, Validity::NonNullable)
-            .into_array_data()
+impl<T> From<ScalarBuffer<T>> for ArrayData
+where
+    T: ArrowNativeType + NativePType,
+{
+    fn from(value: ScalarBuffer<T>) -> Self {
+        PrimitiveArray::new(value.into_inner().into(), T::PTYPE, Validity::NonNullable).into()
     }
 }
 
-impl<O: NativePType + OffsetSizeTrait> IntoArrayData for OffsetBuffer<O> {
-    fn into_array_data(self) -> ArrayData {
-        let array = PrimitiveArray::new(
-            self.into_inner().into_inner().into(),
+impl<O> From<OffsetBuffer<O>> for ArrayData
+where
+    O: NativePType + OffsetSizeTrait,
+{
+    fn from(value: OffsetBuffer<O>) -> Self {
+        let array_data: ArrayData = PrimitiveArray::new(
+            value.into_inner().into_inner().into(),
             O::PTYPE,
             Validity::NonNullable,
         )
-        .into_array_data();
-        array.set(Stat::IsSorted, true.into());
-        array.set(Stat::IsStrictSorted, true.into());
-        array
+        .into();
+        array_data.set(Stat::IsSorted, true.into());
+        array_data.set(Stat::IsStrictSorted, true.into());
+        array_data
     }
 }
 
-impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for ArrayData
+impl<T: ArrowPrimitiveType> FromArrowArray<&ArrowPrimitiveArray<T>> for Array
 where
     <T as ArrowPrimitiveType>::Native: NativePType,
 {
@@ -72,41 +77,33 @@ where
             value.values().clone().into_inner().into(),
             T::Native::PTYPE,
             nulls(value.nulls(), nullable),
-        )
-        .into_array_data();
+        );
 
         if T::DATA_TYPE.is_numeric() {
-            return arr;
+            return arr.into();
         }
 
         match T::DATA_TYPE {
             DataType::Timestamp(time_unit, tz) => {
                 let tz = tz.clone().map(|s| s.to_string());
-                TemporalArray::new_timestamp(arr.into_array(), from_arrow_time_unit(time_unit), tz)
-                    .into_array_data()
+                TemporalArray::new_timestamp(arr.into(), from_arrow_time_unit(time_unit), tz).into()
             }
             DataType::Time32(time_unit) => {
-                TemporalArray::new_time(arr.into_array(), from_arrow_time_unit(time_unit))
-                    .into_array_data()
+                TemporalArray::new_time(arr.into(), from_arrow_time_unit(time_unit)).into()
             }
             DataType::Time64(time_unit) => {
-                TemporalArray::new_time(arr.into_array(), from_arrow_time_unit(time_unit))
-                    .into_array_data()
+                TemporalArray::new_time(arr.into(), from_arrow_time_unit(time_unit)).into()
             }
-            DataType::Date32 => {
-                TemporalArray::new_date(arr.into_array(), TimeUnit::D).into_array_data()
-            }
-            DataType::Date64 => {
-                TemporalArray::new_date(arr.into_array(), TimeUnit::Ms).into_array_data()
-            }
-            DataType::Duration(_) => todo!(),
-            DataType::Interval(_) => todo!(),
+            DataType::Date32 => TemporalArray::new_date(arr.into(), TimeUnit::D).into(),
+            DataType::Date64 => TemporalArray::new_date(arr.into(), TimeUnit::Ms).into(),
+            DataType::Duration(_) => unimplemented!(),
+            DataType::Interval(_) => unimplemented!(),
             _ => panic!("Invalid data type for PrimitiveArray"),
         }
     }
 }
 
-impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for ArrayData
+impl<T: ByteArrayType> FromArrowArray<&GenericByteArray<T>> for Array
 where
     <T as ByteArrayType>::Offset: NativePType,
 {
@@ -117,17 +114,17 @@ where
             _ => panic!("Invalid data type for ByteArray"),
         };
         VarBinArray::try_new(
-            value.offsets().clone().into_array_data().into_array(),
-            value.values().clone().into_array_data().into_array(),
+            ArrayData::from(value.offsets().clone()).into(),
+            ArrayData::from(value.values().clone()).into(),
             dtype,
             nulls(value.nulls(), nullable),
         )
         .unwrap()
-        .into_array_data()
+        .into()
     }
 }
 
-impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
+impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
     fn from_arrow(value: &GenericByteViewArray<T>, nullable: bool) -> Self {
         let dtype = match T::DATA_TYPE {
             DataType::BinaryView => DType::Binary(nullable.into()),
@@ -135,29 +132,29 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for ArrayData {
             _ => panic!("Invalid data type for ByteViewArray"),
         };
         VarBinViewArray::try_new(
-            value.views().inner().clone().into_array_data().into_array(),
+            ArrayData::from(value.views().inner().clone()).into(),
             value
                 .data_buffers()
                 .iter()
-                .map(|b| b.clone().into_array_data().into_array())
+                .map(|b| ArrayData::from(b.clone()).into())
                 .collect::<Vec<_>>(),
             dtype,
             nulls(value.nulls(), nullable),
         )
         .unwrap()
-        .into_array_data()
+        .into()
     }
 }
 
-impl FromArrowArray<&ArrowBooleanArray> for ArrayData {
+impl FromArrowArray<&ArrowBooleanArray> for Array {
     fn from_arrow(value: &ArrowBooleanArray, nullable: bool) -> Self {
         BoolArray::try_new(value.values().clone(), nulls(value.nulls(), nullable))
             .unwrap()
-            .into_array_data()
+            .into()
     }
 }
 
-impl FromArrowArray<&ArrowStructArray> for ArrayData {
+impl FromArrowArray<&ArrowStructArray> for Array {
     fn from_arrow(value: &ArrowStructArray, nullable: bool) -> Self {
         // TODO(ngates): how should we deal with Arrow "logical nulls"?
         assert!(!nullable);
@@ -172,20 +169,20 @@ impl FromArrowArray<&ArrowStructArray> for ArrayData {
                 .columns()
                 .iter()
                 .zip(value.fields())
-                .map(|(c, field)| Self::from_arrow(c.clone(), field.is_nullable()).into_array())
+                .map(|(c, field)| Self::from_arrow(c.clone(), field.is_nullable()))
                 .collect(),
             value.len(),
             nulls(value.nulls(), nullable),
         )
         .unwrap()
-        .into_array_data()
+        .into()
     }
 }
 
-impl FromArrowArray<&ArrowNullArray> for ArrayData {
+impl FromArrowArray<&ArrowNullArray> for Array {
     fn from_arrow(value: &ArrowNullArray, nullable: bool) -> Self {
         assert!(nullable);
-        NullArray::new(value.len()).into_array_data()
+        NullArray::new(value.len()).into()
     }
 }
 
@@ -206,7 +203,7 @@ fn nulls(nulls: Option<&NullBuffer>, nullable: bool) -> Validity {
     }
 }
 
-impl FromArrowArray<ArrowArrayRef> for ArrayData {
+impl FromArrowArray<ArrowArrayRef> for Array {
     fn from_arrow(array: ArrowArrayRef, nullable: bool) -> Self {
         match array.data_type() {
             DataType::Boolean => Self::from_arrow(array.as_boolean(), nullable),

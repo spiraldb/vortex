@@ -5,7 +5,7 @@ use num_traits::AsPrimitive;
 use vortex::compute::unary::{FillForwardFn, ScalarAtFn};
 use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, ToArrayData};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::VortexResult;
 use vortex_expr::Operator;
@@ -136,7 +136,7 @@ impl CompareFn for ByteBoolArray {
 impl FillForwardFn for ByteBoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         if self.dtype().nullability() == Nullability::NonNullable {
-            return Ok(self.to_array_data().into_array());
+            return Ok(self.clone().into());
         }
 
         let validity = self.logical_validity().to_null_buffer()?.unwrap();

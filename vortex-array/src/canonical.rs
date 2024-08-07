@@ -420,22 +420,20 @@ impl IntoCanonical for Array {
     }
 }
 
-/// Implement the IntoArray for the [Canonical] type.
-///
 /// This conversion is always "free" and should not touch underlying data. All it does is create an
 /// owned pointer to the underlying concrete array type.
 ///
 /// This combined with the above [IntoCanonical] impl for [Array] allows simple two-way conversions
 /// between arbitrary Vortex encodings and canonical Arrow-compatible encodings.
-impl IntoArray for Canonical {
-    fn into_array(self) -> Array {
-        match self {
-            Self::Null(a) => a.into_array(),
-            Self::Bool(a) => a.into_array(),
-            Self::Primitive(a) => a.into_array(),
-            Self::Struct(a) => a.into_array(),
-            Self::VarBin(a) => a.into_array(),
-            Self::Extension(a) => a.into_array(),
+impl From<Canonical> for Array {
+    fn from(value: Canonical) -> Self {
+        match value {
+            Canonical::Null(a) => a.into(),
+            Canonical::Bool(a) => a.into(),
+            Canonical::Primitive(a) => a.into(),
+            Canonical::Struct(a) => a.into(),
+            Canonical::VarBin(a) => a.into(),
+            Canonical::Extension(a) => a.into(),
         }
     }
 }

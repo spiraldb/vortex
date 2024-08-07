@@ -5,7 +5,7 @@ use vortex_error::VortexResult;
 use crate::array::BoolArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::{AndFn, OrFn};
-use crate::{Array, ArrayData, IntoArray, IntoCanonical};
+use crate::{Array, IntoCanonical};
 
 impl OrFn for BoolArray {
     fn or(&self, array: &Array) -> VortexResult<Array> {
@@ -17,7 +17,7 @@ impl OrFn for BoolArray {
 
         let array = boolean::or(lhs, rhs)?;
 
-        Ok(ArrayData::from_arrow(&array, true).into_array())
+        Ok(Array::from_arrow(&array, true))
     }
 }
 
@@ -31,6 +31,6 @@ impl AndFn for BoolArray {
 
         let array = boolean::and(lhs, rhs)?;
 
-        Ok(ArrayData::from_arrow(&array, true).into_array())
+        Ok(Array::from_arrow(&array, true))
     }
 }

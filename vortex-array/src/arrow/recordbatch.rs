@@ -4,28 +4,28 @@ use itertools::Itertools;
 use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
-use crate::{ArrayData, IntoArray, IntoArrayData, ToArrayData};
+use crate::Array;
 
-impl ToArrayData for RecordBatch {
-    fn to_array_data(&self) -> ArrayData {
+impl From<RecordBatch> for Array {
+    fn from(value: RecordBatch) -> Self {
         StructArray::try_new(
-            self.schema()
+            value
+                .schema()
                 .fields()
                 .iter()
                 .map(|f| f.name().as_str().into())
                 .collect_vec()
                 .into(),
-            self.columns()
+            value
+                .columns()
                 .iter()
-                .zip(self.schema().fields())
-                .map(|(array, field)| {
-                    ArrayData::from_arrow(array.clone(), field.is_nullable()).into_array()
-                })
+                .zip(value.schema().fields())
+                .map(|(array, field)| Array::from_arrow(array.clone(), field.is_nullable()))
                 .collect(),
-            self.num_rows(),
+            value.num_rows(),
             Validity::AllValid,
         )
         .unwrap()
-        .into_array_data()
+        .into()
     }
 }

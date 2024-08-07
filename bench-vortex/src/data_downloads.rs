@@ -11,7 +11,7 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use tokio::runtime::Runtime;
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowType;
-use vortex::{IntoArray, ToArrayData};
+use vortex::{Array, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
 use vortex_serde::io::TokioAdapter;
@@ -46,7 +46,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         let array = ChunkedArray::try_new(
             reader
                 .into_iter()
-                .map(|batch_result| batch_result.unwrap().to_array_data().into_array())
+                .map(|batch_result| Array::from(batch_result.unwrap()))
                 .collect(),
             dtype,
         )
