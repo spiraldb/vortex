@@ -5,7 +5,7 @@
 //! Vortex arrays hold data in a set of buffers.
 //!
 //! # Alignment
-//! See: https://github.com/spiraldb/vortex/issues/115
+//! See: `<https://github.com/spiraldb/vortex/issues/115>`
 //!
 //! We do not currently enforce any alignment guarantees on the buffer.
 
@@ -28,7 +28,7 @@ pub enum Buffer {
     /// A Buffer that wraps an Apache Arrow buffer
     Arrow(ArrowBuffer),
 
-    /// A Buffer that wraps an owned [`Bytes`].
+    /// A Buffer that wraps an owned [`bytes::Bytes`].
     Bytes(bytes::Bytes),
 }
 
