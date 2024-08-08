@@ -34,8 +34,6 @@ mod eval;
 mod expr;
 mod plans;
 
-pub use datatype::infer_schema;
-
 const SUPPORTED_BINARY_OPS: &[Operator] = &[
     Operator::Eq,
     Operator::NotEq,

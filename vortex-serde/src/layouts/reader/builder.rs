@@ -99,7 +99,7 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
         len as usize
     }
 
-    pub async fn read_footer(&mut self) -> VortexResult<Footer> {
+    async fn read_footer(&mut self) -> VortexResult<Footer> {
         let file_length = self.len().await;
 
         if file_length < Self::FOOTER_TRAILER_SIZE {

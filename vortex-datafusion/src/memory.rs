@@ -14,8 +14,9 @@ use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
 
+use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
-use crate::{can_be_pushed_down, get_filter_projection, infer_schema, VortexScanExec};
+use crate::{can_be_pushed_down, get_filter_projection, VortexScanExec};
 
 /// A [`TableProvider`] that exposes an existing Vortex Array to the DataFusion SQL engine.
 ///
