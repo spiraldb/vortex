@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::Greater;
 
 use fastlanes::BitPacking;
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::SparseArray;
+use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{
     search_sorted, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
 };
@@ -85,7 +84,7 @@ impl Len for BitPackedSearch {
 
 #[cfg(test)]
 mod test {
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::PrimitiveArray;
     use vortex::compute::{search_sorted, slice, SearchResult, SearchSortedSide};
     use vortex::IntoArray;
 

@@ -3,6 +3,7 @@
 use std::collections::HashSet;
 use std::env::temp_dir;
 use std::fs::{create_dir_all, File};
+use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -14,11 +15,11 @@ use log::{info, LevelFilter};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;
-use vortex::{Array, Context, IntoArray, ToArrayData};
+use vortex::{Array, Context, IntoArray};
 use vortex_alp::ALPEncoding;
 use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
@@ -91,6 +92,23 @@ pub fn idempotent<T, E, P: IdempotentPath + ?Sized>(
         let temp_path = temp_location.as_path();
         f(temp_path)?;
         std::fs::rename(temp_path, &data_path).unwrap();
+    }
+    Ok(data_path)
+}
+
+pub async fn idempotent_async<T, E, F, P>(
+    path: &P,
+    f: impl FnOnce(PathBuf) -> F,
+) -> Result<PathBuf, E>
+where
+    F: Future<Output = Result<T, E>>,
+    P: IdempotentPath + ?Sized,
+{
+    let data_path = path.to_data_path();
+    if !data_path.exists() {
+        let temp_location = path.to_temp_path();
+        f(temp_location.clone()).await?;
+        std::fs::rename(temp_location.as_path(), &data_path).unwrap();
     }
     Ok(data_path)
 }
@@ -170,7 +188,7 @@ pub fn compress_taxi_data() -> Array {
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(|batch| batch.to_array_data().into_array())
+        .map(Array::from)
         .map(|array| {
             uncompressed_size += array.nbytes();
             compressor.compress(&array).unwrap()
@@ -244,7 +262,7 @@ mod test {
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
     use vortex::arrow::FromArrowArray;
     use vortex::compress::CompressionStrategy;
-    use vortex::{ArrayData, IntoArray, IntoCanonical};
+    use vortex::{Array, IntoCanonical};
     use vortex_sampling_compressor::SamplingCompressor;
 
     use crate::taxi_data::taxi_data_parquet;
@@ -267,7 +285,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
+            let vortex_array = Array::from_arrow(arrow_array.clone(), false);
             let vortex_as_arrow = vortex_array.into_canonical().unwrap().into_arrow();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
@@ -286,7 +304,7 @@ mod test {
         for record_batch in reader.map(|batch_result| batch_result.unwrap()) {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
-            let vortex_array = ArrayData::from_arrow(arrow_array.clone(), false).into_array();
+            let vortex_array = Array::from_arrow(arrow_array.clone(), false);
 
             let compressed = compressor.compress(&vortex_array).unwrap();
             let compressed_as_arrow = compressed.into_canonical().unwrap().into_arrow();

@@ -1,6 +1,7 @@
 [package]
 name = "bench-vortex"
 version = { workspace = true }
+publish = false
 description = "End to end vortex benchmarks"
 homepage = { workspace = true }
 repository = { workspace = true }
@@ -15,7 +16,7 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
-anyhow = "1.0"
+anyhow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
@@ -26,6 +27,7 @@ datafusion = { workspace = true }
 enum-iterator = { workspace = true }
 flexbuffers = { workspace = true }
 futures = { workspace = true, features = ["executor"] }
+homedir = { workspace = true }
 humansize = { workspace = true }
 indicatif = { workspace = true }
 itertools = { workspace = true }
@@ -40,25 +42,31 @@ rayon = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 simplelog = { workspace = true }
+tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 uuid = { workspace = true, features = ["v4"] }
-vortex-alp = { path = "../encodings/alp" }
-vortex-array = { path = "../vortex-array" }
-vortex-buffer = { path = "../vortex-buffer" }
-vortex-datafusion = { path = "../vortex-datafusion" }
-vortex-datetime-parts = { path = "../encodings/datetime-parts" }
-vortex-dict = { path = "../encodings/dict" }
-vortex-dtype = { path = "../vortex-dtype" }
-vortex-error = { path = "../vortex-error", features = ["parquet"] }
-vortex-fastlanes = { path = "../encodings/fastlanes" }
-vortex-ipc = { path = "../vortex-ipc", features = ["object_store"] }
-vortex-roaring = { path = "../encodings/roaring" }
-vortex-runend = { path = "../encodings/runend" }
-vortex-sampling-compressor = { path = "../vortex-sampling-compressor" }
-xshell = "0.2.6"
+vortex-alp = { workspace = true }
+vortex-array = { workspace = true }
+vortex-buffer = { workspace = true }
+vortex-datafusion = { workspace = true }
+vortex-datetime-parts = { workspace = true }
+vortex-dict = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true, features = ["parquet"] }
+vortex-fastlanes = { workspace = true }
+vortex-roaring = { workspace = true }
+vortex-runend = { workspace = true }
+vortex-sampling-compressor = { workspace = true }
+vortex-serde = { workspace = true, features = ["futures", "monoio", "tokio", "object_store"] }
+xshell = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
+
+[[bin]]
+name = "tpch_benchmark"
+test = false
+bench = false
 
 [[bench]]
 name = "compress_benchmark"

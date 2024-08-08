@@ -25,6 +25,7 @@ impl ArrayCompute for PrimitiveArray {
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
         Some(self)
     }
+
     fn filter_indices(&self) -> Option<&dyn FilterIndicesFn> {
         Some(self)
     }

@@ -3,6 +3,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
+use vortex_error::{vortex_bail, VortexResult};
 use DType::*;
 
 use crate::nullability::Nullability;
@@ -111,6 +112,13 @@ impl DType {
     pub fn is_boolean(&self) -> bool {
         matches!(self, Bool(_))
     }
+
+    pub fn as_struct(&self) -> Option<&StructDType> {
+        match self {
+            Struct(s, _) => Some(s),
+            _ => None,
+        }
+    }
 }
 
 impl Display for DType {
@@ -170,6 +178,22 @@ impl StructDType {
 
     pub fn dtypes(&self) -> &Arc<[DType]> {
         &self.dtypes
+    }
+
+    pub fn project(&self, indices: &[usize]) -> VortexResult<Self> {
+        let mut names = vec![];
+        let mut dtypes = vec![];
+
+        for &idx in indices.iter() {
+            if idx > self.names.len() {
+                vortex_bail!("Projection column is out of bounds");
+            }
+
+            names.push(self.names[idx].clone());
+            dtypes.push(self.dtypes[idx].clone());
+        }
+
+        Ok(StructDType::new(names.into(), dtypes))
     }
 }
 

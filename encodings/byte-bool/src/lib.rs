@@ -3,7 +3,7 @@ use std::mem::ManuallyDrop;
 
 use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
-use vortex::array::bool::BoolArray;
+use vortex::array::BoolArray;
 use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};

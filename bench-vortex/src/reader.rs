@@ -22,20 +22,19 @@ use parquet::arrow::async_reader::{AsyncFileReader, ParquetObjectReader};
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
 use serde::{Deserialize, Serialize};
 use stream::StreamExt;
-use vortex::array::chunked::ChunkedArray;
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{ChunkedArray, PrimitiveArray};
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, IntoArray, IntoCanonical, ToArrayData};
+use vortex::{Array, IntoArray, IntoCanonical};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_ipc::chunked_reader::ChunkedArrayReader;
-use vortex_ipc::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
-use vortex_ipc::writer::ArrayWriter;
-use vortex_ipc::MessageReader;
 use vortex_sampling_compressor::SamplingCompressor;
+use vortex_serde::chunked_reader::ChunkedArrayReader;
+use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
+use vortex_serde::writer::ArrayWriter;
+use vortex_serde::MessageReader;
 
 use crate::{COMPRESSORS, CTX};
 
@@ -99,7 +98,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = record_batch.to_array_data().into_array();
+            let vortex_array = Array::from(record_batch);
             compressor.compress(&vortex_array).unwrap()
         })
         .collect_vec();
@@ -153,14 +152,14 @@ pub async fn read_vortex_footer_format<R: VortexReadAt>(
     ChunkedArrayReader::try_new(
         reader,
         CTX.clone(),
-        dtype,
+        dtype.into(),
         PrimitiveArray::from(footer.byte_offsets).into_array(),
         PrimitiveArray::from(footer.row_offsets).into_array(),
     )
 }
 
-pub async fn take_vortex_object_store<O: ObjectStore>(
-    fs: &O,
+pub async fn take_vortex_object_store(
+    fs: &Arc<dyn ObjectStore>,
     path: &object_store::path::Path,
     indices: &[u64],
 ) -> VortexResult<Array> {
@@ -171,7 +170,7 @@ pub async fn take_vortex_object_store<O: ObjectStore>(
         .take_rows(&indices_array)
         .await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    Ok(taken.into_canonical()?.into_array())
+    Ok(taken.into_canonical()?.into())
 }
 
 pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Array> {
@@ -182,7 +181,7 @@ pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Arr
         .take_rows(&indices_array)
         .await?;
     // For equivalence.... we flatten to make sure we're not cheating too much.
-    Ok(taken.into_canonical()?.into_array())
+    Ok(taken.into_canonical()?.into())
 }
 
 pub async fn take_parquet_object_store(

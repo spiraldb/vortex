@@ -20,8 +20,8 @@ use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayData, ArrayDef, ArrayTrait, Canonical, IntoArray,
-    IntoArrayVariant, IntoCanonical,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArrayVariant,
+    IntoCanonical,
 };
 
 mod accessor;
@@ -200,8 +200,8 @@ impl VarBinViewArray {
         for s in iter {
             builder.append_value(s);
         }
-        let array_data = ArrayData::from_arrow(&builder.finish(), false);
-        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
+        let array = Array::from_arrow(&builder.finish(), false);
+        VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
     pub fn from_iter_nullable_str<T: AsRef<str>, I: IntoIterator<Item = Option<T>>>(
@@ -211,8 +211,8 @@ impl VarBinViewArray {
         let mut builder = StringViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
 
-        let array_data = ArrayData::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
+        let array = Array::from_arrow(&builder.finish(), true);
+        VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
     pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -221,8 +221,8 @@ impl VarBinViewArray {
         for b in iter {
             builder.append_value(b);
         }
-        let array_data = ArrayData::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
+        let array = Array::from_arrow(&builder.finish(), true);
+        VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
     pub fn from_iter_nullable_bin<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
@@ -231,8 +231,8 @@ impl VarBinViewArray {
         let iter = iter.into_iter();
         let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
-        let array_data = ArrayData::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array_data.into_array()).expect("should be var bin view array")
+        let array = Array::from_arrow(&builder.finish(), true);
+        VarBinViewArray::try_from(array).expect("should be var bin view array")
     }
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
@@ -261,7 +261,7 @@ impl IntoCanonical for VarBinViewArray {
         let arrow_self = as_arrow(self);
         let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
             .map_err(VortexError::ArrowError)?;
-        let vortex_array = ArrayData::from_arrow(arrow_varbin, nullable).into_array();
+        let vortex_array = Array::from_arrow(arrow_varbin, nullable);
 
         Ok(Canonical::VarBin(VarBinArray::try_from(&vortex_array)?))
     }
@@ -360,7 +360,7 @@ mod test {
     use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
-    use crate::{Canonical, IntoArray, IntoCanonical};
+    use crate::{Canonical, IntoCanonical};
 
     #[test]
     pub fn varbin_view() {
@@ -381,7 +381,7 @@ mod test {
     pub fn slice_array() {
         let binary_arr = slice(
             &VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"])
-                .into_array(),
+                .into(),
             1,
             2,
         )
@@ -399,7 +399,7 @@ mod test {
         let flattened = binary_arr.into_canonical().unwrap();
         assert!(matches!(flattened, Canonical::VarBin(_)));
 
-        let var_bin = flattened.into_array();
+        let var_bin = flattened.into();
         assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
         assert_eq!(scalar_at(&var_bin, 1).unwrap(), Scalar::from("string2"));
     }

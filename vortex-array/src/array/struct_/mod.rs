@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -26,15 +26,11 @@ impl StructArray {
             self.len(),
         ))
     }
-}
 
-impl<'a> StructArray {
-    pub fn children(&'a self) -> impl Iterator<Item = Array> + '_ {
+    pub fn children(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nfields()).map(move |idx| self.field(idx).unwrap())
     }
-}
 
-impl StructArray {
     pub fn try_new(
         names: FieldNames,
         fields: Vec<Array>,
@@ -85,11 +81,8 @@ impl StructArray {
         Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)
             .expect("building StructArray with helper")
     }
-}
 
-impl StructArray {
     // TODO(aduffy): Add equivalent function to support field masks for nested column access.
-
     /// Return a new StructArray with the given projection applied.
     ///
     /// Projection does not copy data arrays. Projection is defined by an ordinal array slice
@@ -104,12 +97,12 @@ impl StructArray {
         let mut children = Vec::with_capacity(projection.len());
         let mut names = Vec::with_capacity(projection.len());
 
-        for column_idx in projection {
+        for &column_idx in projection {
             children.push(
-                self.field(*column_idx)
-                    .expect("column must not exceed bounds"),
+                self.field(column_idx)
+                    .ok_or(vortex_err!(OutOfBounds: column_idx, 0, self.dtypes().len()))?,
             );
-            names.push(self.names()[*column_idx].clone());
+            names.push(self.names()[column_idx].clone());
         }
 
         StructArray::try_new(
@@ -131,7 +124,9 @@ impl ArrayVariants for StructArray {
 
 impl StructArrayTrait for StructArray {
     fn field(&self, idx: usize) -> Option<Array> {
-        self.array().child(idx, &self.dtypes()[idx], self.len())
+        self.dtypes()
+            .get(idx)
+            .and_then(|dtype| self.array().child(idx, dtype, self.len()))
     }
 }
 
@@ -168,10 +163,10 @@ impl ArrayStatisticsCompute for StructArray {}
 mod test {
     use vortex_dtype::{DType, FieldName, FieldNames, Nullability};
 
-    use crate::array::bool::BoolArray;
     use crate::array::primitive::PrimitiveArray;
     use crate::array::struct_::StructArray;
     use crate::array::varbin::VarBinArray;
+    use crate::array::BoolArray;
     use crate::validity::Validity;
     use crate::variants::StructArrayTrait;
     use crate::IntoArray;

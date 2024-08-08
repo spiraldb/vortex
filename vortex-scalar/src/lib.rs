@@ -11,6 +11,7 @@ mod extension;
 mod list;
 mod primitive;
 mod pvalue;
+#[cfg(feature = "serde")]
 mod serde;
 mod struct_;
 mod utf8;
@@ -26,37 +27,6 @@ pub use struct_::*;
 pub use utf8::*;
 pub use value::*;
 use vortex_error::{vortex_bail, VortexResult};
-
-#[cfg(feature = "proto")]
-pub mod proto {
-    #[allow(clippy::module_inception)]
-    pub mod scalar {
-        include!(concat!(env!("OUT_DIR"), "/proto/vortex.scalar.rs"));
-    }
-
-    pub use vortex_dtype::proto::dtype;
-}
-
-#[cfg(feature = "flatbuffers")]
-pub mod flatbuffers {
-    pub use generated::vortex::scalar::*;
-
-    #[allow(clippy::all)]
-    #[allow(dead_code)]
-    #[allow(non_camel_case_types)]
-    #[allow(unsafe_op_in_unsafe_fn)]
-    #[allow(unused_imports)]
-    pub mod generated {
-        include!(concat!(env!("OUT_DIR"), "/flatbuffers/scalar.rs"));
-    }
-
-    mod deps {
-        pub mod dtype {
-            #[allow(unused_imports)]
-            pub use vortex_dtype::flatbuffers as dtype;
-        }
-    }
-}
 
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]

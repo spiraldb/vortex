@@ -1,4 +1,4 @@
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::PrimitiveArray;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_alp::{alp_encode_components, match_each_alp_float_ptype, ALPArray, ALP};
 use vortex_dtype::PType;

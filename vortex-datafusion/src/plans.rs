@@ -20,10 +20,10 @@ use datafusion_physical_plan::{
 use futures::{ready, Stream};
 use lazy_static::lazy_static;
 use pin_project::pin_project;
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
-use vortex::{ArrayDType, ArrayData, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
 
 use crate::datatype::infer_schema;
 use crate::eval::ExpressionEvaluator;
@@ -346,8 +346,7 @@ where
         );
 
         let row_indices =
-            ArrayData::from_arrow(record_batch.column(0).as_primitive::<UInt64Type>(), false)
-                .into_array();
+            Array::from_arrow(record_batch.column(0).as_primitive::<UInt64Type>(), false);
 
         // If no columns in the output projection, we send back a RecordBatch with empty schema.
         // This is common for COUNT queries.
@@ -403,10 +402,7 @@ mod test {
     use arrow_array::{RecordBatch, UInt64Array};
     use datafusion_expr::{and, col, lit};
     use itertools::Itertools;
-    use vortex::array::bool::BoolArray;
-    use vortex::array::chunked::ChunkedArray;
-    use vortex::array::primitive::PrimitiveArray;
-    use vortex::array::struct_::StructArray;
+    use vortex::array::{BoolArray, ChunkedArray, PrimitiveArray, StructArray};
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray};
     use vortex_dtype::FieldName;

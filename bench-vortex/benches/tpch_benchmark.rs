@@ -12,16 +12,16 @@ fn benchmark(c: &mut Criterion) {
     let vortex_pushdown_disabled_ctx = runtime
         .block_on(load_datasets(
             &data_dir,
-            Format::Vortex {
-                disable_pushdown: true,
+            Format::InMemoryVortex {
+                enable_pushdown: false,
             },
         ))
         .unwrap();
     let vortex_ctx = runtime
         .block_on(load_datasets(
             &data_dir,
-            Format::Vortex {
-                disable_pushdown: false,
+            Format::InMemoryVortex {
+                enable_pushdown: true,
             },
         ))
         .unwrap();
@@ -30,6 +30,14 @@ fn benchmark(c: &mut Criterion) {
         .unwrap();
     let parquet_ctx = runtime
         .block_on(load_datasets(&data_dir, Format::Parquet))
+        .unwrap();
+    let persistent_vortex_ctx = runtime
+        .block_on(load_datasets(
+            &data_dir,
+            Format::OnDiskVortex {
+                enable_compression: true,
+            },
+        ))
         .unwrap();
 
     for (q, query) in tpch_queries() {
@@ -75,6 +83,18 @@ fn benchmark(c: &mut Criterion) {
         group.bench_function("parquet", |b| {
             b.to_async(&runtime).iter(|| async {
                 parquet_ctx
+                    .sql(&query)
+                    .await
+                    .unwrap()
+                    .collect()
+                    .await
+                    .unwrap()
+            })
+        });
+
+        group.bench_function("persistent_compressed_vortex", |b| {
+            b.to_async(&runtime).iter(|| async {
+                persistent_vortex_ctx
                     .sql(&query)
                     .await
                     .unwrap()

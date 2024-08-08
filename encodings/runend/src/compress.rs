@@ -2,7 +2,7 @@ use std::cmp::min;
 
 use itertools::Itertools;
 use num_traits::{AsPrimitive, FromPrimitive};
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::PrimitiveArray;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::ArrayDType;
@@ -108,7 +108,7 @@ pub fn runend_decode_primitive<
 
 #[cfg(test)]
 mod test {
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::PrimitiveArray;
     use vortex::validity::{ArrayValidity, Validity};
     use vortex::IntoArray;
 

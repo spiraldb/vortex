@@ -56,28 +56,7 @@ mod view;
 pub mod visitor;
 
 pub mod flatbuffers {
-    pub use generated::vortex::array::*;
-
-    #[allow(clippy::all)]
-    #[allow(dead_code)]
-    #[allow(non_camel_case_types)]
-    #[allow(unsafe_op_in_unsafe_fn)]
-    #[allow(unused_imports)]
-    mod generated {
-        include!(concat!(env!("OUT_DIR"), "/flatbuffers/array.rs"));
-    }
-
-    mod deps {
-        pub mod dtype {
-            #[allow(unused_imports)]
-            pub use vortex_dtype::flatbuffers as dtype;
-        }
-
-        pub mod scalar {
-            #[allow(unused_imports)]
-            pub use vortex_scalar::flatbuffers as scalar;
-        }
-    }
+    pub use vortex_flatbuffers::array::*;
 }
 
 #[derive(Debug, Clone)]
@@ -214,14 +193,6 @@ pub trait IntoArray {
     fn into_array(self) -> Array;
 }
 
-pub trait ToArrayData {
-    fn to_array_data(&self) -> ArrayData;
-}
-
-pub trait IntoArrayData {
-    fn into_array_data(self) -> ArrayData;
-}
-
 pub trait AsArray {
     fn as_array_ref(&self) -> &Array;
 }
@@ -238,7 +209,6 @@ pub trait ArrayTrait:
     + AcceptArrayVisitor
     + ArrayStatistics
     + ArrayStatisticsCompute
-    + ToArrayData
 {
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
@@ -323,14 +293,5 @@ impl Display for Array {
             self.dtype(),
             self.len()
         )
-    }
-}
-
-impl IntoArrayData for Array {
-    fn into_array_data(self) -> ArrayData {
-        match self {
-            Self::Data(d) => d,
-            Self::View(_) => self.with_dyn(|a| a.to_array_data()),
-        }
     }
 }

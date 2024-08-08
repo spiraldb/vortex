@@ -15,8 +15,8 @@ use datafusion::prelude::{col, DataFrame, SessionContext};
 use lazy_static::lazy_static;
 use vortex::compress::CompressionStrategy;
 use vortex::encoding::EncodingRef;
-use vortex::{Array, Context, IntoArray, ToArrayData};
-use vortex_datafusion::{VortexMemTable, VortexMemTableOptions};
+use vortex::{Array, Context};
+use vortex_datafusion::memory::{VortexMemTable, VortexMemTableOptions};
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
@@ -81,7 +81,7 @@ fn toy_dataset_arrow() -> RecordBatch {
 }
 
 fn toy_dataset_vortex(compress: bool) -> Array {
-    let uncompressed = toy_dataset_arrow().to_array_data().into_array();
+    let uncompressed = toy_dataset_arrow().into();
 
     if !compress {
         return uncompressed;
@@ -158,13 +158,13 @@ fn bench_arrow<M: Measurement>(mut group: BenchmarkGroup<M>, session: &SessionCo
 fn bench_vortex<M: Measurement>(
     mut group: BenchmarkGroup<M>,
     session: &SessionContext,
-    disable_pushdown: bool,
+    enable_pushdown: bool,
     compress: bool,
 ) {
     let vortex_dataset = toy_dataset_vortex(compress);
     let vortex_table = Arc::new(VortexMemTable::new(
         vortex_dataset,
-        VortexMemTableOptions::default().with_disable_pushdown(disable_pushdown),
+        VortexMemTableOptions::default().with_pushdown(enable_pushdown),
     ));
 
     measure_provider(&mut group, session, vortex_table);
@@ -177,7 +177,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-pushdown-compressed"),
         &SessionContext::new(),
-        false,
+        true,
         true,
     );
 
@@ -185,7 +185,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-pushdown-uncompressed"),
         &SessionContext::new(),
-        false,
+        true,
         false,
     );
 
@@ -193,7 +193,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-nopushdown-compressed"),
         &SessionContext::new(),
-        true,
+        false,
         true,
     );
 
@@ -201,7 +201,7 @@ fn bench_datafusion(c: &mut Criterion) {
     bench_vortex(
         c.benchmark_group("vortex-nopushdown-uncompressed"),
         &SessionContext::new(),
-        true,
+        false,
         false,
     );
 }

@@ -5,9 +5,9 @@ use arrow::pyarrow::FromPyArrow;
 use arrow::record_batch::RecordBatchReader;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
-use vortex::{ArrayData, IntoArray, IntoArrayData, ToArrayData};
+use vortex::Array;
 use vortex_dtype::DType;
 
 use crate::array::PyArray;
@@ -25,8 +25,8 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
 
     if obj.is_instance(&pa_array)? {
         let arrow_array = ArrowArrayData::from_pyarrow_bound(obj).map(make_array)?;
-        let enc_array = ArrayData::from_arrow(arrow_array, false);
-        PyArray::wrap(obj.py(), enc_array)
+        let enc_array = Array::from_arrow(arrow_array, false);
+        PyArray::wrap(obj.py(), enc_array.into())
     } else if obj.is_instance(&chunked_array)? {
         let chunks: Vec<Bound<PyAny>> = obj.getattr("chunks")?.extract()?;
         let encoded_chunks = chunks
@@ -34,7 +34,7 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
             .map(|a| {
                 ArrowArrayData::from_pyarrow_bound(a)
                     .map(make_array)
-                    .map(|a| ArrayData::from_arrow(a, false).into_array())
+                    .map(|a| Array::from_arrow(a, false))
             })
             .collect::<PyResult<Vec<_>>>()?;
         let dtype: DType = obj
@@ -45,23 +45,20 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
             obj.py(),
             ChunkedArray::try_new(encoded_chunks, dtype)
                 .map_err(PyVortexError::map_err)?
-                .into_array_data(),
+                .into(),
         )
     } else if obj.is_instance(&table)? {
         let array_stream = ArrowArrayStreamReader::from_pyarrow_bound(obj)?;
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| {
-                b.map(|bb| bb.to_array_data().into_array())
-                    .map_err(map_arrow_err)
-            })
+            .map(|b| b.map(Array::from).map_err(map_arrow_err))
             .collect::<PyResult<Vec<_>>>()?;
         PyArray::wrap(
             obj.py(),
             ChunkedArray::try_new(chunks, dtype)
                 .map_err(PyVortexError::map_err)?
-                .into_array_data(),
+                .into(),
         )
     } else {
         Err(PyValueError::new_err("Cannot convert object to enc array"))

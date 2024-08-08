@@ -28,13 +28,7 @@ impl ArrayCompute for VarBinArray {
 impl ScalarAtFn for VarBinArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if self.is_valid(index) {
-            Ok(varbin_scalar(
-                self.bytes_at(index)?
-                    // TODO(ngates): update to use buffer when we refactor scalars.
-                    .into_vec()
-                    .unwrap_or_else(|b| b.as_ref().to_vec()),
-                self.dtype(),
-            ))
+            Ok(varbin_scalar(self.bytes_at(index)?, self.dtype()))
         } else {
             Ok(Scalar::null(self.dtype().clone()))
         }

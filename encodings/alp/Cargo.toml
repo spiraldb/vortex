@@ -1,7 +1,7 @@
 [package]
 name = "vortex-alp"
-version = { workspace = true }
 description = "Vortex ALP array"
+version = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }
@@ -18,10 +18,10 @@ workspace = true
 itertools = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-vortex-array = { path = "../../vortex-array" }
-vortex-error = { path = "../../vortex-error" }
-vortex-dtype = { path = "../../vortex-dtype" }
-vortex-scalar = { path = "../../vortex-scalar" }
+vortex-array = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
+vortex-scalar = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }

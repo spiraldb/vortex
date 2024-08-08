@@ -5,7 +5,7 @@ use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::array::datetime::{make_temporal_ext_dtype, TimeUnit};
+use crate::array::{make_temporal_ext_dtype, TimeUnit};
 use crate::arrow::{FromArrowType, TryFromArrowType};
 
 impl TryFromArrowType<&DataType> for PType {

@@ -93,7 +93,7 @@ impl SearchSortedFn for FoRArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
     use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
     use vortex::IntoArray;

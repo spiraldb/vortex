@@ -1,13 +1,11 @@
-#![cfg(feature = "flatbuffers")]
-
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::DType;
 use vortex_error::VortexError;
-use vortex_flatbuffers::WriteFlatBuffer;
+use vortex_flatbuffers::{scalar as fb, WriteFlatBuffer};
 
-use crate::{flatbuffers as fb, Scalar, ScalarValue};
+use crate::{Scalar, ScalarValue};
 
 impl TryFrom<fb::Scalar<'_>> for Scalar {
     type Error = VortexError;

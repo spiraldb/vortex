@@ -2,9 +2,7 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use log::{debug, info, warn};
-use vortex::array::chunked::{Chunked, ChunkedArray};
-use vortex::array::constant::Constant;
-use vortex::array::struct_::{Struct, StructArray};
+use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
 use vortex::validity::Validity;
@@ -300,7 +298,7 @@ fn sampled_compression<'a>(
         array.dtype().clone(),
     )?
     .into_canonical()?
-    .into_array();
+    .into();
 
     find_best_compression(candidates, &sample, compressor)?
         .into_path()

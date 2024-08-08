@@ -1,5 +1,3 @@
-#![cfg(feature = "proto")]
-
 use std::sync::Arc;
 
 use vortex_error::{vortex_err, VortexError, VortexResult};

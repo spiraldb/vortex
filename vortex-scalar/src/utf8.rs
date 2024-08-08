@@ -29,12 +29,22 @@ impl<'a> Utf8Scalar<'a> {
 impl Scalar {
     pub fn utf8<B>(str: B, nullability: Nullability) -> Self
     where
-        BufferString: From<B>,
+        B: Into<BufferString>,
     {
-        Self {
+        Self::try_utf8(str, nullability).unwrap()
+    }
+
+    pub fn try_utf8<B>(
+        str: B,
+        nullability: Nullability,
+    ) -> Result<Self, <B as TryInto<BufferString>>::Error>
+    where
+        B: TryInto<BufferString>,
+    {
+        Ok(Self {
             dtype: DType::Utf8(nullability),
-            value: ScalarValue::BufferString(BufferString::from(str)),
-        }
+            value: ScalarValue::BufferString(str.try_into()?),
+        })
     }
 }
 

@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package vortex.scalar;
+
+import "dtype.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+
+message Scalar {
+  vortex.dtype.DType dtype = 1;
+  ScalarValue value = 2;
+}
+
+message ScalarValue {
+  oneof kind {
+    google.protobuf.NullValue null_value = 1;
+    bool bool_value = 2;
+    int32 int32_value = 3;
+    int64 int64_value = 4;
+    uint32 uint32_value = 5;
+    uint64 uint64_value = 6;
+    float float_value = 7;
+    double double_value = 8;
+    string string_value = 9;
+    bytes bytes_value = 10;
+    ListValue list_value = 12;
+  }
+}
+
+message ListValue {
+  repeated ScalarValue values = 1;
+}

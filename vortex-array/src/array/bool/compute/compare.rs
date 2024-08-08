@@ -3,7 +3,7 @@ use std::ops::{BitAnd, BitOr, BitXor, Not};
 use vortex_error::VortexResult;
 use vortex_expr::Operator;
 
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::compute::CompareFn;
 use crate::{Array, IntoArray, IntoArrayVariant};
 

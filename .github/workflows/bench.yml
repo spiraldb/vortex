@@ -2,8 +2,7 @@ name: Benchmarks
 
 on:
   push:
-    branches: [ "develop" ]
-  workflow_dispatch: { }
+    branches: [develop]
 
 permissions:
   actions: read
@@ -13,29 +12,38 @@ permissions:
 jobs:
   bench:
     runs-on: ubuntu-latest-large
-    if: ${{ github.event_name == 'workflow_dispatch' || (contains(github.event.head_commit.message, '[benchmark]') && github.ref_name == 'develop') }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
       - uses: ./.github/actions/cleanup
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
 
-      - name: Bench - Vortex
-        run: cargo bench | tee bench.txt
+      - name: Setup bencher.dev CLI
+        uses: bencherdev/bencher@main
 
-      - name: Store benchmark result
-        uses: benchmark-action/github-action-benchmark@v1.20.3
+      # The compression benchmarks rely on DuckDB being installed to convert CSV to Parquet
+      - name: Install DuckDB
+        uses: opt-nc/setup-duckdb-action@v1.0.8
         with:
-          name: Vortex Benchmarks
-          tool: cargo
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: bench.txt
-          summary-always: true
-          auto-push: true
-          fail-on-alert: false
+          version: v1.0.0
+
+      - name: Upload Vortex Benchmarks
+        run: |
+          bencher run \
+            --project vortex \
+            --token "${BENCHER_TOKEN}" \
+            --adapter rust_criterion \
+            --testbed "github-actions" \
+            "cargo bench -p bench-vortex"
+        env:
+          BENCHER_TOKEN: ${{ secrets.BENCHER_TOKEN }}
+          # AWS Credentials for R2 storage tests
+          AWS_BUCKET: vortex-test
+          AWS_ENDPOINT: ${{ secrets.AWS_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+
