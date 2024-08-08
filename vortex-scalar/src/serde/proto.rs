@@ -1,5 +1,3 @@
-#![cfg(feature = "proto")]
-
 use vortex_buffer::{Buffer, BufferString};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};

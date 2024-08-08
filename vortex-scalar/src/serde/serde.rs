@@ -1,5 +1,3 @@
-#![cfg(feature = "serde")]
-
 use std::fmt::Formatter;
 
 use serde::de::{Error, SeqAccess, Visitor};

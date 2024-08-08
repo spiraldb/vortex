@@ -1,5 +1,3 @@
-#![cfg(feature = "flatbuffers")]
-
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};

@@ -1,7 +1,7 @@
 use clap::Command;
 use xshell::{cmd, Shell};
 
-static FLATC_BIN: &'static str = "flatc";
+static FLATC_BIN: &str = "flatc";
 
 fn flatbuffers_command() -> Command {
     Command::new("generate-fbs")
