@@ -45,10 +45,7 @@ pub fn build_proto() {
     let proto_includes = metadata
         .packages
         .iter()
-        .filter(|&pkg| {
-            pkg.features.contains_key(&proto_feature)
-                || pkg.name == pkg_name
-        })
+        .filter(|&pkg| pkg.features.contains_key(&proto_feature) || pkg.name == pkg_name)
         .map(|pkg| {
             println!("cargo:warning=using proto files from {:?}", pkg.name);
             pkg.manifest_path.parent().unwrap().join("proto")
@@ -83,4 +80,3 @@ fn rerun_if_changed(path: &Path) {
             .unwrap()
     );
 }
-

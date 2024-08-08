@@ -82,11 +82,11 @@ fn execute_build_protos() -> anyhow::Result<()> {
     let out_dir = vortex_proto.join("src").join("generated");
     std::fs::create_dir_all(&out_dir)?;
 
-
     prost_build::Config::new()
         .out_dir(out_dir)
         .default_package_filename()
-        .compile_protos(&proto_files, &[vortex_proto.join("proto")]).unwrap();
+        .compile_protos(&proto_files, &[vortex_proto.join("proto")])
+        .unwrap();
 
     Ok(())
 }

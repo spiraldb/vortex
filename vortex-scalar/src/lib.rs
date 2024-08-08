@@ -28,7 +28,6 @@ pub use utf8::*;
 pub use value::*;
 use vortex_error::{vortex_bail, VortexResult};
 
-
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Scalar {
