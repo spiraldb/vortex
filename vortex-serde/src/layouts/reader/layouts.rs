@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use bytes::Bytes;
+use flatbuffers::{ForwardsUOffset, Vector};
 use vortex::Context;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -150,6 +151,26 @@ impl ColumnLayout {
         };
         fb_layout.layout_as_nested_layout().expect("must be nested")
     }
+
+    fn read_child(
+        &self,
+        idx: usize,
+        children: Vector<ForwardsUOffset<fb::Layout>>,
+        st_dtype: &Arc<[DType]>,
+    ) -> VortexResult<Box<dyn Layout>> {
+        let layout = children.get(idx);
+        let dtype = st_dtype[idx].clone();
+        // TODO: Figure out complex nested schema projections
+        let mut child_scan = self.scan.clone();
+        child_scan.projection = Projection::All;
+
+        self.layout_serde.read_layout(
+            self.fb_bytes.clone(),
+            layout._tab.loc(),
+            child_scan,
+            self.message_cache.relative(idx as u16, dtype),
+        )
+    }
 }
 
 impl Layout for ColumnLayout {
@@ -162,35 +183,19 @@ impl Layout for ColumnLayout {
 
                 let fb_children = self.flatbuffer().children().expect("must have children");
 
-                let indexes = match self.scan.projection {
-                    Projection::All => Vec::from_iter(0..fb_children.len()),
-                    Projection::Partial(ref v) => v.clone(),
+                let column_layouts = match self.scan.projection {
+                    Projection::All => (0..fb_children.len())
+                        .map(|idx| self.read_child(idx, fb_children, s.dtypes()))
+                        .collect::<VortexResult<Vec<_>>>()?,
+                    Projection::Partial(ref v) => v
+                        .iter()
+                        .map(|&idx| self.read_child(idx, fb_children, s.dtypes()))
+                        .collect::<VortexResult<Vec<_>>>()?,
                 };
 
-                let mut column_layouts = Vec::with_capacity(indexes.len());
-
-                for idx in indexes.into_iter() {
-                    let child = fb_children.get(idx);
-                    let dtype = s.dtypes()[idx].clone();
-
-                    // TODO: This is needed to support more complex nested layouts
-                    let mut child_scan = self.scan.clone();
-                    child_scan.projection = Projection::All;
-
-                    let layout = self.layout_serde.read_layout(
-                        self.fb_bytes.clone(),
-                        child._tab.loc(),
-                        child_scan,
-                        self.message_cache.relative(idx as u16, dtype.clone()),
-                    )?;
-
-                    column_layouts.push(layout);
-                }
-
-                let mut reader = BatchReader::new(s.names().clone(), column_layouts);
-                let rr = reader.read()?;
+                let reader = BatchReader::new(s.names().clone(), column_layouts);
                 self.state = ColumnLayoutState::ReadColumns(reader);
-                Ok(rr)
+                self.read()
             }
             ColumnLayoutState::ReadColumns(br) => br.read(),
         }
