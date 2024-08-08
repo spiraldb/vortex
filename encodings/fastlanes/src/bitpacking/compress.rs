@@ -1,8 +1,7 @@
 use std::mem::size_of;
 
 use fastlanes::BitPacking;
-use vortex::array::primitive::PrimitiveArray;
-use vortex::array::sparse::{Sparse, SparseArray};
+use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};

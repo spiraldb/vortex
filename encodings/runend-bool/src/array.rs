@@ -151,7 +151,7 @@ impl ArrayStatisticsCompute for RunEndBoolArray {}
 
 #[cfg(test)]
 mod test {
-    use vortex::array::bool::BoolArray;
+    use vortex::array::BoolArray;
     use vortex::compute::unary::scalar_at;
     use vortex::compute::{slice, take};
     use vortex::validity::Validity;

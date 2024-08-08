@@ -1,7 +1,6 @@
 use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
-use vortex::array::constant::ConstantArray;
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::{ConstantArray, PrimitiveArray};
 use vortex::stats::{trailing_zeros, ArrayStatistics, Stat};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, NativePType};

@@ -1,6 +1,5 @@
-use vortex::array::datetime::temporal::TemporalMetadata;
-use vortex::array::datetime::{TemporalArray, TimeUnit};
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::temporal::TemporalMetadata;
+use vortex::array::{PrimitiveArray, TemporalArray, TimeUnit};
 use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::ArrayValidity;
@@ -120,8 +119,7 @@ pub fn decode_to_temporal(array: &DateTimePartsArray) -> VortexResult<TemporalAr
 
 #[cfg(test)]
 mod test {
-    use vortex::array::datetime::{TemporalArray, TimeUnit};
-    use vortex::array::primitive::PrimitiveArray;
+    use vortex::array::{PrimitiveArray, TemporalArray, TimeUnit};
     use vortex::{IntoArray, IntoArrayVariant};
     use vortex_dtype::{DType, Nullability};
 
