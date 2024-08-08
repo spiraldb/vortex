@@ -3,12 +3,12 @@ use xshell::{cmd, Shell};
 
 static FLATC_BIN: &str = "flatc";
 
-fn flatbuffers_command() -> Command {
+fn gen_flatbuffers_command() -> Command {
     Command::new("generate-fbs")
 }
 
-fn build_protos_command() -> Command {
-    Command::new("build-protos")
+fn gen_proto_command() -> Command {
+    Command::new("generate-proto")
 }
 
 fn execute_generate_fbs() -> anyhow::Result<()> {
@@ -34,7 +34,7 @@ fn execute_generate_fbs() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn execute_build_protos() -> anyhow::Result<()> {
+fn execute_generate_proto() -> anyhow::Result<()> {
     let vortex_proto = std::env::current_dir()?.join("vortex-proto");
     let proto_files = vec![
         vortex_proto.join("proto").join("dtype.proto"),
@@ -59,12 +59,12 @@ fn execute_build_protos() -> anyhow::Result<()> {
 
 fn main() -> anyhow::Result<()> {
     let cli = Command::new("xtask")
-        .subcommand(flatbuffers_command())
-        .subcommand(build_protos_command());
+        .subcommand(gen_flatbuffers_command())
+        .subcommand(gen_proto_command());
     let args = cli.get_matches();
     match args.subcommand() {
         Some(("generate-fbs", _)) => execute_generate_fbs()?,
-        Some(("build-protos", _)) => execute_build_protos()?,
+        Some(("generate-proto", _)) => execute_generate_proto()?,
         _ => anyhow::bail!("please use one of the recognized subcommands"),
     }
 
