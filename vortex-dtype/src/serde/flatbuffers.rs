@@ -1,5 +1,3 @@
-#![cfg(feature = "flatbuffers")]
-
 use std::sync::Arc;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};

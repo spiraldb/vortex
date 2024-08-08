@@ -25,13 +25,10 @@ tokio = { workspace = true, features = ["io-util", "fs"], optional = true }
 vortex-array = { workspace = true }
 vortex-buffer = { workspace = true }
 vortex-dtype = { workspace = true }
-vortex-error = { workspace = true, features = ["object_store"] }
 vortex-expr = { workspace = true }
-vortex-flatbuffers = { workspace = true }
-vortex-scalar = { workspace = true }
-
-[build-dependencies]
-vortex-build = { workspace = true }
+vortex-error = { workspace = true, features = ["object_store"] }
+vortex-flatbuffers = { workspace = true, features = ["file"] }
+vortex-scalar = { workspace = true, features = ["flatbuffers"] }
 
 [dev-dependencies]
 arrow = { workspace = true }

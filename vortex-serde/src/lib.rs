@@ -12,42 +12,6 @@ pub mod writer;
 
 pub const ALIGNMENT: usize = 64;
 
-pub mod flatbuffers {
-    pub use generated_footer::vortex::*;
-    pub use generated_message::vortex::*;
-
-    #[allow(unused_imports)]
-    #[allow(dead_code)]
-    #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
-    mod generated_message {
-        include!(concat!(env!("OUT_DIR"), "/flatbuffers/message.rs"));
-    }
-
-    #[allow(unused_imports)]
-    #[allow(dead_code)]
-    #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
-    mod generated_footer {
-        include!(concat!(env!("OUT_DIR"), "/flatbuffers/footer.rs"));
-    }
-
-    mod deps {
-        pub mod array {
-            pub use vortex::flatbuffers as array;
-        }
-
-        pub mod dtype {
-            pub use vortex_dtype::flatbuffers as dtype;
-        }
-
-        pub mod scalar {
-            #[allow(unused_imports)]
-            pub use vortex_scalar::flatbuffers as scalar;
-        }
-    }
-}
-
 #[cfg(test)]
 mod test {
     use std::sync::Arc;

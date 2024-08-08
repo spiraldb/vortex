@@ -14,6 +14,7 @@ rust-version = { workspace = true }
 [lib]
 name = "vortex"
 path = "src/lib.rs"
+bench = false
 
 [lints]
 workspace = true
@@ -28,8 +29,8 @@ arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
 bytes = { workspace = true }
 enum-iterator = { workspace = true }
-flatbuffers = { workspace = true }
-flexbuffers = { workspace = true }
+flatbuffers = { workspace = true, optional = true }
+flexbuffers = { workspace = true, optional = true }
 futures-util = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
@@ -42,21 +43,32 @@ pin-project = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-buffer = { workspace = true }
-vortex-dtype = { workspace = true, features = ["flatbuffers", "serde"] }
-vortex-error = { workspace = true, features = ["flexbuffers"] }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
 vortex-expr = { workspace = true }
-vortex-flatbuffers = { workspace = true }
-vortex-scalar = { workspace = true, features = [
-    "flatbuffers",
-    "serde",
-] }
+vortex-flatbuffers = { workspace = true, optional = true }
+vortex-scalar = { workspace = true }
+
+[features]
+default = ["flatbuffers", "serde"]
+flatbuffers = [
+  "dep:flatbuffers",
+  "dep:flexbuffers",
+  "dep:vortex-flatbuffers",
+  "vortex-flatbuffers/array",
+  "vortex-dtype/flatbuffers",
+  "vortex-error/flatbuffers",
+  "vortex-error/flexbuffers",
+  "vortex-scalar/flatbuffers",
+]
+serde = [
+  "vortex-dtype/serde",
+  "vortex-scalar/serde",
+]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Enable the JS feature of getrandom (via rand) to supprt wasm32 target
 getrandom = { workspace = true, features = ["js"] }
-
-[build-dependencies]
-vortex-build = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
