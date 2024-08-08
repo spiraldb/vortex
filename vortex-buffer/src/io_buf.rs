@@ -3,7 +3,7 @@
 use crate::Buffer;
 
 /// Trait for types that can provide a readonly byte buffer interface to I/O frameworks.
-/// 
+///
 /// # Safety
 /// The type must support contiguous raw memory access via pointer, such as `Vec` or `[u8]`.
 pub unsafe trait IoBuf: Unpin + 'static {

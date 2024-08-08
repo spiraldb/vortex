@@ -5,10 +5,9 @@
 //! Vortex arrays hold data in a set of buffers.
 //!
 //! # Alignment
+//! See: https://github.com/spiraldb/vortex/issues/115
 //!
-//! We do not currently enforce any alignment guarantees on the buffer. This can be problematic
-//! so it is recommended to convert all buffers into Arrow before usage.
-
+//! We do not currently enforce any alignment guarantees on the buffer.
 
 use std::cmp::Ordering;
 use std::ops::{Deref, Range};
@@ -20,7 +19,7 @@ mod flexbuffers;
 pub mod io_buf;
 mod string;
 
-/// Buffer is an owned, cheaply cloneable byte arrays.
+/// Buffer is an owned, cheaply cloneable byte array.
 ///
 /// Buffers form the building blocks of all in-memory storage in Vortex.
 #[derive(Debug, Clone)]
