@@ -13,7 +13,8 @@ members = [
     "vortex-proto",
     "vortex-sampling-compressor",
     "vortex-scalar",
-    "vortex-serde", "xtask",
+    "vortex-serde",
+    "xtask",
 ]
 resolver = "2"
 
