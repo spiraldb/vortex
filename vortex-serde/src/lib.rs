@@ -2,8 +2,8 @@ pub use message_reader::*;
 pub use message_writer::*;
 
 pub mod chunked_reader;
-pub mod file;
 pub mod io;
+pub mod layouts;
 mod message_reader;
 mod message_writer;
 mod messages;
@@ -20,8 +20,7 @@ mod test {
     use futures_util::io::Cursor;
     use futures_util::{pin_mut, StreamExt, TryStreamExt};
     use itertools::Itertools;
-    use vortex::array::chunked::ChunkedArray;
-    use vortex::array::primitive::{PrimitiveArray, PrimitiveEncoding};
+    use vortex::array::{ChunkedArray, PrimitiveArray, PrimitiveEncoding};
     use vortex::encoding::ArrayEncoding;
     use vortex::stream::ArrayStreamExt;
     use vortex::{ArrayDType, Context, IntoArray};

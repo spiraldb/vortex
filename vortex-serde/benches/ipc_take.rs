@@ -11,7 +11,7 @@ use futures_executor::block_on;
 use futures_util::io::Cursor;
 use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
-use vortex::array::primitive::PrimitiveArray;
+use vortex::array::PrimitiveArray;
 use vortex::compress::CompressionStrategy;
 use vortex::compute::take;
 use vortex::{Context, IntoArray};
