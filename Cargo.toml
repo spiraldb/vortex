@@ -22,9 +22,7 @@ resolver = "2"
 version = "0.5.0"
 homepage = "https://github.com/spiraldb/vortex"
 repository = "https://github.com/spiraldb/vortex"
-authors = [
-    "Robert Kruszewski <robert@spiraldb.com>, Nicholas Gates <nick@spiraldb.com>, Will Manning <will@spiraldb.com>",
-]
+authors = ["Vortex Authors <hello@spiraldb.com>"]
 license = "Apache-2.0"
 keywords = ["vortex"]
 include = ["benches/*.rs", "build.rs", "src/**/*.rs", "Cargo.toml", "proto/**/*.proto", "flatbuffers/*.fbs"]
