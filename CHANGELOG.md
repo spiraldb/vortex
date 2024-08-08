@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.5.0](https://github.com/spiraldb/vortex/releases/tag/vortex-runend-bool-v0.5.0) - 2024-08-08
+
+### Other
+- Re-import array types ([#559](https://github.com/spiraldb/vortex/pull/559))
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Added bool iterators index and slice and filtering across some array types ([#505](https://github.com/spiraldb/vortex/pull/505))
+- Fix out ouf bounds when taking from run end arrays ([#501](https://github.com/spiraldb/vortex/pull/501))
+- Change codes for runendbool so it doesn't conflict with datetimeparts ([#498](https://github.com/spiraldb/vortex/pull/498))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- use FQDNs in impl_encoding macro ([#490](https://github.com/spiraldb/vortex/pull/490))
+
+## `vortex-bytebool` - [0.5.0](https://github.com/spiraldb/vortex/releases/tag/vortex-bytebool-v0.5.0) - 2024-08-08
+
+### Other
+- Refactor specialized conversion traits into `From` and `Into` ([#560](https://github.com/spiraldb/vortex/pull/560))
+- Re-import array types ([#559](https://github.com/spiraldb/vortex/pull/559))
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Simpler ByteBool slice ([#527](https://github.com/spiraldb/vortex/pull/527))
+- Added bool iterators index and slice and filtering across some array types ([#505](https://github.com/spiraldb/vortex/pull/505))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- use FQDNs in impl_encoding macro ([#490](https://github.com/spiraldb/vortex/pull/490))
+
 ## `vortex-runend-bool` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.4.12...vortex-runend-bool-v0.5.0) - 2024-08-08
 
 ### Other
