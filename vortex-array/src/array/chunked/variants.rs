@@ -61,12 +61,14 @@ impl Utf8ArrayTrait for ChunkedArray {}
 impl BinaryArrayTrait for ChunkedArray {}
 
 impl StructArrayTrait for ChunkedArray {
+    #[allow(clippy::unwrap_in_result)]
     fn field(&self, idx: usize) -> Option<Array> {
         let mut chunks = Vec::with_capacity(self.nchunks());
         for chunk in self.chunks() {
             let array = chunk.with_dyn(|a| a.as_struct_array().and_then(|s| s.field(idx)))?;
             chunks.push(array);
         }
+
         let chunked = ChunkedArray::try_new(chunks, self.dtype().clone())
             .expect("should be correct dtype")
             .into_array();

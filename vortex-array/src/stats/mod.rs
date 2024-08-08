@@ -93,7 +93,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.get(stat)
-            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
+            .and_then(|s| U::try_from(&s).ok())
     }
 
     pub fn get_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -101,11 +101,10 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.get(stat)
-            .map(|s| {
-                s.cast(&DType::Primitive(U::PTYPE, NonNullable))
-                    .expect("Invalid scalar cast")
+            .and_then(|s| {
+                s.cast(&DType::Primitive(U::PTYPE, NonNullable)).ok()
             })
-            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
+            .and_then(|s| U::try_from(&s).ok())
     }
 
     pub fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -113,7 +112,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.compute(stat)
-            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
+            .and_then(|s| U::try_from(&s).ok())
     }
 
     pub fn compute_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -121,11 +120,10 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.compute(stat)
-            .map(|s| {
-                s.cast(&DType::Primitive(U::PTYPE, NonNullable))
-                    .expect("Invalid scalar cast")
+            .and_then(|s| {
+                s.cast(&DType::Primitive(U::PTYPE, NonNullable)).ok()
             })
-            .map(|s| U::try_from(&s).expect("Invalid stats cast"))
+            .and_then(|s| U::try_from(&s).ok())
     }
 
     pub fn compute_min<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self) -> Option<U> {

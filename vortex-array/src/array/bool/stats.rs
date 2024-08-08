@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use arrow_buffer::BooleanBuffer;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 
 use crate::array::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
@@ -37,7 +38,7 @@ impl ArrayStatisticsCompute for NullableBools<'_> {
             .skip_while(|(_, valid)| !*valid)
             .map(|(idx, _)| idx)
             .next()
-            .expect("Must be at least one non-null value");
+            .ok_or_else(|| vortex_err!("Must be at least one non-null value"))?;
 
         let mut stats = BoolStatsAccumulator::new_with_leading_nulls(
             self.0.value(first_non_null_idx),

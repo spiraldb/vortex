@@ -77,8 +77,7 @@ impl StructArrayTrait for SparseArray {
                 self.len(),
                 self.indices_offset(),
                 scalar,
-            )
-            .unwrap()
+            ).ok()?
             .into_array(),
         )
     }

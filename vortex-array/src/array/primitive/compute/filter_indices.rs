@@ -2,7 +2,7 @@ use std::ops::{BitAnd, BitOr};
 
 use arrow_buffer::BooleanBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::{Disjunction, Predicate, Value};
 
 use crate::array::primitive::PrimitiveArray;
@@ -16,7 +16,7 @@ impl FilterIndicesFn for PrimitiveArray {
             conj.iter()
                 .map(|pred| indices_matching_predicate(self, pred))
                 .reduce(|a, b| Ok(a?.bitand(&b?)))
-                .unwrap()
+                .ok_or_else(|| vortex_err!("Empty conjunction"))?
         });
         let present_buf = self
             .validity()

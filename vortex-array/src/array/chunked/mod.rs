@@ -1,6 +1,7 @@
 //! First-class chunked arrays.
 //!
 //! Vortex is a chunked array library that's able to
+
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -51,7 +52,7 @@ impl ChunkedArray {
             .collect_vec();
 
         let num_chunks = chunk_ends.len() - 1;
-        let length = (*chunk_ends.last().unwrap()) as usize;
+        let length = *chunk_ends.last().unwrap_or_else(|| unreachable!("Chunk ends is guaranteed to have at least one element")) as usize;
 
         let mut children = vec![PrimitiveArray::from_vec(chunk_ends, NonNullable).into_array()];
         children.extend(chunks);
@@ -67,8 +68,8 @@ impl ChunkedArray {
 
     #[inline]
     pub fn chunk(&self, idx: usize) -> Option<Array> {
-        let chunk_start = usize::try_from(&scalar_at(&self.chunk_ends(), idx).unwrap()).unwrap();
-        let chunk_end = usize::try_from(&scalar_at(&self.chunk_ends(), idx + 1).unwrap()).unwrap();
+        let chunk_start = usize::try_from(&scalar_at(&self.chunk_ends(), idx).ok()?).ok()?;
+        let chunk_end = usize::try_from(&scalar_at(&self.chunk_ends(), idx + 1).ok()?).ok()?;
 
         // Offset the index since chunk_ends is child 0.
         self.array()
@@ -149,14 +150,10 @@ impl ArrayValidity for ChunkedArray {
 
 impl SubtractScalarFn for ChunkedArray {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
-        self.chunks()
+        let chunks = self.chunks()
             .map(|chunk| subtract_scalar(&chunk, to_subtract))
-            .collect::<VortexResult<Vec<_>>>()
-            .map(|chunks| {
-                Self::try_new(chunks, self.dtype().clone())
-                    .expect("Subtraction on chunked array changed dtype")
-                    .into_array()
-            })
+            .collect::<VortexResult<Vec<_>>>()?;
+        Ok(Self::try_new(chunks, self.dtype().clone())?.into_array())
     }
 }
 

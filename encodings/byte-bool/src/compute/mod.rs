@@ -139,7 +139,7 @@ impl FillForwardFn for ByteBoolArray {
             return Ok(self.clone().into());
         }
 
-        let validity = self.logical_validity().to_null_buffer()?.unwrap();
+        let validity = self.logical_validity().to_present_null_buffer()?;
         let bools = self.maybe_null_slice();
         let mut last_value = bool::default();
 

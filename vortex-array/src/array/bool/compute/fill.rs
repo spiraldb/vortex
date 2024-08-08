@@ -12,7 +12,7 @@ impl FillForwardFn for BoolArray {
             return Ok(self.clone().into());
         }
 
-        let validity = self.logical_validity().to_null_buffer()?.unwrap();
+        let validity = self.logical_validity().to_present_null_buffer()?;
         let bools = self.boolean_buffer();
         let mut last_value = false;
         let filled = bools

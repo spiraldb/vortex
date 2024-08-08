@@ -10,11 +10,12 @@ impl TryFrom<&ExtDType> for TemporalMetadata {
     type Error = VortexError;
 
     fn try_from(ext_dtype: &ExtDType) -> Result<Self, Self::Error> {
+        let metadata = ext_dtype.metadata().ok_or_else(|| vortex_err!("ExtDType is missing metadata"))?;
         match ext_dtype.id().as_ref() {
-            x if x == TIME_ID.as_ref() => decode_time_metadata(ext_dtype.metadata().unwrap()),
-            x if x == DATE_ID.as_ref() => decode_date_metadata(ext_dtype.metadata().unwrap()),
+            x if x == TIME_ID.as_ref() => decode_time_metadata(metadata),
+            x if x == DATE_ID.as_ref() => decode_date_metadata(metadata),
             x if x == TIMESTAMP_ID.as_ref() => {
-                decode_timestamp_metadata(ext_dtype.metadata().unwrap())
+                decode_timestamp_metadata(metadata)
             }
             _ => {
                 vortex_bail!(InvalidArgument: "ExtDType must be one of the known temporal types")
