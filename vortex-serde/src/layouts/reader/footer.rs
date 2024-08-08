@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use bytes::Bytes;
 use flatbuffers::root;
-use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_dtype::{DType, StructDType};
+use vortex_error::{vortex_err, VortexResult};
+use vortex_flatbuffers::dtype::Struct_;
 use vortex_flatbuffers::ReadFlatBuffer;
 
 use crate::layouts::reader::context::LayoutDeserializer;
@@ -53,5 +56,39 @@ impl Footer {
             IPCDType::read_flatbuffer(&root::<vortex_flatbuffers::message::Schema>(dtype_bytes)?)?
                 .0,
         )
+    }
+
+    pub fn projected_dtype(&self, projection: &[usize]) -> VortexResult<DType> {
+        let start_offset = self.leftovers_schema_offset();
+        let end_offset = self.leftovers_footer_offset();
+        let dtype_bytes = &self.leftovers[start_offset..end_offset];
+
+        let fb_schema = root::<vortex_flatbuffers::message::Schema>(dtype_bytes)?;
+        let fb_dtype = fb_schema
+            .dtype()
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
+
+        let fb_struct = fb_dtype.type__as_struct_().unwrap();
+        let nullability = fb_struct.nullable().into();
+
+        let (names, dtypes): (Vec<Arc<str>>, Vec<DType>) = projection
+            .iter()
+            .map(|idx| Self::read_field(fb_struct, *idx))
+            .collect::<VortexResult<Vec<_>>>()?
+            .into_iter()
+            .unzip();
+
+        Ok(DType::Struct(
+            StructDType::new(names.into(), dtypes),
+            nullability,
+        ))
+    }
+
+    fn read_field(fb_struct: Struct_, idx: usize) -> VortexResult<(Arc<str>, DType)> {
+        let name = fb_struct.names().unwrap().get(idx);
+        let fb_dtype = fb_struct.dtypes().unwrap().get(idx);
+        let dtype = DType::try_from(fb_dtype)?;
+
+        Ok((name.into(), dtype))
     }
 }

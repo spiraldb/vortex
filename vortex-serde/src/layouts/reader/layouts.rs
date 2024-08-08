@@ -156,10 +156,10 @@ impl ColumnLayout {
         &self,
         idx: usize,
         children: Vector<ForwardsUOffset<fb::Layout>>,
-        st_dtype: &Arc<[DType]>,
+        dtype: DType,
     ) -> VortexResult<Box<dyn Layout>> {
         let layout = children.get(idx);
-        let dtype = st_dtype[idx].clone();
+
         // TODO: Figure out complex nested schema projections
         let mut child_scan = self.scan.clone();
         child_scan.projection = Projection::All;
@@ -185,13 +185,24 @@ impl Layout for ColumnLayout {
 
                 let column_layouts = match self.scan.projection {
                     Projection::All => (0..fb_children.len())
-                        .map(|idx| self.read_child(idx, fb_children, s.dtypes()))
+                        .map(|idx| self.read_child(idx, fb_children, s.dtypes()[idx].clone()))
                         .collect::<VortexResult<Vec<_>>>()?,
                     Projection::Partial(ref v) => v
                         .iter()
-                        .map(|&idx| self.read_child(idx, fb_children, s.dtypes()))
+                        .enumerate()
+                        .map(|(position, &projection_idx)| {
+                            self.read_child(
+                                projection_idx,
+                                fb_children,
+                                s.dtypes()[position].clone(),
+                            )
+                        })
                         .collect::<VortexResult<Vec<_>>>()?,
                 };
+
+                // let column_layouts = (0..s.dtypes().len())
+                //     .map(|idx| self.read_child(idx, fb_children, s.dtypes()))
+                //     .collect::<VortexResult<Vec<_>>>()?;
 
                 let reader = BatchReader::new(s.names().clone(), column_layouts);
                 self.state = ColumnLayoutState::ReadColumns(reader);

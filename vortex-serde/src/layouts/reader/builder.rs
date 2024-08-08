@@ -75,6 +75,11 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
         let projection = self.projection.unwrap_or_default();
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
+        let projected_dtype = match &projection {
+            Projection::All => footer.dtype()?,
+            Projection::Partial(projection) => footer.projected_dtype(projection)?,
+        };
+
         let scan = Scan {
             projection,
             indices: self.indices,
@@ -83,11 +88,12 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
         };
 
         let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let layouts_cache = RelativeLayoutCache::new(message_cache.clone(), footer.dtype()?);
+        let layouts_cache =
+            RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone());
 
         let layout = footer.layout(scan.clone(), layouts_cache)?;
 
-        VortexLayoutBatchStream::try_new(self.reader, layout, message_cache, footer.dtype()?, scan)
+        VortexLayoutBatchStream::try_new(self.reader, layout, message_cache, projected_dtype, scan)
     }
 
     async fn len(&self) -> usize {

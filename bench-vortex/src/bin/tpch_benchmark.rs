@@ -17,17 +17,17 @@ async fn main() {
 
     // The formats to run against (vs the baseline)
     let formats = [
-        Format::Arrow,
+        // Format::Arrow,
         Format::Parquet,
-        Format::InMemoryVortex {
-            enable_pushdown: true,
-        },
+        // Format::InMemoryVortex {
+        //     enable_pushdown: true,
+        // },
         Format::OnDiskVortex {
             enable_compression: true,
         },
-        Format::OnDiskVortex {
-            enable_compression: false,
-        },
+        // Format::OnDiskVortex {
+        //     enable_compression: false,
+        // },
     ];
 
     // Load datasets
