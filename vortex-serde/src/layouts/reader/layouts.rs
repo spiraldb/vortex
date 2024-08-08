@@ -162,27 +162,32 @@ impl Layout for ColumnLayout {
 
                 let fb_children = self.flatbuffer().children().expect("must have children");
 
-                let columns = fb_children
-                    .into_iter()
-                    .enumerate()
-                    .zip(s.dtypes().iter().cloned())
-                    .filter_map(|((idx, child), dtype)| {
-                        self.scan.projection.contains_idx(idx).then(|| {
-                            // TODO: This is needed to support more complex nested layouts
-                            let mut child_scan = self.scan.clone();
-                            child_scan.projection = Projection::All;
+                let indexes = match self.scan.projection {
+                    Projection::All => Vec::from_iter(0..fb_children.len()),
+                    Projection::Partial(ref v) => v.clone(),
+                };
 
-                            self.layout_serde.read_layout(
-                                self.fb_bytes.clone(),
-                                child._tab.loc(),
-                                child_scan,
-                                self.message_cache.relative(idx as u16, dtype),
-                            )
-                        })
-                    })
-                    .collect::<VortexResult<Vec<_>>>()?;
+                let mut column_layouts = Vec::with_capacity(indexes.len());
 
-                let mut reader = BatchReader::new(s.names().clone(), columns);
+                for idx in indexes.into_iter() {
+                    let child = fb_children.get(idx).clone();
+                    let dtype = s.dtypes()[idx].clone();
+
+                    // TODO: This is needed to support more complex nested layouts
+                    let mut child_scan = self.scan.clone();
+                    child_scan.projection = Projection::All;
+
+                    let layout = self.layout_serde.read_layout(
+                        self.fb_bytes.clone(),
+                        child._tab.loc(),
+                        child_scan,
+                        self.message_cache.relative(idx as u16, dtype.clone()),
+                    )?;
+
+                    column_layouts.push(layout);
+                }
+
+                let mut reader = BatchReader::new(s.names().clone(), column_layouts);
                 let rr = reader.read()?;
                 self.state = ColumnLayoutState::ReadColumns(reader);
                 Ok(rr)
