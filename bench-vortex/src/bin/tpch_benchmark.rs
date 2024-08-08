@@ -19,8 +19,14 @@ async fn main() {
     let formats = [
         Format::Arrow,
         Format::Parquet,
-        Format::Vortex {
+        Format::InMemoryVortex {
             enable_pushdown: true,
+        },
+        Format::OnDiskVortex {
+            enable_compression: true,
+        },
+        Format::OnDiskVortex {
+            enable_compression: false,
         },
     ];
 

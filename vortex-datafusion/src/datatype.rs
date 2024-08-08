@@ -136,7 +136,7 @@ mod test {
         DType, ExtDType, ExtID, FieldName, FieldNames, Nullability, PType, StructDType,
     };
 
-    use crate::datatype::{infer_data_type, infer_schema};
+    use super::*;
 
     #[test]
     fn test_dtype_conversion_success() {

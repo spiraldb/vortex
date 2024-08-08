@@ -29,12 +29,13 @@ impl VortexFile {
     }
 }
 
-pub struct VortexTableConfig {
+#[derive(Default)]
+pub struct VortexTableOptions {
     pub(crate) data_files: Vec<VortexFile>,
     pub(crate) schema: Option<SchemaRef>,
 }
 
-impl VortexTableConfig {
+impl VortexTableOptions {
     pub fn new(schema: SchemaRef, data_files: Vec<VortexFile>) -> Self {
         Self {
             data_files,
