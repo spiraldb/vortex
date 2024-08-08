@@ -47,12 +47,10 @@ vortex-sampling-compressor = { workspace = true }
 workspace = true
 
 [features]
-default = ["futures", "monoio", "tokio", "flatbuffers"]
+default = ["futures", "monoio", "tokio"]
 futures = ["futures-util/io"]
 monoio = ["dep:monoio"]
 tokio = ["dep:tokio"]
-# needed for vortex-build script
-flatbuffers = []
 
 [[bench]]
 name = "ipc_take"
