@@ -15,7 +15,7 @@ use crate::compute::{
     SearchSortedSide, SliceFn, TakeFn,
 };
 use crate::stats::{ArrayStatistics, Stat};
-use crate::{Array, ArrayDType, ArrayData, AsArray, IntoArray, IntoCanonical};
+use crate::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
 
 impl ArrayCompute for ConstantArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -118,7 +118,7 @@ impl CompareFn for ConstantArray {
                 Operator::Lte => arrow_ord::cmp::lt_eq(datum.as_ref(), &rhs)?,
             };
 
-            Ok(ArrayData::from_arrow(&boolean_array, true).into_array())
+            Ok(Array::from_arrow(&boolean_array, true))
         }
     }
 }
@@ -175,8 +175,8 @@ fn constant_array_bool_impl(
 mod test {
     use rstest::rstest;
 
-    use crate::array::bool::BoolArray;
     use crate::array::constant::ConstantArray;
+    use crate::array::BoolArray;
     use crate::compute::unary::scalar_at;
     use crate::compute::{and, or, search_sorted, SearchResult, SearchSortedSide};
     use crate::{Array, IntoArray, IntoArrayVariant};

@@ -1,4 +1,4 @@
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::compute::unary::{FillForwardFn, ScalarAtFn};
 use crate::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 

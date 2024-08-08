@@ -1,7 +1,7 @@
 use vortex_error::VortexResult;
 
 use crate::accessor::ArrayAccessor;
-use crate::array::bool::BoolArray;
+use crate::array::BoolArray;
 use crate::validity::Validity;
 use crate::IntoArrayVariant;
 
@@ -38,7 +38,7 @@ impl ArrayAccessor<bool> for BoolArray {
 #[cfg(test)]
 mod test {
     use crate::accessor::ArrayAccessor;
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
 
     #[test]
     fn test_bool_accesor() {

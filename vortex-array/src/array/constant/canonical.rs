@@ -4,10 +4,10 @@ use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{BoolScalar, Utf8Scalar};
 
-use crate::array::bool::BoolArray;
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
+use crate::array::BoolArray;
 use crate::validity::Validity;
 use crate::{ArrayDType, Canonical, IntoCanonical};
 

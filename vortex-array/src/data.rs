@@ -7,7 +7,7 @@ use vortex_scalar::Scalar;
 
 use crate::encoding::EncodingRef;
 use crate::stats::{Stat, Statistics, StatsSet};
-use crate::{Array, ArrayDType, ArrayMetadata, IntoArray, ToArray};
+use crate::{Array, ArrayDType, ArrayMetadata, ToArray};
 
 #[derive(Clone, Debug)]
 pub struct ArrayData {
@@ -106,9 +106,18 @@ impl ToArray for ArrayData {
     }
 }
 
-impl IntoArray for ArrayData {
-    fn into_array(self) -> Array {
-        Array::Data(self)
+impl From<Array> for ArrayData {
+    fn from(value: Array) -> ArrayData {
+        match &value {
+            Array::Data(d) => d.clone(),
+            Array::View(_) => value.clone().into(),
+        }
+    }
+}
+
+impl From<ArrayData> for Array {
+    fn from(value: ArrayData) -> Array {
+        Array::Data(value)
     }
 }
 

@@ -150,7 +150,7 @@ impl AcceptArrayVisitor for BoolArray {
 mod tests {
     use itertools::Itertools;
 
-    use crate::array::bool::BoolArray;
+    use crate::array::BoolArray;
     use crate::compute::unary::scalar_at;
     use crate::variants::BoolArrayTrait;
     use crate::IntoArray;

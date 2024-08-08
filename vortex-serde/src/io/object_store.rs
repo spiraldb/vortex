@@ -3,6 +3,7 @@
 use std::future::Future;
 use std::io::Cursor;
 use std::ops::Range;
+use std::sync::Arc;
 use std::{io, mem};
 
 use bytes::BytesMut;
@@ -29,7 +30,7 @@ pub trait ObjectStoreExt {
     ) -> impl Future<Output = VortexResult<impl VortexWrite>>;
 }
 
-impl<O: ObjectStore> ObjectStoreExt for O {
+impl ObjectStoreExt for Arc<dyn ObjectStore> {
     async fn vortex_read(
         &self,
         location: &Path,
@@ -40,7 +41,7 @@ impl<O: ObjectStore> ObjectStoreExt for O {
     }
 
     fn vortex_reader(&self, location: &Path) -> impl VortexReadAt {
-        ObjectStoreReadAt::new(self, location)
+        ObjectStoreReadAt::new(self.clone(), location.clone())
     }
 
     async fn vortex_writer(&self, location: &Path) -> VortexResult<impl VortexWrite> {
@@ -51,13 +52,13 @@ impl<O: ObjectStore> ObjectStoreExt for O {
     }
 }
 
-pub struct ObjectStoreReadAt<'a, 'b, O: ObjectStore> {
-    object_store: &'a O,
-    location: &'b Path,
+pub struct ObjectStoreReadAt {
+    object_store: Arc<dyn ObjectStore>,
+    location: Path,
 }
 
-impl<'a, 'b, O: ObjectStore> ObjectStoreReadAt<'a, 'b, O> {
-    pub fn new(object_store: &'a O, location: &'b Path) -> Self {
+impl ObjectStoreReadAt {
+    pub fn new(object_store: Arc<dyn ObjectStore>, location: Path) -> Self {
         Self {
             object_store,
             location,
@@ -65,19 +66,19 @@ impl<'a, 'b, O: ObjectStore> ObjectStoreReadAt<'a, 'b, O> {
     }
 }
 
-impl<'a, 'b, O: ObjectStore> VortexReadAt for ObjectStoreReadAt<'a, 'b, O> {
+impl VortexReadAt for ObjectStoreReadAt {
     async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
         let start_range = pos as usize;
         let bytes = self
             .object_store
-            .get_range(self.location, start_range..(start_range + buffer.len()))
+            .get_range(&self.location, start_range..(start_range + buffer.len()))
             .await?;
         buffer.as_mut().copy_from_slice(bytes.as_ref());
         Ok(buffer)
     }
 
     async fn size(&self) -> u64 {
-        self.object_store.head(self.location).await.unwrap().size as u64
+        self.object_store.head(&self.location).await.unwrap().size as u64
     }
 }
 

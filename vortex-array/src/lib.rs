@@ -193,14 +193,6 @@ pub trait IntoArray {
     fn into_array(self) -> Array;
 }
 
-pub trait ToArrayData {
-    fn to_array_data(&self) -> ArrayData;
-}
-
-pub trait IntoArrayData {
-    fn into_array_data(self) -> ArrayData;
-}
-
 pub trait AsArray {
     fn as_array_ref(&self) -> &Array;
 }
@@ -217,7 +209,6 @@ pub trait ArrayTrait:
     + AcceptArrayVisitor
     + ArrayStatistics
     + ArrayStatisticsCompute
-    + ToArrayData
 {
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
@@ -302,14 +293,5 @@ impl Display for Array {
             self.dtype(),
             self.len()
         )
-    }
-}
-
-impl IntoArrayData for Array {
-    fn into_array_data(self) -> ArrayData {
-        match self {
-            Self::Data(d) => d,
-            Self::View(_) => self.with_dyn(|a| a.to_array_data()),
-        }
     }
 }

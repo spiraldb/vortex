@@ -3,7 +3,7 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
 
 use crate::arrow::FromArrowArray;
-use crate::{Array, ArrayDType, ArrayData, IntoArray, IntoCanonical};
+use crate::{Array, ArrayDType, IntoCanonical};
 
 pub trait FilterFn {
     /// Filter an array by the provided predicate.
@@ -42,15 +42,14 @@ pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
             let filtered =
                 arrow_select::filter::filter(array_ref.as_ref(), predicate_ref.as_boolean())?;
 
-            Ok(ArrayData::from_arrow(filtered, array.dtype().is_nullable()).into_array())
+            Ok(Array::from_arrow(filtered, array.dtype().is_nullable()))
         }
     })
 }
 
 #[cfg(test)]
 mod test {
-    use crate::array::bool::BoolArray;
-    use crate::array::primitive::PrimitiveArray;
+    use crate::array::{BoolArray, PrimitiveArray};
     use crate::compute::filter::filter;
     use crate::validity::Validity;
     use crate::{IntoArray, IntoCanonical};

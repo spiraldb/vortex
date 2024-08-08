@@ -17,14 +17,11 @@ use arrow_schema::{Field, Fields};
 use vortex_dtype::{DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::array::bool::BoolArray;
-use crate::array::datetime::temporal::{is_temporal_ext_type, TemporalMetadata};
-use crate::array::datetime::{TemporalArray, TimeUnit};
-use crate::array::extension::ExtensionArray;
-use crate::array::null::NullArray;
-use crate::array::primitive::PrimitiveArray;
-use crate::array::struct_::StructArray;
-use crate::array::varbin::VarBinArray;
+use crate::array::temporal::{is_temporal_ext_type, TemporalMetadata};
+use crate::array::{
+    BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray, TemporalArray, TimeUnit,
+    VarBinArray,
+};
 use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::try_cast;
 use crate::encoding::ArrayEncoding;
@@ -423,22 +420,20 @@ impl IntoCanonical for Array {
     }
 }
 
-/// Implement the IntoArray for the [Canonical] type.
-///
 /// This conversion is always "free" and should not touch underlying data. All it does is create an
 /// owned pointer to the underlying concrete array type.
 ///
 /// This combined with the above [IntoCanonical] impl for [Array] allows simple two-way conversions
 /// between arbitrary Vortex encodings and canonical Arrow-compatible encodings.
-impl IntoArray for Canonical {
-    fn into_array(self) -> Array {
-        match self {
-            Self::Null(a) => a.into_array(),
-            Self::Bool(a) => a.into_array(),
-            Self::Primitive(a) => a.into_array(),
-            Self::Struct(a) => a.into_array(),
-            Self::VarBin(a) => a.into_array(),
-            Self::Extension(a) => a.into_array(),
+impl From<Canonical> for Array {
+    fn from(value: Canonical) -> Self {
+        match value {
+            Canonical::Null(a) => a.into(),
+            Canonical::Bool(a) => a.into(),
+            Canonical::Primitive(a) => a.into(),
+            Canonical::Struct(a) => a.into(),
+            Canonical::VarBin(a) => a.into(),
+            Canonical::Extension(a) => a.into(),
         }
     }
 }
@@ -452,9 +447,7 @@ mod test {
     use vortex_dtype::Nullability;
     use vortex_scalar::Scalar;
 
-    use crate::array::primitive::PrimitiveArray;
-    use crate::array::sparse::SparseArray;
-    use crate::array::struct_::StructArray;
+    use crate::array::{PrimitiveArray, SparseArray, StructArray};
     use crate::validity::Validity;
     use crate::{IntoArray, IntoCanonical};
 
