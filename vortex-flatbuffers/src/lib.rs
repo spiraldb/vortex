@@ -1,3 +1,26 @@
+
+#[allow(unused_imports)]
+#[allow(dead_code)]
+#[allow(clippy::all)]
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+mod generated;
+
+#[cfg(feature = "array")]
+pub mod array {
+    pub use super::generated::array::*;
+}
+
+#[cfg(feature = "dtype")]
+pub mod dtype {
+    pub use super::generated::dtype::*;
+}
+
+#[cfg(feature = "scalar")]
+pub mod scalar {
+    pub use super::generated::scalar::*;
+}
+
 use std::io;
 use std::io::Write;
 

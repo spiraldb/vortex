@@ -1,0 +1,23 @@
+[package]
+name = "vortex-proto"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+prost = { workspace = true }
+prost-types = { workspace = true }
+
+[features]
+dtype = []
+scalar = ["dtype"]
+expr = ["dtype", "scalar"]
+
+[lints]
+workspace = true

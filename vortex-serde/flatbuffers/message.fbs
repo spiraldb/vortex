@@ -1,5 +1,5 @@
-include "array.fbs";
-include "dtype.fbs";
+include "vortex-array/flatbuffers/array.fbs";
+include "vortex-dtype/flatbuffers/dtype.fbs";
 
 namespace vortex.serde;
 

@@ -56,27 +56,7 @@ mod view;
 pub mod visitor;
 
 pub mod flatbuffers {
-    pub use generated::vortex::array::*;
-
-    #[allow(unused_imports)]
-    #[allow(dead_code)]
-    #[allow(non_camel_case_types)]
-    #[allow(clippy::all)]
-    mod generated {
-        include!(concat!(env!("OUT_DIR"), "/flatbuffers/array.rs"));
-    }
-
-    mod deps {
-        pub mod dtype {
-            #[allow(unused_imports)]
-            pub use vortex_dtype::flatbuffers as dtype;
-        }
-
-        pub mod scalar {
-            #[allow(unused_imports)]
-            pub use vortex_scalar::flatbuffers as scalar;
-        }
-    }
+    pub use vortex_flatbuffers::array::*;
 }
 
 #[derive(Debug, Clone)]

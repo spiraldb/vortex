@@ -1,9 +1,7 @@
-include "dtype.fbs";
-
-namespace vortex.scalar;
+include "vortex-dtype/dtype.fbs";
 
 table Scalar {
-  dtype: vortex.dtype.DType (required);
+  dtype: DType (required);
   value: ScalarValue (required);
 }
 

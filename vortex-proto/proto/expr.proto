@@ -2,8 +2,8 @@ syntax = "proto3";
 
 package vortex.expr;
 
-import "vortex/dtype/dtype.proto";
-import "vortex/scalar/scalar.proto";
+import "dtype.proto";
+import "scalar.proto";
 
 message Disjunction {
   repeated Conjunction conjunctions = 1;

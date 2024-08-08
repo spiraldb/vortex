@@ -1,6 +1,4 @@
-include "scalar.fbs";
-
-namespace vortex.array;
+include "vortex-scalar/scalar.fbs";
 
 enum Version: uint8 {
   V0 = 0,
@@ -16,8 +14,8 @@ table Array {
 }
 
 table ArrayStats {
-    min: vortex.scalar.ScalarValue;
-    max: vortex.scalar.ScalarValue;
+    min: ScalarValue;
+    max: ScalarValue;
     is_sorted: bool = null;
     is_strict_sorted: bool = null;
     is_constant: bool = null;

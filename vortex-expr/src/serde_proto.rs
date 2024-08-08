@@ -2,8 +2,8 @@
 
 use vortex_error::{vortex_bail, vortex_err, VortexError};
 
-use crate::proto::expr as pb;
-use crate::proto::expr::predicate::Rhs;
+use vortex_proto::expr as pb;
+use vortex_proto::expr::predicate::Rhs;
 use crate::{Operator, Predicate, Value};
 
 impl TryFrom<&pb::Predicate> for Predicate {

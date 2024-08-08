@@ -55,6 +55,7 @@ flatbuffers = [
   "dep:flatbuffers",
   "dep:flexbuffers",
   "dep:vortex-flatbuffers",
+  "vortex-flatbuffers/array",
   "vortex-dtype/flatbuffers",
   "vortex-error/flatbuffers",
   "vortex-error/flexbuffers",

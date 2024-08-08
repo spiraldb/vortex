@@ -11,6 +11,11 @@ include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
 
+[features]
+dtype = []
+scalar = ["dtype"]
+array = ["dtype", "scalar"]
+
 [dependencies]
 flatbuffers = { workspace = true }
 
