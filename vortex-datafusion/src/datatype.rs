@@ -15,8 +15,8 @@ use std::sync::Arc;
 use arrow_schema::{
     DataType, Field, FieldRef, Fields, Schema, SchemaBuilder, TimeUnit as ArrowTimeUnit,
 };
-use vortex::array::datetime::temporal::TemporalMetadata;
-use vortex::array::datetime::TimeUnit;
+use vortex::array::temporal::TemporalMetadata;
+use vortex::array::TimeUnit;
 use vortex_dtype::{DType, Nullability, PType};
 
 /// Convert a Vortex [struct DType][DType] to an Arrow [Schema].

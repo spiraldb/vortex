@@ -195,6 +195,23 @@ macro_rules! vortex_bail {
     };
 }
 
+#[cfg(feature = "datafusion")]
+impl From<VortexError> for datafusion_common::DataFusionError {
+    fn from(value: VortexError) -> Self {
+        Self::External(Box::new(value))
+    }
+}
+
+#[cfg(feature = "datafusion")]
+impl From<VortexError> for datafusion_common::arrow::error::ArrowError {
+    fn from(value: VortexError) -> Self {
+        match value {
+            VortexError::ArrowError(e) => e,
+            _ => Self::from_external_error(Box::new(value)),
+        }
+    }
+}
+
 // Not public, referenced by macros only.
 #[doc(hidden)]
 pub mod __private {
