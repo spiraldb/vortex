@@ -71,9 +71,18 @@ impl ALPArray {
     }
 
     pub fn encoded(&self) -> Array {
-        self.array()
-            .child(0, &self.metadata().encoded_dtype, self.len())
-            .expect("Missing encoded array")
+        let child_opt = self
+            .array()
+            .child(0, &self.metadata().encoded_dtype, self.len());
+        if child_opt.is_none() {
+            match self.array() {
+                Array::Data(_) => {}
+                Array::View(v) => {
+                    dbg!(v.flatbuffer());
+                }
+            }
+        }
+        child_opt.expect("Missing encoded array")
     }
 
     #[inline]
