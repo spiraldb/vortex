@@ -200,10 +200,6 @@ impl Layout for ColumnLayout {
                         .collect::<VortexResult<Vec<_>>>()?,
                 };
 
-                // let column_layouts = (0..s.dtypes().len())
-                //     .map(|idx| self.read_child(idx, fb_children, s.dtypes()))
-                //     .collect::<VortexResult<Vec<_>>>()?;
-
                 let reader = BatchReader::new(s.names().clone(), column_layouts);
                 self.state = ColumnLayoutState::ReadColumns(reader);
                 self.read()
