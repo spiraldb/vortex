@@ -34,8 +34,8 @@ impl BatchReader {
         {
             match self.children[i].read()? {
                 Some(rr) => match rr {
-                    ReadResult::GetMsgs(r1) => {
-                        messages.extend(r1);
+                    ReadResult::GetMsgs(message) => {
+                        messages.extend(message);
                     }
                     ReadResult::Batch(a) => *child_array = Some(a),
                 },
