@@ -6,6 +6,7 @@ use vortex::Context;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
+use super::projections::Projection;
 use crate::flatbuffers::footer as fb;
 use crate::layouts::reader::batch::BatchReader;
 use crate::layouts::reader::buffered::BufferedReader;
@@ -129,7 +130,6 @@ impl ColumnLayout {
         fb_bytes: Bytes,
         fb_loc: usize,
         scan: Scan,
-
         layout_serde: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
     ) -> Self {
@@ -166,13 +166,19 @@ impl Layout for ColumnLayout {
                     .into_iter()
                     .enumerate()
                     .zip(s.dtypes().iter().cloned())
-                    .map(|((idx, child), dtype)| {
-                        self.layout_serde.read_layout(
-                            self.fb_bytes.clone(),
-                            child._tab.loc(),
-                            self.scan.clone(),
-                            self.message_cache.relative(idx as u16, dtype),
-                        )
+                    .filter_map(|((idx, child), dtype)| {
+                        self.scan.projection.contains_idx(idx).then(|| {
+                            // TODO: This is needed to support more complex nested layouts
+                            let mut child_scan = self.scan.clone();
+                            child_scan.projection = Projection::All;
+
+                            self.layout_serde.read_layout(
+                                self.fb_bytes.clone(),
+                                child._tab.loc(),
+                                child_scan,
+                                self.message_cache.relative(idx as u16, dtype),
+                            )
+                        })
                     })
                     .collect::<VortexResult<Vec<_>>>()?;
 
