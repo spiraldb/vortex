@@ -3,14 +3,14 @@ use std::fs;
 use std::path::Path;
 use std::sync::Arc;
 
-use arrow_array::StructArray;
+use arrow_array::StructArray as ArrowStructArray;
 use arrow_schema::Schema;
 use datafusion::dataframe::DataFrameWriteOptions;
 use datafusion::datasource::MemTable;
 use datafusion::execution::object_store::ObjectStoreUrl;
 use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
 use tokio::fs::OpenOptions;
-use vortex::array::ChunkedArray;
+use vortex::array::{ChunkedArray, StructArray};
 use vortex::arrow::FromArrowArray;
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
@@ -249,7 +249,7 @@ async fn register_vortex_file(
                 })
                 .collect::<Vec<_>>();
 
-            let data = vortex::array::StructArray::from_fields(&fields).into_array();
+            let data = StructArray::from_fields(&fields).into_array();
 
             let data = if enable_compression {
                 let compressor = SamplingCompressor::default();
@@ -266,9 +266,7 @@ async fn register_vortex_file(
                 .await?;
 
             let mut writer = LayoutWriter::new(f);
-
             writer = writer.write_array_columns(data).await?;
-
             writer.finalize().await?;
 
             anyhow::Ok(())
@@ -276,7 +274,7 @@ async fn register_vortex_file(
     )
     .await?;
 
-    let f = tokio::fs::File::options()
+    let f = OpenOptions::new()
         .read(true)
         .write(true)
         .open(&vtx_file)
@@ -324,7 +322,7 @@ async fn register_vortex(
     let chunks: Vec<Array> = record_batches
         .iter()
         .cloned()
-        .map(StructArray::from)
+        .map(ArrowStructArray::from)
         .map(|struct_array| Array::from_arrow(&struct_array, false))
         .collect();
 

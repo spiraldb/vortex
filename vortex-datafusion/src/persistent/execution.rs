@@ -2,7 +2,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use datafusion::datasource::physical_plan::{FileScanConfig, FileStream};
-use datafusion_common::Result as DFResult;
+use datafusion_common::{project_schema, Result as DFResult};
 use datafusion_execution::{SendableRecordBatchStream, TaskContext};
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning, PhysicalExpr};
 use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
@@ -18,7 +18,6 @@ pub struct VortexExec {
     metrics: ExecutionPlanMetricsSet,
     predicate: Option<Arc<dyn PhysicalExpr>>,
     plan_properties: PlanProperties,
-    projection: Option<Vec<usize>>,
 }
 
 impl VortexExec {
@@ -28,26 +27,17 @@ impl VortexExec {
         projection: Option<&Vec<usize>>,
         predicate: Option<Arc<dyn PhysicalExpr>>,
     ) -> DFResult<Self> {
-        let partitioning = Partitioning::UnknownPartitioning(1);
-
-        let projected_schema = if let Some(projection) = projection {
-            Arc::new(file_scan_config.file_schema.clone().project(projection)?)
-        } else {
-            file_scan_config.file_schema.clone()
-        };
-
+        let projected_schema = project_schema(&file_scan_config.file_schema, projection)?;
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(projected_schema),
-            partitioning,
+            Partitioning::UnknownPartitioning(1),
             ExecutionMode::Bounded,
         );
-        let projection = projection.cloned();
 
         Ok(Self {
             file_scan_config,
             metrics,
             predicate,
-            projection,
             plan_properties,
         })
     }
@@ -99,7 +89,7 @@ impl ExecutionPlan for VortexExec {
             .object_store(&self.file_scan_config.object_store_url)?;
         let opener = VortexFileOpener {
             object_store,
-            projection: self.projection.clone(),
+            projection: self.file_scan_config.projection.clone(),
             batch_size: None,
             predicate: self.predicate.clone(),
         };

@@ -80,20 +80,12 @@ pub trait SessionContextExt {
         options: VortexMemTableOptions,
     ) -> DFResult<DataFrame>;
 
-    fn register_disk_vortex<S: AsRef<str>>(&self, name: S, url: ObjectStoreUrl) -> DFResult<()> {
-        self.register_disk_vortex_opts(name, url, VortexTableOptions::default())
-    }
-
     fn register_disk_vortex_opts<S: AsRef<str>>(
         &self,
         name: S,
         url: ObjectStoreUrl,
         options: VortexTableOptions,
     ) -> DFResult<()>;
-
-    fn read_disk_vortex(&self, url: ObjectStoreUrl) -> DFResult<DataFrame> {
-        self.read_disk_vortex_opts(url, VortexTableOptions::default())
-    }
 
     fn read_disk_vortex_opts(
         &self,
