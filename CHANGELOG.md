@@ -6,6 +6,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.4.12...vortex-runend-bool-v0.5.0) - 2024-08-08
+
+### Other
+- Re-import array types ([#559](https://github.com/spiraldb/vortex/pull/559))
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Added bool iterators index and slice and filtering across some array types ([#505](https://github.com/spiraldb/vortex/pull/505))
+- Fix out ouf bounds when taking from run end arrays ([#501](https://github.com/spiraldb/vortex/pull/501))
+- Change codes for runendbool so it doesn't conflict with datetimeparts ([#498](https://github.com/spiraldb/vortex/pull/498))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- use FQDNs in impl_encoding macro ([#490](https://github.com/spiraldb/vortex/pull/490))
+
+## `vortex-bytebool` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-bytebool-v0.4.12...vortex-bytebool-v0.5.0) - 2024-08-08
+
+### Other
+- Refactor specialized conversion traits into `From` and `Into` ([#560](https://github.com/spiraldb/vortex/pull/560))
+- Re-import array types ([#559](https://github.com/spiraldb/vortex/pull/559))
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Run cargo-sort on the whole workspace ([#550](https://github.com/spiraldb/vortex/pull/550))
+- Simpler ByteBool slice ([#527](https://github.com/spiraldb/vortex/pull/527))
+- Added bool iterators index and slice and filtering across some array types ([#505](https://github.com/spiraldb/vortex/pull/505))
+- Make unary functions nicer to `use` ([#493](https://github.com/spiraldb/vortex/pull/493))
+- use FQDNs in impl_encoding macro ([#490](https://github.com/spiraldb/vortex/pull/490))
+
+## `vortex-serde` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.4.12...vortex-serde-v0.5.0) - 2024-08-08
+
+### Other
+- Push column projections down to the file IO layer ([#568](https://github.com/spiraldb/vortex/pull/568))
+- Lots of things to try and get publishing working ([#557](https://github.com/spiraldb/vortex/pull/557))
+- Support dynamic layouts with io batching ([#533](https://github.com/spiraldb/vortex/pull/533))
+- Re-import array types ([#559](https://github.com/spiraldb/vortex/pull/559))
+- File-based table provider for Datafusion ([#546](https://github.com/spiraldb/vortex/pull/546))
+- build-vortex -> vortex-build ([#552](https://github.com/spiraldb/vortex/pull/552))
+- Use versioned workspace deps ([#551](https://github.com/spiraldb/vortex/pull/551))
+- Add identity projection to the file reader ([#532](https://github.com/spiraldb/vortex/pull/532))
+- Support reading unaligned chunks across columns ([#531](https://github.com/spiraldb/vortex/pull/531))
+- Initial version of simple FileReader/Writer ([#516](https://github.com/spiraldb/vortex/pull/516))
+
+## `vortex-datafusion` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-datafusion-v0.4.12...vortex-datafusion-v0.5.0) - 2024-08-08
+
+### Other
+- Hook on-disk vortex files into benchmarking ([#565](https://github.com/spiraldb/vortex/pull/565))
+
+## `vortex-error` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-error-v0.4.12...vortex-error-v0.5.0) - 2024-08-08
+
+### Other
+- Lots of things to try and get publishing working ([#557](https://github.com/spiraldb/vortex/pull/557))
+
+## `vortex-array` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-array-v0.4.12...vortex-array-v0.5.0) - 2024-08-08
+
+### Other
+- Lots of things to try and get publishing working ([#557](https://github.com/spiraldb/vortex/pull/557))
+- Hook on-disk vortex files into benchmarking ([#565](https://github.com/spiraldb/vortex/pull/565))
+
 ## `vortex-runend-bool` - [0.2.0](https://github.com/spiraldb/vortex/releases/tag/vortex-runend-bool-v0.2.0) - 2024-08-05
 
 ### Other
