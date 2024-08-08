@@ -1,4 +1,7 @@
-use vortex::array::PrimitiveArray;
+use std::collections::HashSet;
+
+use vortex::array::{PrimitiveArray, SparseEncoding};
+use vortex::encoding::EncodingRef;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
@@ -50,5 +53,9 @@ impl EncodingCompressor for ZigZagCompressor {
             ZigZagArray::new(compressed.array).into_array(),
             Some(CompressionTree::new(self, vec![compressed.path])),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&SparseEncoding as EncodingRef])
     }
 }

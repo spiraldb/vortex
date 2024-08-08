@@ -1,9 +1,13 @@
+use std::collections::HashSet;
+
 use vortex::array::PrimitiveArray;
+use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_fastlanes::{
     bitpack, bitpack_patches, count_exceptions, find_best_bit_width, BitPacked, BitPackedArray,
+    BitPackedEncoding,
 };
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
@@ -82,5 +86,9 @@ impl EncodingCompressor for BitPackedCompressor {
                 vec![patches.and_then(|p| p.path)],
             )),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&BitPackedEncoding as EncodingRef])
     }
 }

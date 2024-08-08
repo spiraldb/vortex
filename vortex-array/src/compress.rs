@@ -1,9 +1,14 @@
+use std::collections::HashSet;
+
 use vortex_error::VortexResult;
 
+use crate::encoding::EncodingRef;
 use crate::Array;
 
 pub trait CompressionStrategy {
     fn compress(&self, array: &Array) -> VortexResult<Array>;
+
+    fn used_encodings(&self) -> HashSet<EncodingRef>;
 }
 
 /// Check that compression did not alter the length of the validity array.

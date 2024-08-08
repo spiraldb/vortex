@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
 use vortex::array::{Primitive, PrimitiveArray, VarBin, VarBinArray};
+use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
-use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray};
+use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray, DictEncoding};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
@@ -68,5 +71,9 @@ impl EncodingCompressor for DictCompressor {
             DictArray::try_new(codes.array, values.array)?.into_array(),
             Some(CompressionTree::new(self, vec![codes.path, values.path])),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&DictEncoding as EncodingRef])
     }
 }
