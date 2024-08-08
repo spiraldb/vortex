@@ -1,68 +1,35 @@
-use anyhow::bail;
-use clap::{Arg, ArgMatches, Command};
+use clap::Command;
+use xshell::{cmd, Shell};
 
 static FLATC_BIN: &'static str = "flatc";
 
 fn flatbuffers_command() -> Command {
     Command::new("generate-fbs")
-        .about("Generate Flatbuffers rust code")
-        .arg(
-            Arg::new("input")
-                .help("input .fbs file to generate")
-                .required(true)
-                .short('i')
-                .value_name("FILE"),
-        )
-        .arg(
-            Arg::new("outdir")
-                .help("output directory for generate files")
-                .required(true)
-                .short('o')
-                .value_name("OUTDIR"),
-        )
-        .arg(
-            Arg::new("include")
-                .help("Path to a file to include. Can be provided multiple times.")
-                .short('I')
-                .value_name("INCLUDE_PATH"),
-        )
 }
 
 fn build_protos_command() -> Command {
     Command::new("build-protos")
 }
 
-fn execute_generate_fbs(args: &ArgMatches) -> anyhow::Result<()> {
-    let input = args
-        .get_one::<String>("input")
-        .expect("input must be provided");
-    let output = args
-        .get_one::<String>("outdir")
-        .expect("outdir must be provided");
-    let includes = args
-        .get_many::<String>("include")
-        .map(|values| values.cloned().collect())
-        .unwrap_or_else(Vec::new);
+fn execute_generate_fbs() -> anyhow::Result<()> {
+    let sh = Shell::new()?;
 
-    let mut include_args = Vec::new();
-    for include in includes {
-        include_args.push("-I".to_string());
-        include_args.push(include);
-    }
+    let files = vec![
+        "./flatbuffers/vortex-dtype/dtype.fbs",
+        "./flatbuffers/vortex-scalar/scalar.fbs",
+        "./flatbuffers/vortex-array/array.fbs",
+        "./flatbuffers/vortex-serde/footer.fbs",
+        "./flatbuffers/vortex-serde/message.fbs",
+    ];
 
-    check_call(
-        std::process::Command::new(FLATC_BIN)
-            .arg("--rust")
-            .arg("--rust-module-root-file")
-            .arg("--filename-suffix")
-            .arg("")
-            .args(include_args)
-            .arg("--include-prefix")
-            .arg("flatbuffers::deps")
-            .arg("-o")
-            .arg(output)
-            .arg(input),
-    )?;
+    // CD to vortex-flatbuffers project
+    sh.change_dir(std::env::current_dir()?.join("vortex-flatbuffers"));
+
+    cmd!(
+        sh,
+        "{FLATC_BIN} --rust --filename-suffix '' -I ./flatbuffers/ -o ./src/generated {files...}"
+    )
+    .run()?;
 
     Ok(())
 }
@@ -90,25 +57,13 @@ fn execute_build_protos() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn check_call(command: &mut std::process::Command) -> anyhow::Result<()> {
-    let name = command.get_program().to_str().unwrap().to_string();
-    let Ok(status) = command.status() else {
-        bail!("Failed to launch {}", &name)
-    };
-    if !status.success() {
-        bail!("{} failed with status {}", &name, status.code().unwrap());
-    }
-
-    Ok(())
-}
-
 fn main() -> anyhow::Result<()> {
     let cli = Command::new("xtask")
         .subcommand(flatbuffers_command())
         .subcommand(build_protos_command());
     let args = cli.get_matches();
     match args.subcommand() {
-        Some(("generate-fbs", args)) => execute_generate_fbs(args)?,
+        Some(("generate-fbs", _)) => execute_generate_fbs()?,
         Some(("build-protos", _)) => execute_build_protos()?,
         _ => anyhow::bail!("please use one of the recognized subcommands"),
     }

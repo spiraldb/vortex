@@ -1446,15 +1446,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "flatbuffers-build"
-version = "0.2.0+flatc-24.3.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec5cc564166463ff0ad4ac75f3ca520502e927413f111578c5f2f5433f7532c9"
-dependencies = [
- "thiserror",
-]
-
-[[package]]
 name = "flate2"
 version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4949,10 +4940,9 @@ version = "0.4.11"
 dependencies = [
  "anyhow",
  "clap",
- "flatbuffers",
- "flatbuffers-build",
  "prost-build",
  "walkdir",
+ "xshell",
 ]
 
 [[package]]
