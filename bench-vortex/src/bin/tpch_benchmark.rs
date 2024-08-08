@@ -1,3 +1,5 @@
+#![allow(clippy::use_debug)]
+
 use std::sync;
 use std::time::SystemTime;
 

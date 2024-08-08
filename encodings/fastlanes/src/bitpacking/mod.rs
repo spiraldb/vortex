@@ -112,19 +112,15 @@ impl BitPackedArray {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        if self.metadata().patches_len > 0 {
-            Some(
-                self.array()
+        (self.metadata().patches_len > 0).then_some(
+            self.array()
                     .child(
                         1,
                         &self.dtype().with_nullability(Nullability::Nullable),
                         self.metadata().patches_len,
                     )
                     .expect("Missing patches array"),
-            )
-        } else {
-            None
-        }
+                )
     }
 
     #[inline]

@@ -1,3 +1,5 @@
+#![allow(clippy::use_debug)]
+
 use std::collections::HashSet;
 use std::sync::Arc;
 

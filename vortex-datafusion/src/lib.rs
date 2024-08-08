@@ -209,6 +209,7 @@ impl Debug for VortexScanExec {
 }
 
 impl DisplayAs for VortexScanExec {
+    #[allow(clippy::use_debug)]
     fn fmt_as(&self, _display_type: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }

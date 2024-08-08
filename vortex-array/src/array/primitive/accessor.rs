@@ -20,7 +20,7 @@ impl<T: NativePType> ArrayAccessor<T> for PrimitiveArray {
                     .maybe_null_slice::<T>()
                     .iter()
                     .zip(nulls.iter())
-                    .map(|(value, valid)| if valid { Some(value) } else { None });
+                    .map(|(value, valid)| valid.then_some(value));
                 Ok(f(&mut iter))
             }
         }
