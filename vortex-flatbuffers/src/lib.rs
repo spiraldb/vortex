@@ -1,25 +1,33 @@
 
+#[cfg(feature = "array")]
 #[allow(unused_imports)]
 #[allow(dead_code)]
 #[allow(clippy::all)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
-mod generated;
-
-#[cfg(feature = "array")]
-pub mod array {
-    pub use super::generated::array::*;
-}
+#[rustfmt::skip]
+#[path = "./generated/array.rs"]
+pub mod array;
 
 #[cfg(feature = "dtype")]
-pub mod dtype {
-    pub use super::generated::dtype::*;
-}
+#[allow(unused_imports)]
+#[allow(dead_code)]
+#[allow(clippy::all)]
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+#[rustfmt::skip]
+#[path = "./generated/dtype.rs"]
+pub mod dtype;
 
 #[cfg(feature = "scalar")]
-pub mod scalar {
-    pub use super::generated::scalar::*;
-}
+#[allow(unused_imports)]
+#[allow(dead_code)]
+#[allow(clippy::all)]
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+#[rustfmt::skip]
+#[path = "./generated/scalar.rs"]
+pub mod scalar;
 
 use std::io;
 use std::io::Write;
