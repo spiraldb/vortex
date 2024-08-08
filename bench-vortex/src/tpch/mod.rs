@@ -7,10 +7,11 @@ use arrow_schema::Schema;
 use datafusion::dataframe::DataFrameWriteOptions;
 use datafusion::datasource::MemTable;
 use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
-use vortex::array::chunked::ChunkedArray;
+use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
-use vortex::{Array, ArrayDType, ArrayData, IntoArray};
-use vortex_datafusion::{SessionContextExt, VortexMemTableOptions};
+use vortex::{Array, ArrayDType, IntoArray};
+use vortex_datafusion::memory::VortexMemTableOptions;
+use vortex_datafusion::SessionContextExt;
 
 use crate::idempotent_async;
 
@@ -192,7 +193,7 @@ async fn register_vortex(
         .iter()
         .cloned()
         .map(StructArray::from)
-        .map(|struct_array| ArrayData::from_arrow(&struct_array, false).into_array())
+        .map(|struct_array| Array::from_arrow(&struct_array, false))
         .collect();
 
     let dtype = chunks[0].dtype().clone();
