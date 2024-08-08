@@ -1,3 +1,14 @@
+#![deny(missing_docs)]
+
+//! A byte buffer implementation for Vortex.
+//!
+//! Vortex arrays hold data in a set of buffers.
+//!
+//! # Alignment
+//! See: `<https://github.com/spiraldb/vortex/issues/115>`
+//!
+//! We do not currently enforce any alignment guarantees on the buffer.
+
 use std::cmp::Ordering;
 use std::ops::{Deref, Range};
 
@@ -8,10 +19,16 @@ mod flexbuffers;
 pub mod io_buf;
 mod string;
 
+/// Buffer is an owned, cheaply cloneable byte array.
+///
+/// Buffers form the building blocks of all in-memory storage in Vortex.
 #[derive(Debug, Clone)]
 pub enum Buffer {
     // TODO(ngates): we could add Aligned(Arc<AVec>) from aligned-vec package
+    /// A Buffer that wraps an Apache Arrow buffer
     Arrow(ArrowBuffer),
+
+    /// A Buffer that wraps an owned [`bytes::Bytes`].
     Bytes(bytes::Bytes),
 }
 
@@ -19,6 +36,7 @@ unsafe impl Send for Buffer {}
 unsafe impl Sync for Buffer {}
 
 impl Buffer {
+    /// Length of the buffer in bytes
     pub fn len(&self) -> usize {
         match self {
             Self::Arrow(b) => b.len(),
@@ -26,6 +44,7 @@ impl Buffer {
         }
     }
 
+    /// Predicate for empty buffers
     pub fn is_empty(&self) -> bool {
         match self {
             Self::Arrow(b) => b.is_empty(),
@@ -33,6 +52,7 @@ impl Buffer {
         }
     }
 
+    /// Return a new view on the buffer, but limited to the given index range.
     pub fn slice(&self, range: Range<usize>) -> Self {
         match self {
             Self::Arrow(b) => {
@@ -42,6 +62,7 @@ impl Buffer {
         }
     }
 
+    /// Access the buffer as an immutable byte slice.
     pub fn as_slice(&self) -> &[u8] {
         match self {
             Self::Arrow(b) => b.as_ref(),
@@ -49,6 +70,13 @@ impl Buffer {
         }
     }
 
+    /// Convert the buffer into a `Vec` of the given native type `T`.
+    ///
+    /// # Ownership
+    /// The caller takes ownership of the underlying memory.
+    ///
+    /// # Errors
+    /// This method will fail if the underlying buffer is an owned [`bytes::Bytes`].
     pub fn into_vec<T: ArrowNativeType>(self) -> Result<Vec<T>, Self> {
         match self {
             Self::Arrow(buffer) => buffer.into_vec::<T>().map_err(Buffer::Arrow),
