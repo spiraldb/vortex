@@ -7,7 +7,6 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
-use vortex::array::StructArray;
 use vortex::compute::unary::subtract_scalar;
 use vortex::compute::{filter, filter_indices, search_sorted, slice, take, SearchSortedSide};
 use vortex::{Array, IntoArray, IntoArrayVariant};
@@ -16,7 +15,6 @@ use vortex_error::{VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
-use crate::layouts::reader::projections::Projection;
 use crate::layouts::reader::schema::Schema;
 use crate::layouts::reader::{Layout, LayoutMessageCache, MessageId, ReadResult, Scan};
 use crate::writer::ByteRange;
@@ -94,10 +92,10 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                 StreamingState::Init => {
                     if let Some(read) = self.layout.read()? {
                         match read {
-                            ReadResult::GetMsgs(r1) => {
+                            ReadResult::GetMsgs(messages) => {
                                 let reader =
                                     mem::take(&mut self.reader).expect("Invalid state transition");
-                                let read_future = read_ranges(reader, r1).boxed();
+                                let read_future = read_ranges(reader, messages).boxed();
                                 self.state = StreamingState::Reading(read_future);
                             }
                             ReadResult::Batch(a) => self.state = StreamingState::Decoding(a),
@@ -117,15 +115,8 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                         batch = filter(&batch, &mask)?;
                     }
 
-                    let projected = match &self.scan.projection {
-                        Projection::All => batch,
-                        Projection::Partial(indices) => StructArray::try_from(batch.clone())?
-                            .project(indices.as_ref())?
-                            .into_array(),
-                    };
-
                     self.state = StreamingState::Init;
-                    return Poll::Ready(Some(Ok(projected)));
+                    return Poll::Ready(Some(Ok(batch)));
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
                     Ok((read, buffers)) => {
