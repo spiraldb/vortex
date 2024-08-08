@@ -16,6 +16,7 @@ impl BufferString {
         Self(buffer)
     }
 
+    /// Return a view of the contents of BufferString as an immutable `&str`.
     pub fn as_str(&self) -> &str {
         // SAFETY: We have already validated that the buffer is valid UTF-8
         unsafe { std::str::from_utf8_unchecked(self.0.as_ref()) }
