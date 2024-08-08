@@ -5,7 +5,6 @@ members = [
     "pyvortex",
     "vortex-array",
     "vortex-buffer",
-    "vortex-build",
     "vortex-datafusion",
     "vortex-dtype",
     "vortex-error",
@@ -119,7 +118,6 @@ uuid = "1.8.0"
 vortex-alp = { version = "0.4.11", path = "./encodings/alp" }
 vortex-array = { version = "0.4.11", path = "./vortex-array" }
 vortex-buffer = { version = "0.4.11", path = "./vortex-buffer" }
-vortex-build = { version = "0.4.11", path = "./vortex-build" }
 vortex-byte-bool = { version = "0.4.11", path = "./encodings/byte-bool" }
 vortex-datafusion = { version = "0.4.11", path = "./vortex-datafusion" }
 vortex-datetime-parts = { version = "0.4.11", path = "./encodings/datetime-parts" }

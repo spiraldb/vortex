@@ -29,9 +29,6 @@ vortex-error = { workspace = true }
 vortex-scalar = { workspace = true }
 vortex-proto = { workspace = true, optional = true }
 
-[build-dependencies]
-vortex-build = { workspace = true }
-
 [features]
 datafusion = ["dep:datafusion-common", "dep:datafusion-expr", "vortex-scalar/datafusion"]
 proto = ["dep:prost", "vortex-dtype/proto", "vortex-scalar/proto", "vortex-proto/expr"]

@@ -15,6 +15,7 @@ rust-version = { workspace = true }
 dtype = []
 scalar = ["dtype"]
 array = ["dtype", "scalar"]
+file = ["dtype", "scalar", "array"]
 
 [dependencies]
 flatbuffers = { workspace = true }

@@ -5,7 +5,7 @@ use vortex_error::{VortexError, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
 
 use super::reader::projections::Projection;
-use crate::flatbuffers::footer as fb;
+use vortex_flatbuffers::footer as fb;
 use crate::writer::ByteRange;
 
 #[derive(Debug, Clone)]

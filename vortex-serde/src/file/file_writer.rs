@@ -15,7 +15,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::file::layouts::{ChunkedLayout, FlatLayout, Layout, StructLayout};
-use crate::flatbuffers::footer as fb;
+use vortex_flatbuffers::footer as fb;
 use crate::io::VortexWrite;
 use crate::messages::IPCSchema;
 use crate::writer::ChunkLayout;

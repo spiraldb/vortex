@@ -10,8 +10,7 @@ flatc \
 	-o ./src/generated \
 	./flatbuffers/vortex-dtype/dtype.fbs \
 	./flatbuffers/vortex-scalar/scalar.fbs \
-	./flatbuffers/vortex-array/array.fbs
+	./flatbuffers/vortex-array/array.fbs \
+	./flatbuffers/vortex-serde/footer.fbs \
+	./flatbuffers/vortex-serde/message.fbs
 
-	#--include-prefix "flatbuffers::deps" \
-# Modify the files as necessary to update the imports.
-#sed -i '' ''

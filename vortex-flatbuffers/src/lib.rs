@@ -28,6 +28,26 @@ pub mod dtype;
 #[path = "./generated/scalar.rs"]
 pub mod scalar;
 
+#[cfg(feature = "file")]
+#[allow(unused_imports)]
+#[allow(dead_code)]
+#[allow(clippy::all)]
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+#[rustfmt::skip]
+#[path = "./generated/footer.rs"]
+pub mod footer;
+
+#[cfg(feature = "file")]
+#[allow(unused_imports)]
+#[allow(dead_code)]
+#[allow(clippy::all)]
+#[allow(non_snake_case)]
+#[allow(non_camel_case_types)]
+#[rustfmt::skip]
+#[path = "./generated/message.rs"]
+pub mod message;
+
 use std::io;
 use std::io::Write;
 
