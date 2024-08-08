@@ -39,7 +39,6 @@ impl FileOpener for VortexFileOpener {
 
         Ok(async move {
             let reader = builder.build().await?;
-
             let stream = reader.map_ok(RecordBatch::from).map_err(|e| e.into());
             Ok(Box::pin(stream) as _)
         }
