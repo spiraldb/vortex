@@ -36,7 +36,7 @@ impl Footer {
         let start_offset = self.leftovers_footer_offset();
         let end_offset = self.leftovers.len() - FULL_FOOTER_SIZE;
         let footer_bytes = self.leftovers.slice(start_offset..end_offset);
-        let fb_footer = root::<crate::flatbuffers::footer::Footer>(&footer_bytes)?;
+        let fb_footer = root::<vortex_flatbuffers::footer::Footer>(&footer_bytes)?;
 
         let fb_layout = fb_footer.layout().expect("Footer must contain a layout");
         let loc = fb_layout._tab.loc();
@@ -49,6 +49,9 @@ impl Footer {
         let end_offset = self.leftovers_footer_offset();
         let dtype_bytes = &self.leftovers[start_offset..end_offset];
 
-        Ok(IPCDType::read_flatbuffer(&root::<crate::flatbuffers::serde::Schema>(dtype_bytes)?)?.0)
+        Ok(
+            IPCDType::read_flatbuffer(&root::<vortex_flatbuffers::message::Schema>(dtype_bytes)?)?
+                .0,
+        )
     }
 }

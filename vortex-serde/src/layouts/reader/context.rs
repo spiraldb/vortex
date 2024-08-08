@@ -5,9 +5,9 @@ use ahash::HashMap;
 use bytes::Bytes;
 use vortex::Context;
 use vortex_error::{vortex_err, VortexResult};
+use vortex_flatbuffers::footer as fb;
+use vortex_flatbuffers::footer::LayoutVariant;
 
-use crate::flatbuffers::footer as fb;
-use crate::flatbuffers::footer::LayoutVariant;
 use crate::layouts::reader::layouts::{ChunkedLayoutSpec, ColumnLayoutSpec, FlatLayout};
 use crate::layouts::reader::{Layout, RelativeLayoutCache, Scan};
 

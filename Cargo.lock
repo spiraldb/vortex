@@ -4195,9 +4195,11 @@ dependencies = [
 name = "vortex-datafusion"
 version = "0.4.12"
 dependencies = [
+ "anyhow",
  "arrow-array",
  "arrow-schema",
  "async-trait",
+ "chrono",
  "datafusion",
  "datafusion-common",
  "datafusion-execution",
@@ -4207,13 +4209,18 @@ dependencies = [
  "futures",
  "itertools 0.13.0",
  "lazy_static",
+ "log",
+ "object_store",
  "pin-project",
+ "tempfile",
  "tokio",
+ "url",
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
  "vortex-expr",
  "vortex-scalar",
+ "vortex-serde",
 ]
 
 [[package]]
@@ -4268,6 +4275,7 @@ name = "vortex-error"
 version = "0.4.12"
 dependencies = [
  "arrow-schema",
+ "datafusion-common",
  "flatbuffers",
  "flexbuffers",
  "object_store",
@@ -4412,6 +4420,7 @@ dependencies = [
 name = "vortex-serde"
 version = "0.4.12"
 dependencies = [
+ "ahash",
  "arrow",
  "arrow-array",
  "arrow-ipc",
@@ -4435,6 +4444,7 @@ dependencies = [
  "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
+ "vortex-expr",
  "vortex-fastlanes",
  "vortex-flatbuffers",
  "vortex-sampling-compressor",

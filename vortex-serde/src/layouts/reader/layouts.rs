@@ -5,8 +5,8 @@ use bytes::Bytes;
 use vortex::Context;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_flatbuffers::footer as fb;
 
-use crate::flatbuffers::footer as fb;
 use crate::layouts::reader::batch::BatchReader;
 use crate::layouts::reader::buffered::BufferedReader;
 use crate::layouts::reader::context::{LayoutDeserializer, LayoutId, LayoutSpec};

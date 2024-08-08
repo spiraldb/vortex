@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
-use vortex_flatbuffers::WriteFlatBuffer;
+use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
 
-use crate::flatbuffers::footer as fb;
 use crate::layouts::reader::context::LayoutId;
 use crate::writer::ByteRange;
 
