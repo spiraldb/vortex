@@ -68,7 +68,9 @@ impl Footer {
             .dtype()
             .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
 
-        let fb_struct = fb_dtype.type__as_struct_().unwrap();
+        let fb_struct = fb_dtype
+            .type__as_struct_()
+            .expect("The top-level type should be a struct");
         let nullability = fb_struct.nullable().into();
 
         let (names, dtypes): (Vec<Arc<str>>, Vec<DType>) = projection
