@@ -9,9 +9,8 @@ use vortex::{Array, ArrayView, Context, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-use vortex_flatbuffers::ReadFlatBuffer;
+use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
 
-use vortex_flatbuffers::message as fb;
 use crate::io::VortexRead;
 use crate::messages::IPCDType;
 

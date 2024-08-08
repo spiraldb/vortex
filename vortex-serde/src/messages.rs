@@ -5,10 +5,9 @@ use vortex::{flatbuffers as fba, Array};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
-use vortex_flatbuffers::{FlatBufferRoot, ReadFlatBuffer, WriteFlatBuffer};
-
-use vortex_flatbuffers::message as fb;
 use vortex_flatbuffers::message::Compression;
+use vortex_flatbuffers::{message as fb, FlatBufferRoot, ReadFlatBuffer, WriteFlatBuffer};
+
 use crate::ALIGNMENT;
 
 pub enum IPCMessage<'a> {

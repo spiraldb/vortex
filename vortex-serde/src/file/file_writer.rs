@@ -12,10 +12,9 @@ use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_flatbuffers::WriteFlatBuffer;
+use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
 
 use crate::file::layouts::{ChunkedLayout, FlatLayout, Layout, StructLayout};
-use vortex_flatbuffers::footer as fb;
 use crate::io::VortexWrite;
 use crate::messages::IPCSchema;
 use crate::writer::ChunkLayout;

@@ -2,10 +2,9 @@ use std::collections::VecDeque;
 
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex_error::{VortexError, VortexResult};
-use vortex_flatbuffers::WriteFlatBuffer;
+use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
 
 use super::reader::projections::Projection;
-use vortex_flatbuffers::footer as fb;
 use crate::writer::ByteRange;
 
 #[derive(Debug, Clone)]

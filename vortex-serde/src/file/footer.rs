@@ -40,6 +40,9 @@ impl Footer {
         let end_offset = self.leftovers_footer_offset();
         let dtype_bytes = &self.leftovers[start_offset..end_offset];
 
-        Ok(IPCDType::read_flatbuffer(&root::<vortex_flatbuffers::message::Schema>(dtype_bytes)?)?.0)
+        Ok(
+            IPCDType::read_flatbuffer(&root::<vortex_flatbuffers::message::Schema>(dtype_bytes)?)?
+                .0,
+        )
     }
 }

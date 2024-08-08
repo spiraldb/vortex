@@ -12,7 +12,6 @@ pub mod writer;
 
 pub const ALIGNMENT: usize = 64;
 
-
 #[cfg(test)]
 mod test {
     use std::sync::Arc;
