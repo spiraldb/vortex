@@ -5,9 +5,9 @@ use bytes::Bytes;
 use vortex::Context;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_flatbuffers::footer as fb;
 
 use super::projections::Projection;
-use crate::flatbuffers::footer as fb;
 use crate::layouts::reader::batch::BatchReader;
 use crate::layouts::reader::buffered::BufferedReader;
 use crate::layouts::reader::context::{LayoutDeserializer, LayoutId, LayoutSpec};
@@ -170,7 +170,7 @@ impl Layout for ColumnLayout {
                 let mut column_layouts = Vec::with_capacity(indexes.len());
 
                 for idx in indexes.into_iter() {
-                    let child = fb_children.get(idx).clone();
+                    let child = fb_children.get(idx);
                     let dtype = s.dtypes()[idx].clone();
 
                     // TODO: This is needed to support more complex nested layouts

@@ -1,9 +1,7 @@
-include "vortex-array/flatbuffers/array.fbs";
-include "vortex-dtype/flatbuffers/dtype.fbs";
+include "vortex-array/array.fbs";
+include "vortex-dtype/dtype.fbs";
 
-namespace vortex.serde;
-
-enum Version: uint8 {
+enum MessageVersion: uint8 {
     V0 = 0,
 }
 
@@ -12,7 +10,7 @@ enum Compression: uint8 {
 }
 
 table Schema {
-    dtype: vortex.dtype.DType;
+    dtype: DType;
 }
 
 struct Buffer {
@@ -22,7 +20,7 @@ struct Buffer {
 }
 
 table Batch {
-    array: vortex.array.Array;
+    array: Array;
     length: uint64;
     buffers: [Buffer];
     buffer_size: uint64;
@@ -40,7 +38,7 @@ union MessageHeader {
 }
 
 table Message {
-    version: Version = V0;
+    version: MessageVersion = V0;
     header: MessageHeader;
 }
 

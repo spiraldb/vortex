@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package vortex.scalar;
 
-import "vortex/dtype/dtype.proto";
+import "dtype.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/wrappers.proto";
 

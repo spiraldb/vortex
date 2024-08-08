@@ -57,7 +57,7 @@ vortex-fastlanes = { workspace = true }
 vortex-roaring = { workspace = true }
 vortex-runend = { workspace = true }
 vortex-sampling-compressor = { workspace = true }
-vortex-serde = { workspace = true, features = ["object_store"] }
+vortex-serde = { workspace = true, features = ["futures", "monoio", "tokio", "object_store"] }
 xshell = { workspace = true }
 
 [dev-dependencies]
