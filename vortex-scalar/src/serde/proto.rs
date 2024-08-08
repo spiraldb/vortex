@@ -4,9 +4,9 @@ use vortex_buffer::{Buffer, BufferString};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexError};
 
-use crate::proto::scalar as pb;
-use crate::proto::scalar::scalar_value::Kind;
-use crate::proto::scalar::ListValue;
+use vortex_proto::scalar as pb;
+use vortex_proto::scalar::scalar_value::Kind;
+use vortex_proto::scalar::ListValue;
 use crate::pvalue::PValue;
 use crate::{Scalar, ScalarValue};
 
@@ -149,10 +149,11 @@ mod test {
     use vortex_dtype::PType::I32;
     use vortex_dtype::{DType, Nullability};
 
-    use crate::{proto as pb, Scalar, ScalarValue};
+    use vortex_proto::scalar as pb;
+    use crate::{Scalar, ScalarValue};
 
     fn round_trip(scalar: Scalar) {
-        Scalar::try_from(&pb::scalar::Scalar::from(&scalar)).unwrap();
+        Scalar::try_from(&pb::Scalar::from(&scalar)).unwrap();
     }
 
     #[test]

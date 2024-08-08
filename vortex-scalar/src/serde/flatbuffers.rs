@@ -7,7 +7,8 @@ use vortex_dtype::DType;
 use vortex_error::VortexError;
 use vortex_flatbuffers::WriteFlatBuffer;
 
-use crate::{flatbuffers as fb, Scalar, ScalarValue};
+use vortex_flatbuffers::scalar as fb;
+use crate::{Scalar, ScalarValue};
 
 impl TryFrom<fb::Scalar<'_>> for Scalar {
     type Error = VortexError;
