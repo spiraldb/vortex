@@ -40,11 +40,13 @@ impl ConstantArray {
         Self::try_from_parts(
             scalar.dtype().clone(),
             length,
-            ConstantMetadata { scalar, length },
+            ConstantMetadata { scalar: scalar.clone(), length },
             [].into(),
             stats,
         )
-        .unwrap()
+        .unwrap_or_else(|err| {
+            panic!("Failed to create Constant array of length {} from scalar {}: {}", length, scalar, err);
+        })
     }
 
     pub fn scalar(&self) -> &Scalar {

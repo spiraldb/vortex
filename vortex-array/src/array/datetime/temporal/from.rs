@@ -43,7 +43,7 @@ fn decode_timestamp_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMet
     let time_unit =
         TimeUnit::try_from(tag).map_err(|e| vortex_err!(ComputeError: "invalid unit tag: {e}"))?;
     let tz_len_bytes = &ext_meta.as_ref()[1..3];
-    let tz_len = u16::from_le_bytes(tz_len_bytes.try_into().unwrap());
+    let tz_len = u16::from_le_bytes(tz_len_bytes.try_into()?);
     if tz_len == 0 {
         return Ok(TemporalMetadata::Timestamp(time_unit, None));
     }

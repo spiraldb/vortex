@@ -119,11 +119,11 @@ impl SessionContextExt for SessionContext {
         options: VortexMemTableOptions,
     ) -> DFResult<DataFrame> {
         if !array.dtype().is_struct() {
-            return Err(vortex_err!(
+            vortex_bail!(
                 "Vortex arrays must have struct type, found {}",
                 array.dtype()
             )
-            .into());
+            .into();
         }
 
         let vortex_table = VortexMemTable::new(array, options);

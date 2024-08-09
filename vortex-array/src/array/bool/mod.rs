@@ -72,7 +72,9 @@ impl BoolArray {
 
     pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
         let buffer = BooleanBuffer::from(bools);
-        Self::try_new(buffer, validity).unwrap()
+        Self::try_new(buffer, validity).unwrap_or_else(|err| {
+            panic!("Failed to create BoolArray from vec: {}", err)
+        })
     }
 }
 
@@ -96,7 +98,9 @@ impl BoolArrayTrait for BoolArray {
 
 impl From<BooleanBuffer> for BoolArray {
     fn from(value: BooleanBuffer) -> Self {
-        Self::try_new(value, Validity::NonNullable).unwrap()
+        Self::try_new(value, Validity::NonNullable).unwrap_or_else(|err| {
+            panic!("Failed to create BoolArray from BooleanBuffer: {}", err)
+        })
     }
 }
 
@@ -119,7 +123,9 @@ impl FromIterator<Option<bool>> for BoolArray {
             })
             .collect::<Vec<_>>();
 
-        Self::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap()
+        Self::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap_or_else(|err| {
+            panic!("Failed to create BoolArray from iterator of Option<bool>: {}", err)
+        })
     }
 }
 

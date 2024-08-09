@@ -92,20 +92,27 @@ impl ChunkedArray {
     pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
+        let search_result = search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left).unwrap_or_else(|err| {
+            panic!("Search sorted failed in find_chunk_idx: {}", err);
+        });
         let index_chunk =
-            match search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left).unwrap() {
+            match search_result {
                 SearchResult::Found(i) => i,
                 SearchResult::NotFound(i) => i - 1,
             };
         let chunk_start =
-            usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
+            &scalar_at(&self.chunk_ends(), index_chunk).and_then(|s| usize::try_from(&s)).unwrap_or_else(|err| {
+                panic!("Failed to find chunk start in find_chunk_idx: {}", err);
+            });
 
         let index_in_chunk = index - chunk_start;
         (index_chunk, index_in_chunk)
     }
 
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
-        (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
+        (0..self.nchunks()).map(|c| self.chunk(c).unwrap_or_else(|| {
+            panic!("Chunk should {} exist but doesn't (nchunks: {})", c, self.nchunks());
+        }))
     }
 
     pub fn array_iterator(&self) -> impl ArrayIterator + '_ {
@@ -126,7 +133,9 @@ impl FromIterator<Array> for ChunkedArray {
             .first()
             .map(|c| c.dtype().clone())
             .expect("Cannot create a chunked array from an empty iterator");
-        Self::try_new(chunks, dtype).unwrap()
+        Self::try_new(chunks, dtype).unwrap_or_else(|err| {
+            panic!("Failed to create chunked array from iterator: {}", err);
+        })
     }
 }
 

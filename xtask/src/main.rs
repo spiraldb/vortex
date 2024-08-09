@@ -53,8 +53,7 @@ fn execute_generate_proto() -> anyhow::Result<()> {
 
     prost_build::Config::new()
         .out_dir(out_dir)
-        .compile_protos(&proto_files, &[vortex_proto.join("proto")])
-        .unwrap();
+        .compile_protos(&proto_files, &[vortex_proto.join("proto")])?;
 
     Ok(())
 }

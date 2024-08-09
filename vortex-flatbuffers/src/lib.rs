@@ -1,5 +1,6 @@
 #[cfg(feature = "array")]
 #[allow(clippy::all)]
+#[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -11,6 +12,7 @@ pub mod array;
 
 #[cfg(feature = "dtype")]
 #[allow(clippy::all)]
+#[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -22,6 +24,7 @@ pub mod dtype;
 
 #[cfg(feature = "scalar")]
 #[allow(clippy::all)]
+#[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -33,6 +36,7 @@ pub mod scalar;
 
 #[cfg(feature = "file")]
 #[allow(clippy::all)]
+#[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]
@@ -44,6 +48,7 @@ pub mod footer;
 
 #[cfg(feature = "file")]
 #[allow(clippy::all)]
+#[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
 #[allow(non_camel_case_types)]

@@ -119,7 +119,9 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let flat_indices = self.indices().into_primitive().unwrap();
+        let flat_indices = self.indices().into_primitive().unwrap_or_else(|err| {
+            panic!("Failed to convert indices to primitive array: {}", err);
+        });
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
                 .maybe_null_slice::<$P>()
@@ -131,10 +133,10 @@ impl SparseArray {
 
     pub fn min_index(&self) -> usize {
         let min_index: usize = scalar_at(&self.indices(), 0)
-            .unwrap()
-            .as_ref()
-            .try_into()
-            .unwrap();
+            .and_then(|s| s.as_ref().try_into())
+            .unwrap_or_else(|err| {
+                panic!("Failed to get min_index: {}", err);
+            });
         min_index - self.indices_offset()
     }
 }
@@ -152,7 +154,9 @@ impl ArrayStatisticsCompute for SparseArray {}
 
 impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
-        match self.find_index(index).unwrap() {
+        match self.find_index(index).unwrap_or_else(|err| {
+            panic!("Error while finding index {} in sparse array: {}", index, err);
+        }) {
             None => !self.fill_value().is_null(),
             Some(idx) => self.values().with_dyn(|a| a.is_valid(idx)),
         }
@@ -181,7 +185,9 @@ impl ArrayValidity for SparseArray {
                 false.into(),
             )
         }
-        .unwrap();
+        .unwrap_or_else(|err| {
+            panic!("Error determining logical validity for sparse array: {}", err);
+        });
 
         LogicalValidity::Array(validity.into_array())
     }

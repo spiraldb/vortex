@@ -155,4 +155,5 @@ panic_in_result_fn = { level = "deny" }
 same_name_method = { level = "deny" }
 tests_outside_test_module = { level = "deny" }
 unwrap_in_result = { level = "deny" }
+unwrap_used = { level = "deny" }
 use_debug = { level = "deny" }
