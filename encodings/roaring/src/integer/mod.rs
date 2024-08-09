@@ -106,19 +106,16 @@ mod test {
     use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
-    use vortex_error::VortexResult;
 
     use crate::RoaringIntArray;
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    pub fn test_scalar_at() -> VortexResult<()> {
+    pub fn test_scalar_at() {
         let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]).into_array();
-        let array = RoaringIntArray::encode(ints)?;
+        let array = RoaringIntArray::encode(ints).unwrap();
 
         assert_eq!(scalar_at(&array, 0).unwrap(), 2u32.into());
         assert_eq!(scalar_at(&array, 1).unwrap(), 12u32.into());
-
-        Ok(())
     }
 }

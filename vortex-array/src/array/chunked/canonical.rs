@@ -1,7 +1,7 @@
 use arrow_buffer::{BooleanBuffer, Buffer, MutableBuffer};
 use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
-use vortex_error::{vortex_bail, ErrString, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, ErrString, VortexResult};
 
 use crate::accessor::ArrayAccessor;
 use crate::array::chunked::ChunkedArray;
@@ -79,9 +79,13 @@ pub(crate) fn try_canonicalize_chunks(
                 .iter()
                 // Extension-typed arrays can be compressed into something that is not an
                 // ExtensionArray, so we should canonicalize each chunk into ExtensionArray first.
-                .map(|chunk| chunk.clone().into_extension().unwrap().storage())
-                .collect();
-            let storage_dtype = storage_chunks.first().unwrap().dtype().clone();
+                .map(|chunk| chunk.clone().into_extension().map(|ext| ext.storage()))
+                .collect::<VortexResult<Vec<Array>>>()?;
+            let storage_dtype = storage_chunks
+                .first()
+                .ok_or_else(|| vortex_err!("Expected at least one chunk in ChunkedArray"))?
+                .dtype()
+                .clone();
             let chunked_storage =
                 ChunkedArray::try_new(storage_chunks, storage_dtype)?.into_array();
 

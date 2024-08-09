@@ -62,6 +62,7 @@ impl DBGen {
 }
 
 impl DBGen {
+    #[allow(clippy::unwrap_in_result)]
     /// Generate the TPC-H data files for use with benchmarks.
     pub fn generate(&self) -> anyhow::Result<PathBuf> {
         let sh = Shell::new()?;
@@ -156,7 +157,7 @@ fn get_cached_dbgen<P: AsRef<Path>>(cache_dir: P) -> anyhow::Result<PathBuf> {
         return get_or_cache_toolchain(cache_dir.as_ref(), DBGEN_VERSION, Platform::Linux);
     }
 
-    panic!("unsupported platform, only linux and macos supported")
+    anyhow::bail!("unsupported platform, only linux and macos supported")
 }
 
 fn get_or_cache_toolchain(

@@ -86,7 +86,7 @@ fn take_primitive<T: NativePType + BitPacking>(
         } else {
             for index in &offsets {
                 output.push(unsafe {
-                    unpack_single_primitive::<T>(packed_chunk, bit_width, *index as usize)?
+                    unpack_single_primitive::<T>(packed_chunk, bit_width, *index as usize)
                 });
             }
         }

@@ -1,4 +1,4 @@
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::chunked::ChunkedArray;
 use crate::compute::{slice, SliceFn};
@@ -22,9 +22,9 @@ impl SliceFn for ChunkedArray {
         let mut chunks = (offset_chunk..length_chunk + 1)
             .map(|i| {
                 self.chunk(i)
-                    .expect("find_chunk_idx returned an incorrect index")
+                    .ok_or_else(|| vortex_err!(OutOfBounds: i, 0, self.nchunks()))
             })
-            .collect::<Vec<_>>();
+            .collect::<VortexResult<Vec<_>>>()?;
         if let Some(c) = chunks.first_mut() {
             *c = slice(c, offset_in_first_chunk, c.len())?;
         }

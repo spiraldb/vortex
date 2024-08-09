@@ -13,67 +13,35 @@ use crate::{Array, ArrayDType, IntoArray};
 /// Constant arrays support all DTypes
 impl ArrayVariants for ConstantArray {
     fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
-        if matches!(self.dtype(), DType::Null) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Null).then_some(self)
     }
 
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
-        if matches!(self.dtype(), DType::Bool(_)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Bool(_)).then_some(self)
     }
 
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
-        if matches!(self.dtype(), DType::Primitive(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Primitive(..)).then_some(self)
     }
 
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
-        if matches!(self.dtype(), DType::Utf8(_)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Utf8(_)).then_some(self)
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
-        if matches!(self.dtype(), DType::Binary(_)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Binary(_)).then_some(self)
     }
 
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
-        if matches!(self.dtype(), DType::Struct(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Struct(..)).then_some(self)
     }
 
     fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
-        if matches!(self.dtype(), DType::List(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::List(..)).then_some(self)
     }
 
     fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
-        if matches!(self.dtype(), DType::Extension(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Extension(..)).then_some(self)
     }
 }
 
@@ -81,7 +49,9 @@ impl NullArrayTrait for ConstantArray {}
 
 impl BoolArrayTrait for ConstantArray {
     fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
-        let value = self.scalar().value().as_bool().unwrap();
+        let value = self.scalar().value().as_bool().unwrap_or_else(|err| {
+            panic!("Failed to get bool value from constant array: {}", err);
+        });
         if value.unwrap_or(false) {
             Box::new(0..self.len())
         } else {
@@ -91,7 +61,9 @@ impl BoolArrayTrait for ConstantArray {
 
     fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         // Must be a boolean scalar
-        let value = self.scalar().value().as_bool().unwrap();
+        let value = self.scalar().value().as_bool().unwrap_or_else(|err| {
+            panic!("Failed to get bool value from constant array: {}", err);
+        });
 
         if value.unwrap_or(false) {
             Box::new(iter::once((0, self.len())))

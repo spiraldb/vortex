@@ -6,7 +6,9 @@ use async_trait::async_trait;
 use datafusion::datasource::physical_plan::FileScanConfig;
 use datafusion::datasource::TableProvider;
 use datafusion::execution::context::SessionState;
-use datafusion_common::{project_schema, Result as DFResult, Statistics, ToDFSchema};
+use datafusion_common::{
+    project_schema, DataFusionError, Result as DFResult, Statistics, ToDFSchema,
+};
 use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_expr::utils::conjunction;
 use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
@@ -26,7 +28,10 @@ pub struct VortexFileTableProvider {
 impl VortexFileTableProvider {
     pub fn try_new(object_store_url: ObjectStoreUrl, config: VortexTableOptions) -> DFResult<Self> {
         Ok(Self {
-            schema_ref: config.schema.clone().unwrap(),
+            schema_ref: config
+                .schema
+                .clone()
+                .ok_or_else(|| DataFusionError::Configuration("Missing schema".to_string()))?,
             object_store_url,
             config,
         })

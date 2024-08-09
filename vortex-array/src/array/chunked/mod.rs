@@ -1,6 +1,7 @@
 //! First-class chunked arrays.
 //!
 //! Vortex is a chunked array library that's able to
+
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -51,7 +52,9 @@ impl ChunkedArray {
             .collect_vec();
 
         let num_chunks = chunk_ends.len() - 1;
-        let length = (*chunk_ends.last().unwrap()) as usize;
+        let length = *chunk_ends.last().unwrap_or_else(|| {
+            unreachable!("Chunk ends is guaranteed to have at least one element")
+        }) as usize;
 
         let mut children = vec![PrimitiveArray::from_vec(chunk_ends, NonNullable).into_array()];
         children.extend(chunks);
@@ -67,8 +70,8 @@ impl ChunkedArray {
 
     #[inline]
     pub fn chunk(&self, idx: usize) -> Option<Array> {
-        let chunk_start = usize::try_from(&scalar_at(&self.chunk_ends(), idx).unwrap()).unwrap();
-        let chunk_end = usize::try_from(&scalar_at(&self.chunk_ends(), idx + 1).unwrap()).unwrap();
+        let chunk_start = usize::try_from(&scalar_at(&self.chunk_ends(), idx).ok()?).ok()?;
+        let chunk_end = usize::try_from(&scalar_at(&self.chunk_ends(), idx + 1).ok()?).ok()?;
 
         // Offset the index since chunk_ends is child 0.
         self.array()
@@ -89,20 +92,34 @@ impl ChunkedArray {
     pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        let index_chunk =
-            match search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left).unwrap() {
-                SearchResult::Found(i) => i,
-                SearchResult::NotFound(i) => i - 1,
-            };
-        let chunk_start =
-            usize::try_from(&scalar_at(&self.chunk_ends(), index_chunk).unwrap()).unwrap();
+        let search_result = search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left)
+            .unwrap_or_else(|err| {
+                panic!("Search sorted failed in find_chunk_idx: {}", err);
+            });
+        let index_chunk = match search_result {
+            SearchResult::Found(i) => i,
+            SearchResult::NotFound(i) => i - 1,
+        };
+        let chunk_start = &scalar_at(&self.chunk_ends(), index_chunk)
+            .and_then(|s| usize::try_from(&s))
+            .unwrap_or_else(|err| {
+                panic!("Failed to find chunk start in find_chunk_idx: {}", err);
+            });
 
         let index_in_chunk = index - chunk_start;
         (index_chunk, index_in_chunk)
     }
 
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
-        (0..self.nchunks()).map(|c| self.chunk(c).unwrap())
+        (0..self.nchunks()).map(|c| {
+            self.chunk(c).unwrap_or_else(|| {
+                panic!(
+                    "Chunk should {} exist but doesn't (nchunks: {})",
+                    c,
+                    self.nchunks()
+                );
+            })
+        })
     }
 
     pub fn array_iterator(&self) -> impl ArrayIterator + '_ {
@@ -123,7 +140,9 @@ impl FromIterator<Array> for ChunkedArray {
             .first()
             .map(|c| c.dtype().clone())
             .expect("Cannot create a chunked array from an empty iterator");
-        Self::try_new(chunks, dtype).unwrap()
+        Self::try_new(chunks, dtype).unwrap_or_else(|err| {
+            panic!("Failed to create chunked array from iterator: {}", err);
+        })
     }
 }
 
@@ -149,14 +168,11 @@ impl ArrayValidity for ChunkedArray {
 
 impl SubtractScalarFn for ChunkedArray {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
-        self.chunks()
+        let chunks = self
+            .chunks()
             .map(|chunk| subtract_scalar(&chunk, to_subtract))
-            .collect::<VortexResult<Vec<_>>>()
-            .map(|chunks| {
-                Self::try_new(chunks, self.dtype().clone())
-                    .expect("Subtraction on chunked array changed dtype")
-                    .into_array()
-            })
+            .collect::<VortexResult<Vec<_>>>()?;
+        Ok(Self::try_new(chunks, self.dtype().clone())?.into_array())
     }
 }
 

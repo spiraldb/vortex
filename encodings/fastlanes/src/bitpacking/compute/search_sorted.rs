@@ -70,7 +70,6 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
                 self.bit_width,
                 idx + self.offset,
             )
-            .unwrap()
         };
         val.partial_cmp(elem)
     }

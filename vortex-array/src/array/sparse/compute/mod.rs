@@ -42,14 +42,13 @@ impl SearchSortedFn for SparseArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         search_sorted(&self.values(), value.clone(), side).and_then(|sr| match sr {
             SearchResult::Found(i) => {
-                let index: usize = scalar_at(&self.indices(), i)?.as_ref().try_into().unwrap();
+                let index: usize = scalar_at(&self.indices(), i)?.as_ref().try_into()?;
                 Ok(SearchResult::Found(index - self.indices_offset()))
             }
             SearchResult::NotFound(i) => {
                 let index: usize = scalar_at(&self.indices(), if i == 0 { 0 } else { i - 1 })?
                     .as_ref()
-                    .try_into()
-                    .unwrap();
+                    .try_into()?;
                 Ok(SearchResult::NotFound(
                     if i == 0 { index } else { index + 1 } - self.indices_offset(),
                 ))

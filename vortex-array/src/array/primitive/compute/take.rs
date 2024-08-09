@@ -24,7 +24,11 @@ impl TakeFn for PrimitiveArray {
 fn take_primitive<T: NativePType, I: NativePType + PrimInt>(array: &[T], indices: &[I]) -> Vec<T> {
     indices
         .iter()
-        .map(|&idx| array[idx.to_usize().unwrap()])
+        .map(|&idx| {
+            array[idx.to_usize().unwrap_or_else(|| {
+                panic!("Failed to convert index to usize: {}", idx);
+            })]
+        })
         .collect()
 }
 

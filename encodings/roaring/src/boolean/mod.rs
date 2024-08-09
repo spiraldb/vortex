@@ -127,6 +127,7 @@ impl IntoCanonical for RoaringBoolArray {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
 mod test {
     use vortex::array::BoolArray;
     use vortex::compute::unary::scalar_at;

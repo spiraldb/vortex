@@ -125,7 +125,7 @@ pub fn lit<T: Into<Scalar>>(n: T) -> Value {
 impl Value {
     // NB: We rewrite predicates to be Field-op-predicate, so these methods all must
     // use the inverse operator.
-    pub fn eq(self, field: impl Into<FieldPath>) -> Predicate {
+    pub fn equals(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
             op: Operator::Eq,
@@ -133,7 +133,7 @@ impl Value {
         }
     }
 
-    pub fn not_eq(self, field: impl Into<FieldPath>) -> Predicate {
+    pub fn not_equals(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
             op: Operator::NotEq.inverse(),

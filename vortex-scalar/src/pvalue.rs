@@ -1,3 +1,4 @@
+use core::fmt::Display;
 use std::mem;
 
 use num_traits::NumCast;
@@ -181,6 +182,24 @@ macro_rules! impl_pvalue {
             }
         }
     };
+}
+
+impl Display for PValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::U8(v) => write!(f, "{}_u8", v),
+            Self::U16(v) => write!(f, "{}_u16", v),
+            Self::U32(v) => write!(f, "{}_u32", v),
+            Self::U64(v) => write!(f, "{}_u64", v),
+            Self::I8(v) => write!(f, "{}_i8", v),
+            Self::I16(v) => write!(f, "{}_i16", v),
+            Self::I32(v) => write!(f, "{}_i32", v),
+            Self::I64(v) => write!(f, "{}_i64", v),
+            Self::F16(v) => write!(f, "{}_f16", v),
+            Self::F32(v) => write!(f, "{}_f32", v),
+            Self::F64(v) => write!(f, "{}_f64", v),
+        }
+    }
 }
 
 impl_pvalue!(u8, U8);
