@@ -1,9 +1,12 @@
+use std::collections::HashSet;
+
 use vortex::array::Primitive;
+use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 use vortex_runend::compress::runend_encode;
-use vortex_runend::{RunEnd, RunEndArray};
+use vortex_runend::{RunEnd, RunEndArray, RunEndEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -70,5 +73,9 @@ impl EncodingCompressor for RunEndCompressor {
                 vec![compressed_ends.path, compressed_values.path],
             )),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&RunEndEncoding as EncodingRef])
     }
 }
