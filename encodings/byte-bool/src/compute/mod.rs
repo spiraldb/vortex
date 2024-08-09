@@ -145,7 +145,9 @@ impl FillForwardFn for ByteBoolArray {
         }
         // all invalid => fill with default value (false)
         if validity.all_invalid() {
-            return Ok(Self::try_from_vec(vec![false; self.len()], Validity::AllValid)?.into_array());
+            return Ok(
+                Self::try_from_vec(vec![false; self.len()], Validity::AllValid)?.into_array(),
+            );
         }
 
         let validity = validity

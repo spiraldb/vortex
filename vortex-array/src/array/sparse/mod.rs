@@ -155,7 +155,10 @@ impl ArrayStatisticsCompute for SparseArray {}
 impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
         match self.find_index(index).unwrap_or_else(|err| {
-            panic!("Error while finding index {} in sparse array: {}", index, err);
+            panic!(
+                "Error while finding index {} in sparse array: {}",
+                index, err
+            );
         }) {
             None => !self.fill_value().is_null(),
             Some(idx) => self.values().with_dyn(|a| a.is_valid(idx)),
@@ -186,7 +189,10 @@ impl ArrayValidity for SparseArray {
             )
         }
         .unwrap_or_else(|err| {
-            panic!("Error determining logical validity for sparse array: {}", err);
+            panic!(
+                "Error determining logical validity for sparse array: {}",
+                err
+            );
         });
 
         LogicalValidity::Array(validity.into_array())

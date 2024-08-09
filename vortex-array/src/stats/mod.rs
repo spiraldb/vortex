@@ -120,8 +120,17 @@ impl dyn Statistics + '_ {
         &self,
         stat: Stat,
     ) -> Option<U> {
-        self.compute(stat).map(|s| U::try_from(&s)).transpose()
-            .unwrap_or_else(|err| panic!("Failed to compute stat {} as {}: {}", stat, std::any::type_name::<U>(), err))
+        self.compute(stat)
+            .map(|s| U::try_from(&s))
+            .transpose()
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to compute stat {} as {}: {}",
+                    stat,
+                    std::any::type_name::<U>(),
+                    err
+                )
+            })
     }
 
     pub fn compute_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -132,7 +141,14 @@ impl dyn Statistics + '_ {
             .map(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
-            .unwrap_or_else(|err| panic!("Failed to compute stat {} as cast {}: {}", stat, U::PTYPE, err))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to compute stat {} as cast {}: {}",
+                    stat,
+                    U::PTYPE,
+                    err
+                )
+            })
     }
 
     pub fn compute_min<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self) -> Option<U> {

@@ -11,10 +11,15 @@ impl FillForwardFn for PrimitiveArray {
         if self.dtype().nullability() == Nullability::NonNullable {
             return Ok(self.clone().into());
         }
-        
+
         let validity = self.logical_validity();
         if validity.all_valid() {
-            return Ok(PrimitiveArray::new(self.buffer().clone(), self.ptype(), Validity::AllValid).into_array());
+            return Ok(PrimitiveArray::new(
+                self.buffer().clone(),
+                self.ptype(),
+                Validity::AllValid,
+            )
+            .into_array());
         }
 
         match_each_native_ptype!(self.ptype(), |$T| {
