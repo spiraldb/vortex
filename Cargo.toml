@@ -150,7 +150,6 @@ unsafe_op_in_unsafe_fn = "deny"
 all = { level = "deny", priority = -1 }
 if_then_some_else_none = { level = "deny" }
 mem_forget = { level = "deny" }
-#multiple_inherent_impl = { level = "deny" }
 or_fun_call = "deny"
 panic_in_result_fn = { level = "deny" }
 same_name_method = { level = "deny" }
