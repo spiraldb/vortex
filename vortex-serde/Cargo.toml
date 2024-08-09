@@ -41,9 +41,9 @@ futures-executor = { workspace = true }
 rand = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
-vortex-alp = { workspace = true }
-vortex-fastlanes = { workspace = true }
-vortex-sampling-compressor = { workspace = true }
+vortex-alp = { path = "../encodings/alp" }
+vortex-fastlanes = { path = "../encodings/fastlanes" }
+vortex-sampling-compressor = { path = "../vortex-sampling-compressor" }
 
 [lints]
 workspace = true
