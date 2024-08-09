@@ -1,28 +1,16 @@
 use vortex_error::VortexResult;
 
 use crate::array::sparse::SparseArray;
-use crate::compute::unary::scalar_at;
 use crate::compute::{search_sorted, slice, SearchSortedSide, SliceFn};
 use crate::{Array, IntoArray};
 
 impl SliceFn for SparseArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        dbg!(start);
-        dbg!(stop);
-
         // Find the index of the first patch index that is greater than or equal to the offset of this array
         let index_start_index =
             search_sorted(&self.indices(), start, SearchSortedSide::Left)?.to_index();
         let index_end_index =
             search_sorted(&self.indices(), stop, SearchSortedSide::Left)?.to_index();
-
-        let s = scalar_at(&self.indices(), self.indices().len() - 1).unwrap();
-        dbg!(s);
-
-        dbg!(index_start_index);
-        dbg!(index_end_index);
-
-        dbg!(self.indices_offset());
 
         Ok(Self::try_new_with_offset(
             slice(&self.indices(), index_start_index, index_end_index)?,
