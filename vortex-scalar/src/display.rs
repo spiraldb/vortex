@@ -14,7 +14,7 @@ impl Display for Scalar {
                 .map_err(|err| {
                     debug_assert!(
                         false,
-                        "failed to parse bool from scalar with DType Bool: {}",
+                        "Failed to parse bool from scalar with DType Bool: {}",
                         err
                     );
                     std::fmt::Error

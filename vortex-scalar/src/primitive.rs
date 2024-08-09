@@ -38,7 +38,7 @@ impl<'a> PrimitiveScalar<'a> {
 
         self.pvalue.as_ref().map(|pv| {
             T::try_from(*pv).unwrap_or_else(|err| {
-                unreachable!("Failed to cast {} to {}: {}", pv, type_name::<T>(), err)
+                panic!("Failed to cast {} to {}: {}", pv, type_name::<T>(), err)
             })
         })
     }
