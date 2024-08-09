@@ -1,8 +1,12 @@
-use std::ops::Range;
+//! Provides types that can be used by I/O frameworks to work with byte buffer-shaped data.
 
+use std::ops::Range;
 use crate::Buffer;
 
-#[allow(clippy::missing_safety_doc)]
+/// Trait for types that can provide a readonly byte buffer interface to I/O frameworks.
+///
+/// # Safety
+/// The type must support contiguous raw memory access via pointer, such as `Vec` or `[u8]`.
 pub unsafe trait IoBuf: Unpin + 'static {
     /// Returns a raw pointer to the vector’s buffer.
     fn read_ptr(&self) -> *const u8;
@@ -10,8 +14,10 @@ pub unsafe trait IoBuf: Unpin + 'static {
     /// Number of initialized bytes.
     fn bytes_init(&self) -> usize;
 
+    /// Access the buffer as a byte slice
     fn as_slice(&self) -> &[u8];
 
+    /// Access the buffer as a byte slice with begin and end indices
     #[inline]
     fn slice_owned(self, range: Range<usize>) -> Slice<Self>
     where
@@ -33,6 +39,7 @@ pub struct Slice<T> {
 }
 
 impl<T> Slice<T> {
+    /// Unwrap the slice into its underlying type.
     pub fn into_inner(self) -> T {
         self.buf
     }
