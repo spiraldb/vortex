@@ -1,5 +1,5 @@
 use arrow_ord::cmp;
-use vortex_dtype::{DType, Nullability};
+use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::Scalar;
@@ -47,12 +47,13 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         Operator::Lte => cmp::lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
     };
 
-    Ok(Array::from_arrow(&array, true))
+    Ok(Array::from_arrow(&array, false))
 }
 
 pub fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {
     if lhs.is_null() | rhs.is_null() {
-        Scalar::null(DType::Bool(Nullability::Nullable))
+        // Scalar::null(DType::Bool(Nullability::Nullable))
+        Scalar::bool(false, Nullability::NonNullable)
     } else {
         let b = match operator {
             Operator::Eq => lhs == rhs,

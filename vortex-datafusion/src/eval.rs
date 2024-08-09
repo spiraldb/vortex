@@ -6,6 +6,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::Operator;
 
 use crate::can_be_pushed_down;
+use crate::scalar::dfvalue_to_scalar;
 
 pub struct ExpressionEvaluator;
 
@@ -36,7 +37,10 @@ impl ExpressionEvaluator {
                     .and_then(|a| a.field_by_name(name))
                     .ok_or(vortex_err!("Missing field {name} in struct array"))
             }),
-            Expr::Literal(lit) => Ok(ConstantArray::new(lit.clone(), array.len()).into_array()),
+            Expr::Literal(lit) => {
+                let lit = dfvalue_to_scalar(lit.clone());
+                Ok(ConstantArray::new(lit, array.len()).into_array())
+            }
             _ => unreachable!(),
         }
     }

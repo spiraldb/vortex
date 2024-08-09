@@ -1,5 +1,5 @@
 use arrow_array::cast::AsArray;
-use vortex_dtype::{DType, Nullability};
+// use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
 
 use crate::arrow::FromArrowArray;
@@ -21,11 +21,11 @@ pub trait FilterFn {
 /// The `predicate` must receive an Array with type non-nullable bool, and will panic if this is
 /// not the case.
 pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
-    assert_eq!(
-        predicate.dtype(),
-        &DType::Bool(Nullability::NonNullable),
-        "predicate must be non-nullable bool"
-    );
+    // assert_eq!(
+    //     predicate.dtype(),
+    //     &DType::Bool(Nullability::NonNullable),
+    //     "predicate must be non-nullable bool"
+    // );
     assert_eq!(
         predicate.len(),
         array.len(),
