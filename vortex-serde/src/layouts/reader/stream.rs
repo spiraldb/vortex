@@ -56,10 +56,9 @@ impl<R: VortexReadAt> VortexLayoutBatchStream<R> {
     fn take_batch(&mut self, batch: &Array) -> VortexResult<Array> {
         let curr_offset = self.current_offset;
         let indices = self.scan.indices.as_ref().expect("should be there");
-        let left =
-            search_sorted(indices, curr_offset, SearchSortedSide::Left)?.to_zero_offset_index();
-        let right = search_sorted(indices, curr_offset + batch.len(), SearchSortedSide::Left)?
-            .to_zero_offset_index();
+        let left = search_sorted(indices, curr_offset, SearchSortedSide::Left)?.to_index();
+        let right =
+            search_sorted(indices, curr_offset + batch.len(), SearchSortedSide::Left)?.to_index();
 
         self.current_offset += batch.len();
 

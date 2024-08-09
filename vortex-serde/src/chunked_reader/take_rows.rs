@@ -121,9 +121,9 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
 
         // Relativize the indices to these chunks
         let indices_start =
-            search_sorted(indices, row_range.start, SearchSortedSide::Left)?.to_zero_offset_index();
+            search_sorted(indices, row_range.start, SearchSortedSide::Left)?.to_index();
         let indices_stop =
-            search_sorted(indices, row_range.end, SearchSortedSide::Right)?.to_zero_offset_index();
+            search_sorted(indices, row_range.end, SearchSortedSide::Right)?.to_index();
         let relative_indices = slice(indices, indices_start, indices_stop)?;
         let row_start_scalar = Scalar::from(row_range.start).cast(relative_indices.dtype())?;
         let relative_indices = subtract_scalar(&relative_indices, &row_start_scalar)?;
