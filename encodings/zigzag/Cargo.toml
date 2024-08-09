@@ -20,7 +20,7 @@ vortex-scalar = { workspace = true }
 zigzag = { workspace = true }
 
 [dev-dependencies]
-vortex-fastlanes = { workspace = true }
+vortex-fastlanes = { path = "../fastlanes" }
 
 [lints]
 workspace = true
