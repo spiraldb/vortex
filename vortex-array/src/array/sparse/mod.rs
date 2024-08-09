@@ -62,7 +62,7 @@ impl SparseArray {
             );
         }
 
-        if indices.len() != 0 {
+        if !indices.is_empty() {
             let last_index = usize::try_from(&scalar_at(&indices, indices.len() - 1)?)?;
 
             if last_index - indices_offset >= len {
