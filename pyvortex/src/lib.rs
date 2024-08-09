@@ -57,7 +57,6 @@ fn dtype_bool(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
     PyDType::wrap(py, DType::Bool(nullable.into()))
 }
 
-#[allow(unsafe_op_in_unsafe_fn)]
 #[pyfunction(name = "int")]
 #[pyo3(signature = (width = None, nullable = false))]
 fn dtype_int(py: Python<'_>, width: Option<u16>, nullable: bool) -> PyResult<Py<PyDType>> {

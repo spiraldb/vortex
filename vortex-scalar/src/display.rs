@@ -7,11 +7,16 @@ use crate::primitive::PrimitiveScalar;
 use crate::Scalar;
 
 impl Display for Scalar {
-    #[allow(clippy::unwrap_in_result)]
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.dtype() {
             DType::Null => write!(f, "null"),
-            DType::Bool(_) => match BoolScalar::try_from(self).expect("bool").value() {
+            DType::Bool(_) => match BoolScalar::try_from(self)
+                .map_err(|err| {
+                    debug_assert!(false, "failed to parse bool from scalar with DType Bool: {}", err);
+                    std::fmt::Error
+                })?
+                .value()
+            {
                 None => write!(f, "null"),
                 Some(b) => write!(f, "{}", b),
             },

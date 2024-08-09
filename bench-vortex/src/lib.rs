@@ -1,5 +1,4 @@
 #![feature(exit_status_error)]
-#![allow(clippy::use_debug)]
 
 use std::collections::HashSet;
 use std::env::temp_dir;

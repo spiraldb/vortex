@@ -55,15 +55,10 @@ impl<R: VortexReadAt> VortexLayoutBatchStream<R> {
     // TODO(robert): Push this logic down to layouts
     fn take_batch(&mut self, batch: &Array) -> VortexResult<Array> {
         let curr_offset = self.current_offset;
-        let indices = self
-            .scan
-            .indices
-            .as_ref()
-            .ok_or_else(|| vortex_err!("Missing indices"))?;
-        let left =
-            search_sorted(indices, curr_offset, SearchSortedSide::Left)?.to_zero_offset_index();
-        let right = search_sorted(indices, curr_offset + batch.len(), SearchSortedSide::Left)?
-            .to_zero_offset_index();
+        let indices = self.scan.indices.as_ref().ok_or_else(|| vortex_err!("Missing scan indices"))?;
+        let left = search_sorted(indices, curr_offset, SearchSortedSide::Left)?.to_index();
+        let right =
+            search_sorted(indices, curr_offset + batch.len(), SearchSortedSide::Left)?.to_index();
 
         self.current_offset += batch.len();
 

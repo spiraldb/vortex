@@ -22,15 +22,19 @@ impl CompareFn for PrimitiveArray {
         let present = self
             .validity()
             .to_logical(self.len())
-            .to_present_null_buffer()?
-            .into_inner();
+            .to_null_buffer()?
+            .map(|b| b.into_inner());
         let present_other = flattened
             .validity()
             .to_logical(self.len())
-            .to_present_null_buffer()?
-            .into_inner();
+            .to_null_buffer()?
+            .map(|b| b.into_inner());
 
-        Ok(BoolArray::from(matching_idxs.bitand(&present).bitand(&present_other)).into_array())
+        let mut result = matching_idxs;
+        result = present.map(|p| p.bitand(&result)).unwrap_or(result);
+        result = present_other.map(|p| p.bitand(&result)).unwrap_or(result);
+
+        Ok(BoolArray::from(result).into_array())
     }
 }
 

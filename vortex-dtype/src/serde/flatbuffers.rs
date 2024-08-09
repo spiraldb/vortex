@@ -10,7 +10,6 @@ use crate::{flatbuffers as fb, DType, ExtDType, ExtID, ExtMetadata, PType, Struc
 impl TryFrom<fb::DType<'_>> for DType {
     type Error = VortexError;
 
-    #[allow(clippy::unwrap_in_result)]
     fn try_from(fb: fb::DType<'_>) -> Result<Self, Self::Error> {
         match fb.type_type() {
             fb::Type::Null => Ok(Self::Null),
@@ -21,36 +20,44 @@ impl TryFrom<fb::DType<'_>> for DType {
                     .into(),
             )),
             fb::Type::Primitive => {
-                let fb_primitive = fb.type__as_primitive().unwrap();
+                let fb_primitive = fb.type__as_primitive().ok_or_else(|| vortex_err!("failed to parse primitive from flatbuffer"))?;
                 Ok(Self::Primitive(
                     fb_primitive.ptype().try_into()?,
                     fb_primitive.nullable().into(),
                 ))
             }
             fb::Type::Binary => Ok(Self::Binary(
-                fb.type__as_binary().unwrap().nullable().into(),
+                fb.type__as_binary()
+                    .ok_or_else(|| vortex_err!("failed to parse binary from flatbuffer"))?
+                    .nullable()
+                    .into(),
             )),
-            fb::Type::Utf8 => Ok(Self::Utf8(fb.type__as_utf_8().unwrap().nullable().into())),
+            fb::Type::Utf8 => Ok(Self::Utf8(
+                fb.type__as_utf_8()
+                    .ok_or_else(|| vortex_err!("failed to parse utf-8 from flatbuffer"))?
+                    .nullable()
+                    .into(),
+            )),
             fb::Type::List => {
-                let fb_list = fb.type__as_list().unwrap();
-                let element_dtype = Self::try_from(fb_list.element_type().unwrap())?;
+                let fb_list = fb.type__as_list().ok_or_else(|| vortex_err!("failed to parse list from flatbuffer"))?;
+                let element_dtype = Self::try_from(fb_list.element_type().ok_or_else(|| vortex_err!("failed to parse list element type from flatbuffer"))?)?;
                 Ok(Self::List(
                     Arc::new(element_dtype),
                     fb_list.nullable().into(),
                 ))
             }
             fb::Type::Struct_ => {
-                let fb_struct = fb.type__as_struct_().unwrap();
+                let fb_struct = fb.type__as_struct_().ok_or_else(|| vortex_err!("failed to parse struct from flatbuffer"))?;
                 let names = fb_struct
                     .names()
-                    .unwrap()
+                    .ok_or_else(|| vortex_err!("failed to parse struct names from flatbuffer"))?
                     .iter()
                     .map(|n| (*n).into())
                     .collect_vec()
                     .into();
                 let dtypes: Vec<Self> = fb_struct
                     .dtypes()
-                    .unwrap()
+                    .ok_or_else(|| vortex_err!("failed to parse struct dtypes from flatbuffer"))?
                     .iter()
                     .map(Self::try_from)
                     .collect::<VortexResult<Vec<_>>>()?;
@@ -60,8 +67,8 @@ impl TryFrom<fb::DType<'_>> for DType {
                 ))
             }
             fb::Type::Extension => {
-                let fb_ext = fb.type__as_extension().unwrap();
-                let id = ExtID::from(fb_ext.id().unwrap());
+                let fb_ext = fb.type__as_extension().ok_or_else(|| vortex_err!("failed to parse extension from flatbuffer"))?;
+                let id = ExtID::from(fb_ext.id().ok_or_else(|| vortex_err!("failed to parse extension id from flatbuffer"))?);
                 let metadata = fb_ext.metadata().map(|m| ExtMetadata::from(m.bytes()));
                 Ok(Self::Extension(
                     ExtDType::new(id, metadata),

@@ -20,7 +20,6 @@ pub trait FilterFn {
 ///
 /// The `predicate` must receive an Array with type non-nullable bool, and will panic if this is
 /// not the case.
-#[allow(clippy::panic_in_result_fn)]
 pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
     assert_eq!(
         predicate.dtype(),

@@ -141,7 +141,7 @@ impl Statistics for ArrayData {
 
         self.stats_map
             .write()
-            .unwrap_or_else(|_| panic!("Failed to write to stats map"))
+            .unwrap_or_else(|_| panic!("Failed to write to stats map while computing {}", stat))
             .extend(
                 self.to_array()
                     .with_dyn(|a| a.compute_statistics(stat))

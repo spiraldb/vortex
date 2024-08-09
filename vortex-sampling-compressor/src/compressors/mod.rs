@@ -1,6 +1,8 @@
+use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
+use vortex::encoding::EncodingRef;
 use vortex::Array;
 use vortex_error::VortexResult;
 
@@ -34,6 +36,8 @@ pub trait EncodingCompressor: Sync + Send + Debug {
         like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>>;
+
+    fn used_encodings(&self) -> HashSet<EncodingRef>;
 }
 
 pub type CompressorRef<'a> = &'a dyn EncodingCompressor;

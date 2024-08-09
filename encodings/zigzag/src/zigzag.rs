@@ -5,12 +5,14 @@ use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::compress::zigzag_encode;
+use crate::zigzag_decode;
 
 impl_encoding!("vortex.zigzag", 21u16, ZigZag);
 
@@ -83,6 +85,8 @@ impl ArrayStatisticsCompute for ZigZagArray {}
 
 impl IntoCanonical for ZigZagArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        todo!("ZigZagArray::flatten")
+        Ok(Canonical::Primitive(zigzag_decode(
+            &self.encoded().into_primitive()?,
+        )))
     }
 }

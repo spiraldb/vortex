@@ -11,7 +11,7 @@ use tokio::fs::OpenOptions;
 use url::Url;
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
 use vortex::validity::Validity;
-use vortex::IntoArray;
+use vortex::{Context, IntoArray};
 use vortex_datafusion::persistent::config::{VortexFile, VortexTableOptions};
 use vortex_datafusion::persistent::provider::VortexFileTableProvider;
 use vortex_serde::layouts::writer::LayoutWriter;
@@ -66,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
             Field::new("numbers", DataType::UInt32, false),
         ])),
         vec![VortexFile::new(p, file_size)],
+        Arc::new(Context::default()),
     );
 
     let provider = Arc::new(VortexFileTableProvider::try_new(url, config)?);

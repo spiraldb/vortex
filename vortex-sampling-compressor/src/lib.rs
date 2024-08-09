@@ -5,6 +5,7 @@ use log::{debug, info, warn};
 use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
+use vortex::encoding::EncodingRef;
 use vortex::validity::Validity;
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
@@ -69,6 +70,13 @@ impl Display for SamplingCompressor<'_> {
 impl CompressionStrategy for SamplingCompressor<'_> {
     fn compress(&self, array: &Array) -> VortexResult<Array> {
         Self::compress(self, array, None).map(|c| c.into_array())
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        self.compressors
+            .iter()
+            .flat_map(|c| c.used_encodings())
+            .collect()
     }
 }
 

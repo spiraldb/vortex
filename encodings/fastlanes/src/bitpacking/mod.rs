@@ -120,7 +120,7 @@ impl BitPackedArray {
                     self.metadata().patches_len,
                 )
                 .unwrap_or_else(|| panic!("Missing patches array")),
-        )
+            )
     }
 
     #[inline]

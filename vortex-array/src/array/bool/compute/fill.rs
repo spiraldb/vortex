@@ -1,5 +1,5 @@
 use vortex_dtype::Nullability;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::BoolArray;
 use crate::compute::unary::FillForwardFn;
@@ -8,11 +8,12 @@ use crate::{Array, ArrayDType, IntoArray};
 
 impl FillForwardFn for BoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
-        if self.dtype().nullability() == Nullability::NonNullable {
+        let validity = self.logical_validity();
+        if self.dtype().nullability() == Nullability::NonNullable || validity.all_valid() || validity.all_invalid() {
             return Ok(self.clone().into());
-        }
+        } 
 
-        let validity = self.logical_validity().to_present_null_buffer()?;
+        let validity = self.logical_validity().to_null_buffer()?.ok_or_else(|| vortex_err!("Failed to convert array validity to null buffer"))?;
         let bools = self.boolean_buffer();
         let mut last_value = false;
         let filled = bools

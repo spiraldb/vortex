@@ -84,8 +84,14 @@ impl TableProvider for VortexFileTableProvider {
             )
             .with_projection(projection.cloned());
 
-        let exec =
-            VortexExec::try_new(file_scan_config, metrics, projection, predicate)?.into_arc();
+        let exec = VortexExec::try_new(
+            file_scan_config,
+            metrics,
+            projection,
+            predicate,
+            self.config.ctx.clone(),
+        )?
+        .into_arc();
 
         Ok(exec)
     }

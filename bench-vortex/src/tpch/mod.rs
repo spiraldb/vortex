@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::fs::create_dir_all;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -12,8 +13,9 @@ use datafusion::prelude::{CsvReadOptions, ParquetReadOptions, SessionContext};
 use tokio::fs::OpenOptions;
 use vortex::array::{ChunkedArray, StructArray};
 use vortex::arrow::FromArrowArray;
+use vortex::compress::CompressionStrategy;
 use vortex::variants::StructArrayTrait;
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, Context, IntoArray, IntoArrayVariant};
 use vortex_datafusion::memory::VortexMemTableOptions;
 use vortex_datafusion::persistent::config::{VortexFile, VortexTableOptions};
 use vortex_datafusion::SessionContextExt;
@@ -194,12 +196,16 @@ async fn register_vortex_file(
     schema: &Schema,
     enable_compression: bool,
 ) -> anyhow::Result<()> {
-    let path = if enable_compression {
-        file.with_extension("").with_extension("vtxcmp")
+    let vortex_dir = file.parent().unwrap().join(if enable_compression {
+        "vortex_compressed"
     } else {
-        file.with_extension("").with_extension("vtxucmp")
-    };
-    let vtx_file = idempotent_async(&path, |vtx_file| async move {
+        "vortex_uncompressed"
+    });
+    create_dir_all(&vortex_dir)?;
+    let output_file = &vortex_dir
+        .join(file.file_name().unwrap())
+        .with_extension("vxf");
+    let vtx_file = idempotent_async(output_file, |vtx_file| async move {
         let record_batches = session
             .read_csv(
                 file.to_str().unwrap(),
@@ -276,6 +282,12 @@ async fn register_vortex_file(
     })
     .await?;
 
+    let ctx = if enable_compression {
+        Arc::new(Context::default().with_encodings(SamplingCompressor::default().used_encodings()))
+    } else {
+        Arc::new(Context::default())
+    };
+
     let f = OpenOptions::new()
         .read(true)
         .write(true)
@@ -294,6 +306,7 @@ async fn register_vortex_file(
                 vtx_file.to_str().unwrap().to_string(),
                 file_size,
             )],
+            ctx,
         ),
     )?;
 

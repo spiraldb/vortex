@@ -5,14 +5,24 @@ use std::time::SystemTime;
 
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::tpch::{load_datasets, tpch_queries, Format};
+use clap::Parser;
 use futures::future::try_join_all;
 use indicatif::ProgressBar;
 use prettytable::{Cell, Row, Table};
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, value_delimiter = ',')]
+    queries: Option<Vec<usize>>,
+}
 
 #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 async fn main() {
     // uncomment the below to enable trace logging of datafusion execution
     // setup_logger(LevelFilter::Trace);
+
+    let args = Args::parse();
 
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
@@ -45,12 +55,19 @@ async fn main() {
         table.add_row(Row::new(cells));
     }
 
+    let query_count = args.queries.as_ref().map_or(21, |c| c.len());
+
     // Setup a progress bar
-    let progress = ProgressBar::new(21 * formats.len() as u64);
+    let progress = ProgressBar::new((query_count * formats.len()) as u64);
 
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
     for (q, query) in tpch_queries() {
+        if let Some(queries) = args.queries.as_ref() {
+            if !queries.contains(&q) {
+                continue;
+            }
+        }
         let ctxs = ctxs.clone();
         let tx = rows_tx.clone();
         let progress = progress.clone();

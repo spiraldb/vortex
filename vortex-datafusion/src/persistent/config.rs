@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
 use arrow_schema::SchemaRef;
 use chrono::TimeZone as _;
 use datafusion::datasource::listing::PartitionedFile;
 use object_store::path::Path;
 use object_store::ObjectMeta;
+use vortex::Context;
 
 #[derive(Clone)]
 pub struct VortexFile {
@@ -33,13 +36,15 @@ impl VortexFile {
 pub struct VortexTableOptions {
     pub(crate) data_files: Vec<VortexFile>,
     pub(crate) schema: Option<SchemaRef>,
+    pub(crate) ctx: Arc<Context>,
 }
 
 impl VortexTableOptions {
-    pub fn new(schema: SchemaRef, data_files: Vec<VortexFile>) -> Self {
+    pub fn new(schema: SchemaRef, data_files: Vec<VortexFile>, ctx: Arc<Context>) -> Self {
         Self {
             data_files,
             schema: Some(schema),
+            ctx,
         }
     }
 }

@@ -23,6 +23,7 @@ arrow-select = { workspace = true }
 bytes = { workspace = true }
 bzip2 = { workspace = true }
 csv = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 datafusion = { workspace = true }
 enum-iterator = { workspace = true }
 flexbuffers = { workspace = true }
@@ -57,7 +58,12 @@ vortex-fastlanes = { workspace = true }
 vortex-roaring = { workspace = true }
 vortex-runend = { workspace = true }
 vortex-sampling-compressor = { workspace = true }
-vortex-serde = { workspace = true, features = ["futures", "monoio", "tokio", "object_store"] }
+vortex-serde = { workspace = true, features = [
+    "futures",
+    "monoio",
+    "tokio",
+    "object_store",
+] }
 xshell = { workspace = true }
 
 [dev-dependencies]
