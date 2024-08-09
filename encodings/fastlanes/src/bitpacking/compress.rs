@@ -28,8 +28,8 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
     }
 
     let packed = bitpack(&array, bit_width)?;
-    let patches = (num_exceptions > 0).then_some(bitpack_patches(&array, bit_width, num_exceptions));
-
+    let patches =
+        (num_exceptions > 0).then_some(bitpack_patches(&array, bit_width, num_exceptions));
 
     BitPackedArray::try_new(packed, array.validity(), patches, bit_width, array.len())
 }

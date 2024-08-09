@@ -139,11 +139,14 @@ impl Statistics for ArrayData {
             return Some(s);
         }
 
-        self.stats_map.write().unwrap_or_else(|_| panic!("Failed to write to stats map")).extend(
-            self.to_array()
-                .with_dyn(|a| a.compute_statistics(stat))
-                .ok()?,
-        );
+        self.stats_map
+            .write()
+            .unwrap_or_else(|_| panic!("Failed to write to stats map"))
+            .extend(
+                self.to_array()
+                    .with_dyn(|a| a.compute_statistics(stat))
+                    .ok()?,
+            );
         self.get(stat)
     }
 }

@@ -52,7 +52,9 @@ impl ChunkedArray {
             .collect_vec();
 
         let num_chunks = chunk_ends.len() - 1;
-        let length = *chunk_ends.last().unwrap_or_else(|| unreachable!("Chunk ends is guaranteed to have at least one element")) as usize;
+        let length = *chunk_ends.last().unwrap_or_else(|| {
+            unreachable!("Chunk ends is guaranteed to have at least one element")
+        }) as usize;
 
         let mut children = vec![PrimitiveArray::from_vec(chunk_ends, NonNullable).into_array()];
         children.extend(chunks);
@@ -150,7 +152,8 @@ impl ArrayValidity for ChunkedArray {
 
 impl SubtractScalarFn for ChunkedArray {
     fn subtract_scalar(&self, to_subtract: &Scalar) -> VortexResult<Array> {
-        let chunks = self.chunks()
+        let chunks = self
+            .chunks()
             .map(|chunk| subtract_scalar(&chunk, to_subtract))
             .collect::<VortexResult<Vec<_>>>()?;
         Ok(Self::try_new(chunks, self.dtype().clone())?.into_array())

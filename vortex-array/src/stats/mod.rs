@@ -92,8 +92,7 @@ impl dyn Statistics + '_ {
         &self,
         stat: Stat,
     ) -> Option<U> {
-        self.get(stat)
-            .and_then(|s| U::try_from(&s).ok())
+        self.get(stat).and_then(|s| U::try_from(&s).ok())
     }
 
     pub fn get_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -101,9 +100,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.get(stat)
-            .and_then(|s| {
-                s.cast(&DType::Primitive(U::PTYPE, NonNullable)).ok()
-            })
+            .and_then(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)).ok())
             .and_then(|s| U::try_from(&s).ok())
     }
 
@@ -111,8 +108,7 @@ impl dyn Statistics + '_ {
         &self,
         stat: Stat,
     ) -> Option<U> {
-        self.compute(stat)
-            .and_then(|s| U::try_from(&s).ok())
+        self.compute(stat).and_then(|s| U::try_from(&s).ok())
     }
 
     pub fn compute_as_cast<U: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -120,9 +116,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.compute(stat)
-            .and_then(|s| {
-                s.cast(&DType::Primitive(U::PTYPE, NonNullable)).ok()
-            })
+            .and_then(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)).ok())
             .and_then(|s| U::try_from(&s).ok())
     }
 

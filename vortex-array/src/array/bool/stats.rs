@@ -1,8 +1,7 @@
 use std::collections::HashMap;
 
 use arrow_buffer::BooleanBuffer;
-use vortex_error::VortexResult;
-use vortex_error::vortex_err;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};

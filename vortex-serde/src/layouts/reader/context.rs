@@ -80,7 +80,9 @@ impl LayoutDeserializer {
 
         match fb_layout.layout_type() {
             LayoutVariant::FlatLayout => {
-                let flat_layout = fb_layout.layout_as_flat_layout().ok_or_else(|| vortex_err!("Must be flat layout"))?;
+                let flat_layout = fb_layout
+                    .layout_as_flat_layout()
+                    .ok_or_else(|| vortex_err!("Must be flat layout"))?;
                 Ok(Box::new(FlatLayout::new(
                     flat_layout.begin(),
                     flat_layout.end(),

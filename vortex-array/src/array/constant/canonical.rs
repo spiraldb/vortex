@@ -29,7 +29,9 @@ impl IntoCanonical for ConstantArray {
         }
 
         if let Ok(s) = Utf8Scalar::try_from(self.scalar()) {
-            let const_value = s.value().ok_or_else(|| vortex_err!("Constant UTF-8 array has null value"))?;
+            let const_value = s
+                .value()
+                .ok_or_else(|| vortex_err!("Constant UTF-8 array has null value"))?;
             let bytes = const_value.as_bytes();
 
             return Ok(Canonical::VarBin(VarBinArray::from_iter(

@@ -41,7 +41,9 @@ impl TakeFn for ChunkedArray {
                 // Start a new chunk
                 let indices_in_chunk_array = indices_in_chunk.clone().into_array();
                 chunks.push(take(
-                    &self.chunk(prev_chunk_idx).ok_or_else(|| vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()))?,
+                    &self.chunk(prev_chunk_idx).ok_or_else(
+                        || vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()),
+                    )?,
                     &indices_in_chunk_array,
                 )?);
                 indices_in_chunk = Vec::new();
@@ -54,7 +56,9 @@ impl TakeFn for ChunkedArray {
         if !indices_in_chunk.is_empty() {
             let indices_in_chunk_array = indices_in_chunk.into_array();
             chunks.push(take(
-                &self.chunk(prev_chunk_idx).ok_or_else(|| vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()))?,
+                &self
+                    .chunk(prev_chunk_idx)
+                    .ok_or_else(|| vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()))?,
                 &indices_in_chunk_array,
             )?);
         }

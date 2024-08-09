@@ -14,7 +14,10 @@ impl ArrayCompute for RoaringIntArray {
 
 impl ScalarAtFn for RoaringIntArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let bitmap_value = self.bitmap().select(index as u32).ok_or_else(|| vortex_err!(OutOfBounds: index, 0, self.len()))?;
+        let bitmap_value = self
+            .bitmap()
+            .select(index as u32)
+            .ok_or_else(|| vortex_err!(OutOfBounds: index, 0, self.len()))?;
         let scalar: Scalar = match self.metadata().ptype {
             PType::U8 => (bitmap_value as u8).into(),
             PType::U16 => (bitmap_value as u16).into(),

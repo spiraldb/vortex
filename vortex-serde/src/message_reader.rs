@@ -272,7 +272,9 @@ impl ArrayBufferReader {
                 // let all_buffers_size = self.fb_msg.expect()
                 let batch_msg = unsafe {
                     root_unchecked::<fb::Message>(
-                        self.fb_msg.as_ref().ok_or_else(|| vortex_err!("Missing fb message"))?,
+                        self.fb_msg
+                            .as_ref()
+                            .ok_or_else(|| vortex_err!("Missing fb message"))?,
                     )
                 }
                 .header_as_batch()
@@ -322,7 +324,9 @@ impl ArrayBufferReader {
 
     pub fn into_array(self, ctx: Arc<Context>, dtype: DType) -> VortexResult<Array> {
         let length = self.fb_bytes_as_batch()?.length() as usize;
-        let fb_msg = self.fb_msg.ok_or_else(|| vortex_err!("Populated in previous step"))?;
+        let fb_msg = self
+            .fb_msg
+            .ok_or_else(|| vortex_err!("Populated in previous step"))?;
         let view = ArrayView::try_new(
             ctx,
             dtype,

@@ -150,7 +150,9 @@ impl ArrayValidity for StructArray {
 impl AcceptArrayVisitor for StructArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         for (idx, name) in self.names().iter().enumerate() {
-            let child = self.field(idx).ok_or_else(|| vortex_err!(OutOfBounds: idx, 0, self.nfields()))?;
+            let child = self
+                .field(idx)
+                .ok_or_else(|| vortex_err!(OutOfBounds: idx, 0, self.nfields()))?;
             visitor.visit_child(&format!("\"{}\"", name), &child)?;
         }
         Ok(())

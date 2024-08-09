@@ -1,6 +1,7 @@
 //! Provides types that can be used by I/O frameworks to work with byte buffer-shaped data.
 
 use std::ops::Range;
+
 use crate::Buffer;
 
 /// Trait for types that can provide a readonly byte buffer interface to I/O frameworks.
