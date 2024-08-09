@@ -72,8 +72,17 @@ impl RunEndArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
-            .map(|s| s.to_index())
+        if index >= self.len() {
+            vortex_bail!(OutOfBounds: index, 0, self.len())
+        }
+
+        let searched_index =
+            search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)?.to_index();
+        Ok(if searched_index == self.ends().len() {
+            searched_index - 1
+        } else {
+            searched_index
+        })
     }
 
     pub fn encode(array: Array) -> VortexResult<Self> {
