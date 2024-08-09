@@ -52,10 +52,12 @@ impl SliceFn for RunEndArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let slice_begin = self.find_physical_index(start)?;
         let slice_end = self.find_physical_index(stop)?;
+        let bounded_slice_end = usize::min(slice_end + 1, self.ends().len());
+
         Ok(Self::with_offset_and_size(
-            slice(&self.ends(), slice_begin, slice_end + 1)?,
-            slice(&self.values(), slice_begin, slice_end + 1)?,
-            self.validity().slice(slice_begin, slice_end + 1)?,
+            slice(&self.ends(), slice_begin, bounded_slice_end)?,
+            slice(&self.values(), slice_begin, bounded_slice_end)?,
+            self.validity().slice(slice_begin, bounded_slice_end)?,
             stop - start,
             start,
         )?
