@@ -20,7 +20,7 @@ name = "pyvortex"
 crate-type = ["rlib", "cdylib"]
 
 [dependencies]
-arrow = { workspace = true }
+arrow = { workspace = true, features = ["pyarrow"] }
 log = { workspace = true }
 paste = { workspace = true }
 pyo3 = { workspace = true }
