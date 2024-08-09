@@ -62,6 +62,14 @@ impl SparseArray {
             );
         }
 
+        if !indices.is_empty() {
+            let last_index = usize::try_from(&scalar_at(&indices, indices.len() - 1)?)?;
+
+            if last_index - indices_offset >= len {
+                vortex_bail!("Array length was set to {len} but the last index is {last_index}");
+            }
+        }
+
         Self::try_from_parts(
             values.dtype().clone(),
             len,
@@ -190,7 +198,7 @@ impl ArrayValidity for SparseArray {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::Nullability::Nullable;
+    use vortex_dtype::Nullability::{self, Nullable};
     use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
     use vortex_scalar::Scalar;
@@ -358,5 +366,34 @@ mod test {
             validity.boolean_buffer().iter().collect_vec(),
             [false, false, true, false, false, true, false, false, true, false]
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_length() {
+        let values = vec![15_u32, 135, 13531, 42].into_array();
+        let indices = vec![10_u64, 11, 50, 100].into_array();
+
+        SparseArray::try_new(
+            indices.clone(),
+            values,
+            100,
+            Scalar::primitive(0_u32, Nullability::NonNullable),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_valid_length() {
+        let values = vec![15_u32, 135, 13531, 42].into_array();
+        let indices = vec![10_u64, 11, 50, 100].into_array();
+
+        SparseArray::try_new(
+            indices.clone(),
+            values,
+            101,
+            Scalar::primitive(0_u32, Nullability::NonNullable),
+        )
+        .unwrap();
     }
 }
