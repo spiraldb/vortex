@@ -73,6 +73,7 @@ impl Array {
         }
     }
 
+    #[allow(clippy::same_name_method)]
     pub fn len(&self) -> usize {
         match self {
             Self::Data(d) => d.len(),

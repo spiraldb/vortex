@@ -202,6 +202,7 @@ impl<T: PartialOrd> IndexOrd<T> for [T] {
 }
 
 impl Len for Array {
+    #[allow(clippy::same_name_method)]
     fn len(&self) -> usize {
         Self::len(self)
     }
