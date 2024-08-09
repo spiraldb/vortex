@@ -136,15 +136,19 @@ impl CompareFn for ByteBoolArray {
 impl FillForwardFn for ByteBoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         let validity = self.logical_validity();
-        if self.dtype().nullability() == Nullability::NonNullable
-            || validity.all_valid()
-            || validity.all_invalid()
-        {
+        if self.dtype().nullability() == Nullability::NonNullable {
             return Ok(self.clone().into());
         }
+        // all valid, but we need to convert to non-nullable
+        if validity.all_valid() {
+            return Ok(Self::try_new(self.buffer().clone(), Validity::AllValid)?.into_array());
+        }
+        // all invalid => fill with default value (false)
+        if validity.all_invalid() {
+            return Ok(Self::try_from_vec(vec![false; self.len()], Validity::AllValid)?.into_array());
+        }
 
-        let validity = self
-            .logical_validity()
+        let validity = validity
             .to_null_buffer()?
             .ok_or_else(|| vortex_err!("Failed to convert array validity to null buffer"))?;
 
@@ -163,7 +167,7 @@ impl FillForwardFn for ByteBoolArray {
             })
             .collect::<Vec<_>>();
 
-        Ok(Self::from(filled).into_array())
+        Ok(Self::try_from_vec(filled, Validity::AllValid)?.into_array())
     }
 }
 
