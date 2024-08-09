@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::create_dir_all;
 use std::path::Path;
@@ -15,7 +15,7 @@ use vortex::array::{ChunkedArray, StructArray};
 use vortex::arrow::FromArrowArray;
 use vortex::compress::CompressionStrategy;
 use vortex::variants::StructArrayTrait;
-use vortex::{Array, ArrayDType, Context, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_datafusion::memory::VortexMemTableOptions;
 use vortex_datafusion::persistent::config::{VortexFile, VortexTableOptions};
 use vortex_datafusion::SessionContextExt;
@@ -282,10 +282,10 @@ async fn register_vortex_file(
     })
     .await?;
 
-    let ctx = if enable_compression {
-        Arc::new(Context::default().with_encodings(SamplingCompressor::default().used_encodings()))
+    let extra_encodings = if enable_compression {
+        SamplingCompressor::default().used_encodings()
     } else {
-        Arc::new(Context::default())
+        HashSet::new()
     };
 
     let f = OpenOptions::new()
@@ -306,7 +306,7 @@ async fn register_vortex_file(
                 vtx_file.to_str().unwrap().to_string(),
                 file_size,
             )],
-            ctx,
+            extra_encodings,
         ),
     )?;
 

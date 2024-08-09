@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow_array::RecordBatch;
@@ -6,6 +7,7 @@ use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
 use object_store::ObjectStore;
+use vortex::encoding::EncodingRef;
 use vortex::Context;
 use vortex_serde::io::ObjectStoreReadAt;
 use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
@@ -13,7 +15,7 @@ use vortex_serde::layouts::reader::context::{LayoutContext, LayoutDeserializer};
 use vortex_serde::layouts::reader::projections::Projection;
 
 pub struct VortexFileOpener {
-    pub ctx: Arc<Context>,
+    pub extra_encodings: HashSet<EncodingRef>,
     pub object_store: Arc<dyn ObjectStore>,
     pub batch_size: Option<usize>,
     pub projection: Option<Vec<usize>>,
@@ -27,7 +29,10 @@ impl FileOpener for VortexFileOpener {
 
         let mut builder = VortexLayoutReaderBuilder::new(
             read_at,
-            LayoutDeserializer::new(self.ctx.clone(), Arc::new(LayoutContext::default())),
+            LayoutDeserializer::new(
+                Arc::new(Context::default().with_encodings(self.extra_encodings.iter().copied())),
+                Arc::new(LayoutContext::default()),
+            ),
         );
 
         if let Some(batch_size) = self.batch_size {

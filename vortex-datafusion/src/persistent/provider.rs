@@ -84,7 +84,7 @@ impl TableProvider for VortexFileTableProvider {
             metrics,
             projection,
             predicate,
-            self.config.ctx.clone(),
+            self.config.extra_encodings.clone(),
         )?
         .into_arc();
 

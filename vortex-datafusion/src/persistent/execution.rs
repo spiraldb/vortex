@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt;
 use std::sync::Arc;
 
@@ -9,7 +10,7 @@ use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, PlanProperties,
 };
-use vortex::Context;
+use vortex::encoding::EncodingRef;
 
 use crate::persistent::opener::VortexFileOpener;
 
@@ -19,7 +20,7 @@ pub struct VortexExec {
     metrics: ExecutionPlanMetricsSet,
     predicate: Option<Arc<dyn PhysicalExpr>>,
     plan_properties: PlanProperties,
-    ctx: Arc<Context>,
+    extra_encodings: HashSet<EncodingRef>,
 }
 
 impl VortexExec {
@@ -28,7 +29,7 @@ impl VortexExec {
         metrics: ExecutionPlanMetricsSet,
         projection: Option<&Vec<usize>>,
         predicate: Option<Arc<dyn PhysicalExpr>>,
-        ctx: Arc<Context>,
+        extra_encodings: HashSet<EncodingRef>,
     ) -> DFResult<Self> {
         let projected_schema = project_schema(&file_scan_config.file_schema, projection)?;
         let plan_properties = PlanProperties::new(
@@ -42,7 +43,7 @@ impl VortexExec {
             metrics,
             predicate,
             plan_properties,
-            ctx,
+            extra_encodings,
         })
     }
     pub(crate) fn into_arc(self) -> Arc<dyn ExecutionPlan> {
@@ -92,7 +93,7 @@ impl ExecutionPlan for VortexExec {
             .runtime_env()
             .object_store(&self.file_scan_config.object_store_url)?;
         let opener = VortexFileOpener {
-            ctx: self.ctx.clone(),
+            extra_encodings: self.extra_encodings.clone(),
             object_store,
             projection: self.file_scan_config.projection.clone(),
             batch_size: None,
