@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-array` - [0.6.1](https://github.com/spiraldb/vortex/compare/vortex-array-v0.6.0...vortex-array-v0.6.1) - 2024-08-09
+
+### Other
+- Fix vortex compressed benchmarks ([#577](https://github.com/spiraldb/vortex/pull/577))
+
 ## `vortex-serde` - [0.6.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.5.0...vortex-serde-v0.6.0) - 2024-08-09
 
 ### Other
