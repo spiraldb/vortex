@@ -39,10 +39,30 @@ impl<D: ArrayDef> TypedArray<D> {
 
     pub fn metadata(&self) -> &D::Metadata {
         match &self.array {
-            Array::Data(d) => d.metadata().as_any().downcast_ref::<D::Metadata>().unwrap(),
+            Array::Data(d) => d
+                .metadata()
+                .as_any()
+                .downcast_ref::<D::Metadata>()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Failed to downcast metadata to {} for typed array with ID {} and encoding {}",
+                        std::any::type_name::<D::Metadata>(),
+                        D::ID.as_ref(),
+                        D::ENCODING.id().as_ref(),
+                    )
+                }),
             Array::View(v) => self
                 .lazy_metadata
-                .get_or_init(|| D::Metadata::try_deserialize_metadata(v.metadata()).unwrap()),
+                .get_or_init(|| {
+                    D::Metadata::try_deserialize_metadata(v.metadata()).unwrap_or_else(|err| {
+                        panic!(
+                            "Failed to deserialize ArrayView metadata for typed array with ID {} and encoding {}: {}", 
+                            D::ID.as_ref(),
+                            D::ENCODING.id().as_ref(),
+                            err
+                        )
+                    })
+                }),
         }
     }
 }

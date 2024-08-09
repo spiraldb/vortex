@@ -63,6 +63,6 @@ mod test {
             filled_bool.boolean_buffer().iter().collect::<Vec<bool>>(),
             vec![false, false, false, true, true]
         );
-        assert_eq!(filled_bool.validity(), Validity::NonNullable);
+        assert_eq!(filled_bool.validity(), Validity::AllValid);
     }
 }

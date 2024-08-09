@@ -28,7 +28,10 @@ impl StructArray {
     }
 
     pub fn children(&self) -> impl Iterator<Item = Array> + '_ {
-        (0..self.nfields()).map(move |idx| self.field(idx).unwrap())
+        (0..self.nfields()).map(move |idx| {
+            self.field(idx)
+                .unwrap_or_else(|| panic!("Field {} not found, nfields: {}", idx, self.nfields()))
+        })
     }
 
     pub fn try_new(
