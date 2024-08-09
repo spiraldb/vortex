@@ -3,7 +3,7 @@ use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::RunEndArray;
@@ -35,9 +35,12 @@ impl TakeFn for RunEndArray {
             primitive_indices
                 .maybe_null_slice::<$P>()
                 .iter()
+                .map(|idx| *idx as usize)
                 .map(|idx| {
-                    self.find_physical_index(*idx as usize)
-                        .map(|loc| loc as u64)
+                    if idx >= self.len() {
+                        vortex_bail!(OutOfBounds: idx, 0, self.len())
+                    }
+                    self.find_physical_index(idx).map(|loc| loc as u64)
                 })
                 .collect::<VortexResult<Vec<_>>>()?
         });
