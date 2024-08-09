@@ -86,7 +86,7 @@ fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<Primiti
                     typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())
             })
         }
-        _ => panic!("can't patch ALP array with {}", patches),
+        _ => vortex_bail!("Can't patch ALP array with {}; only {} is supported", patches, Sparse::ID),
     }
 }
 

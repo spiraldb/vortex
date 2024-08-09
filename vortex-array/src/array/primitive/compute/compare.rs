@@ -48,6 +48,7 @@ fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
 }
 
 #[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
 mod test {
     use itertools::Itertools;
 

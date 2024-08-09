@@ -25,6 +25,7 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex_error::vortex_err;
 
 use crate::datatype::infer_schema;
 use crate::eval::ExpressionEvaluator;
@@ -123,10 +124,11 @@ impl ExecutionPlan for RowSelectorExec {
         partition: usize,
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        assert_eq!(
-            partition, 0,
-            "single partitioning only supported by RowSelectorExec"
-        );
+        if partition != 0 {
+            return Err(DataFusionError::External(
+                Box::new(vortex_err!("Single partitioning only supported by RowSelectorExec, got partition {}", partition))
+            ));
+        }
 
         // Derive a schema using the provided set of fields.
         let filter_schema = Arc::new(
