@@ -71,7 +71,16 @@ impl StatsSet {
     }
 
     fn get_as<T: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self, stat: Stat) -> Option<T> {
-        self.get(stat).and_then(|v| T::try_from(v).ok())
+        self.get(stat).map(|v| {
+            T::try_from(v).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to get stat {} as {}: {}",
+                    stat,
+                    std::any::type_name::<T>(),
+                    err
+                )
+            })
+        })
     }
 
     pub fn set(&mut self, stat: Stat, value: Scalar) {
