@@ -12,7 +12,6 @@ pub trait SliceFn {
 
 /// Return a zero-copy slice of an array, between `start` (inclusive) and `end` (exclusive).
 ///
-///
 /// # Errors
 ///
 /// Slicing returns an error if you attempt to slice a range that exceeds the bounds of the
@@ -39,6 +38,9 @@ fn check_slice_bounds(array: &Array, start: usize, stop: usize) -> VortexResult<
     }
     if stop > array.len() {
         vortex_bail!(OutOfBounds: stop, 0, array.len());
+    }
+    if start > stop {
+        vortex_bail!("start ({}) must be <= stop ({})", start, stop);
     }
     Ok(())
 }
