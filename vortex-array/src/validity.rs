@@ -238,14 +238,6 @@ impl LogicalValidity {
         }
     }
 
-    pub fn to_present_null_buffer(&self) -> VortexResult<NullBuffer> {
-        match self {
-            Self::AllValid(l) => Ok(NullBuffer::new_valid(*l)),
-            Self::AllInvalid(l) => Ok(NullBuffer::new_null(*l)),
-            Self::Array(a) => Ok(NullBuffer::new(a.clone().into_bool()?.boolean_buffer())),
-        }
-    }
-
     pub fn all_valid(&self) -> bool {
         matches!(self, Self::AllValid(_))
     }

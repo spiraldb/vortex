@@ -21,12 +21,15 @@ impl FilterIndicesFn for PrimitiveArray {
         let present_buf = self
             .validity()
             .to_logical(self.len())
-            .to_present_null_buffer()?
-            .into_inner();
+            .to_null_buffer()?
+            .map(|b| b.into_inner());
 
         let bitset: VortexResult<BooleanBuffer> = conjunction_indices
             .reduce(|a, b| Ok(a?.bitor(&b?)))
-            .map(|bitset| Ok(bitset?.bitand(&present_buf)))
+            .map(|bitset| {
+                let bs = bitset?;
+                Ok(present_buf.map(|b| b.bitand(&bs)).unwrap_or(bs))
+            })
             .unwrap_or_else(|| Ok(BooleanBuffer::new_set(self.len())));
 
         Ok(BoolArray::from(bitset?).into_array())
