@@ -1,7 +1,7 @@
 use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::ArrayCompute;
 use vortex_dtype::PType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::RoaringIntArray;
@@ -14,8 +14,7 @@ impl ArrayCompute for RoaringIntArray {
 
 impl ScalarAtFn for RoaringIntArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        // Unwrap since we know the index is valid
-        let bitmap_value = self.bitmap().select(index as u32).unwrap();
+        let bitmap_value = self.bitmap().select(index as u32).ok_or_else(|| vortex_err!(OutOfBounds: index, 0, self.len()))?;
         let scalar: Scalar = match self.metadata().ptype {
             PType::U8 => (bitmap_value as u8).into(),
             PType::U16 => (bitmap_value as u16).into(),

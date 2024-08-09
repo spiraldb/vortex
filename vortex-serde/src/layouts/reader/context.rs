@@ -80,7 +80,7 @@ impl LayoutDeserializer {
 
         match fb_layout.layout_type() {
             LayoutVariant::FlatLayout => {
-                let flat_layout = fb_layout.layout_as_flat_layout().expect("must be flat");
+                let flat_layout = fb_layout.layout_as_flat_layout().ok_or_else(|| vortex_err!("Must be flat layout"))?;
                 Ok(Box::new(FlatLayout::new(
                     flat_layout.begin(),
                     flat_layout.end(),
@@ -91,7 +91,7 @@ impl LayoutDeserializer {
             LayoutVariant::NestedLayout => {
                 let nested_layout = fb_layout
                     .layout_as_nested_layout()
-                    .expect("must be nested layout");
+                    .ok_or_else(|| vortex_err!("Must be nested layout"))?;
                 Ok(self
                     .layout_ctx
                     .lookup_layout(&LayoutId(nested_layout.encoding()))

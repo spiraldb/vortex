@@ -41,7 +41,7 @@ impl Footer {
         let footer_bytes = self.leftovers.slice(start_offset..end_offset);
         let fb_footer = root::<vortex_flatbuffers::footer::Footer>(&footer_bytes)?;
 
-        let fb_layout = fb_footer.layout().expect("Footer must contain a layout");
+        let fb_layout = fb_footer.layout().ok_or_else(|| vortex_err!("Footer must contain a layout"))?;
         let loc = fb_layout._tab.loc();
         self.layout_serde
             .read_layout(footer_bytes, loc, scan, message_cache)
@@ -70,7 +70,7 @@ impl Footer {
 
         let fb_struct = fb_dtype
             .type__as_struct_()
-            .expect("The top-level type should be a struct");
+            .ok_or_else(|| vortex_err!("The top-level type should be a struct"))?;
         let nullability = fb_struct.nullable().into();
 
         let (names, dtypes): (Vec<Arc<str>>, Vec<DType>) = projection
@@ -87,8 +87,8 @@ impl Footer {
     }
 
     fn read_field(fb_struct: Struct_, idx: usize) -> VortexResult<(Arc<str>, DType)> {
-        let name = fb_struct.names().unwrap().get(idx);
-        let fb_dtype = fb_struct.dtypes().unwrap().get(idx);
+        let name = fb_struct.names().ok_or_else(|| vortex_err!("Missing field names"))?.get(idx);
+        let fb_dtype = fb_struct.dtypes().ok_or_else(|| vortex_err!("Missing field dtypes"))?.get(idx);
         let dtype = DType::try_from(fb_dtype)?;
 
         Ok((name.into(), dtype))

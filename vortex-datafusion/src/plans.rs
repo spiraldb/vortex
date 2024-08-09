@@ -1,6 +1,7 @@
 //! Physical operators needed to implement scanning of Vortex arrays with pushdown.
 
 use std::any::Any;
+use std::backtrace::Backtrace;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use datafusion_common::Result as DFResult;
+use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_expr::Expr;
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
@@ -128,11 +129,10 @@ impl ExecutionPlan for RowSelectorExec {
         );
 
         // Derive a schema using the provided set of fields.
-
         let filter_schema = Arc::new(
             infer_schema(self.chunked_array.dtype())
                 .project(self.filter_projection.as_slice())
-                .unwrap(),
+                .map_err(|err| DataFusionError::ArrowError(err, Some(Backtrace::capture().to_string())))?,
         );
 
         let conjunction_expr =

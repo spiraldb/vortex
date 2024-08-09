@@ -62,6 +62,7 @@ impl DBGen {
 }
 
 impl DBGen {
+    #[allow(clippy::unwrap_in_result)]
     /// Generate the TPC-H data files for use with benchmarks.
     pub fn generate(&self) -> anyhow::Result<PathBuf> {
         let sh = Shell::new()?;

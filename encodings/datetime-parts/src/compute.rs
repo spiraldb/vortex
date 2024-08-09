@@ -51,13 +51,12 @@ impl SliceFn for DateTimePartsArray {
 impl ScalarAtFn for DateTimePartsArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let DType::Extension(ext, nullability) = self.dtype().clone() else {
-            panic!("DateTimePartsArray must have extension dtype");
+            panic!("DateTimePartsArray must have extension dtype, found {}", self.dtype());
         };
 
-        let TemporalMetadata::Timestamp(time_unit, _) = TemporalMetadata::try_from(&ext)
-            .expect("extension metadata must decode to TemporalMetadata")
+        let TemporalMetadata::Timestamp(time_unit, _) = TemporalMetadata::try_from(&ext)?
         else {
-            panic!("metadata must be Timestamp");
+            panic!("metadata must be Timestamp, found {}", ext.id());
         };
 
         let divisor = match time_unit {

@@ -89,11 +89,11 @@ impl RelativeLayoutCache {
     }
 
     pub fn get(&self, path: &[LayoutPartId]) -> Option<Bytes> {
-        self.root.read().unwrap().get(&self.absolute_id(path))
+        self.root.read().ok()?.get(&self.absolute_id(path))
     }
 
     pub fn remove(&mut self, path: &[LayoutPartId]) -> Option<Bytes> {
-        self.root.write().unwrap().remove(&self.absolute_id(path))
+        self.root.write().ok()?.remove(&self.absolute_id(path))
     }
 
     pub fn dtype(&self) -> DType {

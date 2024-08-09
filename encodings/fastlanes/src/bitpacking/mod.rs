@@ -119,7 +119,7 @@ impl BitPackedArray {
                         &self.dtype().with_nullability(Nullability::Nullable),
                         self.metadata().patches_len,
                     )
-                    .expect("Missing patches array"),
+                    .unwrap_or_else(|| panic!("Missing patches array")),
                 )
     }
 
@@ -178,10 +178,10 @@ impl ArrayValidity for BitPackedArray {
 impl AcceptArrayVisitor for BitPackedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("packed", &self.packed())?;
-        if self.metadata().patches_len > 0 {
+        if let Some(patches) = self.patches().as_ref() {
             visitor.visit_child(
                 "patches",
-                &self.patches().expect("Expected patches to be present "),
+                patches,
             )?;
         }
         visitor.visit_validity(&self.validity())

@@ -11,7 +11,7 @@ use vortex::compute::unary::subtract_scalar;
 use vortex::compute::{filter, filter_indices, search_sorted, slice, take, SearchSortedSide};
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
@@ -55,7 +55,7 @@ impl<R: VortexReadAt> VortexLayoutBatchStream<R> {
     // TODO(robert): Push this logic down to layouts
     fn take_batch(&mut self, batch: &Array) -> VortexResult<Array> {
         let curr_offset = self.current_offset;
-        let indices = self.scan.indices.as_ref().expect("should be there");
+        let indices = self.scan.indices.as_ref().ok_or_else(|| vortex_err!("Missing indices"))?;
         let left =
             search_sorted(indices, curr_offset, SearchSortedSide::Left)?.to_zero_offset_index();
         let right = search_sorted(indices, curr_offset + batch.len(), SearchSortedSide::Left)?

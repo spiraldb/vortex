@@ -426,8 +426,8 @@ impl BenchmarkDataset for BenchmarkDatasets {
     fn compress_to_vortex(&self) -> VortexResult<()> {
         self.write_as_parquet();
         for f in self.list_files(FileType::Parquet) {
-            info!("Compressing and writing {} to vortex", f.to_str().unwrap());
-            let from_vortex = compress_parquet_to_vortex(f.as_path()).unwrap();
+            info!("Compressing and writing {} to vortex", f.to_str().unwrap_or("None"));
+            let from_vortex = compress_parquet_to_vortex(f.as_path())?;
             let vx_size = from_vortex.nbytes();
 
             info!(

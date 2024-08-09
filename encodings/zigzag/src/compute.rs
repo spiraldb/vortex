@@ -2,7 +2,7 @@ use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{slice, ArrayCompute, SliceFn};
 use vortex::{Array, IntoArray};
 use vortex_dtype::PType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar};
 use zigzag::ZigZag as ExternalZigZag;
 
@@ -21,12 +21,40 @@ impl ArrayCompute for ZigZagArray {
 impl ScalarAtFn for ZigZagArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let scalar = scalar_at(&self.encoded(), index)?;
+        if scalar.is_null() {
+            return Ok(scalar);
+        }
+
         let pscalar = PrimitiveScalar::try_from(&scalar)?;
         match pscalar.ptype() {
-            PType::U8 => Ok(i8::decode(pscalar.typed_value::<u8>().unwrap()).into()),
-            PType::U16 => Ok(i16::decode(pscalar.typed_value::<u16>().unwrap()).into()),
-            PType::U32 => Ok(i32::decode(pscalar.typed_value::<u32>().unwrap()).into()),
-            PType::U64 => Ok(i64::decode(pscalar.typed_value::<u64>().unwrap()).into()),
+            PType::U8 => Ok(i8::decode(pscalar.typed_value::<u8>().ok_or_else(|| {
+                vortex_err!(
+                    "Cannot decode provided scalar: expected u8, got ptype {}",
+                    pscalar.ptype()
+                )
+            })?)
+            .into()),
+            PType::U16 => Ok(i16::decode(pscalar.typed_value::<u16>().ok_or_else(|| {
+                vortex_err!(
+                    "Cannot decode provided scalar: expected u16, got ptype {}",
+                    pscalar.ptype()
+                )
+            })?)
+            .into()),
+            PType::U32 => Ok(i32::decode(pscalar.typed_value::<u32>().ok_or_else(|| {
+                vortex_err!(
+                    "Cannot decode provided scalar: expected u32, got ptype {}",
+                    pscalar.ptype()
+                )
+            })?)
+            .into()),
+            PType::U64 => Ok(i64::decode(pscalar.typed_value::<u64>().ok_or_else(|| {
+                vortex_err!(
+                    "Cannot decode provided scalar: expected u64, got ptype {}",
+                    pscalar.ptype()
+                )
+            })?)
+            .into()),
             _ => unreachable!(),
         }
     }
