@@ -9,11 +9,17 @@ use crate::{Array, ArrayDType, IntoArray};
 impl FillForwardFn for BoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         let validity = self.logical_validity();
-        if self.dtype().nullability() == Nullability::NonNullable || validity.all_valid() || validity.all_invalid() {
+        if self.dtype().nullability() == Nullability::NonNullable
+            || validity.all_valid()
+            || validity.all_invalid()
+        {
             return Ok(self.clone().into());
-        } 
+        }
 
-        let validity = self.logical_validity().to_null_buffer()?.ok_or_else(|| vortex_err!("Failed to convert array validity to null buffer"))?;
+        let validity = self
+            .logical_validity()
+            .to_null_buffer()?
+            .ok_or_else(|| vortex_err!("Failed to convert array validity to null buffer"))?;
         let bools = self.boolean_buffer();
         let mut last_value = false;
         let filled = bools

@@ -70,7 +70,12 @@ impl StructArrayTrait for ChunkedArray {
 
         let projected_dtype = self.dtype().as_struct().and_then(|s| s.dtypes().get(idx))?;
         let chunked = ChunkedArray::try_new(chunks, projected_dtype.clone())
-            .unwrap_or_else(|err| panic!("Failed to create new chunked array with dtype {}: {}", projected_dtype, err))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to create new chunked array with dtype {}: {}",
+                    projected_dtype, err
+                )
+            })
             .into_array();
         Some(chunked)
     }

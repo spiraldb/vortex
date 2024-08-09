@@ -112,15 +112,13 @@ impl BitPackedArray {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        (self.metadata().patches_len > 0).then_some(
-            self.array()
-                .child(
-                    1,
-                    &self.dtype().with_nullability(Nullability::Nullable),
-                    self.metadata().patches_len,
-                )
-                .unwrap_or_else(|| panic!("Missing patches array")),
-            )
+        (self.metadata().patches_len > 0)
+            .then_some(self.array().child(
+                1,
+                &self.dtype().with_nullability(Nullability::Nullable),
+                self.metadata().patches_len,
+            ))
+            .flatten()
     }
 
     #[inline]

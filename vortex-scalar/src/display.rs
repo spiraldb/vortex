@@ -12,7 +12,11 @@ impl Display for Scalar {
             DType::Null => write!(f, "null"),
             DType::Bool(_) => match BoolScalar::try_from(self)
                 .map_err(|err| {
-                    debug_assert!(false, "failed to parse bool from scalar with DType Bool: {}", err);
+                    debug_assert!(
+                        false,
+                        "failed to parse bool from scalar with DType Bool: {}",
+                        err
+                    );
                     std::fmt::Error
                 })?
                 .value()

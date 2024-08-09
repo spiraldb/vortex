@@ -20,7 +20,9 @@ impl TryFrom<fb::DType<'_>> for DType {
                     .into(),
             )),
             fb::Type::Primitive => {
-                let fb_primitive = fb.type__as_primitive().ok_or_else(|| vortex_err!("failed to parse primitive from flatbuffer"))?;
+                let fb_primitive = fb
+                    .type__as_primitive()
+                    .ok_or_else(|| vortex_err!("failed to parse primitive from flatbuffer"))?;
                 Ok(Self::Primitive(
                     fb_primitive.ptype().try_into()?,
                     fb_primitive.nullable().into(),
@@ -39,15 +41,21 @@ impl TryFrom<fb::DType<'_>> for DType {
                     .into(),
             )),
             fb::Type::List => {
-                let fb_list = fb.type__as_list().ok_or_else(|| vortex_err!("failed to parse list from flatbuffer"))?;
-                let element_dtype = Self::try_from(fb_list.element_type().ok_or_else(|| vortex_err!("failed to parse list element type from flatbuffer"))?)?;
+                let fb_list = fb
+                    .type__as_list()
+                    .ok_or_else(|| vortex_err!("failed to parse list from flatbuffer"))?;
+                let element_dtype = Self::try_from(fb_list.element_type().ok_or_else(|| {
+                    vortex_err!("failed to parse list element type from flatbuffer")
+                })?)?;
                 Ok(Self::List(
                     Arc::new(element_dtype),
                     fb_list.nullable().into(),
                 ))
             }
             fb::Type::Struct_ => {
-                let fb_struct = fb.type__as_struct_().ok_or_else(|| vortex_err!("failed to parse struct from flatbuffer"))?;
+                let fb_struct = fb
+                    .type__as_struct_()
+                    .ok_or_else(|| vortex_err!("failed to parse struct from flatbuffer"))?;
                 let names = fb_struct
                     .names()
                     .ok_or_else(|| vortex_err!("failed to parse struct names from flatbuffer"))?
@@ -67,8 +75,13 @@ impl TryFrom<fb::DType<'_>> for DType {
                 ))
             }
             fb::Type::Extension => {
-                let fb_ext = fb.type__as_extension().ok_or_else(|| vortex_err!("failed to parse extension from flatbuffer"))?;
-                let id = ExtID::from(fb_ext.id().ok_or_else(|| vortex_err!("failed to parse extension id from flatbuffer"))?);
+                let fb_ext = fb
+                    .type__as_extension()
+                    .ok_or_else(|| vortex_err!("failed to parse extension from flatbuffer"))?;
+                let id =
+                    ExtID::from(fb_ext.id().ok_or_else(|| {
+                        vortex_err!("failed to parse extension id from flatbuffer")
+                    })?);
                 let metadata = fb_ext.metadata().map(|m| ExtMetadata::from(m.bytes()));
                 Ok(Self::Extension(
                     ExtDType::new(id, metadata),
