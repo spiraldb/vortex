@@ -45,7 +45,7 @@ impl TakeFn for RunEndBoolArray {
                     if idx >= self.len() {
                         vortex_bail!(OutOfBounds: idx, 0, self.len())
                     }
-                    self.find_physical_index(idx).map(|loc| loc as u64)
+                    self.find_physical_index(idx)
                 })
                 .collect::<VortexResult<Vec<_>>>()?
         });
