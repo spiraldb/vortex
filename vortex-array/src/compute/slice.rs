@@ -11,10 +11,10 @@ pub trait SliceFn {
 }
 
 /// Return a zero-copy slice of an array, between `start` (inclusive) and `end` (exclusive).
-/// 
+///
 ///
 /// # Errors
-/// 
+///
 /// Slicing returns an error if you attempt to slice a range that exceeds the bounds of the
 /// underlying array.
 ///

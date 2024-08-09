@@ -101,9 +101,10 @@ impl SessionContextExt for SessionContext {
         options: VortexMemTableOptions,
     ) -> DFResult<()> {
         if !array.dtype().is_struct() {
-            return Err(DataFusionError::External(
-                Box::new(vortex_err!("Vortex arrays must have struct type, found {}", array.dtype()))
-            ));
+            return Err(DataFusionError::External(Box::new(vortex_err!(
+                "Vortex arrays must have struct type, found {}",
+                array.dtype()
+            ))));
         }
 
         let vortex_table = VortexMemTable::new(array, options);
@@ -117,9 +118,10 @@ impl SessionContextExt for SessionContext {
         options: VortexMemTableOptions,
     ) -> DFResult<DataFrame> {
         if !array.dtype().is_struct() {
-            return Err(DataFusionError::External(
-                Box::new(vortex_err!("Vortex arrays must have struct type, found {}", array.dtype()))
-            ));
+            return Err(DataFusionError::External(Box::new(vortex_err!(
+                "Vortex arrays must have struct type, found {}",
+                array.dtype()
+            ))));
         }
 
         let vortex_table = VortexMemTable::new(array, options);

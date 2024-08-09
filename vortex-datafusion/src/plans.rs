@@ -125,9 +125,10 @@ impl ExecutionPlan for RowSelectorExec {
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
         if partition != 0 {
-            return Err(DataFusionError::External(
-                Box::new(vortex_err!("Single partitioning only supported by RowSelectorExec, got partition {}", partition))
-            ));
+            return Err(DataFusionError::External(Box::new(vortex_err!(
+                "Single partitioning only supported by RowSelectorExec, got partition {}",
+                partition
+            ))));
         }
 
         // Derive a schema using the provided set of fields.

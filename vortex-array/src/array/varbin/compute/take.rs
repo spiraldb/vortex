@@ -12,7 +12,10 @@ impl TakeFn for VarBinArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         // TODO(ngates): support i64 indices.
         if indices.len() >= i32::MAX as usize {
-            vortex_bail!("indices.len() ({}) must be less than i32::MAX", indices.len());
+            vortex_bail!(
+                "indices.len() ({}) must be less than i32::MAX",
+                indices.len()
+            );
         }
 
         let offsets = self.offsets().into_primitive()?;
