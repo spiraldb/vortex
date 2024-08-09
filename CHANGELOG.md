@@ -6,6 +6,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-serde` - [0.6.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.5.0...vortex-serde-v0.6.0) - 2024-08-09
+
+### Other
+- Only deserialize the required dtypes by projection from the footer ([#569](https://github.com/spiraldb/vortex/pull/569))
+
+## `vortex-buffer` - [0.6.0](https://github.com/spiraldb/vortex/compare/vortex-buffer-v0.5.0...vortex-buffer-v0.6.0) - 2024-08-09
+
+### Other
+- enforce docstrings in vortex-buffer ([#575](https://github.com/spiraldb/vortex/pull/575))
+
+## `vortex-array` - [0.6.0](https://github.com/spiraldb/vortex/compare/vortex-array-v0.5.0...vortex-array-v0.6.0) - 2024-08-09
+
+### Other
+- Remove to_present_null_buffer from LogicalValidity ([#579](https://github.com/spiraldb/vortex/pull/579))
+
 ## `vortex-runend-bool` - [0.5.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.4.12...vortex-runend-bool-v0.5.0) - 2024-08-08
 
 ### Other
