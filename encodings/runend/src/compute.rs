@@ -3,7 +3,7 @@ use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::RunEndArray;
@@ -35,9 +35,12 @@ impl TakeFn for RunEndArray {
             primitive_indices
                 .maybe_null_slice::<$P>()
                 .iter()
+                .map(|idx| *idx as usize)
                 .map(|idx| {
-                    self.find_physical_index(*idx as usize)
-                        .map(|loc| loc as u64)
+                    if idx >= self.len() {
+                        vortex_bail!(OutOfBounds: idx, 0, self.len())
+                    }
+                    self.find_physical_index(idx).map(|loc| loc as u64)
                 })
                 .collect::<VortexResult<Vec<_>>>()?
         });
@@ -52,6 +55,7 @@ impl SliceFn for RunEndArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let slice_begin = self.find_physical_index(start)?;
         let slice_end = self.find_physical_index(stop)?;
+
         Ok(Self::with_offset_and_size(
             slice(&self.ends(), slice_begin, slice_end + 1)?,
             slice(&self.values(), slice_begin, slice_end + 1)?,
@@ -67,20 +71,46 @@ impl SliceFn for RunEndArray {
 mod test {
     use vortex::array::PrimitiveArray;
     use vortex::compute::take;
-    use vortex::{IntoArrayVariant, ToArray};
+    use vortex::compute::unary::scalar_at;
+    use vortex::{Array, IntoArray, IntoArrayVariant, ToArray};
 
     use crate::RunEndArray;
 
-    #[test]
-    fn ree_take() {
-        let ree = RunEndArray::encode(
+    fn ree_array() -> Array {
+        RunEndArray::encode(
             PrimitiveArray::from(vec![1, 1, 1, 4, 4, 4, 2, 2, 5, 5, 5, 5]).to_array(),
         )
-        .unwrap();
-        let taken = take(ree.array(), PrimitiveArray::from(vec![9, 8, 1, 3]).array()).unwrap();
+        .unwrap()
+        .into_array()
+    }
+
+    #[test]
+    fn ree_take() {
+        let taken = take(&ree_array(), PrimitiveArray::from(vec![9, 8, 1, 3]).array()).unwrap();
         assert_eq!(
             taken.into_primitive().unwrap().maybe_null_slice::<i32>(),
             &[5, 5, 1, 4]
         );
+    }
+
+    #[test]
+    fn ree_take_end() {
+        let taken = take(&ree_array(), PrimitiveArray::from(vec![11]).array()).unwrap();
+        assert_eq!(
+            taken.into_primitive().unwrap().maybe_null_slice::<i32>(),
+            &[5]
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn ree_take_out_of_bounds() {
+        take(&ree_array(), PrimitiveArray::from(vec![12]).array()).unwrap();
+    }
+
+    #[test]
+    fn ree_scalar_at_end() {
+        let scalar = scalar_at(&ree_array(), 11).unwrap();
+        assert_eq!(scalar, 5.into());
     }
 }

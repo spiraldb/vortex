@@ -1,10 +1,13 @@
+use std::collections::HashSet;
+
 use vortex::array::PrimitiveArray;
+use vortex::encoding::EncodingRef;
 use vortex::stats::{trailing_zeros, ArrayStatistics};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
-use vortex_fastlanes::{for_compress, FoR, FoRArray};
+use vortex_fastlanes::{for_compress, FoR, FoRArray, FoREncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -59,5 +62,9 @@ impl EncodingCompressor for FoRCompressor {
             FoRArray::try_new(compressed_child.array, min, shift).map(|a| a.into_array())?,
             Some(CompressionTree::new(self, vec![compressed_child.path])),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&FoREncoding as EncodingRef])
     }
 }

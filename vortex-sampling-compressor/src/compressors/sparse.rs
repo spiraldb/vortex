@@ -1,4 +1,7 @@
-use vortex::array::{Sparse, SparseArray};
+use std::collections::HashSet;
+
+use vortex::array::{Sparse, SparseArray, SparseEncoding};
+use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 
@@ -46,5 +49,9 @@ impl EncodingCompressor for SparseCompressor {
             .into_array(),
             Some(CompressionTree::new(self, vec![indices.path, values.path])),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&SparseEncoding as EncodingRef])
     }
 }

@@ -8,9 +8,9 @@ impl SliceFn for SparseArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         // Find the index of the first patch index that is greater than or equal to the offset of this array
         let index_start_index =
-            search_sorted(&self.indices(), start, SearchSortedSide::Left)?.to_zero_offset_index();
+            search_sorted(&self.indices(), start, SearchSortedSide::Left)?.to_index();
         let index_end_index =
-            search_sorted(&self.indices(), stop, SearchSortedSide::Left)?.to_zero_offset_index();
+            search_sorted(&self.indices(), stop, SearchSortedSide::Left)?.to_index();
 
         Ok(Self::try_new_with_offset(
             slice(&self.indices(), index_start_index, index_end_index)?,

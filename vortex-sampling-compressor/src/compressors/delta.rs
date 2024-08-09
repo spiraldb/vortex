@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
 use vortex::array::PrimitiveArray;
+use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
-use vortex_fastlanes::{delta_compress, Delta, DeltaArray};
+use vortex_fastlanes::{delta_compress, Delta, DeltaArray, DeltaEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -50,5 +53,9 @@ impl EncodingCompressor for DeltaCompressor {
             DeltaArray::try_new(bases.array, deltas.array, validity)?.into_array(),
             Some(CompressionTree::new(self, vec![bases.path, deltas.path])),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&DeltaEncoding as EncodingRef])
     }
 }

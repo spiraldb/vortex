@@ -9,6 +9,7 @@ use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, PlanProperties,
 };
+use vortex::Context;
 
 use crate::persistent::opener::VortexFileOpener;
 
@@ -18,6 +19,7 @@ pub struct VortexExec {
     metrics: ExecutionPlanMetricsSet,
     predicate: Option<Arc<dyn PhysicalExpr>>,
     plan_properties: PlanProperties,
+    ctx: Arc<Context>,
 }
 
 impl VortexExec {
@@ -26,6 +28,7 @@ impl VortexExec {
         metrics: ExecutionPlanMetricsSet,
         projection: Option<&Vec<usize>>,
         predicate: Option<Arc<dyn PhysicalExpr>>,
+        ctx: Arc<Context>,
     ) -> DFResult<Self> {
         let projected_schema = project_schema(&file_scan_config.file_schema, projection)?;
         let plan_properties = PlanProperties::new(
@@ -39,6 +42,7 @@ impl VortexExec {
             metrics,
             predicate,
             plan_properties,
+            ctx,
         })
     }
     pub(crate) fn into_arc(self) -> Arc<dyn ExecutionPlan> {
@@ -91,6 +95,7 @@ impl ExecutionPlan for VortexExec {
         let arrow_schema = self.file_scan_config.file_schema.clone();
 
         let opener = VortexFileOpener {
+            ctx: self.ctx.clone(),
             object_store,
             projection: self.file_scan_config.projection.clone(),
             batch_size: None,

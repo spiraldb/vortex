@@ -1,5 +1,8 @@
-use vortex::array::{Constant, ConstantArray};
+use std::collections::HashSet;
+
+use vortex::array::{Constant, ConstantArray, ConstantEncoding};
 use vortex::compute::unary::scalar_at;
+use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
@@ -30,5 +33,9 @@ impl EncodingCompressor for ConstantCompressor {
             ConstantArray::new(scalar_at(array, 0)?, array.len()).into_array(),
             Some(CompressionTree::flat(self)),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&ConstantEncoding as EncodingRef])
     }
 }

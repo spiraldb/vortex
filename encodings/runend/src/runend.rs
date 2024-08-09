@@ -72,8 +72,13 @@ impl RunEndArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
-            .map(|s| s.to_non_zero_offset_index(self.ends().len()))
+        let searched_index =
+            search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)?.to_index();
+        Ok(if searched_index == self.ends().len() {
+            searched_index - 1
+        } else {
+            searched_index
+        })
     }
 
     pub fn encode(array: Array) -> VortexResult<Self> {
@@ -207,6 +212,32 @@ mod test {
         assert_eq!(
             arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
             vec![2, 2, 3, 3, 3]
+        );
+    }
+
+    #[test]
+    fn slice_end_inclusive() {
+        let arr = slice(
+            RunEndArray::try_new(
+                vec![2u32, 5, 10].into_array(),
+                vec![1i32, 2, 3].into_array(),
+                Validity::NonNullable,
+            )
+            .unwrap()
+            .array(),
+            4,
+            10,
+        )
+        .unwrap();
+        assert_eq!(
+            arr.dtype(),
+            &DType::Primitive(PType::I32, Nullability::NonNullable)
+        );
+        assert_eq!(arr.len(), 6);
+
+        assert_eq!(
+            arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
+            vec![2, 3, 3, 3, 3, 3]
         );
     }
 

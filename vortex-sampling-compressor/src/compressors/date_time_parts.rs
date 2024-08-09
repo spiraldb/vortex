@@ -1,7 +1,12 @@
+use std::collections::HashSet;
+
 use vortex::array::temporal::TemporalMetadata;
 use vortex::array::TemporalArray;
+use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
-use vortex_datetime_parts::{compress_temporal, DateTimeParts, DateTimePartsArray};
+use vortex_datetime_parts::{
+    compress_temporal, DateTimeParts, DateTimePartsArray, DateTimePartsEncoding,
+};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
@@ -57,5 +62,9 @@ impl EncodingCompressor for DateTimePartsCompressor {
                 vec![days.path, seconds.path, subsecond.path],
             )),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&DateTimePartsEncoding as EncodingRef])
     }
 }

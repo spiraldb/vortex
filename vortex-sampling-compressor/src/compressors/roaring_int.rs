@@ -1,7 +1,10 @@
+use std::collections::HashSet;
+
+use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_error::VortexResult;
-use vortex_roaring::{roaring_int_encode, RoaringInt};
+use vortex_roaring::{roaring_int_encode, RoaringInt, RoaringIntEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -51,5 +54,9 @@ impl EncodingCompressor for RoaringIntCompressor {
             roaring_int_encode(array.clone().into_primitive()?)?.into_array(),
             Some(CompressionTree::flat(self)),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&RoaringIntEncoding as EncodingRef])
     }
 }

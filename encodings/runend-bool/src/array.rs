@@ -67,11 +67,13 @@ impl RunEndBoolArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        if index > self.len() {
-            vortex_bail!("Index must be in array slice",);
-        }
-        search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
-            .map(|s| s.to_non_zero_offset_index(self.ends().len()))
+        let searched_index =
+            search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)?.to_index();
+        Ok(if searched_index == self.ends().len() {
+            searched_index - 1
+        } else {
+            searched_index
+        })
     }
 
     pub fn validity(&self) -> Validity {

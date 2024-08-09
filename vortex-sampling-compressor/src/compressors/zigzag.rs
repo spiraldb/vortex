@@ -1,8 +1,11 @@
+use std::collections::HashSet;
+
 use vortex::array::PrimitiveArray;
+use vortex::encoding::EncodingRef;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
-use vortex_zigzag::{zigzag_encode, ZigZag, ZigZagArray};
+use vortex_zigzag::{zigzag_encode, ZigZag, ZigZagArray, ZigZagEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -50,5 +53,9 @@ impl EncodingCompressor for ZigZagCompressor {
             ZigZagArray::new(compressed.array).into_array(),
             Some(CompressionTree::new(self, vec![compressed.path])),
         ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        HashSet::from([&ZigZagEncoding as EncodingRef])
     }
 }
