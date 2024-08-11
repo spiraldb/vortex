@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::datasource::physical_plan::FileScanConfig;
 use datafusion::datasource::TableProvider;
-use datafusion::execution::context::SessionState;
 use datafusion_common::{
     project_schema, DataFusionError, Result as DFResult, Statistics, ToDFSchema,
 };
@@ -54,7 +54,7 @@ impl TableProvider for VortexFileTableProvider {
 
     async fn scan(
         &self,
-        state: &SessionState,
+        state: &dyn Session,
         projection: Option<&Vec<usize>>,
         filters: &[Expr],
         _limit: Option<usize>,
