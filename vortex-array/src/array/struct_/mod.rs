@@ -79,7 +79,7 @@ impl StructArray {
             .map(|(name, _)| FieldName::from(name.as_ref()))
             .collect();
         let fields: Vec<Array> = items.iter().map(|(_, array)| array.clone()).collect();
-        let len = fields.first().unwrap().len();
+        let len = fields.first().map(|f| f.len()).unwrap_or(0);
 
         Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)
             .expect("building StructArray with helper")
