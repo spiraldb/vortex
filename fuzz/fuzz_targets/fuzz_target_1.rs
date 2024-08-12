@@ -111,6 +111,7 @@ fn random_array(u: &mut Unstructured) -> Array {
         9 => random_primitive::<f64>(u),
         10 => random_bool(u),
         11 => random_string(u),
+        12 => random_bytes(u),
         _ => unreachable!(),
     }
 }
@@ -120,6 +121,15 @@ fn random_string(u: &mut Unstructured) -> Array {
     match u.int_in_range(0..=1).unwrap() {
         0 => VarBinArray::from_iter(v.into_iter(), DType::Utf8(Nullability::Nullable)).into_array(),
         1 => VarBinViewArray::from_iter_nullable_str(v).into_array(),
+        _ => unreachable!(),
+    }
+}
+
+fn random_bytes(u: &mut Unstructured) -> Array {
+    let v = Vec::<Option<Vec<u8>>>::arbitrary(u).unwrap();
+    match u.int_in_range(0..=1).unwrap() {
+        0 => VarBinArray::from_iter(v.into_iter(), DType::Utf8(Nullability::Nullable)).into_array(),
+        1 => VarBinViewArray::from_iter_nullable_bin(v).into_array(),
         _ => unreachable!(),
     }
 }
