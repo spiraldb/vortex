@@ -7,6 +7,12 @@ use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray};
+use vortex_sampling_compressor::compressors::alp::ALPCompressor;
+use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
+use vortex_sampling_compressor::compressors::dict::DictCompressor;
+use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
+use vortex_sampling_compressor::compressors::EncodingCompressor;
+use vortex_sampling_compressor::SamplingCompressor;
 
 fuzz_target!(|data: &[u8]| {
     let mut u = Unstructured::new(data);
@@ -19,10 +25,75 @@ fuzz_target!(|data: &[u8]| {
         return;
     }
 
-    let start = u.choose_index(array.len()).unwrap();
-    let stop = u.choose_index(array.len() - start).unwrap() + start;
-    let slice = slice(&array, start, stop).unwrap();
-    assert_slice(&array, &slice, start);
+    match u.int_in_range(0..=4).unwrap() {
+        0 => {
+            let start = u.choose_index(array.len()).unwrap();
+            let stop = u.choose_index(array.len() - start).unwrap() + start;
+            let slice = slice(&array, start, stop).unwrap();
+            assert_slice(&array, &slice, start);
+        }
+        1 => {
+            println!("alp");
+            // lets compress
+            let ctx = SamplingCompressor::default();
+            let compressed_array = match ALPCompressor
+                .can_compress(&array)
+                .map(|compressor| compressor.compress(&array, None, ctx))
+            {
+                Some(r) => r.unwrap(),
+                None => return,
+            }
+            .into_array();
+
+            assert_array_eq(&array, &compressed_array);
+        }
+        2 => {
+            println!("bitpacked");
+            // lets compress
+            let ctx = SamplingCompressor::default();
+            let compressed_array = match BitPackedCompressor
+                .can_compress(&array)
+                .map(|compressor| compressor.compress(&array, None, ctx))
+            {
+                Some(r) => r.unwrap(),
+                None => return,
+            }
+            .into_array();
+
+            assert_array_eq(&array, &compressed_array);
+        }
+        3 => {
+            println!("dict");
+            // lets compress
+            let ctx = SamplingCompressor::default();
+            let compressed_array = match DictCompressor
+                .can_compress(&array)
+                .map(|compressor| compressor.compress(&array, None, ctx))
+            {
+                Some(r) => r.unwrap(),
+                None => return,
+            }
+            .into_array();
+
+            assert_array_eq(&array, &compressed_array);
+        }
+        4 => {
+            println!("for");
+            // lets compress
+            let ctx = SamplingCompressor::default();
+            let compressed_array = match FoRCompressor
+                .can_compress(&array)
+                .map(|compressor| compressor.compress(&array, None, ctx))
+            {
+                Some(r) => r.unwrap(),
+                None => return,
+            }
+            .into_array();
+
+            assert_array_eq(&array, &compressed_array);
+        }
+        _ => unreachable!(),
+    }
 });
 
 fn random_array(u: &mut Unstructured) -> Option<Array> {
@@ -92,5 +163,16 @@ fn assert_slice(original: &Array, slice: &Array, start: usize) {
         let s = scalar_at(&slice, idx).unwrap();
 
         assert_eq!(o, s);
+    }
+}
+
+fn assert_array_eq(lhs: &Array, rhs: &Array) {
+    assert_eq!(lhs.len(), rhs.len());
+    for idx in 0..lhs.len() {
+        let l = scalar_at(&lhs, idx).unwrap();
+        let r = scalar_at(&rhs, idx).unwrap();
+
+        assert_eq!(l.value(), r.value());
+        assert_eq!(l.is_valid(), r.is_valid());
     }
 }
