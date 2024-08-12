@@ -161,6 +161,41 @@ impl Array {
             futures_util::stream::once(ready(Ok(self))),
         )
     }
+
+    #[inline]
+    pub fn with_dyn<R, F>(&self, mut f: F) -> R
+    where
+        F: FnMut(&dyn ArrayTrait) -> R,
+    {
+        let mut result = None;
+
+        self.encoding()
+            .with_dyn(self, &mut |array| {
+                // Sanity check that the encoding implements the correct array trait
+                debug_assert!(
+                    match array.dtype() {
+                        DType::Null => array.as_null_array().is_some(),
+                        DType::Bool(_) => array.as_bool_array().is_some(),
+                        DType::Primitive(..) => array.as_primitive_array().is_some(),
+                        DType::Utf8(_) => array.as_utf8_array().is_some(),
+                        DType::Binary(_) => array.as_binary_array().is_some(),
+                        DType::Struct(..) => array.as_struct_array().is_some(),
+                        DType::List(..) => array.as_list_array().is_some(),
+                        DType::Extension(..) => array.as_extension_array().is_some(),
+                    },
+                    "Encoding {} does not implement the variant trait for {}",
+                    self.encoding().id(),
+                    array.dtype()
+                );
+
+                result = Some(f(array));
+                Ok(())
+            })
+            .unwrap();
+
+        // Now we unwrap the optional, which we know to be populated by the closure.
+        result.unwrap()
+    }
 }
 
 /// A depth-first pre-order iterator over a ArrayData.
@@ -240,43 +275,6 @@ impl ArrayVisitor for NBytesVisitor {
     fn visit_buffer(&mut self, buffer: &Buffer) -> VortexResult<()> {
         self.0 += buffer.len();
         Ok(())
-    }
-}
-
-impl Array {
-    #[inline]
-    pub fn with_dyn<R, F>(&self, mut f: F) -> R
-    where
-        F: FnMut(&dyn ArrayTrait) -> R,
-    {
-        let mut result = None;
-
-        self.encoding()
-            .with_dyn(self, &mut |array| {
-                // Sanity check that the encoding implements the correct array trait
-                debug_assert!(
-                    match array.dtype() {
-                        DType::Null => array.as_null_array().is_some(),
-                        DType::Bool(_) => array.as_bool_array().is_some(),
-                        DType::Primitive(..) => array.as_primitive_array().is_some(),
-                        DType::Utf8(_) => array.as_utf8_array().is_some(),
-                        DType::Binary(_) => array.as_binary_array().is_some(),
-                        DType::Struct(..) => array.as_struct_array().is_some(),
-                        DType::List(..) => array.as_list_array().is_some(),
-                        DType::Extension(..) => array.as_extension_array().is_some(),
-                    },
-                    "Encoding {} does not implement the variant trait for {}",
-                    self.encoding().id(),
-                    array.dtype()
-                );
-
-                result = Some(f(array));
-                Ok(())
-            })
-            .unwrap();
-
-        // Now we unwrap the optional, which we know to be populated by the closure.
-        result.unwrap()
     }
 }
 

@@ -27,12 +27,13 @@ use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant};
 use vortex_error::vortex_err;
 
+pub mod expr;
 pub mod memory;
 pub mod persistent;
+pub mod scalar;
 
 mod datatype;
 mod eval;
-mod expr;
 mod plans;
 
 const SUPPORTED_BINARY_OPS: &[Operator] = &[
