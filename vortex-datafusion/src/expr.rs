@@ -13,7 +13,7 @@ use vortex::array::{ConstantArray, StructArray};
 use vortex::compute::compare;
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, IntoArray};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
@@ -100,29 +100,7 @@ impl VortexPhysicalExpr for BinaryExpr {
             DFOperator::GtEq => compare(&lhs, &rhs, Operator::Gte)?,
             DFOperator::And => vortex::compute::and(&lhs, &rhs)?,
             DFOperator::Or => vortex::compute::or(&lhs, &rhs)?,
-            DFOperator::Plus => todo!(),
-            DFOperator::Minus => todo!(),
-            DFOperator::Multiply => todo!(),
-            DFOperator::Divide => todo!(),
-            DFOperator::Modulo => todo!(),
-            DFOperator::IsDistinctFrom => todo!(),
-            DFOperator::IsNotDistinctFrom => todo!(),
-            DFOperator::RegexMatch => todo!(),
-            DFOperator::RegexIMatch => todo!(),
-            DFOperator::RegexNotMatch => todo!(),
-            DFOperator::RegexNotIMatch => todo!(),
-            DFOperator::LikeMatch => todo!(),
-            DFOperator::ILikeMatch => todo!(),
-            DFOperator::NotLikeMatch => todo!(),
-            DFOperator::NotILikeMatch => todo!(),
-            DFOperator::BitwiseAnd => todo!(),
-            DFOperator::BitwiseOr => todo!(),
-            DFOperator::BitwiseXor => todo!(),
-            DFOperator::BitwiseShiftRight => todo!(),
-            DFOperator::BitwiseShiftLeft => todo!(),
-            DFOperator::StringConcat => todo!(),
-            DFOperator::AtArrow => todo!(),
-            DFOperator::ArrowAt => todo!(),
+            _ => vortex_bail!("{} is not a supported DF operator in Vortex", self.operator),
         };
 
         Ok(array)
@@ -140,7 +118,7 @@ pub fn convert_expr_to_vortex(
     input_schema: &Schema,
 ) -> VortexResult<Arc<dyn VortexPhysicalExpr>> {
     if physical_expr.data_type(input_schema).unwrap().is_temporal() {
-        vortex_bail!("Doesn't support evaluating operations over temporal values")
+        vortex_bail!("Doesn't support evaluating operations over temporal values");
     }
     if let Some(binary_expr) = physical_expr
         .as_any()
