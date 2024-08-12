@@ -1,7 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::arbitrary::{Arbitrary, Unstructured};
-use libfuzzer_sys::fuzz_target;
+use libfuzzer_sys::{fuzz_target, Corpus};
 use vortex::array::PrimitiveArray;
 use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
@@ -14,15 +14,13 @@ use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
 use vortex_sampling_compressor::compressors::EncodingCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
 
-fuzz_target!(|data: &[u8]| {
+fuzz_target!(|data: &[u8]| -> Corpus {
     let mut u = Unstructured::new(data);
 
-    let Some(array) = random_array(&mut u) else {
-        return;
-    };
+    let array = random_array(&mut u);
 
     if array.len() == 0 {
-        return;
+        return Corpus::Reject;
     }
 
     match u.int_in_range(0..=4).unwrap() {
@@ -41,7 +39,7 @@ fuzz_target!(|data: &[u8]| {
                 .map(|compressor| compressor.compress(&array, None, ctx))
             {
                 Some(r) => r.unwrap(),
-                None => return,
+                None => return Corpus::Reject,
             }
             .into_array();
 
@@ -56,7 +54,7 @@ fuzz_target!(|data: &[u8]| {
                 .map(|compressor| compressor.compress(&array, None, ctx))
             {
                 Some(r) => r.unwrap(),
-                None => return,
+                None => return Corpus::Reject,
             }
             .into_array();
 
@@ -71,7 +69,7 @@ fuzz_target!(|data: &[u8]| {
                 .map(|compressor| compressor.compress(&array, None, ctx))
             {
                 Some(r) => r.unwrap(),
-                None => return,
+                None => return Corpus::Reject,
             }
             .into_array();
 
@@ -86,7 +84,7 @@ fuzz_target!(|data: &[u8]| {
                 .map(|compressor| compressor.compress(&array, None, ctx))
             {
                 Some(r) => r.unwrap(),
-                None => return,
+                None => return Corpus::Reject,
             }
             .into_array();
 
@@ -94,51 +92,53 @@ fuzz_target!(|data: &[u8]| {
         }
         _ => unreachable!(),
     }
+
+    Corpus::Keep
 });
 
-fn random_array(u: &mut Unstructured) -> Option<Array> {
-    match u8::arbitrary(u).unwrap() {
+fn random_array(u: &mut Unstructured) -> Array {
+    match u.int_in_range(0..=7).unwrap() {
         0 => {
             let v = Vec::<u8>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
         1 => {
             let v = Vec::<u16>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
         2 => {
             let v = Vec::<u32>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
         3 => {
             let v = Vec::<u64>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
         4 => {
             let v = Vec::<i8>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
         5 => {
             let v = Vec::<i16>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
         6 => {
             let v = Vec::<i32>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
         7 => {
             let v = Vec::<i64>::arbitrary(u).unwrap();
             let validity = random_validity(u, v.len());
-            Some(PrimitiveArray::from_vec(v, validity).into_array())
+            PrimitiveArray::from_vec(v, validity).into_array()
         }
-        _ => None,
+        _ => unreachable!(),
     }
 }
 
