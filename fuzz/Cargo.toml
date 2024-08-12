@@ -9,6 +9,7 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+vortex-array = { workspace = true }
 
 
 [[bin]]
