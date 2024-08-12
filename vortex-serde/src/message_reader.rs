@@ -257,9 +257,11 @@ impl ArrayBufferReader {
                 Ok(Some(bytes.get_u32_le() as usize))
             }
             ReadState::ReadingFb => {
-                let batch = root::<fb::Message>(&bytes)?
-                    .header_as_batch()
-                    .ok_or_else(|| vortex_err!("Message was not a batch"))?;
+                let batch = unsafe {
+                    root_unchecked::<fb::Message>(&bytes)?
+                        .header_as_batch()
+                        .ok_or_else(|| vortex_err!("Message was not a batch"))?
+                };
                 let buffer_size = batch.buffer_size() as usize;
                 self.fb_msg = Some(Buffer::from(bytes));
                 self.state = ReadState::ReadingBuffers;
