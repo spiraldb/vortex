@@ -50,7 +50,7 @@ pub trait VortexPhysicalExpr: Send + Sync {
     fn evaluate(&self, array: &Array) -> VortexResult<Array>;
 }
 
-pub struct NoOp {}
+pub struct NoOp;
 
 pub struct BinaryExpr {
     left: Arc<dyn VortexPhysicalExpr>,
@@ -109,7 +109,7 @@ impl VortexPhysicalExpr for BinaryExpr {
 
 impl VortexPhysicalExpr for NoOp {
     fn evaluate(&self, _array: &Array) -> VortexResult<Array> {
-        unimplemented!()
+        vortex_bail!("NoOp::evaluate() should not be called")
     }
 }
 
@@ -155,6 +155,14 @@ pub fn convert_expr_to_vortex(
         return Ok(Arc::new(Literal {
             scalar_value: value,
         }) as _);
+    }
+
+    if physical_expr
+        .as_any()
+        .downcast_ref::<datafusion_physical_expr::expressions::NoOp>()
+        .is_some()
+    {
+        return Ok(Arc::new(NoOp));
     }
 
     vortex_bail!("Couldn't convert DataFusion physical expression to a vortex expression")
