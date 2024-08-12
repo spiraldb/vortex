@@ -17,7 +17,7 @@ impl OrFn for BoolArray {
 
         let array = boolean::or(lhs, rhs)?;
 
-        Ok(Array::from_arrow(&array, false))
+        Ok(Array::from_arrow(&array, true))
     }
 }
 
@@ -31,6 +31,6 @@ impl AndFn for BoolArray {
 
         let array = boolean::and(lhs, rhs)?;
 
-        Ok(Array::from_arrow(&array, false))
+        Ok(Array::from_arrow(&array, true))
     }
 }

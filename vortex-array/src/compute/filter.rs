@@ -23,7 +23,7 @@ pub trait FilterFn {
 pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
     if predicate.dtype() != &DType::Bool(Nullability::NonNullable) {
         vortex_bail!(
-            "predicate must be non-nullable bool, has dtype {} with nullability",
+            "predicate must be non-nullable bool, has dtype {}",
             predicate.dtype(),
         );
     }

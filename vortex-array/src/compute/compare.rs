@@ -47,7 +47,7 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         Operator::Lte => cmp::lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
     };
 
-    Ok(Array::from_arrow(&array, false))
+    Ok(Array::from_arrow(&array, true))
 }
 
 pub fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {
