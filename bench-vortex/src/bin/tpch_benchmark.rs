@@ -34,9 +34,9 @@ async fn main() {
         // Format::InMemoryVortex {
         //     enable_pushdown: true,
         // },
-        Format::OnDiskVortex {
-            enable_compression: true,
-        },
+        // Format::OnDiskVortex {
+        //     enable_compression: true,
+        // },
         Format::OnDiskVortex {
             enable_compression: false,
         },
