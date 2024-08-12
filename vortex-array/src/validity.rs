@@ -92,7 +92,14 @@ impl Validity {
         match self {
             Self::NonNullable | Self::AllValid => true,
             Self::AllInvalid => false,
-            Self::Array(a) => bool::try_from(&scalar_at(a, index).unwrap()).unwrap(),
+            Self::Array(a) => scalar_at(a, index)
+                .and_then(|s| bool::try_from(&s))
+                .unwrap_or_else(|err| {
+                    panic!(
+                        "Failed to get bool from Validity Array at index {}: {err}",
+                        index
+                    )
+                }),
         }
     }
 
@@ -143,8 +150,18 @@ impl PartialEq for Validity {
             (Self::AllValid, Self::AllValid) => true,
             (Self::AllInvalid, Self::AllInvalid) => true,
             (Self::Array(a), Self::Array(b)) => {
-                a.clone().into_bool().unwrap().boolean_buffer()
-                    == b.clone().into_bool().unwrap().boolean_buffer()
+                a.clone()
+                    .into_bool()
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to get Validity Array as BoolArray: {err}")
+                    })
+                    .boolean_buffer()
+                    == b.clone()
+                        .into_bool()
+                        .unwrap_or_else(|err| {
+                            panic!("Failed to get Validity Array as BoolArray: {err}")
+                        })
+                        .boolean_buffer()
             }
             _ => false,
         }
@@ -202,13 +219,12 @@ impl FromIterator<LogicalValidity> for Validity {
                 LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
                 LogicalValidity::Array(array) => array
                     .into_bool()
-                    .expect("validity must flatten to BoolArray")
-                    .boolean_buffer(),
+                    .unwrap_or_else(|err| panic!("Failed to get Validity Array as BoolArray: {err}")).boolean_buffer(),
             };
             buffer.append_buffer(&present);
         }
         let bool_array = BoolArray::try_new(buffer.finish(), Validity::NonNullable)
-            .expect("BoolArray::try_new from BooleanBuffer should always succeed");
+            .unwrap_or_else(|err| panic!("BoolArray::try_new from BooleanBuffer should always succeed: {err}"));
         Self::Array(bool_array.into_array())
     }
 }

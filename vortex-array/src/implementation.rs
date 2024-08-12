@@ -242,7 +242,7 @@ where
                     buffer: None,
                     children: vec![],
                 };
-                array.with_dyn(|a| a.accept(&mut visitor).unwrap());
+                array.with_dyn(|a| a.accept(&mut visitor).unwrap_or_else(|err| panic!("Error while visiting Array View children: {err}")));
                 ArrayData::try_new(
                     encoding,
                     array.dtype().clone(),
@@ -252,7 +252,7 @@ where
                     visitor.children.into(),
                     stats,
                 )
-                .unwrap()
+                .unwrap_or_else(|err| panic!("Failed to create ArrayData from Array View: {err}"))
             }
         }
     }
