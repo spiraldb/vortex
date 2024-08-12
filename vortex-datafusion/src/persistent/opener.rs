@@ -64,9 +64,7 @@ impl FileOpener for VortexFileOpener {
                     let predicate = predicate.clone();
                     async move {
                         let array = if let Some(predicate) = predicate.as_ref() {
-                            // println!("eval!");
                             let predicate_result = predicate.evaluate(&array)?;
-
                             vortex::compute::filter(&array, &predicate_result)?
                         } else {
                             array

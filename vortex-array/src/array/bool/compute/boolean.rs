@@ -1,5 +1,6 @@
 use arrow_arith::boolean;
 use arrow_array::cast::AsArray as _;
+use arrow_array::BooleanArray;
 use vortex_error::VortexResult;
 
 use crate::array::BoolArray;
@@ -17,7 +18,14 @@ impl OrFn for BoolArray {
 
         let array = boolean::or(lhs, rhs)?;
 
-        Ok(Array::from_arrow(&array, true))
+        let not_null = BooleanArray::from(
+            array
+                .iter()
+                .map(|v| v.unwrap_or_default())
+                .collect::<Vec<_>>(),
+        );
+
+        Ok(Array::from_arrow(&not_null, false))
     }
 }
 
@@ -31,6 +39,13 @@ impl AndFn for BoolArray {
 
         let array = boolean::and(lhs, rhs)?;
 
-        Ok(Array::from_arrow(&array, true))
+        let not_null = BooleanArray::from(
+            array
+                .iter()
+                .map(|v| v.unwrap_or_default())
+                .collect::<Vec<_>>(),
+        );
+
+        Ok(Array::from_arrow(&not_null, false))
     }
 }
