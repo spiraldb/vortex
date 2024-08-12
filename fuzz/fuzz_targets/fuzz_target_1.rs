@@ -20,7 +20,7 @@ fuzz_target!(|data: &[u8]| -> Corpus {
 
     let array = random_array(&mut u);
 
-    if array.len() == 0 {
+    if array.is_empty() {
         return Corpus::Reject;
     }
 
@@ -136,8 +136,8 @@ fn random_validity(u: &mut Unstructured, len: usize) -> Validity {
 
 fn assert_slice(original: &Array, slice: &Array, start: usize) {
     for idx in 0..slice.len() {
-        let o = scalar_at(&original, start + idx).unwrap();
-        let s = scalar_at(&slice, idx).unwrap();
+        let o = scalar_at(original, start + idx).unwrap();
+        let s = scalar_at(slice, idx).unwrap();
 
         assert_eq!(o.value(), s.value());
         assert_eq!(o.is_valid(), s.is_valid());
@@ -147,8 +147,8 @@ fn assert_slice(original: &Array, slice: &Array, start: usize) {
 fn assert_array_eq(lhs: &Array, rhs: &Array) {
     assert_eq!(lhs.len(), rhs.len());
     for idx in 0..lhs.len() {
-        let l = scalar_at(&lhs, idx).unwrap();
-        let r = scalar_at(&rhs, idx).unwrap();
+        let l = scalar_at(lhs, idx).unwrap();
+        let r = scalar_at(rhs, idx).unwrap();
 
         assert_eq!(l.value(), r.value());
         assert_eq!(l.is_valid(), r.is_valid());
