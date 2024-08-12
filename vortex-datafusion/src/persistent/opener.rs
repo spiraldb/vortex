@@ -43,7 +43,6 @@ impl FileOpener for VortexFileOpener {
             if let Ok(vortex_predicate) =
                 convert_expr_to_vortex(predicate.clone(), self.arrow_schema.as_ref())
             {
-                log::info!("got some predicate here!");
                 Some(vortex_predicate)
             } else {
                 None
