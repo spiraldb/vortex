@@ -2,7 +2,7 @@ name: Benchmarks
 
 on:
   push:
-    branches: [develop]
+    branches: [ develop ]
 
 permissions:
   actions: read
@@ -20,30 +20,29 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
 
-
-      - name: Setup bencher.dev CLI
-        uses: bencherdev/bencher@main
-
       # The compression benchmarks rely on DuckDB being installed to convert CSV to Parquet
       - name: Install DuckDB
         uses: opt-nc/setup-duckdb-action@v1.0.8
         with:
           version: v1.0.0
 
-      - name: Upload Vortex Benchmarks
-        run: |
-          bencher run \
-            --project vortex \
-            --token "${BENCHER_TOKEN}" \
-            --adapter rust_criterion \
-            --testbed "github-actions" \
-            "cargo bench -p bench-vortex"
+      - name: Run benchmark
+        run: cargo bench --bench tpch_benchmark -- --output-format bencher | tee output.txt
+
+      - name: Store benchmark result
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Vortex benchmarks
+          tool: 'cargo'
+          gh-pages-branch: gh-pages-bench
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file-path: output.txt
+          summary-always: true
+          auto-push: true
+          fail-on-alert: false
         env:
-          BENCHER_TOKEN: ${{ secrets.BENCHER_TOKEN }}
           # AWS Credentials for R2 storage tests
           AWS_BUCKET: vortex-test
           AWS_ENDPOINT: ${{ secrets.AWS_ENDPOINT }}
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-
