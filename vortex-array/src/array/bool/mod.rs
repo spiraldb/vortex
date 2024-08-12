@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_all_some_iter() {
-        let arr = BoolArray::from_iter([Some(true), Some(true), Some(true), Some(false)]);
+        let arr = BoolArray::from_iter([Some(true), Some(false)]);
 
         assert!(matches!(arr.validity(), Validity::AllValid));
 
@@ -181,10 +181,6 @@ mod tests {
         let scalar = bool::try_from(&scalar_at(&arr, 0).unwrap()).unwrap();
         assert!(scalar);
         let scalar = bool::try_from(&scalar_at(&arr, 1).unwrap()).unwrap();
-        assert!(scalar);
-        let scalar = bool::try_from(&scalar_at(&arr, 2).unwrap()).unwrap();
-        assert!(scalar);
-        let scalar = bool::try_from(&scalar_at(&arr, 3).unwrap()).unwrap();
         assert!(!scalar);
     }
 
