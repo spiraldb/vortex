@@ -1,12 +1,10 @@
 use arrow_arith::boolean;
 use arrow_array::cast::AsArray as _;
-use arrow_array::BooleanArray;
 use vortex_error::VortexResult;
 
 use crate::array::BoolArray;
-use crate::arrow::FromArrowArray;
 use crate::compute::{AndFn, OrFn};
-use crate::{Array, IntoCanonical};
+use crate::{Array, IntoArray, IntoCanonical};
 
 impl OrFn for BoolArray {
     fn or(&self, array: &Array) -> VortexResult<Array> {
@@ -17,15 +15,9 @@ impl OrFn for BoolArray {
         let rhs = rhs.as_boolean();
 
         let array = boolean::or(lhs, rhs)?;
+        let not_null = BoolArray::from_iter(array.iter().map(|v| Some(v.unwrap_or_default())));
 
-        let not_null = BooleanArray::from(
-            array
-                .iter()
-                .map(|v| v.unwrap_or_default())
-                .collect::<Vec<_>>(),
-        );
-
-        Ok(Array::from_arrow(&not_null, false))
+        Ok(not_null.into_array())
     }
 }
 
@@ -38,14 +30,8 @@ impl AndFn for BoolArray {
         let rhs = rhs.as_boolean();
 
         let array = boolean::and(lhs, rhs)?;
+        let not_null = BoolArray::from_iter(array.iter().map(|v| Some(v.unwrap_or_default())));
 
-        let not_null = BooleanArray::from(
-            array
-                .iter()
-                .map(|v| v.unwrap_or_default())
-                .collect::<Vec<_>>(),
-        );
-
-        Ok(Array::from_arrow(&not_null, false))
+        Ok(not_null.into_array())
     }
 }
