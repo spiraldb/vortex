@@ -2,12 +2,12 @@
 
 use libfuzzer_sys::arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::{fuzz_target, Corpus};
-use vortex::array::{BoolArray, PrimitiveArray};
+use vortex::array::{BoolArray, PrimitiveArray, VarBinArray, VarBinViewArray};
 use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray};
-use vortex_dtype::NativePType;
+use vortex_dtype::{DType, NativePType, Nullability};
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
@@ -110,6 +110,16 @@ fn random_array(u: &mut Unstructured) -> Array {
         8 => random_primitive::<f32>(u),
         9 => random_primitive::<f64>(u),
         10 => random_bool(u),
+        11 => random_string(u),
+        _ => unreachable!(),
+    }
+}
+
+fn random_string(u: &mut Unstructured) -> Array {
+    let v = Vec::<Option<String>>::arbitrary(u).unwrap();
+    match u.int_in_range(0..=1).unwrap() {
+        0 => VarBinArray::from_iter(v.into_iter(), DType::Utf8(Nullability::Nullable)).into_array(),
+        1 => VarBinViewArray::from_iter_nullable_str(v).into_array(),
         _ => unreachable!(),
     }
 }
@@ -121,11 +131,8 @@ fn random_primitive<'a, T: Arbitrary<'a> + NativePType>(u: &mut Unstructured<'a>
 }
 
 fn random_bool(u: &mut Unstructured) -> Array {
-    let len: usize = u.arbitrary_len::<bool>().unwrap();
-    let v = (0..len)
-        .map(|_| bool::arbitrary(u).unwrap())
-        .collect::<Vec<_>>();
-    let validity = random_validity(u, len);
+    let v = Vec::<bool>::arbitrary(u).unwrap();
+    let validity = random_validity(u, v.len());
 
     BoolArray::from_vec(v, validity).into_array()
 }
