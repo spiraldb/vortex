@@ -2,7 +2,7 @@
 
 use libfuzzer_sys::arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::fuzz_target;
-use vortex::array::{BoolArray, PrimitiveArray};
+use vortex::array::PrimitiveArray;
 use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
 use vortex::validity::Validity;
@@ -80,7 +80,7 @@ fn random_validity(u: &mut Unstructured, len: usize) -> Validity {
             let bools = (0..len)
                 .map(|_| bool::arbitrary(u).unwrap())
                 .collect::<Vec<_>>();
-            Validity::Array(BoolArray::from_vec(bools, Validity::AllValid).into_array())
+            Validity::from(bools)
         }
         _ => unreachable!(),
     }
