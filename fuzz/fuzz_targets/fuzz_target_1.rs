@@ -2,7 +2,7 @@
 
 use libfuzzer_sys::arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::{fuzz_target, Corpus};
-use vortex::array::PrimitiveArray;
+use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
 use vortex::validity::Validity;
@@ -109,6 +109,7 @@ fn random_array(u: &mut Unstructured) -> Array {
         7 => random_primitive::<i64>(u),
         8 => random_primitive::<f32>(u),
         9 => random_primitive::<f64>(u),
+        10 => random_bool(u),
         _ => unreachable!(),
     }
 }
@@ -117,6 +118,16 @@ fn random_primitive<'a, T: Arbitrary<'a> + NativePType>(u: &mut Unstructured<'a>
     let v = Vec::<T>::arbitrary(u).unwrap();
     let validity = random_validity(u, v.len());
     PrimitiveArray::from_vec(v, validity).into_array()
+}
+
+fn random_bool(u: &mut Unstructured) -> Array {
+    let len: usize = u.arbitrary_len::<bool>().unwrap();
+    let v = (0..len)
+        .map(|_| bool::arbitrary(u).unwrap())
+        .collect::<Vec<_>>();
+    let validity = random_validity(u, len);
+
+    BoolArray::from_vec(v, validity).into_array()
 }
 
 fn random_validity(u: &mut Unstructured, len: usize) -> Validity {
