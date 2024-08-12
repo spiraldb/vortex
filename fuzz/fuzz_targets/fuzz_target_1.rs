@@ -7,6 +7,7 @@ use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray};
+use vortex_dtype::NativePType;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
@@ -97,49 +98,25 @@ fuzz_target!(|data: &[u8]| -> Corpus {
 });
 
 fn random_array(u: &mut Unstructured) -> Array {
-    match u.int_in_range(0..=7).unwrap() {
-        0 => {
-            let v = Vec::<u8>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
-        1 => {
-            let v = Vec::<u16>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
-        2 => {
-            let v = Vec::<u32>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
-        3 => {
-            let v = Vec::<u64>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
-        4 => {
-            let v = Vec::<i8>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
-        5 => {
-            let v = Vec::<i16>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
-        6 => {
-            let v = Vec::<i32>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
-        7 => {
-            let v = Vec::<i64>::arbitrary(u).unwrap();
-            let validity = random_validity(u, v.len());
-            PrimitiveArray::from_vec(v, validity).into_array()
-        }
+    match u.int_in_range(0..=9).unwrap() {
+        0 => random_primitive::<u8>(u),
+        1 => random_primitive::<u16>(u),
+        2 => random_primitive::<u32>(u),
+        3 => random_primitive::<u64>(u),
+        4 => random_primitive::<i8>(u),
+        5 => random_primitive::<i16>(u),
+        6 => random_primitive::<i32>(u),
+        7 => random_primitive::<i64>(u),
+        8 => random_primitive::<f32>(u),
+        9 => random_primitive::<f64>(u),
         _ => unreachable!(),
     }
+}
+
+fn random_primitive<'a, T: Arbitrary<'a> + NativePType>(u: &mut Unstructured<'a>) -> Array {
+    let v = Vec::<T>::arbitrary(u).unwrap();
+    let validity = random_validity(u, v.len());
+    PrimitiveArray::from_vec(v, validity).into_array()
 }
 
 fn random_validity(u: &mut Unstructured, len: usize) -> Validity {

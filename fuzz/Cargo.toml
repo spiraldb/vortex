@@ -10,6 +10,7 @@ cargo-fuzz = true
 [dependencies]
 libfuzzer-sys = "0.4"
 vortex-array = { workspace = true }
+vortex-dtype = { workspace = true }
 vortex-sampling-compressor = { workspace = true }
 
 
