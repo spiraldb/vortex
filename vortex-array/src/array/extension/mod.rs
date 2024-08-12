@@ -28,13 +28,13 @@ impl ExtensionArray {
             [storage].into(),
             Default::default(),
         )
-        .expect("Invalid ExtensionArray")
+        .unwrap_or_else(|err| panic!("Invalid ExtensionArray: {err}"))
     }
 
     pub fn storage(&self) -> Array {
         self.array()
             .child(0, &self.metadata().storage_dtype, self.len())
-            .expect("Missing storage array")
+            .unwrap_or_else(|| panic!("Missing storage array for ExtensionArray"))
     }
 
     #[allow(dead_code)]

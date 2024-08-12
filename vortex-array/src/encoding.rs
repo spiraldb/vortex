@@ -81,7 +81,8 @@ pub trait ArrayEncodingExt {
         F: for<'b> FnMut(&'b (dyn ArrayTrait + 'b)) -> R,
     {
         let typed =
-            <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array.clone()).unwrap();
+            <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array.clone())
+            .unwrap_or_else(|err| panic!("Failed to convert array to {}: {err}", std::any::type_name::<<Self::D as ArrayDef>::Array>()));
         f(&typed)
     }
 }

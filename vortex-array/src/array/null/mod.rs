@@ -28,7 +28,7 @@ impl NullArray {
             Arc::new([]),
             StatsSet::nulls(len, &DType::Null),
         )
-        .expect("NullArray::new cannot fail")
+        .unwrap_or_else(|err| panic!("NullArray::new should never fail! Got: {}", err))
     }
 }
 

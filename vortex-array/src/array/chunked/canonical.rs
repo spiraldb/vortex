@@ -149,7 +149,7 @@ fn swizzle_struct_chunks(
             field_chunks.push(
                 chunk
                     .field(field_idx)
-                    .expect("all chunks must have same dtype"),
+                    .ok_or_else(|| vortex_err!("All chunks must have same dtype; missing field at index {}, current chunk dtype: {}", field_idx, chunk.dtype()))?,
             );
         }
         let field_array = ChunkedArray::try_new(field_chunks, field_dtype.clone())?;

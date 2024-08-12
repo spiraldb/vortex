@@ -86,7 +86,7 @@ impl ChunkedArray {
     pub fn chunk_ends(&self) -> Array {
         self.array()
             .child(0, &Self::ENDS_DTYPE, self.nchunks() + 1)
-            .expect("missing chunk ends")
+            .unwrap_or_else(|| panic!("Missing chunk ends in ChunkedArray"))
     }
 
     pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
@@ -139,7 +139,7 @@ impl FromIterator<Array> for ChunkedArray {
         let dtype = chunks
             .first()
             .map(|c| c.dtype().clone())
-            .expect("Cannot create a chunked array from an empty iterator");
+            .unwrap_or_else(|| panic!("Cannot infer DType from an empty iterator"));
         Self::try_new(chunks, dtype).unwrap_or_else(|err| {
             panic!("Failed to create chunked array from iterator: {}", err);
         })

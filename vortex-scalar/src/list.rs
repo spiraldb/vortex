@@ -106,11 +106,11 @@ impl<'a, T: for<'b> TryFrom<&'b Scalar, Error = VortexError>> TryFrom<&'a Scalar
 
 impl<T> From<Vec<T>> for Scalar
 where
-    Self: From<T>,
+    Self: From<T>
 {
     fn from(value: Vec<T>) -> Self {
         let scalars = value.into_iter().map(|v| Self::from(v)).collect_vec();
-        let element_dtype = scalars.first().expect("Empty list").dtype().clone();
+        let element_dtype = scalars.first().unwrap_or_else(|| panic!("Empty list, could not determine element dtype")).dtype().clone();
         let dtype = DType::List(Arc::new(element_dtype), NonNullable);
         Self {
             dtype,

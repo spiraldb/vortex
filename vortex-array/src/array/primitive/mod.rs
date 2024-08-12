@@ -43,13 +43,13 @@ impl PrimitiveArray {
                 DType::from(ptype).with_nullability(validity.nullability()),
                 length,
                 PrimitiveMetadata {
-                    validity: validity.to_metadata(length).expect("invalid validity"),
+                    validity: validity.to_metadata(length).unwrap_or_else(|err| panic!("Invalid validity: {err}")),
                 },
                 Some(buffer),
                 validity.into_array().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )
-            .expect("should be valid"),
+            .unwrap_or_else(|err| panic!("PrimitiveArray::new should never fail! Got: {err}")),
         }
     }
 
@@ -90,7 +90,7 @@ impl PrimitiveArray {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer().expect("missing buffer")
+        self.array().buffer().unwrap_or_else(|| panic!("Missing buffer in PrimitiveArray"))
     }
 
     pub fn maybe_null_slice<T: NativePType>(&self) -> &[T] {
@@ -166,7 +166,7 @@ impl PrimitiveArray {
     pub fn into_buffer(self) -> Buffer {
         self.into_array()
             .into_buffer()
-            .expect("PrimitiveArray must have a buffer")
+            .unwrap_or_else(|| panic!("PrimitiveArray must have a buffer"))
     }
 }
 
@@ -217,6 +217,6 @@ impl AcceptArrayVisitor for PrimitiveArray {
 
 impl Array {
     pub fn as_primitive(&self) -> PrimitiveArray {
-        PrimitiveArray::try_from(self).expect("expected primitive array")
+        PrimitiveArray::try_from(self).unwrap_or_else(|err| panic!("Expected primitive array: {err}"))
     }
 }

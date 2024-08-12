@@ -1,15 +1,18 @@
 use arrow_array::cast::as_struct_array;
 use arrow_array::RecordBatch;
 use itertools::Itertools;
+use vortex_error::{VortexError, VortexResult};
 
 use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
 use crate::{Array, IntoArray, IntoCanonical};
 
-impl From<RecordBatch> for Array {
-    fn from(value: RecordBatch) -> Self {
-        StructArray::try_new(
+impl TryFrom<RecordBatch> for Array {
+    type Error = VortexError;
+
+    fn try_from(value: RecordBatch) -> VortexResult<Self> {
+        Ok(StructArray::try_new(
             value
                 .schema()
                 .fields()
@@ -25,25 +28,27 @@ impl From<RecordBatch> for Array {
                 .collect(),
             value.num_rows(),
             Validity::AllValid,
-        )
-        .unwrap()
-        .into()
+        )?
+        .into())
     }
 }
 
-impl From<Array> for RecordBatch {
-    fn from(value: Array) -> Self {
+impl TryFrom<Array> for RecordBatch {
+    type Error = VortexError;
+
+    fn try_from(value: Array) -> VortexResult<Self> {
         let array_ref = value
-            .into_canonical()
-            .expect("struct arrays must canonicalize")
+            .into_canonical()?
             .into_arrow();
         let struct_array = as_struct_array(array_ref.as_ref());
-        RecordBatch::from(struct_array)
+        Ok(RecordBatch::from(struct_array))
     }
 }
 
-impl From<StructArray> for RecordBatch {
-    fn from(value: StructArray) -> Self {
-        RecordBatch::from(value.into_array())
+impl TryFrom<StructArray> for RecordBatch {
+    type Error = VortexError;
+
+    fn try_from(value: StructArray) -> VortexResult<Self> {
+        RecordBatch::try_from(value.into_array())
     }
 }

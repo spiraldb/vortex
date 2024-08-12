@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrow_schema::{DataType, Field, SchemaRef, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 
 use crate::array::{make_temporal_ext_dtype, TimeUnit};
 use crate::arrow::{FromArrowType, TryFromArrowType};
@@ -103,14 +103,16 @@ impl From<&ArrowTimeUnit> for TimeUnit {
     }
 }
 
-impl From<TimeUnit> for ArrowTimeUnit {
-    fn from(value: TimeUnit) -> Self {
+impl TryFrom<TimeUnit> for ArrowTimeUnit {
+    type Error = VortexError;
+
+    fn try_from(value: TimeUnit) -> VortexResult<Self> {
         match value {
-            TimeUnit::S => Self::Second,
-            TimeUnit::Ms => Self::Millisecond,
-            TimeUnit::Us => Self::Microsecond,
-            TimeUnit::Ns => Self::Nanosecond,
-            _ => panic!("cannot convert {value} to Arrow TimeUnit"),
+            TimeUnit::S => Ok(Self::Second),
+            TimeUnit::Ms => Ok(Self::Millisecond),
+            TimeUnit::Us => Ok(Self::Microsecond),
+            TimeUnit::Ns => Ok(Self::Nanosecond),
+            _ => vortex_bail!("cannot convert {value} to Arrow TimeUnit"),
         }
     }
 }

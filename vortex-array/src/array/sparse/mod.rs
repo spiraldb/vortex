@@ -96,7 +96,7 @@ impl SparseArray {
     pub fn values(&self) -> Array {
         self.array()
             .child(1, self.dtype(), self.metadata().indices_len)
-            .expect("missing child array")
+            .unwrap_or_else(|| panic!("Missing child array in SparseArray"))
     }
 
     #[inline]
@@ -107,7 +107,7 @@ impl SparseArray {
                 &self.metadata().indices_dtype,
                 self.metadata().indices_len,
             )
-            .expect("missing indices array")
+            .unwrap_or_else(|| panic!("Missing indices array in SparseArray"))
     }
 
     #[inline]

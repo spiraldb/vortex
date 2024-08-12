@@ -85,7 +85,7 @@ impl Canonical {
 
                 temporal_to_arrow(
                     TemporalArray::try_from(&a.into_array())
-                        .expect("array must be known temporal array ext type"),
+                        .unwrap_or_else(|err| panic!("array must be known temporal array ext type: {err}")),
                 )
             }
         }
@@ -97,42 +97,42 @@ impl Canonical {
     pub fn into_null(self) -> VortexResult<NullArray> {
         match self {
             Canonical::Null(a) => Ok(a),
-            _ => vortex_bail!(InvalidArgument: "cannot unwrap NullArray from {:?}", &self),
+            _ => vortex_bail!("Cannot unwrap NullArray from {:?}", &self),
         }
     }
 
     pub fn into_bool(self) -> VortexResult<BoolArray> {
         match self {
             Canonical::Bool(a) => Ok(a),
-            _ => vortex_bail!(InvalidArgument: "cannot unwrap BoolArray from {:?}", &self),
+            _ => vortex_bail!("Cannot unwrap BoolArray from {:?}", &self),
         }
     }
 
     pub fn into_primitive(self) -> VortexResult<PrimitiveArray> {
         match self {
             Canonical::Primitive(a) => Ok(a),
-            _ => vortex_bail!(InvalidArgument: "cannot unwrap PrimitiveArray from {:?}", &self),
+            _ => vortex_bail!("Cannot unwrap PrimitiveArray from {:?}", &self),
         }
     }
 
     pub fn into_struct(self) -> VortexResult<StructArray> {
         match self {
             Canonical::Struct(a) => Ok(a),
-            _ => vortex_bail!(InvalidArgument: "cannot unwrap StructArray from {:?}", &self),
+            _ => vortex_bail!("Cannot unwrap StructArray from {:?}", &self),
         }
     }
 
     pub fn into_varbin(self) -> VortexResult<VarBinArray> {
         match self {
             Canonical::VarBin(a) => Ok(a),
-            _ => vortex_bail!(InvalidArgument: "cannot unwrap VarBinArray from {:?}", &self),
+            _ => vortex_bail!("Cannot unwrap VarBinArray from {:?}", &self),
         }
     }
 
     pub fn into_extension(self) -> VortexResult<ExtensionArray> {
         match self {
             Canonical::Extension(a) => Ok(a),
-            _ => vortex_bail!(InvalidArgument: "cannot unwrap ExtensionArray from {:?}", &self),
+            _ => vortex_bail!("Cannot unwrap ExtensionArray from {:?}", &self),
         }
     }
 }
@@ -147,7 +147,7 @@ fn bool_to_arrow(bool_array: BoolArray) -> ArrayRef {
         bool_array
             .logical_validity()
             .to_null_buffer()
-            .expect("null buffer"),
+            .unwrap_or_else(|err| panic!("Failed to get null buffer from logical validity: {err}")),
     ))
 }
 
@@ -160,7 +160,7 @@ fn primitive_to_arrow(primitive_array: PrimitiveArray) -> ArrayRef {
             array
                 .logical_validity()
                 .to_null_buffer()
-                .expect("null buffer"),
+                .unwrap_or_else(|err| panic!("Failed to get null buffer from logical validity: {err}")),
         )
     }
 
@@ -183,7 +183,7 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
     let field_arrays: Vec<ArrayRef> = struct_array
         .children()
         .map(|f| {
-            let canonical = f.into_canonical().unwrap();
+            let canonical = f.into_canonical().unwrap_or_else(|err| panic!("Failed to canonicalize field: {err}"));
             match canonical {
                 // visit nested structs recursively
                 Canonical::Struct(a) => struct_to_arrow(a),
@@ -214,7 +214,7 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
     let offsets = varbin_array
         .offsets()
         .into_primitive()
-        .expect("flatten_primitive");
+        .unwrap_or_else(|err| panic!("Failed to canon offsets: {err}"));
     let offsets = match offsets.ptype() {
         PType::I32 | PType::I64 => offsets,
         // Unless it's u64, everything else can be converted into an i32.
@@ -222,19 +222,18 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
         PType::U64 => offsets.reinterpret_cast(PType::I64),
         PType::U32 => offsets.reinterpret_cast(PType::I32),
         _ => try_cast(&offsets.to_array(), PType::I32.into())
-            .expect("cast to i32")
-            .into_primitive()
-            .expect("flatten_primitive"),
+            .and_then(|a| a.into_primitive())
+            .unwrap_or_else(|err| panic!("Failed to cast offsets to PrimitiveArray of i32: {err}")),
     };
     let nulls = varbin_array
         .logical_validity()
         .to_null_buffer()
-        .expect("null buffer");
+        .unwrap_or_else(|err| panic!("Failed to get null buffer from logical validity: {err}"));
 
     let data = varbin_array
         .bytes()
         .into_primitive()
-        .expect("flatten_primitive");
+        .unwrap_or_else(|err| panic!("Failed to canonicalize bytes: {err}"));
     assert_eq!(data.ptype(), PType::U8);
     let data = data.buffer();
 

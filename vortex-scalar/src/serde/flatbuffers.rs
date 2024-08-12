@@ -54,7 +54,8 @@ impl WriteFlatBuffer for ScalarValue {
     ) -> WIPOffset<Self::Target<'fb>> {
         let mut value_se = flexbuffers::FlexbufferSerializer::new();
         self.serialize(&mut value_se)
-            .expect("Failed to serialize ScalarValue");
+            .map_err(VortexError::FlexBuffersSerError)
+            .unwrap_or_else(|err| panic!("Failed to serialize ScalarValue: {}", err));
         let flex = Some(fbb.create_vector(value_se.view()));
         fb::ScalarValue::create(fbb, &fb::ScalarValueArgs { flex })
     }

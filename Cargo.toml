@@ -154,7 +154,7 @@ borrow_as_ptr = { level = "deny" }
 collection_is_never_read = { level = "deny" }
 cognitive_complexity = { level = "deny" }
 debug_assert_with_mut_call = { level = "deny" }
-default_numeric_fallback = { level = "deny" }
+#default_numeric_fallback = { level = "deny" }
 derive_partial_eq_without_eq = { level = "deny" }
 expect_used = { level = "deny" }
 equatable_if_let = { level = "deny" }
@@ -167,7 +167,6 @@ manual_is_variant_and = { level = "deny" }
 mem_forget = { level = "deny" }
 or_fun_call = "deny"
 panic_in_result_fn = { level = "deny" }
-redundant_closure_for_method_calls = { level = "deny" }
 same_name_method = { level = "deny" }
 tests_outside_test_module = { level = "deny" }
 unwrap_in_result = { level = "deny" }

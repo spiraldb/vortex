@@ -36,7 +36,14 @@ impl<O: NativePType> VarBinBuilder<O> {
     #[inline]
     pub fn push_value(&mut self, value: &[u8]) {
         self.offsets
-            .push(O::from(self.data.len() + value.len()).unwrap());
+            .push(O::from(self.data.len() + value.len()).unwrap_or_else(|| {
+                panic!(
+                    "Failed to convert sum of {} and {} to offset of type {}",
+                    self.data.len(),
+                    value.len(),
+                    std::any::type_name::<O>()
+                )
+            }));
         self.data.extend_from_slice(value);
         self.validity.append_non_null();
     }
@@ -71,7 +78,8 @@ impl<O: NativePType> VarBinBuilder<O> {
             Validity::NonNullable
         };
 
-        VarBinArray::try_new(offsets.into_array(), data.into_array(), dtype, validity).unwrap()
+        VarBinArray::try_new(offsets.into_array(), data.into_array(), dtype, validity)
+            .unwrap_or_else(|err| panic!("Unexpected error while building VarBinArray: {err}"))
     }
 }
 

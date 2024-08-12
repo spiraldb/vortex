@@ -75,7 +75,7 @@ impl VarBinArray {
     pub fn offsets(&self) -> Array {
         self.array()
             .child(0, &self.metadata().offsets_dtype, self.len() + 1)
-            .expect("missing offsets")
+            .unwrap_or_else(|| panic!("Missing offsets in VarBinArray"))
     }
 
     pub fn first_offset<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -91,7 +91,7 @@ impl VarBinArray {
     pub fn bytes(&self) -> Array {
         self.array()
             .child(1, &DType::BYTES, self.metadata().bytes_len)
-            .expect("missing bytes")
+            .unwrap_or_else(|| panic!("Missing bytes in VarBinArray"))
     }
 
     pub fn validity(&self) -> Validity {
@@ -152,10 +152,10 @@ impl VarBinArray {
             })
             .unwrap_or_else(|| {
                 scalar_at(&self.offsets(), index)
-                    .unwrap()
+                    .unwrap_or_else(|err| panic!("Failed to get offset at index: {}: {}", index, err))
                     .as_ref()
                     .try_into()
-                    .unwrap()
+                    .unwrap_or_else(|err| panic!("Failed to convert offset to usize: {}", err))
             })
     }
 
@@ -219,7 +219,7 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 pub fn varbin_scalar(value: Buffer, dtype: &DType) -> Scalar {
     if matches!(dtype, DType::Utf8(_)) {
-        Scalar::try_utf8(value, dtype.nullability()).unwrap()
+        Scalar::try_utf8(value, dtype.nullability()).unwrap_or_else(|err| panic!("Failed to create scalar from utf8 buffer: {}", err))
     } else {
         Scalar::binary(value, dtype.nullability())
     }

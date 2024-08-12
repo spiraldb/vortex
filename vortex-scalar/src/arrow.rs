@@ -9,12 +9,19 @@ impl From<&Scalar> for Arc<dyn Datum> {
     fn from(value: &Scalar) -> Arc<dyn Datum> {
         match value.dtype {
             DType::Null => Arc::new(NullArray::new(1)),
-            DType::Bool(_) => match value.value.as_bool().expect("should be bool") {
-                Some(b) => Arc::new(BooleanArray::new_scalar(b)),
-                None => Arc::new(BooleanArray::new_null(1)),
+            DType::Bool(_) => {
+                let maybe_bool = value.value.as_bool().unwrap_or_else(|err| { 
+                    panic!("Expected a bool scalar: {}", err)
+                });
+                match maybe_bool {
+                    Some(b) => Arc::new(BooleanArray::new_scalar(b)),
+                    None => Arc::new(BooleanArray::new_null(1)),
+                }
             },
             DType::Primitive(ptype, _) => {
-                let pvalue = value.value.as_pvalue().expect("should be pvalue");
+                let pvalue = value.value.as_pvalue().unwrap_or_else(|err| {
+                    panic!("Expected a pvalue scalar: {}", err)
+                });
                 match pvalue {
                     None => match ptype {
                         PType::U8 => Arc::new(UInt8Array::new_null(1)),
@@ -45,22 +52,23 @@ impl From<&Scalar> for Arc<dyn Datum> {
                 }
             }
             DType::Utf8(_) => {
-                match value
-                    .value
-                    .as_buffer_string()
-                    .expect("should be buffer string")
-                {
+                let maybe_string = value.value.as_buffer_string().unwrap_or_else(|err| {
+                    panic!("Expected a string scalar: {}", err)
+                });
+                match maybe_string {
                     Some(s) => Arc::new(StringArray::new_scalar(s.as_str())),
                     None => Arc::new(StringArray::new_null(1)),
-                }
+                }   
             }
             DType::Binary(_) => {
-                match value
+                let maybe_buffer = value
                     .value
-                    .as_buffer_string()
-                    .expect("should be buffer string")
-                {
-                    Some(s) => Arc::new(BinaryArray::new_scalar(s.as_bytes())),
+                    .as_buffer()
+                    .unwrap_or_else(|err| {
+                        panic!("Expected a binary buffer: {}", err)
+                    });
+                match maybe_buffer {
+                    Some(s) => Arc::new(BinaryArray::new_scalar(s)),
                     None => Arc::new(BinaryArray::new_null(1)),
                 }
             }
