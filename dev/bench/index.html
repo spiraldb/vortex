@@ -146,12 +146,12 @@
         function stringToColor(str) {
             // Random colours are generally pretty disgusting...
             const MAP = {
-                "vortex-pushdown-disabled": '#3CD50C',
-                "vortex-pushdown-enabled": '#7437D0',
+                "vortex-in-memory-no-pushdown": '#3CD50C',
+                "vortex-in-memory-pushdown": '#7437D0',
                 "arrow": '#E8A807',
                 "parquet": '#D7B945',
-                "persistent_compressed_vortex": '#F34B7D',
-                "persistent_uncompressed_vortex": '#4DBDFB',
+                "vortex-file-compressed": '#F34B7D',
+                "vortex-file-uncompressed": '#4DBDFB',
             };
 
             if (MAP[str]) {
