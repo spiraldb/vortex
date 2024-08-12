@@ -12,7 +12,7 @@ pub trait ArrayVariants {
     }
 
     fn as_null_array_unchecked(&self) -> &dyn NullArrayTrait {
-        self.as_null_array().expect("Expected NullArray")
+        self.as_null_array().unwrap_or_else(|| panic!("Expected NullArray"))
     }
 
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
@@ -20,7 +20,7 @@ pub trait ArrayVariants {
     }
 
     fn as_bool_array_unchecked(&self) -> &dyn BoolArrayTrait {
-        self.as_bool_array().expect("Expected BoolArray")
+        self.as_bool_array().unwrap_or_else(|| panic!("Expected BoolArray"))
     }
 
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
@@ -28,7 +28,7 @@ pub trait ArrayVariants {
     }
 
     fn as_primitive_array_unchecked(&self) -> &dyn PrimitiveArrayTrait {
-        self.as_primitive_array().expect("Expected PrimitiveArray")
+        self.as_primitive_array().unwrap_or_else(|| panic!("Expected PrimitiveArray"))
     }
 
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
@@ -36,7 +36,7 @@ pub trait ArrayVariants {
     }
 
     fn as_utf8_array_unchecked(&self) -> &dyn Utf8ArrayTrait {
-        self.as_utf8_array().expect("Expected Utf8Array")
+        self.as_utf8_array().unwrap_or_else(|| panic!("Expected Utf8Array"))
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
@@ -44,7 +44,7 @@ pub trait ArrayVariants {
     }
 
     fn as_binary_array_unchecked(&self) -> &dyn BinaryArrayTrait {
-        self.as_binary_array().expect("Expected BinaryArray")
+        self.as_binary_array().unwrap_or_else(|| panic!("Expected BinaryArray"))
     }
 
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
@@ -52,7 +52,7 @@ pub trait ArrayVariants {
     }
 
     fn as_struct_array_unchecked(&self) -> &dyn StructArrayTrait {
-        self.as_struct_array().expect("Expected StructArray")
+        self.as_struct_array().unwrap_or_else(|| panic!("Expected StructArray"))
     }
 
     fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
@@ -60,7 +60,7 @@ pub trait ArrayVariants {
     }
 
     fn as_list_array_unchecked(&self) -> &dyn ListArrayTrait {
-        self.as_list_array().expect("Expected ListArray")
+        self.as_list_array().unwrap_or_else(|| panic!("Expected ListArray"))
     }
 
     fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
@@ -68,7 +68,7 @@ pub trait ArrayVariants {
     }
 
     fn as_extension_array_unchecked(&self) -> &dyn ExtensionArrayTrait {
-        self.as_extension_array().expect("Expected ExtensionArray")
+        self.as_extension_array().unwrap_or_else(|| panic!("Expected ExtensionArray"))
     }
 }
 

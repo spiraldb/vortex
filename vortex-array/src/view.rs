@@ -153,7 +153,7 @@ impl ArrayView {
         let mut collector = ChildrenCollector::default();
         Array::View(self.clone())
             .with_dyn(|a| a.accept(&mut collector))
-            .unwrap();
+            .unwrap_or_else(|err| panic!("Failed to get children: {err}"));
         collector.children
     }
 

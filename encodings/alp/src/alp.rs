@@ -112,7 +112,13 @@ pub trait ALPFloat: Float + 'static {
 
     #[inline]
     fn decode_single(encoded: Self::ALPInt, exponents: Exponents) -> Self {
-        let encoded_float: Self = Self::from(encoded).unwrap();
+        let encoded_float: Self = Self::from(encoded).unwrap_or_else(|| {
+            panic!(
+                "Failed to convert {} to {} in ALPFloat::decode_single",
+                std::any::type_name::<Self::ALPInt>(),
+                std::any::type_name::<Self>()
+            )
+        });
         encoded_float * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize]
     }
 }

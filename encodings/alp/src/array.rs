@@ -73,7 +73,7 @@ impl ALPArray {
     pub fn encoded(&self) -> Array {
         self.array()
             .child(0, &self.metadata().encoded_dtype, self.len())
-            .expect("Missing encoded array")
+            .unwrap_or_else(|| panic!("Missing encoded child in ALPArray"))
     }
 
     #[inline]
@@ -97,7 +97,7 @@ impl ALPArray {
 
     #[inline]
     pub fn ptype(&self) -> PType {
-        self.dtype().try_into().unwrap()
+        self.dtype().try_into().unwrap_or_else(|err| panic!("Failed to convert DType to PType: {err}"))
     }
 }
 
