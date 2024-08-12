@@ -91,12 +91,16 @@ impl ExecutionPlan for VortexExec {
         let object_store = context
             .runtime_env()
             .object_store(&self.file_scan_config.object_store_url)?;
+
+        let arrow_schema = self.file_scan_config.file_schema.clone();
+
         let opener = VortexFileOpener {
             ctx: self.ctx.clone(),
             object_store,
             projection: self.file_scan_config.projection.clone(),
             batch_size: None,
             predicate: self.predicate.clone(),
+            arrow_schema,
         };
         let stream = FileStream::new(&self.file_scan_config, partition, opener, &self.metrics)?;
 

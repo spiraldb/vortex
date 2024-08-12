@@ -3,7 +3,7 @@ use arrow_array::cast::AsArray as _;
 use vortex_error::VortexResult;
 
 use crate::array::BoolArray;
-use crate::arrow::FromArrowArray;
+use crate::arrow::FromArrowArray as _;
 use crate::compute::{AndFn, OrFn};
 use crate::{Array, IntoCanonical};
 

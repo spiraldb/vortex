@@ -159,6 +159,7 @@ mod tests {
 
     use crate::array::BoolArray;
     use crate::compute::unary::scalar_at;
+    use crate::validity::Validity;
     use crate::variants::BoolArrayTrait;
     use crate::IntoArray;
 
@@ -167,6 +168,20 @@ mod tests {
         let arr = BoolArray::from(vec![true, false, true]).into_array();
         let scalar = bool::try_from(&scalar_at(&arr, 0).unwrap()).unwrap();
         assert!(scalar);
+    }
+
+    #[test]
+    fn test_all_some_iter() {
+        let arr = BoolArray::from_iter([Some(true), Some(false)]);
+
+        assert!(matches!(arr.validity(), Validity::AllValid));
+
+        let arr = arr.into_array();
+
+        let scalar = bool::try_from(&scalar_at(&arr, 0).unwrap()).unwrap();
+        assert!(scalar);
+        let scalar = bool::try_from(&scalar_at(&arr, 1).unwrap()).unwrap();
+        assert!(!scalar);
     }
 
     #[test]
