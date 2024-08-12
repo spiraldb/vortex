@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use arrow_schema::SchemaRef;
 use async_trait::async_trait;
+use datafusion::catalog::Session;
 use datafusion::datasource::TableProvider;
-use datafusion::execution::context::SessionState;
 use datafusion::prelude::*;
 use datafusion_common::Result as DFResult;
 use datafusion_expr::{TableProviderFilterPushDown, TableType};
@@ -75,7 +75,7 @@ impl TableProvider for VortexMemTable {
     /// The array is flattened directly into the nearest Arrow-compatible encoding.
     async fn scan(
         &self,
-        state: &SessionState,
+        state: &dyn Session,
         projection: Option<&Vec<usize>>,
         filters: &[Expr],
         _limit: Option<usize>,
@@ -194,7 +194,7 @@ fn make_filter_then_take_plan(
     filter_projection: Vec<usize>,
     chunked_array: ChunkedArray,
     output_projection: Vec<usize>,
-    _session_state: &SessionState,
+    _session_state: &dyn Session,
 ) -> Arc<dyn ExecutionPlan> {
     let row_selector_op = Arc::new(RowSelectorExec::new(
         filter_exprs,

@@ -80,8 +80,18 @@ impl ArrayData {
         match self.children.get(index) {
             None => None,
             Some(child) => {
-                assert_eq!(child.dtype(), dtype, "Child requested with incorrect dtype");
-                assert_eq!(child.len(), len, "Child requested with incorrect length");
+                assert_eq!(
+                    child.dtype(),
+                    dtype,
+                    "Child {index} requested with incorrect dtype for encoding {}",
+                    self.encoding().id()
+                );
+                assert_eq!(
+                    child.len(),
+                    len,
+                    "Child {index} requested with incorrect length for encoding {}",
+                    self.encoding.id()
+                );
                 Some(child)
             }
         }
