@@ -22,13 +22,7 @@ impl ArrayAccessor<bool> for BoolArray {
             Validity::Array(valid) => {
                 let valids = valid.into_bool()?.boolean_buffer();
                 let mut iter = valids.iter().zip(bools.iter()).map(|(is_valid, value)| {
-                    is_valid.then_some({
-                        if value {
-                            &TRUE
-                        } else {
-                            &FALSE
-                        }
-                    })
+                    is_valid.then_some(if value { &TRUE } else { &FALSE })
                 });
 
                 Ok(f(&mut iter))
