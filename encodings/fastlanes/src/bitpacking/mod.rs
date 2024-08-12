@@ -71,7 +71,7 @@ impl BitPackedArray {
 
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
-            patches_len: patches.as_ref().map(|a| a.len()).unwrap_or(0),
+            patches_len: patches.as_ref().map(vortex::Array::len).unwrap_or(0),
             offset,
             length,
             bit_width,

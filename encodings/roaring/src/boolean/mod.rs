@@ -58,7 +58,7 @@ impl RoaringBoolArray {
 
     pub fn encode(array: Array) -> VortexResult<Array> {
         if array.encoding().id() == Bool::ID {
-            roaring_bool_encode(BoolArray::try_from(array)?).map(|a| a.into_array())
+            roaring_bool_encode(BoolArray::try_from(array)?).map(vortex::IntoArray::into_array)
         } else {
             Err(vortex_err!("RoaringInt can only encode boolean arrays"))
         }

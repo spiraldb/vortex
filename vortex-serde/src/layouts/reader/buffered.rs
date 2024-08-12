@@ -28,7 +28,7 @@ impl BufferedReader {
     }
 
     fn buffered_row_count(&self) -> usize {
-        self.arrays.iter().map(|arr| arr.len()).sum()
+        self.arrays.iter().map(vortex::Array::len).sum()
     }
 
     fn buffer(&mut self) -> VortexResult<Option<ReadResult>> {

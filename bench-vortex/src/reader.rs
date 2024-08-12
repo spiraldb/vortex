@@ -55,7 +55,7 @@ pub async fn open_vortex(path: &Path) -> VortexResult<Array> {
         .unwrap()
         .collect_chunked()
         .await
-        .map(|a| a.into_array())
+        .map(vortex::IntoArray::into_array)
 }
 
 pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
@@ -217,7 +217,7 @@ async fn parquet_take_from_stream<T: AsyncFileReader + Unpin + Send + 'static>(
             .metadata()
             .row_groups()
             .iter()
-            .map(|rg| rg.num_rows())
+            .map(parquet::file::metadata::RowGroupMetaData::num_rows)
             .scan(0i64, |acc, x| {
                 *acc += x;
                 Some(*acc)
@@ -236,7 +236,7 @@ async fn parquet_take_from_stream<T: AsyncFileReader + Unpin + Send + 'static>(
     let row_group_indices = row_groups
         .keys()
         .sorted()
-        .map(|i| row_groups.get(i).unwrap().clone())
+        .map(|i| row_groups[i].clone())
         .collect_vec();
 
     let reader = builder

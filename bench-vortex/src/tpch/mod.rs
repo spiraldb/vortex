@@ -248,7 +248,7 @@ async fn register_vortex_file(
             .iter()
             .map(|field| {
                 let name: Arc<str> = field.name().as_str().into();
-                let dtype = types_map.get(&name).unwrap().clone();
+                let dtype = types_map[&name].clone();
                 let chunks = arrays_map.remove(&name).unwrap();
 
                 (

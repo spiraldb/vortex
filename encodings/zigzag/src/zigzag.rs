@@ -43,7 +43,7 @@ impl ZigZagArray {
         PrimitiveArray::try_from(array)
             .map_err(|_| vortex_err!("ZigZag can only encoding primitive arrays"))
             .map(|parray| zigzag_encode(&parray))?
-            .map(|encoded| encoded.into_array())
+            .map(vortex::IntoArray::into_array)
     }
 
     pub fn encoded(&self) -> Array {

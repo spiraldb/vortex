@@ -186,7 +186,7 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
     Ok(chunks
         .keys()
         .sorted()
-        .map(|k| chunks.get(k).unwrap())
+        .map(|k| &chunks[k])
         .cloned()
         .collect_vec())
 }

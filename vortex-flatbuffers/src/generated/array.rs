@@ -93,7 +93,7 @@ impl<'a> flatbuffers::Verifiable for Version {
 
 impl flatbuffers::SimpleToVerifyInSlice for Version {}
 pub enum ArrayOffset {}
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 
 pub struct Array<'a> {
   pub _tab: flatbuffers::Table<'a>,
@@ -275,7 +275,7 @@ impl core::fmt::Debug for Array<'_> {
   }
 }
 pub enum ArrayStatsOffset {}
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 
 pub struct ArrayStats<'a> {
   pub _tab: flatbuffers::Table<'a>,

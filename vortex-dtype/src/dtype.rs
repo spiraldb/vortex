@@ -50,7 +50,7 @@ impl DType {
             Primitive(_, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
-            Struct(st, _) => st.dtypes().iter().all(|f| f.is_nullable()),
+            Struct(st, _) => st.dtypes().iter().all(DType::is_nullable),
             List(_, n) => matches!(n, Nullable),
             Extension(_, n) => matches!(n, Nullable),
         }
@@ -86,27 +86,19 @@ impl DType {
     }
 
     pub fn is_unsigned_int(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_unsigned_int())
-            .unwrap_or_default()
+        PType::try_from(self).is_ok_and(super::ptype::PType::is_unsigned_int)
     }
 
     pub fn is_signed_int(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_signed_int())
-            .unwrap_or_default()
+        PType::try_from(self).is_ok_and(super::ptype::PType::is_signed_int)
     }
 
     pub fn is_int(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_int())
-            .unwrap_or_default()
+        PType::try_from(self).is_ok_and(super::ptype::PType::is_int)
     }
 
     pub fn is_float(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_float())
-            .unwrap_or_default()
+        PType::try_from(self).is_ok_and(super::ptype::PType::is_float)
     }
 
     pub fn is_boolean(&self) -> bool {

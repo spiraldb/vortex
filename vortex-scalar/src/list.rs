@@ -53,7 +53,7 @@ impl<'a> ListScalar<'a> {
     pub fn elements(&self) -> impl Iterator<Item = Scalar> + '_ {
         self.elements
             .as_ref()
-            .map(|e| e.as_ref())
+            .map(std::convert::AsRef::as_ref)
             .unwrap_or_else(|| &[] as &[ScalarValue])
             .iter()
             .map(|e| Scalar {

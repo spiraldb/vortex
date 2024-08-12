@@ -4,7 +4,7 @@ use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::stats::{trailing_zeros, ArrayStatistics};
 use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDef, IntoArray};
+use vortex::{Array, ArrayDef};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_fastlanes::{for_compress, FoR, FoRArray, FoREncoding};
@@ -59,7 +59,8 @@ impl EncodingCompressor for FoRCompressor {
             .excluding(self)
             .compress(&child, like.as_ref().and_then(|l| l.child(0)))?;
         Ok(CompressedArray::new(
-            FoRArray::try_new(compressed_child.array, min, shift).map(|a| a.into_array())?,
+            FoRArray::try_new(compressed_child.array, min, shift)
+                .map(vortex::IntoArray::into_array)?,
             Some(CompressionTree::new(self, vec![compressed_child.path])),
         ))
     }

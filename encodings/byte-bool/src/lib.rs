@@ -102,7 +102,10 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
         let validity = Validity::from_iter(value.iter());
 
         // This doesn't reallocate, and the compiler even vectorizes it
-        let data = value.into_iter().map(|b| b.unwrap_or_default()).collect();
+        let data = value
+            .into_iter()
+            .map(std::option::Option::unwrap_or_default)
+            .collect();
 
         Self::try_from_vec(data, validity).unwrap()
     }

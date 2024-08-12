@@ -286,7 +286,7 @@ impl ArrayBufferReader {
                     .zip(
                         ipc_buffers
                             .iter()
-                            .map(|b| b.offset())
+                            .map(vortex_flatbuffers::message::Buffer::offset)
                             .skip(1)
                             .chain([all_buffers_size]),
                     )

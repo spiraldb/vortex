@@ -41,7 +41,7 @@ impl ALPArray {
         let length = encoded.len();
 
         let patches_dtype = patches.as_ref().map(|a| a.dtype().as_nullable());
-        let patches_len = patches.as_ref().map(|a| a.len()).unwrap_or(0);
+        let patches_len = patches.as_ref().map(vortex::Array::len).unwrap_or(0);
         let mut children = Vec::with_capacity(2);
         children.push(encoded);
         if let Some(patch) = patches {
