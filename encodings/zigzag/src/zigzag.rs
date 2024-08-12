@@ -5,7 +5,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArrayVariant,
     IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
@@ -21,7 +21,7 @@ pub struct ZigZagMetadata;
 
 impl ZigZagArray {
     pub fn new(encoded: Array) -> Self {
-        Self::try_new(encoded).unwrap()
+        Self::try_new(encoded).unwrap_or_else(|err| panic!("Failed to construct ZigZagArray: {}", err))
     }
 
     pub fn try_new(encoded: Array) -> VortexResult<Self> {
@@ -47,11 +47,11 @@ impl ZigZagArray {
     }
 
     pub fn encoded(&self) -> Array {
-        let ptype = PType::try_from(self.dtype()).expect("ptype");
+        let ptype = PType::try_from(self.dtype()).unwrap_or_else(|err| panic!("Failed to convert DType {} to PType: {}", self.dtype(), err));
         let encoded = DType::from(ptype.to_unsigned()).with_nullability(self.dtype().nullability());
         self.array()
             .child(0, &encoded, self.len())
-            .expect("Missing encoded array")
+            .unwrap_or_else(|| panic!("ZigZagArray is missing its encoded array"))
     }
 }
 

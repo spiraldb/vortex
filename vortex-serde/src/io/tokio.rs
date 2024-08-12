@@ -7,6 +7,7 @@ use bytes::BytesMut;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use vortex_buffer::io_buf::IoBuf;
+use vortex_error::VortexError;
 
 use crate::io::{VortexRead, VortexReadAt, VortexWrite};
 
@@ -27,7 +28,12 @@ impl VortexReadAt for TokioAdapter<File> {
     }
 
     async fn size(&self) -> u64 {
-        self.0.metadata().await.unwrap().len()
+        self.0
+            .metadata()
+            .await
+            .map_err(VortexError::IOError)
+            .unwrap_or_else(|err| panic!("Failed to get size of file: {err}"))
+            .len()
     }
 }
 

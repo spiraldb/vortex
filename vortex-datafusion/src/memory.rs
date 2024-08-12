@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::datasource::TableProvider;
 use datafusion::prelude::*;
-use datafusion_common::Result as DFResult;
+use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_expr::{TableProviderFilterPushDown, TableType};
 use datafusion_physical_expr::EquivalenceProperties;
 use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanProperties};
@@ -97,7 +97,8 @@ impl TableProvider for VortexMemTable {
             // using the calculated indices from the filter.
             Some(filter_exprs) => {
                 let filter_projection =
-                    get_filter_projection(filter_exprs, self.schema_ref.clone());
+                    get_filter_projection(filter_exprs, self.schema_ref.clone())
+                    .map_err(DataFusionError::from)?;
 
                 Ok(make_filter_then_take_plan(
                     self.schema_ref.clone(),

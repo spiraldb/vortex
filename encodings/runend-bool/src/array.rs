@@ -96,7 +96,7 @@ impl RunEndBoolArray {
     pub fn ends(&self) -> Array {
         self.array()
             .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
-            .expect("missing ends")
+            .unwrap_or_else(|| panic!("RunEndBoolArray is missing its run ends"))
     }
 }
 

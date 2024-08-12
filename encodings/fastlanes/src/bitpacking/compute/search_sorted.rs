@@ -43,13 +43,13 @@ struct BitPackedSearch {
 impl BitPackedSearch {
     pub fn new(array: &BitPackedArray) -> Self {
         Self {
-            packed: array.packed().into_primitive().unwrap(),
+            packed: array.packed().into_primitive().unwrap_or_else(|err| panic!("Failed to get packed bytes as PrimitiveArray: {err}")),
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),
             min_patch_offset: array.patches().map(|p| {
                 SparseArray::try_from(p)
-                    .expect("Only Sparse patches are supported")
+                    .unwrap_or_else(|err| panic!("Only sparse patches are supported: {err}"))
                     .min_index()
             }),
         }

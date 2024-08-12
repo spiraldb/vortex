@@ -71,8 +71,8 @@ impl Canonical {
     /// Scalar arrays such as Bool and Primitive canonical arrays should convert with
     /// zero copies, while more complex variants such as Struct may require allocations if its child
     /// arrays require decompression.
-    pub fn into_arrow(self) -> ArrayRef {
-        match self {
+    pub fn into_arrow(self) -> VortexResult<ArrayRef> {
+        Ok(match self {
             Canonical::Null(a) => null_to_arrow(a),
             Canonical::Bool(a) => bool_to_arrow(a),
             Canonical::Primitive(a) => primitive_to_arrow(a),
@@ -80,15 +80,14 @@ impl Canonical {
             Canonical::VarBin(a) => varbin_to_arrow(a),
             Canonical::Extension(a) => {
                 if !is_temporal_ext_type(a.id()) {
-                    panic!("unsupported extension dtype with ID {}", a.id().as_ref())
+                    vortex_bail!("unsupported extension dtype with ID {}", a.id().as_ref())
                 }
 
                 temporal_to_arrow(
-                    TemporalArray::try_from(&a.into_array())
-                        .unwrap_or_else(|err| panic!("array must be known temporal array ext type: {err}")),
+                    TemporalArray::try_from(&a.into_array())?,
                 )
             }
-        }
+        })
     }
 }
 
@@ -187,7 +186,7 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
             match canonical {
                 // visit nested structs recursively
                 Canonical::Struct(a) => struct_to_arrow(a),
-                _ => canonical.into_arrow(),
+                _ => canonical.into_arrow().unwrap_or_else(|err| panic!("Failed to convert canonicalized field to arrow: {err}")),
             }
         })
         .collect();
@@ -441,7 +440,7 @@ impl From<Canonical> for Array {
 mod test {
     use arrow_array::types::{Int64Type, UInt64Type};
     use arrow_array::{
-        Array, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
+        PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
     };
     use vortex_dtype::Nullability;
     use vortex_scalar::Scalar;
@@ -483,6 +482,7 @@ mod test {
             .into_canonical()
             .unwrap()
             .into_arrow()
+            .unwrap()
             .as_any()
             .downcast_ref::<ArrowStructArray>()
             .cloned()

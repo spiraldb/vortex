@@ -68,7 +68,7 @@ impl FileOpener for VortexFileOpener {
                             array
                         };
 
-                        VortexResult::Ok(RecordBatch::from(array))
+                        RecordBatch::try_from(array)
                     }
                 })
                 .map_err(|e| e.into());

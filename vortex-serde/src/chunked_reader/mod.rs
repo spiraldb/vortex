@@ -54,10 +54,17 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
 
     pub async fn array_stream(&mut self) -> impl ArrayStream + '_ {
         let mut cursor = Cursor::new(&self.read);
-        cursor.set_position(u64::try_from(&scalar_at(&self.byte_offsets, 0).unwrap()).unwrap());
+        let byte_offset = scalar_at(&self.byte_offsets, 0)
+            .and_then(|s| u64::try_from(&s))
+            .unwrap_or_else(|err| {
+                panic!("Failed to convert byte_offset to u64: {err}");
+            });
+        cursor.set_position(byte_offset);
         StreamArrayReader::try_new(cursor, self.context.clone())
             .await
-            .unwrap()
+            .unwrap_or_else(|err| {
+                panic!("Failed to create stream array reader: {err}");
+            })
             .with_dtype(self.dtype.clone())
             .into_array_stream()
     }

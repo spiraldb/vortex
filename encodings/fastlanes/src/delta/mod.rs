@@ -61,19 +61,19 @@ impl DeltaArray {
     pub fn bases(&self) -> Array {
         self.array()
             .child(0, self.dtype(), self.bases_len())
-            .expect("Missing bases")
+            .unwrap_or_else(|| panic!("DeltaArray is missing bases"))
     }
 
     #[inline]
     pub fn deltas(&self) -> Array {
         self.array()
             .child(1, self.dtype(), self.len())
-            .expect("Missing deltas")
+            .unwrap_or_else(|| panic!("DeltaArray is missing deltas"))
     }
 
     #[inline]
     fn lanes(&self) -> usize {
-        let ptype = self.dtype().try_into().unwrap();
+        let ptype = self.dtype().try_into().unwrap_or_else(|err| panic!("Failed to convert DeltaArray DType to PType: {err}"));
         match_each_unsigned_integer_ptype!(ptype, |$T| {
             <$T as fastlanes::FastLanes>::LANES
         })

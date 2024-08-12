@@ -10,7 +10,7 @@ use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
 
 use crate::io::VortexWrite;
@@ -132,7 +132,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
                 row_offsets
                     .last()
                     .map(|off| off + chunk.len() as u64)
-                    .expect("Row offsets should be initialized with a value"),
+                    .ok_or_else(|| vortex_err!("Row offsets should be initialized with a value"))?,
             );
             self.msgs.write_batch(chunk).await?;
             byte_offsets.push(self.msgs.tell());
@@ -154,8 +154,8 @@ impl<W: VortexWrite> LayoutWriter<W> {
     }
 
     async fn write_metadata_arrays(&mut self) -> VortexResult<NestedLayout> {
-        let DType::Struct(..) = self.dtype.as_ref().expect("Should have written values") else {
-            unreachable!("Values are a structarray")
+        let DType::Struct(..) = self.dtype.as_ref().ok_or_else(|| vortex_err!("Should have written values"))? else {
+            unreachable!("Values are a StructArray")
         };
 
         let mut column_layouts = VecDeque::with_capacity(self.column_chunks.len());
@@ -229,7 +229,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
 
         let dtype_len = Self::write_flatbuffer(
             &mut w,
-            &IPCSchema(&self.dtype.expect("Needed a schema at this point")),
+            &IPCSchema(&self.dtype.ok_or_else(|| vortex_err!("Schema should be written by now"))?),
         )
         .await?;
         let _ = Self::write_flatbuffer(&mut w, &footer).await?;

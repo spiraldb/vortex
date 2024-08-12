@@ -35,8 +35,8 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
     }
 
     // Fallback to arrow on canonical types
-    let lhs = left.clone().into_canonical()?.into_arrow();
-    let rhs = right.clone().into_canonical()?.into_arrow();
+    let lhs = left.clone().into_canonical()?.into_arrow()?;
+    let rhs = right.clone().into_canonical()?.into_arrow()?;
 
     let array = match operator {
         Operator::Eq => cmp::eq(&lhs.as_ref(), &rhs.as_ref())?,

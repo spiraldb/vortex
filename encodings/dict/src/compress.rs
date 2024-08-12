@@ -65,7 +65,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
             }
         }
     })
-    .unwrap();
+    .unwrap_or_else(|err| panic!("Failed to iterate over primitive array during dictionary encoding: {err}"));
 
     let values_validity = if array.dtype().is_nullable() {
         let mut validity = vec![true; values.len()];
@@ -86,7 +86,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
 pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
-        .unwrap()
+        .unwrap_or_else(|err| panic!("Failed to iterate over varbin array during dictionary encoding: {err}"))
 }
 
 fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
@@ -165,7 +165,7 @@ where
             dtype,
             values_validity,
         )
-        .unwrap(),
+        .unwrap_or_else(|err| panic!("Failed to create VarBinArray dictionary during encoding: {err}"))
     )
 }
 

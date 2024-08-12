@@ -135,10 +135,13 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
                     .metadata()
                     .try_serialize_metadata()
                     // TODO(ngates): should we serialize externally to here?
-                    .unwrap();
+                    .unwrap_or_else(|err| panic!("Failed to serialize metadata: {}", err));
                 Some(fbb.create_vector(metadata.as_ref()))
             }
-            Array::View(v) => Some(fbb.create_vector(v.metadata().unwrap())),
+            Array::View(v) => Some(fbb.create_vector(v.metadata().unwrap_or_else(|| {
+                // TODO(wmanning): should this just return None? why does this panic?
+                panic!("ArrayView is missing metadata during serialization")
+            }))),
         };
 
         let children = column_data

@@ -19,13 +19,12 @@ use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_expr::{Expr, Operator};
 use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 use futures::Stream;
-use itertools::Itertools;
 use memory::{VortexMemTable, VortexMemTableOptions};
 use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant};
-use vortex_error::vortex_err;
+use vortex_error::{vortex_err, VortexError, VortexResult};
 
 pub mod expr;
 pub mod memory;
@@ -167,21 +166,31 @@ fn can_be_pushed_down(expr: &Expr) -> bool {
     }
 }
 
-fn get_filter_projection(exprs: &[Expr], schema: SchemaRef) -> Vec<usize> {
-    let referenced_columns: HashSet<String> =
-        exprs.iter().flat_map(get_column_references).collect();
-
-    let projection: Vec<usize> = referenced_columns
+fn get_filter_projection(exprs: &[Expr], schema: SchemaRef) -> VortexResult<Vec<usize>> {
+    let referenced_columns: HashSet<String> = exprs
         .iter()
-        .map(|col_name| schema.column_with_name(col_name).unwrap().0)
-        .sorted()
+        .map(get_column_references)
+        .collect::<VortexResult<Vec<_>>>()?
+        .into_iter()
+        .flatten()
         .collect();
 
-    projection
+    let mut projection: Vec<usize> = referenced_columns
+        .iter()
+        .map(|col_name| {
+            schema
+                .column_with_name(col_name)
+                .ok_or_else(|| vortex_err!("Column not found: {}", col_name))
+                .map(|c| c.0)
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    projection.sort();
+
+    Ok(projection)
 }
 
 /// Extract out the columns from our table referenced by the expression.
-fn get_column_references(expr: &Expr) -> HashSet<String> {
+fn get_column_references(expr: &Expr) -> VortexResult<HashSet<String>> {
     let mut references = HashSet::new();
 
     expr.apply(|node| match node {
@@ -192,9 +201,9 @@ fn get_column_references(expr: &Expr) -> HashSet<String> {
         }
         _ => Ok(TreeNodeRecursion::Continue),
     })
-    .unwrap();
+    .map_err(VortexError::from)?;
 
-    references
+    Ok(references)
 }
 
 /// Physical plan node for scans against an in-memory, possibly chunked Vortex Array.
@@ -246,7 +255,7 @@ impl Stream for VortexRecordBatchStream {
         let chunk = this
             .chunks
             .chunk(this.idx)
-            .expect("nchunks should match precomputed");
+            .ok_or_else(|| vortex_err!("nchunks should match precomputed"))?;
         this.idx += 1;
 
         let struct_array = chunk
@@ -261,7 +270,7 @@ impl Stream for VortexRecordBatchStream {
                     exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
                 })?;
 
-        Poll::Ready(Some(Ok(projected_struct.into())))
+        Poll::Ready(Some(Ok(projected_struct.try_into()?)))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

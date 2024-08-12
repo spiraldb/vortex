@@ -50,7 +50,7 @@ impl FoRArray {
         };
         self.array()
             .child(0, dtype, self.len())
-            .expect("Missing FoR child")
+            .unwrap_or_else(|| panic!("FoRArray is missing encoded child array"))
     }
 
     #[inline]
@@ -65,7 +65,7 @@ impl FoRArray {
 
     #[inline]
     pub fn ptype(&self) -> PType {
-        self.dtype().try_into().unwrap()
+        self.dtype().try_into().unwrap_or_else(|err| panic!("Failed to convert FoRArray DType to PType: {err}"))
     }
 }
 

@@ -28,7 +28,9 @@ pub fn runend_bool_encode_slice(elements: &BooleanBuffer) -> (Vec<u64>, bool) {
         ends.push(s as u64);
         ends.push(e as u64);
     }
-    if *ends.last().unwrap() != elements.len() as u64 {
+
+    let last_end = ends.last().unwrap_or_else(|| panic!("RunEndBoolArray is missing its run ends"));
+    if *last_end != elements.len() as u64 {
         ends.push(elements.len() as u64)
     }
 
@@ -54,8 +56,8 @@ pub fn runend_bool_decode_slice<E: NativePType + AsPrimitive<usize> + FromPrimit
     offset: usize,
     length: usize,
 ) -> Vec<bool> {
-    let offset_e = E::from_usize(offset).unwrap();
-    let length_e = E::from_usize(length).unwrap();
+    let offset_e = E::from_usize(offset).unwrap_or_else(|| panic!("offset {} cannot be converted to {}", offset, std::any::type_name::<E>()));
+    let length_e = E::from_usize(length).unwrap_or_else(|| panic!("length {} cannot be converted to {}", length, std::any::type_name::<E>()));
     let trimmed_ends = run_ends
         .iter()
         .map(|v| *v - offset_e)

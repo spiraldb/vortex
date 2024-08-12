@@ -39,7 +39,7 @@ impl TryFrom<Array> for RecordBatch {
     fn try_from(value: Array) -> VortexResult<Self> {
         let array_ref = value
             .into_canonical()?
-            .into_arrow();
+            .into_arrow()?;
         let struct_array = as_struct_array(array_ref.as_ref());
         Ok(RecordBatch::from(struct_array))
     }

@@ -64,7 +64,7 @@ impl ByteBoolArray {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer().expect("missing mandatory buffer")
+        self.array().buffer().unwrap_or_else(|| panic!("ByteBoolArray is missing the underlying buffer"))
     }
 
     fn maybe_null_slice(&self) -> &[bool] {
@@ -93,7 +93,7 @@ impl BoolArrayTrait for ByteBoolArray {
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
-        Self::try_from_vec(value, Validity::AllValid).unwrap()
+        Self::try_from_vec(value, Validity::AllValid).unwrap_or_else(|err| panic!("Failed to create ByteBoolArray from Vec<bool>: {err}"))
     }
 }
 
@@ -107,7 +107,8 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
             .map(std::option::Option::unwrap_or_default)
             .collect();
 
-        Self::try_from_vec(data, validity).unwrap()
+        Self::try_from_vec(data, validity)
+            .unwrap_or_else(|err| panic!("Failed to create ByteBoolArray from nullable bools: {err}"))
     }
 }
 

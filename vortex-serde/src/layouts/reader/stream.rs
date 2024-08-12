@@ -97,7 +97,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                         match read {
                             ReadResult::GetMsgs(messages) => {
                                 let reader =
-                                    mem::take(&mut self.reader).expect("Invalid state transition");
+                                    mem::take(&mut self.reader).ok_or_else(|| vortex_err!("Invalid state transition"))?;
                                 let read_future = read_ranges(reader, messages).boxed();
                                 self.state = StreamingState::Reading(read_future);
                             }
@@ -123,7 +123,9 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
                     Ok((read, buffers)) => {
-                        let mut write_cache = self.messages_cache.write().unwrap();
+                        let mut write_cache = self.messages_cache.write().unwrap_or_else(|err| {
+                            panic!("Failed to write to message cache: {err}")
+                        });
                         for (id, buf) in buffers {
                             write_cache.set(id, buf)
                         }

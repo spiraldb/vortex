@@ -136,6 +136,13 @@ pub enum VortexError {
         #[backtrace]
         object_store::Error,
     ),
+    #[cfg(feature = "datafusion")]
+    #[error(transparent)]
+    DataFusion(
+        #[from]
+        #[backtrace]
+        datafusion_common::DataFusionError,
+    ),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;

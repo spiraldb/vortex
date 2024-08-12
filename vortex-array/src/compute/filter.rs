@@ -40,8 +40,8 @@ pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
             filter_fn.filter(predicate)
         } else {
             // Fallback: implement using Arrow kernels.
-            let array_ref = array.clone().into_canonical()?.into_arrow();
-            let predicate_ref = predicate.clone().into_canonical()?.into_arrow();
+            let array_ref = array.clone().into_canonical()?.into_arrow()?;
+            let predicate_ref = predicate.clone().into_canonical()?.into_arrow()?;
             let filtered =
                 arrow_select::filter::filter(array_ref.as_ref(), predicate_ref.as_boolean())?;
 

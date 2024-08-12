@@ -106,7 +106,7 @@ impl CompareFn for ConstantArray {
             Ok(ConstantArray::new(scalar, self.len()).into_array())
         } else {
             let datum = Arc::<dyn Datum>::from(self.scalar());
-            let rhs = rhs.clone().into_canonical()?.into_arrow();
+            let rhs = rhs.clone().into_canonical()?.into_arrow()?;
             let rhs = rhs.as_ref();
 
             let boolean_array = match operator {

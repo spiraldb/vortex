@@ -133,12 +133,12 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
         let footer_offset = u64::from_le_bytes(
             buf[magic_bytes_loc - 8..magic_bytes_loc]
                 .try_into()
-                .unwrap(),
+                .unwrap_or_else(|err| panic!("Failed to slice footer offset: {err}")),
         );
         let schema_offset = u64::from_le_bytes(
             buf[magic_bytes_loc - 16..magic_bytes_loc - 8]
                 .try_into()
-                .unwrap(),
+                .unwrap_or_else(|err| panic!("Failed to slice schema offset: {err}")),
         );
 
         Ok(Footer {

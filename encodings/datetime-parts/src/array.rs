@@ -65,19 +65,19 @@ impl DateTimePartsArray {
     pub fn days(&self) -> Array {
         self.array()
             .child(0, &self.metadata().days_dtype, self.len())
-            .expect("Missing days array")
+            .unwrap_or_else(|| panic!("DatetimePartsArray missing days array"))
     }
 
     pub fn seconds(&self) -> Array {
         self.array()
             .child(1, &self.metadata().seconds_dtype, self.len())
-            .expect("Missing seconds array")
+            .unwrap_or_else(|| panic!("DatetimePartsArray missing seconds array"))
     }
 
     pub fn subsecond(&self) -> Array {
         self.array()
             .child(2, &self.metadata().subseconds_dtype, self.len())
-            .expect("Missing subsecond array")
+            .unwrap_or_else(|| panic!("DatetimePartsArray missing subsecond array"))
     }
 }
 

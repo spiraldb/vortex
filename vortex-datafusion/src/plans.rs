@@ -25,7 +25,7 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
-use vortex_error::vortex_err;
+use vortex_error::{vortex_err, VortexError};
 
 use crate::datatype::infer_schema;
 use crate::eval::ExpressionEvaluator;
@@ -174,22 +174,20 @@ impl Stream for RowIndicesStream {
         let next_chunk = this
             .chunked_array
             .chunk(this.chunk_idx)
-            .expect("chunk index in-bounds");
+            .ok_or_else(|| vortex_err!("Chunk not found for index {}, nchunks: {}", this.chunk_idx, this.chunked_array.nchunks()))?;
         this.chunk_idx += 1;
 
         // Get the unfiltered record batch.
         // Since this is a one-shot, we only want to poll the inner future once, to create the
         // initial batch for us to process.
         let vortex_struct = next_chunk
-            .into_struct()
-            .expect("chunks must be StructArray")
-            .project(this.filter_projection.as_slice())
-            .expect("projection should succeed");
+            .into_struct()?
+            .project(this.filter_projection.as_slice())?;
 
         // TODO(adamg): Filter on vortex arrays
         let array =
-            ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr).unwrap();
-        let selection = array.into_canonical().unwrap().into_arrow();
+            ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr)?;
+        let selection = array.into_canonical()?.into_arrow()?;
 
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
         let selection_indices = selection
@@ -235,7 +233,7 @@ impl TakeRowsExec {
         row_indices: Arc<dyn ExecutionPlan>,
         table: &ChunkedArray,
     ) -> Self {
-        let output_schema = Arc::new(schema_ref.project(projection).unwrap());
+        let output_schema = Arc::new(schema_ref.project(projection).unwrap_or_else(|err| panic!("Failed to project schema: {}", VortexError::from(err))));
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(output_schema.clone()),
             Partitioning::UnknownPartitioning(1),
@@ -365,27 +363,24 @@ where
                 vec![],
                 &opts,
             )
-            .unwrap())));
+            .map_err(DataFusionError::from)?)));
         }
 
         let chunk = this
             .vortex_array
             .chunk(*this.chunk_idx)
-            .expect("streamed too many chunks")
-            .into_struct()
-            .expect("chunks must be struct-encoded");
+            .ok_or_else(|| vortex_err!("Chunk not found for index {}, nchunks: {}", this.chunk_idx, this.vortex_array.nchunks()))?
+            .into_struct()?;
 
         *this.chunk_idx += 1;
 
         // TODO(aduffy): this re-decodes the fields from the filter schema, which is wasteful.
         //  We should find a way to avoid decoding the filter columns and only decode the other
         //  columns, then stitch the StructArray back together from those.
-        let projected_for_output = chunk.project(this.output_projection).unwrap();
-        let decoded = take(&projected_for_output.into_array(), &row_indices)
-            .expect("take")
-            .into_canonical()
-            .expect("into_canonical")
-            .into_arrow();
+        let projected_for_output = chunk.project(this.output_projection)?;
+        let decoded = take(&projected_for_output.into_array(), &row_indices)?
+            .into_canonical()?
+            .into_arrow()?;
 
         // Send back a single record batch of the decoded data.
         let output_batch = RecordBatch::from(decoded.as_struct());

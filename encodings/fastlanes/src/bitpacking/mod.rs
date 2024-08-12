@@ -102,7 +102,7 @@ impl BitPackedArray {
                 &self.dtype().with_nullability(Nullability::NonNullable),
                 self.packed_len(),
             )
-            .expect("Missing packed array")
+            .unwrap_or_else(|| panic!("BitpackedArray is missing packed child bytes array"))
     }
 
     #[inline]
@@ -150,7 +150,7 @@ impl BitPackedArray {
 
     #[inline]
     pub fn ptype(&self) -> PType {
-        self.dtype().try_into().unwrap()
+        self.dtype().try_into().unwrap_or_else(|err| panic!("Failed to convert BitpackedArray DType to PType: {err}"))
     }
 
     #[inline]

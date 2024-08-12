@@ -11,7 +11,7 @@ use object_store::path::Path;
 use object_store::{ObjectStore, WriteMultipart};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_buffer::Buffer;
-use vortex_error::VortexResult;
+use vortex_error::{VortexError, VortexResult};
 
 use crate::io::{VortexRead, VortexReadAt, VortexWrite};
 
@@ -78,7 +78,12 @@ impl VortexReadAt for ObjectStoreReadAt {
     }
 
     async fn size(&self) -> u64 {
-        self.object_store.head(&self.location).await.unwrap().size as u64
+        self.object_store
+            .head(&self.location)
+            .await
+            .map_err(VortexError::ObjectStore)
+            .unwrap_or_else(|err| panic!("Failed to get size of object at location {}: {err}", self.location))
+            .size as u64
     }
 }
 

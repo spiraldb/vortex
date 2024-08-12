@@ -106,14 +106,14 @@ impl RunEndArray {
     pub fn ends(&self) -> Array {
         self.array()
             .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
-            .expect("missing ends")
+            .unwrap_or_else(|| panic!("RunEndArray is missing its run ends"))
     }
 
     #[inline]
     pub fn values(&self) -> Array {
         self.array()
             .child(1, self.dtype(), self.metadata().num_runs)
-            .expect("missing values")
+            .unwrap_or_else(|| panic!("RunEndArray is missing its values"))
     }
 }
 

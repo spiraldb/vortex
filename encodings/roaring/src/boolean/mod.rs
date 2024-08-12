@@ -10,7 +10,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
     TypedArray,
 };
 use vortex_buffer::Buffer;
@@ -51,7 +51,7 @@ impl RoaringBoolArray {
         Bitmap::deserialize::<Portable>(
             self.array()
                 .buffer()
-                .expect("RoaringBoolArray buffer is missing")
+                .unwrap_or_else(|| panic!("RoaringBoolArray buffer is missing"))
                 .as_ref(),
         )
     }

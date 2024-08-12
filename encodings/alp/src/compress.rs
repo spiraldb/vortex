@@ -44,7 +44,7 @@ where
                 len,
                 Scalar::null(values.dtype().as_nullable()),
             )
-            .unwrap()
+            .unwrap_or_else(|err| panic!("Failed to create SparseArray for ALP patches: {err}"))
             .into_array()
         }),
     )
@@ -62,7 +62,8 @@ pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
     let encoded = array.encoded().into_primitive()?;
 
-    let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
+    let ptype = array.dtype().try_into()?;
+    let decoded = match_each_alp_float_ptype!(ptype, |$T| {
         PrimitiveArray::from_vec(
             decompress_primitive::<$T>(encoded.maybe_null_slice(), array.exponents()),
             encoded.validity(),

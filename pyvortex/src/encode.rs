@@ -9,10 +9,11 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
 use vortex::Array;
 use vortex_dtype::DType;
+use vortex_error::VortexError;
 
 use crate::array::PyArray;
 use crate::error::PyVortexError;
-use crate::vortex_arrow::map_arrow_err;
+use crate::vortex_arrow::map_to_pyerr;
 
 /// The main entry point for creating enc arrays from other Python objects.
 ///
@@ -52,7 +53,8 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| b.map(Array::from).map_err(map_arrow_err))
+            .map(|b| b.map_err(VortexError::ArrowError))
+            .map(|b| b.and_then(Array::try_from).map_err(map_to_pyerr))
             .collect::<PyResult<Vec<_>>>()?;
         PyArray::wrap(
             obj.py(),

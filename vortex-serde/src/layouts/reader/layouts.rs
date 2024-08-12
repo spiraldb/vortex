@@ -149,7 +149,9 @@ impl ColumnLayout {
             let tab = flatbuffers::Table::new(&self.fb_bytes, self.fb_loc);
             fb::Layout::init_from_table(tab)
         };
-        fb_layout.layout_as_nested_layout().expect("must be nested")
+        fb_layout.layout_as_nested_layout().unwrap_or_else(|| {
+            panic!("ColumnLayout: Failed to read nested layout from flatbuffer")
+        })
     }
 
     fn read_child(
@@ -285,7 +287,9 @@ impl ChunkedLayout {
             let tab = flatbuffers::Table::new(&self.fb_bytes, self.fb_loc);
             fb::Layout::init_from_table(tab)
         };
-        fb_layout.layout_as_nested_layout().expect("must be nested")
+        fb_layout.layout_as_nested_layout().unwrap_or_else(|| {
+            panic!("ChunkedLayout: Failed to read nested layout from flatbuffer")
+        })
     }
 }
 
