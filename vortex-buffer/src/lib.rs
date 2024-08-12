@@ -52,6 +52,7 @@ impl Buffer {
         }
     }
 
+    #[allow(clippy::same_name_method)]
     /// Return a new view on the buffer, but limited to the given index range.
     pub fn slice(&self, range: Range<usize>) -> Self {
         match self {
@@ -62,6 +63,7 @@ impl Buffer {
         }
     }
 
+    #[allow(clippy::same_name_method)]
     /// Access the buffer as an immutable byte slice.
     pub fn as_slice(&self) -> &[u8] {
         match self {

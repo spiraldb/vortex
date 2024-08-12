@@ -1,3 +1,5 @@
+use core::any::type_name;
+
 use num_traits::NumCast;
 use vortex_dtype::half::f16;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability, PType};
@@ -26,12 +28,19 @@ impl<'a> PrimitiveScalar<'a> {
     }
 
     pub fn typed_value<T: NativePType + TryFrom<PValue, Error = VortexError>>(&self) -> Option<T> {
-        if self.ptype != T::PTYPE {
-            panic!("Attempting to read {} scalar as {}", self.ptype, T::PTYPE);
-        }
-        self.pvalue
-            .as_ref()
-            .map(|pv| T::try_from(*pv).expect("checked on construction"))
+        assert_eq!(
+            self.ptype,
+            T::PTYPE,
+            "Attempting to read {} scalar as {}",
+            self.ptype,
+            T::PTYPE
+        );
+
+        self.pvalue.as_ref().map(|pv| {
+            T::try_from(*pv).unwrap_or_else(|err| {
+                panic!("Failed to cast {} to {}: {}", pv, type_name::<T>(), err)
+            })
+        })
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
@@ -85,7 +94,12 @@ impl Scalar {
     }
 
     pub fn reinterpret_cast(&self, ptype: PType) -> Self {
-        let primitive = PrimitiveScalar::try_from(self).unwrap();
+        let primitive = PrimitiveScalar::try_from(self).unwrap_or_else(|err| {
+            panic!(
+                "Failed to reinterpret cast {} to {}: {}",
+                self.dtype, ptype, err
+            )
+        });
         if primitive.ptype() == ptype {
             return self.clone();
         }

@@ -2,7 +2,7 @@ use vortex::array::PrimitiveArray;
 use vortex::validity::Validity;
 use vortex::IntoArray;
 use vortex_dtype::{NativePType, PType};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use zigzag::ZigZag as ExternalZigZag;
 
 use crate::ZigZagArray;
@@ -13,7 +13,7 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
         PType::I16 => zigzag_encode_primitive::<i16>(parray.maybe_null_slice(), parray.validity()),
         PType::I32 => zigzag_encode_primitive::<i32>(parray.maybe_null_slice(), parray.validity()),
         PType::I64 => zigzag_encode_primitive::<i64>(parray.maybe_null_slice(), parray.validity()),
-        _ => panic!("Unsupported ptype {}", parray.ptype()),
+        _ => vortex_bail!("Unsupported ptype {}", parray.ptype()),
     };
     ZigZagArray::try_new(encoded.into_array())
 }

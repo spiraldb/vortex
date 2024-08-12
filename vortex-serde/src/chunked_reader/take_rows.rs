@@ -201,6 +201,7 @@ struct ChunkIndices {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
 mod test {
     use std::io::Cursor;
     use std::sync::Arc;
@@ -260,7 +261,6 @@ mod test {
 
         assert_eq!(result.len(), 3);
         assert_eq!(result.maybe_null_slice::<i32>(), &[0, 10, 999]);
-
         Ok(())
     }
 }

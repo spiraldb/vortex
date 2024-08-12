@@ -4,17 +4,18 @@ use crate::Array;
 
 /// Limit array to start...stop range
 pub trait SliceFn {
+    /// Return a zero-copy slice of an array, between `start` (inclusive) and `end` (exclusive).
+    /// If start >= stop, returns an empty array of the same type as `self`.
+    /// Assumes that start or stop are out of bounds, may panic otherwise.
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array>;
 }
 
 /// Return a zero-copy slice of an array, between `start` (inclusive) and `end` (exclusive).
 ///
-/// # Panics
-///
-/// Slicing will panic if you attempt to slice a range that exceeds the bounds of the
-/// underlying array.
-///
 /// # Errors
+///
+/// Slicing returns an error if you attempt to slice a range that exceeds the bounds of the
+/// underlying array.
 ///
 /// Slicing returns an error if the underlying codec's [slice](SliceFn::slice()) implementation
 /// returns an error.
@@ -37,6 +38,9 @@ fn check_slice_bounds(array: &Array, start: usize, stop: usize) -> VortexResult<
     }
     if stop > array.len() {
         vortex_bail!(OutOfBounds: stop, 0, array.len());
+    }
+    if start > stop {
+        vortex_bail!("start ({}) must be <= stop ({})", start, stop);
     }
     Ok(())
 }

@@ -65,7 +65,7 @@ pub struct Column {
 
 impl VortexPhysicalExpr for Column {
     fn evaluate(&self, array: &Array) -> VortexResult<Array> {
-        let s = StructArray::try_from(array).expect("expecting struct array");
+        let s = StructArray::try_from(array)?;
 
         let column = s.field_by_name(&self.name).ok_or(vortex_err!(
             "Array doesn't contain child array of name {}",

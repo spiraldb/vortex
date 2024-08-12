@@ -249,7 +249,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
 
         let (buffer, buffer_begin) = fbb.collapse();
         let buffer_end = buffer.len();
-        let sliced_buf = buffer.slice(buffer_begin, buffer_end);
+        let sliced_buf = buffer.slice_owned(buffer_begin..buffer_end);
         let buf_len = sliced_buf.as_slice().len() as u64;
 
         write.write_all(sliced_buf).await?;

@@ -2,7 +2,7 @@ use croaring::Bitmap;
 use num_traits::NumCast;
 use vortex::array::PrimitiveArray;
 use vortex_dtype::{NativePType, PType};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::RoaringIntArray;
 
@@ -12,7 +12,7 @@ pub fn roaring_int_encode(parray: PrimitiveArray) -> VortexResult<RoaringIntArra
         PType::U16 => roaring_encode_primitive::<u16>(parray.maybe_null_slice()),
         PType::U32 => roaring_encode_primitive::<u32>(parray.maybe_null_slice()),
         PType::U64 => roaring_encode_primitive::<u64>(parray.maybe_null_slice()),
-        _ => panic!("Unsupported ptype {}", parray.ptype()),
+        _ => vortex_bail!("Unsupported ptype {}", parray.ptype()),
     }
 }
 

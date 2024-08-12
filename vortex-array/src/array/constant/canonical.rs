@@ -1,7 +1,7 @@
 use std::iter;
 
 use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::{BoolScalar, Utf8Scalar};
 
 use crate::array::constant::ConstantArray;
@@ -29,7 +29,9 @@ impl IntoCanonical for ConstantArray {
         }
 
         if let Ok(s) = Utf8Scalar::try_from(self.scalar()) {
-            let const_value = s.value().unwrap();
+            let const_value = s
+                .value()
+                .ok_or_else(|| vortex_err!("Constant UTF-8 array has null value"))?;
             let bytes = const_value.as_bytes();
 
             return Ok(Canonical::VarBin(VarBinArray::from_iter(

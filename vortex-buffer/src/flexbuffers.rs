@@ -8,9 +8,12 @@ use crate::Buffer;
 impl flexbuffers::Buffer for Buffer {
     type BufferString = BufferString;
 
+    #[allow(clippy::same_name_method)]
     fn slice(&self, range: Range<usize>) -> Option<Self> {
-        // TODO(ngates): bounds-check and return None?
-        Some(Self::slice(self, range))
+        if range.end > self.len() || range.start >= self.len() || range.start >= range.end {
+            return None;
+        }
+        Some(Buffer::slice(self, range))
     }
 
     fn empty() -> Self {

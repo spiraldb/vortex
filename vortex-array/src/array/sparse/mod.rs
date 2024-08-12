@@ -62,6 +62,14 @@ impl SparseArray {
             );
         }
 
+        if !indices.is_empty() {
+            let last_index = usize::try_from(&scalar_at(&indices, indices.len() - 1)?)?;
+
+            if last_index - indices_offset >= len {
+                vortex_bail!("Array length was set to {len} but the last index is {last_index}");
+            }
+        }
+
         Self::try_from_parts(
             values.dtype().clone(),
             len,
@@ -119,7 +127,9 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let flat_indices = self.indices().into_primitive().unwrap();
+        let flat_indices = self.indices().into_primitive().unwrap_or_else(|err| {
+            panic!("Failed to convert indices to primitive array: {}", err);
+        });
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
                 .maybe_null_slice::<$P>()
@@ -131,10 +141,10 @@ impl SparseArray {
 
     pub fn min_index(&self) -> usize {
         let min_index: usize = scalar_at(&self.indices(), 0)
-            .unwrap()
-            .as_ref()
-            .try_into()
-            .unwrap();
+            .and_then(|s| s.as_ref().try_into())
+            .unwrap_or_else(|err| {
+                panic!("Failed to get min_index: {}", err);
+            });
         min_index - self.indices_offset()
     }
 }
@@ -152,7 +162,12 @@ impl ArrayStatisticsCompute for SparseArray {}
 
 impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
-        match self.find_index(index).unwrap() {
+        match self.find_index(index).unwrap_or_else(|err| {
+            panic!(
+                "Error while finding index {} in sparse array: {}",
+                index, err
+            );
+        }) {
             None => !self.fill_value().is_null(),
             Some(idx) => self.values().with_dyn(|a| a.is_valid(idx)),
         }
@@ -181,7 +196,12 @@ impl ArrayValidity for SparseArray {
                 false.into(),
             )
         }
-        .unwrap();
+        .unwrap_or_else(|err| {
+            panic!(
+                "Error determining logical validity for sparse array: {}",
+                err
+            );
+        });
 
         LogicalValidity::Array(validity.into_array())
     }
@@ -190,7 +210,7 @@ impl ArrayValidity for SparseArray {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::Nullability::Nullable;
+    use vortex_dtype::Nullability::{self, Nullable};
     use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
     use vortex_scalar::Scalar;
@@ -358,5 +378,34 @@ mod test {
             validity.boolean_buffer().iter().collect_vec(),
             [false, false, true, false, false, true, false, false, true, false]
         );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_invalid_length() {
+        let values = vec![15_u32, 135, 13531, 42].into_array();
+        let indices = vec![10_u64, 11, 50, 100].into_array();
+
+        SparseArray::try_new(
+            indices.clone(),
+            values,
+            100,
+            Scalar::primitive(0_u32, Nullability::NonNullable),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_valid_length() {
+        let values = vec![15_u32, 135, 13531, 42].into_array();
+        let indices = vec![10_u64, 11, 50, 100].into_array();
+
+        SparseArray::try_new(
+            indices.clone(),
+            values,
+            101,
+            Scalar::primitive(0_u32, Nullability::NonNullable),
+        )
+        .unwrap();
     }
 }

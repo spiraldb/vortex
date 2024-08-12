@@ -10,67 +10,35 @@ use crate::{Array, ArrayDType, IntoArray};
 /// Chunked arrays support all DTypes
 impl ArrayVariants for ChunkedArray {
     fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
-        if matches!(self.dtype(), DType::Null) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Null).then_some(self)
     }
 
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
-        if matches!(self.dtype(), DType::Bool(_)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Bool(_)).then_some(self)
     }
 
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
-        if matches!(self.dtype(), DType::Primitive(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Primitive(..)).then_some(self)
     }
 
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
-        if matches!(self.dtype(), DType::Utf8(_)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Utf8(_)).then_some(self)
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
-        if matches!(self.dtype(), DType::Binary(_)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Binary(_)).then_some(self)
     }
 
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
-        if matches!(self.dtype(), DType::Struct(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Struct(..)).then_some(self)
     }
 
     fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
-        if matches!(self.dtype(), DType::List(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::List(..)).then_some(self)
     }
 
     fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
-        if matches!(self.dtype(), DType::Extension(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Extension(..)).then_some(self)
     }
 }
 
@@ -99,8 +67,15 @@ impl StructArrayTrait for ChunkedArray {
             let array = chunk.with_dyn(|a| a.as_struct_array().and_then(|s| s.field(idx)))?;
             chunks.push(array);
         }
-        let chunked = ChunkedArray::try_new(chunks, self.dtype().clone())
-            .expect("should be correct dtype")
+
+        let projected_dtype = self.dtype().as_struct().and_then(|s| s.dtypes().get(idx))?;
+        let chunked = ChunkedArray::try_new(chunks, projected_dtype.clone())
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to create new chunked array with dtype {}: {}",
+                    projected_dtype, err
+                )
+            })
             .into_array();
         Some(chunked)
     }

@@ -7,7 +7,7 @@ use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::{Scalar, ScalarValue};
 
@@ -135,11 +135,25 @@ impl CompareFn for ByteBoolArray {
 
 impl FillForwardFn for ByteBoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
+        let validity = self.logical_validity();
         if self.dtype().nullability() == Nullability::NonNullable {
             return Ok(self.clone().into());
         }
+        // all valid, but we need to convert to non-nullable
+        if validity.all_valid() {
+            return Ok(Self::try_new(self.buffer().clone(), Validity::AllValid)?.into_array());
+        }
+        // all invalid => fill with default value (false)
+        if validity.all_invalid() {
+            return Ok(
+                Self::try_from_vec(vec![false; self.len()], Validity::AllValid)?.into_array(),
+            );
+        }
 
-        let validity = self.logical_validity().to_null_buffer()?.unwrap();
+        let validity = validity
+            .to_null_buffer()?
+            .ok_or_else(|| vortex_err!("Failed to convert array validity to null buffer"))?;
+
         let bools = self.maybe_null_slice();
         let mut last_value = bool::default();
 
@@ -155,7 +169,7 @@ impl FillForwardFn for ByteBoolArray {
             })
             .collect::<Vec<_>>();
 
-        Ok(Self::from(filled).into_array())
+        Ok(Self::try_from_vec(filled, Validity::AllValid)?.into_array())
     }
 }
 

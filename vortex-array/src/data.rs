@@ -123,15 +123,35 @@ impl From<ArrayData> for Array {
 
 impl Statistics for ArrayData {
     fn get(&self, stat: Stat) -> Option<Scalar> {
-        self.stats_map.read().unwrap().get(stat).cloned()
+        self.stats_map
+            .read()
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to acquire read lock on stats map while getting {}",
+                    stat
+                )
+            })
+            .get(stat)
+            .cloned()
     }
 
     fn to_set(&self) -> StatsSet {
-        self.stats_map.read().unwrap().clone()
+        self.stats_map
+            .read()
+            .unwrap_or_else(|_| panic!("Failed to acquire read lock on stats map"))
+            .clone()
     }
 
     fn set(&self, stat: Stat, value: Scalar) {
-        self.stats_map.write().unwrap().set(stat, value);
+        self.stats_map
+            .write()
+            .unwrap_or_else(|_| {
+                panic!(
+                    "Failed to acquire write lock on stats map while setting {} to {}",
+                    stat, value
+                )
+            })
+            .set(stat, value);
     }
 
     fn compute(&self, stat: Stat) -> Option<Scalar> {
@@ -139,11 +159,14 @@ impl Statistics for ArrayData {
             return Some(s);
         }
 
-        self.stats_map.write().unwrap().extend(
-            self.to_array()
-                .with_dyn(|a| a.compute_statistics(stat))
-                .ok()?,
-        );
+        self.stats_map
+            .write()
+            .unwrap_or_else(|_| panic!("Failed to write to stats map while computing {}", stat))
+            .extend(
+                self.to_array()
+                    .with_dyn(|a| a.compute_statistics(stat))
+                    .ok()?,
+            );
         self.get(stat)
     }
 }

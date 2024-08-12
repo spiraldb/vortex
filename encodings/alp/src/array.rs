@@ -85,7 +85,13 @@ impl ALPArray {
         self.metadata().patches_dtype.as_ref().map(|dt| {
             self.array()
                 .child(1, dt, self.metadata().patches_len)
-                .expect("Missing patches with present metadata flag")
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Missing patches with present metadata flag; dtype: {}, patches_len: {}",
+                        dt,
+                        self.metadata().patches_len
+                    )
+                })
         })
     }
 
@@ -124,11 +130,8 @@ impl IntoCanonical for ALPArray {
 impl AcceptArrayVisitor for ALPArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("encoded", &self.encoded())?;
-        if self.patches().is_some() {
-            visitor.visit_child(
-                "patches",
-                &self.patches().expect("Expected patches to be present "),
-            )?;
+        if let Some(patches) = self.patches().as_ref() {
+            visitor.visit_child("patches", patches)?;
         }
         Ok(())
     }

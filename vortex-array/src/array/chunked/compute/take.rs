@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use vortex_dtype::PType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
@@ -41,7 +41,9 @@ impl TakeFn for ChunkedArray {
                 // Start a new chunk
                 let indices_in_chunk_array = indices_in_chunk.clone().into_array();
                 chunks.push(take(
-                    &self.chunk(prev_chunk_idx).unwrap(),
+                    &self.chunk(prev_chunk_idx).ok_or_else(
+                        || vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()),
+                    )?,
                     &indices_in_chunk_array,
                 )?);
                 indices_in_chunk = Vec::new();
@@ -54,7 +56,9 @@ impl TakeFn for ChunkedArray {
         if !indices_in_chunk.is_empty() {
             let indices_in_chunk_array = indices_in_chunk.into_array();
             chunks.push(take(
-                &self.chunk(prev_chunk_idx).unwrap(),
+                &self
+                    .chunk(prev_chunk_idx)
+                    .ok_or_else(|| vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()))?,
                 &indices_in_chunk_array,
             )?);
         }
@@ -71,15 +75,13 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
     let mut pos = 0;
     while pos < indices.len() {
         // Locate the chunk index for the current index
-        let idx = usize::try_from(&scalar_at(indices, pos)?).unwrap();
+        let idx = usize::try_from(&scalar_at(indices, pos)?)?;
         let (chunk_idx, _idx_in_chunk) = chunked.find_chunk_idx(idx);
 
         // Find the end of this chunk, and locate that position in the indices array.
-        let chunk_begin = usize::try_from(&scalar_at(&chunked.chunk_ends(), chunk_idx)?).unwrap();
-        let chunk_end = usize::try_from(&scalar_at(&chunked.chunk_ends(), chunk_idx + 1)?).unwrap();
-        let chunk_end_pos = search_sorted(indices, chunk_end, SearchSortedSide::Left)
-            .unwrap()
-            .to_index();
+        let chunk_begin = usize::try_from(&scalar_at(&chunked.chunk_ends(), chunk_idx)?)?;
+        let chunk_end = usize::try_from(&scalar_at(&chunked.chunk_ends(), chunk_idx + 1)?)?;
+        let chunk_end_pos = search_sorted(indices, chunk_end, SearchSortedSide::Left)?.to_index();
 
         // Now we can say the slice of indices belonging to this chunk is [pos, chunk_end_pos)
         let chunk_indices = slice(indices, pos, chunk_end_pos)?;

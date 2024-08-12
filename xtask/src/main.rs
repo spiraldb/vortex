@@ -43,7 +43,9 @@ fn execute_generate_proto() -> anyhow::Result<()> {
     ];
 
     for file in &proto_files {
-        assert!(file.exists(), "proto file not found: {file:?}");
+        if !file.exists() {
+            anyhow::bail!("proto file not found: {file:?}");
+        }
     }
 
     let out_dir = vortex_proto.join("src").join("generated");
@@ -51,8 +53,7 @@ fn execute_generate_proto() -> anyhow::Result<()> {
 
     prost_build::Config::new()
         .out_dir(out_dir)
-        .compile_protos(&proto_files, &[vortex_proto.join("proto")])
-        .unwrap();
+        .compile_protos(&proto_files, &[vortex_proto.join("proto")])?;
 
     Ok(())
 }

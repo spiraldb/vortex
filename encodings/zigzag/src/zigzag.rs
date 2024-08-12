@@ -30,7 +30,7 @@ impl ZigZagArray {
             vortex_bail!(MismatchedTypes: "unsigned int", encoded_dtype);
         }
 
-        let dtype = DType::from(PType::try_from(&encoded_dtype).expect("ptype").to_signed())
+        let dtype = DType::from(PType::try_from(&encoded_dtype)?.to_signed())
             .with_nullability(encoded_dtype.nullability());
 
         let len = encoded.len();

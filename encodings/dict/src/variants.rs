@@ -6,27 +6,15 @@ use crate::DictArray;
 
 impl ArrayVariants for DictArray {
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
-        if matches!(self.dtype(), DType::Primitive(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Primitive(..)).then_some(self)
     }
 
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
-        if matches!(self.dtype(), DType::Utf8(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Utf8(..)).then_some(self)
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
-        if matches!(self.dtype(), DType::Binary(..)) {
-            Some(self)
-        } else {
-            None
-        }
+        matches!(self.dtype(), DType::Binary(..)).then_some(self)
     }
 }
 

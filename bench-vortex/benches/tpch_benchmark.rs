@@ -1,3 +1,5 @@
+#![allow(clippy::use_debug)]
+
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::tpch::{load_datasets, tpch_queries, Format};
 use criterion::{criterion_group, criterion_main, Criterion};
