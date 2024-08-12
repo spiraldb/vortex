@@ -139,7 +139,8 @@ fn assert_slice(original: &Array, slice: &Array, start: usize) {
         let o = scalar_at(&original, start + idx).unwrap();
         let s = scalar_at(&slice, idx).unwrap();
 
-        assert_eq!(o, s);
+        assert_eq!(o.value(), s.value());
+        assert_eq!(o.is_valid(), s.is_valid());
     }
 }
 
