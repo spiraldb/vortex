@@ -13,7 +13,7 @@ use vortex::array::{ConstantArray, StructArray};
 use vortex::compute::compare;
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, IntoArray};
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 

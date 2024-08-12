@@ -15,28 +15,48 @@ use prettytable::{Cell, Row, Table};
 struct Args {
     #[arg(short, long, value_delimiter = ',')]
     queries: Option<Vec<usize>>,
+    #[arg(short, long)]
+    threads: Option<usize>,
 }
 
-#[tokio::main(flavor = "multi_thread", worker_threads = 8)]
-async fn main() {
+fn main() {
+    let args = Args::parse();
+
+    let runtime = match args.threads {
+        Some(0) => panic!("Can't use 0 threads for runtime"),
+        Some(1) => tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build(),
+        Some(n) => tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(n)
+            .enable_all()
+            .build(),
+        None => tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build(),
+    }
+    .expect("Failed building the Runtime");
+
+    runtime.block_on(bench_main(args.queries));
+}
+
+async fn bench_main(queries: Option<Vec<usize>>) {
     // uncomment the below to enable trace logging of datafusion execution
     // setup_logger(LevelFilter::Trace);
-
-    let args = Args::parse();
 
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
     // The formats to run against (vs the baseline)
     let formats = [
-        // Format::Arrow,
+        Format::Arrow,
         Format::Parquet,
         Format::InMemoryVortex {
             enable_pushdown: true,
         },
-        Format::OnDiskVortex {
-            enable_compression: true,
-        },
+        // Format::OnDiskVortex {
+        //     enable_compression: true,
+        // },
         Format::OnDiskVortex {
             enable_compression: false,
         },
@@ -55,7 +75,7 @@ async fn main() {
         table.add_row(Row::new(cells));
     }
 
-    let query_count = args.queries.as_ref().map_or(21, |c| c.len());
+    let query_count = queries.as_ref().map_or(21, |c| c.len());
 
     // Setup a progress bar
     let progress = ProgressBar::new((query_count * formats.len()) as u64);
@@ -63,7 +83,7 @@ async fn main() {
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
     for (q, query) in tpch_queries() {
-        if let Some(queries) = args.queries.as_ref() {
+        if let Some(queries) = queries.as_ref() {
             if !queries.contains(&q) {
                 continue;
             }
