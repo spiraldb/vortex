@@ -44,6 +44,8 @@ macro_rules! impl_encoding {
                 pub fn array(&self) -> &$crate::Array {
                     self.typed.array()
                 }
+
+                #[allow(clippy::same_name_method)]
                 fn metadata(&self) -> &[<$Name Metadata>] {
                     self.typed.metadata()
                 }
@@ -68,6 +70,7 @@ macro_rules! impl_encoding {
                 }
             }
             impl $crate::GetArrayMetadata for [<$Name Array>] {
+                #[allow(clippy::same_name_method)]
                 fn metadata(&self) -> std::sync::Arc<dyn $crate::ArrayMetadata> {
                     std::sync::Arc::new(self.metadata().clone())
                 }

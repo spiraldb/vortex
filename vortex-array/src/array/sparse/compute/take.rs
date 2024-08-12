@@ -26,8 +26,7 @@ impl TakeFn for SparseArray {
             taken_values,
             indices.len(),
             self.fill_value().clone(),
-        )
-        .expect("Must be valid SparseArray")
+        )?
         .into_array())
     }
 }

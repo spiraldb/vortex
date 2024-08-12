@@ -3,7 +3,7 @@ use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::{slice, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray, IntoArrayVariant, ToArray};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::compress::value_at_index;
@@ -40,8 +40,12 @@ impl TakeFn for RunEndBoolArray {
             primitive_indices
                 .maybe_null_slice::<$P>()
                 .iter()
+                .map(|idx| *idx as usize)
                 .map(|idx| {
-                    self.find_physical_index(*idx as usize)
+                    if idx >= self.len() {
+                        vortex_bail!(OutOfBounds: idx, 0, self.len())
+                    }
+                    self.find_physical_index(idx)
                 })
                 .collect::<VortexResult<Vec<_>>>()?
         });
@@ -60,12 +64,11 @@ impl SliceFn for RunEndBoolArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         let slice_begin = self.find_physical_index(start)?;
         let slice_end = self.find_physical_index(stop)?;
-        let bounded_slice_end = usize::min(slice_end + 1, self.ends().len());
 
         Ok(Self::with_offset_and_size(
-            slice(&self.ends(), slice_begin, bounded_slice_end)?,
+            slice(&self.ends(), slice_begin, slice_end + 1)?,
             value_at_index(slice_begin, self.start()),
-            self.validity().slice(slice_begin, bounded_slice_end)?,
+            self.validity().slice(slice_begin, slice_end + 1)?,
             stop - start,
             start,
         )?

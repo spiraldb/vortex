@@ -1,18 +1,33 @@
-use vortex_dtype::match_each_native_ptype;
-use vortex_error::VortexResult;
+use vortex_dtype::{match_each_native_ptype, Nullability};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::FillForwardFn;
-use crate::validity::ArrayValidity;
-use crate::{Array, IntoArray};
+use crate::validity::{ArrayValidity, Validity};
+use crate::{Array, ArrayDType, IntoArray};
 
 impl FillForwardFn for PrimitiveArray {
     fn fill_forward(&self) -> VortexResult<Array> {
-        let validity = self.logical_validity();
-        let Some(nulls) = validity.to_null_buffer()? else {
+        if self.dtype().nullability() == Nullability::NonNullable {
             return Ok(self.clone().into());
-        };
+        }
+
+        let validity = self.logical_validity();
+        if validity.all_valid() {
+            return Ok(PrimitiveArray::new(
+                self.buffer().clone(),
+                self.ptype(),
+                Validity::AllValid,
+            )
+            .into_array());
+        }
+
         match_each_native_ptype!(self.ptype(), |$T| {
+            if validity.all_invalid() {
+                return Ok(PrimitiveArray::from_vec(vec![$T::default(); self.len()], Validity::AllValid).into_array());
+            }
+
+            let nulls = validity.to_null_buffer()?.ok_or_else(|| vortex_err!("Failed to convert array validity to null buffer"))?;
             let maybe_null_slice = self.maybe_null_slice::<$T>();
             let mut last_value = $T::default();
             let filled = maybe_null_slice
@@ -25,7 +40,7 @@ impl FillForwardFn for PrimitiveArray {
                     last_value
                 })
                 .collect::<Vec<_>>();
-            Ok(filled.into_array())
+            Ok(PrimitiveArray::from_vec(filled, Validity::AllValid).into_array())
         })
     }
 }

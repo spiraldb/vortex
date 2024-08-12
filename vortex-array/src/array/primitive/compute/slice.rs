@@ -6,7 +6,6 @@ use crate::{Array, IntoArray};
 
 impl SliceFn for PrimitiveArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        assert!(start <= stop, "start must be <= stop");
         let byte_width = self.ptype().byte_width();
         let buffer = self.buffer().slice(start * byte_width..stop * byte_width);
         Ok(

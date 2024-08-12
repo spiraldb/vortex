@@ -10,12 +10,13 @@ impl TryFrom<&ExtDType> for TemporalMetadata {
     type Error = VortexError;
 
     fn try_from(ext_dtype: &ExtDType) -> Result<Self, Self::Error> {
+        let metadata = ext_dtype
+            .metadata()
+            .ok_or_else(|| vortex_err!("ExtDType is missing metadata"))?;
         match ext_dtype.id().as_ref() {
-            x if x == TIME_ID.as_ref() => decode_time_metadata(ext_dtype.metadata().unwrap()),
-            x if x == DATE_ID.as_ref() => decode_date_metadata(ext_dtype.metadata().unwrap()),
-            x if x == TIMESTAMP_ID.as_ref() => {
-                decode_timestamp_metadata(ext_dtype.metadata().unwrap())
-            }
+            x if x == TIME_ID.as_ref() => decode_time_metadata(metadata),
+            x if x == DATE_ID.as_ref() => decode_date_metadata(metadata),
+            x if x == TIMESTAMP_ID.as_ref() => decode_timestamp_metadata(metadata),
             _ => {
                 vortex_bail!(InvalidArgument: "ExtDType must be one of the known temporal types")
             }
@@ -42,7 +43,7 @@ fn decode_timestamp_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMet
     let time_unit =
         TimeUnit::try_from(tag).map_err(|e| vortex_err!(ComputeError: "invalid unit tag: {e}"))?;
     let tz_len_bytes = &ext_meta.as_ref()[1..3];
-    let tz_len = u16::from_le_bytes(tz_len_bytes.try_into().unwrap());
+    let tz_len = u16::from_le_bytes(tz_len_bytes.try_into()?);
     if tz_len == 0 {
         return Ok(TemporalMetadata::Timestamp(time_unit, None));
     }

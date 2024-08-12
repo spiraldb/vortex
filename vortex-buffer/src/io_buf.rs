@@ -1,5 +1,7 @@
 //! Provides types that can be used by I/O frameworks to work with byte buffer-shaped data.
 
+use std::ops::Range;
+
 use crate::Buffer;
 
 /// Trait for types that can provide a readonly byte buffer interface to I/O frameworks.
@@ -14,20 +16,18 @@ pub unsafe trait IoBuf: Unpin + 'static {
     fn bytes_init(&self) -> usize;
 
     /// Access the buffer as a byte slice
-    fn as_slice(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.read_ptr(), self.bytes_init()) }
-    }
+    fn as_slice(&self) -> &[u8];
 
     /// Access the buffer as a byte slice with begin and end indices
     #[inline]
-    fn slice(self, begin: usize, end: usize) -> Slice<Self>
+    fn slice_owned(self, range: Range<usize>) -> Slice<Self>
     where
         Self: Sized,
     {
         Slice {
             buf: self,
-            begin,
-            end,
+            begin: range.start,
+            end: range.end,
         }
     }
 }
@@ -56,6 +56,11 @@ unsafe impl IoBuf for &'static [u8] {
     fn bytes_init(&self) -> usize {
         <[u8]>::len(self)
     }
+
+    #[inline]
+    fn as_slice(&self) -> &[u8] {
+        self
+    }
 }
 
 unsafe impl<const N: usize> IoBuf for [u8; N] {
@@ -67,6 +72,11 @@ unsafe impl<const N: usize> IoBuf for [u8; N] {
     #[inline]
     fn bytes_init(&self) -> usize {
         N
+    }
+
+    #[inline]
+    fn as_slice(&self) -> &[u8] {
+        self.as_ref()
     }
 }
 
@@ -80,6 +90,11 @@ unsafe impl IoBuf for Vec<u8> {
     fn bytes_init(&self) -> usize {
         self.len()
     }
+
+    #[inline]
+    fn as_slice(&self) -> &[u8] {
+        self.as_ref()
+    }
 }
 
 unsafe impl<T: IoBuf> IoBuf for Slice<T> {
@@ -91,6 +106,11 @@ unsafe impl<T: IoBuf> IoBuf for Slice<T> {
     #[inline]
     fn bytes_init(&self) -> usize {
         self.end - self.begin
+    }
+
+    #[inline]
+    fn as_slice(&self) -> &[u8] {
+        unsafe { std::slice::from_raw_parts(self.read_ptr(), self.bytes_init()) }
     }
 }
 
@@ -106,5 +126,11 @@ unsafe impl IoBuf for Buffer {
     #[inline]
     fn bytes_init(&self) -> usize {
         self.len()
+    }
+
+    #[inline]
+    #[allow(clippy::same_name_method)]
+    fn as_slice(&self) -> &[u8] {
+        Buffer::as_slice(self)
     }
 }

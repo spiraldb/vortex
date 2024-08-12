@@ -25,13 +25,15 @@ use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant};
+use vortex_error::vortex_err;
 
+pub mod expr;
 pub mod memory;
 pub mod persistent;
+pub mod scalar;
 
 mod datatype;
 mod eval;
-mod expr;
 mod plans;
 
 const SUPPORTED_BINARY_OPS: &[Operator] = &[
@@ -99,10 +101,13 @@ impl SessionContextExt for SessionContext {
         array: Array,
         options: VortexMemTableOptions,
     ) -> DFResult<()> {
-        assert!(
-            array.dtype().is_struct(),
-            "Vortex arrays must have struct type"
-        );
+        if !array.dtype().is_struct() {
+            return Err(vortex_err!(
+                "Vortex arrays must have struct type, found {}",
+                array.dtype()
+            )
+            .into());
+        }
 
         let vortex_table = VortexMemTable::new(array, options);
         self.register_table(name.as_ref(), Arc::new(vortex_table))
@@ -114,10 +119,13 @@ impl SessionContextExt for SessionContext {
         array: Array,
         options: VortexMemTableOptions,
     ) -> DFResult<DataFrame> {
-        assert!(
-            array.dtype().is_struct(),
-            "Vortex arrays must have struct type"
-        );
+        if !array.dtype().is_struct() {
+            return Err(vortex_err!(
+                "Vortex arrays must have struct type, found {}",
+                array.dtype()
+            )
+            .into());
+        }
 
         let vortex_table = VortexMemTable::new(array, options);
 
@@ -209,6 +217,7 @@ impl Debug for VortexScanExec {
 }
 
 impl DisplayAs for VortexScanExec {
+    #[allow(clippy::use_debug)]
     fn fmt_as(&self, _display_type: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }

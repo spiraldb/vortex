@@ -142,11 +142,7 @@ impl ArrayView {
 
     fn array_child(&self, idx: usize) -> Option<fb::Array> {
         let children = self.flatbuffer().children()?;
-        if idx < children.len() {
-            Some(children.get(idx))
-        } else {
-            None
-        }
+        (idx < children.len()).then(|| children.get(idx))
     }
 
     pub fn nchildren(&self) -> usize {

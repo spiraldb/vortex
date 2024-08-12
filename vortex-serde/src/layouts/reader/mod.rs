@@ -89,11 +89,27 @@ impl RelativeLayoutCache {
     }
 
     pub fn get(&self, path: &[LayoutPartId]) -> Option<Bytes> {
-        self.root.read().unwrap().get(&self.absolute_id(path))
+        self.root
+            .read()
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to read from layout cache at path {:?} with error {}",
+                    path, err
+                );
+            })
+            .get(&self.absolute_id(path))
     }
 
     pub fn remove(&mut self, path: &[LayoutPartId]) -> Option<Bytes> {
-        self.root.write().unwrap().remove(&self.absolute_id(path))
+        self.root
+            .write()
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to write to layout cache at path {:?} with error {}",
+                    path, err
+                )
+            })
+            .remove(&self.absolute_id(path))
     }
 
     pub fn dtype(&self) -> DType {

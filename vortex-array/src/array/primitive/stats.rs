@@ -5,7 +5,7 @@ use arrow_buffer::buffer::BooleanBuffer;
 use num_traits::PrimInt;
 use vortex_dtype::half::f16;
 use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -60,7 +60,7 @@ impl<'a, T: PStatsType> ArrayStatisticsCompute for NullableValues<'a, T> {
             .skip_while(|(_, valid)| !*valid)
             .map(|(idx, _)| idx)
             .next()
-            .expect("Must be at least one non-null value");
+            .ok_or_else(|| vortex_err!("Must be at least one non-null value"))?;
 
         let mut stats = StatsAccumulator::new_with_leading_nulls(
             values[first_non_null_idx],

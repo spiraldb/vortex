@@ -34,6 +34,7 @@ impl CompareFn for BoolArray {
 }
 
 #[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
 mod test {
     use itertools::Itertools;
 
@@ -47,7 +48,7 @@ mod test {
             .boolean_buffer()
             .iter()
             .enumerate()
-            .flat_map(|(idx, v)| if v { Some(idx as u64) } else { None })
+            .flat_map(|(idx, v)| v.then_some(idx as u64))
             .collect_vec();
         filtered
     }

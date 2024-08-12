@@ -84,7 +84,9 @@ impl PrimitiveArray {
 
     pub fn ptype(&self) -> PType {
         // TODO(ngates): we can't really cache this anywhere?
-        self.dtype().try_into().unwrap()
+        self.dtype().try_into().unwrap_or_else(|err| {
+            panic!("Failed to convert dtype {} to ptype: {}", self.dtype(), err);
+        })
     }
 
     pub fn buffer(&self) -> &Buffer {

@@ -181,7 +181,10 @@ impl Layout for ColumnLayout {
                     vortex_bail!("Column layout must have struct dtype")
                 };
 
-                let fb_children = self.flatbuffer().children().expect("must have children");
+                let fb_children = self
+                    .flatbuffer()
+                    .children()
+                    .ok_or_else(|| vortex_err!("Missing children"))?;
 
                 let column_layouts = match self.scan.projection {
                     Projection::All => (0..fb_children.len())
@@ -293,7 +296,7 @@ impl Layout for ChunkedLayout {
                 let children = self
                     .flatbuffer()
                     .children()
-                    .expect("must have children")
+                    .ok_or_else(|| vortex_err!("Missing children"))?
                     .iter()
                     .enumerate()
                     // Skip over the metadata table of this layout

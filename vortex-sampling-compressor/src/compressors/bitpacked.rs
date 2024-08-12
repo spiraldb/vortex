@@ -63,14 +63,14 @@ impl EncodingCompressor for BitPackedCompressor {
 
         let validity = ctx.compress_validity(parray.validity())?;
         let packed = bitpack(&parray, bit_width)?;
-        let patches = if num_exceptions > 0 {
-            Some(ctx.auxiliary("patches").compress(
-                &bitpack_patches(&parray, bit_width, num_exceptions),
-                like.as_ref().and_then(|l| l.child(0)),
-            )?)
-        } else {
-            None
-        };
+        let patches = (num_exceptions > 0)
+            .then(|| {
+                ctx.auxiliary("patches").compress(
+                    &bitpack_patches(&parray, bit_width, num_exceptions),
+                    like.as_ref().and_then(|l| l.child(0)),
+                )
+            })
+            .transpose()?;
 
         Ok(CompressedArray::new(
             BitPackedArray::try_new(

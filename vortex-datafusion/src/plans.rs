@@ -1,6 +1,7 @@
 //! Physical operators needed to implement scanning of Vortex arrays with pushdown.
 
 use std::any::Any;
+use std::backtrace::Backtrace;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -10,7 +11,7 @@ use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use datafusion_common::Result as DFResult;
+use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_expr::Expr;
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
@@ -24,6 +25,7 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex_error::vortex_err;
 
 use crate::datatype::infer_schema;
 use crate::eval::ExpressionEvaluator;
@@ -81,6 +83,7 @@ impl Debug for RowSelectorExec {
     }
 }
 
+#[allow(clippy::use_debug)]
 impl DisplayAs for RowSelectorExec {
     fn fmt_as(
         &self,
@@ -121,17 +124,21 @@ impl ExecutionPlan for RowSelectorExec {
         partition: usize,
         _context: Arc<TaskContext>,
     ) -> DFResult<SendableRecordBatchStream> {
-        assert_eq!(
-            partition, 0,
-            "single partitioning only supported by RowSelectorExec"
-        );
+        if partition != 0 {
+            return Err(vortex_err!(
+                "Single partitioning only supported by RowSelectorExec, got partition {}",
+                partition
+            )
+            .into());
+        }
 
         // Derive a schema using the provided set of fields.
-
         let filter_schema = Arc::new(
             infer_schema(self.chunked_array.dtype())
                 .project(self.filter_projection.as_slice())
-                .unwrap(),
+                .map_err(|err| {
+                    DataFusionError::ArrowError(err, Some(Backtrace::capture().to_string()))
+                })?,
         );
 
         let conjunction_expr =
@@ -254,6 +261,7 @@ impl Debug for TakeRowsExec {
     }
 }
 
+#[allow(clippy::use_debug)]
 impl DisplayAs for TakeRowsExec {
     fn fmt_as(&self, _display_type: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
         write!(f, "{:?}", self)

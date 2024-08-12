@@ -13,6 +13,7 @@ pub mod writer;
 pub const ALIGNMENT: usize = 64;
 
 #[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
 mod test {
     use std::sync::Arc;
 

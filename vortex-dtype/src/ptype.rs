@@ -191,32 +191,6 @@ impl PType {
     }
 }
 
-impl DType {
-    pub fn is_unsigned_int(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_unsigned_int())
-            .unwrap_or_default()
-    }
-
-    pub fn is_signed_int(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_signed_int())
-            .unwrap_or_default()
-    }
-
-    pub fn is_int(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_int())
-            .unwrap_or_default()
-    }
-
-    pub fn is_float(&self) -> bool {
-        PType::try_from(self)
-            .map(|ptype| ptype.is_float())
-            .unwrap_or_default()
-    }
-}
-
 impl Display for PType {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {

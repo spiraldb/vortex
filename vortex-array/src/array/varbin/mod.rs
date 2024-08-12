@@ -129,6 +129,7 @@ impl VarBinArray {
         builder.finish(dtype)
     }
 
+    #[allow(clippy::same_name_method)]
     pub fn from_iter<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
         iter: I,
         dtype: DType,

@@ -28,11 +28,7 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
     }
 
     let packed = bitpack(&array, bit_width)?;
-    let patches = if num_exceptions > 0 {
-        Some(bitpack_patches(&array, bit_width, num_exceptions))
-    } else {
-        None
-    };
+    let patches = (num_exceptions > 0).then(|| bitpack_patches(&array, bit_width, num_exceptions));
 
     BitPackedArray::try_new(packed, array.validity(), patches, bit_width, array.len())
 }
@@ -155,7 +151,11 @@ fn patch_unpacked(array: PrimitiveArray, patches: &Array) -> VortexResult<Primit
                     typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())
             })
         }
-        _ => panic!("can't patch bitpacked array with {}", patches),
+        _ => vortex_bail!(
+            "Can't patch bitpacked array with {}, only {} is supported",
+            patches,
+            Sparse::ID
+        ),
     }
 }
 
@@ -230,8 +230,8 @@ pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scala
     let packed = array.packed().into_primitive()?;
     let index_in_encoded = index + array.offset();
     let scalar: Scalar = match_each_unsigned_integer_ptype!(packed.ptype(), |$P| unsafe {
-        unpack_single_primitive::<$P>(packed.maybe_null_slice::<$P>(), bit_width, index_in_encoded).map(|v| v.into())
-    })?;
+        unpack_single_primitive::<$P>(packed.maybe_null_slice::<$P>(), bit_width, index_in_encoded).into()
+    });
     // Cast to fix signedness and nullability
     scalar.cast(array.dtype())
 }
@@ -248,13 +248,13 @@ pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
     packed: &[T],
     bit_width: usize,
     index_to_decode: usize,
-) -> VortexResult<T> {
+) -> T {
     let chunk_index = index_to_decode / 1024;
     let index_in_chunk = index_to_decode % 1024;
     let elems_per_chunk: usize = 128 * bit_width / size_of::<T>();
 
     let packed_chunk = &packed[chunk_index * elems_per_chunk..][0..elems_per_chunk];
-    Ok(unsafe { BitPacking::unchecked_unpack_single(bit_width, packed_chunk, index_in_chunk) })
+    unsafe { BitPacking::unchecked_unpack_single(bit_width, packed_chunk, index_in_chunk) }
 }
 
 pub fn find_best_bit_width(array: &PrimitiveArray) -> Option<usize> {
