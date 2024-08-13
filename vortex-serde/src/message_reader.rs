@@ -246,8 +246,6 @@ impl ArrayBufferReader {
         }
     }
 
-    /// SAFETY: Assumes that any flatbuffer bytes passed have been validated.
-    ///     This is currently the case in stream and file implementations.
     pub fn read(&mut self, mut bytes: Bytes) -> VortexResult<Option<usize>> {
         match self.state {
             ReadState::Init => {
@@ -259,6 +257,8 @@ impl ArrayBufferReader {
                 Ok(Some(bytes.get_u32_le() as usize))
             }
             ReadState::ReadingFb => {
+                // SAFETY: Assumes that any flatbuffer bytes passed have been validated.
+                //     This is currently the case in stream and file implementations.
                 let batch = unsafe {
                     root_unchecked::<fb::Message>(&bytes)
                         .header_as_batch()
@@ -273,7 +273,6 @@ impl ArrayBufferReader {
                 // Split out into individual buffers
                 // Initialize the column's buffers for a vectored read.
                 // To start with, we include the padding and then truncate the buffers after.
-                // let all_buffers_size = self.fb_msg.expect()
                 let batch_msg = unsafe {
                     root_unchecked::<fb::Message>(
                         self.fb_msg
