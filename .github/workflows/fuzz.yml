@@ -1,4 +1,3 @@
-
 name: Fuzz
 
 on:
@@ -12,9 +11,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-      - uses: ./.github/actions/setup-rust
       - name: Install cargo fuzz
         run: cargo install cargo-fuzz
       - name: Run fuzzing target
