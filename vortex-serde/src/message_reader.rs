@@ -246,6 +246,8 @@ impl ArrayBufferReader {
         }
     }
 
+    /// SAFETY: Assumes that any flatbuffer bytes passed have been validated.
+    ///     This is currently the case in stream and file implementations.
     pub fn read(&mut self, mut bytes: Bytes) -> VortexResult<Option<usize>> {
         match self.state {
             ReadState::Init => {
@@ -258,7 +260,7 @@ impl ArrayBufferReader {
             }
             ReadState::ReadingFb => {
                 let batch = unsafe {
-                    root_unchecked::<fb::Message>(&bytes)?
+                    root_unchecked::<fb::Message>(&bytes)
                         .header_as_batch()
                         .ok_or_else(|| vortex_err!("Message was not a batch"))?
                 };
