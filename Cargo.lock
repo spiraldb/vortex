@@ -4394,6 +4394,7 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-sampling-compressor",
+ "vortex-scalar",
 ]
 
 [[package]]

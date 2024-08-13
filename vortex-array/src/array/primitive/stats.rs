@@ -131,6 +131,7 @@ struct StatsAccumulator<T: PStatsType> {
     is_strict_sorted: bool,
     run_count: usize,
     null_count: usize,
+    nan_count: usize,
     bit_widths: Vec<usize>,
     trailing_zeros: Vec<usize>,
     len: usize,
@@ -138,6 +139,7 @@ struct StatsAccumulator<T: PStatsType> {
 
 impl<T: PStatsType> StatsAccumulator<T> {
     fn new(first_value: T) -> Self {
+        let is_nan = first_value.is_nan();
         let mut stats = Self {
             prev: first_value,
             min: first_value,
@@ -149,6 +151,7 @@ impl<T: PStatsType> StatsAccumulator<T> {
             bit_widths: vec![0; size_of::<T>() * 8 + 1],
             trailing_zeros: vec![0; size_of::<T>() * 8 + 1],
             len: 1,
+            nan_count: is_nan.then_some(1).unwrap_or_default(),
         };
         stats.bit_widths[first_value.bit_width() as usize] += 1;
         stats.trailing_zeros[first_value.trailing_zeros() as usize] += 1;
@@ -181,6 +184,10 @@ impl<T: PStatsType> StatsAccumulator<T> {
         self.trailing_zeros[next.trailing_zeros() as usize] += 1;
         self.len += 1;
 
+        if next.is_nan() {
+            self.nan_count += 1;
+        }
+
         if self.prev == next {
             self.is_strict_sorted = false;
         } else {
@@ -198,8 +205,9 @@ impl<T: PStatsType> StatsAccumulator<T> {
     }
 
     pub fn into_map(self) -> StatsSet {
-        let is_constant =
-            (self.min == self.max && self.null_count == 0) || self.null_count == self.len;
+        let is_constant = (self.min == self.max && self.null_count == 0 && self.nan_count == 0)
+            || self.null_count == self.len
+            || self.nan_count == self.len;
 
         StatsSet::from(HashMap::from([
             (Stat::Min, self.min.into()),
