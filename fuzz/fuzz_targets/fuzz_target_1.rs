@@ -1,5 +1,7 @@
 #![no_main]
 
+use std::collections::HashSet;
+
 use libfuzzer_sys::arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::{fuzz_target, Corpus};
 use vortex::compute::slice;
@@ -14,7 +16,7 @@ use vortex_sampling_compressor::compressors::roaring_int::RoaringIntCompressor;
 use vortex_sampling_compressor::compressors::runend::DEFAULT_RUN_END_COMPRESSOR;
 use vortex_sampling_compressor::compressors::sparse::SparseCompressor;
 use vortex_sampling_compressor::compressors::zigzag::ZigZagCompressor;
-use vortex_sampling_compressor::compressors::EncodingCompressor;
+use vortex_sampling_compressor::compressors::CompressorRef;
 use vortex_sampling_compressor::SamplingCompressor;
 
 fuzz_target!(|data: &[u8]| -> Corpus {
@@ -25,9 +27,7 @@ fuzz_target!(|data: &[u8]| -> Corpus {
     // TODO(adamg): We actually might want to test empty things, but I'm punting this issue for now
     if array.is_empty() {
         return Corpus::Reject;
-    }
-
-    let ctx = SamplingCompressor::default();
+    };
     match u.int_in_range(0..=9).unwrap() {
         0 => {
             let start = u.choose_index(array.len()).unwrap();
@@ -35,119 +35,57 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             let slice = slice(&array, start, stop).unwrap();
             assert_slice(&array, &slice, start);
         }
-        1 => {
-            let compressed_array = match ALPCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        2 => {
-            let compressed_array = match BitPackedCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        3 => {
-            let compressed_array = match DictCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        4 => {
-            let compressed_array = match FoRCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        5 => {
-            let compressed_array = match RoaringBoolCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        6 => {
-            let compressed_array = match RoaringIntCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        7 => {
-            let compressed_array = match DEFAULT_RUN_END_COMPRESSOR
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        8 => {
-            let compressed_array = match SparseCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
-        9 => {
-            let compressed_array = match ZigZagCompressor
-                .can_compress(&array)
-                .map(|compressor| compressor.compress(&array, None, ctx))
-            {
-                Some(r) => r.unwrap(),
-                None => return Corpus::Reject,
-            }
-            .into_array();
-
-            assert_array_eq(&array, &compressed_array);
-        }
+        1 => match fuzz_compress(&array, &ALPCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        2 => match fuzz_compress(&array, &BitPackedCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        3 => match fuzz_compress(&array, &DictCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        4 => match fuzz_compress(&array, &FoRCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        5 => match fuzz_compress(&array, &RoaringBoolCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        6 => match fuzz_compress(&array, &RoaringIntCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        7 => match fuzz_compress(&array, &DEFAULT_RUN_END_COMPRESSOR) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        8 => match fuzz_compress(&array, &SparseCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
+        9 => match fuzz_compress(&array, &ZigZagCompressor) {
+            Some(compressed_array) => assert_array_eq(&array, &compressed_array),
+            None => return Corpus::Reject,
+        },
         _ => unreachable!(),
     }
 
     Corpus::Keep
 });
+
+fn fuzz_compress(array: &Array, compressor_ref: CompressorRef<'_>) -> Option<Array> {
+    let ctx = SamplingCompressor::new(HashSet::from([compressor_ref]));
+    let compressed_array = ctx.compress(array, None).unwrap();
+
+    compressed_array
+        .path()
+        .is_some()
+        .then(|| compressed_array.into_array())
+}
 
 fn assert_slice(original: &Array, slice: &Array, start: usize) {
     for idx in 0..slice.len() {
