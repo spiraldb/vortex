@@ -126,32 +126,15 @@
 <script id="main-script">
     'use strict';
     (function () {
-        // Colors from https://github.com/github/linguist/blob/master/lib/linguist/languages.yml
-        const toolColors = {
-            cargo: '#dea584',
-            go: '#00add8',
-            benchmarkjs: '#f1e05a',
-            benchmarkluau: '#000080',
-            pytest: '#3572a5',
-            googlecpp: '#f34b7d',
-            catch2: '#f34b7d',
-            julia: '#a270ba',
-            jmh: '#b07219',
-            benchmarkdotnet: '#178600',
-            customBiggerIsBetter: '#38ff38',
-            customSmallerIsBetter: '#ff3838',
-            _: '#333333'
-        };
-
         function stringToColor(str) {
             // Random colours are generally pretty disgusting...
             const MAP = {
-                "vortex-in-memory-no-pushdown": '#3CD50C',
-                "vortex-in-memory-pushdown": '#7437D0',
-                "arrow": '#E8A807',
-                "parquet": '#D7B945',
-                "vortex-file-compressed": '#F34B7D',
-                "vortex-file-uncompressed": '#4DBDFB',
+                "vortex-file-compressed": '#D4FF8F',
+                "vortex-file-uncompressed": '#3E6A00',
+                "vortex-in-memory-no-pushdown": '#00C8F2',
+                "vortex-in-memory-pushdown": '#00769F',
+                "arrow": '#FFD57A',
+                "parquet": '#FFC086',
             };
 
             if (MAP[str]) {
@@ -256,7 +239,7 @@
                             label: name,
                             data: benches.map(b => b ? b.value : null),
                             borderColor: color,
-                            // backgroundColor: color + '60', // Add alpha for #rrggbbaa
+                            backgroundColor: color + '60', // Add alpha for #rrggbbaa
                         };
                     }),
                 };
