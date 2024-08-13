@@ -257,9 +257,13 @@ impl ArrayBufferReader {
                 Ok(Some(bytes.get_u32_le() as usize))
             }
             ReadState::ReadingFb => {
-                let batch = root::<fb::Message>(&bytes)?
-                    .header_as_batch()
-                    .ok_or_else(|| vortex_err!("Message was not a batch"))?;
+                // SAFETY: Assumes that any flatbuffer bytes passed have been validated.
+                //     This is currently the case in stream and file implementations.
+                let batch = unsafe {
+                    root_unchecked::<fb::Message>(&bytes)
+                        .header_as_batch()
+                        .ok_or_else(|| vortex_err!("Message was not a batch"))?
+                };
                 let buffer_size = batch.buffer_size() as usize;
                 self.fb_msg = Some(Buffer::from(bytes));
                 self.state = ReadState::ReadingBuffers;
@@ -269,7 +273,6 @@ impl ArrayBufferReader {
                 // Split out into individual buffers
                 // Initialize the column's buffers for a vectored read.
                 // To start with, we include the padding and then truncate the buffers after.
-                // let all_buffers_size = self.fb_msg.expect()
                 let batch_msg = unsafe {
                     root_unchecked::<fb::Message>(
                         self.fb_msg

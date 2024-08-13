@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
+use arrow_array::cast::AsArray;
 use arrow_array::{Array as _, BooleanArray, RecordBatch};
 use arrow_schema::SchemaRef;
-use datafusion::arrow::buffer::{buffer_bin_and_not, BooleanBuffer};
+use datafusion::arrow::buffer::{buffer_bin_and, buffer_bin_and_not, BooleanBuffer};
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
@@ -10,7 +11,7 @@ use futures::{FutureExt as _, TryStreamExt};
 use object_store::ObjectStore;
 use vortex::array::BoolArray;
 use vortex::arrow::FromArrowArray;
-use vortex::{Array, Context, IntoArrayVariant as _};
+use vortex::{Array, Context, IntoArrayVariant as _, IntoCanonical};
 use vortex_error::VortexResult;
 use vortex_serde::io::ObjectStoreReadAt;
 use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
@@ -62,7 +63,7 @@ impl FileOpener for VortexFileOpener {
                         let array = if let Some(predicate) = predicate.as_ref() {
                             let predicate_result = predicate.evaluate(&array)?;
 
-                            let filter_array = null_as_false(&predicate_result.into_bool()?)?;
+                            let filter_array = null_as_false(predicate_result.into_bool()?)?;
                             vortex::compute::filter(&array, &filter_array)?
                         } else {
                             array
@@ -79,14 +80,15 @@ impl FileOpener for VortexFileOpener {
 }
 
 /// Mask all null values of a Arrow boolean array to false
-fn null_as_false(array: &BoolArray) -> VortexResult<Array> {
-    let array = BooleanArray::from(array.boolean_buffer());
+fn null_as_false(array: BoolArray) -> VortexResult<Array> {
+    let arrow_array = array.into_canonical()?.into_arrow()?;
+    let array = arrow_array.as_boolean();
 
     let boolean_array = match array.nulls() {
         None => array,
         Some(nulls) => {
             let inner_bool_buffer = array.values();
-            let buff = buffer_bin_and_not(
+            let buff = buffer_bin_and(
                 inner_bool_buffer.inner(),
                 inner_bool_buffer.offset(),
                 nulls.buffer(),
@@ -95,9 +97,31 @@ fn null_as_false(array: &BoolArray) -> VortexResult<Array> {
             );
             let bool_buffer =
                 BooleanBuffer::new(buff, inner_bool_buffer.offset(), inner_bool_buffer.len());
-            BooleanArray::from(bool_buffer)
+            &BooleanArray::from(bool_buffer)
         }
     };
 
-    Ok(Array::from_arrow(&boolean_array, false))
+    Ok(Array::from_arrow(boolean_array, false))
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::BoolArray;
+    use vortex::validity::Validity;
+    use vortex::IntoArrayVariant;
+
+    use crate::persistent::opener::null_as_false;
+
+    #[test]
+    fn coerces_nulls() {
+        let bool_array = BoolArray::from_vec(
+            vec![true, true, false, false],
+            Validity::Array(BoolArray::from(vec![true, false, true, false]).into()),
+        );
+        let non_null_array = null_as_false(bool_array).unwrap().into_bool().unwrap();
+        assert_eq!(
+            non_null_array.boolean_buffer().iter().collect::<Vec<_>>(),
+            vec![true, false, false, false]
+        );
+    }
 }

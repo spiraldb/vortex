@@ -21,9 +21,6 @@ jobs:
 
       - uses: ./.github/actions/cleanup
 
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v3
-
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
 

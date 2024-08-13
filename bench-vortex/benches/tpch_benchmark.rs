@@ -11,7 +11,7 @@ fn benchmark(c: &mut Criterion) {
     // Run TPC-H data gen.
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
 
-    let vortex_pushdown_disabled_ctx = runtime
+    let vortex_no_pushdown_ctx = runtime
         .block_on(load_datasets(
             &data_dir,
             Format::InMemoryVortex {
@@ -33,11 +33,19 @@ fn benchmark(c: &mut Criterion) {
     let parquet_ctx = runtime
         .block_on(load_datasets(&data_dir, Format::Parquet))
         .unwrap();
-    let persistent_vortex_ctx = runtime
+    let vortex_compressed_ctx = runtime
         .block_on(load_datasets(
             &data_dir,
             Format::OnDiskVortex {
                 enable_compression: true,
+            },
+        ))
+        .unwrap();
+    let vortex_uncompressed_ctx = runtime
+        .block_on(load_datasets(
+            &data_dir,
+            Format::OnDiskVortex {
+                enable_compression: false,
             },
         ))
         .unwrap();
@@ -46,9 +54,9 @@ fn benchmark(c: &mut Criterion) {
         let mut group = c.benchmark_group(format!("tpch_q{q}"));
         group.sample_size(10);
 
-        group.bench_function("vortex-pushdown-disabled", |b| {
+        group.bench_function("vortex-in-memory-no-pushdown", |b| {
             b.to_async(&runtime).iter(|| async {
-                vortex_pushdown_disabled_ctx
+                vortex_no_pushdown_ctx
                     .sql(&query)
                     .await
                     .unwrap()
@@ -58,7 +66,7 @@ fn benchmark(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("vortex-pushdown-enabled", |b| {
+        group.bench_function("vortex-in-memory-pushdown", |b| {
             b.to_async(&runtime).iter(|| async {
                 vortex_ctx
                     .sql(&query)
@@ -94,9 +102,21 @@ fn benchmark(c: &mut Criterion) {
             })
         });
 
-        group.bench_function("persistent_compressed_vortex", |b| {
+        group.bench_function("vortex-file-compressed", |b| {
             b.to_async(&runtime).iter(|| async {
-                persistent_vortex_ctx
+                vortex_compressed_ctx
+                    .sql(&query)
+                    .await
+                    .unwrap()
+                    .collect()
+                    .await
+                    .unwrap()
+            })
+        });
+
+        group.bench_function("vortex-file-uncompressed", |b| {
+            b.to_async(&runtime).iter(|| async {
+                vortex_uncompressed_ctx
                     .sql(&query)
                     .await
                     .unwrap()

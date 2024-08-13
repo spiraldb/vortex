@@ -46,12 +46,30 @@ pub trait NativePType:
     + TryFromBytes
 {
     const PTYPE: PType;
+
+    fn is_nan(self) -> bool;
 }
 
 macro_rules! native_ptype {
     ($T:ty, $ptype:tt) => {
         impl NativePType for $T {
             const PTYPE: PType = PType::$ptype;
+
+            fn is_nan(self) -> bool {
+                false
+            }
+        }
+    };
+}
+
+macro_rules! native_float_ptype {
+    ($T:ty, $ptype:tt) => {
+        impl NativePType for $T {
+            const PTYPE: PType = PType::$ptype;
+
+            fn is_nan(self) -> bool {
+                <$T>::is_nan(self)
+            }
         }
     };
 }
@@ -64,9 +82,9 @@ native_ptype!(i8, I8);
 native_ptype!(i16, I16);
 native_ptype!(i32, I32);
 native_ptype!(i64, I64);
-native_ptype!(f16, F16);
-native_ptype!(f32, F32);
-native_ptype!(f64, F64);
+native_float_ptype!(f16, F16);
+native_float_ptype!(f32, F32);
+native_float_ptype!(f64, F64);
 
 #[macro_export]
 macro_rules! match_each_native_ptype {

@@ -131,8 +131,10 @@ struct StatsAccumulator<T: PStatsType> {
     is_strict_sorted: bool,
     run_count: usize,
     null_count: usize,
+    nan_count: usize,
     bit_widths: Vec<usize>,
     trailing_zeros: Vec<usize>,
+    len: usize,
 }
 
 impl<T: PStatsType> StatsAccumulator<T> {
@@ -147,6 +149,8 @@ impl<T: PStatsType> StatsAccumulator<T> {
             null_count: 0,
             bit_widths: vec![0; size_of::<T>() * 8 + 1],
             trailing_zeros: vec![0; size_of::<T>() * 8 + 1],
+            len: 1,
+            nan_count: first_value.is_nan().then_some(1).unwrap_or_default(),
         };
         stats.bit_widths[first_value.bit_width() as usize] += 1;
         stats.trailing_zeros[first_value.trailing_zeros() as usize] += 1;
@@ -158,6 +162,7 @@ impl<T: PStatsType> StatsAccumulator<T> {
         stats.null_count += leading_null_count;
         stats.bit_widths[0] += leading_null_count;
         stats.trailing_zeros[T::PTYPE.bit_width()] += leading_null_count;
+        stats.len += leading_null_count;
         stats
     }
 
@@ -168,6 +173,7 @@ impl<T: PStatsType> StatsAccumulator<T> {
                 self.bit_widths[0] += 1;
                 self.trailing_zeros[T::PTYPE.bit_width()] += 1;
                 self.null_count += 1;
+                self.len += 1;
             }
         }
     }
@@ -175,6 +181,11 @@ impl<T: PStatsType> StatsAccumulator<T> {
     pub fn next(&mut self, next: T) {
         self.bit_widths[next.bit_width() as usize] += 1;
         self.trailing_zeros[next.trailing_zeros() as usize] += 1;
+        self.len += 1;
+
+        if next.is_nan() {
+            self.nan_count += 1;
+        }
 
         if self.prev == next {
             self.is_strict_sorted = false;
@@ -193,11 +204,15 @@ impl<T: PStatsType> StatsAccumulator<T> {
     }
 
     pub fn into_map(self) -> StatsSet {
+        let is_constant = (self.min == self.max && self.null_count == 0 && self.nan_count == 0)
+            || self.null_count == self.len
+            || self.nan_count == self.len;
+
         StatsSet::from(HashMap::from([
             (Stat::Min, self.min.into()),
             (Stat::Max, self.max.into()),
             (Stat::NullCount, self.null_count.into()),
-            (Stat::IsConstant, (self.min == self.max).into()),
+            (Stat::IsConstant, is_constant.into()),
             (Stat::BitWidthFreq, self.bit_widths.into()),
             (Stat::TrailingZeroFreq, self.trailing_zeros.into()),
             (Stat::IsSorted, self.is_sorted.into()),

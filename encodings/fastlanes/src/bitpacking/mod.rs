@@ -48,7 +48,7 @@ impl BitPackedArray {
         if !dtype.is_unsigned_int() {
             vortex_bail!(MismatchedTypes: "uint", &dtype);
         }
-        if bit_width > 64 {
+        if bit_width > u64::BITS as usize {
             vortex_bail!("Unsupported bit width {}", bit_width);
         }
         if offset > 1023 {
@@ -58,7 +58,7 @@ impl BitPackedArray {
             );
         }
 
-        let ptype: PType = (&dtype).try_into()?;
+        let ptype = PType::try_from(&dtype)?;
         let expected_packed_size =
             ((length + offset + 1023) / 1024) * (128 * bit_width / ptype.byte_width());
         if packed.len() != expected_packed_size {
@@ -129,12 +129,14 @@ impl BitPackedArray {
     }
 
     pub fn validity(&self) -> Validity {
+        let validity_child_idx = if self.metadata().patches_len > 0 {
+            2
+        } else {
+            1
+        };
+
         self.metadata().validity.to_validity(self.array().child(
-            if self.metadata().patches_len > 0 {
-                2
-            } else {
-                1
-            },
+            validity_child_idx,
             &Validity::DTYPE,
             self.len(),
         ))

@@ -2,6 +2,7 @@
 members = [
     "bench-vortex",
     "encodings/*",
+    "fuzz",
     "pyvortex",
     "vortex-array",
     "vortex-buffer",
@@ -25,7 +26,14 @@ repository = "https://github.com/spiraldb/vortex"
 authors = ["Vortex Authors <hello@spiraldb.com>"]
 license = "Apache-2.0"
 keywords = ["vortex"]
-include = ["benches/*.rs", "build.rs", "src/**/*.rs", "Cargo.toml", "proto/**/*.proto", "flatbuffers/*.fbs"]
+include = [
+    "benches/*.rs",
+    "build.rs",
+    "src/**/*.rs",
+    "Cargo.toml",
+    "proto/**/*.proto",
+    "flatbuffers/*.fbs",
+]
 edition = "2021"
 rust-version = "1.76"
 
@@ -33,6 +41,7 @@ rust-version = "1.76"
 ahash = "0.8.11"
 allocator-api2 = "0.2.16"
 anyhow = "1.0"
+arbitrary = "1.3.2"
 arrayref = "0.3.7"
 arrow = { version = "52.0.0" }
 arrow-arith = "52.0.0"
