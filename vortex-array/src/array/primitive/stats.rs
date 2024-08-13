@@ -139,7 +139,6 @@ struct StatsAccumulator<T: PStatsType> {
 
 impl<T: PStatsType> StatsAccumulator<T> {
     fn new(first_value: T) -> Self {
-        let is_nan = first_value.is_nan();
         let mut stats = Self {
             prev: first_value,
             min: first_value,
@@ -151,7 +150,7 @@ impl<T: PStatsType> StatsAccumulator<T> {
             bit_widths: vec![0; size_of::<T>() * 8 + 1],
             trailing_zeros: vec![0; size_of::<T>() * 8 + 1],
             len: 1,
-            nan_count: is_nan.then_some(1).unwrap_or_default(),
+            nan_count: first_value.is_nan().then_some(1).unwrap_or_default(),
         };
         stats.bit_widths[first_value.bit_width() as usize] += 1;
         stats.trailing_zeros[first_value.trailing_zeros() as usize] += 1;
