@@ -1,0 +1,20 @@
+
+name: Fuzz
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup:
+    name: 'build'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+      - uses: ./.github/actions/setup-rust
+      - name: Install cargo fuzz
+        run: cargo install cargo-fuzz
+      - name: Run fuzzing target
+        run: cargo fuzz run fuzz_target_1 -- -max_total_time=600
+
+
