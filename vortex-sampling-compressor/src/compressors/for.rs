@@ -54,8 +54,8 @@ impl EncodingCompressor for FoRCompressor {
     ) -> VortexResult<CompressedArray<'a>> {
         let for_compressed = for_compress(&array.clone().into_primitive()?)?;
 
-        FoRArray::try_from(for_compressed.clone())
-            .and_then(|for_array| {
+        match FoRArray::try_from(for_compressed.clone()) {
+            Ok(for_array) => {
                 let compressed_child = ctx
                     .named("for")
                     .excluding(self)
@@ -69,8 +69,8 @@ impl EncodingCompressor for FoRCompressor {
                     .map(|a| a.into_array())?,
                     Some(CompressionTree::new(self, vec![compressed_child.path])),
                 ))
-            })
-            .or_else(|_| {
+            }
+            Err(_) => {
                 let compressed_child = ctx
                     .named("for")
                     .excluding(self)
@@ -79,7 +79,8 @@ impl EncodingCompressor for FoRCompressor {
                     compressed_child.array,
                     Some(CompressionTree::new(self, vec![compressed_child.path])),
                 ))
-            })
+            }
+        }
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
