@@ -191,7 +191,13 @@ fn assert_array_eq(lhs: &Array, rhs: &Array) {
         let l = scalar_at(lhs, idx).unwrap();
         let r = scalar_at(rhs, idx).unwrap();
 
-        assert_eq!(l.value(), r.value(), "{l} != {r} at index {idx}");
+        assert_eq!(
+            l.value(),
+            r.value(),
+            "{l} != {r} at index {idx}, lhs is {} rhs is {}",
+            lhs.encoding().id(),
+            rhs.encoding().id()
+        );
         assert_eq!(l.is_valid(), r.is_valid());
     }
 }
