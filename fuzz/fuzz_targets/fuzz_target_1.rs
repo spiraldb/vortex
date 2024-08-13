@@ -2,12 +2,9 @@
 
 use libfuzzer_sys::arbitrary::{Arbitrary, Unstructured};
 use libfuzzer_sys::{fuzz_target, Corpus};
-use vortex::array::{BoolArray, PrimitiveArray, VarBinArray, VarBinViewArray};
 use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
-use vortex::validity::Validity;
-use vortex::{Array, IntoArray};
-use vortex_dtype::{DType, NativePType, Nullability};
+use vortex::Array;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
@@ -23,8 +20,9 @@ use vortex_sampling_compressor::SamplingCompressor;
 fuzz_target!(|data: &[u8]| -> Corpus {
     let mut u = Unstructured::new(data);
 
-    let array = random_array(&mut u);
+    let array = Array::arbitrary(&mut u).unwrap();
 
+    // TODO(adamg): We actually might want to test empty things, but I'm punting this issue for now
     if array.is_empty() {
         return Corpus::Reject;
     }
@@ -176,71 +174,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
 
     Corpus::Keep
 });
-
-fn random_array(u: &mut Unstructured) -> Array {
-    match u.int_in_range(0..=9).unwrap() {
-        0 => random_primitive::<u8>(u),
-        1 => random_primitive::<u16>(u),
-        2 => random_primitive::<u32>(u),
-        3 => random_primitive::<u64>(u),
-        4 => random_primitive::<i8>(u),
-        5 => random_primitive::<i16>(u),
-        6 => random_primitive::<i32>(u),
-        7 => random_primitive::<i64>(u),
-        8 => random_primitive::<f32>(u),
-        9 => random_primitive::<f64>(u),
-        10 => random_bool(u),
-        11 => random_string(u),
-        12 => random_bytes(u),
-        _ => unreachable!(),
-    }
-}
-
-fn random_string(u: &mut Unstructured) -> Array {
-    let v = Vec::<Option<String>>::arbitrary(u).unwrap();
-    match u.int_in_range(0..=1).unwrap() {
-        0 => VarBinArray::from_iter(v.into_iter(), DType::Utf8(Nullability::Nullable)).into_array(),
-        1 => VarBinViewArray::from_iter_nullable_str(v).into_array(),
-        _ => unreachable!(),
-    }
-}
-
-fn random_bytes(u: &mut Unstructured) -> Array {
-    let v = Vec::<Option<Vec<u8>>>::arbitrary(u).unwrap();
-    match u.int_in_range(0..=1).unwrap() {
-        0 => VarBinArray::from_iter(v.into_iter(), DType::Utf8(Nullability::Nullable)).into_array(),
-        1 => VarBinViewArray::from_iter_nullable_bin(v).into_array(),
-        _ => unreachable!(),
-    }
-}
-
-fn random_primitive<'a, T: Arbitrary<'a> + NativePType>(u: &mut Unstructured<'a>) -> Array {
-    let v = Vec::<T>::arbitrary(u).unwrap();
-    let validity = random_validity(u, v.len());
-    PrimitiveArray::from_vec(v, validity).into_array()
-}
-
-fn random_bool(u: &mut Unstructured) -> Array {
-    let v = Vec::<bool>::arbitrary(u).unwrap();
-    let validity = random_validity(u, v.len());
-
-    BoolArray::from_vec(v, validity).into_array()
-}
-
-fn random_validity(u: &mut Unstructured, len: usize) -> Validity {
-    match u.int_in_range(0..=3).unwrap() {
-        0 => Validity::AllValid,
-        1 => Validity::AllInvalid,
-        2 => Validity::NonNullable,
-        3 => {
-            let bools = (0..len)
-                .map(|_| bool::arbitrary(u).unwrap())
-                .collect::<Vec<_>>();
-            Validity::from(bools)
-        }
-        _ => unreachable!(),
-    }
-}
 
 fn assert_slice(original: &Array, slice: &Array, start: usize) {
     for idx in 0..slice.len() {

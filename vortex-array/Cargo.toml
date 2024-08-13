@@ -20,6 +20,7 @@ bench = false
 workspace = true
 
 [dependencies]
+arbitrary = { workspace = true, optional = true }
 arrow-arith = { workspace = true }
 arrow-array = { workspace = true }
 arrow-buffer = { workspace = true }
@@ -51,6 +52,7 @@ vortex-scalar = { workspace = true }
 
 [features]
 default = ["flatbuffers", "serde"]
+arbitrary = ["dep:arbitrary"]
 flatbuffers = [
   "dep:flatbuffers",
   "dep:flexbuffers",
@@ -61,10 +63,7 @@ flatbuffers = [
   "vortex-error/flexbuffers",
   "vortex-scalar/flatbuffers",
 ]
-serde = [
-  "vortex-dtype/serde",
-  "vortex-scalar/serde",
-]
+serde = ["vortex-dtype/serde", "vortex-scalar/serde"]
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 # Enable the JS feature of getrandom (via rand) to supprt wasm32 target
