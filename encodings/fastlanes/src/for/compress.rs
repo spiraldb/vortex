@@ -20,13 +20,11 @@ pub fn for_compress(array: &PrimitiveArray) -> VortexResult<Array> {
     Ok(match_each_integer_ptype!(array.ptype(), |$T| {
         if shift == <$T>::PTYPE.bit_width() as u8 {
             match array.validity().to_logical(array.len()) {
-                LogicalValidity::AllValid(_) => ConstantArray::new(
-                    Scalar::zero::<$T>(array.dtype().nullability()),
-                    array.len(),
-                )
-                .into_array(),
-                LogicalValidity::AllInvalid(_) => {
-                    ConstantArray::new(Scalar::null(array.dtype().clone()), array.len()).into_array()
+                LogicalValidity::AllValid(l) => {
+                ConstantArray::new(Scalar::zero::<i32>(array.dtype().nullability()), l).into_array()
+                },
+                LogicalValidity::AllInvalid(l) => {
+                    ConstantArray::new(Scalar::null(array.dtype().clone()), l).into_array()
                 }
                 LogicalValidity::Array(a) => {
                     let valid_indices = PrimitiveArray::from(
