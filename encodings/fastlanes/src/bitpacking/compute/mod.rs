@@ -36,11 +36,12 @@ impl ScalarAtFn for BitPackedArray {
             if self.bit_width() == 0 || patches.with_dyn(|a| a.is_valid(index)) {
                 return scalar_at(&patches, index)?.cast(self.dtype());
             }
-        } else {
-            if !self.validity().is_valid(index) {
-                return Ok(Scalar::null(self.dtype().clone()));
-            }
         }
+
+        if !self.validity().is_valid(index) {
+            return Ok(Scalar::null(self.dtype().clone()));
+        }
+
         unpack_single(self, index)?.cast(self.dtype())
     }
 }

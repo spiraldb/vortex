@@ -27,6 +27,7 @@ fuzz_target!(|data: &[u8]| -> Corpus {
         return Corpus::Reject;
     }
 
+    let ctx = SamplingCompressor::default();
     match u.int_in_range(0..=9).unwrap() {
         0 => {
             let start = u.choose_index(array.len()).unwrap();
@@ -35,9 +36,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_slice(&array, &slice, start);
         }
         1 => {
-            println!("alp");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match ALPCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -50,9 +48,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         2 => {
-            println!("bitpacked");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match BitPackedCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -65,9 +60,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         3 => {
-            println!("dict");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match DictCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -80,9 +72,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         4 => {
-            println!("for");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match FoRCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -95,9 +84,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         5 => {
-            println!("roaring bool");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match RoaringBoolCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -110,9 +96,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         6 => {
-            println!("roaring int");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match RoaringIntCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -125,9 +108,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         7 => {
-            println!("default runend");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match DEFAULT_RUN_END_COMPRESSOR
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -140,9 +120,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         8 => {
-            println!("sparse");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match SparseCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
@@ -155,9 +132,6 @@ fuzz_target!(|data: &[u8]| -> Corpus {
             assert_array_eq(&array, &compressed_array);
         }
         9 => {
-            println!("zigag");
-            // lets compress
-            let ctx = SamplingCompressor::default();
             let compressed_array = match ZigZagCompressor
                 .can_compress(&array)
                 .map(|compressor| compressor.compress(&array, None, ctx))
