@@ -176,6 +176,7 @@
 
                     for (const bench of benches) {
                         const {name, range, unit, value} = bench;
+                        const is_nanos = unit === "ns/iter";
                         // Normalize name
                         let [q, seriesName] = name.split("/");
                         let prettyQ = q.replace("_", " ").toUpperCase();
@@ -184,7 +185,7 @@
                         if (arr === undefined) {
                             map.set(prettyQ, {
                                 commits,
-                                unit: unit,
+                                unit: is_nanos ? "ms/iter" : unit,
                                 series: new Map(),
                             });
                             arr = map.get(prettyQ);
@@ -195,7 +196,7 @@
                             arr.series.set(seriesName, new Array(entries.length).fill(null));
                             series = arr.series.get(seriesName);
                         }
-                        series[entryIdx] = {range, value};
+                        series[entryIdx] = {range, value: is_nanos ? value / 1_000_000 : value};
                     }
                 });
                 return map;
@@ -258,6 +259,7 @@
                                 display: true,
                                 text: dataset.commits.length > 0 ? dataset.unit : '',
                             },
+                            suggestedMin: 0,
                         },
                     },
                     tooltips: {
