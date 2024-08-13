@@ -184,7 +184,10 @@ impl StatsSet {
     fn merge_scalar_stat(&mut self, other: &Self, stat: Stat) {
         if let Entry::Occupied(mut e) = self.values.entry(stat) {
             if let Some(other_value) = other.get_as::<usize>(stat) {
-                let self_value: usize = e.get().try_into().unwrap_or_else(|err| panic!("Failed to get stat {} as usize: {err}", stat));
+                let self_value: usize = e
+                    .get()
+                    .try_into()
+                    .unwrap_or_else(|err| panic!("Failed to get stat {} as usize: {err}", stat));
                 e.insert((self_value + other_value).into());
             } else {
                 e.remove();
@@ -204,7 +207,10 @@ impl StatsSet {
         if let Entry::Occupied(mut e) = self.values.entry(stat) {
             if let Some(other_value) = other.get_as::<Vec<u64>>(stat) {
                 // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
-                let self_value: Vec<u64> = e.get().try_into().unwrap_or_else(|err| panic!("Failed to get stat {} as Vec<u64>: {err}", stat));
+                let self_value: Vec<u64> = e
+                    .get()
+                    .try_into()
+                    .unwrap_or_else(|err| panic!("Failed to get stat {} as Vec<u64>: {err}", stat));
                 e.insert(
                     self_value
                         .iter()
@@ -223,7 +229,9 @@ impl StatsSet {
     fn merge_run_count(&mut self, other: &Self) {
         if let Entry::Occupied(mut e) = self.values.entry(Stat::RunCount) {
             if let Some(other_value) = other.get_as::<usize>(Stat::RunCount) {
-                let self_value: usize = e.get().try_into().unwrap_or_else(|err| panic!("Failed to get stat {} as usize: {err}", Stat::RunCount));
+                let self_value: usize = e.get().try_into().unwrap_or_else(|err| {
+                    panic!("Failed to get stat {} as usize: {err}", Stat::RunCount)
+                });
                 e.insert((self_value + other_value + 1).into());
             } else {
                 e.remove();

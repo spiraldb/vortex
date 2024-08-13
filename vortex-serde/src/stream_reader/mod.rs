@@ -41,12 +41,22 @@ impl<R: VortexRead> StreamArrayReader<R> {
 
     /// Reads a single array from the stream.
     pub fn array_stream(&mut self) -> impl ArrayStream + '_ {
-        let dtype = self.dtype.as_ref().unwrap_or_else(|| panic!("DType not set")).deref().clone();
+        let dtype = self
+            .dtype
+            .as_ref()
+            .unwrap_or_else(|| panic!("DType not set"))
+            .deref()
+            .clone();
         self.msgs.array_stream(self.ctx.clone(), dtype)
     }
 
     pub fn into_array_stream(self) -> impl ArrayStream {
-        let dtype = self.dtype.as_ref().unwrap_or_else(|| panic!("DType not set")).deref().clone();
+        let dtype = self
+            .dtype
+            .as_ref()
+            .unwrap_or_else(|| panic!("DType not set"))
+            .deref()
+            .clone();
         self.msgs.into_array_stream(self.ctx.clone(), dtype)
     }
 

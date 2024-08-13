@@ -57,8 +57,19 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         let mut start_chunks: Vec<u32> = Vec::with_capacity(coalesced_chunks.len());
         let mut stop_chunks: Vec<u32> = Vec::with_capacity(coalesced_chunks.len());
         for (i, chunks) in coalesced_chunks.iter().enumerate() {
-            start_chunks.push(chunks.first().ok_or_else(|| vortex_err!("Coalesced chunk {i} cannot be empty"))?.chunk_idx);
-            stop_chunks.push(chunks.last().ok_or_else(|| vortex_err!("Coalesced chunk {i} cannot be empty"))?.chunk_idx + 1);
+            start_chunks.push(
+                chunks
+                    .first()
+                    .ok_or_else(|| vortex_err!("Coalesced chunk {i} cannot be empty"))?
+                    .chunk_idx,
+            );
+            stop_chunks.push(
+                chunks
+                    .last()
+                    .ok_or_else(|| vortex_err!("Coalesced chunk {i} cannot be empty"))?
+                    .chunk_idx
+                    + 1,
+            );
         }
 
         // Grab the row and byte offsets for each chunk range.

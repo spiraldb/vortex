@@ -20,7 +20,15 @@ fn roaring_encode_primitive<T: NumCast + NativePType>(
     values: &[T],
 ) -> VortexResult<RoaringIntArray> {
     let mut bitmap = Bitmap::new();
-    bitmap.extend(values.iter().map(|i| i.to_u32().ok_or_else(|| vortex_err!("Failed to cast value {} to u32", i))).collect::<VortexResult<Vec<u32>>>()?);
+    bitmap.extend(
+        values
+            .iter()
+            .map(|i| {
+                i.to_u32()
+                    .ok_or_else(|| vortex_err!("Failed to cast value {} to u32", i))
+            })
+            .collect::<VortexResult<Vec<u32>>>()?,
+    );
     bitmap.run_optimize();
     bitmap.shrink_to_fit();
     RoaringIntArray::try_new(bitmap, T::PTYPE)

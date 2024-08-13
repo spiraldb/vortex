@@ -92,8 +92,20 @@ pub fn runend_decode_primitive<
     offset: usize,
     length: usize,
 ) -> Vec<T> {
-    let offset_e = E::from_usize(offset).unwrap_or_else(|| panic!("offset {} cannot be converted to {}", offset, std::any::type_name::<E>()));
-    let length_e = E::from_usize(length).unwrap_or_else(|| panic!("length {} cannot be converted to {}", length, std::any::type_name::<E>()));
+    let offset_e = E::from_usize(offset).unwrap_or_else(|| {
+        panic!(
+            "offset {} cannot be converted to {}",
+            offset,
+            std::any::type_name::<E>()
+        )
+    });
+    let length_e = E::from_usize(length).unwrap_or_else(|| {
+        panic!(
+            "length {} cannot be converted to {}",
+            length,
+            std::any::type_name::<E>()
+        )
+    });
     let trimmed_ends = run_ends
         .iter()
         .map(|v| *v - offset_e)

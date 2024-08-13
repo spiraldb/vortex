@@ -158,7 +158,8 @@ impl VarBinViewArray {
     fn view_slice(&self) -> &[BinaryView] {
         unsafe {
             slice::from_raw_parts(
-                self.views().into_primitive()
+                self.views()
+                    .into_primitive()
                     .unwrap_or_else(|err| panic!("Views must be a primitive array: {}", err))
                     .maybe_null_slice::<u8>()
                     .as_ptr() as _,

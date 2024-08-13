@@ -8,13 +8,17 @@ impl From<Scalar> for ScalarValue {
     fn from(value: Scalar) -> Self {
         match value.dtype {
             DType::Null => ScalarValue::Null,
-            DType::Bool(_) => ScalarValue::Boolean(value.value.as_bool().unwrap_or_else(|err| {
-                panic!("Expected a bool scalar: {}", err)
-            })),
+            DType::Bool(_) => ScalarValue::Boolean(
+                value
+                    .value
+                    .as_bool()
+                    .unwrap_or_else(|err| panic!("Expected a bool scalar: {}", err)),
+            ),
             DType::Primitive(ptype, _) => {
-                let pvalue = value.value.as_pvalue().unwrap_or_else(|err| {
-                    panic!("Expected a pvalue scalar: {}", err)
-                });
+                let pvalue = value
+                    .value
+                    .as_pvalue()
+                    .unwrap_or_else(|err| panic!("Expected a pvalue scalar: {}", err));
                 match pvalue {
                     None => match ptype {
                         PType::U8 => ScalarValue::UInt8(None),
@@ -48,18 +52,14 @@ impl From<Scalar> for ScalarValue {
                 value
                     .value
                     .as_buffer_string()
-                    .unwrap_or_else(|err| {
-                        panic!("Expected a buffer string: {}", err)
-                    })
+                    .unwrap_or_else(|err| panic!("Expected a buffer string: {}", err))
                     .map(|b| b.as_str().to_string()),
             ),
             DType::Binary(_) => ScalarValue::Binary(
                 value
                     .value
                     .as_buffer()
-                    .unwrap_or_else(|err| {
-                        panic!("Expected a buffer: {}", err)
-                    })
+                    .unwrap_or_else(|err| panic!("Expected a buffer: {}", err))
                     .map(|b| b.into_vec().unwrap_or_else(|buf| buf.as_slice().to_vec())),
             ),
             DType::Struct(..) => {

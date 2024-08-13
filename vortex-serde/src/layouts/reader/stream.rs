@@ -96,8 +96,8 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                     if let Some(read) = self.layout.read()? {
                         match read {
                             ReadResult::GetMsgs(messages) => {
-                                let reader =
-                                    mem::take(&mut self.reader).ok_or_else(|| vortex_err!("Invalid state transition"))?;
+                                let reader = mem::take(&mut self.reader)
+                                    .ok_or_else(|| vortex_err!("Invalid state transition"))?;
                                 let read_future = read_ranges(reader, messages).boxed();
                                 self.state = StreamingState::Reading(read_future);
                             }

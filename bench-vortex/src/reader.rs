@@ -98,7 +98,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = Array::from(record_batch);
+            let vortex_array = Array::try_from(record_batch).unwrap();
             compressor.compress(&vortex_array).unwrap()
         })
         .collect_vec();

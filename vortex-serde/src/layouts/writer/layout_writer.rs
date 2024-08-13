@@ -154,7 +154,11 @@ impl<W: VortexWrite> LayoutWriter<W> {
     }
 
     async fn write_metadata_arrays(&mut self) -> VortexResult<NestedLayout> {
-        let DType::Struct(..) = self.dtype.as_ref().ok_or_else(|| vortex_err!("Should have written values"))? else {
+        let DType::Struct(..) = self
+            .dtype
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Should have written values"))?
+        else {
             unreachable!("Values are a StructArray")
         };
 
@@ -229,7 +233,11 @@ impl<W: VortexWrite> LayoutWriter<W> {
 
         let dtype_len = Self::write_flatbuffer(
             &mut w,
-            &IPCSchema(&self.dtype.ok_or_else(|| vortex_err!("Schema should be written by now"))?),
+            &IPCSchema(
+                &self
+                    .dtype
+                    .ok_or_else(|| vortex_err!("Schema should be written by now"))?,
+            ),
         )
         .await?;
         let _ = Self::write_flatbuffer(&mut w, &footer).await?;

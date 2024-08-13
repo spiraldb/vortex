@@ -73,7 +73,10 @@ impl DeltaArray {
 
     #[inline]
     fn lanes(&self) -> usize {
-        let ptype = self.dtype().try_into().unwrap_or_else(|err| panic!("Failed to convert DeltaArray DType to PType: {err}"));
+        let ptype = self
+            .dtype()
+            .try_into()
+            .unwrap_or_else(|err| panic!("Failed to convert DeltaArray DType to PType: {err}"));
         match_each_unsigned_integer_ptype!(ptype, |$T| {
             <$T as fastlanes::FastLanes>::LANES
         })

@@ -242,7 +242,11 @@ where
                     buffer: None,
                     children: vec![],
                 };
-                array.with_dyn(|a| a.accept(&mut visitor).unwrap_or_else(|err| panic!("Error while visiting Array View children: {err}")));
+                array.with_dyn(|a| {
+                    a.accept(&mut visitor).unwrap_or_else(|err| {
+                        panic!("Error while visiting Array View children: {err}")
+                    })
+                });
                 ArrayData::try_new(
                     encoding,
                     array.dtype().clone(),

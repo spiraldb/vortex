@@ -83,9 +83,7 @@ impl Canonical {
                     vortex_bail!("unsupported extension dtype with ID {}", a.id().as_ref())
                 }
 
-                temporal_to_arrow(
-                    TemporalArray::try_from(&a.into_array())?,
-                )
+                temporal_to_arrow(TemporalArray::try_from(&a.into_array())?)
             }
         })
     }
@@ -159,7 +157,9 @@ fn primitive_to_arrow(primitive_array: PrimitiveArray) -> ArrayRef {
             array
                 .logical_validity()
                 .to_null_buffer()
-                .unwrap_or_else(|err| panic!("Failed to get null buffer from logical validity: {err}")),
+                .unwrap_or_else(|err| {
+                    panic!("Failed to get null buffer from logical validity: {err}")
+                }),
         )
     }
 
@@ -182,11 +182,15 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
     let field_arrays: Vec<ArrayRef> = struct_array
         .children()
         .map(|f| {
-            let canonical = f.into_canonical().unwrap_or_else(|err| panic!("Failed to canonicalize field: {err}"));
+            let canonical = f
+                .into_canonical()
+                .unwrap_or_else(|err| panic!("Failed to canonicalize field: {err}"));
             match canonical {
                 // visit nested structs recursively
                 Canonical::Struct(a) => struct_to_arrow(a),
-                _ => canonical.into_arrow().unwrap_or_else(|err| panic!("Failed to convert canonicalized field to arrow: {err}")),
+                _ => canonical.into_arrow().unwrap_or_else(|err| {
+                    panic!("Failed to convert canonicalized field to arrow: {err}")
+                }),
             }
         })
         .collect();
@@ -439,9 +443,7 @@ impl From<Canonical> for Array {
 #[cfg(test)]
 mod test {
     use arrow_array::types::{Int64Type, UInt64Type};
-    use arrow_array::{
-        PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
-    };
+    use arrow_array::{PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray};
     use vortex_dtype::Nullability;
     use vortex_scalar::Scalar;
 

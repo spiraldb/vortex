@@ -16,10 +16,19 @@ pub fn export_array<'py>(py: Python<'py>, array: &Array) -> PyResult<Bound<'py, 
     let chunks: Vec<ArrayRef> = if let Ok(chunked_array) = ChunkedArray::try_from(array) {
         chunked_array
             .chunks()
-            .map(|chunk| chunk.into_canonical().and_then(|c| c.into_arrow()).map_err(map_to_pyerr))
+            .map(|chunk| {
+                chunk
+                    .into_canonical()
+                    .and_then(|c| c.into_arrow())
+                    .map_err(map_to_pyerr)
+            })
             .collect::<PyResult<Vec<_>>>()?
     } else {
-        vec![array.clone().into_canonical().and_then(|c| c.into_arrow()).map_err(map_to_pyerr)?]
+        vec![array
+            .clone()
+            .into_canonical()
+            .and_then(|c| c.into_arrow())
+            .map_err(map_to_pyerr)?]
     };
     if chunks.is_empty() {
         return Err(PyValueError::new_err("No chunks in array"));

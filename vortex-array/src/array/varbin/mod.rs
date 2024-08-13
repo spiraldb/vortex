@@ -152,7 +152,9 @@ impl VarBinArray {
             })
             .unwrap_or_else(|| {
                 scalar_at(&self.offsets(), index)
-                    .unwrap_or_else(|err| panic!("Failed to get offset at index: {}: {}", index, err))
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to get offset at index: {}: {}", index, err)
+                    })
                     .as_ref()
                     .try_into()
                     .unwrap_or_else(|err| panic!("Failed to convert offset to usize: {}", err))
@@ -219,7 +221,8 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 
 pub fn varbin_scalar(value: Buffer, dtype: &DType) -> Scalar {
     if matches!(dtype, DType::Utf8(_)) {
-        Scalar::try_utf8(value, dtype.nullability()).unwrap_or_else(|err| panic!("Failed to create scalar from utf8 buffer: {}", err))
+        Scalar::try_utf8(value, dtype.nullability())
+            .unwrap_or_else(|err| panic!("Failed to create scalar from utf8 buffer: {}", err))
     } else {
         Scalar::binary(value, dtype.nullability())
     }

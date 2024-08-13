@@ -81,8 +81,9 @@ impl StructArray {
         let fields: Vec<Array> = items.iter().map(|(_, array)| array.clone()).collect();
         let len = fields.first().map(|f| f.len()).unwrap_or(0);
 
-        Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)
-            .unwrap_or_else(|err| panic!("Unexpected error while building StructArray from fields: {err}"))
+        Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable).unwrap_or_else(
+            |err| panic!("Unexpected error while building StructArray from fields: {err}"),
+        )
     }
 
     // TODO(aduffy): Add equivalent function to support field masks for nested column access.

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrow_array::cast::AsArray;
 use arrow_array::{Array as _, BooleanArray, RecordBatch};
 use arrow_schema::SchemaRef;
-use datafusion::arrow::buffer::{buffer_bin_and, buffer_bin_and_not, BooleanBuffer};
+use datafusion::arrow::buffer::{buffer_bin_and, BooleanBuffer};
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
@@ -79,7 +79,7 @@ impl FileOpener for VortexFileOpener {
     }
 }
 
-/// Mask all null values of a Arrow boolean array to false
+/// Mask all null values of an Arrow boolean array to false
 fn null_as_false(array: BoolArray) -> VortexResult<Array> {
     let arrow_array = array.into_canonical()?.into_arrow()?;
     let array = arrow_array.as_boolean();

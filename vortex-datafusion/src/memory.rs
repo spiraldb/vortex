@@ -13,6 +13,7 @@ use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanP
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
+use vortex_error::VortexError;
 
 use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
@@ -43,7 +44,9 @@ impl VortexMemTable {
             Ok(a) => a,
             _ => {
                 let dtype = array.dtype().clone();
-                ChunkedArray::try_new(vec![array], dtype).unwrap()
+                ChunkedArray::try_new(vec![array], dtype).unwrap_or_else(|err| {
+                    panic!("Failed to wrap array as a ChunkedArray with 1 chunk: {err}")
+                })
             }
         };
 
@@ -98,7 +101,7 @@ impl TableProvider for VortexMemTable {
             Some(filter_exprs) => {
                 let filter_projection =
                     get_filter_projection(filter_exprs, self.schema_ref.clone())
-                    .map_err(DataFusionError::from)?;
+                        .map_err(DataFusionError::from)?;
 
                 Ok(make_filter_then_take_plan(
                     self.schema_ref.clone(),
@@ -116,7 +119,12 @@ impl TableProvider for VortexMemTable {
                 let output_schema = Arc::new(
                     self.schema_ref
                         .project(output_projection.as_slice())
-                        .expect("project output schema"),
+                        .unwrap_or_else(|err| {
+                            panic!(
+                                "Failed to project output schema: {}",
+                                VortexError::from(err)
+                            )
+                        }),
                 );
                 let plan_properties = PlanProperties::new(
                     EquivalenceProperties::new(output_schema),

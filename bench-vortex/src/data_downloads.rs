@@ -46,7 +46,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
         let array = ChunkedArray::try_new(
             reader
                 .into_iter()
-                .map(|batch_result| Array::from(batch_result.unwrap()))
+                .map(|batch_result| Array::try_from(batch_result.unwrap()).unwrap())
                 .collect(),
             dtype,
         )

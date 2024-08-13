@@ -43,7 +43,9 @@ impl PrimitiveArray {
                 DType::from(ptype).with_nullability(validity.nullability()),
                 length,
                 PrimitiveMetadata {
-                    validity: validity.to_metadata(length).unwrap_or_else(|err| panic!("Invalid validity: {err}")),
+                    validity: validity
+                        .to_metadata(length)
+                        .unwrap_or_else(|err| panic!("Invalid validity: {err}")),
                 },
                 Some(buffer),
                 validity.into_array().into_iter().collect_vec().into(),
@@ -90,7 +92,9 @@ impl PrimitiveArray {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer().unwrap_or_else(|| panic!("Missing buffer in PrimitiveArray"))
+        self.array()
+            .buffer()
+            .unwrap_or_else(|| panic!("Missing buffer in PrimitiveArray"))
     }
 
     pub fn maybe_null_slice<T: NativePType>(&self) -> &[T] {
@@ -217,6 +221,7 @@ impl AcceptArrayVisitor for PrimitiveArray {
 
 impl Array {
     pub fn as_primitive(&self) -> PrimitiveArray {
-        PrimitiveArray::try_from(self).unwrap_or_else(|err| panic!("Expected primitive array: {err}"))
+        PrimitiveArray::try_from(self)
+            .unwrap_or_else(|err| panic!("Expected primitive array: {err}"))
     }
 }

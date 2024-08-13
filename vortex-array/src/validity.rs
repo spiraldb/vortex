@@ -219,12 +219,17 @@ impl FromIterator<LogicalValidity> for Validity {
                 LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
                 LogicalValidity::Array(array) => array
                     .into_bool()
-                    .unwrap_or_else(|err| panic!("Failed to get Validity Array as BoolArray: {err}")).boolean_buffer(),
+                    .unwrap_or_else(|err| {
+                        panic!("Failed to get Validity Array as BoolArray: {err}")
+                    })
+                    .boolean_buffer(),
             };
             buffer.append_buffer(&present);
         }
-        let bool_array = BoolArray::try_new(buffer.finish(), Validity::NonNullable)
-            .unwrap_or_else(|err| panic!("BoolArray::try_new from BooleanBuffer should always succeed: {err}"));
+        let bool_array =
+            BoolArray::try_new(buffer.finish(), Validity::NonNullable).unwrap_or_else(|err| {
+                panic!("BoolArray::try_new from BooleanBuffer should always succeed: {err}")
+            });
         Self::Array(bool_array.into_array())
     }
 }

@@ -117,7 +117,11 @@ pub fn convert_expr_to_vortex(
     physical_expr: Arc<dyn PhysicalExpr>,
     input_schema: &Schema,
 ) -> VortexResult<Arc<dyn VortexPhysicalExpr>> {
-    if physical_expr.data_type(input_schema).map_err(VortexError::from)?.is_temporal() {
+    if physical_expr
+        .data_type(input_schema)
+        .map_err(VortexError::from)?
+        .is_temporal()
+    {
         vortex_bail!("Doesn't support evaluating operations over temporal values");
     }
     if let Some(binary_expr) = physical_expr

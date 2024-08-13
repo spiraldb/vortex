@@ -113,7 +113,8 @@ impl From<TemporalMetadata> for ExtMetadata {
                     None => meta.extend_from_slice(0u16.to_le_bytes().as_slice()),
                     Some(tz) => {
                         let tz_bytes = tz.as_bytes();
-                        let tz_len = u16::try_from(tz_bytes.len()).unwrap_or_else(|err| panic!("tz did not fit in u16: {err}"));
+                        let tz_len = u16::try_from(tz_bytes.len())
+                            .unwrap_or_else(|err| panic!("tz did not fit in u16: {err}"));
                         meta.extend_from_slice(tz_len.to_le_bytes().as_slice());
                         meta.extend_from_slice(tz_bytes);
                     }

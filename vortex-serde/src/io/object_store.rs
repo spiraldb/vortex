@@ -82,7 +82,12 @@ impl VortexReadAt for ObjectStoreReadAt {
             .head(&self.location)
             .await
             .map_err(VortexError::ObjectStore)
-            .unwrap_or_else(|err| panic!("Failed to get size of object at location {}: {err}", self.location))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to get size of object at location {}: {err}",
+                    self.location
+                )
+            })
             .size as u64
     }
 }

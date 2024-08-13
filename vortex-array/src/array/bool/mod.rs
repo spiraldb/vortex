@@ -27,7 +27,9 @@ pub struct BoolMetadata {
 
 impl BoolArray {
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer().unwrap_or_else(|| panic!("Missing buffer in BoolArray"))
+        self.array()
+            .buffer()
+            .unwrap_or_else(|| panic!("Missing buffer in BoolArray"))
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {

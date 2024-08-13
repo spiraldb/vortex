@@ -119,7 +119,12 @@ where
             dtype,
             nulls(value.nulls(), nullable),
         )
-        .unwrap_or_else(|err| panic!("Failed to convert Arrow GenericByteArray to Vortex VarBinArray: {}", err))
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to convert Arrow GenericByteArray to Vortex VarBinArray: {}",
+                err
+            )
+        })
         .into()
     }
 }
@@ -141,7 +146,12 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
             dtype,
             nulls(value.nulls(), nullable),
         )
-        .unwrap_or_else(|err| panic!("Failed to convert Arrow GenericByteViewArray to Vortex VarBinViewArray: {}", err))
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to convert Arrow GenericByteViewArray to Vortex VarBinViewArray: {}",
+                err
+            )
+        })
         .into()
     }
 }
@@ -149,7 +159,12 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
 impl FromArrowArray<&ArrowBooleanArray> for Array {
     fn from_arrow(value: &ArrowBooleanArray, nullable: bool) -> Self {
         BoolArray::try_new(value.values().clone(), nulls(value.nulls(), nullable))
-            .unwrap_or_else(|err| panic!("Failed to convert Arrow BooleanArray to Vortex BoolArray: {}", err))
+            .unwrap_or_else(|err| {
+                panic!(
+                    "Failed to convert Arrow BooleanArray to Vortex BoolArray: {}",
+                    err
+                )
+            })
             .into()
     }
 }
@@ -174,7 +189,12 @@ impl FromArrowArray<&ArrowStructArray> for Array {
             value.len(),
             nulls(value.nulls(), nullable),
         )
-        .unwrap_or_else(|err| panic!("Failed to convert Arrow StructArray to Vortex StructArray: {}", err))
+        .unwrap_or_else(|err| {
+            panic!(
+                "Failed to convert Arrow StructArray to Vortex StructArray: {}",
+                err
+            )
+        })
         .into()
     }
 }
@@ -223,17 +243,24 @@ impl FromArrowArray<ArrowArrayRef> for Array {
             DataType::Binary => Self::from_arrow(array.as_binary::<i32>(), nullable),
             DataType::LargeBinary => Self::from_arrow(array.as_binary::<i64>(), nullable),
             DataType::BinaryView => Self::from_arrow(
-                array.as_any().downcast_ref::<BinaryViewArray>().unwrap_or_else(|| panic!("Expected Arrow BinaryViewArray for DataType::BinaryView")),
+                array
+                    .as_any()
+                    .downcast_ref::<BinaryViewArray>()
+                    .unwrap_or_else(|| {
+                        panic!("Expected Arrow BinaryViewArray for DataType::BinaryView")
+                    }),
                 nullable,
             ),
             DataType::Utf8View => Self::from_arrow(
-                array.as_any().downcast_ref::<StringViewArray>().unwrap_or_else(|| panic!("Expected Arrow StringViewArray for DataType::Utf8View")),
+                array
+                    .as_any()
+                    .downcast_ref::<StringViewArray>()
+                    .unwrap_or_else(|| {
+                        panic!("Expected Arrow StringViewArray for DataType::Utf8View")
+                    }),
                 nullable,
             ),
-            DataType::Struct(_) => Self::from_arrow(
-                array.as_struct(),
-                nullable,
-            ),
+            DataType::Struct(_) => Self::from_arrow(array.as_struct(), nullable),
             DataType::Null => Self::from_arrow(as_null_array(&array), nullable),
             DataType::Timestamp(u, _) => match u {
                 ArrowTimeUnit::Second => {

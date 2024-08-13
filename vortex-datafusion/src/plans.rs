@@ -171,10 +171,13 @@ impl Stream for RowIndicesStream {
             return Poll::Ready(None);
         }
 
-        let next_chunk = this
-            .chunked_array
-            .chunk(this.chunk_idx)
-            .ok_or_else(|| vortex_err!("Chunk not found for index {}, nchunks: {}", this.chunk_idx, this.chunked_array.nchunks()))?;
+        let next_chunk = this.chunked_array.chunk(this.chunk_idx).ok_or_else(|| {
+            vortex_err!(
+                "Chunk not found for index {}, nchunks: {}",
+                this.chunk_idx,
+                this.chunked_array.nchunks()
+            )
+        })?;
         this.chunk_idx += 1;
 
         // Get the unfiltered record batch.
@@ -185,8 +188,7 @@ impl Stream for RowIndicesStream {
             .project(this.filter_projection.as_slice())?;
 
         // TODO(adamg): Filter on vortex arrays
-        let array =
-            ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr)?;
+        let array = ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr)?;
         let selection = array.into_canonical()?.into_arrow()?;
 
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
@@ -233,7 +235,10 @@ impl TakeRowsExec {
         row_indices: Arc<dyn ExecutionPlan>,
         table: &ChunkedArray,
     ) -> Self {
-        let output_schema = Arc::new(schema_ref.project(projection).unwrap_or_else(|err| panic!("Failed to project schema: {}", VortexError::from(err))));
+        let output_schema =
+            Arc::new(schema_ref.project(projection).unwrap_or_else(|err| {
+                panic!("Failed to project schema: {}", VortexError::from(err))
+            }));
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(output_schema.clone()),
             Partitioning::UnknownPartitioning(1),
@@ -369,7 +374,13 @@ where
         let chunk = this
             .vortex_array
             .chunk(*this.chunk_idx)
-            .ok_or_else(|| vortex_err!("Chunk not found for index {}, nchunks: {}", this.chunk_idx, this.vortex_array.nchunks()))?
+            .ok_or_else(|| {
+                vortex_err!(
+                    "Chunk not found for index {}, nchunks: {}",
+                    this.chunk_idx,
+                    this.vortex_array.nchunks()
+                )
+            })?
             .into_struct()?;
 
         *this.chunk_idx += 1;
