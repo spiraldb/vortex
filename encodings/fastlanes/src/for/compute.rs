@@ -96,33 +96,30 @@ mod test {
     use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
     use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
-    use vortex::IntoArray;
 
-    use crate::{for_compress, FoRArray};
+    use crate::for_compress;
 
     #[test]
     fn for_scalar_at() {
-        let (child, min, shift) = for_compress(&PrimitiveArray::from(vec![11, 15, 19])).unwrap();
-        let forarr = FoRArray::try_new(child, min, shift).unwrap().into_array();
-        assert_eq!(scalar_at(&forarr, 0).unwrap(), 11.into());
-        assert_eq!(scalar_at(&forarr, 1).unwrap(), 15.into());
-        assert_eq!(scalar_at(&forarr, 2).unwrap(), 19.into());
+        let for_arr = for_compress(PrimitiveArray::from(vec![1100, 1500, 1900]).array()).unwrap();
+        assert_eq!(scalar_at(&for_arr, 0).unwrap(), 1100.into());
+        assert_eq!(scalar_at(&for_arr, 1).unwrap(), 1500.into());
+        assert_eq!(scalar_at(&for_arr, 2).unwrap(), 1900.into());
     }
 
     #[test]
     fn for_search() {
-        let (child, min, shift) = for_compress(&PrimitiveArray::from(vec![11, 15, 19])).unwrap();
-        let forarr = FoRArray::try_new(child, min, shift).unwrap().into_array();
+        let for_arr = for_compress(PrimitiveArray::from(vec![1100, 1500, 1900]).array()).unwrap();
         assert_eq!(
-            search_sorted(&forarr, 15, SearchSortedSide::Left).unwrap(),
+            search_sorted(&for_arr, 1500, SearchSortedSide::Left).unwrap(),
             SearchResult::Found(1)
         );
         assert_eq!(
-            search_sorted(&forarr, 20, SearchSortedSide::Left).unwrap(),
+            search_sorted(&for_arr, 2000, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(3)
         );
         assert_eq!(
-            search_sorted(&forarr, 10, SearchSortedSide::Left).unwrap(),
+            search_sorted(&for_arr, 1000, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(0)
         );
     }

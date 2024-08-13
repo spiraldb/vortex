@@ -1,7 +1,8 @@
 use itertools::Itertools;
 use num_traits::{PrimInt, WrappingAdd, WrappingSub};
-use vortex::array::{ConstantArray, PrimitiveArray};
+use vortex::array::{ConstantArray, PrimitiveArray, SparseArray};
 use vortex::stats::{trailing_zeros, ArrayStatistics, Stat};
+use vortex::validity::LogicalValidity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
@@ -9,7 +10,14 @@ use vortex_scalar::Scalar;
 
 use crate::FoRArray;
 
-pub fn for_compress(array: &PrimitiveArray) -> VortexResult<(Array, Scalar, u8)> {
+pub fn for_compress(array: &Array) -> VortexResult<Array> {
+    let (child, for_params) = for_compress_parts(&array.clone().into_primitive()?)?;
+    for_params
+        .map(|(shift, min)| FoRArray::try_new(child.clone(), shift, min).map(|a| a.into_array()))
+        .unwrap_or(Ok(child))
+}
+
+pub fn for_compress_parts(array: &PrimitiveArray) -> VortexResult<(Array, Option<(Scalar, u8)>)> {
     let shift = trailing_zeros(array.array());
     let min = array
         .statistics()
@@ -18,16 +26,52 @@ pub fn for_compress(array: &PrimitiveArray) -> VortexResult<(Array, Scalar, u8)>
 
     Ok(match_each_integer_ptype!(array.ptype(), |$T| {
         if shift == <$T>::PTYPE.bit_width() as u8 {
-            (ConstantArray::new(
-                Scalar::zero::<$T>(array.dtype().nullability())
-                    .reinterpret_cast(array.ptype().to_unsigned()),
-                array.len(),
-            )
-            .into_array(), min, shift)
+            match array.validity().to_logical(array.len()) {
+                LogicalValidity::AllValid(_) => (
+                    ConstantArray::new(
+                        Scalar::zero::<$T>(array.dtype().nullability()),
+                        array.len(),
+                    )
+                    .into_array(),
+                    None,
+                ),
+                LogicalValidity::AllInvalid(_) => (
+                    ConstantArray::new(Scalar::null(array.dtype().clone()), array.len()).into_array(),
+                    None,
+                ),
+                LogicalValidity::Array(a) => {
+                    let valid_indices = PrimitiveArray::from(
+                        a.into_bool()?
+                            .boolean_buffer()
+                            .set_indices()
+                            .map(|i| i as u64)
+                            .collect::<Vec<_>>(),
+                    )
+                    .into_array();
+                    let valid_len = valid_indices.len();
+                    (
+                        SparseArray::try_new(
+                            valid_indices,
+                            ConstantArray::new(
+                                Scalar::zero::<$T>(array.dtype().nullability()),
+                                valid_len,
+                            )
+                            .into_array(),
+                            array.len(),
+                            Scalar::null(array.dtype().clone()),
+                        )?
+                        .into_array(),
+                        None,
+                    )
+                }
+            }
         } else {
-            (compress_primitive::<$T>(&array, shift, $T::try_from(&min)?)
-                .reinterpret_cast(array.ptype().to_unsigned())
-                .into_array(), min, shift)
+            (
+                compress_primitive::<$T>(&array, shift, $T::try_from(&min)?)
+                    .reinterpret_cast(array.ptype().to_unsigned())
+                    .into_array(),
+                Some((min, shift)),
+            )
         }
     }))
 }
@@ -101,20 +145,17 @@ mod test {
     fn test_compress() {
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
+        let compressed = FoRArray::try_from(for_compress(array.array()).unwrap()).unwrap();
 
-        let (_, reference, _) = for_compress(&array).unwrap();
-        assert_eq!(u32::try_from(reference).unwrap(), 1_000_000u32);
+        assert_eq!(u32::try_from(compressed.reference()).unwrap(), 1_000_000u32);
     }
 
     #[test]
     fn test_decompress() {
         // Create a range offset by a million
         let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
-        let (compressed, reference, shift) = for_compress(&array).unwrap();
-        let decompressed = FoRArray::try_new(compressed, reference, shift)
-            .unwrap()
-            .into_primitive()
-            .unwrap();
+        let compressed = for_compress(array.array()).unwrap();
+        let decompressed = compressed.into_primitive().unwrap();
         assert_eq!(
             decompressed.maybe_null_slice::<u32>(),
             array.maybe_null_slice::<u32>()
@@ -124,8 +165,7 @@ mod test {
     #[test]
     fn test_overflow() {
         let array = PrimitiveArray::from((i8::MIN..=i8::MAX).collect_vec());
-        let (compressed, reference, shift) = for_compress(&array).unwrap();
-        let compressed = FoRArray::try_new(compressed, reference, shift).unwrap();
+        let compressed = FoRArray::try_from(for_compress(array.array()).unwrap()).unwrap();
         assert_eq!(i8::MIN, i8::try_from(compressed.reference()).unwrap());
 
         let encoded = compressed.encoded().into_primitive().unwrap();
