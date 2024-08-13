@@ -1,0 +1,23 @@
+[package]
+name = "vortex-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+license = { workspace = true }
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+vortex-array = { workspace = true, features = ["arbitrary"] }
+vortex-dtype = { workspace = true }
+vortex-sampling-compressor = { workspace = true }
+
+
+[[bin]]
+name = "fuzz_target_1"
+path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false

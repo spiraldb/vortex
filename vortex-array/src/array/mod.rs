@@ -10,6 +10,9 @@ mod struct_;
 mod varbin;
 mod varbinview;
 
+#[cfg(feature = "arbitrary")]
+pub mod arbitrary;
+
 pub use self::bool::*;
 pub use self::chunked::*;
 pub use self::constant::*;
