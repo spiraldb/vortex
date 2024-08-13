@@ -202,6 +202,14 @@ macro_rules! vortex_bail {
     };
 }
 
+#[macro_export]
+macro_rules! vortex_panic {
+    // TODO: this can be fancier, e.g., add backtrace if it's not already included
+    ($($tt:tt)+) => {
+        panic!($($tt)+)
+    };
+}
+
 #[cfg(feature = "datafusion")]
 impl From<VortexError> for datafusion_common::DataFusionError {
     fn from(value: VortexError) -> Self {
