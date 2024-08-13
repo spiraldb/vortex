@@ -1,0 +1,32 @@
+
+name: Fuzz
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # daily
+  workflow_dispatch:
+
+jobs:
+  setup:
+    name: 'build'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install Protoc
+        uses: arduino/setup-protoc@v3
+      - uses: ./.github/actions/setup-rust
+      - name: Install cargo fuzz
+        run: cargo install cargo-fuzz
+      - name: Run fuzzing target
+        run: cargo fuzz run fuzz_target_1 -- -max_total_time=600
+      - name: Archive crash artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzing-crash-artifacts
+          path: fuzz/artifacts
+      - name: Archive fuzzing corpus
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzzing-corpus
+          path: fuzz/corpus
+
+
