@@ -163,11 +163,10 @@ borrow_as_ptr = { level = "deny" }
 collection_is_never_read = { level = "deny" }
 cognitive_complexity = { level = "deny" }
 debug_assert_with_mut_call = { level = "deny" }
-#default_numeric_fallback = { level = "deny" }
 derive_partial_eq_without_eq = { level = "deny" }
 expect_used = { level = "deny" }
 equatable_if_let = { level = "deny" }
-#fallible_impl_from = { level = "deny" }
+fallible_impl_from = { level = "deny" }
 get_unwrap = { level = "deny" }
 host_endian_bytes = { level = "deny" }
 if_then_some_else_none = { level = "deny" }
