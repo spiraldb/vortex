@@ -101,7 +101,7 @@ mod test {
 
     #[test]
     fn for_scalar_at() {
-        let for_arr = for_compress(PrimitiveArray::from(vec![1100, 1500, 1900]).array()).unwrap();
+        let for_arr = for_compress(&PrimitiveArray::from(vec![1100, 1500, 1900])).unwrap();
         assert_eq!(scalar_at(&for_arr, 0).unwrap(), 1100.into());
         assert_eq!(scalar_at(&for_arr, 1).unwrap(), 1500.into());
         assert_eq!(scalar_at(&for_arr, 2).unwrap(), 1900.into());
@@ -109,7 +109,7 @@ mod test {
 
     #[test]
     fn for_search() {
-        let for_arr = for_compress(PrimitiveArray::from(vec![1100, 1500, 1900]).array()).unwrap();
+        let for_arr = for_compress(&PrimitiveArray::from(vec![1100, 1500, 1900])).unwrap();
         assert_eq!(
             search_sorted(&for_arr, 1500, SearchSortedSide::Left).unwrap(),
             SearchResult::Found(1)
