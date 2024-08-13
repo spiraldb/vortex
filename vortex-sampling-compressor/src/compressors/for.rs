@@ -4,7 +4,7 @@ use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::stats::{trailing_zeros, ArrayStatistics};
 use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDef, IntoArray};
+use vortex::{Array, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_fastlanes::{for_compress, FoR, FoRArray, FoREncoding};
@@ -52,16 +52,35 @@ impl EncodingCompressor for FoRCompressor {
         like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
-        let (child, min, shift) = for_compress(&PrimitiveArray::try_from(array)?)?;
+        let for_compressed = for_compress(&array.clone().into_primitive()?)?;
 
-        let compressed_child = ctx
-            .named("for")
-            .excluding(self)
-            .compress(&child, like.as_ref().and_then(|l| l.child(0)))?;
-        Ok(CompressedArray::new(
-            FoRArray::try_new(compressed_child.array, min, shift).map(|a| a.into_array())?,
-            Some(CompressionTree::new(self, vec![compressed_child.path])),
-        ))
+        match FoRArray::try_from(for_compressed.clone()) {
+            Ok(for_array) => {
+                let compressed_child = ctx
+                    .named("for")
+                    .excluding(self)
+                    .compress(&for_array.encoded(), like.as_ref().and_then(|l| l.child(0)))?;
+                Ok(CompressedArray::new(
+                    FoRArray::try_new(
+                        compressed_child.array,
+                        for_array.reference().clone(),
+                        for_array.shift(),
+                    )
+                    .map(|a| a.into_array())?,
+                    Some(CompressionTree::new(self, vec![compressed_child.path])),
+                ))
+            }
+            Err(_) => {
+                let compressed_child = ctx
+                    .named("for")
+                    .excluding(self)
+                    .compress(&for_compressed, like.as_ref())?;
+                Ok(CompressedArray::new(
+                    compressed_child.array,
+                    Some(CompressionTree::new(self, vec![compressed_child.path])),
+                ))
+            }
+        }
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
