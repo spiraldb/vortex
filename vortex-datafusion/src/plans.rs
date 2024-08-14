@@ -25,7 +25,7 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
-use vortex_error::{vortex_err, vortex_panic, VortexError};
+use vortex_error::{vortex_err, VortexError};
 
 use crate::datatype::infer_schema;
 use crate::eval::ExpressionEvaluator;
@@ -187,8 +187,11 @@ impl Stream for RowIndicesStream {
             .into_struct()?
             .project(this.filter_projection.as_slice())?;
 
+        let schema = infer_schema(vortex_struct.dtype());
+
         // TODO(adamg): Filter on vortex arrays
-        let array = ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr)?;
+        let array =
+            ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr, &schema)?;
         let selection = array.into_canonical()?.into_arrow()?;
 
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
@@ -237,7 +240,7 @@ impl TakeRowsExec {
     ) -> Self {
         let output_schema =
             Arc::new(schema_ref.project(projection).unwrap_or_else(|err| {
-                vortex_panic!("Failed to project schema", VortexError::from(err))
+                panic!("Failed to project schema: {}", VortexError::from(err))
             }));
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(output_schema.clone()),

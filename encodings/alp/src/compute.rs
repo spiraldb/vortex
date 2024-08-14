@@ -1,6 +1,7 @@
 use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray};
+use vortex_dtype::{DType, NativePType};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -22,11 +23,23 @@ impl ArrayCompute for ALPArray {
 
 impl ScalarAtFn for ALPArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if let Some(patch) = self.patches().and_then(|p| scalar_at(&p, index).ok()) {
-            return Ok(patch);
+        if let Some(patches) = self.patches().and_then(|p| {
+            p.with_dyn(|arr| {
+                // We need to make sure the value is actually in the patches array
+                arr.is_valid(index)
+            })
+            .then_some(p)
+        }) {
+            return scalar_at(&patches, index);
         }
+
         let encoded_val = scalar_at(&self.encoded(), index)?;
+
         match_each_alp_float_ptype!(self.ptype(), |$T| {
+            // If we have a null value, no need to decode it
+            if !encoded_val.is_valid() {
+                return Ok(Scalar::null(DType::from(<$T>::PTYPE).as_nullable()));
+            }
             let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.as_ref().try_into().unwrap();
             Ok(Scalar::from(<$T as ALPFloat>::decode_single(
                 encoded_val,

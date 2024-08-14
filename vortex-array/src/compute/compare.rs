@@ -27,10 +27,9 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         return selection;
     }
 
-    if let Some(selection) = right.with_dyn(|rhs| {
-        rhs.compare()
-            .map(|rhs| rhs.compare(left, operator.inverse()))
-    }) {
+    if let Some(selection) =
+        right.with_dyn(|rhs| rhs.compare().map(|rhs| rhs.compare(left, operator.swap())))
+    {
         return selection;
     }
 

@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use arrow_array::RecordBatch;
-use arrow_schema::{DataType, SchemaRef};
+use arrow_schema::{DataType, Schema, SchemaRef};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::{DataFrame, SessionContext};
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
@@ -46,7 +46,6 @@ const SUPPORTED_BINARY_OPS: &[Operator] = &[
 
 fn supported_data_types(dt: DataType) -> bool {
     dt.is_integer()
-        || dt.is_signed_integer()
         || dt.is_floating()
         || dt.is_null()
         || dt == DataType::Boolean
@@ -153,14 +152,18 @@ impl SessionContextExt for SessionContext {
     }
 }
 
-fn can_be_pushed_down(expr: &Expr) -> bool {
+fn can_be_pushed_down(expr: &Expr, schema: &Schema) -> bool {
     match expr {
         Expr::BinaryExpr(expr)
             if expr.op.is_logic_operator() || SUPPORTED_BINARY_OPS.contains(&expr.op) =>
         {
-            can_be_pushed_down(expr.left.as_ref()) & can_be_pushed_down(expr.right.as_ref())
+            can_be_pushed_down(expr.left.as_ref(), schema)
+                & can_be_pushed_down(expr.right.as_ref(), schema)
         }
-        Expr::Column(_) => true,
+        Expr::Column(col) => match schema.column_with_name(col.name()) {
+            Some((_, field)) => supported_data_types(field.data_type().clone()),
+            _ => false,
+        },
         Expr::Literal(lit) => supported_data_types(lit.data_type()),
         _ => false,
     }

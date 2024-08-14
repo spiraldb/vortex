@@ -159,7 +159,7 @@ impl TableProvider for VortexMemTable {
         filters
             .iter()
             .map(|expr| {
-                if can_be_pushed_down(expr) {
+                if can_be_pushed_down(expr, self.schema().as_ref()) {
                     Ok(TableProviderFilterPushDown::Exact)
                 } else {
                     Ok(TableProviderFilterPushDown::Unsupported)
@@ -223,6 +223,7 @@ fn make_filter_then_take_plan(
 mod test {
     use arrow_array::cast::AsArray as _;
     use arrow_array::types::Int64Type;
+    use arrow_schema::{DataType, Field, Schema};
     use datafusion::functions_aggregate::count::count_distinct;
     use datafusion::prelude::SessionContext;
     use datafusion_common::{Column, TableReference};
@@ -343,21 +344,24 @@ mod test {
         };
         let e = Expr::BinaryExpr(e);
 
-        assert!(can_be_pushed_down(&e));
+        assert!(can_be_pushed_down(
+            &e,
+            &Schema::new(vec![Field::new("o_orderstatus", DataType::Utf8, true)])
+        ));
     }
 
     #[test]
     fn test_can_be_pushed_down1() {
         let e = lit("hello");
 
-        assert!(can_be_pushed_down(&e));
+        assert!(can_be_pushed_down(&e, &Schema::empty()));
     }
 
     #[test]
     fn test_can_be_pushed_down2() {
         let e = lit(3);
 
-        assert!(can_be_pushed_down(&e));
+        assert!(can_be_pushed_down(&e, &Schema::empty()));
     }
 
     #[test]
@@ -369,12 +373,21 @@ mod test {
         };
         let e = Expr::BinaryExpr(e);
 
-        assert!(!can_be_pushed_down(&e));
+        assert!(!can_be_pushed_down(
+            &e,
+            &Schema::new(vec![Field::new("nums", DataType::Int32, true)])
+        ));
     }
 
     #[test]
     fn test_can_be_pushed_down4() {
         let e = and((col("a")).eq(lit(2u64)), col("b").eq(lit(true)));
-        assert!(can_be_pushed_down(&e));
+        assert!(can_be_pushed_down(
+            &e,
+            &Schema::new(vec![
+                Field::new("a", DataType::UInt64, true),
+                Field::new("b", DataType::Boolean, true)
+            ])
+        ));
     }
 }
