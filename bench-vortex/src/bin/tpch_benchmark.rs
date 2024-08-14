@@ -186,20 +186,6 @@ async fn bench_main(queries: Option<Vec<usize>>) -> ExitCode {
             .or_insert_with(|| vec![0; EXPECTED_ROW_COUNTS.len()])[idx] = row_count;
     }
 
-    let mut mismatched = false;
-    for (format, row_counts) in format_row_counts {
-        row_counts
-            .into_iter()
-            .zip_eq(EXPECTED_ROW_COUNTS)
-            .enumerate()
-            .for_each(|(idx, (row_count, expected_row_count))| {
-                if row_count != expected_row_count {
-                    println!("Mismatched row count {row_count} instead of {expected_row_count} in query {idx} for format {format:?}");
-                    mismatched = true;
-                }
-            })
-    }
-
     let mut rows = vec![];
     while let Ok((idx, row)) = rows_rx.recv() {
         rows.push((idx, row));
@@ -211,6 +197,21 @@ async fn bench_main(queries: Option<Vec<usize>>) -> ExitCode {
 
     progress.finish();
     table.printstd();
+
+    let mut mismatched = false;
+    for (format, row_counts) in format_row_counts {
+        row_counts
+            .into_iter()
+            .zip_eq(EXPECTED_ROW_COUNTS)
+            .enumerate()
+            .filter(|(idx, _)| queries.as_ref().map(|q| q.contains(idx)).unwrap_or(true))
+            .for_each(|(idx, (row_count, expected_row_count))| {
+                if row_count != expected_row_count {
+                    println!("Mismatched row count {row_count} instead of {expected_row_count} in query {idx} for format {format:?}");
+                    mismatched = true;
+                }
+            })
+    }
     if mismatched {
         ExitCode::FAILURE
     } else {
