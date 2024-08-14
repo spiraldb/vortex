@@ -3,7 +3,6 @@ use std::mem::size_of;
 use itertools::Itertools;
 use num_traits::{Float, NumCast, PrimInt, Zero};
 use serde::{Deserialize, Serialize};
-use vortex_dtype::{DType, Nullability, PType};
 
 const SAMPLE_SIZE: usize = 32;
 

@@ -106,6 +106,8 @@ fn decompress_primitive<T: NativePType + ALPFloat>(
 
 #[cfg(test)]
 mod tests {
+    use core::f64;
+
     use vortex::compute::unary::scalar_at;
     use vortex::AsArray;
 
@@ -146,7 +148,7 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::approx_constant)]
+    #[allow(clippy::approx_constant)] // ALP doesn't like E
     fn test_patched_compress() {
         let values = vec![1.234f64, 2.718, std::f64::consts::PI, 4.0];
         let array = PrimitiveArray::from(values.clone());
@@ -163,6 +165,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::approx_constant)] // ALP doesn't like E
     fn test_nullable_patched_scalar_at() {
         let values = vec![
             Some(1.234f64),

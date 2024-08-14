@@ -28,7 +28,7 @@ impl ScalarAtFn for ALPArray {
                 // We need to make sure the value is actually in the patches array
                 arr.is_valid(index)
             })
-            .then(|| p)
+            .then_some(p)
         }) {
             return scalar_at(&patches, index);
         }
