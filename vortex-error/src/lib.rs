@@ -1,4 +1,5 @@
 #![feature(error_generic_member_access)]
+#![feature(min_specialization)]
 
 use std::backtrace::Backtrace;
 use std::borrow::Cow;
@@ -57,6 +58,8 @@ pub enum VortexError {
     NotImplemented(ErrString, ErrString, Backtrace),
     #[error("expected type: {0} but instead got {1}\nBacktrace:\n{2}")]
     MismatchedTypes(ErrString, ErrString, Backtrace),
+    #[error("{0}: {1}")]
+    Context(ErrString, Box<VortexError>),
     #[error(transparent)]
     ArrowError(
         #[from]
@@ -179,6 +182,12 @@ macro_rules! vortex_err {
             $crate::VortexError::MismatchedTypes($expected.to_string().into(), $actual.to_string().into(), Backtrace::capture())
         )
     }};
+    (Context: $fmt:literal $(, $arg:expr)*, $err:expr $(,)?) => {{
+        use std::backtrace::Backtrace;
+        $crate::__private::must_use(
+            $crate::VortexError::Context(format!($fmt, $($arg),*).into(), Box::new($err))
+        )
+    }};
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {{
         use std::backtrace::Backtrace;
         $crate::__private::must_use(
@@ -202,11 +211,34 @@ macro_rules! vortex_bail {
     };
 }
 
+pub trait VortexPanic {
+    fn panic(self);
+}
+
+impl VortexPanic for VortexError {
+    #[allow(clippy::panic)]
+    fn panic(self) {
+        panic!("{}", self)
+    }
+}
+
+impl<T: Into<VortexError>> VortexPanic for T {
+    #[allow(clippy::panic)]
+    default fn panic(self) {
+        let err: VortexError = self.into();
+        panic!("{}", err)
+    }
+}
+
 #[macro_export]
 macro_rules! vortex_panic {
     // TODO: this can be fancier, e.g., add backtrace if it's not already included
-    ($($tt:tt)+) => {
-        panic!($($tt)+)
+    ($err:expr) => {{
+        use $crate::VortexPanic;
+        <$err as VortexPanic>::panic()
+    }};
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::vortex_panic!($crate::vortex_err!(Context: $fmt, $($arg),*))
     };
 }
 

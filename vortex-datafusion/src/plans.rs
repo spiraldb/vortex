@@ -25,7 +25,7 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
-use vortex_error::{vortex_err, VortexError};
+use vortex_error::{vortex_err, vortex_panic, VortexError};
 
 use crate::datatype::infer_schema;
 use crate::eval::ExpressionEvaluator;
@@ -237,7 +237,7 @@ impl TakeRowsExec {
     ) -> Self {
         let output_schema =
             Arc::new(schema_ref.project(projection).unwrap_or_else(|err| {
-                panic!("Failed to project schema: {}", VortexError::from(err))
+                vortex_panic!("Failed to project schema", VortexError::from(err))
             }));
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(output_schema.clone()),
