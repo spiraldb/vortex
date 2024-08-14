@@ -1,5 +1,4 @@
 #![feature(error_generic_member_access)]
-#![feature(min_specialization)]
 
 use std::backtrace::Backtrace;
 use std::borrow::Cow;
@@ -208,37 +207,6 @@ macro_rules! vortex_err {
 macro_rules! vortex_bail {
     ($($tt:tt)+) => {
         return Err($crate::vortex_err!($($tt)+))
-    };
-}
-
-pub trait VortexPanic {
-    fn panic(self);
-}
-
-impl VortexPanic for VortexError {
-    #[allow(clippy::panic)]
-    fn panic(self) {
-        panic!("{}", self)
-    }
-}
-
-impl<T: Into<VortexError>> VortexPanic for T {
-    #[allow(clippy::panic)]
-    default fn panic(self) {
-        let err: VortexError = self.into();
-        panic!("{}", err)
-    }
-}
-
-#[macro_export]
-macro_rules! vortex_panic {
-    // TODO: this can be fancier, e.g., add backtrace if it's not already included
-    ($err:expr) => {{
-        use $crate::VortexPanic;
-        <$err as VortexPanic>::panic()
-    }};
-    ($fmt:literal $(, $arg:expr)* $(,)?) => {
-        $crate::vortex_panic!($crate::vortex_err!(Context: $fmt, $($arg),*))
     };
 }
 
