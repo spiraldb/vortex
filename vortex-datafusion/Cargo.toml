@@ -37,12 +37,12 @@ vortex-dtype = { workspace = true }
 vortex-error = { workspace = true, features = ["datafusion"] }
 vortex-expr = { workspace = true }
 vortex-scalar = { workspace = true, features = ["datafusion"] }
-vortex-serde = { workspace = true, features = ["object_store"] }
+vortex-serde = { workspace = true, features = ["object_store", "tokio"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["test-util", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["test-util", "rt-multi-thread", "fs"] }
 url = { workspace = true }
 
 [lints]

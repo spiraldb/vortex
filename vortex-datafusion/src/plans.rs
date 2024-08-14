@@ -186,9 +186,12 @@ impl Stream for RowIndicesStream {
             .project(this.filter_projection.as_slice())
             .expect("projection should succeed");
 
+        let schema = infer_schema(vortex_struct.dtype());
+
         // TODO(adamg): Filter on vortex arrays
         let array =
-            ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr).unwrap();
+            ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr, &schema)
+                .unwrap();
         let selection = array.into_canonical().unwrap().into_arrow();
 
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
