@@ -106,6 +106,9 @@ fn decompress_primitive<T: NativePType + ALPFloat>(
 
 #[cfg(test)]
 mod tests {
+    use vortex::compute::unary::scalar_at;
+    use vortex::AsArray;
+
     use super::*;
 
     #[test]
@@ -157,5 +160,31 @@ mod tests {
 
         let decoded = decompress(encoded).unwrap();
         assert_eq!(values, decoded.maybe_null_slice::<f64>());
+    }
+
+    #[test]
+    fn test_nullable_patched_scalar_at() {
+        let values = vec![
+            Some(1.234f64),
+            Some(2.718),
+            Some(std::f64::consts::PI),
+            Some(4.0),
+            None,
+        ];
+        let array = PrimitiveArray::from_nullable_vec(values);
+        let encoded = alp_encode(&array).unwrap();
+        assert!(encoded.patches().is_some());
+
+        assert_eq!(encoded.exponents(), Exponents { e: 3, f: 0 });
+
+        for idx in 0..3 {
+            let s = scalar_at(encoded.as_array_ref(), idx).unwrap();
+            assert!(s.is_valid());
+        }
+
+        let s = scalar_at(encoded.as_array_ref(), 4).unwrap();
+        assert!(s.is_null());
+
+        let _decoded = decompress(encoded).unwrap();
     }
 }

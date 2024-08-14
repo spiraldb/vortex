@@ -22,8 +22,6 @@ pub trait ALPFloat: Float + 'static {
     const F10: &'static [Self];
     const IF10: &'static [Self];
 
-    fn dtype() -> DType;
-
     /// Round to the nearest floating integer by shifting in and out of the low precision range.
     fn fast_round(self) -> Self {
         (self + Self::SWEET) - Self::SWEET
@@ -153,10 +151,6 @@ impl ALPFloat for f32 {
         0.000000001,
         0.0000000001,
     ];
-
-    fn dtype() -> DType {
-        DType::Primitive(PType::F32, Nullability::Nullable)
-    }
 }
 
 impl ALPFloat for f64 {
@@ -218,8 +212,4 @@ impl ALPFloat for f64 {
         0.0000000000000000000001,
         0.00000000000000000000001,
     ];
-
-    fn dtype() -> DType {
-        DType::Primitive(PType::F64, Nullability::Nullable)
-    }
 }
