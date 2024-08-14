@@ -49,6 +49,13 @@ impl RunEndArray {
             );
         }
 
+        if offset != 0 && !ends.is_empty() {
+            let first_run_end: usize = scalar_at(&ends, 0)?.as_ref().try_into()?;
+            if first_run_end <= offset {
+                vortex_bail!("First run end {first_run_end} must be bigger than offset {offset}");
+            }
+        }
+
         if !ends.statistics().compute_is_strict_sorted().unwrap_or(true) {
             vortex_bail!("Ends array must be strictly sorted",);
         }
