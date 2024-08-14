@@ -64,6 +64,18 @@ impl Operator {
         }
     }
 
+    /// Change the sides of the operator, where changing lhs and rhs won't change the result of the operation
+    pub fn swap(self) -> Self {
+        match self {
+            Operator::Eq => Operator::Eq,
+            Operator::NotEq => Operator::NotEq,
+            Operator::Gt => Operator::Lte,
+            Operator::Gte => Operator::Lt,
+            Operator::Lt => Operator::Gte,
+            Operator::Lte => Operator::Gt,
+        }
+    }
+
     pub fn to_predicate<T: NativePType>(&self) -> fn(&T, &T) -> bool {
         match self {
             Operator::Eq => PartialEq::eq,

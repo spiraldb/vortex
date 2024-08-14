@@ -11,12 +11,12 @@ use crate::compute::CompareFn;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for PrimitiveArray {
-    fn compare(&self, other: &Array, predicate: Operator) -> VortexResult<Array> {
-        let flattened = other.clone().into_primitive()?;
+    fn compare(&self, other: &Array, operator: Operator) -> VortexResult<Array> {
+        let other = other.clone().into_primitive()?;
 
         let matching_idxs = match_each_native_ptype!(self.ptype(), |$T| {
-            let predicate_fn = &predicate.to_predicate::<$T>();
-            apply_predicate(self.maybe_null_slice::<$T>(), flattened.maybe_null_slice::<$T>(), predicate_fn)
+            let predicate_fn = &operator.to_predicate::<$T>();
+            apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), predicate_fn)
         });
 
         let present = self
@@ -24,7 +24,7 @@ impl CompareFn for PrimitiveArray {
             .to_logical(self.len())
             .to_null_buffer()?
             .map(|b| b.into_inner());
-        let present_other = flattened
+        let present_other = other
             .validity()
             .to_logical(self.len())
             .to_null_buffer()?
