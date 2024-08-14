@@ -1,3 +1,4 @@
+use arrow_schema::Schema;
 use datafusion_expr::{Expr, Operator as DFOperator};
 use vortex::array::ConstantArray;
 use vortex::compute::{and, compare, or};
@@ -11,13 +12,13 @@ use crate::scalar::dfvalue_to_scalar;
 pub struct ExpressionEvaluator;
 
 impl ExpressionEvaluator {
-    pub fn eval(array: Array, expr: &Expr) -> VortexResult<Array> {
-        debug_assert!(can_be_pushed_down(expr));
+    pub fn eval(array: Array, expr: &Expr, schema: &Schema) -> VortexResult<Array> {
+        debug_assert!(can_be_pushed_down(expr, schema));
 
         match expr {
             Expr::BinaryExpr(expr) => {
-                let lhs = ExpressionEvaluator::eval(array.clone(), expr.left.as_ref())?;
-                let rhs = ExpressionEvaluator::eval(array, expr.right.as_ref())?;
+                let lhs = ExpressionEvaluator::eval(array.clone(), expr.left.as_ref(), schema)?;
+                let rhs = ExpressionEvaluator::eval(array, expr.right.as_ref(), schema)?;
                 // TODO(adamg): turn and/or into more general compute functions
                 match expr.op {
                     DFOperator::And => and(&lhs, &rhs),
