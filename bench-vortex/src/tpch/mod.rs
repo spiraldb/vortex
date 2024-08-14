@@ -28,7 +28,11 @@ use crate::idempotent_async;
 pub mod dbgen;
 pub mod schema;
 
-#[derive(Clone, Copy, Debug)]
+pub const EXPECTED_ROW_COUNTS: [usize; 23] = [
+    0, 4, 460, 11620, 5, 5, 1, 4, 2, 175, 37967, 1048, 2, 42, 1, 0, 18314, 1, 57, 1, 186, 411, 7,
+];
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Format {
     Csv,
     Arrow,
@@ -362,7 +366,7 @@ pub fn tpch_queries() -> impl Iterator<Item = (usize, String)> {
         .map(|q| (q, tpch_query(q)))
 }
 
-pub fn tpch_query(query_idx: usize) -> String {
+fn tpch_query(query_idx: usize) -> String {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tpch")
         .join(format!("q{}.sql", query_idx));

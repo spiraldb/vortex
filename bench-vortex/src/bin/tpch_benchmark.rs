@@ -1,13 +1,16 @@
 #![allow(clippy::use_debug)]
 
+use std::collections::HashMap;
+use std::process::ExitCode;
 use std::sync;
 use std::time::SystemTime;
 
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
-use bench_vortex::tpch::{load_datasets, tpch_queries, Format};
+use bench_vortex::tpch::{load_datasets, tpch_queries, Format, EXPECTED_ROW_COUNTS};
 use clap::Parser;
 use futures::future::try_join_all;
 use indicatif::ProgressBar;
+use itertools::Itertools;
 use prettytable::{Cell, Row, Table};
 
 #[derive(Parser, Debug)]
@@ -19,7 +22,7 @@ struct Args {
     threads: Option<usize>,
 }
 
-fn main() {
+fn main() -> ExitCode {
     let args = Args::parse();
 
     let runtime = match args.threads {
@@ -37,10 +40,10 @@ fn main() {
     }
     .expect("Failed building the Runtime");
 
-    runtime.block_on(bench_main(args.queries));
+    runtime.block_on(bench_main(args.queries))
 }
 
-async fn bench_main(queries: Option<Vec<usize>>) {
+async fn bench_main(queries: Option<Vec<usize>>) -> ExitCode {
     // uncomment the below to enable trace logging of datafusion execution
     // setup_logger(LevelFilter::Trace);
 
@@ -82,6 +85,7 @@ async fn bench_main(queries: Option<Vec<usize>>) {
 
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
+    let (row_count_tx, row_count_rx) = sync::mpsc::channel();
     for (q, query) in tpch_queries() {
         if let Some(queries) = queries.as_ref() {
             if !queries.contains(&q) {
@@ -90,6 +94,7 @@ async fn bench_main(queries: Option<Vec<usize>>) {
         }
         let ctxs = ctxs.clone();
         let tx = rows_tx.clone();
+        let count_tx = row_count_tx.clone();
         let progress = progress.clone();
         rayon::spawn_fifo(move || {
             let mut cells = Vec::with_capacity(formats.len());
@@ -101,9 +106,9 @@ async fn bench_main(queries: Option<Vec<usize>>) {
                 .build()
                 .unwrap();
             for (ctx, format) in ctxs.iter().zip(formats.iter()) {
-                for _ in 0..3 {
+                for i in 0..3 {
                     // warmup
-                    rt.block_on(async {
+                    let row_count: usize = rt.block_on(async {
                         ctx.sql(&query)
                             .await
                             .map_err(|e| println!("Failed to run {} {:?}: {}", q, format, e))
@@ -111,8 +116,14 @@ async fn bench_main(queries: Option<Vec<usize>>) {
                             .collect()
                             .await
                             .map_err(|e| println!("Failed to collect {} {:?}: {}", q, format, e))
-                            .unwrap();
-                    })
+                            .unwrap()
+                            .iter()
+                            .map(|r| r.num_rows())
+                            .sum()
+                    });
+                    if i == 0 {
+                        count_tx.send((q, *format, row_count)).unwrap();
+                    }
                 }
                 let mut measure = Vec::new();
                 for _ in 0..10 {
@@ -166,6 +177,28 @@ async fn bench_main(queries: Option<Vec<usize>>) {
 
     // delete parent handle to tx
     drop(rows_tx);
+    drop(row_count_tx);
+
+    let mut format_row_counts: HashMap<Format, Vec<usize>> = HashMap::new();
+    while let Ok((idx, format, row_count)) = row_count_rx.recv() {
+        format_row_counts
+            .entry(format)
+            .or_insert_with(|| vec![0; EXPECTED_ROW_COUNTS.len()])[idx] = row_count;
+    }
+
+    let mut mismatched = false;
+    for (format, row_counts) in format_row_counts {
+        row_counts
+            .into_iter()
+            .zip_eq(EXPECTED_ROW_COUNTS)
+            .enumerate()
+            .for_each(|(idx, (row_count, expected_row_count))| {
+                if row_count != expected_row_count {
+                    println!("Mismatched row count {row_count} instead of {expected_row_count} in query {idx} for format {format:?}");
+                    mismatched = true;
+                }
+            })
+    }
 
     let mut rows = vec![];
     while let Ok((idx, row)) = rows_rx.recv() {
@@ -178,4 +211,9 @@ async fn bench_main(queries: Option<Vec<usize>>) {
 
     progress.finish();
     table.printstd();
+    if mismatched {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
 }

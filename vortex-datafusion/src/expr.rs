@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::fmt::Debug;
 use std::sync::Arc;
 
 use arrow_schema::{Schema, SchemaRef};
@@ -46,18 +47,21 @@ pub(crate) fn simplify_expr(expr: &Expr, schema: SchemaRef) -> DFResult<Expr> {
     simplifier.simplify(expr.clone())
 }
 
-pub trait VortexPhysicalExpr: Send + Sync {
+pub trait VortexPhysicalExpr: Debug + Send + Sync {
     fn evaluate(&self, array: &Array) -> VortexResult<Array>;
 }
 
+#[derive(Debug)]
 pub struct NoOp;
 
+#[derive(Debug)]
 pub struct BinaryExpr {
     left: Arc<dyn VortexPhysicalExpr>,
     right: Arc<dyn VortexPhysicalExpr>,
     operator: DFOperator,
 }
 
+#[derive(Debug)]
 pub struct Column {
     name: String,
     index: usize,
@@ -76,6 +80,7 @@ impl VortexPhysicalExpr for Column {
     }
 }
 
+#[derive(Debug)]
 pub struct Literal {
     scalar_value: Scalar,
 }

@@ -62,7 +62,7 @@ fn benchmark(c: &mut Criterion) {
                     .unwrap()
                     .collect()
                     .await
-                    .unwrap()
+                    .unwrap();
             })
         });
 
@@ -74,7 +74,7 @@ fn benchmark(c: &mut Criterion) {
                     .unwrap()
                     .collect()
                     .await
-                    .unwrap()
+                    .unwrap();
             })
         });
 
@@ -86,7 +86,7 @@ fn benchmark(c: &mut Criterion) {
                     .unwrap()
                     .collect()
                     .await
-                    .unwrap()
+                    .unwrap();
             })
         });
 
@@ -98,7 +98,7 @@ fn benchmark(c: &mut Criterion) {
                     .unwrap()
                     .collect()
                     .await
-                    .unwrap()
+                    .unwrap();
             })
         });
 
@@ -110,7 +110,7 @@ fn benchmark(c: &mut Criterion) {
                     .unwrap()
                     .collect()
                     .await
-                    .unwrap()
+                    .unwrap();
             })
         });
 
@@ -122,7 +122,7 @@ fn benchmark(c: &mut Criterion) {
                     .unwrap()
                     .collect()
                     .await
-                    .unwrap()
+                    .unwrap();
             })
         });
     }

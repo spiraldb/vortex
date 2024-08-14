@@ -47,7 +47,6 @@ const SUPPORTED_BINARY_OPS: &[Operator] = &[
 
 fn supported_data_types(dt: DataType) -> bool {
     dt.is_integer()
-        || dt.is_signed_integer()
         || dt.is_floating()
         || dt.is_null()
         || dt == DataType::Boolean
