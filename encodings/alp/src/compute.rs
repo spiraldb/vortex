@@ -22,16 +22,16 @@ impl ArrayCompute for ALPArray {
 
 impl ScalarAtFn for ALPArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if let Some(patch) = self.patches().and_then(|p| {
-            p.with_dyn(|arr| {
-                // We need to make sure the value is actually in the patches array
-                if arr.is_valid(index) {
-                    scalar_at(&p, index).ok()
-                } else {
-                    None
-                }
+        if let Some(patch) = self
+            .patches()
+            .and_then(|p| {
+                p.with_dyn(|arr| {
+                    // We need to make sure the value is actually in the patches array
+                    arr.is_valid(index).then(|| scalar_at(&p, index).ok())
+                })
             })
-        }) {
+            .flatten()
+        {
             return Ok(patch);
         }
 
