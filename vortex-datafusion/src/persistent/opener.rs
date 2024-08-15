@@ -46,43 +46,15 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_batch_size(batch_size);
         }
 
-        let mut predicate_projection = HashSet::new();
+        let predicate_projection =
+            extract_column_from_expr(self.predicate.as_ref(), self.arrow_schema.clone())?;
 
         let predicate = self
             .predicate
             .clone()
             .map(|predicate| -> DFResult<Arc<dyn VortexPhysicalExpr>> {
                 // Extend the projection to include column only referenced by physical expressions
-                predicate.apply(|expr| {
-                    if let Some(column) = expr
-                        .as_any()
-                        .downcast_ref::<datafusion_physical_expr::expressions::Column>()
-                    {
-                        // Check if the idx is not in the original projection AND that there's a matching column in the data
-                        let projections_contains_idx = self
-                            .projection
-                            .as_ref()
-                            .map(|p| p.contains(&column.index()))
-                            .unwrap_or(true);
 
-                        match self.arrow_schema.column_with_name(column.name()) {
-                            Some(_) if !projections_contains_idx => {
-                                predicate_projection.insert(column.index());
-                            }
-                            Some(_) => {}
-                            None => {
-                                return Err(DataFusionError::External(
-                                    format!(
-                                        "Could not find expected column {} in schema",
-                                        column.name()
-                                    )
-                                    .into(),
-                                ))
-                            }
-                        }
-                    }
-                    Ok(TreeNodeRecursion::Continue)
-                })?;
                 let vtx_expr = convert_expr_to_vortex(predicate, self.arrow_schema.as_ref())
                     .map_err(|e| DataFusionError::External(e.into()))?;
 
@@ -92,12 +64,16 @@ impl FileOpener for VortexFileOpener {
 
         if let Some(projection) = self.projection.as_ref() {
             let mut projection = projection.clone();
-            projection.extend(predicate_projection);
+            for col_idx in predicate_projection.into_iter() {
+                if !projection.contains(&col_idx) {
+                    projection.push(col_idx);
+                }
+            }
 
             builder = builder.with_projection(Projection::new(projection))
         }
 
-        let original_projection_len = self.projection.clone().map(|v| v.len());
+        let original_projection_len = self.projection.as_ref().map(|v| v.len());
 
         Ok(async move {
             let reader = builder.build().await?;
@@ -155,6 +131,38 @@ fn null_as_false(array: BoolArray) -> VortexResult<Array> {
     };
 
     Ok(Array::from_arrow(boolean_array, false))
+}
+
+/// Extract all indexes of all columns referenced by the physical expressions from the schema
+fn extract_column_from_expr(
+    expr: Option<&Arc<dyn PhysicalExpr>>,
+    schema_ref: SchemaRef,
+) -> DFResult<HashSet<usize>> {
+    let mut predicate_projection = HashSet::new();
+
+    if let Some(expr) = expr {
+        expr.apply(|expr| {
+            if let Some(column) = expr
+                .as_any()
+                .downcast_ref::<datafusion_physical_expr::expressions::Column>()
+            {
+                match schema_ref.column_with_name(column.name()) {
+                    Some(_) => {
+                        predicate_projection.insert(column.index());
+                    }
+                    None => {
+                        return Err(DataFusionError::External(
+                            format!("Could not find expected column {} in schema", column.name())
+                                .into(),
+                        ))
+                    }
+                }
+            }
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+    }
+
+    Ok(predicate_projection)
 }
 
 #[cfg(test)]
