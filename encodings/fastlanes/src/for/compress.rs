@@ -103,11 +103,10 @@ fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(
     shift: u8,
 ) -> Vec<T> {
     if shift > 0 {
-        let shifted_reference = reference << shift as usize;
         values
             .iter()
             .map(|&v| v << shift as usize)
-            .map(|v| v.wrapping_add(&shifted_reference))
+            .map(|v| v.wrapping_add(&reference))
             .collect_vec()
     } else {
         values
