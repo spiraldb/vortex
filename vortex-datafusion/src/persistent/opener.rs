@@ -5,9 +5,11 @@ use arrow_array::{Array as _, BooleanArray, RecordBatch};
 use arrow_schema::SchemaRef;
 use datafusion::arrow::buffer::{buffer_bin_and, BooleanBuffer};
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
+use itertools::Itertools;
 use object_store::ObjectStore;
 use vortex::array::BoolArray;
 use vortex::arrow::FromArrowArray;
@@ -43,13 +45,42 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_batch_size(batch_size);
         }
 
-        let predicate = self.predicate.clone().and_then(|predicate| {
-            convert_expr_to_vortex(predicate, self.arrow_schema.as_ref()).ok()
+        let mut predicate_projection = Vec::default();
+
+        let predicate = self.predicate.clone().map(|predicate| {
+            predicate
+                .apply(|expr| {
+                    if let Some(column) = expr
+                        .as_any()
+                        .downcast_ref::<datafusion_physical_expr::expressions::Column>()
+                    {
+                        let projections_contains_idx = self
+                            .projection
+                            .as_ref()
+                            .map(|p| p.contains(&column.index()))
+                            .unwrap_or(true);
+                        if self.arrow_schema.column_with_name(column.name()).is_some()
+                            && !projections_contains_idx
+                        {
+                            predicate_projection.push(column.index());
+                        }
+                    }
+                    Ok(TreeNodeRecursion::Continue)
+                })
+                .unwrap();
+            let vtx_expr = convert_expr_to_vortex(predicate, self.arrow_schema.as_ref()).unwrap();
+
+            vtx_expr
         });
 
         if let Some(projection) = self.projection.as_ref() {
+            let mut projection = projection.clone();
+            projection.extend(predicate_projection);
+
             builder = builder.with_projection(Projection::new(projection))
         }
+
+        let og_projection_len = self.projection.clone().map(|v| v.len());
 
         Ok(async move {
             let reader = builder.build().await?;
@@ -58,7 +89,7 @@ impl FileOpener for VortexFileOpener {
                 .and_then(move |array| {
                     let predicate = predicate.clone();
                     async move {
-                        let array = if let Some(predicate) = predicate.as_ref() {
+                        let array = if let Some(predicate) = predicate {
                             let predicate_result = predicate.evaluate(&array)?;
 
                             let filter_array = null_as_false(predicate_result.into_bool()?)?;
@@ -67,7 +98,13 @@ impl FileOpener for VortexFileOpener {
                             array
                         };
 
-                        Ok(RecordBatch::from(array))
+                        let rb = RecordBatch::from(array);
+
+                        if let Some(len) = og_projection_len {
+                            Ok(rb.project(&(0..len).collect_vec())?)
+                        } else {
+                            Ok(rb)
+                        }
                     }
                 })
                 .map_err(|e| e.into());
