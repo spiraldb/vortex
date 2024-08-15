@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
@@ -5,9 +6,11 @@ use arrow_array::{Array as _, BooleanArray, RecordBatch};
 use arrow_schema::SchemaRef;
 use datafusion::arrow::buffer::{buffer_bin_and, BooleanBuffer};
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
-use datafusion_common::Result as DFResult;
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
+use itertools::Itertools;
 use object_store::ObjectStore;
 use vortex::array::BoolArray;
 use vortex::arrow::FromArrowArray;
@@ -18,7 +21,7 @@ use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
 use vortex_serde::layouts::reader::context::{LayoutContext, LayoutDeserializer};
 use vortex_serde::layouts::reader::projections::Projection;
 
-use crate::expr::convert_expr_to_vortex;
+use crate::expr::{convert_expr_to_vortex, VortexPhysicalExpr};
 
 pub struct VortexFileOpener {
     pub ctx: Arc<Context>,
@@ -43,13 +46,32 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_batch_size(batch_size);
         }
 
-        let predicate = self.predicate.clone().and_then(|predicate| {
-            convert_expr_to_vortex(predicate, self.arrow_schema.as_ref()).ok()
-        });
+        let predicate_projection =
+            extract_column_from_expr(self.predicate.as_ref(), self.arrow_schema.clone())?;
+
+        let predicate = self
+            .predicate
+            .clone()
+            .map(|predicate| -> DFResult<Arc<dyn VortexPhysicalExpr>> {
+                let vtx_expr = convert_expr_to_vortex(predicate, self.arrow_schema.as_ref())
+                    .map_err(|e| DataFusionError::External(e.into()))?;
+
+                DFResult::Ok(vtx_expr)
+            })
+            .transpose()?;
 
         if let Some(projection) = self.projection.as_ref() {
+            let mut projection = projection.clone();
+            for col_idx in predicate_projection.into_iter() {
+                if !projection.contains(&col_idx) {
+                    projection.push(col_idx);
+                }
+            }
+
             builder = builder.with_projection(Projection::new(projection))
         }
+
+        let original_projection_len = self.projection.as_ref().map(|v| v.len());
 
         Ok(async move {
             let reader = builder.build().await?;
@@ -58,7 +80,7 @@ impl FileOpener for VortexFileOpener {
                 .and_then(move |array| {
                     let predicate = predicate.clone();
                     async move {
-                        let array = if let Some(predicate) = predicate.as_ref() {
+                        let array = if let Some(predicate) = predicate {
                             let predicate_result = predicate.evaluate(&array)?;
 
                             let filter_array = null_as_false(predicate_result.into_bool()?)?;
@@ -67,7 +89,14 @@ impl FileOpener for VortexFileOpener {
                             array
                         };
 
-                        Ok(RecordBatch::from(array))
+                        let rb = RecordBatch::from(array);
+
+                        // If we had a projection, we cut the record batch down to the desired columns
+                        if let Some(len) = original_projection_len {
+                            Ok(rb.project(&(0..len).collect_vec())?)
+                        } else {
+                            Ok(rb)
+                        }
                     }
                 })
                 .map_err(|e| e.into());
@@ -100,6 +129,38 @@ fn null_as_false(array: BoolArray) -> VortexResult<Array> {
     };
 
     Ok(Array::from_arrow(boolean_array, false))
+}
+
+/// Extract all indexes of all columns referenced by the physical expressions from the schema
+fn extract_column_from_expr(
+    expr: Option<&Arc<dyn PhysicalExpr>>,
+    schema_ref: SchemaRef,
+) -> DFResult<HashSet<usize>> {
+    let mut predicate_projection = HashSet::new();
+
+    if let Some(expr) = expr {
+        expr.apply(|expr| {
+            if let Some(column) = expr
+                .as_any()
+                .downcast_ref::<datafusion_physical_expr::expressions::Column>()
+            {
+                match schema_ref.column_with_name(column.name()) {
+                    Some(_) => {
+                        predicate_projection.insert(column.index());
+                    }
+                    None => {
+                        return Err(DataFusionError::External(
+                            format!("Could not find expected column {} in schema", column.name())
+                                .into(),
+                        ))
+                    }
+                }
+            }
+            Ok(TreeNodeRecursion::Continue)
+        })?;
+    }
+
+    Ok(predicate_projection)
 }
 
 #[cfg(test)]

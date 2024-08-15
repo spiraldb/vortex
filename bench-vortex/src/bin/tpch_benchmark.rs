@@ -7,7 +7,7 @@ use std::time::SystemTime;
 
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::tpch::{load_datasets, tpch_queries, Format, EXPECTED_ROW_COUNTS};
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use futures::future::try_join_all;
 use indicatif::ProgressBar;
 use itertools::Itertools;
@@ -20,6 +20,10 @@ struct Args {
     queries: Option<Vec<usize>>,
     #[arg(short, long)]
     threads: Option<usize>,
+    #[arg(short, long, default_value_t = true, default_missing_value = "true", action = ArgAction::Set)]
+    warmup: bool,
+    #[arg(short, long, default_value = "10")]
+    iterations: usize,
 }
 
 fn main() -> ExitCode {
@@ -40,10 +44,10 @@ fn main() -> ExitCode {
     }
     .expect("Failed building the Runtime");
 
-    runtime.block_on(bench_main(args.queries))
+    runtime.block_on(bench_main(args.queries, args.iterations, args.warmup))
 }
 
-async fn bench_main(queries: Option<Vec<usize>>) -> ExitCode {
+async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool) -> ExitCode {
     // uncomment the below to enable trace logging of datafusion execution
     // setup_logger(LevelFilter::Trace);
 
@@ -106,27 +110,31 @@ async fn bench_main(queries: Option<Vec<usize>>) -> ExitCode {
                 .build()
                 .unwrap();
             for (ctx, format) in ctxs.iter().zip(formats.iter()) {
-                for i in 0..3 {
-                    // warmup
-                    let row_count: usize = rt.block_on(async {
-                        ctx.sql(&query)
-                            .await
-                            .map_err(|e| println!("Failed to run {} {:?}: {}", q, format, e))
-                            .unwrap()
-                            .collect()
-                            .await
-                            .map_err(|e| println!("Failed to collect {} {:?}: {}", q, format, e))
-                            .unwrap()
-                            .iter()
-                            .map(|r| r.num_rows())
-                            .sum()
-                    });
-                    if i == 0 {
-                        count_tx.send((q, *format, row_count)).unwrap();
+                if warmup {
+                    for i in 0..3 {
+                        let row_count: usize = rt.block_on(async {
+                            ctx.sql(&query)
+                                .await
+                                .map_err(|e| println!("Failed to run {} {:?}: {}", q, format, e))
+                                .unwrap()
+                                .collect()
+                                .await
+                                .map_err(|e| {
+                                    println!("Failed to collect {} {:?}: {}", q, format, e)
+                                })
+                                .unwrap()
+                                .iter()
+                                .map(|r| r.num_rows())
+                                .sum()
+                        });
+                        if i == 0 {
+                            count_tx.send((q, *format, row_count)).unwrap();
+                        }
                     }
                 }
+
                 let mut measure = Vec::new();
-                for _ in 0..10 {
+                for _ in 0..iterations {
                     let start = SystemTime::now();
                     rt.block_on(async {
                         ctx.sql(&query)
