@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
-use arrow_array::{Array as _, BooleanArray, RecordBatch};
+use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
-use datafusion::arrow::buffer::{buffer_bin_and, BooleanBuffer};
+use datafusion::arrow::compute::prep_null_mask_filter;
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_physical_expr::PhysicalExpr;
@@ -107,23 +107,9 @@ impl FileOpener for VortexFileOpener {
 /// Mask all null values of a Arrow boolean array to false
 fn null_as_false(array: BoolArray) -> VortexResult<Array> {
     let arrow_array = array.into_canonical()?.into_arrow();
-    let array = arrow_array.as_boolean();
-
-    let boolean_array = match array.nulls() {
-        None => array,
-        Some(nulls) => {
-            let inner_bool_buffer = array.values();
-            let buff = buffer_bin_and(
-                inner_bool_buffer.inner(),
-                inner_bool_buffer.offset(),
-                nulls.buffer(),
-                nulls.offset(),
-                inner_bool_buffer.len(),
-            );
-            let bool_buffer =
-                BooleanBuffer::new(buff, inner_bool_buffer.offset(), inner_bool_buffer.len());
-            &BooleanArray::from(bool_buffer)
-        }
+    let boolean_array = match arrow_array.null_count() {
+        0 => arrow_array.as_boolean(),
+        _ => &prep_null_mask_filter(arrow_array.as_boolean()),
     };
 
     Ok(Array::from_arrow(boolean_array, false))
