@@ -33,7 +33,6 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
             assert_slice(&array, &slice, range.start);
             Corpus::Keep
         }
-        Action::NoOp => Corpus::Reject,
     }
 });
 

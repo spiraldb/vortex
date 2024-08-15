@@ -29,7 +29,6 @@ impl std::fmt::Debug for FuzzArrayAction {
 
 #[derive()]
 pub enum Action {
-    NoOp,
     Compress(&'static dyn EncodingCompressor),
     Slice(Range<usize>),
 }
@@ -37,7 +36,6 @@ pub enum Action {
 impl std::fmt::Debug for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NoOp => write!(f, "NoOp"),
             Self::Slice(arg0) => f.debug_tuple("Slice").field(arg0).finish(),
             Self::Compress(c) => write!(f, "Compress({})", c.id()),
         }
@@ -62,7 +60,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
             7 => Action::Compress(&DEFAULT_RUN_END_COMPRESSOR),
             8 => Action::Compress(&SparseCompressor),
             9 => Action::Compress(&ZigZagCompressor),
-            _ => Action::NoOp,
+            _ => unreachable!(),
         };
 
         Ok(Self {
