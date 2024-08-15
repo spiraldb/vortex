@@ -15,13 +15,13 @@ use vortex_sampling_compressor::compressors::EncodingCompressor;
 
 pub struct FuzzArrayAction {
     pub array: Array,
-    pub action: Action,
+    pub actions: Vec<Action>,
 }
 
 impl std::fmt::Debug for FuzzArrayAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FuzzArrayAction")
-            .field("action", &self.action)
+            .field("action", &self.actions)
             .field("array", &self.array)
             .finish()
     }
@@ -30,7 +30,7 @@ impl std::fmt::Debug for FuzzArrayAction {
 #[derive()]
 pub enum Action {
     NoOp,
-    Compress(Box<dyn EncodingCompressor>),
+    Compress(&'static dyn EncodingCompressor),
     Slice(Range<usize>),
 }
 
@@ -53,18 +53,21 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                 let stop = u.choose_index(array.len() - start)? + start;
                 Action::Slice(start..stop)
             }
-            1 => Action::Compress(Box::new(ALPCompressor) as _),
-            2 => Action::Compress(Box::new(BitPackedCompressor) as _),
-            3 => Action::Compress(Box::new(DictCompressor) as _),
-            4 => Action::Compress(Box::new(FoRCompressor) as _),
-            5 => Action::Compress(Box::new(RoaringBoolCompressor) as _),
-            6 => Action::Compress(Box::new(RoaringIntCompressor) as _),
-            7 => Action::Compress(Box::new(DEFAULT_RUN_END_COMPRESSOR) as _),
-            8 => Action::Compress(Box::new(SparseCompressor) as _),
-            9 => Action::Compress(Box::new(ZigZagCompressor) as _),
+            1 => Action::Compress(&ALPCompressor),
+            2 => Action::Compress(&BitPackedCompressor),
+            3 => Action::Compress(&DictCompressor),
+            4 => Action::Compress(&FoRCompressor),
+            5 => Action::Compress(&RoaringBoolCompressor),
+            6 => Action::Compress(&RoaringIntCompressor),
+            7 => Action::Compress(&DEFAULT_RUN_END_COMPRESSOR),
+            8 => Action::Compress(&SparseCompressor),
+            9 => Action::Compress(&ZigZagCompressor),
             _ => Action::NoOp,
         };
 
-        Ok(Self { array, action })
+        Ok(Self {
+            array,
+            actions: vec![action],
+        })
     }
 }

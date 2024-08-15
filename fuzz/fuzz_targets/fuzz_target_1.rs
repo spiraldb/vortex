@@ -13,15 +13,15 @@ use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
-    let FuzzArrayAction { array, action } = fuzz_action;
+    let FuzzArrayAction { array, actions } = fuzz_action;
 
     // TODO(adamg): We actually might want to test empty things, but I'm punting this issue for now
     if array.is_empty() {
         return Corpus::Reject;
     };
 
-    match action {
-        Action::Compress(c) => match fuzz_compress(&array, c.as_ref()) {
+    match &actions[0] {
+        Action::Compress(c) => match fuzz_compress(&array, *c) {
             Some(compressed_array) => {
                 assert_array_eq(&array, &compressed_array);
                 Corpus::Keep

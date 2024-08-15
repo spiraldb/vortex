@@ -9,7 +9,7 @@ license = { workspace = true }
 cargo-fuzz = true
 
 [dependencies]
-libfuzzer-sys = { version = "0.4" }
+libfuzzer-sys = { workspace = true }
 vortex-array = { workspace = true, features = ["arbitrary"] }
 vortex-dtype = { workspace = true }
 vortex-sampling-compressor = { workspace = true }
@@ -18,7 +18,6 @@ vortex-scalar = { workspace = true }
 [lib]
 name = "vortex_fuzz"
 path = "src/lib.rs"
-
 
 [[bin]]
 name = "fuzz_target_1"

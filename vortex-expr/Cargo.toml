@@ -26,8 +26,8 @@ prost = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
-vortex-scalar = { workspace = true }
 vortex-proto = { workspace = true, optional = true }
+vortex-scalar = { workspace = true }
 
 [features]
 datafusion = ["dep:datafusion-common", "dep:datafusion-expr", "vortex-scalar/datafusion"]
