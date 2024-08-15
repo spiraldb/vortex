@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
-use arrow_schema::{DataType, Field, SchemaRef, TimeUnit as ArrowTimeUnit};
+use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
+use vortex_datetime_dtype::arrow::make_temporal_ext_dtype;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::array::{make_temporal_ext_dtype, TimeUnit};
 use crate::arrow::{FromArrowType, TryFromArrowType};
 
 impl TryFromArrowType<&DataType> for PType {
@@ -88,29 +88,6 @@ impl FromArrowType<&Field> for DType {
                 nullability,
             ),
             _ => unimplemented!("Arrow data type not yet supported: {:?}", field.data_type()),
-        }
-    }
-}
-
-impl From<&ArrowTimeUnit> for TimeUnit {
-    fn from(value: &ArrowTimeUnit) -> Self {
-        match value {
-            ArrowTimeUnit::Second => Self::S,
-            ArrowTimeUnit::Millisecond => Self::Ms,
-            ArrowTimeUnit::Microsecond => Self::Us,
-            ArrowTimeUnit::Nanosecond => Self::Ns,
-        }
-    }
-}
-
-impl From<TimeUnit> for ArrowTimeUnit {
-    fn from(value: TimeUnit) -> Self {
-        match value {
-            TimeUnit::S => Self::Second,
-            TimeUnit::Ms => Self::Millisecond,
-            TimeUnit::Us => Self::Microsecond,
-            TimeUnit::Ns => Self::Nanosecond,
-            _ => panic!("cannot convert {value} to Arrow TimeUnit"),
         }
     }
 }

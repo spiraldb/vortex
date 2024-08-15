@@ -2,17 +2,17 @@ use std::cmp::Ordering;
 use std::sync::Arc;
 
 use arrow_array::Datum;
+use arrow_ord::cmp;
 use vortex_dtype::Nullability;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::unary::{scalar_at, ScalarAtFn};
 use crate::compute::{
-    scalar_cmp, AndFn, ArrayCompute, CompareFn, FilterFn, OrFn, SearchResult, SearchSortedFn,
-    SearchSortedSide, SliceFn, TakeFn,
+    scalar_cmp, AndFn, ArrayCompute, CompareFn, FilterFn, Operator, OrFn, SearchResult,
+    SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
 };
 use crate::stats::{ArrayStatistics, Stat};
 use crate::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
@@ -110,12 +110,12 @@ impl CompareFn for ConstantArray {
             let rhs = rhs.as_ref();
 
             let boolean_array = match operator {
-                Operator::Eq => arrow_ord::cmp::eq(datum.as_ref(), &rhs)?,
-                Operator::NotEq => arrow_ord::cmp::neq(datum.as_ref(), &rhs)?,
-                Operator::Gt => arrow_ord::cmp::gt(datum.as_ref(), &rhs)?,
-                Operator::Gte => arrow_ord::cmp::gt_eq(datum.as_ref(), &rhs)?,
-                Operator::Lt => arrow_ord::cmp::lt(datum.as_ref(), &rhs)?,
-                Operator::Lte => arrow_ord::cmp::lt_eq(datum.as_ref(), &rhs)?,
+                Operator::Eq => cmp::eq(datum.as_ref(), &rhs)?,
+                Operator::NotEq => cmp::neq(datum.as_ref(), &rhs)?,
+                Operator::Gt => cmp::gt(datum.as_ref(), &rhs)?,
+                Operator::Gte => cmp::gt_eq(datum.as_ref(), &rhs)?,
+                Operator::Lt => cmp::lt(datum.as_ref(), &rhs)?,
+                Operator::Lte => cmp::lt_eq(datum.as_ref(), &rhs)?,
             };
 
             Ok(Array::from_arrow(&boolean_array, true))

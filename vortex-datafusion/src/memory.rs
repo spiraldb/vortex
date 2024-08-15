@@ -14,9 +14,9 @@ use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanP
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
+use vortex_expr::datafusion::extract_columns_from_expr;
 
 use crate::datatype::infer_schema;
-use crate::expr::extract_columns_from_expr;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
 use crate::{can_be_pushed_down, VortexScanExec};
 

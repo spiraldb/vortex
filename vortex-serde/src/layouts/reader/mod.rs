@@ -25,6 +25,7 @@ const INITIAL_READ_SIZE: usize = 8 * 1024 * 1024;
 const DEFAULT_BATCH_SIZE: usize = 65536;
 const FILE_POSTSCRIPT_SIZE: usize = 20;
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Scan {
     indices: Option<Array>,

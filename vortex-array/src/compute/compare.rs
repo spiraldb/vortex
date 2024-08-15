@@ -1,11 +1,74 @@
+use core::fmt;
+use std::fmt::{Display, Formatter};
+
 use arrow_ord::cmp;
-use vortex_dtype::{DType, Nullability};
+use vortex_dtype::{DType, NativePType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_expr::Operator;
 use vortex_scalar::Scalar;
 
 use crate::arrow::FromArrowArray;
 use crate::{Array, ArrayDType, IntoCanonical};
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+pub enum Operator {
+    // comparison
+    Eq,
+    NotEq,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+}
+
+impl Display for Operator {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let display = match &self {
+            Operator::Eq => "=",
+            Operator::NotEq => "!=",
+            Operator::Gt => ">",
+            Operator::Gte => ">=",
+            Operator::Lt => "<",
+            Operator::Lte => "<=",
+        };
+        write!(f, "{display}")
+    }
+}
+
+impl Operator {
+    pub fn inverse(self) -> Self {
+        match self {
+            Operator::Eq => Operator::NotEq,
+            Operator::NotEq => Operator::Eq,
+            Operator::Gt => Operator::Lte,
+            Operator::Gte => Operator::Lt,
+            Operator::Lt => Operator::Gte,
+            Operator::Lte => Operator::Gt,
+        }
+    }
+
+    /// Change the sides of the operator, where changing lhs and rhs won't change the result of the operation
+    pub fn swap(self) -> Self {
+        match self {
+            Operator::Eq => Operator::Eq,
+            Operator::NotEq => Operator::NotEq,
+            Operator::Gt => Operator::Lte,
+            Operator::Gte => Operator::Lt,
+            Operator::Lt => Operator::Gte,
+            Operator::Lte => Operator::Gt,
+        }
+    }
+
+    pub fn to_predicate<T: NativePType>(&self) -> fn(&T, &T) -> bool {
+        match self {
+            Operator::Eq => PartialEq::eq,
+            Operator::NotEq => PartialEq::ne,
+            Operator::Gt => PartialOrd::gt,
+            Operator::Gte => PartialOrd::ge,
+            Operator::Lt => PartialOrd::lt,
+            Operator::Lte => PartialOrd::le,
+        }
+    }
+}
 
 pub trait CompareFn {
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;

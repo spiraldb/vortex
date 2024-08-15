@@ -136,7 +136,7 @@ impl Value {
     pub fn not_equals(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::NotEq.inverse(),
+            op: Operator::NotEq,
             rhs: self,
         }
     }
@@ -144,7 +144,7 @@ impl Value {
     pub fn gt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Gt.inverse(),
+            op: Operator::Gt.inverse().unwrap(),
             rhs: self,
         }
     }
@@ -152,7 +152,7 @@ impl Value {
     pub fn gte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Gte.inverse(),
+            op: Operator::Gte.inverse().unwrap(),
             rhs: self,
         }
     }
@@ -160,7 +160,7 @@ impl Value {
     pub fn lt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Lt.inverse(),
+            op: Operator::Lt.inverse().unwrap(),
             rhs: self,
         }
     }
@@ -168,88 +168,9 @@ impl Value {
     pub fn lte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Lte.inverse(),
+            op: Operator::Lte.inverse().unwrap(),
             rhs: self,
         }
-    }
-}
-
-use std::fmt::Debug;
-use std::sync::Arc;
-
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_scalar::Scalar;
-
-use crate::Operator;
-
-pub trait VortexPhysicalExpr: Debug + Send + Sync {
-    fn evaluate(&self, array: &Array) -> VortexResult<Array>;
-}
-
-#[derive(Debug)]
-pub struct NoOp;
-
-#[derive(Debug)]
-pub struct BinaryExpr {
-    left: Arc<dyn VortexPhysicalExpr>,
-    right: Arc<dyn VortexPhysicalExpr>,
-    operator: DFOperator,
-}
-
-#[derive(Debug)]
-pub struct Column {
-    name: String,
-    index: usize,
-}
-
-impl VortexPhysicalExpr for Column {
-    fn evaluate(&self, array: &Array) -> VortexResult<Array> {
-        let s = StructArray::try_from(array)?;
-
-        let column = s.field_by_name(&self.name).ok_or(vortex_err!(
-            "Array doesn't contain child array of name {}",
-            self.name
-        ))?;
-
-        Ok(column)
-    }
-}
-
-#[derive(Debug)]
-pub struct Literal {
-    scalar_value: Scalar,
-}
-
-impl VortexPhysicalExpr for Literal {
-    fn evaluate(&self, array: &Array) -> VortexResult<Array> {
-        Ok(ConstantArray::new(self.scalar_value.clone(), array.len()).into_array())
-    }
-}
-
-impl VortexPhysicalExpr for BinaryExpr {
-    fn evaluate(&self, array: &Array) -> VortexResult<Array> {
-        let lhs = self.left.evaluate(array)?;
-        let rhs = self.right.evaluate(array)?;
-
-        let array = match self.operator {
-            DFOperator::Eq => compare(&lhs, &rhs, Operator::Eq)?,
-            DFOperator::NotEq => compare(&lhs, &rhs, Operator::NotEq)?,
-            DFOperator::Lt => compare(&lhs, &rhs, Operator::Lt)?,
-            DFOperator::LtEq => compare(&lhs, &rhs, Operator::Lte)?,
-            DFOperator::Gt => compare(&lhs, &rhs, Operator::Gt)?,
-            DFOperator::GtEq => compare(&lhs, &rhs, Operator::Gte)?,
-            DFOperator::And => vortex::compute::and(&lhs, &rhs)?,
-            DFOperator::Or => vortex::compute::or(&lhs, &rhs)?,
-            _ => vortex_bail!("{} is not a supported DF operator in Vortex", self.operator),
-        };
-
-        Ok(array)
-    }
-}
-
-impl VortexPhysicalExpr for NoOp {
-    fn evaluate(&self, _array: &Array) -> VortexResult<Array> {
-        vortex_bail!("NoOp::evaluate() should not be called")
     }
 }
 

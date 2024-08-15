@@ -8,9 +8,8 @@
 //! from Arrow.
 
 pub use boolean::{and, or, AndFn, OrFn};
-pub use compare::{compare, scalar_cmp, CompareFn};
+pub use compare::{compare, scalar_cmp, CompareFn, Operator};
 pub use filter::{filter, FilterFn};
-pub use filter_indices::{find, FindFn};
 pub use search_sorted::*;
 pub use slice::{slice, SliceFn};
 pub use take::{take, TakeFn};
@@ -19,12 +18,10 @@ use unary::{CastFn, FillForwardFn, ScalarAtFn, SubtractScalarFn};
 mod boolean;
 mod compare;
 mod filter;
-mod filter_indices;
 mod search_sorted;
 mod slice;
 mod take;
 
-mod expr;
 pub mod unary;
 
 /// Trait providing compute functions on top of Vortex arrays.
@@ -54,12 +51,6 @@ pub trait ArrayCompute {
     ///
     /// See: [FilterFn].
     fn filter(&self) -> Option<&dyn FilterFn> {
-        None
-    }
-
-    /// Filter indices based on a disjunctive normal form relational expression.
-    /// TODO(aduffy): remove this function and push implementation into vortex-datafusion.
-    fn find(&self) -> Option<&dyn FindFn> {
         None
     }
 

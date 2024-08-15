@@ -1,7 +1,6 @@
 pub mod reader;
 pub mod writer;
 
-mod statistics;
 #[cfg(test)]
 mod tests;
 

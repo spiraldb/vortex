@@ -3,12 +3,11 @@ use std::ops::{BitAnd, BitOr, BitXor, Not};
 use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
 use vortex::compute::unary::{FillForwardFn, ScalarAtFn};
-use vortex::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
+use vortex::compute::{ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_err, VortexResult};
-use vortex_expr::Operator;
 use vortex_scalar::{Scalar, ScalarValue};
 
 use super::ByteBoolArray;

@@ -44,6 +44,7 @@ pin-project = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-buffer = { workspace = true }
+vortex-datetime-dtype = { workspace = true }
 vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
 vortex-flatbuffers = { workspace = true, optional = true }
@@ -79,10 +80,6 @@ harness = false
 
 [[bench]]
 name = "scalar_subtract"
-harness = false
-
-[[bench]]
-name = "filter_indices"
 harness = false
 
 [[bench]]

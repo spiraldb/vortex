@@ -1,8 +1,6 @@
-use vortex_dtype::{ExtDType, ExtMetadata};
+use vortex_datetime_dtype::{TemporalMetadata, TimeUnit};
 
-use crate::array::datetime::temporal::{TemporalMetadata, TIMESTAMP_ID};
-use crate::array::datetime::{TemporalArray, TimeUnit};
-use crate::array::primitive::PrimitiveArray;
+use crate::array::{PrimitiveArray, TemporalArray};
 use crate::validity::Validity;
 use crate::{IntoArray, IntoArrayVariant};
 
@@ -38,30 +36,6 @@ macro_rules! test_fail_case {
             test_temporal_roundtrip!($prim, $constructor, $unit)
         }
     };
-}
-
-#[test]
-fn test_roundtrip_metadata() {
-    let meta: ExtMetadata =
-        TemporalMetadata::Timestamp(TimeUnit::Ms, Some("UTC".to_string())).into();
-
-    assert_eq!(
-        meta.as_ref(),
-        vec![
-            2u8, // Tag for TimeUnit::Ms
-            0x3u8, 0x0u8, // u16 length
-            b'U', b'T', b'C',
-        ]
-        .as_slice()
-    );
-
-    let temporal_metadata =
-        TemporalMetadata::try_from(&ExtDType::new(TIMESTAMP_ID.clone(), Some(meta))).unwrap();
-
-    assert_eq!(
-        temporal_metadata,
-        TemporalMetadata::Timestamp(TimeUnit::Ms, Some("UTC".to_string()))
-    );
 }
 
 // Time32 conformance tests

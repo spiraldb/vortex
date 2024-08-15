@@ -1,10 +1,57 @@
+use lazy_static::lazy_static;
+use vortex_dtype::ExtID;
+
+use crate::unit::TimeUnit;
+
+lazy_static! {
+    pub static ref DATE_ID: ExtID = ExtID::from("vortex.date");
+    pub static ref TIME_ID: ExtID = ExtID::from("vortex.time");
+    pub static ref TIMESTAMP_ID: ExtID = ExtID::from("vortex.timestamp");
+}
+
+pub fn is_temporal_ext_type(id: &ExtID) -> bool {
+    match id.as_ref() {
+        x if x == DATE_ID.as_ref() => true,
+        x if x == TIME_ID.as_ref() => true,
+        x if x == TIMESTAMP_ID.as_ref() => true,
+        _ => false,
+    }
+}
+
+/// Metadata for [TemporalArray].
+///
+/// There is one enum for each of the temporal array types we can load from Arrow.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TemporalMetadata {
+    Time(TimeUnit),
+    Date(TimeUnit),
+    Timestamp(TimeUnit, Option<String>),
+}
+
+impl TemporalMetadata {
+    /// Retrieve the time unit associated with the array.
+    ///
+    /// All temporal arrays have a single intrinsic time unit for all of its numeric values.
+    pub fn time_unit(&self) -> TimeUnit {
+        match self {
+            TemporalMetadata::Time(time_unit)
+            | TemporalMetadata::Date(time_unit)
+            | TemporalMetadata::Timestamp(time_unit, _) => *time_unit,
+        }
+    }
+
+    /// Access the optional time-zone component of the metadata.
+    pub fn time_zone(&self) -> Option<&str> {
+        if let TemporalMetadata::Timestamp(_, tz) = self {
+            tz.as_ref().map(|s| s.as_str())
+        } else {
+            None
+        }
+    }
+}
+
 use vortex_dtype::{ExtDType, ExtMetadata};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
-
-use crate::array::datetime::temporal::{TemporalMetadata, DATE_ID, TIMESTAMP_ID, TIME_ID};
-use crate::array::datetime::{TemporalArray, TimeUnit};
-use crate::array::extension::ExtensionArray;
-use crate::Array;
 
 impl TryFrom<&ExtDType> for TemporalMetadata {
     type Error = VortexError;
@@ -54,39 +101,6 @@ fn decode_timestamp_metadata(ext_meta: &ExtMetadata) -> VortexResult<TemporalMet
     Ok(TemporalMetadata::Timestamp(time_unit, Some(tz)))
 }
 
-impl TryFrom<&Array> for TemporalArray {
-    type Error = VortexError;
-
-    /// Try to specialize a generic Vortex array as a TemporalArray.
-    ///
-    /// # Errors
-    ///
-    /// If the provided Array does not have `vortex.ext` encoding, an error will be returned.
-    ///
-    /// If the provided Array does not have recognized ExtMetadata corresponding to one of the known
-    /// `TemporalMetadata` variants, an error is returned.
-    fn try_from(value: &Array) -> Result<Self, Self::Error> {
-        let ext = ExtensionArray::try_from(value)?;
-        let temporal_metadata = TemporalMetadata::try_from(ext.ext_dtype())?;
-
-        Ok(Self {
-            ext,
-            temporal_metadata,
-        })
-    }
-}
-
-impl TryFrom<Array> for TemporalArray {
-    type Error = VortexError;
-
-    /// Try to specialize a generic Vortex array as a TemporalArray.
-    ///
-    /// Delegates to `TryFrom<&Array>`.
-    fn try_from(value: Array) -> Result<Self, Self::Error> {
-        TemporalArray::try_from(&value)
-    }
-}
-
 impl From<TemporalMetadata> for ExtMetadata {
     /// Infallibly serialize a `TemporalMetadata` as an `ExtMetadata` so it can be attached to
     /// an `ExtensionArray`.
@@ -125,27 +139,33 @@ impl From<TemporalMetadata> for ExtMetadata {
     }
 }
 
-// Conversions to/from ExtensionArray
-impl From<&TemporalArray> for ExtensionArray {
-    fn from(value: &TemporalArray) -> Self {
-        value.ext.clone()
-    }
-}
+#[cfg(test)]
+mod tests {
+    use vortex_dtype::{ExtDType, ExtMetadata};
 
-impl From<TemporalArray> for ExtensionArray {
-    fn from(value: TemporalArray) -> Self {
-        value.ext
-    }
-}
+    use crate::{TemporalMetadata, TimeUnit, TIMESTAMP_ID};
 
-impl TryFrom<ExtensionArray> for TemporalArray {
-    type Error = VortexError;
+    #[test]
+    fn test_roundtrip_metadata() {
+        let meta: ExtMetadata =
+            TemporalMetadata::Timestamp(TimeUnit::Ms, Some("UTC".to_string())).into();
 
-    fn try_from(ext: ExtensionArray) -> Result<Self, Self::Error> {
-        let temporal_metadata = TemporalMetadata::try_from(ext.ext_dtype())?;
-        Ok(Self {
-            ext,
+        assert_eq!(
+            meta.as_ref(),
+            vec![
+                2u8, // Tag for TimeUnit::Ms
+                0x3u8, 0x0u8, // u16 length
+                b'U', b'T', b'C',
+            ]
+            .as_slice()
+        );
+
+        let temporal_metadata =
+            TemporalMetadata::try_from(&ExtDType::new(TIMESTAMP_ID.clone(), Some(meta))).unwrap();
+
+        assert_eq!(
             temporal_metadata,
-        })
+            TemporalMetadata::Timestamp(TimeUnit::Ms, Some("UTC".to_string()))
+        );
     }
 }

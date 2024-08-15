@@ -3,7 +3,7 @@ use std::ops::Add;
 
 use chrono::TimeDelta;
 use vortex::array::builder::VarBinBuilder;
-use vortex::array::{BoolArray, PrimitiveArray, StructArray, TemporalArray, TimeUnit};
+use vortex::array::{BoolArray, PrimitiveArray, StructArray, TemporalArray};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability};
@@ -22,6 +22,8 @@ use vortex_sampling_compressor::{CompressConfig, SamplingCompressor};
 
 #[cfg(test)]
 mod tests {
+    use vortex_datetime_dtype::TimeUnit;
+
     use super::*;
 
     #[test]
