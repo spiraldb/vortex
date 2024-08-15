@@ -57,6 +57,7 @@ impl FileOpener for VortexFileOpener {
                         .as_any()
                         .downcast_ref::<datafusion_physical_expr::expressions::Column>()
                     {
+                        // Check if the idx is not in the original projection AND that there's a matching column in the data
                         let projections_contains_idx = self
                             .projection
                             .as_ref()
@@ -66,6 +67,22 @@ impl FileOpener for VortexFileOpener {
                             && !projections_contains_idx
                         {
                             predicate_projection.insert(column.index());
+                        }
+
+                        match self.arrow_schema.column_with_name(column.name()) {
+                            Some(_) if !projections_contains_idx => {
+                                predicate_projection.insert(column.index());
+                            }
+                            Some(_) => {}
+                            None => {
+                                return Err(DataFusionError::External(
+                                    format!(
+                                        "Could not find expected column {} in schema",
+                                        column.name()
+                                    )
+                                    .into(),
+                                ))
+                            }
                         }
                     }
                     Ok(TreeNodeRecursion::Continue)
@@ -84,7 +101,7 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_projection(Projection::new(projection))
         }
 
-        let og_projection_len = self.projection.clone().map(|v| v.len());
+        let original_projection_len = self.projection.clone().map(|v| v.len());
 
         Ok(async move {
             let reader = builder.build().await?;
@@ -104,7 +121,7 @@ impl FileOpener for VortexFileOpener {
 
                         let rb = RecordBatch::from(array);
 
-                        if let Some(len) = og_projection_len {
+                        if let Some(len) = original_projection_len {
                             Ok(rb.project(&(0..len).collect_vec())?)
                         } else {
                             Ok(rb)

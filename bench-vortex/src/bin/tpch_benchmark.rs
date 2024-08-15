@@ -112,7 +112,6 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
             for (ctx, format) in ctxs.iter().zip(formats.iter()) {
                 if warmup {
                     for i in 0..3 {
-                        // warmup
                         let row_count: usize = rt.block_on(async {
                             ctx.sql(&query)
                                 .await

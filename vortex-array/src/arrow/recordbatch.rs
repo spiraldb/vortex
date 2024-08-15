@@ -5,7 +5,7 @@ use itertools::Itertools;
 use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
-use crate::{Array, IntoArray, IntoCanonical};
+use crate::{Array, IntoArrayVariant, IntoCanonical};
 
 impl From<RecordBatch> for Array {
     fn from(value: RecordBatch) -> Self {
@@ -33,17 +33,20 @@ impl From<RecordBatch> for Array {
 
 impl From<Array> for RecordBatch {
     fn from(value: Array) -> Self {
-        let array_ref = value
-            .into_canonical()
-            .expect("struct arrays must canonicalize")
-            .into_arrow();
-        let struct_array = as_struct_array(array_ref.as_ref());
-        RecordBatch::from(struct_array)
+        let struct_arr = value
+            .into_struct()
+            .expect("RecordBatch can only be constructed from a Vortex StructArray");
+        Self::from(struct_arr)
     }
 }
 
 impl From<StructArray> for RecordBatch {
     fn from(value: StructArray) -> Self {
-        RecordBatch::from(value.into_array())
+        let array_ref = value
+            .into_canonical()
+            .expect("Struct arrays must canonicalize")
+            .into_arrow();
+        let struct_array = as_struct_array(array_ref.as_ref());
+        Self::from(struct_array)
     }
 }
