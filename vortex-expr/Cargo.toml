@@ -22,14 +22,16 @@ workspace = true
 [dependencies]
 datafusion-common = { workspace = true, optional = true }
 datafusion-expr = { workspace = true, optional = true }
+datafusion-physical-expr = { workspace = true, optional = true }
 prost = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
+vortex-array = { workspace = true }
 vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
-vortex-scalar = { workspace = true }
 vortex-proto = { workspace = true, optional = true }
+vortex-scalar = { workspace = true }
 
 [features]
-datafusion = ["dep:datafusion-common", "dep:datafusion-expr", "vortex-scalar/datafusion"]
+datafusion = ["dep:datafusion-common", "dep:datafusion-expr", "dep:datafusion-physical-expr", "vortex-scalar/datafusion"]
 proto = ["dep:prost", "vortex-dtype/proto", "vortex-scalar/proto", "vortex-proto/expr"]
 serde = ["dep:serde", "vortex-dtype/serde", "vortex-scalar/serde"]

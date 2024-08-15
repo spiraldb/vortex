@@ -8,7 +8,7 @@ use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
 use vortex::compute::unary::subtract_scalar;
-use vortex::compute::{filter, filter_indices, search_sorted, slice, take, SearchSortedSide};
+use vortex::compute::{filter, find, search_sorted, slice, take, SearchSortedSide};
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_err, VortexError, VortexResult};
@@ -115,7 +115,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                     }
 
                     if let Some(row_filter) = &self.scan.filter {
-                        let mask = filter_indices(&batch, &row_filter.disjunction)?;
+                        let mask = find(&batch, &row_filter.disjunction)?;
                         batch = filter(&batch, &mask)?;
                     }
 

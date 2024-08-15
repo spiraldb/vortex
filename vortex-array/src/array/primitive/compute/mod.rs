@@ -1,6 +1,6 @@
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{CastFn, FillForwardFn, ScalarAtFn, SubtractScalarFn};
-use crate::compute::{ArrayCompute, CompareFn, FilterIndicesFn, SearchSortedFn, SliceFn, TakeFn};
+use crate::compute::{ArrayCompute, CompareFn, FindFn, SearchSortedFn, SliceFn, TakeFn};
 
 mod cast;
 mod compare;
@@ -26,7 +26,7 @@ impl ArrayCompute for PrimitiveArray {
         Some(self)
     }
 
-    fn filter_indices(&self) -> Option<&dyn FilterIndicesFn> {
+    fn find(&self) -> Option<&dyn FindFn> {
         Some(self)
     }
 

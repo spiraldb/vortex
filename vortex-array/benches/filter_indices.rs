@@ -21,7 +21,7 @@ fn filter_indices(c: &mut Criterion) {
 
     group.bench_function("vortex", |b| {
         b.iter(|| {
-            let indices = vortex::compute::filter_indices(&arr, &predicate).unwrap();
+            let indices = vortex::compute::find(&arr, &predicate).unwrap();
             black_box(indices);
             Ok::<(), VortexError>(())
         });

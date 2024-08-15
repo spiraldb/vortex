@@ -4222,7 +4222,6 @@ dependencies = [
  "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
- "vortex-expr",
  "vortex-flatbuffers",
  "vortex-scalar",
 ]
@@ -4250,7 +4249,6 @@ dependencies = [
  "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
- "vortex-expr",
  "vortex-scalar",
 ]
 
@@ -4353,8 +4351,10 @@ version = "0.7.0"
 dependencies = [
  "datafusion-common",
  "datafusion-expr",
+ "datafusion-physical-expr",
  "prost",
  "serde",
+ "vortex-array",
  "vortex-dtype",
  "vortex-error",
  "vortex-proto",

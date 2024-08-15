@@ -34,7 +34,6 @@ impl CompareFn for BoolArray {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod test {
     use itertools::Itertools;
 

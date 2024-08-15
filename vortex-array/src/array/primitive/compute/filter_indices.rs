@@ -7,11 +7,11 @@ use vortex_expr::{Disjunction, Predicate, Value};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::BoolArray;
-use crate::compute::FilterIndicesFn;
+use crate::compute::FindFn;
 use crate::{Array, IntoArray};
 
-impl FilterIndicesFn for PrimitiveArray {
-    fn filter_indices(&self, disjunction: &Disjunction) -> VortexResult<Array> {
+impl FindFn for PrimitiveArray {
+    fn find(&self, disjunction: &Disjunction) -> VortexResult<Array> {
         let conjunction_indices = disjunction.iter().map(|conj| {
             conj.iter()
                 .map(|pred| indices_matching_predicate(self, pred))
@@ -79,7 +79,7 @@ mod test {
     use crate::IntoArrayVariant;
 
     fn apply_conjunctive_filter(arr: &PrimitiveArray, conj: Conjunction) -> VortexResult<Array> {
-        arr.filter_indices(&Disjunction::from_iter([conj]))
+        arr.find(&Disjunction::from_iter([conj]))
     }
 
     fn to_int_indices(filtered_primitive: BoolArray) -> Vec<u64> {
@@ -191,7 +191,7 @@ mod test {
         let c2 = Conjunction::from(field.gt(lit(5u32)));
 
         let disj = Disjunction::from_iter([c1, c2]);
-        let filtered_primitive = arr.filter_indices(&disj).unwrap().into_bool().unwrap();
+        let filtered_primitive = arr.find(&disj).unwrap().into_bool().unwrap();
         let filtered = to_int_indices(filtered_primitive);
         assert_eq!(filtered, [0u64, 1, 2, 3, 5, 6, 7, 8, 9])
     }

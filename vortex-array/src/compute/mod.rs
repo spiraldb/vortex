@@ -10,7 +10,7 @@
 pub use boolean::{and, or, AndFn, OrFn};
 pub use compare::{compare, scalar_cmp, CompareFn};
 pub use filter::{filter, FilterFn};
-pub use filter_indices::{filter_indices, FilterIndicesFn};
+pub use filter_indices::{find, FindFn};
 pub use search_sorted::*;
 pub use slice::{slice, SliceFn};
 pub use take::{take, TakeFn};
@@ -24,6 +24,7 @@ mod search_sorted;
 mod slice;
 mod take;
 
+mod expr;
 pub mod unary;
 
 /// Trait providing compute functions on top of Vortex arrays.
@@ -58,7 +59,7 @@ pub trait ArrayCompute {
 
     /// Filter indices based on a disjunctive normal form relational expression.
     /// TODO(aduffy): remove this function and push implementation into vortex-datafusion.
-    fn filter_indices(&self) -> Option<&dyn FilterIndicesFn> {
+    fn find(&self) -> Option<&dyn FindFn> {
         None
     }
 
