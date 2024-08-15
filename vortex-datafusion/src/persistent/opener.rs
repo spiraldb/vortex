@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
@@ -6,7 +7,7 @@ use arrow_schema::SchemaRef;
 use datafusion::arrow::buffer::{buffer_bin_and, BooleanBuffer};
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
-use datafusion_common::Result as DFResult;
+use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
 use itertools::Itertools;
@@ -20,7 +21,7 @@ use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
 use vortex_serde::layouts::reader::context::{LayoutContext, LayoutDeserializer};
 use vortex_serde::layouts::reader::projections::Projection;
 
-use crate::expr::convert_expr_to_vortex;
+use crate::expr::{convert_expr_to_vortex, VortexPhysicalExpr};
 
 pub struct VortexFileOpener {
     pub ctx: Arc<Context>,
@@ -45,11 +46,13 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_batch_size(batch_size);
         }
 
-        let mut predicate_projection = Vec::default();
+        let mut predicate_projection = HashSet::new();
 
-        let predicate = self.predicate.clone().map(|predicate| {
-            predicate
-                .apply(|expr| {
+        let predicate = self
+            .predicate
+            .clone()
+            .map(|predicate| -> DFResult<Arc<dyn VortexPhysicalExpr>> {
+                predicate.apply(|expr| {
                     if let Some(column) = expr
                         .as_any()
                         .downcast_ref::<datafusion_physical_expr::expressions::Column>()
@@ -62,16 +65,17 @@ impl FileOpener for VortexFileOpener {
                         if self.arrow_schema.column_with_name(column.name()).is_some()
                             && !projections_contains_idx
                         {
-                            predicate_projection.push(column.index());
+                            predicate_projection.insert(column.index());
                         }
                     }
                     Ok(TreeNodeRecursion::Continue)
-                })
-                .unwrap();
-            let vtx_expr = convert_expr_to_vortex(predicate, self.arrow_schema.as_ref()).unwrap();
+                })?;
+                let vtx_expr = convert_expr_to_vortex(predicate, self.arrow_schema.as_ref())
+                    .map_err(|e| DataFusionError::External(e.into()))?;
 
-            vtx_expr
-        });
+                DFResult::Ok(vtx_expr)
+            })
+            .transpose()?;
 
         if let Some(projection) = self.projection.as_ref() {
             let mut projection = projection.clone();
