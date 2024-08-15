@@ -135,8 +135,15 @@ mod test {
     #[test]
     fn test_decompress() {
         // Create a range offset by a million
-        let array = PrimitiveArray::from((0u32..10_000).map(|v| v + 1_000_000).collect_vec());
+        let array = PrimitiveArray::from(
+            (0u32..100_000)
+                .step_by(1024)
+                .map(|v| v + 1_000_000)
+                .collect_vec(),
+        );
         let compressed = for_compress(&array).unwrap();
+        let for_arr = FoRArray::try_from(compressed.clone()).unwrap();
+        assert!(for_arr.shift() > 0);
         let decompressed = compressed.into_primitive().unwrap();
         assert_eq!(
             decompressed.maybe_null_slice::<u32>(),
