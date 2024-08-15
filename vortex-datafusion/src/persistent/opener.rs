@@ -53,12 +53,10 @@ impl FileOpener for VortexFileOpener {
             .predicate
             .clone()
             .map(|predicate| -> DFResult<Arc<dyn VortexPhysicalExpr>> {
-                // Extend the projection to include column only referenced by physical expressions
-
                 let vtx_expr = convert_expr_to_vortex(predicate, self.arrow_schema.as_ref())
                     .map_err(|e| DataFusionError::External(e.into()))?;
 
-                Ok(vtx_expr)
+                DFResult::Ok(vtx_expr)
             })
             .transpose()?;
 
