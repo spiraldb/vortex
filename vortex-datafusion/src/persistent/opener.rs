@@ -58,7 +58,7 @@ impl FileOpener for VortexFileOpener {
                 let vtx_expr = convert_expr_to_vortex(predicate, self.arrow_schema.as_ref())
                     .map_err(|e| DataFusionError::External(e.into()))?;
 
-                DFResult::Ok(vtx_expr)
+                Ok(vtx_expr)
             })
             .transpose()?;
 
