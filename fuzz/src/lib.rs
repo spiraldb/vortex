@@ -50,7 +50,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
         let action = match u.int_in_range(0..=9)? {
             0 => {
                 let start = u.choose_index(array.len())?;
-                let stop = u.choose_index(array.len() - start).unwrap() + start;
+                let stop = u.choose_index(array.len() - start)? + start;
                 Action::Slice(start..stop)
             }
             1 => Action::Compress(Box::new(ALPCompressor) as _),

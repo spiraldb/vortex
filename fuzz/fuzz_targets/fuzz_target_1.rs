@@ -7,7 +7,7 @@ use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
 use vortex::encoding::EncodingId;
 use vortex::Array;
-use vortex_fuzz::FuzzArrayAction;
+use vortex_fuzz::{Action, FuzzArrayAction};
 use vortex_sampling_compressor::compressors::CompressorRef;
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::{PValue, Scalar, ScalarValue};
@@ -21,19 +21,19 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
     };
 
     match action {
-        vortex_fuzz::Action::Compress(c) => match fuzz_compress(&array, c.as_ref()) {
+        Action::Compress(c) => match fuzz_compress(&array, c.as_ref()) {
             Some(compressed_array) => {
                 assert_array_eq(&array, &compressed_array);
                 Corpus::Keep
             }
             None => return Corpus::Reject,
         },
-        vortex_fuzz::Action::Slice(range) => {
+        Action::Slice(range) => {
             let slice = slice(&array, range.start, range.end).unwrap();
             assert_slice(&array, &slice, range.start);
             Corpus::Keep
         }
-        vortex_fuzz::Action::NoOp => Corpus::Reject,
+        Action::NoOp => Corpus::Reject,
     }
 });
 
