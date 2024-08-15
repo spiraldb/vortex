@@ -8,7 +8,7 @@ use vortex::stream::{ArrayStream, ArrayStreamAdapter};
 use vortex::{Array, ArrayView, Context, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
 
 use crate::io::VortexRead;
@@ -273,15 +273,7 @@ impl ArrayBufferReader {
                 // Split out into individual buffers
                 // Initialize the column's buffers for a vectored read.
                 // To start with, we include the padding and then truncate the buffers after.
-                let batch_msg = unsafe {
-                    root_unchecked::<fb::Message>(
-                        self.fb_msg
-                            .as_ref()
-                            .ok_or_else(|| vortex_err!("Missing fb message"))?,
-                    )
-                }
-                .header_as_batch()
-                .ok_or_else(|| vortex_err!("Checked in previous step"))?;
+                let batch_msg = self.fb_bytes_as_batch()?;
                 let all_buffers_size = batch_msg.buffer_size();
                 let ipc_buffers = batch_msg.buffers().unwrap_or_default();
                 let buffers = ipc_buffers
@@ -345,11 +337,7 @@ impl ArrayBufferReader {
             self.buffers,
         )?;
 
-        let array = view.into_array();
-        // Validate it
-        array.with_dyn(|_| Ok::<(), VortexError>(()))?;
-
-        Ok(array)
+        Ok(view.into_array())
     }
 }
 

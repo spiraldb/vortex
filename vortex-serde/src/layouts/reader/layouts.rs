@@ -311,10 +311,9 @@ impl Layout for ChunkedLayout {
                         )
                     })
                     .collect::<VortexResult<VecDeque<_>>>()?;
-                let mut reader = BufferedReader::new(children, self.scan.batch_size);
-                let rr = reader.read();
+                let reader = BufferedReader::new(children, self.scan.batch_size);
                 self.state = ChunkedLayoutState::ReadChunks(reader);
-                rr
+                self.read()
             }
             ChunkedLayoutState::ReadChunks(cr) => cr.read(),
         }

@@ -26,11 +26,11 @@ use crate::array::{
 use crate::arrow::FromArrowArray;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
-use crate::{Array, ArrayData};
+use crate::{Array, ArrayData, ToArrayData};
 
 impl From<Buffer> for ArrayData {
     fn from(value: Buffer) -> Self {
-        PrimitiveArray::new(value.into(), PType::U8, Validity::NonNullable).into()
+        PrimitiveArray::new(value.into(), PType::U8, Validity::NonNullable).to_array_data()
     }
 }
 
@@ -38,7 +38,7 @@ impl From<NullBuffer> for ArrayData {
     fn from(value: NullBuffer) -> Self {
         BoolArray::try_new(value.into_inner(), Validity::NonNullable)
             .unwrap()
-            .into()
+            .to_array_data()
     }
 }
 
@@ -47,7 +47,8 @@ where
     T: ArrowNativeType + NativePType,
 {
     fn from(value: ScalarBuffer<T>) -> Self {
-        PrimitiveArray::new(value.into_inner().into(), T::PTYPE, Validity::NonNullable).into()
+        PrimitiveArray::new(value.into_inner().into(), T::PTYPE, Validity::NonNullable)
+            .to_array_data()
     }
 }
 
@@ -61,7 +62,7 @@ where
             O::PTYPE,
             Validity::NonNullable,
         )
-        .into();
+        .to_array_data();
         array_data.set(Stat::IsSorted, true.into());
         array_data.set(Stat::IsStrictSorted, true.into());
         array_data
