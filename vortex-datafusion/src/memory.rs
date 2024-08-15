@@ -16,7 +16,7 @@ use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
 
 use crate::datatype::infer_schema;
-use crate::expr::extract_column_from_expr;
+use crate::expr::extract_columns_from_expr;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
 use crate::{can_be_pushed_down, VortexScanExec};
 
@@ -97,7 +97,7 @@ impl TableProvider for VortexMemTable {
                 let filter_expr = create_physical_expr(&expr, &df_schema, state.execution_props())?;
 
                 let filter_projection =
-                    extract_column_from_expr(Some(&filter_expr), self.schema_ref.clone())?
+                    extract_columns_from_expr(Some(&filter_expr), self.schema_ref.clone())?
                         .into_iter()
                         .collect();
 

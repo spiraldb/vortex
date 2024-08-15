@@ -19,7 +19,7 @@ use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
 use vortex_serde::layouts::reader::context::{LayoutContext, LayoutDeserializer};
 use vortex_serde::layouts::reader::projections::Projection;
 
-use crate::expr::{convert_expr_to_vortex, extract_column_from_expr, VortexPhysicalExpr};
+use crate::expr::{convert_expr_to_vortex, extract_columns_from_expr, VortexPhysicalExpr};
 
 pub struct VortexFileOpener {
     pub ctx: Arc<Context>,
@@ -45,7 +45,7 @@ impl FileOpener for VortexFileOpener {
         }
 
         let predicate_projection =
-            extract_column_from_expr(self.predicate.as_ref(), self.arrow_schema.clone())?;
+            extract_columns_from_expr(self.predicate.as_ref(), self.arrow_schema.clone())?;
 
         let predicate = self
             .predicate

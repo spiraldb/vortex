@@ -176,7 +176,7 @@ pub fn convert_expr_to_vortex(
 }
 
 /// Extract all indexes of all columns referenced by the physical expressions from the schema
-pub(crate) fn extract_column_from_expr(
+pub(crate) fn extract_columns_from_expr(
     expr: Option<&Arc<dyn PhysicalExpr>>,
     schema_ref: SchemaRef,
 ) -> DFResult<HashSet<usize>> {
