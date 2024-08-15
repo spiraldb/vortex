@@ -38,6 +38,7 @@ edition = "2021"
 rust-version = "1.76"
 
 [workspace.dependencies]
+libfuzzer-sys = "0.4"
 ahash = "0.8.11"
 allocator-api2 = "0.2.16"
 anyhow = "1.0"
