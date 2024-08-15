@@ -18,7 +18,7 @@ pub fn is_temporal_ext_type(id: &ExtID) -> bool {
     }
 }
 
-/// Metadata for [TemporalArray].
+/// Metadata for TemporalArray.
 ///
 /// There is one enum for each of the temporal array types we can load from Arrow.
 #[derive(Clone, Debug, PartialEq, Eq)]
