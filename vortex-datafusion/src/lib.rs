@@ -3,7 +3,6 @@
 #![allow(clippy::nonminimal_bool)]
 
 use std::any::Any;
-use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -13,13 +12,11 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema, SchemaRef};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::{DataFrame, SessionContext};
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
 use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_expr::{Expr, Operator};
 use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 use futures::Stream;
-use itertools::Itertools;
 use memory::{VortexMemTable, VortexMemTableOptions};
 use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
@@ -33,7 +30,6 @@ pub mod persistent;
 pub mod scalar;
 
 mod datatype;
-mod eval;
 mod plans;
 
 const SUPPORTED_BINARY_OPS: &[Operator] = &[
@@ -168,36 +164,6 @@ fn can_be_pushed_down(expr: &Expr, schema: &Schema) -> bool {
         Expr::Literal(lit) => supported_data_types(lit.data_type()),
         _ => false,
     }
-}
-
-fn get_filter_projection(exprs: &[Expr], schema: SchemaRef) -> Vec<usize> {
-    let referenced_columns: HashSet<String> =
-        exprs.iter().flat_map(get_column_references).collect();
-
-    let projection: Vec<usize> = referenced_columns
-        .iter()
-        .map(|col_name| schema.column_with_name(col_name).unwrap().0)
-        .sorted()
-        .collect();
-
-    projection
-}
-
-/// Extract out the columns from our table referenced by the expression.
-fn get_column_references(expr: &Expr) -> HashSet<String> {
-    let mut references = HashSet::new();
-
-    expr.apply(|node| match node {
-        Expr::Column(col) => {
-            references.insert(col.name.clone());
-
-            Ok(TreeNodeRecursion::Continue)
-        }
-        _ => Ok(TreeNodeRecursion::Continue),
-    })
-    .unwrap();
-
-    references
 }
 
 /// Physical plan node for scans against an in-memory, possibly chunked Vortex Array.

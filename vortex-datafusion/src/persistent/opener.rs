@@ -1,4 +1,3 @@
-use std::collections::HashSet;
 use std::sync::Arc;
 
 use arrow_array::cast::AsArray;
@@ -6,7 +5,6 @@ use arrow_array::{Array as _, BooleanArray, RecordBatch};
 use arrow_schema::SchemaRef;
 use datafusion::arrow::buffer::{buffer_bin_and, BooleanBuffer};
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
@@ -21,7 +19,7 @@ use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
 use vortex_serde::layouts::reader::context::{LayoutContext, LayoutDeserializer};
 use vortex_serde::layouts::reader::projections::Projection;
 
-use crate::expr::{convert_expr_to_vortex, VortexPhysicalExpr};
+use crate::expr::{convert_expr_to_vortex, extract_column_from_expr, VortexPhysicalExpr};
 
 pub struct VortexFileOpener {
     pub ctx: Arc<Context>,
@@ -129,38 +127,6 @@ fn null_as_false(array: BoolArray) -> VortexResult<Array> {
     };
 
     Ok(Array::from_arrow(boolean_array, false))
-}
-
-/// Extract all indexes of all columns referenced by the physical expressions from the schema
-fn extract_column_from_expr(
-    expr: Option<&Arc<dyn PhysicalExpr>>,
-    schema_ref: SchemaRef,
-) -> DFResult<HashSet<usize>> {
-    let mut predicate_projection = HashSet::new();
-
-    if let Some(expr) = expr {
-        expr.apply(|expr| {
-            if let Some(column) = expr
-                .as_any()
-                .downcast_ref::<datafusion_physical_expr::expressions::Column>()
-            {
-                match schema_ref.column_with_name(column.name()) {
-                    Some(_) => {
-                        predicate_projection.insert(column.index());
-                    }
-                    None => {
-                        return Err(DataFusionError::External(
-                            format!("Could not find expected column {} in schema", column.name())
-                                .into(),
-                        ))
-                    }
-                }
-            }
-            Ok(TreeNodeRecursion::Continue)
-        })?;
-    }
-
-    Ok(predicate_projection)
 }
 
 #[cfg(test)]
