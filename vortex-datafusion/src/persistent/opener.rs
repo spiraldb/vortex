@@ -15,7 +15,7 @@ use vortex::arrow::FromArrowArray;
 use vortex::{Array, Context, IntoArrayVariant as _, IntoCanonical};
 use vortex_error::VortexResult;
 use vortex_serde::io::ObjectStoreReadAt;
-use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
+use vortex_serde::layouts::reader::builder::LayoutReaderBuilder;
 use vortex_serde::layouts::reader::context::{LayoutContext, LayoutDeserializer};
 use vortex_serde::layouts::reader::projections::Projection;
 
@@ -35,7 +35,7 @@ impl FileOpener for VortexFileOpener {
         let read_at =
             ObjectStoreReadAt::new(self.object_store.clone(), file_meta.location().clone());
 
-        let mut builder = VortexLayoutReaderBuilder::new(
+        let mut builder = LayoutReaderBuilder::new(
             read_at,
             LayoutDeserializer::new(self.ctx.clone(), Arc::new(LayoutContext::default())),
         );

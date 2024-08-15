@@ -15,8 +15,9 @@ use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
+use crate::layouts::reader::cache::LayoutMessageCache;
 use crate::layouts::reader::schema::Schema;
-use crate::layouts::reader::{Layout, LayoutMessageCache, MessageId, ReadResult, Scan};
+use crate::layouts::reader::{Layout, MessageId, ReadResult, Scan};
 use crate::writer::ByteRange;
 
 pub struct VortexLayoutBatchStream<R> {
