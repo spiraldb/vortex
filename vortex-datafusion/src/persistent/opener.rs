@@ -52,6 +52,7 @@ impl FileOpener for VortexFileOpener {
             .predicate
             .clone()
             .map(|predicate| -> DFResult<Arc<dyn VortexPhysicalExpr>> {
+                // Extend the projection to include column only referenced by physical expressions
                 predicate.apply(|expr| {
                     if let Some(column) = expr
                         .as_any()
@@ -63,11 +64,6 @@ impl FileOpener for VortexFileOpener {
                             .as_ref()
                             .map(|p| p.contains(&column.index()))
                             .unwrap_or(true);
-                        if self.arrow_schema.column_with_name(column.name()).is_some()
-                            && !projections_contains_idx
-                        {
-                            predicate_projection.insert(column.index());
-                        }
 
                         match self.arrow_schema.column_with_name(column.name()) {
                             Some(_) if !projections_contains_idx => {
@@ -121,6 +117,7 @@ impl FileOpener for VortexFileOpener {
 
                         let rb = RecordBatch::from(array);
 
+                        // If we had a projection, we cut the record batch down to the desired columns
                         if let Some(len) = original_projection_len {
                             Ok(rb.project(&(0..len).collect_vec())?)
                         } else {
