@@ -101,11 +101,8 @@ mod test {
             .iter()
             .enumerate()
             .filter_map(|(idx, v)| {
-                indices_bits
-                    .validity()
-                    .is_valid(idx)
-                    .then(|| v.then_some(idx as u64))
-                    .flatten()
+                let valid_and_true = indices_bits.validity().is_valid(idx) & v;
+                valid_and_true.then_some(idx as u64)
             })
             .collect_vec();
         filtered
