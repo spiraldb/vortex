@@ -20,18 +20,18 @@ impl CompareFn for PrimitiveArray {
             apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), op_fn)
         });
 
-        let present = self
+        let lhs_validity = self
             .validity()
             .to_logical(self.len())
             .to_null_buffer()?
             .map(|b| b.into_inner());
-        let present_other = other
+        let rhs_validity = other
             .validity()
             .to_logical(self.len())
             .to_null_buffer()?
             .map(|b| b.into_inner());
 
-        let validity_buffer = match (present, present_other) {
+        let validity_buffer = match (lhs_validity, rhs_validity) {
             (Some(l), Some(r)) => Some(l.bitand(&r)),
             (Some(b), None) | (None, Some(b)) => Some(b),
             _ => None,
