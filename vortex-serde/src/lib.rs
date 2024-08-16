@@ -8,7 +8,7 @@ mod message_reader;
 mod message_writer;
 mod messages;
 pub mod stream_reader;
-pub mod writer;
+pub mod stream_writer;
 
 pub const ALIGNMENT: usize = 64;
 
@@ -28,12 +28,12 @@ mod test {
     use vortex_error::VortexResult;
 
     use crate::io::FuturesAdapter;
-    use crate::writer::ArrayWriter;
+    use crate::stream_writer::StreamArrayWriter;
     use crate::MessageReader;
 
     fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
         block_on(async {
-            ArrayWriter::new(vec![])
+            StreamArrayWriter::new(vec![])
                 .write_array(array.into_array())
                 .await
                 .unwrap()

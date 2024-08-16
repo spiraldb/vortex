@@ -3,8 +3,8 @@ use std::collections::VecDeque;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
 
-use crate::layouts::reader::context::LayoutId;
-use crate::writer::ByteRange;
+use crate::layouts::LayoutId;
+use crate::stream_writer::ByteRange;
 
 #[derive(Debug, Clone)]
 pub enum Layout {

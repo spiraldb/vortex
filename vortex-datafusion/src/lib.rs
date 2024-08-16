@@ -22,6 +22,7 @@ use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant};
+use vortex_dtype::field::Field;
 use vortex_error::vortex_err;
 
 pub mod memory;
@@ -190,9 +191,8 @@ impl Debug for VortexScanExec {
 }
 
 impl DisplayAs for VortexScanExec {
-    #[allow(clippy::use_debug)]
     fn fmt_as(&self, _display_type: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 
@@ -203,7 +203,7 @@ pub(crate) struct VortexRecordBatchStream {
     num_chunks: usize,
     chunks: ChunkedArray,
 
-    projection: Vec<usize>,
+    projection: Vec<Field>,
 }
 
 impl Stream for VortexRecordBatchStream {
@@ -227,12 +227,11 @@ impl Stream for VortexRecordBatchStream {
             .into_struct()
             .map_err(|vortex_error| DataFusionError::Execution(format!("{}", vortex_error)))?;
 
-        let projected_struct =
-            struct_array
-                .project(this.projection.as_slice())
-                .map_err(|vortex_err| {
-                    exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
-                })?;
+        let projected_struct = struct_array
+            .project(&this.projection)
+            .map_err(|vortex_err| {
+                exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
+            })?;
 
         Poll::Ready(Some(Ok(projected_struct.into())))
     }
@@ -284,7 +283,12 @@ impl ExecutionPlan for VortexScanExec {
             idx: 0,
             num_chunks: self.array.nchunks(),
             chunks: self.array.clone(),
-            projection: self.scan_projection.clone(),
+            projection: self
+                .scan_projection
+                .iter()
+                .copied()
+                .map(Field::from)
+                .collect(),
         }))
     }
 }

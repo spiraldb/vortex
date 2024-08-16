@@ -33,7 +33,7 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::chunked_reader::ChunkedArrayReader;
 use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
-use vortex_serde::writer::ArrayWriter;
+use vortex_serde::stream_writer::StreamArrayWriter;
 use vortex_serde::MessageReader;
 
 use crate::{COMPRESSORS, CTX};
@@ -64,7 +64,7 @@ pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let written = ArrayWriter::new(write)
+    let written = StreamArrayWriter::new(write)
         .write_array_stream(chunked.array_stream())
         .await?;
 

@@ -17,7 +17,7 @@ use vortex::compute::take;
 use vortex::{Context, IntoArray};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::io::FuturesAdapter;
-use vortex_serde::writer::ArrayWriter;
+use vortex_serde::stream_writer::StreamArrayWriter;
 use vortex_serde::MessageReader;
 
 fn ipc_take(c: &mut Criterion) {
@@ -61,9 +61,10 @@ fn ipc_take(c: &mut Criterion) {
         let compressed = compressor.compress(&uncompressed).unwrap();
 
         // Try running take over an ArrayView.
-        let buffer = block_on(async { ArrayWriter::new(vec![]).write_array(compressed).await })
-            .unwrap()
-            .into_inner();
+        let buffer =
+            block_on(async { StreamArrayWriter::new(vec![]).write_array(compressed).await })
+                .unwrap()
+                .into_inner();
 
         let ctx_ref = &Arc::new(ctx);
         let ro_buffer = buffer.as_slice();

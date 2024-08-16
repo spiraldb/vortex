@@ -3,10 +3,8 @@ use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
 use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 
-use crate::layouts::reader::builder::LayoutReaderBuilder;
-use crate::layouts::reader::context::LayoutDeserializer;
-use crate::layouts::reader::projections::Projection;
 use crate::layouts::writer::LayoutWriter;
+use crate::layouts::{LayoutDeserializer, LayoutReaderBuilder, Projection};
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]

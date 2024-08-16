@@ -1,5 +1,5 @@
-pub use layout_writer::LayoutWriter;
+pub use writer::LayoutWriter;
 
 mod footer;
-mod layout_writer;
 mod layouts;
+mod writer;

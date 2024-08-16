@@ -4,6 +4,7 @@ use std::sync::Arc;
 use bytes::Bytes;
 use flatbuffers::{ForwardsUOffset, Vector};
 use vortex::Context;
+use vortex_dtype::field::Field;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_flatbuffers::footer as fb;
@@ -14,7 +15,7 @@ use crate::layouts::reader::buffered::BufferedReader;
 use crate::layouts::reader::cache::RelativeLayoutCache;
 use crate::layouts::reader::context::{LayoutDeserializer, LayoutId, LayoutSpec};
 use crate::layouts::reader::{Layout, ReadResult, Scan};
-use crate::writer::ByteRange;
+use crate::stream_writer::ByteRange;
 use crate::ArrayBufferReader;
 
 #[derive(Debug)]
@@ -191,15 +192,17 @@ impl Layout for ColumnLayout {
                     Projection::All => (0..fb_children.len())
                         .map(|idx| self.read_child(idx, fb_children, s.dtypes()[idx].clone()))
                         .collect::<VortexResult<Vec<_>>>()?,
-                    Projection::Partial(ref v) => v
+                    Projection::Flat(ref v) => v
                         .iter()
-                        .enumerate()
-                        .map(|(position, &projection_idx)| {
-                            self.read_child(
-                                projection_idx,
-                                fb_children,
-                                s.dtypes()[position].clone(),
-                            )
+                        .zip(s.dtypes().iter().cloned())
+                        .map(|(projected_field, dtype)| {
+                            let child_idx = match projected_field {
+                                Field::Name(n) => s.find_name(n.as_ref()).ok_or_else(|| {
+                                    vortex_err!("Invalid projection, trying to select  {n}")
+                                })?,
+                                Field::Index(i) => *i,
+                            };
+                            self.read_child(child_idx, fb_children, dtype)
                         })
                         .collect::<VortexResult<Vec<_>>>()?,
                 };

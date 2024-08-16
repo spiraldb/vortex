@@ -4,12 +4,14 @@ pub use dtype::*;
 pub use extension::*;
 pub use half;
 pub use nullability::*;
+pub use project::*;
 pub use ptype::*;
 
 mod dtype;
 mod extension;
 pub mod field;
 mod nullability;
+mod project;
 mod ptype;
 mod serde;
 

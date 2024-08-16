@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -5,6 +6,7 @@ use vortex::array::{ConstantArray, StructArray};
 use vortex::compute::{compare, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, IntoArray};
+use vortex_dtype::field::{Field, FieldPath};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -12,6 +14,8 @@ use crate::Operator;
 
 pub trait VortexExpr: Debug + Send + Sync {
     fn evaluate(&self, array: &Array) -> VortexResult<Array>;
+
+    fn references(&self) -> HashSet<Field>;
 }
 
 #[derive(Debug)]
@@ -36,12 +40,14 @@ impl BinaryExpr {
 
 #[derive(Debug)]
 pub struct Column {
-    name: String,
+    field: FieldPath,
 }
 
 impl Column {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(field: String) -> Self {
+        Self {
+            field: FieldPath::from_name(field),
+        }
     }
 }
 
@@ -49,12 +55,20 @@ impl VortexExpr for Column {
     fn evaluate(&self, array: &Array) -> VortexResult<Array> {
         let s = StructArray::try_from(array)?;
 
-        let column = s.field_by_name(&self.name).ok_or(vortex_err!(
-            "Array doesn't contain child array of name {}",
-            self.name
-        ))?;
+        if let Some(first) = self.field.path().get(0) {
+            let column = match first {
+                Field::Name(n) => s.field_by_name(n),
+                Field::Index(i) => s.field(*i),
+            }
+            .ok_or_else(|| vortex_err!("Array doesn't contain child array of name {first}"))?;
+            Ok(column)
+        } else {
+            vortex_bail!("Empty column reference")
+        }
+    }
 
-        Ok(column)
+    fn references(&self) -> HashSet<Field> {
+        HashSet::from([self.field.path()[0].clone()])
     }
 }
 
@@ -72,6 +86,10 @@ impl Literal {
 impl VortexExpr for Literal {
     fn evaluate(&self, array: &Array) -> VortexResult<Array> {
         Ok(ConstantArray::new(self.value.clone(), array.len()).into_array())
+    }
+
+    fn references(&self) -> HashSet<Field> {
+        HashSet::new()
     }
 }
 
@@ -93,10 +111,20 @@ impl VortexExpr for BinaryExpr {
 
         Ok(array)
     }
+
+    fn references(&self) -> HashSet<Field> {
+        let mut res = self.left.references();
+        res.extend(self.right.references());
+        res
+    }
 }
 
 impl VortexExpr for NoOp {
     fn evaluate(&self, _array: &Array) -> VortexResult<Array> {
         vortex_bail!("NoOp::evaluate() should not be called")
+    }
+
+    fn references(&self) -> HashSet<Field> {
+        HashSet::new()
     }
 }

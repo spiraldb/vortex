@@ -10,7 +10,7 @@ use vortex::stream::ArrayStreamExt;
 use vortex::validity::Validity;
 use vortex::{Context, IntoArray};
 use vortex_serde::io::FuturesAdapter;
-use vortex_serde::writer::ArrayWriter;
+use vortex_serde::stream_writer::StreamArrayWriter;
 use vortex_serde::MessageReader;
 
 // 100 record batches, 100k rows each
@@ -33,7 +33,7 @@ fn ipc_array_reader_take(c: &mut Criterion) {
         )
         .into_array();
 
-        let buffer = block_on(async { ArrayWriter::new(vec![]).write_array(array).await })
+        let buffer = block_on(async { StreamArrayWriter::new(vec![]).write_array(array).await })
             .unwrap()
             .into_inner();
 
