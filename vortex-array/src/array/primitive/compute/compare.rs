@@ -1,6 +1,7 @@
 use std::ops::BitAnd;
 
-use arrow_buffer::BooleanBuffer;
+use arrow_buffer::bit_util::ceil;
+use arrow_buffer::{BooleanBuffer, MutableBuffer};
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 
@@ -14,9 +15,9 @@ impl CompareFn for PrimitiveArray {
     fn compare(&self, other: &Array, operator: Operator) -> VortexResult<Array> {
         let other = other.clone().into_primitive()?;
 
-        let matching_idxs = match_each_native_ptype!(self.ptype(), |$T| {
-            let predicate_fn = &operator.to_fn::<$T>();
-            apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), predicate_fn)
+        let match_mask = match_each_native_ptype!(self.ptype(), |$T| {
+            let op_fn = &operator.to_fn::<$T>();
+            apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), op_fn)
         });
 
         let present = self
@@ -30,21 +31,58 @@ impl CompareFn for PrimitiveArray {
             .to_null_buffer()?
             .map(|b| b.into_inner());
 
-        let mut result = matching_idxs;
-        result = present.map(|p| p.bitand(&result)).unwrap_or(result);
-        result = present_other.map(|p| p.bitand(&result)).unwrap_or(result);
+        let validity_buffer = match (present, present_other) {
+            (Some(l), Some(r)) => Some(l.bitand(&r)),
+            (Some(b), None) | (None, Some(b)) => Some(b),
+            _ => None,
+        };
 
-        Ok(BoolArray::try_new(result, Validity::AllValid)?.into_array())
+        let validity = validity_buffer
+            .map(Validity::from)
+            .unwrap_or(Validity::AllValid);
+
+        Ok(BoolArray::try_new(match_mask, validity)?.into_array())
     }
 }
 
-fn apply_predicate<T: NativePType, F: Fn(&T, &T) -> bool>(
+fn apply_predicate<T: NativePType, F: Fn(T, T) -> bool>(
     lhs: &[T],
     rhs: &[T],
     f: F,
 ) -> BooleanBuffer {
-    let matches = lhs.iter().zip(rhs.iter()).map(|(lhs, rhs)| f(lhs, rhs));
-    BooleanBuffer::from_iter(matches)
+    const BLOCK_SIZE: usize = u64::BITS as usize;
+
+    let mut buffer = MutableBuffer::new(ceil(lhs.len(), BLOCK_SIZE) * 8);
+    let reminder = lhs.len() % BLOCK_SIZE;
+    let block_count = lhs.len() / BLOCK_SIZE;
+
+    for block in 0..block_count {
+        let mut packed_block = 0_u64;
+        for bit_idx in 0..BLOCK_SIZE {
+            let idx = bit_idx + block * BLOCK_SIZE;
+            let r = f(lhs[idx], rhs[idx]);
+            packed_block |= (r as u64) << bit_idx;
+        }
+
+        unsafe {
+            buffer.push_unchecked(packed_block);
+        }
+    }
+
+    if reminder != 0 {
+        let mut packed_block = 0_u64;
+        for bit_idx in 0..reminder {
+            let idx = bit_idx + block_count * BLOCK_SIZE;
+            let r = f(lhs[idx], rhs[idx]);
+            packed_block |= (r as u64) << bit_idx;
+        }
+
+        unsafe {
+            buffer.push_unchecked(packed_block);
+        }
+    }
+
+    BooleanBuffer::new(buffer.into(), 0, lhs.len())
 }
 
 #[cfg(test)]
