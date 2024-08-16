@@ -57,14 +57,14 @@ impl Operator {
         }
     }
 
-    pub fn to_fn<T: NativePType>(&self) -> fn(&T, &T) -> bool {
+    pub fn to_fn<T: NativePType>(&self) -> fn(T, T) -> bool {
         match self {
-            Operator::Eq => PartialEq::eq,
-            Operator::NotEq => PartialEq::ne,
-            Operator::Gt => PartialOrd::gt,
-            Operator::Gte => PartialOrd::ge,
-            Operator::Lt => PartialOrd::lt,
-            Operator::Lte => PartialOrd::le,
+            Operator::Eq => |l, r| l == r,
+            Operator::NotEq => |l, r| l != r,
+            Operator::Gt => |l, r| l > r,
+            Operator::Gte => |l, r| l >= r,
+            Operator::Lt => |l, r| l < r,
+            Operator::Lte => |l, r| l <= r,
         }
     }
 }
