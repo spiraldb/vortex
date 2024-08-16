@@ -56,11 +56,11 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
 
     // The formats to run against (vs the baseline)
     let formats = [
-        // Format::Arrow,
-        // Format::InMemoryVortex {
-        //     enable_pushdown: true,
-        // },
+        Format::Arrow,
         Format::Parquet,
+        Format::InMemoryVortex {
+            enable_pushdown: true,
+        },
         Format::OnDiskVortex {
             enable_compression: true,
         },
