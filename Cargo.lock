@@ -4220,9 +4220,9 @@ dependencies = [
  "serde",
  "tokio",
  "vortex-buffer",
+ "vortex-datetime-dtype",
  "vortex-dtype",
  "vortex-error",
- "vortex-expr",
  "vortex-flatbuffers",
  "vortex-scalar",
 ]
@@ -4250,7 +4250,6 @@ dependencies = [
  "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
- "vortex-expr",
  "vortex-scalar",
 ]
 
@@ -4279,11 +4278,24 @@ dependencies = [
  "tokio",
  "url",
  "vortex-array",
+ "vortex-datetime-dtype",
  "vortex-dtype",
  "vortex-error",
  "vortex-expr",
  "vortex-scalar",
  "vortex-serde",
+]
+
+[[package]]
+name = "vortex-datetime-dtype"
+version = "0.7.0"
+dependencies = [
+ "arrow-schema",
+ "lazy_static",
+ "num_enum 0.7.3",
+ "serde",
+ "vortex-dtype",
+ "vortex-error",
 ]
 
 [[package]]
@@ -4293,6 +4305,7 @@ dependencies = [
  "log",
  "serde",
  "vortex-array",
+ "vortex-datetime-dtype",
  "vortex-dtype",
  "vortex-error",
  "vortex-scalar",
@@ -4351,10 +4364,13 @@ dependencies = [
 name = "vortex-expr"
 version = "0.7.0"
 dependencies = [
+ "arrow-schema",
  "datafusion-common",
  "datafusion-expr",
+ "datafusion-physical-expr",
  "prost",
  "serde",
+ "vortex-array",
  "vortex-dtype",
  "vortex-error",
  "vortex-proto",
@@ -4459,6 +4475,7 @@ dependencies = [
  "rand",
  "vortex-alp",
  "vortex-array",
+ "vortex-datetime-dtype",
  "vortex-datetime-parts",
  "vortex-dict",
  "vortex-dtype",
@@ -4484,6 +4501,7 @@ dependencies = [
  "prost-types",
  "serde",
  "vortex-buffer",
+ "vortex-datetime-dtype",
  "vortex-dtype",
  "vortex-error",
  "vortex-flatbuffers",

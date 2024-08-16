@@ -1,6 +1,7 @@
 #![cfg(feature = "datafusion")]
 use datafusion_common::ScalarValue;
-use vortex_dtype::{DType, PType};
+use vortex_datetime_dtype::arrow::make_temporal_ext_dtype;
+use vortex_dtype::{DType, Nullability, PType};
 
 use crate::{PValue, Scalar};
 
@@ -90,7 +91,14 @@ impl From<ScalarValue> for Scalar {
             ScalarValue::BinaryView(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
             ScalarValue::LargeBinary(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
             ScalarValue::FixedSizeBinary(_, b) => b.map(|b| Scalar::from(b.clone())),
-            _ => unimplemented!(),
+            ScalarValue::Date32(v) => v.map(|i| {
+                let ext_dtype = make_temporal_ext_dtype(&value.data_type());
+                Scalar::new(
+                    DType::Extension(ext_dtype, Nullability::Nullable),
+                    crate::ScalarValue::Primitive(PValue::I32(i)),
+                )
+            }),
+            _ => unimplemented!("Can't convert {value:?} value to a Vortex scalar"),
         }
         .unwrap_or(Scalar::null(DType::Null))
     }

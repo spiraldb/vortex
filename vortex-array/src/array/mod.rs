@@ -16,7 +16,7 @@ pub mod arbitrary;
 pub use self::bool::*;
 pub use self::chunked::*;
 pub use self::constant::*;
-pub use self::datetime::{temporal, *};
+pub use self::datetime::*;
 pub use self::extension::*;
 pub use self::null::*;
 pub use self::primitive::*;

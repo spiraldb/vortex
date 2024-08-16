@@ -24,14 +24,14 @@ use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, AsArray as _, IntoArray, IntoArrayVariant, IntoCanonical};
 use vortex_error::vortex_err;
-
-use crate::expr::{convert_expr_to_vortex, VortexPhysicalExpr};
+use vortex_expr::datafusion::convert_expr_to_vortex;
+use vortex_expr::VortexExpr;
 
 /// Physical plan operator that applies a set of [filters][Expr] against the input, producing a
 /// row mask that can be used downstream to force a take against the corresponding struct array
 /// chunks but for different columns.
 pub(crate) struct RowSelectorExec {
-    filter_expr: Arc<dyn VortexPhysicalExpr>,
+    filter_expr: Arc<dyn VortexExpr>,
     filter_projection: Vec<usize>,
     /// cached PlanProperties object. We do not make use of this.
     cached_plan_props: PlanProperties,
@@ -141,7 +141,7 @@ impl ExecutionPlan for RowSelectorExec {
 pub(crate) struct RowIndicesStream {
     chunked_array: ChunkedArray,
     chunk_idx: usize,
-    conjunction_expr: Arc<dyn VortexPhysicalExpr>,
+    conjunction_expr: Arc<dyn VortexExpr>,
     filter_projection: Vec<usize>,
 }
 
@@ -404,9 +404,9 @@ mod test {
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray};
     use vortex_dtype::FieldName;
+    use vortex_expr::datafusion::convert_expr_to_vortex;
 
     use crate::datatype::infer_schema;
-    use crate::expr::convert_expr_to_vortex;
     use crate::plans::{RowIndicesStream, ROW_SELECTOR_SCHEMA_REF};
 
     #[tokio::test]

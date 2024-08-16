@@ -7,6 +7,7 @@ members = [
     "vortex-array",
     "vortex-buffer",
     "vortex-datafusion",
+    "vortex-datetime-dtype",
     "vortex-dtype",
     "vortex-error",
     "vortex-expr",
@@ -130,6 +131,7 @@ vortex-array = { version = "0.7.0", path = "./vortex-array" }
 vortex-buffer = { version = "0.7.0", path = "./vortex-buffer" }
 vortex-byte-bool = { version = "0.7.0", path = "./encodings/byte-bool" }
 vortex-datafusion = { version = "0.7.0", path = "./vortex-datafusion" }
+vortex-datetime-dtype = { version = "0.7.0", path = "./vortex-datetime-dtype" }
 vortex-datetime-parts = { version = "0.7.0", path = "./encodings/datetime-parts" }
 vortex-dict = { version = "0.7.0", path = "./encodings/dict" }
 vortex-dtype = { version = "0.7.0", path = "./vortex-dtype", default-features = false }

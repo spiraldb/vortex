@@ -3,11 +3,10 @@ use std::ops::BitAnd;
 use arrow_buffer::BooleanBuffer;
 use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
-use vortex_expr::Operator;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::BoolArray;
-use crate::compute::CompareFn;
+use crate::compute::{CompareFn, Operator};
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for PrimitiveArray {
@@ -15,7 +14,7 @@ impl CompareFn for PrimitiveArray {
         let other = other.clone().into_primitive()?;
 
         let matching_idxs = match_each_native_ptype!(self.ptype(), |$T| {
-            let predicate_fn = &operator.to_predicate::<$T>();
+            let predicate_fn = &operator.to_fn::<$T>();
             apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), predicate_fn)
         });
 
