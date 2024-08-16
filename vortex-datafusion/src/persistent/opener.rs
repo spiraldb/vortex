@@ -71,16 +71,14 @@ impl FileOpener for VortexFileOpener {
             let reader = builder.build().await?;
 
             let stream = reader
-                .and_then(move |array| {
-                    async move {
-                        let rb = RecordBatch::from(array);
+                .and_then(move |array| async move {
+                    let rb = RecordBatch::from(array);
 
-                        // If we had a projection, we cut the record batch down to the desired columns
-                        if let Some(len) = original_projection_len {
-                            Ok(rb.project(&(0..len).collect_vec())?)
-                        } else {
-                            Ok(rb)
-                        }
+                    // If we had a projection, we cut the record batch down to the desired columns
+                    if let Some(len) = original_projection_len {
+                        Ok(rb.project(&(0..len).collect_vec())?)
+                    } else {
+                        Ok(rb)
                     }
                 })
                 .map_err(|e| e.into());
