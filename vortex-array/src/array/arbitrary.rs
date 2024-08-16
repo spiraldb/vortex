@@ -13,7 +13,7 @@ impl<'a> Arbitrary<'a> for Array {
 }
 
 fn random_array(u: &mut Unstructured) -> Result<Array> {
-    match u.int_in_range(0..=9).unwrap() {
+    match u.int_in_range(0..=12).unwrap() {
         0 => random_primitive::<u8>(u),
         1 => random_primitive::<u16>(u),
         2 => random_primitive::<u32>(u),
