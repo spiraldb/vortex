@@ -16,8 +16,7 @@ impl CompareFn for PrimitiveArray {
         let other = other.clone().into_primitive()?;
 
         let match_mask = match_each_native_ptype!(self.ptype(), |$T| {
-            let op_fn = &operator.to_fn::<$T>();
-            apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), op_fn)
+            apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), operator.to_fn::<$T>())
         });
 
         let lhs_validity = self
@@ -101,7 +100,13 @@ mod test {
             .boolean_buffer()
             .iter()
             .enumerate()
-            .flat_map(|(idx, v)| v.then_some(idx as u64))
+            .filter_map(|(idx, v)| {
+                indices_bits
+                    .validity()
+                    .is_valid(idx)
+                    .then(|| v.then_some(idx as u64))
+                    .flatten()
+            })
             .collect_vec();
         filtered
     }
