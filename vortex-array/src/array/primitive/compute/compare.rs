@@ -7,6 +7,7 @@ use vortex_error::VortexResult;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::BoolArray;
 use crate::compute::{CompareFn, Operator};
+use crate::validity::Validity;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for PrimitiveArray {
@@ -33,7 +34,7 @@ impl CompareFn for PrimitiveArray {
         result = present.map(|p| p.bitand(&result)).unwrap_or(result);
         result = present_other.map(|p| p.bitand(&result)).unwrap_or(result);
 
-        Ok(BoolArray::from(result).into_array())
+        Ok(BoolArray::try_new(result, Validity::AllValid)?.into_array())
     }
 }
 
