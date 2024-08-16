@@ -27,7 +27,7 @@ impl FSSTArray {
     // a code.
     //
     // The `codes` array is a Binary array where each binary datum is a sequence of 8-bit codes.
-    // Each code corresponds either to an offset in the `symbols` table, or to the "escape code",
+    // Each code corresponds either to a symbol, or to the "escape code",
     // which tells the decoder to emit the following byte without doing a table lookup.
     pub fn try_new(dtype: DType, symbols: Array, codes: Array) -> VortexResult<Self> {
         // Check: symbols must be a u64 array
@@ -35,7 +35,7 @@ impl FSSTArray {
             vortex_bail!(InvalidArgument: "symbols array must be of type u64")
         }
 
-        // Check: symbols must not have length > 255
+        // Check: symbols must not have length > MAX_CODE
         if symbols.len() > MAX_CODE as usize {
             vortex_bail!(InvalidArgument: "symbols array must have length <= 255")
         }
