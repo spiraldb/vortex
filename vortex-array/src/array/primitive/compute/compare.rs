@@ -52,9 +52,11 @@ fn apply_predicate<T: NativePType, F: Fn(T, T) -> bool>(
 ) -> BooleanBuffer {
     const BLOCK_SIZE: usize = u64::BITS as usize;
 
-    let mut buffer = MutableBuffer::new(ceil(lhs.len(), BLOCK_SIZE) * 8);
-    let reminder = lhs.len() % BLOCK_SIZE;
-    let block_count = lhs.len() / BLOCK_SIZE;
+    let len = lhs.len();
+    let reminder = len % BLOCK_SIZE;
+    let block_count = len / BLOCK_SIZE;
+
+    let mut buffer = MutableBuffer::new(ceil(len, BLOCK_SIZE) * 8);
 
     for block in 0..block_count {
         let mut packed_block = 0_u64;
@@ -82,7 +84,7 @@ fn apply_predicate<T: NativePType, F: Fn(T, T) -> bool>(
         }
     }
 
-    BooleanBuffer::new(buffer.into(), 0, lhs.len())
+    BooleanBuffer::new(buffer.into(), 0, len)
 }
 
 #[cfg(test)]
