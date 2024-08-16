@@ -11,7 +11,6 @@ use crate::{Array, ArrayDType, IntoCanonical};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Operator {
-    // comparison
     Eq,
     NotEq,
     Gt,
@@ -58,7 +57,7 @@ impl Operator {
         }
     }
 
-    pub fn to_predicate<T: NativePType>(&self) -> fn(&T, &T) -> bool {
+    pub fn to_fn<T: NativePType>(&self) -> fn(&T, &T) -> bool {
         match self {
             Operator::Eq => PartialEq::eq,
             Operator::NotEq => PartialEq::ne,

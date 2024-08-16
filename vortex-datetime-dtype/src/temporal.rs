@@ -10,12 +10,7 @@ lazy_static! {
 }
 
 pub fn is_temporal_ext_type(id: &ExtID) -> bool {
-    match id.as_ref() {
-        x if x == DATE_ID.as_ref() => true,
-        x if x == TIME_ID.as_ref() => true,
-        x if x == TIMESTAMP_ID.as_ref() => true,
-        _ => false,
-    }
+    [&DATE_ID as &ExtID, &TIME_ID, &TIMESTAMP_ID].contains(&id)
 }
 
 /// Metadata for TemporalArray.
