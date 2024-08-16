@@ -1,10 +1,10 @@
-use vortex_dtype::DType;
+use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
 use crate::compute::unary::{scalar_at, try_cast, CastFn, ScalarAtFn, SubtractScalarFn};
-use crate::compute::{ArrayCompute, SliceFn, TakeFn};
+use crate::compute::{compare, slice, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
 use crate::{Array, IntoArray};
 
 mod slice;
@@ -30,6 +30,10 @@ impl ArrayCompute for ChunkedArray {
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
+
+    fn compare(&self) -> Option<&dyn CompareFn> {
+        Some(self)
+    }
 }
 
 impl ScalarAtFn for ChunkedArray {
@@ -52,6 +56,23 @@ impl CastFn for ChunkedArray {
         }
 
         Ok(ChunkedArray::try_new(cast_chunks, dtype.clone())?.into_array())
+    }
+}
+
+impl CompareFn for ChunkedArray {
+    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
+        let mut idx = 0;
+        let mut compare_chunks = Vec::default();
+
+        for chunk in self.chunks() {
+            let sliced = slice(array, idx, idx + chunk.len())?;
+            let cmp_result = compare(&chunk, &sliced, operator)?;
+            compare_chunks.push(cmp_result);
+
+            idx += chunk.len();
+        }
+
+        Ok(ChunkedArray::try_new(compare_chunks, DType::Bool(Nullability::Nullable))?.into_array())
     }
 }
 
