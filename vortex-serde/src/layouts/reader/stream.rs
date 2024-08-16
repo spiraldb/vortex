@@ -149,7 +149,9 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
 fn null_as_false(array: BoolArray) -> VortexResult<Array> {
     match array.validity() {
         Validity::NonNullable => Ok(array.into_array()),
-        Validity::AllValid => Ok(array.into_array()),
+        Validity::AllValid => {
+            Ok(BoolArray::try_new(array.boolean_buffer(), Validity::NonNullable)?.into_array())
+        }
         Validity::AllInvalid => Ok(BoolArray::from(vec![false; array.len()]).into_array()),
         Validity::Array(v) => {
             let bool_buffer = &array.boolean_buffer() & &v.into_bool()?.boolean_buffer();
