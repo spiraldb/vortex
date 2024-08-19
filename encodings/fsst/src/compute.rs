@@ -1,11 +1,11 @@
+use vortex::array::varbin_scalar;
 use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{filter, slice, take, ArrayCompute, FilterFn, SliceFn, TakeFn};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, IntoArray};
-use vortex_buffer::{Buffer, BufferString};
-use vortex_dtype::DType;
+use vortex_buffer::Buffer;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_scalar::{Scalar, ScalarValue};
+use vortex_scalar::Scalar;
 
 use crate::FSSTArray;
 
@@ -65,19 +65,7 @@ impl ScalarAtFn for FSSTArray {
         let decompressor = self.decompressor()?;
         let decoded_buffer: Buffer = decompressor.decompress(binary_datum.as_slice()).into();
 
-        if matches!(self.dtype(), &DType::Utf8(_)) {
-            // SAFETY: a UTF-8 FSSTArray can only be compressed from a known-good UTF-8 array, no need to revalidate.
-            let buffer_string = unsafe { BufferString::new_unchecked(decoded_buffer) };
-            Ok(Scalar::new(
-                self.dtype().clone(),
-                ScalarValue::BufferString(buffer_string),
-            ))
-        } else {
-            Ok(Scalar::new(
-                self.dtype().clone(),
-                ScalarValue::Buffer(decoded_buffer),
-            ))
-        }
+        Ok(varbin_scalar(decoded_buffer, self.dtype()))
     }
 }
 
