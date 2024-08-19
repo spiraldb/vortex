@@ -4414,6 +4414,7 @@ version = "0.7.0"
 dependencies = [
  "arrow-array",
  "fsst-rs",
+ "rstest",
  "serde",
  "vortex-array",
  "vortex-buffer",
