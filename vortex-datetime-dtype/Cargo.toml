@@ -12,12 +12,12 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+arrow-schema = { workspace = true, optional = true }
 lazy_static = { workspace = true }
 num_enum = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
-arrow-schema = { workspace = true, optional = true }
 
 [features]
 default = ["arrow"]

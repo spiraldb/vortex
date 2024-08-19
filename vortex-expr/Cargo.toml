@@ -20,10 +20,10 @@ bench = false
 workspace = true
 
 [dependencies]
+arrow-schema = { workspace = true, optional = true }
 datafusion-common = { workspace = true, optional = true }
 datafusion-expr = { workspace = true, optional = true }
 datafusion-physical-expr = { workspace = true, optional = true }
-arrow-schema = { workspace = true, optional = true }
 prost = { workspace = true, optional = true }
 serde = { workspace = true, optional = true, features = ["derive"] }
 vortex-array = { workspace = true }
