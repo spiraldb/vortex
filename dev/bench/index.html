@@ -180,10 +180,12 @@
                         // Normalize name
                         let [q, seriesName] = name.split("/");
                         let prettyQ = q.replace("_", " ").toUpperCase();
+                        let query_idx = parseInt(prettyQ.split(" ")[1].substring(1), 10);
 
                         let arr = map.get(prettyQ);
                         if (arr === undefined) {
                             map.set(prettyQ, {
+                                query_idx,
                                 commits,
                                 unit: is_nanos ? "ms/iter" : unit,
                                 series: new Map(),
@@ -199,7 +201,7 @@
                         series[entryIdx] = {range, value: is_nanos ? value / 1_000_000 : value};
                     }
                 });
-                return map;
+                return new Map([...map.entries()].sort((a, b) => a[1].query_idx - b[1].query_idx));
             }
 
             const data = window.BENCHMARK_DATA;
