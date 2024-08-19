@@ -6,7 +6,9 @@ use std::sync;
 use std::time::SystemTime;
 
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
-use bench_vortex::tpch::{load_datasets, tpch_queries, Format, EXPECTED_ROW_COUNTS};
+use bench_vortex::tpch::{
+    load_datasets, run_tpch_query, tpch_queries, Format, EXPECTED_ROW_COUNTS,
+};
 use clap::{ArgAction, Parser};
 use futures::future::try_join_all;
 use indicatif::ProgressBar;
@@ -90,7 +92,7 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
     // Send back a channel with the results of Row.
     let (rows_tx, rows_rx) = sync::mpsc::channel();
     let (row_count_tx, row_count_rx) = sync::mpsc::channel();
-    for (q, query) in tpch_queries() {
+    for (q, sql_queries) in tpch_queries() {
         if let Some(queries) = queries.as_ref() {
             if !queries.contains(&q) {
                 continue;
@@ -112,21 +114,7 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
             for (ctx, format) in ctxs.iter().zip(formats.iter()) {
                 if warmup {
                     for i in 0..3 {
-                        let row_count: usize = rt.block_on(async {
-                            ctx.sql(&query)
-                                .await
-                                .map_err(|e| println!("Failed to run {} {:?}: {}", q, format, e))
-                                .unwrap()
-                                .collect()
-                                .await
-                                .map_err(|e| {
-                                    println!("Failed to collect {} {:?}: {}", q, format, e)
-                                })
-                                .unwrap()
-                                .iter()
-                                .map(|r| r.num_rows())
-                                .sum()
-                        });
+                        let row_count = rt.block_on(run_tpch_query(ctx, &sql_queries, q, *format));
                         if i == 0 {
                             count_tx.send((q, *format, row_count)).unwrap();
                         }
@@ -136,16 +124,7 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
                 let mut measure = Vec::new();
                 for _ in 0..iterations {
                     let start = SystemTime::now();
-                    rt.block_on(async {
-                        ctx.sql(&query)
-                            .await
-                            .map_err(|e| println!("Failed to run {} {:?}: {}", q, format, e))
-                            .unwrap()
-                            .collect()
-                            .await
-                            .map_err(|e| println!("Failed to collect {} {:?}: {}", q, format, e))
-                            .unwrap();
-                    });
+                    rt.block_on(run_tpch_query(ctx, &sql_queries, q, *format));
                     let elapsed = start.elapsed().unwrap();
                     measure.push(elapsed);
                 }
