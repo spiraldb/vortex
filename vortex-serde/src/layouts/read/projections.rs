@@ -1,5 +1,7 @@
 use vortex_dtype::field::Field;
 
+// TODO(robert): Add ability to project nested columns.
+//  Until datafusion supports nested column pruning we should create a separate variant to implement it
 #[derive(Debug, Clone, Default)]
 pub enum Projection {
     #[default]
