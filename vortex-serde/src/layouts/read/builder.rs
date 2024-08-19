@@ -92,7 +92,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
                 }
             }
         } else {
-            (Projection::All, Projection::All)
+            (self.projection.unwrap_or_default(), Projection::All)
         };
 
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);

@@ -14,7 +14,7 @@ use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
 use crate::io::VortexRead;
 use crate::messages::IPCDType;
 
-const FLATBUFFER_SIZE_LENGTH: usize = 4;
+pub const FLATBUFFER_SIZE_LENGTH: usize = 4;
 
 pub struct MessageReader<R> {
     read: R,
