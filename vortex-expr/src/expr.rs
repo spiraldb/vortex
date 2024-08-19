@@ -6,7 +6,7 @@ use vortex::array::{ConstantArray, StructArray};
 use vortex::compute::{compare, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, IntoArray};
-use vortex_dtype::field::{Field, FieldPath};
+use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -40,13 +40,13 @@ impl BinaryExpr {
 
 #[derive(Debug)]
 pub struct Column {
-    field: FieldPath,
+    field: Field,
 }
 
 impl Column {
     pub fn new(field: String) -> Self {
         Self {
-            field: FieldPath::from_name(field),
+            field: Field::from(field),
         }
     }
 }
@@ -55,20 +55,16 @@ impl VortexExpr for Column {
     fn evaluate(&self, array: &Array) -> VortexResult<Array> {
         let s = StructArray::try_from(array)?;
 
-        if let Some(first) = self.field.path().get(0) {
-            let column = match first {
-                Field::Name(n) => s.field_by_name(n),
-                Field::Index(i) => s.field(*i),
-            }
-            .ok_or_else(|| vortex_err!("Array doesn't contain child array of name {first}"))?;
-            Ok(column)
-        } else {
-            vortex_bail!("Empty column reference")
+        let column = match &self.field {
+            Field::Name(n) => s.field_by_name(n),
+            Field::Index(i) => s.field(*i),
         }
+        .ok_or_else(|| vortex_err!("Array doesn't contain child array {}", self.field))?;
+        Ok(column)
     }
 
     fn references(&self) -> HashSet<Field> {
-        HashSet::from([self.field.path()[0].clone()])
+        HashSet::from([self.field.clone()])
     }
 }
 

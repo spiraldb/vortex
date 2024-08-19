@@ -10,11 +10,11 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_flatbuffers::footer as fb;
 
 use super::projections::Projection;
-use crate::layouts::reader::batch::BatchReader;
-use crate::layouts::reader::buffered::BufferedReader;
-use crate::layouts::reader::cache::RelativeLayoutCache;
-use crate::layouts::reader::context::{LayoutDeserializer, LayoutId, LayoutSpec};
-use crate::layouts::reader::{Layout, ReadResult, Scan};
+use crate::layouts::read::batch::BatchReader;
+use crate::layouts::read::buffered::BufferedReader;
+use crate::layouts::read::cache::RelativeLayoutCache;
+use crate::layouts::read::context::{LayoutDeserializer, LayoutId, LayoutSpec};
+use crate::layouts::read::{Layout, ReadResult, Scan};
 use crate::stream_writer::ByteRange;
 use crate::ArrayBufferReader;
 

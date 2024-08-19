@@ -10,9 +10,9 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::io::VortexWrite;
-use crate::layouts::reader::{ChunkedLayoutSpec, ColumnLayoutSpec};
-use crate::layouts::writer::footer::Footer;
-use crate::layouts::writer::layouts::{FlatLayout, Layout, NestedLayout};
+use crate::layouts::read::{ChunkedLayoutSpec, ColumnLayoutSpec};
+use crate::layouts::write::footer::Footer;
+use crate::layouts::write::layouts::{FlatLayout, Layout, NestedLayout};
 use crate::layouts::MAGIC_BYTES;
 use crate::stream_writer::ChunkOffsets;
 use crate::MessageWriter;
@@ -186,7 +186,7 @@ mod tests {
     use vortex::validity::Validity;
     use vortex::IntoArray;
 
-    use crate::layouts::writer::writer::LayoutWriter;
+    use crate::layouts::write::writer::LayoutWriter;
 
     #[test]
     fn write_columns() {

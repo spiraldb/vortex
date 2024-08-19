@@ -22,7 +22,7 @@ use vortex_datafusion::persistent::config::{VortexFile, VortexTableOptions};
 use vortex_datafusion::SessionContextExt;
 use vortex_dtype::DType;
 use vortex_sampling_compressor::SamplingCompressor;
-use vortex_serde::layouts::writer::LayoutWriter;
+use vortex_serde::layouts::write::LayoutWriter;
 
 use crate::idempotent_async;
 

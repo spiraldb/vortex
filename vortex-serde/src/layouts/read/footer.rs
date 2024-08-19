@@ -5,9 +5,9 @@ use vortex_dtype::{deserialize_and_project, DType};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::ReadFlatBuffer;
 
-use crate::layouts::reader::cache::RelativeLayoutCache;
-use crate::layouts::reader::context::LayoutDeserializer;
-use crate::layouts::reader::{Layout, Scan, FILE_POSTSCRIPT_SIZE};
+use crate::layouts::read::cache::RelativeLayoutCache;
+use crate::layouts::read::context::LayoutDeserializer;
+use crate::layouts::read::{Layout, Scan, FILE_POSTSCRIPT_SIZE};
 use crate::messages::IPCDType;
 
 pub struct Footer {

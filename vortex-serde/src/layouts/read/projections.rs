@@ -33,13 +33,11 @@ impl Extend<Field> for Projection {
             Projection::All => {}
             Projection::Flat(f) => {
                 let unique_fields: HashSet<Field> = f.iter().cloned().collect();
-                let mut own_fields = f.clone();
-                own_fields.extend(
+                f.extend(
                     new_fields
                         .into_iter()
                         .filter(|f| !unique_fields.contains(f)),
                 );
-                Projection::Flat(own_fields);
             }
         }
     }

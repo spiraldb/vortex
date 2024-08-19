@@ -6,13 +6,13 @@ use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::io::VortexReadAt;
-use crate::layouts::reader::cache::{LayoutMessageCache, RelativeLayoutCache};
-use crate::layouts::reader::context::LayoutDeserializer;
-use crate::layouts::reader::filtering::RowFilter;
-use crate::layouts::reader::footer::Footer;
-use crate::layouts::reader::projections::Projection;
-use crate::layouts::reader::stream::LayoutBatchStream;
-use crate::layouts::reader::{Scan, DEFAULT_BATCH_SIZE, FILE_POSTSCRIPT_SIZE, INITIAL_READ_SIZE};
+use crate::layouts::read::cache::{LayoutMessageCache, RelativeLayoutCache};
+use crate::layouts::read::context::LayoutDeserializer;
+use crate::layouts::read::filtering::RowFilter;
+use crate::layouts::read::footer::Footer;
+use crate::layouts::read::projections::Projection;
+use crate::layouts::read::stream::LayoutBatchStream;
+use crate::layouts::read::{Scan, DEFAULT_BATCH_SIZE, FILE_POSTSCRIPT_SIZE, INITIAL_READ_SIZE};
 use crate::layouts::MAGIC_BYTES;
 
 pub struct LayoutReaderBuilder<R> {
