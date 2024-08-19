@@ -71,6 +71,7 @@ fn fsst_array() -> Array {
 }
 
 #[rstest]
+#[cfg_attr(miri, ignore)]
 fn test_scalar_at(fsst_array: Array) {
     assert_nth_scalar!(
         fsst_array,
@@ -90,6 +91,7 @@ fn test_scalar_at(fsst_array: Array) {
 }
 
 #[rstest]
+#[cfg_attr(miri, ignore)]
 fn test_slice(fsst_array: Array) {
     let fsst_sliced = slice(&fsst_array, 1, 3).unwrap();
     assert_eq!(fsst_sliced.encoding().id(), FSST::ENCODING.id());
@@ -107,6 +109,7 @@ fn test_slice(fsst_array: Array) {
 }
 
 #[rstest]
+#[cfg_attr(miri, ignore)]
 fn test_take(fsst_array: Array) {
     let indices = PrimitiveArray::from_vec(vec![0, 2], Validity::NonNullable).into_array();
     let fsst_taken = take(&fsst_array, &indices).unwrap();
@@ -124,6 +127,7 @@ fn test_take(fsst_array: Array) {
 }
 
 #[rstest]
+#[cfg_attr(miri, ignore)]
 fn test_filter(fsst_array: Array) {
     let predicate =
         BoolArray::from_vec(vec![false, true, false], Validity::NonNullable).into_array();
