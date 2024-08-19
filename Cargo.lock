@@ -1550,6 +1550,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fsst-rs"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ae2cf518ae03eeef49886cc339ab26bc5bb9877f4a502c28fe9cd8bdf98db21"
+
+[[package]]
 name = "futures"
 version = "0.3.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2908,7 +2914,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5bb182580f71dd070f88d01ce3de9f4da5021db7115d2e1c3605a754153b77c1"
 dependencies = [
  "bytes",
- "heck 0.4.1",
+ "heck 0.5.0",
  "itertools 0.13.0",
  "log",
  "multimap",
@@ -4400,6 +4406,21 @@ name = "vortex-flatbuffers"
 version = "0.7.0"
 dependencies = [
  "flatbuffers",
+]
+
+[[package]]
+name = "vortex-fsst"
+version = "0.7.0"
+dependencies = [
+ "arrow-array",
+ "fsst-rs",
+ "rstest",
+ "serde",
+ "vortex-array",
+ "vortex-buffer",
+ "vortex-dtype",
+ "vortex-error",
+ "vortex-scalar",
 ]
 
 [[package]]
