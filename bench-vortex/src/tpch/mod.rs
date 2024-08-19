@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use std::fs;
 use std::fs::create_dir_all;
 use std::path::Path;
@@ -26,10 +27,13 @@ use vortex_serde::layouts::writer::LayoutWriter;
 use crate::idempotent_async;
 
 pub mod dbgen;
+mod execute;
 pub mod schema;
 
+pub use execute::*;
+
 pub const EXPECTED_ROW_COUNTS: [usize; 23] = [
-    0, 4, 460, 11620, 5, 5, 1, 4, 2, 175, 37967, 1048, 2, 42, 1, 0, 18314, 1, 57, 1, 186, 411, 7,
+    0, 4, 460, 11620, 5, 5, 1, 4, 2, 175, 37967, 1048, 2, 42, 1, 1, 18314, 1, 57, 1, 186, 411, 7,
 ];
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -39,6 +43,22 @@ pub enum Format {
     Parquet,
     InMemoryVortex { enable_pushdown: bool },
     OnDiskVortex { enable_compression: bool },
+}
+
+impl Display for Format {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Format::Csv => write!(f, "csv"),
+            Format::Arrow => write!(f, "arrow"),
+            Format::Parquet => write!(f, "parquet"),
+            Format::InMemoryVortex { enable_pushdown } => {
+                write!(f, "in_memory_vortex(pushdown={enable_pushdown})")
+            }
+            Format::OnDiskVortex { enable_compression } => {
+                write!(f, "on_disk_vortex(compressed={enable_compression})")
+            }
+        }
+    }
 }
 
 // Generate table dataset.
@@ -357,18 +377,19 @@ async fn register_vortex(
     Ok(())
 }
 
-pub fn tpch_queries() -> impl Iterator<Item = (usize, String)> {
-    (1..=22)
-        .filter(|q| {
-            // Query 15 has multiple SQL statements so doesn't yet run in DataFusion.
-            *q != 15
-        })
-        .map(|q| (q, tpch_query(q)))
+pub fn tpch_queries() -> impl Iterator<Item = (usize, Vec<String>)> {
+    (1..=22).map(|q| (q, tpch_query(q)))
 }
 
-fn tpch_query(query_idx: usize) -> String {
+fn tpch_query(query_idx: usize) -> Vec<String> {
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tpch")
         .join(format!("q{}.sql", query_idx));
-    fs::read_to_string(manifest_dir).unwrap()
+    fs::read_to_string(manifest_dir)
+        .unwrap()
+        .split(';')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .collect()
 }
