@@ -1,7 +1,6 @@
 //! Physical operators needed to implement scanning of Vortex arrays with pushdown.
 
 use std::any::Any;
-use std::backtrace::Backtrace;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -13,8 +12,7 @@ use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
-use datafusion_expr::Expr;
-use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
+use datafusion_physical_expr::{EquivalenceProperties, Partitioning, PhysicalExpr};
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, PlanProperties,
 };
@@ -24,25 +22,20 @@ use pin_project::pin_project;
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, AsArray as _, IntoArray, IntoArrayVariant, IntoCanonical};
 use vortex_error::vortex_err;
-
-use crate::datatype::infer_schema;
-use crate::eval::ExpressionEvaluator;
-use crate::expr::{make_conjunction, simplify_expr};
+use vortex_expr::datafusion::convert_expr_to_vortex;
+use vortex_expr::VortexExpr;
 
 /// Physical plan operator that applies a set of [filters][Expr] against the input, producing a
 /// row mask that can be used downstream to force a take against the corresponding struct array
 /// chunks but for different columns.
 pub(crate) struct RowSelectorExec {
-    filter_exprs: Vec<Expr>,
-
+    filter_expr: Arc<dyn VortexExpr>,
     filter_projection: Vec<usize>,
-
-    // cached PlanProperties object. We do not make use of this.
+    /// cached PlanProperties object. We do not make use of this.
     cached_plan_props: PlanProperties,
-
-    // Full array. We only access partitions of this data.
+    /// Full array. We only access partitions of this data.
     chunked_array: ChunkedArray,
 }
 
@@ -55,30 +48,33 @@ lazy_static! {
 }
 
 impl RowSelectorExec {
-    pub(crate) fn new(
-        filter_exprs: &[Expr],
+    pub(crate) fn try_new(
+        filter_expr: Arc<dyn PhysicalExpr>,
         filter_projection: Vec<usize>,
         chunked_array: &ChunkedArray,
-    ) -> Self {
+        schema: SchemaRef,
+    ) -> DFResult<Self> {
         let cached_plan_props = PlanProperties::new(
             EquivalenceProperties::new(ROW_SELECTOR_SCHEMA_REF.clone()),
             Partitioning::UnknownPartitioning(1),
             ExecutionMode::Bounded,
         );
 
-        Self {
-            filter_exprs: filter_exprs.to_owned(),
+        let filter_expr = convert_expr_to_vortex(filter_expr, schema.as_ref())?;
+
+        Ok(Self {
+            filter_expr,
             filter_projection: filter_projection.clone(),
             chunked_array: chunked_array.clone(),
             cached_plan_props,
-        }
+        })
     }
 }
 
 impl Debug for RowSelectorExec {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RowSelectorExec")
-            .field("filter_exprs", &self.filter_exprs)
+            .field("filter_expr", &self.filter_expr)
             .finish()
     }
 }
@@ -132,23 +128,11 @@ impl ExecutionPlan for RowSelectorExec {
             .into());
         }
 
-        // Derive a schema using the provided set of fields.
-        let filter_schema = Arc::new(
-            infer_schema(self.chunked_array.dtype())
-                .project(self.filter_projection.as_slice())
-                .map_err(|err| {
-                    DataFusionError::ArrowError(err, Some(Backtrace::capture().to_string()))
-                })?,
-        );
-
-        let conjunction_expr =
-            simplify_expr(&make_conjunction(&self.filter_exprs)?, filter_schema)?;
-
         Ok(Box::pin(RowIndicesStream {
             chunked_array: self.chunked_array.clone(),
             chunk_idx: 0,
             filter_projection: self.filter_projection.clone(),
-            conjunction_expr,
+            conjunction_expr: self.filter_expr.clone(),
         }))
     }
 }
@@ -157,7 +141,7 @@ impl ExecutionPlan for RowSelectorExec {
 pub(crate) struct RowIndicesStream {
     chunked_array: ChunkedArray,
     chunk_idx: usize,
-    conjunction_expr: Expr,
+    conjunction_expr: Arc<dyn VortexExpr>,
     filter_projection: Vec<usize>,
 }
 
@@ -186,13 +170,13 @@ impl Stream for RowIndicesStream {
             .project(this.filter_projection.as_slice())
             .expect("projection should succeed");
 
-        let schema = infer_schema(vortex_struct.dtype());
-
-        // TODO(adamg): Filter on vortex arrays
-        let array =
-            ExpressionEvaluator::eval(vortex_struct.into_array(), &this.conjunction_expr, &schema)
-                .unwrap();
-        let selection = array.into_canonical().unwrap().into_arrow();
+        let selection = this
+            .conjunction_expr
+            .evaluate(vortex_struct.as_array_ref())
+            .map_err(|e| DataFusionError::External(e.into()))?
+            .into_canonical()
+            .unwrap()
+            .into_arrow();
 
         // Convert the `selection` BooleanArray into a UInt64Array of indices.
         let selection_indices = selection
@@ -411,13 +395,18 @@ mod test {
     use std::sync::Arc;
 
     use arrow_array::{RecordBatch, UInt64Array};
+    use datafusion_common::ToDFSchema;
+    use datafusion_expr::execution_props::ExecutionProps;
     use datafusion_expr::{and, col, lit};
+    use datafusion_physical_expr::create_physical_expr;
     use itertools::Itertools;
     use vortex::array::{BoolArray, ChunkedArray, PrimitiveArray, StructArray};
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray};
     use vortex_dtype::FieldName;
+    use vortex_expr::datafusion::convert_expr_to_vortex;
 
+    use crate::datatype::infer_schema;
     use crate::plans::{RowIndicesStream, ROW_SELECTOR_SCHEMA_REF};
 
     #[tokio::test]
@@ -439,10 +428,19 @@ mod test {
         let chunked_array =
             ChunkedArray::try_new(vec![chunk.clone(), chunk.clone()], dtype).unwrap();
 
+        let schema = infer_schema(chunk.dtype());
+        let logical_expr = and((col("a")).eq(lit(2u64)), col("b").eq(lit(true)));
+        let df_expr = create_physical_expr(
+            &logical_expr,
+            &schema.clone().to_dfschema().unwrap(),
+            &ExecutionProps::new(),
+        )
+        .unwrap();
+
         let filtering_stream = RowIndicesStream {
             chunked_array: chunked_array.clone(),
             chunk_idx: 0,
-            conjunction_expr: and((col("a")).eq(lit(2u64)), col("b").eq(lit(true))),
+            conjunction_expr: convert_expr_to_vortex(df_expr, &schema).unwrap(),
             filter_projection: vec![0, 1],
         };
 

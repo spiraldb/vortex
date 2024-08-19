@@ -1,63 +1,133 @@
 #![cfg(feature = "datafusion")]
-use datafusion_common::Column;
-use datafusion_expr::{BinaryExpr, Expr};
-use vortex_dtype::field::{Field, FieldPath};
+
+use std::collections::HashSet;
+use std::sync::Arc;
+
+use datafusion_common::arrow::datatypes::{Schema, SchemaRef};
+use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
+use datafusion_common::{DataFusionError, Result as DFResult};
+use datafusion_expr::Operator as DFOperator;
+use datafusion_physical_expr::PhysicalExpr;
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::expressions::{Predicate, Value};
-use crate::operators::Operator;
+use crate::expr::{Literal, NoOp, VortexExpr};
+use crate::{BinaryExpr, Column, Operator};
 
-impl From<Predicate> for Expr {
-    fn from(value: Predicate) -> Self {
-        Expr::BinaryExpr(BinaryExpr::new(
-            Box::new(FieldPathWrapper(value.lhs).into()),
-            value.op.into(),
-            Box::new(value.rhs.into()),
-        ))
+pub fn convert_expr_to_vortex(
+    physical_expr: Arc<dyn PhysicalExpr>,
+    input_schema: &Schema,
+) -> VortexResult<Arc<dyn VortexExpr>> {
+    if physical_expr.data_type(input_schema).unwrap().is_temporal() {
+        vortex_bail!("Doesn't support evaluating operations over temporal values");
     }
+    if let Some(binary_expr) = physical_expr
+        .as_any()
+        .downcast_ref::<datafusion_physical_expr::expressions::BinaryExpr>()
+    {
+        let left = convert_expr_to_vortex(binary_expr.left().clone(), input_schema)?;
+        let right = convert_expr_to_vortex(binary_expr.right().clone(), input_schema)?;
+        let operator = *binary_expr.op();
+
+        return Ok(Arc::new(BinaryExpr::new(left, operator.try_into()?, right)) as _);
+    }
+
+    if let Some(col_expr) = physical_expr
+        .as_any()
+        .downcast_ref::<datafusion_physical_expr::expressions::Column>()
+    {
+        let expr = Column::new(col_expr.name().to_owned());
+
+        return Ok(Arc::new(expr) as _);
+    }
+
+    if let Some(lit) = physical_expr
+        .as_any()
+        .downcast_ref::<datafusion_physical_expr::expressions::Literal>()
+    {
+        let value = Scalar::from(lit.value().clone());
+        return Ok(Arc::new(Literal::new(value)) as _);
+    }
+
+    if physical_expr
+        .as_any()
+        .downcast_ref::<datafusion_physical_expr::expressions::NoOp>()
+        .is_some()
+    {
+        return Ok(Arc::new(NoOp));
+    }
+
+    vortex_bail!("Couldn't convert DataFusion physical expression to a vortex expression")
 }
 
-impl From<Operator> for datafusion_expr::Operator {
-    fn from(value: Operator) -> Self {
-        match value {
-            Operator::Eq => datafusion_expr::Operator::Eq,
-            Operator::NotEq => datafusion_expr::Operator::NotEq,
-            Operator::Gt => datafusion_expr::Operator::Gt,
-            Operator::Gte => datafusion_expr::Operator::GtEq,
-            Operator::Lt => datafusion_expr::Operator::Lt,
-            Operator::Lte => datafusion_expr::Operator::LtEq,
-        }
-    }
-}
+/// Extract all indexes of all columns referenced by the physical expressions from the schema
+pub fn extract_columns_from_expr(
+    expr: Option<&Arc<dyn PhysicalExpr>>,
+    schema_ref: SchemaRef,
+) -> DFResult<HashSet<usize>> {
+    let mut predicate_projection = HashSet::new();
 
-impl From<Value> for Expr {
-    fn from(value: Value) -> Self {
-        match value {
-            Value::Field(field_path) => FieldPathWrapper(field_path).into(),
-            Value::Literal(literal) => ScalarWrapper(literal).into(),
-        }
-    }
-}
-
-struct FieldPathWrapper(FieldPath);
-impl From<FieldPathWrapper> for Expr {
-    fn from(value: FieldPathWrapper) -> Self {
-        let mut field = String::new();
-        for part in value.0.path() {
-            match part {
-                // TODO(ngates): escape quotes?
-                Field::Name(name) => field.push_str(&format!("\"{}\"", name)),
-                Field::Index(idx) => field.push_str(&format!("[{}]", idx)),
+    if let Some(expr) = expr {
+        expr.apply(|expr| {
+            if let Some(column) = expr
+                .as_any()
+                .downcast_ref::<datafusion_physical_expr::expressions::Column>()
+            {
+                match schema_ref.column_with_name(column.name()) {
+                    Some(_) => {
+                        predicate_projection.insert(column.index());
+                    }
+                    None => {
+                        return Err(DataFusionError::External(
+                            format!("Could not find expected column {} in schema", column.name())
+                                .into(),
+                        ))
+                    }
+                }
             }
-        }
-
-        Expr::Column(Column::from(field))
+            Ok(TreeNodeRecursion::Continue)
+        })?;
     }
+
+    Ok(predicate_projection)
 }
 
-struct ScalarWrapper(Scalar);
-impl From<ScalarWrapper> for Expr {
-    fn from(value: ScalarWrapper) -> Self {
-        Expr::Literal(value.0.into())
+impl TryFrom<DFOperator> for Operator {
+    type Error = VortexError;
+
+    fn try_from(value: DFOperator) -> Result<Self, Self::Error> {
+        match value {
+            DFOperator::Eq => Ok(Operator::Eq),
+            DFOperator::NotEq => Ok(Operator::NotEq),
+            DFOperator::Lt => Ok(Operator::Lt),
+            DFOperator::LtEq => Ok(Operator::Lte),
+            DFOperator::Gt => Ok(Operator::Gt),
+            DFOperator::GtEq => Ok(Operator::Gte),
+            DFOperator::And => Ok(Operator::And),
+            DFOperator::Or => Ok(Operator::Or),
+            DFOperator::IsDistinctFrom
+            | DFOperator::IsNotDistinctFrom
+            | DFOperator::RegexMatch
+            | DFOperator::RegexIMatch
+            | DFOperator::RegexNotMatch
+            | DFOperator::RegexNotIMatch
+            | DFOperator::LikeMatch
+            | DFOperator::ILikeMatch
+            | DFOperator::NotLikeMatch
+            | DFOperator::NotILikeMatch
+            | DFOperator::BitwiseAnd
+            | DFOperator::BitwiseOr
+            | DFOperator::BitwiseXor
+            | DFOperator::BitwiseShiftRight
+            | DFOperator::BitwiseShiftLeft
+            | DFOperator::StringConcat
+            | DFOperator::AtArrow
+            | DFOperator::ArrowAt
+            | DFOperator::Plus
+            | DFOperator::Minus
+            | DFOperator::Multiply
+            | DFOperator::Divide
+            | DFOperator::Modulo => Err(vortex_err!("Unsupported datafusion operator {value}")),
+        }
     }
 }

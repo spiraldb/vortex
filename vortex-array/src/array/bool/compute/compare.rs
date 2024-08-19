@@ -1,10 +1,9 @@
 use std::ops::{BitAnd, BitOr, BitXor, Not};
 
 use vortex_error::VortexResult;
-use vortex_expr::Operator;
 
 use crate::array::BoolArray;
-use crate::compute::CompareFn;
+use crate::compute::{CompareFn, Operator};
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for BoolArray {
@@ -34,7 +33,6 @@ impl CompareFn for BoolArray {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod test {
     use itertools::Itertools;
 
@@ -54,17 +52,23 @@ mod test {
     }
 
     #[test]
-    fn test_basic_comparisons() -> VortexResult<()> {
+    fn test_basic_comparisons() {
         let arr = BoolArray::from_vec(
             vec![true, true, false, true, false],
             Validity::Array(BoolArray::from(vec![false, true, true, true, true]).into_array()),
         )
         .into_array();
 
-        let matches = compare(&arr, &arr, Operator::Eq)?.into_bool()?;
+        let matches = compare(&arr, &arr, Operator::Eq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
         assert_eq!(to_int_indices(matches), [1u64, 2, 3, 4]);
 
-        let matches = compare(&arr, &arr, Operator::NotEq)?.into_bool()?;
+        let matches = compare(&arr, &arr, Operator::NotEq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
         let empty: [u64; 0] = [];
         assert_eq!(to_int_indices(matches), empty);
 
@@ -74,17 +78,28 @@ mod test {
         )
         .into_array();
 
-        let matches = compare(&arr, &other, Operator::Lte)?.into_bool()?;
+        let matches = compare(&arr, &other, Operator::Lte)
+            .unwrap()
+            .into_bool()
+            .unwrap();
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
-        let matches = compare(&arr, &other, Operator::Lt)?.into_bool()?;
+        let matches = compare(&arr, &other, Operator::Lt)
+            .unwrap()
+            .into_bool()
+            .unwrap();
         assert_eq!(to_int_indices(matches), [4u64]);
 
-        let matches = compare(&other, &arr, Operator::Gte)?.into_bool()?;
+        let matches = compare(&other, &arr, Operator::Gte)
+            .unwrap()
+            .into_bool()
+            .unwrap();
         assert_eq!(to_int_indices(matches), [2u64, 3, 4]);
 
-        let matches = compare(&other, &arr, Operator::Gt)?.into_bool()?;
+        let matches = compare(&other, &arr, Operator::Gt)
+            .unwrap()
+            .into_bool()
+            .unwrap();
         assert_eq!(to_int_indices(matches), [4u64]);
-        Ok(())
     }
 }

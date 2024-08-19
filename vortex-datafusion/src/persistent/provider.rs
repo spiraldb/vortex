@@ -15,8 +15,10 @@ use datafusion_expr::{Expr, TableProviderFilterPushDown, TableType};
 use datafusion_physical_plan::empty::EmptyExec;
 use datafusion_physical_plan::metrics::ExecutionPlanMetricsSet;
 use datafusion_physical_plan::ExecutionPlan;
+use itertools::Itertools;
 
 use super::config::VortexTableOptions;
+use crate::can_be_pushed_down;
 use crate::persistent::execution::VortexExec;
 
 pub struct VortexFileTableProvider {
@@ -100,7 +102,16 @@ impl TableProvider for VortexFileTableProvider {
         &self,
         filters: &[&Expr],
     ) -> DFResult<Vec<TableProviderFilterPushDown>> {
-        Ok(vec![TableProviderFilterPushDown::Inexact; filters.len()])
+        filters
+            .iter()
+            .map(|expr| {
+                if can_be_pushed_down(expr, self.schema().as_ref()) {
+                    Ok(TableProviderFilterPushDown::Exact)
+                } else {
+                    Ok(TableProviderFilterPushDown::Unsupported)
+                }
+            })
+            .try_collect()
     }
 
     fn statistics(&self) -> Option<Statistics> {

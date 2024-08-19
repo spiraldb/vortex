@@ -11,8 +11,9 @@ use vortex_flatbuffers::footer as fb;
 use super::projections::Projection;
 use crate::layouts::reader::batch::BatchReader;
 use crate::layouts::reader::buffered::BufferedReader;
+use crate::layouts::reader::cache::RelativeLayoutCache;
 use crate::layouts::reader::context::{LayoutDeserializer, LayoutId, LayoutSpec};
-use crate::layouts::reader::{Layout, ReadResult, RelativeLayoutCache, Scan};
+use crate::layouts::reader::{Layout, ReadResult, Scan};
 use crate::writer::ByteRange;
 use crate::ArrayBufferReader;
 

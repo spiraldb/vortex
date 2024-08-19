@@ -1,18 +1,26 @@
-name: Benchmarks
+name: PR Benchmarks
 
 on:
-  push:
-    branches: [ develop ]
+  pull_request:
+    types: [ labeled, synchronize ]
+    branches: [ "develop" ]
+  workflow_dispatch: { }
 
 permissions:
-  actions: read
-  contents: write
-  deployments: write
+  actions: write
+  contents: read
+  pull-requests: write
 
 jobs:
   bench:
     runs-on: ubuntu-latest-large
+    if: ${{ contains(github.event.head_commit.message, '[benchmark]') || github.event.label.name == 'benchmark' && github.event_name == 'pull_request' }}
     steps:
+      # We remove the benchmark label first so that the workflow can be re-triggered.
+      - uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: benchmark
+
       - uses: actions/checkout@v4
       - uses: ./.github/actions/cleanup
       - uses: ./.github/actions/setup-rust
@@ -36,7 +44,9 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           output-file-path: output.txt
           summary-always: true
-          auto-push: true
+          comment-always: true
+          auto-push: false
+          save-data-file: false
           fail-on-alert: false
         env:
           # AWS Credentials for R2 storage tests

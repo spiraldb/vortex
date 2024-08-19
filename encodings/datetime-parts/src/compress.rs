@@ -1,6 +1,7 @@
-use vortex::array::{PrimitiveArray, TemporalArray, TimeUnit};
+use vortex::array::{PrimitiveArray, TemporalArray};
 use vortex::compute::unary::try_cast;
 use vortex::{Array, IntoArray, IntoArrayVariant};
+use vortex_datetime_dtype::TimeUnit;
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 

@@ -136,7 +136,7 @@ impl Value {
     pub fn not_equals(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::NotEq.inverse(),
+            op: Operator::NotEq,
             rhs: self,
         }
     }
@@ -144,7 +144,7 @@ impl Value {
     pub fn gt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Gt.inverse(),
+            op: Operator::Gt.inverse().unwrap(),
             rhs: self,
         }
     }
@@ -152,7 +152,7 @@ impl Value {
     pub fn gte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Gte.inverse(),
+            op: Operator::Gte.inverse().unwrap(),
             rhs: self,
         }
     }
@@ -160,7 +160,7 @@ impl Value {
     pub fn lt(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Lt.inverse(),
+            op: Operator::Lt.inverse().unwrap(),
             rhs: self,
         }
     }
@@ -168,7 +168,7 @@ impl Value {
     pub fn lte(self, field: impl Into<FieldPath>) -> Predicate {
         Predicate {
             lhs: field.into(),
-            op: Operator::Lte.inverse(),
+            op: Operator::Lte.inverse().unwrap(),
             rhs: self,
         }
     }

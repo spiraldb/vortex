@@ -1,24 +1,20 @@
 use std::sync::Arc;
 
-use arrow_array::cast::AsArray;
-use arrow_array::{Array as _, BooleanArray, RecordBatch};
+use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
-use datafusion::arrow::buffer::{buffer_bin_and, BooleanBuffer};
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
-use datafusion_common::Result as DFResult;
+use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, TryStreamExt};
+use itertools::Itertools;
 use object_store::ObjectStore;
-use vortex::array::BoolArray;
-use vortex::arrow::FromArrowArray;
-use vortex::{Array, Context, IntoArrayVariant as _, IntoCanonical};
-use vortex_error::VortexResult;
+use vortex::Context;
+use vortex_expr::datafusion::{convert_expr_to_vortex, extract_columns_from_expr};
 use vortex_serde::io::ObjectStoreReadAt;
-use vortex_serde::layouts::reader::builder::VortexLayoutReaderBuilder;
+use vortex_serde::layouts::reader::builder::LayoutReaderBuilder;
 use vortex_serde::layouts::reader::context::{LayoutContext, LayoutDeserializer};
+use vortex_serde::layouts::reader::filtering::RowFilter;
 use vortex_serde::layouts::reader::projections::Projection;
-
-use crate::expr::convert_expr_to_vortex;
 
 pub struct VortexFileOpener {
     pub ctx: Arc<Context>,
@@ -34,7 +30,7 @@ impl FileOpener for VortexFileOpener {
         let read_at =
             ObjectStoreReadAt::new(self.object_store.clone(), file_meta.location().clone());
 
-        let mut builder = VortexLayoutReaderBuilder::new(
+        let mut builder = LayoutReaderBuilder::new(
             read_at,
             LayoutDeserializer::new(self.ctx.clone(), Arc::new(LayoutContext::default())),
         );
@@ -43,83 +39,51 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_batch_size(batch_size);
         }
 
-        let predicate = self.predicate.clone().and_then(|predicate| {
-            convert_expr_to_vortex(predicate, self.arrow_schema.as_ref()).ok()
-        });
+        let predicate_projection =
+            extract_columns_from_expr(self.predicate.as_ref(), self.arrow_schema.clone())?;
+
+        if let Some(predicate) = self
+            .predicate
+            .clone()
+            .map(|predicate| {
+                convert_expr_to_vortex(predicate, self.arrow_schema.as_ref())
+                    .map_err(|e| DataFusionError::External(e.into()))
+            })
+            .transpose()?
+        {
+            builder = builder.with_row_filter(RowFilter::new(predicate));
+        }
 
         if let Some(projection) = self.projection.as_ref() {
+            let mut projection = projection.clone();
+            for col_idx in predicate_projection.into_iter() {
+                if !projection.contains(&col_idx) {
+                    projection.push(col_idx);
+                }
+            }
+
             builder = builder.with_projection(Projection::new(projection))
         }
+
+        let original_projection_len = self.projection.as_ref().map(|v| v.len());
 
         Ok(async move {
             let reader = builder.build().await?;
 
             let stream = reader
-                .and_then(move |array| {
-                    let predicate = predicate.clone();
-                    async move {
-                        let array = if let Some(predicate) = predicate.as_ref() {
-                            let predicate_result = predicate.evaluate(&array)?;
+                .and_then(move |array| async move {
+                    let rb = RecordBatch::from(array);
 
-                            let filter_array = null_as_false(predicate_result.into_bool()?)?;
-                            vortex::compute::filter(&array, &filter_array)?
-                        } else {
-                            array
-                        };
-
-                        Ok(RecordBatch::from(array))
+                    // If we had a projection, we cut the record batch down to the desired columns
+                    if let Some(len) = original_projection_len {
+                        Ok(rb.project(&(0..len).collect_vec())?)
+                    } else {
+                        Ok(rb)
                     }
                 })
                 .map_err(|e| e.into());
             Ok(Box::pin(stream) as _)
         }
         .boxed())
-    }
-}
-
-/// Mask all null values of a Arrow boolean array to false
-fn null_as_false(array: BoolArray) -> VortexResult<Array> {
-    let arrow_array = array.into_canonical()?.into_arrow();
-    let array = arrow_array.as_boolean();
-
-    let boolean_array = match array.nulls() {
-        None => array,
-        Some(nulls) => {
-            let inner_bool_buffer = array.values();
-            let buff = buffer_bin_and(
-                inner_bool_buffer.inner(),
-                inner_bool_buffer.offset(),
-                nulls.buffer(),
-                nulls.offset(),
-                inner_bool_buffer.len(),
-            );
-            let bool_buffer =
-                BooleanBuffer::new(buff, inner_bool_buffer.offset(), inner_bool_buffer.len());
-            &BooleanArray::from(bool_buffer)
-        }
-    };
-
-    Ok(Array::from_arrow(boolean_array, false))
-}
-
-#[cfg(test)]
-mod tests {
-    use vortex::array::BoolArray;
-    use vortex::validity::Validity;
-    use vortex::IntoArrayVariant;
-
-    use crate::persistent::opener::null_as_false;
-
-    #[test]
-    fn coerces_nulls() {
-        let bool_array = BoolArray::from_vec(
-            vec![true, true, false, false],
-            Validity::Array(BoolArray::from(vec![true, false, true, false]).into()),
-        );
-        let non_null_array = null_as_false(bool_array).unwrap().into_bool().unwrap();
-        assert_eq!(
-            non_null_array.boolean_buffer().iter().collect::<Vec<_>>(),
-            vec![true, false, false, false]
-        );
     }
 }

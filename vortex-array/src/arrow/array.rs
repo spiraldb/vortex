@@ -17,11 +17,11 @@ use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
+use vortex_datetime_dtype::TimeUnit;
 use vortex_dtype::{DType, NativePType, PType};
 
-use crate::array::temporal::TemporalArray;
 use crate::array::{
-    BoolArray, NullArray, PrimitiveArray, StructArray, TimeUnit, VarBinArray, VarBinViewArray,
+    BoolArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray, VarBinViewArray,
 };
 use crate::arrow::FromArrowArray;
 use crate::stats::{Stat, Statistics};
