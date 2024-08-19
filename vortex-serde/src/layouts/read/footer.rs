@@ -80,6 +80,11 @@ impl Footer {
         let end_offset = self.leftovers_footer_offset();
         let dtype_bytes = &self.leftovers[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
 
-        root::<fb::Schema>(dtype_bytes).map_err(|e| e.into())
+        root::<fb::Message>(dtype_bytes)
+            .map_err(|e| e.into())
+            .and_then(|m| {
+                m.header_as_schema()
+                    .ok_or_else(|| vortex_err!("Message was not a schema"))
+            })
     }
 }

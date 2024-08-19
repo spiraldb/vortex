@@ -100,11 +100,11 @@ impl<W: VortexWrite> LayoutWriter<W> {
             byte_offsets.push(self.msgs.tell());
         }
 
-        // Remove last entry from the list as it would be the same as first entry of next chunk
-        byte_offsets.truncate(byte_offsets.len() - 1);
-        row_offsets.truncate(row_offsets.len() - 1);
-
         if let Some(chunk) = self.column_chunks.get_mut(column_idx) {
+            // Remove last entry from the list as it would be the same as first entry of next chunk
+            byte_offsets.truncate(byte_offsets.len() - 1);
+            row_offsets.truncate(row_offsets.len() - 1);
+
             chunk.byte_offsets.extend(byte_offsets);
             chunk.row_offsets.extend(row_offsets);
         } else {
