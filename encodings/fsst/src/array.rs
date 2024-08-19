@@ -21,14 +21,14 @@ pub struct FSSTMetadata {
 }
 
 impl FSSTArray {
-    // Build an FSST array from a set of `symbols` and `codes`.
-    //
-    // Symbols are 8-bytes and can represent short strings, each of which is assigned
-    // a code.
-    //
-    // The `codes` array is a Binary array where each binary datum is a sequence of 8-bit codes.
-    // Each code corresponds either to a symbol, or to the "escape code",
-    // which tells the decoder to emit the following byte without doing a table lookup.
+    /// Build an FSST array from a set of `symbols` and `codes`.
+    ///
+    /// Symbols are 8-bytes and can represent short strings, each of which is assigned
+    /// a code.
+    ///
+    /// The `codes` array is a Binary array where each binary datum is a sequence of 8-bit codes.
+    /// Each code corresponds either to a symbol, or to the "escape code",
+    /// which tells the decoder to emit the following byte without doing a table lookup.
     pub fn try_new(dtype: DType, symbols: Array, codes: Array) -> VortexResult<Self> {
         // Check: symbols must be a u64 array
         if symbols.dtype() != &DType::Primitive(PType::U64, Nullability::NonNullable) {
