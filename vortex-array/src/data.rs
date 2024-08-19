@@ -120,7 +120,7 @@ impl From<Array> for ArrayData {
     fn from(value: Array) -> ArrayData {
         match &value {
             Array::Data(d) => d.clone(),
-            Array::View(_) => value.clone().into(),
+            Array::View(_) => value.with_dyn(|v| v.to_array_data()),
         }
     }
 }

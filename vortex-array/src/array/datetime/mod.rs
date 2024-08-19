@@ -6,7 +6,7 @@ use vortex_dtype::{DType, ExtDType};
 use vortex_error::VortexError;
 
 use crate::array::ExtensionArray;
-use crate::{Array, ArrayDType, ArrayData, IntoArray};
+use crate::{Array, ArrayDType, ArrayData, IntoArray, ToArrayData};
 
 /// An array wrapper for primitive values that have an associated temporal meaning.
 ///
@@ -177,7 +177,7 @@ impl TemporalArray {
 
 impl From<TemporalArray> for ArrayData {
     fn from(value: TemporalArray) -> Self {
-        value.ext.into()
+        value.ext.to_array_data()
     }
 }
 
