@@ -3,7 +3,6 @@
 #![allow(clippy::nonminimal_bool)]
 
 use std::any::Any;
-use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -13,7 +12,6 @@ use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema, SchemaRef};
 use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::{DataFrame, SessionContext};
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult};
 use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_expr::{Expr, Operator};
@@ -26,13 +24,10 @@ use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant};
 use vortex_error::{vortex_err, VortexError, VortexResult};
 
-pub mod expr;
 pub mod memory;
 pub mod persistent;
-pub mod scalar;
 
 mod datatype;
-mod eval;
 mod plans;
 
 const SUPPORTED_BINARY_OPS: &[Operator] = &[
@@ -167,46 +162,6 @@ fn can_be_pushed_down(expr: &Expr, schema: &Schema) -> bool {
         Expr::Literal(lit) => supported_data_types(lit.data_type()),
         _ => false,
     }
-}
-
-fn get_filter_projection(exprs: &[Expr], schema: SchemaRef) -> VortexResult<Vec<usize>> {
-    let referenced_columns: HashSet<String> = exprs
-        .iter()
-        .map(get_column_references)
-        .collect::<VortexResult<Vec<_>>>()?
-        .into_iter()
-        .flatten()
-        .collect();
-
-    let mut projection: Vec<usize> = referenced_columns
-        .iter()
-        .map(|col_name| {
-            schema
-                .column_with_name(col_name)
-                .ok_or_else(|| vortex_err!("Column not found: {}", col_name))
-                .map(|c| c.0)
-        })
-        .collect::<VortexResult<Vec<_>>>()?;
-    projection.sort();
-
-    Ok(projection)
-}
-
-/// Extract out the columns from our table referenced by the expression.
-fn get_column_references(expr: &Expr) -> VortexResult<HashSet<String>> {
-    let mut references = HashSet::new();
-
-    expr.apply(|node| match node {
-        Expr::Column(col) => {
-            references.insert(col.name.clone());
-
-            Ok(TreeNodeRecursion::Continue)
-        }
-        _ => Ok(TreeNodeRecursion::Continue),
-    })
-    .map_err(VortexError::from)?;
-
-    Ok(references)
 }
 
 /// Physical plan node for scans against an in-memory, possibly chunked Vortex Array.

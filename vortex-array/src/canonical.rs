@@ -14,13 +14,12 @@ use arrow_array::{
 };
 use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
+use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::array::temporal::{is_temporal_ext_type, TemporalMetadata};
 use crate::array::{
-    BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray, TemporalArray, TimeUnit,
-    VarBinArray,
+    BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray,
 };
 use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::try_cast;

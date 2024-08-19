@@ -1,0 +1,29 @@
+[package]
+name = "vortex-fsst"
+version = { workspace = true }
+description = "Vortex FSST string array encoding"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+rstest = { workspace = true }
+
+[dependencies]
+arrow-array = { workspace = true }
+fsst-rs = { workspace = true }
+serde = { workspace = true }
+
+vortex-array = { workspace = true }
+vortex-buffer = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
+vortex-scalar = { workspace = true }

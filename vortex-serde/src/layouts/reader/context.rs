@@ -8,8 +8,9 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::footer as fb;
 use vortex_flatbuffers::footer::LayoutVariant;
 
+use crate::layouts::reader::cache::RelativeLayoutCache;
 use crate::layouts::reader::layouts::{ChunkedLayoutSpec, ColumnLayoutSpec, FlatLayout};
-use crate::layouts::reader::{Layout, RelativeLayoutCache, Scan};
+use crate::layouts::reader::{Layout, Scan};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct LayoutId(pub u16);

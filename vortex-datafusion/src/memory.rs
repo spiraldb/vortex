@@ -6,18 +6,20 @@ use async_trait::async_trait;
 use datafusion::catalog::Session;
 use datafusion::datasource::TableProvider;
 use datafusion::prelude::*;
-use datafusion_common::{DataFusionError, Result as DFResult};
+use datafusion_common::{Result as DFResult, ToDFSchema};
+use datafusion_expr::utils::conjunction;
 use datafusion_expr::{TableProviderFilterPushDown, TableType};
-use datafusion_physical_expr::EquivalenceProperties;
+use datafusion_physical_expr::{create_physical_expr, EquivalenceProperties, PhysicalExpr};
 use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanProperties};
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
 use vortex_error::VortexError;
+use vortex_expr::datafusion::extract_columns_from_expr;
 
 use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
-use crate::{can_be_pushed_down, get_filter_projection, VortexScanExec};
+use crate::{can_be_pushed_down, VortexScanExec};
 
 /// A [`TableProvider`] that exposes an existing Vortex Array to the DataFusion SQL engine.
 ///
@@ -83,34 +85,33 @@ impl TableProvider for VortexMemTable {
         filters: &[Expr],
         _limit: Option<usize>,
     ) -> DFResult<Arc<dyn ExecutionPlan>> {
-        let filter_exprs = if filters.is_empty() {
-            None
-        } else {
-            Some(filters)
-        };
-
         let output_projection: Vec<usize> = match projection {
             None => (0..self.schema_ref.fields().len()).collect(),
             Some(proj) => proj.clone(),
         };
 
-        match filter_exprs {
+        match conjunction(filters.to_vec()) {
             // If there is a filter expression, we execute in two phases, first performing a filter
             // on the input to get back row indices, and then taking the remaining struct columns
             // using the calculated indices from the filter.
-            Some(filter_exprs) => {
-                let filter_projection =
-                    get_filter_projection(filter_exprs, self.schema_ref.clone())
-                        .map_err(DataFusionError::from)?;
+            Some(expr) => {
+                let df_schema = self.schema_ref.clone().to_dfschema()?;
 
-                Ok(make_filter_then_take_plan(
+                let filter_expr = create_physical_expr(&expr, &df_schema, state.execution_props())?;
+
+                let filter_projection =
+                    extract_columns_from_expr(Some(&filter_expr), self.schema_ref.clone())?
+                        .into_iter()
+                        .collect();
+
+                make_filter_then_take_plan(
                     self.schema_ref.clone(),
-                    filter_exprs,
+                    filter_expr,
                     filter_projection,
                     self.array.clone(),
                     output_projection.clone(),
                     state,
-                ))
+                )
             }
 
             // If no filters were pushed down, we materialize the entire StructArray into a
@@ -199,24 +200,25 @@ impl VortexMemTableOptions {
 /// columns.
 fn make_filter_then_take_plan(
     schema: SchemaRef,
-    filter_exprs: &[Expr],
+    filter_expr: Arc<dyn PhysicalExpr>,
     filter_projection: Vec<usize>,
     chunked_array: ChunkedArray,
     output_projection: Vec<usize>,
     _session_state: &dyn Session,
-) -> Arc<dyn ExecutionPlan> {
-    let row_selector_op = Arc::new(RowSelectorExec::new(
-        filter_exprs,
+) -> DFResult<Arc<dyn ExecutionPlan>> {
+    let row_selector_op = Arc::new(RowSelectorExec::try_new(
+        filter_expr,
         filter_projection,
         &chunked_array,
-    ));
+        schema.clone(),
+    )?);
 
-    Arc::new(TakeRowsExec::new(
+    Ok(Arc::new(TakeRowsExec::new(
         schema.clone(),
         &output_projection,
         row_selector_op.clone(),
         &chunked_array,
-    ))
+    )))
 }
 
 #[cfg(test)]

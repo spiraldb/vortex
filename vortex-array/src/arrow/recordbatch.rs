@@ -6,7 +6,7 @@ use vortex_error::{VortexError, VortexResult};
 use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
-use crate::{Array, IntoArray, IntoCanonical};
+use crate::{Array, IntoArrayVariant, IntoCanonical};
 
 impl TryFrom<RecordBatch> for Array {
     type Error = VortexError;
@@ -37,9 +37,12 @@ impl TryFrom<Array> for RecordBatch {
     type Error = VortexError;
 
     fn try_from(value: Array) -> VortexResult<Self> {
-        let array_ref = value.into_canonical()?.into_arrow()?;
-        let struct_array = as_struct_array(array_ref.as_ref());
-        Ok(RecordBatch::from(struct_array))
+        let struct_arr = value.into_struct()
+        .map_err(|err| {
+            vortex_err!("RecordBatch can only be constructed from a Vortex StructArray: {err}")
+        })?;
+
+        Ok(RecordBatch::from(struct_arr))
     }
 }
 
@@ -47,6 +50,10 @@ impl TryFrom<StructArray> for RecordBatch {
     type Error = VortexError;
 
     fn try_from(value: StructArray) -> VortexResult<Self> {
-        RecordBatch::try_from(value.into_array())
+        let array_ref = value
+            .into_canonical()?
+            .into_arrow()?;
+        let struct_array = as_struct_array(array_ref.as_ref());
+        Ok(Self::from(struct_array))
     }
 }

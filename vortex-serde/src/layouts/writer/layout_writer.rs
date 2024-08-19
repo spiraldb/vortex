@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::mem;
 
-use flatbuffers::{FlatBufferBuilder, WIPOffset};
+use flatbuffers::FlatBufferBuilder;
 use futures::{Stream, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::{ChunkedArray, StructArray};
@@ -11,10 +11,11 @@ use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
+use vortex_flatbuffers::WriteFlatBuffer;
 
 use crate::io::VortexWrite;
 use crate::layouts::reader::{ChunkedLayoutSpec, ColumnLayoutSpec};
+use crate::layouts::writer::footer::Footer;
 use crate::layouts::writer::layouts::{FlatLayout, Layout, NestedLayout};
 use crate::layouts::MAGIC_BYTES;
 use crate::messages::IPCSchema;
@@ -26,34 +27,6 @@ pub struct LayoutWriter<W> {
 
     dtype: Option<DType>,
     column_chunks: Vec<ChunkOffsets>,
-}
-
-#[derive(Debug)]
-pub struct Footer {
-    layout: Layout,
-}
-
-impl Footer {
-    pub fn new(layout: Layout) -> Self {
-        Self { layout }
-    }
-}
-
-impl WriteFlatBuffer for Footer {
-    type Target<'a> = fb::Footer<'a>;
-
-    fn write_flatbuffer<'fb>(
-        &self,
-        fbb: &mut FlatBufferBuilder<'fb>,
-    ) -> WIPOffset<Self::Target<'fb>> {
-        let layout_offset = self.layout.write_flatbuffer(fbb);
-        fb::Footer::create(
-            fbb,
-            &fb::FooterArgs {
-                layout: Some(layout_offset),
-            },
-        )
-    }
 }
 
 impl<W: VortexWrite> LayoutWriter<W> {

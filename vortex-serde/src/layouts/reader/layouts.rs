@@ -11,8 +11,9 @@ use vortex_flatbuffers::footer as fb;
 use super::projections::Projection;
 use crate::layouts::reader::batch::BatchReader;
 use crate::layouts::reader::buffered::BufferedReader;
+use crate::layouts::reader::cache::RelativeLayoutCache;
 use crate::layouts::reader::context::{LayoutDeserializer, LayoutId, LayoutSpec};
-use crate::layouts::reader::{Layout, ReadResult, RelativeLayoutCache, Scan};
+use crate::layouts::reader::{Layout, ReadResult, Scan};
 use crate::writer::ByteRange;
 use crate::ArrayBufferReader;
 
@@ -315,10 +316,9 @@ impl Layout for ChunkedLayout {
                         )
                     })
                     .collect::<VortexResult<VecDeque<_>>>()?;
-                let mut reader = BufferedReader::new(children, self.scan.batch_size);
-                let rr = reader.read();
+                let reader = BufferedReader::new(children, self.scan.batch_size);
                 self.state = ChunkedLayoutState::ReadChunks(reader);
-                rr
+                self.read()
             }
             ChunkedLayoutState::ReadChunks(cr) => cr.read(),
         }

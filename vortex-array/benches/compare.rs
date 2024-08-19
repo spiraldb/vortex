@@ -5,11 +5,11 @@ use itertools::Itertools;
 use rand::distributions::Uniform;
 use rand::{thread_rng, Rng};
 use vortex::array::BoolArray;
+use vortex::compute::Operator;
 use vortex::IntoArray;
 use vortex_error::VortexError;
-use vortex_expr::Operator;
 
-fn filter_bool_indices(c: &mut Criterion) {
+fn compare_bool(c: &mut Criterion) {
     let mut group = c.benchmark_group("compare");
 
     let mut rng = thread_rng();
@@ -36,7 +36,7 @@ fn filter_bool_indices(c: &mut Criterion) {
     });
 }
 
-fn filter_indices(c: &mut Criterion) {
+fn compare_primitive(c: &mut Criterion) {
     let mut group = c.benchmark_group("compare");
 
     let mut rng = thread_rng();
@@ -60,5 +60,5 @@ fn filter_indices(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, filter_indices, filter_bool_indices);
+criterion_group!(benches, compare_primitive, compare_bool);
 criterion_main!(benches);

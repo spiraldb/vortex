@@ -44,9 +44,9 @@ pin-project = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-buffer = { workspace = true }
+vortex-datetime-dtype = { workspace = true }
 vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
-vortex-expr = { workspace = true }
 vortex-flatbuffers = { workspace = true, optional = true }
 vortex-scalar = { workspace = true }
 
@@ -54,14 +54,14 @@ vortex-scalar = { workspace = true }
 default = ["flatbuffers", "serde"]
 arbitrary = ["dep:arbitrary"]
 flatbuffers = [
-  "dep:flatbuffers",
-  "dep:flexbuffers",
-  "dep:vortex-flatbuffers",
-  "vortex-flatbuffers/array",
-  "vortex-dtype/flatbuffers",
-  "vortex-error/flatbuffers",
-  "vortex-error/flexbuffers",
-  "vortex-scalar/flatbuffers",
+    "dep:flatbuffers",
+    "dep:flexbuffers",
+    "dep:vortex-flatbuffers",
+    "vortex-flatbuffers/array",
+    "vortex-dtype/flatbuffers",
+    "vortex-error/flatbuffers",
+    "vortex-error/flexbuffers",
+    "vortex-scalar/flatbuffers",
 ]
 serde = ["vortex-dtype/serde", "vortex-scalar/serde"]
 
@@ -80,10 +80,6 @@ harness = false
 
 [[bench]]
 name = "scalar_subtract"
-harness = false
-
-[[bench]]
-name = "filter_indices"
 harness = false
 
 [[bench]]

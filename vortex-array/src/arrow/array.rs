@@ -17,20 +17,20 @@ use arrow_buffer::buffer::{NullBuffer, OffsetBuffer};
 use arrow_buffer::{ArrowNativeType, Buffer, ScalarBuffer};
 use arrow_schema::{DataType, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
+use vortex_datetime_dtype::TimeUnit;
 use vortex_dtype::{DType, NativePType, PType};
 
-use crate::array::temporal::TemporalArray;
 use crate::array::{
-    BoolArray, NullArray, PrimitiveArray, StructArray, TimeUnit, VarBinArray, VarBinViewArray,
+    BoolArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray, VarBinViewArray,
 };
 use crate::arrow::FromArrowArray;
 use crate::stats::{Stat, Statistics};
 use crate::validity::Validity;
-use crate::{Array, ArrayData};
+use crate::{Array, ArrayData, ToArrayData};
 
 impl From<Buffer> for ArrayData {
     fn from(value: Buffer) -> Self {
-        PrimitiveArray::new(value.into(), PType::U8, Validity::NonNullable).into()
+        PrimitiveArray::new(value.into(), PType::U8, Validity::NonNullable).to_array_data()
     }
 }
 
@@ -38,7 +38,7 @@ impl From<NullBuffer> for ArrayData {
     fn from(value: NullBuffer) -> Self {
         BoolArray::try_new(value.into_inner(), Validity::NonNullable)
             .unwrap_or_else(|err| panic!("Failed to convert null buffer to BoolArray: {}", err))
-            .into()
+            .to_array_data()
     }
 }
 
@@ -47,7 +47,8 @@ where
     T: ArrowNativeType + NativePType,
 {
     fn from(value: ScalarBuffer<T>) -> Self {
-        PrimitiveArray::new(value.into_inner().into(), T::PTYPE, Validity::NonNullable).into()
+        PrimitiveArray::new(value.into_inner().into(), T::PTYPE, Validity::NonNullable)
+            .to_array_data()
     }
 }
 
@@ -61,7 +62,7 @@ where
             O::PTYPE,
             Validity::NonNullable,
         )
-        .into();
+        .to_array_data();
         array_data.set(Stat::IsSorted, true.into());
         array_data.set(Stat::IsStrictSorted, true.into());
         array_data

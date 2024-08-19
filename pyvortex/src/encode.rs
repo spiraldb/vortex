@@ -7,7 +7,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vortex::array::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
-use vortex::Array;
+use vortex::{Array, ToArrayData};
 use vortex_dtype::DType;
 use vortex_error::VortexError;
 
@@ -46,7 +46,7 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
             obj.py(),
             ChunkedArray::try_new(encoded_chunks, dtype)
                 .map_err(PyVortexError::map_err)?
-                .into(),
+                .to_array_data(),
         )
     } else if obj.is_instance(&table)? {
         let array_stream = ArrowArrayStreamReader::from_pyarrow_bound(obj)?;
@@ -60,7 +60,7 @@ pub fn encode(obj: &Bound<PyAny>) -> PyResult<Py<PyArray>> {
             obj.py(),
             ChunkedArray::try_new(chunks, dtype)
                 .map_err(PyVortexError::map_err)?
-                .into(),
+                .to_array_data(),
         )
     } else {
         Err(PyValueError::new_err("Cannot convert object to enc array"))

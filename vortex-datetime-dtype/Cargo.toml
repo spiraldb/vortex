@@ -1,0 +1,27 @@
+[package]
+name = "vortex-datetime-dtype"
+version = { workspace = true }
+description = "Vortex datetime extension dtype"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+arrow-schema = { workspace = true, optional = true }
+lazy_static = { workspace = true }
+num_enum = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+vortex-dtype = { workspace = true }
+vortex-error = { workspace = true }
+
+[features]
+default = ["arrow"]
+arrow = ["dep:arrow-schema"]
+
+[lints]
+workspace = true

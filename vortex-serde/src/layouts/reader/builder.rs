@@ -5,15 +5,16 @@ use vortex::{Array, ArrayDType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::io::VortexReadAt;
+use crate::layouts::reader::cache::{LayoutMessageCache, RelativeLayoutCache};
 use crate::layouts::reader::context::LayoutDeserializer;
 use crate::layouts::reader::filtering::RowFilter;
 use crate::layouts::reader::footer::Footer;
 use crate::layouts::reader::projections::Projection;
 use crate::layouts::reader::stream::VortexLayoutBatchStream;
-use crate::layouts::reader::{LayoutMessageCache, RelativeLayoutCache, Scan, DEFAULT_BATCH_SIZE};
+use crate::layouts::reader::{Scan, DEFAULT_BATCH_SIZE, FILE_POSTSCRIPT_SIZE, INITIAL_READ_SIZE};
 use crate::layouts::MAGIC_BYTES;
 
-pub struct VortexLayoutReaderBuilder<R> {
+pub struct LayoutReaderBuilder<R> {
     reader: R,
     layout_serde: LayoutDeserializer,
     projection: Option<Projection>,
@@ -23,11 +24,7 @@ pub struct VortexLayoutReaderBuilder<R> {
     batch_size: Option<usize>,
 }
 
-impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
-    // Recommended read-size according to the AWS performance guide
-    const FOOTER_READ_SIZE: usize = 8 * 1024 * 1024;
-    const FOOTER_TRAILER_SIZE: usize = 20;
-
+impl<R: VortexReadAt> LayoutReaderBuilder<R> {
     pub fn new(reader: R, layout_serde: LayoutDeserializer) -> Self {
         Self {
             reader,
@@ -108,15 +105,15 @@ impl<R: VortexReadAt> VortexLayoutReaderBuilder<R> {
     async fn read_footer(&mut self) -> VortexResult<Footer> {
         let file_length = self.len().await;
 
-        if file_length < Self::FOOTER_TRAILER_SIZE {
+        if file_length < FILE_POSTSCRIPT_SIZE {
             vortex_bail!(
                 "Malformed vortex file, length {} must be at least {}",
                 file_length,
-                Self::FOOTER_TRAILER_SIZE,
+                FILE_POSTSCRIPT_SIZE,
             )
         }
 
-        let read_size = Self::FOOTER_READ_SIZE.min(file_length);
+        let read_size = INITIAL_READ_SIZE.min(file_length);
         let mut buf = BytesMut::with_capacity(read_size);
         unsafe { buf.set_len(read_size) }
 

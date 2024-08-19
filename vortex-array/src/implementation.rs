@@ -7,7 +7,7 @@ use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata,
-    IntoArray, TryDeserializeArrayMetadata,
+    IntoArray, ToArrayData, TryDeserializeArrayMetadata,
 };
 
 /// Trait the defines the set of types relating to an array.
@@ -207,14 +207,14 @@ impl<T: AsArray> ArrayStatistics for T {
     }
 }
 
-impl<D> From<D> for ArrayData
+impl<D> ToArrayData for D
 where
-    D: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata,
+    D: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata + Clone,
 {
-    fn from(value: D) -> Self {
+    fn to_array_data(&self) -> ArrayData {
         // TODO: move metadata call `Array::View` match
-        let metadata = value.metadata();
-        let array = value.into_array();
+        let metadata = self.metadata();
+        let array = self.clone().into_array();
         match array {
             Array::Data(d) => d,
             Array::View(ref view) => {
