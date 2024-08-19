@@ -70,20 +70,30 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
 
     pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
-        let mut read_projection = self.projection.unwrap_or_default();
-        let result_projection =
-            if let Some(filter_columns) = self.row_filter.as_ref().map(|f| f.filter.references()) {
-                let result_proj = match read_projection {
-                    Projection::All => Projection::All,
-                    Projection::Flat(ref v) => {
-                        Projection::Flat((0..v.len()).map(Field::from).collect())
-                    }
-                };
-                read_projection.extend(filter_columns);
-                result_proj
-            } else {
-                Projection::All
-            };
+
+        // TODO(robert): Don't leak filter references into read projection
+        let (read_projection, result_projection) = if let Some(filter_columns) = self
+            .row_filter
+            .as_ref()
+            .map(|f| f.filter.references())
+            .filter(|refs| !refs.is_empty())
+            .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
+            .transpose()?
+        {
+            match self.projection.unwrap_or_default() {
+                Projection::All => (Projection::All, Projection::All),
+                Projection::Flat(mut v) => {
+                    let original_len = v.len();
+                    v.extend(filter_columns.into_iter());
+                    (
+                        Projection::Flat(v),
+                        Projection::Flat((0..original_len).map(Field::from).collect()),
+                    )
+                }
+            }
+        } else {
+            (Projection::All, Projection::All)
+        };
 
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
