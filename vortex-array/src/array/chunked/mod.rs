@@ -16,7 +16,7 @@ use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
-use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
 
@@ -157,12 +157,19 @@ impl AcceptArrayVisitor for ChunkedArray {
 }
 
 impl ArrayValidity for ChunkedArray {
-    fn is_valid(&self, _index: usize) -> bool {
-        todo!()
+    fn is_valid(&self, index: usize) -> bool {
+        let (chunk, offset_in_chunk) = self.find_chunk_idx(index);
+        self.chunk(chunk)
+            .expect("must be a valid chunk index")
+            .with_dyn(|a| a.is_valid(offset_in_chunk))
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        todo!()
+        let validity: Validity = self
+            .chunks()
+            .map(|a| a.with_dyn(|arr| arr.logical_validity()))
+            .collect();
+        validity.to_logical(self.len())
     }
 }
 
