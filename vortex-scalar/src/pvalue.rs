@@ -25,6 +25,7 @@ pub enum PValue {
 macro_rules! as_primitive {
     ($T:ty, $PT:tt) => {
         paste! {
+            #[doc = "Access PValue as `" $T "`, returning `None` if conversion is unsuccessful"]
             pub fn [<as_ $T>](self) -> Option<$T> {
                 if let PValue::$PT(v) = self {
                     Some(v)
