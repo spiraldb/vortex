@@ -52,7 +52,6 @@ impl RowSelectorExec {
         filter_expr: Arc<dyn PhysicalExpr>,
         filter_projection: Vec<usize>,
         chunked_array: &ChunkedArray,
-        schema: SchemaRef,
     ) -> DFResult<Self> {
         let cached_plan_props = PlanProperties::new(
             EquivalenceProperties::new(ROW_SELECTOR_SCHEMA_REF.clone()),
@@ -60,7 +59,7 @@ impl RowSelectorExec {
             ExecutionMode::Bounded,
         );
 
-        let filter_expr = convert_expr_to_vortex(filter_expr, schema.as_ref())?;
+        let filter_expr = convert_expr_to_vortex(filter_expr)?;
 
         Ok(Self {
             filter_expr,
@@ -440,7 +439,7 @@ mod test {
         let filtering_stream = RowIndicesStream {
             chunked_array: chunked_array.clone(),
             chunk_idx: 0,
-            conjunction_expr: convert_expr_to_vortex(df_expr, &schema).unwrap(),
+            conjunction_expr: convert_expr_to_vortex(df_expr).unwrap(),
             filter_projection: vec![0, 1],
         };
 

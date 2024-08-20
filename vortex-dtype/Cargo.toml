@@ -35,7 +35,6 @@ serde_test = { workspace = true }
 workspace = true
 
 [features]
-# Uncomment for improved IntelliJ support
 flatbuffers = [
     "dep:flatbuffers",
     "dep:vortex-flatbuffers",

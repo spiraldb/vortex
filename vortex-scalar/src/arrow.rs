@@ -1,18 +1,28 @@
 use std::sync::Arc;
 
 use arrow_array::*;
+use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, PType};
 
 use crate::{PValue, Scalar};
 
+macro_rules! value_to_arrow_scalar {
+    ($V:expr, $AR:ty) => {
+        std::sync::Arc::new(
+            $V.map(<$AR>::new_scalar)
+                .unwrap_or_else(|| arrow_array::Scalar::new(<$AR>::new_null(1))),
+        )
+    };
+}
+
 impl From<&Scalar> for Arc<dyn Datum> {
     fn from(value: &Scalar) -> Arc<dyn Datum> {
-        match value.dtype {
+        match value.dtype() {
             DType::Null => Arc::new(NullArray::new(1)),
-            DType::Bool(_) => match value.value.as_bool().expect("should be bool") {
-                Some(b) => Arc::new(BooleanArray::new_scalar(b)),
-                None => Arc::new(BooleanArray::new_null(1)),
-            },
+            DType::Bool(_) => value_to_arrow_scalar!(
+                value.value.as_bool().expect("should be a bool"),
+                BooleanArray
+            ),
             DType::Primitive(ptype, _) => {
                 let pvalue = value.value.as_pvalue().expect("should be pvalue");
                 match pvalue {
@@ -45,24 +55,19 @@ impl From<&Scalar> for Arc<dyn Datum> {
                 }
             }
             DType::Utf8(_) => {
-                match value
-                    .value
-                    .as_buffer_string()
-                    .expect("should be buffer string")
-                {
-                    Some(s) => Arc::new(StringArray::new_scalar(s.as_str())),
-                    None => Arc::new(StringArray::new_null(1)),
-                }
+                value_to_arrow_scalar!(
+                    value
+                        .value
+                        .as_buffer_string()
+                        .expect("should be buffer string"),
+                    StringArray
+                )
             }
             DType::Binary(_) => {
-                match value
-                    .value
-                    .as_buffer_string()
-                    .expect("should be buffer string")
-                {
-                    Some(s) => Arc::new(BinaryArray::new_scalar(s.as_bytes())),
-                    None => Arc::new(BinaryArray::new_null(1)),
-                }
+                value_to_arrow_scalar!(
+                    value.value.as_buffer().expect("should be a buffer"),
+                    BinaryArray
+                )
             }
             DType::Struct(..) => {
                 todo!("struct scalar conversion")
@@ -70,8 +75,66 @@ impl From<&Scalar> for Arc<dyn Datum> {
             DType::List(..) => {
                 todo!("list scalar conversion")
             }
-            DType::Extension(..) => {
-                todo!("extension scalar conversion")
+            DType::Extension(ext, _) => {
+                if is_temporal_ext_type(ext.id()) {
+                    let metadata = TemporalMetadata::try_from(ext).unwrap();
+                    let pv = value.value.as_pvalue().expect("must be a pvalue");
+                    return match metadata {
+                        TemporalMetadata::Time(u) => match u {
+                            TimeUnit::Ns => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i64()),
+                                Time64NanosecondArray
+                            ),
+                            TimeUnit::Us => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i64()),
+                                Time64MicrosecondArray
+                            ),
+                            TimeUnit::Ms => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i32()),
+                                Time32MillisecondArray
+                            ),
+                            TimeUnit::S => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i32()),
+                                Time32SecondArray
+                            ),
+                            TimeUnit::D => {
+                                unreachable!("Unsupported TimeUnit {u} for {}", ext.id())
+                            }
+                        },
+                        TemporalMetadata::Date(u) => match u {
+                            TimeUnit::Ms => {
+                                value_to_arrow_scalar!(pv.and_then(|p| p.as_i64()), Date64Array)
+                            }
+                            TimeUnit::D => {
+                                value_to_arrow_scalar!(pv.and_then(|p| p.as_i32()), Date32Array)
+                            }
+                            _ => unreachable!("Unsupported TimeUnit {u} for {}", ext.id()),
+                        },
+                        TemporalMetadata::Timestamp(u, _) => match u {
+                            TimeUnit::Ns => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i64()),
+                                TimestampNanosecondArray
+                            ),
+                            TimeUnit::Us => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i64()),
+                                TimestampMicrosecondArray
+                            ),
+                            TimeUnit::Ms => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i64()),
+                                TimestampMillisecondArray
+                            ),
+                            TimeUnit::S => value_to_arrow_scalar!(
+                                pv.and_then(|p| p.as_i64()),
+                                TimestampSecondArray
+                            ),
+                            TimeUnit::D => {
+                                unreachable!("Unsupported TimeUnit {u} for {}", ext.id())
+                            }
+                        },
+                    };
+                }
+
+                todo!("Non temporal extension scalar conversion")
             }
         }
     }

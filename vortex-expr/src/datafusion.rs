@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion_common::arrow::datatypes::{Schema, SchemaRef};
+use datafusion_common::arrow::datatypes::SchemaRef;
 use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
 use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_expr::Operator as DFOperator;
@@ -16,17 +16,13 @@ use crate::{BinaryExpr, Column, Operator};
 
 pub fn convert_expr_to_vortex(
     physical_expr: Arc<dyn PhysicalExpr>,
-    input_schema: &Schema,
 ) -> VortexResult<Arc<dyn VortexExpr>> {
-    if physical_expr.data_type(input_schema).unwrap().is_temporal() {
-        vortex_bail!("Doesn't support evaluating operations over temporal values");
-    }
     if let Some(binary_expr) = physical_expr
         .as_any()
         .downcast_ref::<datafusion_physical_expr::expressions::BinaryExpr>()
     {
-        let left = convert_expr_to_vortex(binary_expr.left().clone(), input_schema)?;
-        let right = convert_expr_to_vortex(binary_expr.right().clone(), input_schema)?;
+        let left = convert_expr_to_vortex(binary_expr.left().clone())?;
+        let right = convert_expr_to_vortex(binary_expr.right().clone())?;
         let operator = *binary_expr.op();
 
         return Ok(Arc::new(BinaryExpr::new(left, operator.try_into()?, right)) as _);

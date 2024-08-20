@@ -2,6 +2,7 @@ use core::fmt::Display;
 use std::mem;
 
 use num_traits::NumCast;
+use paste::paste;
 use vortex_dtype::half::f16;
 use vortex_dtype::PType;
 use vortex_error::{vortex_err, VortexError};
@@ -19,6 +20,20 @@ pub enum PValue {
     F16(f16),
     F32(f32),
     F64(f64),
+}
+
+macro_rules! as_primitive {
+    ($T:ty, $PT:tt) => {
+        paste! {
+            pub fn [<as_ $T>](self) -> Option<$T> {
+                if let PValue::$PT(v) = self {
+                    Some(v)
+                } else {
+                    None
+                }
+            }
+        }
+    };
 }
 
 impl PValue {
@@ -100,6 +115,18 @@ impl PValue {
             },
         }
     }
+
+    as_primitive!(i8, I8);
+    as_primitive!(i16, I16);
+    as_primitive!(i32, I32);
+    as_primitive!(i64, I64);
+    as_primitive!(u8, U8);
+    as_primitive!(u16, U16);
+    as_primitive!(u32, U32);
+    as_primitive!(u64, U64);
+    as_primitive!(f16, F16);
+    as_primitive!(f32, F32);
+    as_primitive!(f64, F64);
 }
 
 macro_rules! int_pvalue {
@@ -166,6 +193,7 @@ impl TryFrom<PValue> for f16 {
         // We serialize f16 as u16.
         match value {
             PValue::U16(u) => Some(Self::from_bits(u)),
+            PValue::F16(u) => Some(u),
             PValue::F32(f) => <Self as NumCast>::from(f),
             PValue::F64(f) => <Self as NumCast>::from(f),
             _ => None,

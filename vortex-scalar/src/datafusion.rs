@@ -1,6 +1,8 @@
 #![cfg(feature = "datafusion")]
 use datafusion_common::ScalarValue;
+use vortex_buffer::Buffer;
 use vortex_datetime_dtype::arrow::make_temporal_ext_dtype;
+use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, Nullability, PType};
 
 use crate::{PValue, Scalar};
@@ -61,8 +63,56 @@ impl From<Scalar> for ScalarValue {
             DType::List(..) => {
                 todo!("list scalar conversion")
             }
-            DType::Extension(..) => {
-                todo!("extension scalar conversion")
+            DType::Extension(ext, _) => {
+                if is_temporal_ext_type(ext.id()) {
+                    let metadata = TemporalMetadata::try_from(&ext).unwrap();
+                    let pv = value.value.as_pvalue().expect("must be a pvalue");
+                    return match metadata {
+                        TemporalMetadata::Time(u) => match u {
+                            TimeUnit::Ns => {
+                                ScalarValue::Time64Nanosecond(pv.and_then(|p| p.as_i64()))
+                            }
+                            TimeUnit::Us => {
+                                ScalarValue::Time64Microsecond(pv.and_then(|p| p.as_i64()))
+                            }
+                            TimeUnit::Ms => {
+                                ScalarValue::Time32Millisecond(pv.and_then(|p| p.as_i32()))
+                            }
+                            TimeUnit::S => ScalarValue::Time32Second(pv.and_then(|p| p.as_i32())),
+                            TimeUnit::D => {
+                                unreachable!("Unsupported TimeUnit {u} for {}", ext.id())
+                            }
+                        },
+                        TemporalMetadata::Date(u) => match u {
+                            TimeUnit::Ms => ScalarValue::Date64(pv.and_then(|p| p.as_i64())),
+                            TimeUnit::D => ScalarValue::Date32(pv.and_then(|p| p.as_i32())),
+                            _ => unreachable!("Unsupported TimeUnit {u} for {}", ext.id()),
+                        },
+                        TemporalMetadata::Timestamp(u, tz) => match u {
+                            TimeUnit::Ns => ScalarValue::TimestampNanosecond(
+                                pv.and_then(|p| p.as_i64()),
+                                tz.map(|t| t.into()),
+                            ),
+                            TimeUnit::Us => ScalarValue::TimestampMicrosecond(
+                                pv.and_then(|p| p.as_i64()),
+                                tz.map(|t| t.into()),
+                            ),
+                            TimeUnit::Ms => ScalarValue::TimestampMillisecond(
+                                pv.and_then(|p| p.as_i64()),
+                                tz.map(|t| t.into()),
+                            ),
+                            TimeUnit::S => ScalarValue::TimestampSecond(
+                                pv.and_then(|p| p.as_i64()),
+                                tz.map(|t| t.into()),
+                            ),
+                            TimeUnit::D => {
+                                unreachable!("Unsupported TimeUnit {u} for {}", ext.id())
+                            }
+                        },
+                    };
+                }
+
+                todo!("Non temporal extension scalar conversion")
             }
         }
     }
@@ -84,18 +134,35 @@ impl From<ScalarValue> for Scalar {
             ScalarValue::UInt16(i) => i.map(Scalar::from),
             ScalarValue::UInt32(i) => i.map(Scalar::from),
             ScalarValue::UInt64(i) => i.map(Scalar::from),
-            ScalarValue::Utf8(s) => s.as_ref().map(|s| Scalar::from(s.as_str())),
-            ScalarValue::Utf8View(s) => s.as_ref().map(|s| Scalar::from(s.as_str())),
-            ScalarValue::LargeUtf8(s) => s.as_ref().map(|s| Scalar::from(s.as_str())),
-            ScalarValue::Binary(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
-            ScalarValue::BinaryView(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
-            ScalarValue::LargeBinary(b) => b.as_ref().map(|b| Scalar::from(b.clone())),
-            ScalarValue::FixedSizeBinary(_, b) => b.map(|b| Scalar::from(b.clone())),
-            ScalarValue::Date32(v) => v.map(|i| {
+            ScalarValue::Utf8(s) | ScalarValue::Utf8View(s) | ScalarValue::LargeUtf8(s) => {
+                s.as_ref().map(|s| Scalar::from(s.as_str()))
+            }
+            ScalarValue::Binary(b)
+            | ScalarValue::BinaryView(b)
+            | ScalarValue::LargeBinary(b)
+            | ScalarValue::FixedSizeBinary(_, b) => b
+                .as_ref()
+                .map(|b| Scalar::binary(Buffer::from(b.clone()), Nullability::Nullable)),
+            ScalarValue::Date32(v)
+            | ScalarValue::Time32Second(v)
+            | ScalarValue::Time32Millisecond(v) => v.map(|i| {
                 let ext_dtype = make_temporal_ext_dtype(&value.data_type());
                 Scalar::new(
                     DType::Extension(ext_dtype, Nullability::Nullable),
                     crate::ScalarValue::Primitive(PValue::I32(i)),
+                )
+            }),
+            ScalarValue::Date64(v)
+            | ScalarValue::Time64Microsecond(v)
+            | ScalarValue::Time64Nanosecond(v)
+            | ScalarValue::TimestampSecond(v, _)
+            | ScalarValue::TimestampMillisecond(v, _)
+            | ScalarValue::TimestampMicrosecond(v, _)
+            | ScalarValue::TimestampNanosecond(v, _) => v.map(|i| {
+                let ext_dtype = make_temporal_ext_dtype(&value.data_type());
+                Scalar::new(
+                    DType::Extension(ext_dtype, Nullability::Nullable),
+                    crate::ScalarValue::Primitive(PValue::I64(i)),
                 )
             }),
             _ => unimplemented!("Can't convert {value:?} value to a Vortex scalar"),
