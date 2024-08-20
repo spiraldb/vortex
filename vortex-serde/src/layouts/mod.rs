@@ -1,5 +1,5 @@
-pub mod read;
-pub mod write;
+mod read;
+mod write;
 
 #[cfg(test)]
 mod tests;

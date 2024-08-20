@@ -186,7 +186,7 @@ mod tests {
     use vortex::validity::Validity;
     use vortex::IntoArray;
 
-    use crate::layouts::write::writer::LayoutWriter;
+    use crate::layouts::LayoutWriter;
 
     #[test]
     fn write_columns() {
