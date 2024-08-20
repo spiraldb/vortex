@@ -1,17 +1,17 @@
-use arrow_buffer::{BooleanBuffer, Buffer, MutableBuffer};
+use arrow_buffer::{BooleanBufferBuilder, Buffer, MutableBuffer};
 use itertools::Itertools;
+use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, vortex_err, ErrString, VortexResult};
 
-use crate::accessor::ArrayAccessor;
 use crate::array::chunked::ChunkedArray;
 use crate::array::extension::ExtensionArray;
 use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
-use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
 use crate::array::BoolArray;
+use crate::compute::unary::try_cast;
 use crate::validity::Validity;
 use crate::variants::StructArrayTrait;
 use crate::{
@@ -166,13 +166,13 @@ fn swizzle_struct_chunks(
 fn pack_bools(chunks: &[Array], nullability: Nullability) -> VortexResult<BoolArray> {
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
     let validity = validity_from_chunks(chunks, nullability);
-    let mut bools = Vec::with_capacity(len);
+    let mut buffer = BooleanBufferBuilder::new(len);
     for chunk in chunks {
         let chunk = chunk.clone().into_bool()?;
-        bools.extend(chunk.boolean_buffer().iter());
+        buffer.append_buffer(&chunk.boolean_buffer());
     }
 
-    BoolArray::try_new(BooleanBuffer::from(bools), validity)
+    BoolArray::try_new(buffer.finish(), validity)
 }
 
 /// Builds a new [PrimitiveArray] by repacking the values from the chunks into a single
@@ -210,19 +210,37 @@ fn pack_varbin(
     dtype: &DType,
     _nullability: Nullability,
 ) -> VortexResult<VarBinArray> {
-    let len = chunks.iter().map(|chunk| chunk.len()).sum();
-    let mut builder = VarBinBuilder::<i32>::with_capacity(len);
+    let len: usize = chunks.iter().map(|c| c.len()).sum();
+    let mut offsets = Vec::with_capacity(len + 1);
+    offsets.push(0);
+    let mut buffer = Vec::new();
 
     for chunk in chunks {
         let chunk = chunk.clone().into_varbin()?;
-        chunk.with_iterator(|iter| {
-            for datum in iter {
-                builder.push(datum);
-            }
-        })?;
+        let offsets_arr = try_cast(
+            chunk.offsets().into_primitive()?.array(),
+            &DType::Primitive(PType::I32, NonNullable),
+        )?
+        .into_primitive()?;
+        let offset_adjustment = *offsets.last().expect("offsets has at least one element");
+        offsets.extend(
+            offsets_arr
+                .maybe_null_slice::<i32>()
+                .iter()
+                .skip(1)
+                .map(|off| *off + offset_adjustment),
+        );
+        buffer.extend_from_slice(chunk.bytes().into_primitive()?.buffer());
     }
 
-    Ok(builder.finish(dtype.clone()))
+    let validity = validity_from_chunks(chunks, dtype.nullability());
+
+    VarBinArray::try_new(
+        PrimitiveArray::from(offsets).into_array(),
+        PrimitiveArray::from(buffer).into_array(),
+        dtype.clone(),
+        validity,
+    )
 }
 
 fn validity_from_chunks(chunks: &[Array], nullability: Nullability) -> Validity {
