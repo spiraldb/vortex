@@ -202,7 +202,6 @@ fn make_filter_then_take_plan(
         filter_expr,
         filter_projection,
         &chunked_array,
-        schema.clone(),
     )?);
 
     Ok(Arc::new(TakeRowsExec::new(

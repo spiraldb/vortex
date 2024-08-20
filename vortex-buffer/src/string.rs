@@ -51,3 +51,9 @@ impl Deref for BufferString {
         self.as_str()
     }
 }
+
+impl AsRef<str> for BufferString {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}

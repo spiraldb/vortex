@@ -49,6 +49,12 @@ fn supported_data_types(dt: DataType) -> bool {
         || dt == DataType::Binary
         || dt == DataType::BinaryView
         || dt == DataType::Utf8View
+        || dt == DataType::Date32
+        || dt == DataType::Date64
+        || matches!(
+            dt,
+            DataType::Timestamp(_, _) | DataType::Time32(_) | DataType::Time64(_)
+        )
 }
 
 pub trait SessionContextExt {

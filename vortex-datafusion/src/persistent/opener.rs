@@ -46,8 +46,7 @@ impl FileOpener for VortexFileOpener {
             .predicate
             .clone()
             .map(|predicate| {
-                convert_expr_to_vortex(predicate, self.arrow_schema.as_ref())
-                    .map_err(|e| DataFusionError::External(e.into()))
+                convert_expr_to_vortex(predicate).map_err(|e| DataFusionError::External(e.into()))
             })
             .transpose()?
         {

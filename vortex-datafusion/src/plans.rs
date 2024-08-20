@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
-use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use arrow_schema::{DataType, Schema, SchemaRef};
 use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning, PhysicalExpr};
@@ -40,11 +40,12 @@ pub(crate) struct RowSelectorExec {
 }
 
 lazy_static! {
-    static ref ROW_SELECTOR_SCHEMA_REF: SchemaRef = Arc::new(Schema::new(vec![Field::new(
-        "row_idx",
-        DataType::UInt64,
-        false
-    )]));
+    static ref ROW_SELECTOR_SCHEMA_REF: SchemaRef =
+        Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "row_idx",
+            DataType::UInt64,
+            false
+        )]));
 }
 
 impl RowSelectorExec {
@@ -52,7 +53,6 @@ impl RowSelectorExec {
         filter_expr: Arc<dyn PhysicalExpr>,
         filter_projection: Vec<usize>,
         chunked_array: &ChunkedArray,
-        schema: SchemaRef,
     ) -> DFResult<Self> {
         let cached_plan_props = PlanProperties::new(
             EquivalenceProperties::new(ROW_SELECTOR_SCHEMA_REF.clone()),
@@ -60,7 +60,7 @@ impl RowSelectorExec {
             ExecutionMode::Bounded,
         );
 
-        let filter_expr = convert_expr_to_vortex(filter_expr, schema.as_ref())?;
+        let filter_expr = convert_expr_to_vortex(filter_expr)?;
 
         Ok(Self {
             filter_expr,
@@ -440,7 +440,7 @@ mod test {
         let filtering_stream = RowIndicesStream {
             chunked_array: chunked_array.clone(),
             chunk_idx: 0,
-            conjunction_expr: convert_expr_to_vortex(df_expr, &schema).unwrap(),
+            conjunction_expr: convert_expr_to_vortex(df_expr).unwrap(),
             filter_projection: vec![0, 1],
         };
 
