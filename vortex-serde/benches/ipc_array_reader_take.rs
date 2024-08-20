@@ -3,6 +3,7 @@ use std::sync::Arc;
 use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use futures_executor::block_on;
+use futures_util::io::Cursor;
 use futures_util::{pin_mut, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::{ChunkedArray, PrimitiveArray};
@@ -10,8 +11,8 @@ use vortex::stream::ArrayStreamExt;
 use vortex::validity::Validity;
 use vortex::{Context, IntoArray};
 use vortex_serde::io::FuturesAdapter;
+use vortex_serde::stream_reader::StreamArrayReader;
 use vortex_serde::stream_writer::StreamArrayWriter;
-use vortex_serde::MessageReader;
 
 // 100 record batches, 100k rows each
 // take from the first 20 batches and last batch
@@ -40,14 +41,15 @@ fn ipc_array_reader_take(c: &mut Criterion) {
         let indices = indices.clone().into_array();
 
         b.to_async(FuturesExecutor).iter(|| async {
-            let mut cursor = futures_util::io::Cursor::new(&buffer);
-            let mut msgs = MessageReader::try_new(FuturesAdapter(&mut cursor))
-                .await
-                .unwrap();
-            let stream = msgs
-                .array_stream_from_messages(ctx.clone())
-                .await
-                .unwrap()
+            let stream_reader =
+                StreamArrayReader::try_new(FuturesAdapter(Cursor::new(&buffer)), ctx.clone())
+                    .await
+                    .unwrap()
+                    .load_dtype()
+                    .await
+                    .unwrap();
+            let stream = stream_reader
+                .into_array_stream()
                 .take_rows(indices.clone())
                 .unwrap();
             pin_mut!(stream);

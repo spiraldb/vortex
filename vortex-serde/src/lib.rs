@@ -1,7 +1,8 @@
-pub use message_reader::*;
-pub use message_writer::*;
+use message_reader::*;
+use message_writer::*;
 
 pub mod chunked_reader;
+mod dtype_reader;
 pub mod io;
 pub mod layouts;
 mod message_reader;
@@ -9,6 +10,7 @@ mod message_writer;
 mod messages;
 pub mod stream_reader;
 pub mod stream_writer;
+pub use dtype_reader::*;
 
 pub const ALIGNMENT: usize = 64;
 
@@ -28,8 +30,8 @@ mod test {
     use vortex_error::VortexResult;
 
     use crate::io::FuturesAdapter;
+    use crate::stream_reader::StreamArrayReader;
     use crate::stream_writer::StreamArrayWriter;
-    use crate::MessageReader;
 
     fn write_ipc<A: IntoArray>(array: A) -> Vec<u8> {
         block_on(async {
@@ -50,14 +52,17 @@ mod test {
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
         let ctx = Arc::new(Context::default());
-        let mut messages = block_on(async {
-            MessageReader::try_new(FuturesAdapter(Cursor::new(buffer)))
+        let mut stream_reader = block_on(async {
+            StreamArrayReader::try_new(FuturesAdapter(Cursor::new(buffer)), ctx)
+                .await
+                .unwrap()
+                .load_dtype()
                 .await
                 .unwrap()
         });
-        let reader = block_on(async { messages.array_stream_from_messages(ctx).await })?;
+        let reader = stream_reader.array_stream();
 
-        let result_iter = reader.take_rows(indices).unwrap();
+        let result_iter = reader.take_rows(indices)?;
         pin_mut!(result_iter);
 
         let _result = block_on(async { result_iter.next().await.unwrap().unwrap() });
@@ -79,12 +84,17 @@ mod test {
         let chunked = ChunkedArray::try_new(vec![data.clone(), data2], data.dtype().clone())?;
         let buffer = write_ipc(chunked);
 
-        let mut messages =
-            block_on(async { MessageReader::try_new(FuturesAdapter(Cursor::new(buffer))).await })?;
-
         let ctx = Arc::new(Context::default());
-        let take_iter = block_on(async { messages.array_stream_from_messages(ctx).await })?
-            .take_rows(indices)?;
+        let mut stream_reader = block_on(async {
+            StreamArrayReader::try_new(FuturesAdapter(Cursor::new(buffer)), ctx)
+                .await
+                .unwrap()
+                .load_dtype()
+                .await
+                .unwrap()
+        });
+
+        let take_iter = stream_reader.array_stream().take_rows(indices)?;
         pin_mut!(take_iter);
 
         let next = block_on(async { take_iter.try_next().await })?.expect("Expected a chunk");

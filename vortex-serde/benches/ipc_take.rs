@@ -17,8 +17,8 @@ use vortex::compute::take;
 use vortex::{Context, IntoArray};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::io::FuturesAdapter;
+use vortex_serde::stream_reader::StreamArrayReader;
 use vortex_serde::stream_writer::StreamArrayWriter;
-use vortex_serde::MessageReader;
 
 fn ipc_take(c: &mut Criterion) {
     let mut group = c.benchmark_group("ipc_take");
@@ -71,8 +71,12 @@ fn ipc_take(c: &mut Criterion) {
         let indices_ref = &indices;
 
         b.to_async(FuturesExecutor).iter(|| async move {
-            let mut msgs = MessageReader::try_new(FuturesAdapter(Cursor::new(ro_buffer))).await?;
-            let reader = msgs.array_stream_from_messages(ctx_ref.clone()).await?;
+            let stream_reader =
+                StreamArrayReader::try_new(FuturesAdapter(Cursor::new(ro_buffer)), ctx_ref.clone())
+                    .await?
+                    .load_dtype()
+                    .await?;
+            let reader = stream_reader.into_array_stream();
             pin_mut!(reader);
             let array_view = reader.try_next().await?.unwrap();
             black_box(take(&array_view, indices_ref))
