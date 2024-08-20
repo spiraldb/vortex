@@ -48,6 +48,7 @@ pub fn make_temporal_ext_dtype(data_type: &DataType) -> ExtDType {
     }
 }
 
+/// Convert temporal ExtDType to a corresponding arrow DataType
 pub fn make_arrow_temporal_dtype(ext_dtype: &ExtDType) -> DataType {
     let metadata = TemporalMetadata::try_from(ext_dtype).unwrap();
     match metadata {
