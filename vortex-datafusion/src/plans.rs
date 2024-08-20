@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
-use arrow_schema::{DataType, Schema, SchemaRef};
+use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_physical_expr::{EquivalenceProperties, Partitioning, PhysicalExpr};
@@ -40,12 +40,11 @@ pub(crate) struct RowSelectorExec {
 }
 
 lazy_static! {
-    static ref ROW_SELECTOR_SCHEMA_REF: SchemaRef =
-        Arc::new(Schema::new(vec![arrow_schema::Field::new(
-            "row_idx",
-            DataType::UInt64,
-            false
-        )]));
+    static ref ROW_SELECTOR_SCHEMA_REF: SchemaRef = Arc::new(Schema::new(vec![Field::new(
+        "row_idx",
+        DataType::UInt64,
+        false
+    )]));
 }
 
 impl RowSelectorExec {
