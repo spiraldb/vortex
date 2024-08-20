@@ -5,6 +5,9 @@ use vortex_error::{vortex_err, VortexResult};
 use crate::field::Field;
 use crate::{flatbuffers as fb, DType, StructDType};
 
+/// Convert name references in projection list into index references.
+///
+/// This is mostly useful if you want to deduplicate multiple projections against serialized schema.
 pub fn resolve_field_references<'a, 'b: 'a>(
     fb: fb::Struct_<'b>,
     projection: &'a [Field],
@@ -23,6 +26,7 @@ pub fn resolve_field_references<'a, 'b: 'a>(
     })
 }
 
+/// Deserialize flatbuffer schema selecting only columns defined by projection
 pub fn deserialize_and_project(fb: fb::DType<'_>, projection: &[Field]) -> VortexResult<DType> {
     let fb_struct = fb
         .type__as_struct_()

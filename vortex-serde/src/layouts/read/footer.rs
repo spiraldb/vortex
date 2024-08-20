@@ -11,6 +11,29 @@ use crate::layouts::read::{Layout, Scan, FILE_POSTSCRIPT_SIZE};
 use crate::messages::IPCDType;
 use crate::FLATBUFFER_SIZE_LENGTH;
 
+/// Wrapper around serialized file footer. Provides handle on file schema and
+/// layout metadata to read the contents.
+///
+/// # Footer format
+/// ┌────────────────────────────┐
+/// │                            │
+///              ...
+/// ├────────────────────────────┤
+/// │                            │
+/// │          Schema            │
+/// │                            │
+/// ├────────────────────────────┤
+/// │                            │
+/// │         Layouts            │
+/// │                            │
+/// ├────────────────────────────┤
+/// │   Schema Offset (8 bytes)  │
+/// ├────────────────────────────┤
+/// │   Layout Offset (8 bytes)  │
+/// ├────────────────────────────┤
+/// │    Magic bytes (4 bytes)   │
+/// └────────────────────────────┘
+///
 pub struct Footer {
     pub(crate) schema_offset: u64,
     /// This is actually layouts
@@ -62,7 +85,7 @@ impl Footer {
     }
 
     /// Convert all name based references to index based for sake of augmenting read projection
-    pub fn resolve_references(&self, projection: &[Field]) -> VortexResult<Vec<Field>> {
+    pub(crate) fn resolve_references(&self, projection: &[Field]) -> VortexResult<Vec<Field>> {
         let dtype = self
             .fb_schema()?
             .dtype()
