@@ -52,7 +52,7 @@ mod test {
         let indices = PrimitiveArray::from(vec![1, 2, 10]).into_array();
 
         let ctx = Arc::new(Context::default());
-        let mut stream_reader = block_on(async {
+        let stream_reader = block_on(async {
             StreamArrayReader::try_new(FuturesAdapter(Cursor::new(buffer)), ctx)
                 .await
                 .unwrap()
@@ -60,7 +60,7 @@ mod test {
                 .await
                 .unwrap()
         });
-        let reader = stream_reader.array_stream();
+        let reader = stream_reader.into_array_stream();
 
         let result_iter = reader.take_rows(indices)?;
         pin_mut!(result_iter);
@@ -85,7 +85,7 @@ mod test {
         let buffer = write_ipc(chunked);
 
         let ctx = Arc::new(Context::default());
-        let mut stream_reader = block_on(async {
+        let stream_reader = block_on(async {
             StreamArrayReader::try_new(FuturesAdapter(Cursor::new(buffer)), ctx)
                 .await
                 .unwrap()
@@ -94,7 +94,7 @@ mod test {
                 .unwrap()
         });
 
-        let take_iter = stream_reader.array_stream().take_rows(indices)?;
+        let take_iter = stream_reader.into_array_stream().take_rows(indices)?;
         pin_mut!(take_iter);
 
         let next = block_on(async { take_iter.try_next().await })?.expect("Expected a chunk");
