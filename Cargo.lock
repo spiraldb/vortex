@@ -4495,6 +4495,7 @@ name = "vortex-sampling-compressor"
 version = "0.7.0"
 dependencies = [
  "chrono",
+ "fsst-rs",
  "log",
  "rand",
  "vortex-alp",
@@ -4505,6 +4506,7 @@ dependencies = [
  "vortex-dtype",
  "vortex-error",
  "vortex-fastlanes",
+ "vortex-fsst",
  "vortex-roaring",
  "vortex-runend",
  "vortex-zigzag",

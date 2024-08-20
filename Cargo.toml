@@ -138,8 +138,9 @@ vortex-dict = { version = "0.7.0", path = "./encodings/dict" }
 vortex-dtype = { version = "0.7.0", path = "./vortex-dtype", default-features = false }
 vortex-error = { version = "0.7.0", path = "./vortex-error" }
 vortex-expr = { version = "0.7.0", path = "./vortex-expr" }
-vortex-flatbuffers = { version = "0.7.0", path = "./vortex-flatbuffers" }
 vortex-fastlanes = { version = "0.7.0", path = "./encodings/fastlanes" }
+vortex-flatbuffers = { version = "0.7.0", path = "./vortex-flatbuffers" }
+vortex-fsst = { version = "0.7.0", path = "./encodings/fsst" }
 vortex-proto = { version = "0.7.0", path = "./vortex-proto" }
 vortex-roaring = { version = "0.7.0", path = "./encodings/roaring" }
 vortex-runend = { version = "0.7.0", path = "./encodings/runend" }
