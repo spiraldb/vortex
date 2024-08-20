@@ -62,7 +62,7 @@ impl CastFn for ChunkedArray {
 impl CompareFn for ChunkedArray {
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
         let mut idx = 0;
-        let mut compare_chunks = Vec::default();
+        let mut compare_chunks = Vec::with_capacity(self.nchunks());
 
         for chunk in self.chunks() {
             let sliced = slice(array, idx, idx + chunk.len())?;

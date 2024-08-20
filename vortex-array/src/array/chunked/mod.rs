@@ -97,7 +97,13 @@ impl ChunkedArray {
                 panic!("Search sorted failed in find_chunk_idx: {}", err);
             });
         let index_chunk = match search_result {
-            SearchResult::Found(i) => i,
+            SearchResult::Found(i) => {
+                if i == self.nchunks() {
+                    i - 1
+                } else {
+                    i
+                }
+            }
             SearchResult::NotFound(i) => i - 1,
         };
         let chunk_start = &scalar_at(&self.chunk_ends(), index_chunk)
@@ -240,6 +246,11 @@ mod test {
     #[test]
     pub fn slice_end() {
         assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
+    }
+
+    #[test]
+    pub fn slice_exactly_end() {
+        assert_equal_slices(slice(chunked_array().array(), 6, 9).unwrap(), &[7u64, 8, 9]);
     }
 
     #[test]
