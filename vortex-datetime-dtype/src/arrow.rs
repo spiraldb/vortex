@@ -49,9 +49,12 @@ pub fn make_temporal_ext_dtype(data_type: &DataType) -> ExtDType {
 }
 
 /// Convert temporal ExtDType to a corresponding arrow DataType
+///
+/// panics if the ext_dtype is not a temporal dtype
 pub fn make_arrow_temporal_dtype(ext_dtype: &ExtDType) -> DataType {
-    let metadata = TemporalMetadata::try_from(ext_dtype).expect("make_arrow_temporal_dtype must be called with a temporal ExtDType");
-    match metadata {
+    match TemporalMetadata::try_from(ext_dtype)
+        .expect("make_arrow_temporal_dtype must be called with a temporal ExtDType")
+    {
         TemporalMetadata::Date(time_unit) => match time_unit {
             TimeUnit::D => DataType::Date32,
             TimeUnit::Ms => DataType::Date64,
