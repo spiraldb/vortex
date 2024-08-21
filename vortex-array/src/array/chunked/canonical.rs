@@ -261,10 +261,10 @@ mod tests {
 
     fn varbin_array() -> VarBinArray {
         let mut builder = VarBinBuilder::<i32>::with_capacity(4);
-        builder.push_value("foo".as_bytes());
-        builder.push_value("bar".as_bytes());
-        builder.push_value("baz".as_bytes());
-        builder.push_value("quak".as_bytes());
+        builder.push_value("foo");
+        builder.push_value("bar");
+        builder.push_value("baz");
+        builder.push_value("quak");
         builder.finish(DType::Utf8(Nullability::NonNullable))
     }
 
