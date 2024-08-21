@@ -210,7 +210,7 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
     let len: usize = chunks.iter().map(|c| c.len()).sum();
     let mut offsets = Vec::with_capacity(len + 1);
     offsets.push(0);
-    let mut buffer = Vec::new();
+    let mut data_bytes = Vec::new();
 
     for chunk in chunks {
         let chunk = chunk.clone().into_varbin()?;
@@ -228,7 +228,7 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
         ))?;
         let primitive_bytes =
             slice(&chunk.bytes(), first_offset_value, last_offset_value)?.into_primitive()?;
-        buffer.extend_from_slice(primitive_bytes.buffer());
+        data_bytes.extend_from_slice(primitive_bytes.buffer());
 
         let adjustment_from_previous = *offsets.last().expect("offsets has at least one element");
         offsets.extend(
@@ -242,7 +242,7 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
 
     VarBinArray::try_new(
         PrimitiveArray::from(offsets).into_array(),
-        PrimitiveArray::from(buffer).into_array(),
+        PrimitiveArray::from(data_bytes).into_array(),
         dtype.clone(),
         validity,
     )
