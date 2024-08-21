@@ -25,6 +25,7 @@ pub fn scalar_at(array: &Array, index: usize) -> VortexResult<Scalar> {
     })
 }
 
+/// Returns a [`Scalar`] value without checking for validity or array bounds. Might panic *OR* return an invalid value if used incorrectly.
 pub fn scalar_at_unchecked(array: &Array, index: usize) -> Scalar {
     array
         .with_dyn(|a| a.scalar_at().map(|s| s.scalar_at_unchecked(index)))
