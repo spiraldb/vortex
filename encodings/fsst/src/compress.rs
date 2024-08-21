@@ -83,7 +83,7 @@ where
         }
     }
 
-    let codes = builder.finish(dtype.clone());
+    let codes = builder.finish(DType::Binary(dtype.nullability()));
     let symbols_vec: Vec<Symbol> = compressor.symbol_table().to_vec();
     // SAFETY: Symbol and u64 are same size
     let symbols_u64: Vec<u64> = unsafe { std::mem::transmute(symbols_vec) };

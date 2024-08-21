@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
+use compressors::fsst::FSSTCompressor;
 use log::{debug, info, warn};
 use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
@@ -89,6 +90,7 @@ impl Default for SamplingCompressor<'_> {
             // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
             // &DeltaCompressor,
             &DictCompressor,
+            &FSSTCompressor,
             &FoRCompressor,
             &DateTimePartsCompressor,
             &RoaringBoolCompressor,

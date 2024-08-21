@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use vortex::array::{VarBinArray, VarBinViewArray};
+use vortex::array::{VarBin, VarBinView};
 use vortex::encoding::EncodingRef;
 use vortex::{ArrayDType, ArrayDef, IntoArray};
 use vortex_dict::DictArray;
@@ -42,13 +42,15 @@ impl EncodingCompressor for FSSTCompressor {
         _ctx: SamplingCompressor<'a>,
     ) -> VortexResult<super::CompressedArray<'a>> {
         // TODO(aduffy): use like array to clone the existing symbol table
-        let fsst_array =
-            if VarBinArray::try_from(array).is_ok() || VarBinViewArray::try_from(array).is_ok() {
+        let result_array =
+            if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
                 // For a VarBinArray or VarBinViewArray, compress directly.
-                fsst_compress(array.clone(), None)
+                fsst_compress(array.clone(), None).into_array()
             } else if let Ok(dict) = DictArray::try_from(array) {
                 // For a dict array, just compress the values
-                fsst_compress(dict.values(), None)
+                let values = fsst_compress(dict.values(), None).into_array();
+                let codes = dict.codes();
+                DictArray::try_new(codes, values)?.into_array()
             } else {
                 vortex_bail!(
                     InvalidArgument: "unsupported encoding for FSSTCompressor {:?}",
@@ -56,7 +58,7 @@ impl EncodingCompressor for FSSTCompressor {
                 )
             };
 
-        Ok(CompressedArray::new(fsst_array.into_array(), None))
+        Ok(CompressedArray::new(result_array, None))
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {

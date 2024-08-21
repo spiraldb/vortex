@@ -42,7 +42,7 @@ impl FSSTArray {
 
         // Check: strings must be a Binary array.
         if !matches!(codes.dtype(), DType::Binary(_)) {
-            vortex_bail!(InvalidArgument: "strings array must be DType::Binary type");
+            vortex_bail!(InvalidArgument: "codes array must be DType::Binary type");
         }
 
         let symbols_len = symbols.len();
@@ -95,8 +95,9 @@ impl FSSTArray {
 }
 
 impl AcceptArrayVisitor for FSSTArray {
-    fn accept(&self, _visitor: &mut dyn vortex::visitor::ArrayVisitor) -> VortexResult<()> {
-        todo!("implement this")
+    fn accept(&self, visitor: &mut dyn vortex::visitor::ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_child("symbols", &self.symbols())?;
+        visitor.visit_child("codes", &self.codes())
     }
 }
 

@@ -44,11 +44,13 @@ fn random_access_vortex(c: &mut Criterion) {
         })
     });
 
-    let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap()) as Arc<dyn ObjectStore>;
-    let r2_path =
-        object_store::path::Path::from_url_path(taxi_vortex.file_name().unwrap().to_str().unwrap())
-            .unwrap();
     group.sample_size(10).bench_function("R2", |b| {
+        let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap()) as Arc<dyn ObjectStore>;
+        let r2_path = object_store::path::Path::from_url_path(
+            taxi_vortex.file_name().unwrap().to_str().unwrap(),
+        )
+        .unwrap();
+
         b.to_async(Runtime::new().unwrap()).iter(|| async {
             black_box(
                 take_vortex_object_store(&r2_fs, &r2_path, &INDICES)
@@ -63,18 +65,19 @@ fn random_access_parquet(c: &mut Criterion) {
     let mut group = c.benchmark_group("parquet");
     group.sample_size(10);
 
-    let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap());
     let taxi_parquet = taxi_data_parquet();
     group.bench_function("tokio local disk", |b| {
         b.to_async(Runtime::new().unwrap())
             .iter(|| async { black_box(take_parquet(&taxi_parquet, &INDICES).await.unwrap()) })
     });
 
-    let r2_parquet_path = object_store::path::Path::from_url_path(
-        taxi_parquet.file_name().unwrap().to_str().unwrap(),
-    )
-    .unwrap();
     group.bench_function("R2", |b| {
+        let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap());
+        let r2_parquet_path = object_store::path::Path::from_url_path(
+            taxi_parquet.file_name().unwrap().to_str().unwrap(),
+        )
+        .unwrap();
+
         b.to_async(Runtime::new().unwrap()).iter(|| async {
             black_box(
                 take_parquet_object_store(r2_fs.clone(), &r2_parquet_path, &INDICES)
