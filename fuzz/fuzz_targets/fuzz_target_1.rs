@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use libfuzzer_sys::{fuzz_target, Corpus};
 use vortex::compute::slice;
-use vortex::compute::unary::scalar_at;
+use vortex::compute::unary::scalar_at_unchecked;
 use vortex::encoding::EncodingId;
 use vortex::Array;
 use vortex_fuzz::{Action, FuzzArrayAction};
@@ -48,8 +48,8 @@ fn fuzz_compress(array: &Array, compressor_ref: CompressorRef<'_>) -> Option<Arr
 
 fn assert_slice(original: &Array, slice: &Array, start: usize) {
     for idx in 0..slice.len() {
-        let o = scalar_at(original, start + idx).unwrap();
-        let s = scalar_at(slice, idx).unwrap();
+        let o = scalar_at_unchecked(original, start + idx);
+        let s = scalar_at_unchecked(slice, idx);
 
         fuzzing_scalar_cmp(o, s, original.encoding().id(), slice.encoding().id(), idx);
     }
@@ -58,8 +58,8 @@ fn assert_slice(original: &Array, slice: &Array, start: usize) {
 fn assert_array_eq(lhs: &Array, rhs: &Array) {
     assert_eq!(lhs.len(), rhs.len());
     for idx in 0..lhs.len() {
-        let l = scalar_at(lhs, idx).unwrap();
-        let r = scalar_at(rhs, idx).unwrap();
+        let l = scalar_at_unchecked(lhs, idx);
+        let r = scalar_at_unchecked(rhs, idx);
 
         fuzzing_scalar_cmp(l, r, lhs.encoding().id(), rhs.encoding().id(), idx);
     }

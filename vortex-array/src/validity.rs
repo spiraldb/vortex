@@ -4,7 +4,7 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::BoolArray;
-use crate::compute::unary::scalar_at;
+use crate::compute::unary::scalar_at_unchecked;
 use crate::compute::{filter, slice, take};
 use crate::stats::ArrayStatistics;
 use crate::{Array, IntoArray, IntoArrayVariant};
@@ -92,7 +92,7 @@ impl Validity {
         match self {
             Self::NonNullable | Self::AllValid => true,
             Self::AllInvalid => false,
-            Self::Array(a) => bool::try_from(&scalar_at(a, index).unwrap()).unwrap(),
+            Self::Array(a) => bool::try_from(&scalar_at_unchecked(a, index)).unwrap(),
         }
     }
 
