@@ -36,12 +36,14 @@ impl ArrayCompute for ByteBoolArray {
 
 impl ScalarAtFn for ByteBoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let scalar = match self.is_valid(index).then(|| self.buffer()[index] == 1) {
-            Some(b) => Scalar::new(self.dtype().clone(), ScalarValue::Bool(b)),
-            None => Scalar::null(self.dtype().clone()),
-        };
+        Ok(self.scalar_at_unchecked(index))
+    }
 
-        Ok(scalar)
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        Scalar::new(
+            self.dtype().clone(),
+            ScalarValue::Bool(self.buffer()[index] == 1),
+        )
     }
 }
 

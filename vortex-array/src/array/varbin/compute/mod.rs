@@ -4,7 +4,6 @@ use vortex_scalar::Scalar;
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::compute::unary::ScalarAtFn;
 use crate::compute::{ArrayCompute, SliceFn, TakeFn};
-use crate::validity::ArrayValidity;
 use crate::ArrayDType;
 
 mod filter;
@@ -27,10 +26,10 @@ impl ArrayCompute for VarBinArray {
 
 impl ScalarAtFn for VarBinArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if self.is_valid(index) {
-            Ok(varbin_scalar(self.bytes_at(index)?, self.dtype()))
-        } else {
-            Ok(Scalar::null(self.dtype().clone()))
-        }
+        Ok(varbin_scalar(self.bytes_at(index)?, self.dtype()))
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        varbin_scalar(self.bytes_at(index).unwrap(), self.dtype())
     }
 }

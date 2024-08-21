@@ -77,6 +77,10 @@ impl ScalarAtFn for DateTimePartsArray {
 
         Ok(Scalar::primitive(scalar, nullability))
     }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
+    }
 }
 
 /// Decode an [Array] into a [TemporalArray].

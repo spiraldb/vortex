@@ -3,7 +3,9 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
-use crate::compute::unary::{scalar_at, try_cast, CastFn, ScalarAtFn, SubtractScalarFn};
+use crate::compute::unary::{
+    scalar_at, scalar_at_unchecked, try_cast, CastFn, ScalarAtFn, SubtractScalarFn,
+};
 use crate::compute::{compare, slice, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
 use crate::{Array, IntoArray};
 
@@ -45,6 +47,11 @@ impl ScalarAtFn for ChunkedArray {
                 .ok_or_else(|| vortex_err!(OutOfBounds: chunk_index, 0, self.nchunks()))?,
             chunk_offset,
         )
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
+        scalar_at_unchecked(&self.chunk(chunk_index).unwrap(), chunk_offset)
     }
 }
 
