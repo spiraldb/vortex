@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
+use vortex::iter::ArrayIter;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -68,7 +69,7 @@ impl PrimitiveArrayTrait for ZigZagArray {
         todo!()
     }
 
-    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
         todo!()
     }
 }

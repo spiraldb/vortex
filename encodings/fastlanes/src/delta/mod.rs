@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
+use vortex::iter::ArrayIter;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -105,7 +106,7 @@ impl PrimitiveArrayTrait for DeltaArray {
         todo!()
     }
 
-    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
         todo!()
     }
 }

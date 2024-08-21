@@ -1,3 +1,4 @@
+use vortex::iter::ArrayIter;
 use vortex::variants::{ArrayVariants, BinaryArrayTrait, PrimitiveArrayTrait, Utf8ArrayTrait};
 use vortex::ArrayDType;
 use vortex_dtype::DType;
@@ -23,7 +24,7 @@ impl PrimitiveArrayTrait for DictArray {
         todo!()
     }
 
-    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
         todo!()
     }
 }

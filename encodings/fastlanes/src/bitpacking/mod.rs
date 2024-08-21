@@ -1,6 +1,7 @@
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
 use vortex::array::{Primitive, PrimitiveArray};
+use vortex::iter::ArrayIter;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};

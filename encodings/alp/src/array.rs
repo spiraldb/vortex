@@ -126,7 +126,7 @@ impl<F: ALPFloat> Accessor<F> for AlpAccessor<F> {
         self.array.is_valid(index)
     }
 
-    fn value_unchecked(&self, index: usize) -> F {
+    fn value_unchecked(&self, _index: usize) -> F {
         todo!()
     }
 }
