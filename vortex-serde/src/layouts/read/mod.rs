@@ -1,24 +1,29 @@
 use std::fmt::Debug;
 
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
-use projections::Projection;
 use vortex::Array;
 use vortex_error::VortexResult;
 
-use crate::layouts::reader::filtering::RowFilter;
-use crate::writer::ByteRange;
-
-pub mod batch;
-pub mod buffered;
-pub mod builder;
+mod batch;
+mod buffered;
+mod builder;
 mod cache;
-pub mod context;
-pub mod filtering;
+mod context;
+mod filtering;
 mod footer;
 mod layouts;
-pub mod projections;
-pub mod schema;
-pub mod stream;
+mod projections;
+mod schema;
+mod stream;
+
+pub use builder::LayoutReaderBuilder;
+pub use context::*;
+pub use filtering::RowFilter;
+pub use projections::Projection;
+pub use schema::Schema;
+pub use stream::LayoutBatchStream;
+
+use crate::stream_writer::ByteRange;
 
 // Recommended read-size according to the AWS performance guide
 const INITIAL_READ_SIZE: usize = 8 * 1024 * 1024;

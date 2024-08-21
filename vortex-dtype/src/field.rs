@@ -1,11 +1,13 @@
 use core::fmt;
 use std::fmt::{Display, Formatter};
 
+use itertools::Itertools;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Field {
     Name(String),
-    Index(i32),
+    Index(usize),
 }
 
 impl From<&str> for Field {
@@ -14,8 +16,14 @@ impl From<&str> for Field {
     }
 }
 
-impl From<i32> for Field {
-    fn from(value: i32) -> Self {
+impl From<String> for Field {
+    fn from(value: String) -> Self {
+        Field::Name(value)
+    }
+}
+
+impl From<usize> for Field {
+    fn from(value: usize) -> Self {
         Field::Index(value)
     }
 }
@@ -38,8 +46,8 @@ impl FieldPath {
         Self(vec![])
     }
 
-    pub fn from_name(name: &str) -> Self {
-        Self(vec![Field::from(name)])
+    pub fn from_name<F: Into<Field>>(name: F) -> Self {
+        Self(vec![name.into()])
     }
 
     pub fn path(&self) -> &[Field] {
@@ -75,12 +83,6 @@ impl From<Vec<Field>> for FieldPath {
 
 impl Display for FieldPath {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let formatted = self
-            .0
-            .iter()
-            .map(|fid| format!("{fid}"))
-            .collect::<Vec<_>>()
-            .join(".");
-        write!(f, "{}", formatted)
+        Display::fmt(&self.0.iter().format("."), f)
     }
 }

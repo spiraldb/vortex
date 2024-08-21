@@ -110,8 +110,8 @@ pub mod field {
     pub enum FieldType {
         #[prost(string, tag = "1")]
         Name(::prost::alloc::string::String),
-        #[prost(int32, tag = "2")]
-        Index(i32),
+        #[prost(uint64, tag = "2")]
+        Index(u64),
     }
 }
 #[allow(clippy::derive_partial_eq_without_eq)]

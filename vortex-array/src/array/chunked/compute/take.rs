@@ -4,11 +4,10 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
-use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{scalar_at, subtract_scalar, try_cast};
 use crate::compute::{search_sorted, slice, take, SearchSortedSide, TakeFn};
 use crate::stats::ArrayStatistics;
-use crate::{Array, ArrayDType, IntoArray, ToArray};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant, ToArray};
 
 impl TakeFn for ChunkedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
@@ -25,8 +24,7 @@ impl TakeFn for ChunkedArray {
             return take_strict_sorted(self, indices);
         }
 
-        // FIXME(ngates): this is wrong, need to canonicalise
-        let indices = PrimitiveArray::try_from(try_cast(indices, PType::U64.into())?)?;
+        let indices = try_cast(indices, PType::U64.into())?.into_primitive()?;
 
         // While the chunk idx remains the same, accumulate a list of chunk indices.
         let mut chunks = Vec::new();
@@ -79,8 +77,8 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         let (chunk_idx, _idx_in_chunk) = chunked.find_chunk_idx(idx);
 
         // Find the end of this chunk, and locate that position in the indices array.
-        let chunk_begin = usize::try_from(&scalar_at(&chunked.chunk_ends(), chunk_idx)?)?;
-        let chunk_end = usize::try_from(&scalar_at(&chunked.chunk_ends(), chunk_idx + 1)?)?;
+        let chunk_begin = usize::try_from(&scalar_at(&chunked.chunk_offsets(), chunk_idx)?)?;
+        let chunk_end = usize::try_from(&scalar_at(&chunked.chunk_offsets(), chunk_idx + 1)?)?;
         let chunk_end_pos = search_sorted(indices, chunk_end, SearchSortedSide::Left)?.to_index();
 
         // Now we can say the slice of indices belonging to this chunk is [pos, chunk_end_pos)
@@ -110,13 +108,13 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
 
     // Now we can take the chunks
     let chunks = indices_by_chunk
-        .iter()
+        .into_iter()
         .enumerate()
-        .filter_map(|(chunk_idx, indices)| indices.as_ref().map(|i| (chunk_idx, i)))
+        .filter_map(|(chunk_idx, indices)| indices.map(|i| (chunk_idx, i)))
         .map(|(chunk_idx, chunk_indices)| {
             take(
                 &chunked.chunk(chunk_idx).expect("chunk not found"),
-                chunk_indices,
+                &chunk_indices,
             )
         })
         .try_collect()?;

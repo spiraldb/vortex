@@ -7,7 +7,7 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
-use vortex::array::BoolArray;
+use vortex::array::{BoolArray, StructArray};
 use vortex::compute::unary::subtract_scalar;
 use vortex::compute::{filter, search_sorted, slice, take, SearchSortedSide};
 use vortex::validity::Validity;
@@ -17,12 +17,13 @@ use vortex_error::{vortex_err, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
-use crate::layouts::reader::cache::LayoutMessageCache;
-use crate::layouts::reader::schema::Schema;
-use crate::layouts::reader::{Layout, MessageId, ReadResult, Scan};
-use crate::writer::ByteRange;
+use crate::layouts::read::cache::LayoutMessageCache;
+use crate::layouts::read::schema::Schema;
+use crate::layouts::read::{Layout, MessageId, ReadResult, Scan};
+use crate::layouts::Projection;
+use crate::stream_writer::ByteRange;
 
-pub struct VortexLayoutBatchStream<R> {
+pub struct LayoutBatchStream<R> {
     reader: Option<R>,
     layout: Box<dyn Layout>,
     scan: Scan,
@@ -30,17 +31,19 @@ pub struct VortexLayoutBatchStream<R> {
     state: StreamingState<R>,
     dtype: DType,
     current_offset: usize,
+    result_projection: Projection,
 }
 
-impl<R: VortexReadAt> VortexLayoutBatchStream<R> {
+impl<R: VortexReadAt> LayoutBatchStream<R> {
     pub fn try_new(
         reader: R,
         layout: Box<dyn Layout>,
         messages_cache: Arc<RwLock<LayoutMessageCache>>,
         dtype: DType,
         scan: Scan,
+        result_projection: Projection,
     ) -> VortexResult<Self> {
-        Ok(VortexLayoutBatchStream {
+        Ok(LayoutBatchStream {
             reader: Some(reader),
             layout,
             scan,
@@ -48,6 +51,7 @@ impl<R: VortexReadAt> VortexLayoutBatchStream<R> {
             state: Default::default(),
             dtype,
             current_offset: 0,
+            result_projection,
         })
     }
 
@@ -89,7 +93,7 @@ enum StreamingState<R> {
     Error,
 }
 
-impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStream<R> {
+impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
     type Item = VortexResult<Array>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -121,6 +125,13 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for VortexLayoutBatchStrea
                         let filter_array = null_as_false(mask.into_bool()?)?;
                         batch = filter(&batch, &filter_array)?;
                     }
+
+                    batch = match &self.result_projection {
+                        Projection::All => batch,
+                        Projection::Flat(v) => {
+                            StructArray::try_from(batch)?.project(v)?.into_array()
+                        }
+                    };
 
                     self.state = StreamingState::Init;
                     return Poll::Ready(Some(Ok(batch)));
@@ -189,7 +200,7 @@ mod tests {
     use vortex::validity::Validity;
     use vortex::IntoArrayVariant;
 
-    use crate::layouts::reader::stream::null_as_false;
+    use crate::layouts::read::stream::null_as_false;
 
     #[test]
     fn coerces_nulls() {

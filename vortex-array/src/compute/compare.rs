@@ -29,7 +29,7 @@ impl Display for Operator {
             Operator::Lt => "<",
             Operator::Lte => "<=",
         };
-        write!(f, "{display}")
+        Display::fmt(display, f)
     }
 }
 
