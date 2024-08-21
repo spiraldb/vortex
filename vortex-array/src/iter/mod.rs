@@ -25,7 +25,7 @@ pub struct ArrayIter<T> {
 }
 
 impl<T> ArrayIter<T> {
-    pub(crate) fn new(accessor: Arc<dyn Accessor<T>>) -> Self {
+    pub fn new(accessor: Arc<dyn Accessor<T>>) -> Self {
         Self {
             accessor,
             current: 0,
