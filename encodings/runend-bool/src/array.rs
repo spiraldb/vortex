@@ -67,13 +67,10 @@ impl RunEndBoolArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        let searched_index =
-            search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)?.to_index();
-        Ok(if searched_index == self.ends().len() {
-            searched_index - 1
-        } else {
-            searched_index
-        })
+        Ok(
+            search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)?
+                .to_ends_index(self.ends().len()),
+        )
     }
 
     pub fn validity(&self) -> Validity {

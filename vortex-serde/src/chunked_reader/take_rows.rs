@@ -6,7 +6,7 @@ use futures_util::{stream, StreamExt, TryStreamExt};
 use itertools::Itertools;
 use vortex::array::{ChunkedArray, PrimitiveArray};
 use vortex::compute::unary::{subtract_scalar, try_cast};
-use vortex::compute::{search_sorted, slice, take, SearchResult, SearchSortedSide};
+use vortex::compute::{search_sorted, slice, take, SearchSortedSide};
 use vortex::stats::ArrayStatistics;
 use vortex::stream::{ArrayStream, ArrayStreamExt};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
@@ -172,10 +172,8 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
     let mut chunks = HashMap::new();
 
     for (pos, idx) in indices.maybe_null_slice::<u64>().iter().enumerate() {
-        let chunk_idx = match search_sorted(row_offsets.array(), *idx, SearchSortedSide::Left)? {
-            SearchResult::Found(i) => i,
-            SearchResult::NotFound(i) => i - 1,
-        };
+        let chunk_idx = search_sorted(row_offsets.array(), *idx, SearchSortedSide::Left)?
+            .to_offset_ends_index(row_offsets.len());
         chunks
             .entry(chunk_idx as u32)
             .and_modify(|chunk_indices: &mut ChunkIndices| {

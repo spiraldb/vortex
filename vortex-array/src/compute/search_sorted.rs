@@ -43,6 +43,34 @@ impl SearchResult {
             Self::NotFound(i) => i,
         }
     }
+
+    pub fn to_offset_ends_index(self, len: usize) -> usize {
+        match self {
+            SearchResult::Found(i) => {
+                if i == len {
+                    i - 1
+                } else {
+                    i
+                }
+            }
+            SearchResult::NotFound(i) => {
+                if i == 0 {
+                    i
+                } else {
+                    i - 1
+                }
+            }
+        }
+    }
+
+    pub fn to_ends_index(self, len: usize) -> usize {
+        let idx = self.to_index();
+        if idx == len {
+            idx - 1
+        } else {
+            idx
+        }
+    }
 }
 
 impl Display for SearchResult {
