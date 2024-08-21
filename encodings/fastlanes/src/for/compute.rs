@@ -50,10 +50,6 @@ impl ScalarAtFn for FoRArray {
         let encoded = PrimitiveScalar::try_from(&encoded_scalar).unwrap();
         let reference = PrimitiveScalar::try_from(self.reference()).unwrap();
 
-        if encoded.ptype() != reference.ptype() {
-            panic!("Reference and encoded values had different dtypes");
-        }
-
         match_each_integer_ptype!(encoded.ptype(), |$P| {
             use num_traits::WrappingAdd;
             encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))
