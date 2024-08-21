@@ -84,7 +84,7 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
         table.add_row(Row::new(cells));
     }
 
-    let query_count = queries.as_ref().map_or(21, |c| c.len());
+    let query_count = queries.as_ref().map_or(22, |c| c.len());
 
     // Setup a progress bar
     let progress = ProgressBar::new((query_count * formats.len()) as u64);
