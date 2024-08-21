@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1724247484962,
+  "lastUpdate": 1724249468330,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -34643,6 +34643,126 @@ window.BENCHMARK_DATA = {
             "name": "tpch_q3/parquet",
             "value": 342668267,
             "range": "± 1219233",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "adam@spiraldb.com",
+            "name": "Adam Gutglick",
+            "username": "AdamGS"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1f6e81cb2ca4177c6e1bc832739f60c8ddabfa95",
+          "message": "Fix query count in benchmark tool (#667)\n\nNow that @robert3005 got Q15 running, we have 22 queries and not 21, so the progress bar is too short.",
+          "timestamp": "2024-08-21T14:02:27Z",
+          "tree_id": "dfe1afe6721d876787117bd428194c396fc65c84",
+          "url": "https://github.com/spiraldb/vortex/commit/1f6e81cb2ca4177c6e1bc832739f60c8ddabfa95"
+        },
+        "date": 1724249467452,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tpch_q1/vortex-in-memory-no-pushdown",
+            "value": 475601295,
+            "range": "± 1245725",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-in-memory-pushdown",
+            "value": 524958096,
+            "range": "± 2938793",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/arrow",
+            "value": 461239084,
+            "range": "± 1205788",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/parquet",
+            "value": 668578262,
+            "range": "± 5497068",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-compressed",
+            "value": 727729671,
+            "range": "± 3184027",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-uncompressed",
+            "value": 548402755,
+            "range": "± 3204307",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-no-pushdown",
+            "value": 147769909,
+            "range": "± 683133",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-pushdown",
+            "value": 144822228,
+            "range": "± 533769",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/arrow",
+            "value": 129010618,
+            "range": "± 925202",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/parquet",
+            "value": 163715246,
+            "range": "± 1103312",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-compressed",
+            "value": 182859401,
+            "range": "± 946374",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-uncompressed",
+            "value": 170439138,
+            "range": "± 1551245",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-in-memory-no-pushdown",
+            "value": 159028581,
+            "range": "± 515375",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-in-memory-pushdown",
+            "value": 182731770,
+            "range": "± 5973477",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/arrow",
+            "value": 157082500,
+            "range": "± 1189404",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/parquet",
+            "value": 340143387,
+            "range": "± 1544062",
             "unit": "ns/iter"
           }
         ]
