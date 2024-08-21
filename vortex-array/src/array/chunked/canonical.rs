@@ -20,15 +20,12 @@ use crate::{
 
 impl IntoCanonical for ChunkedArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        try_canonicalize_chunks(
-            self.chunks().collect(),
-            if self.dtype().is_nullable() {
-                self.logical_validity().into_validity()
-            } else {
-                Validity::NonNullable
-            },
-            self.dtype(),
-        )
+        let validity = if self.dtype().is_nullable() {
+            self.logical_validity().into_validity()
+        } else {
+            Validity::NonNullable
+        };
+        try_canonicalize_chunks(self.chunks().collect(), validity, self.dtype())
     }
 }
 
@@ -239,4 +236,44 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
         dtype.clone(),
         validity,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use rstest::{fixture, rstest};
+    use vortex_dtype::Nullability;
+
+    use super::*;
+
+    #[fixture]
+    fn binary_array() -> Array {
+        let values = PrimitiveArray::from(
+            "hello worldhello world this is a long string"
+                .as_bytes()
+                .to_vec(),
+        );
+        let offsets = PrimitiveArray::from(vec![0, 11, 44]);
+
+        VarBinArray::try_new(
+            offsets.into_array(),
+            values.into_array(),
+            DType::Utf8(Nullability::NonNullable),
+            Validity::NonNullable,
+        )
+        .unwrap()
+        .into_array()
+    }
+
+    #[rstest]
+    fn test_pack_varbin(binary_array: Array) {
+        let arrays = vec![binary_array.clone(), binary_array.clone()];
+        let packed_array = pack_varbin(
+            &arrays,
+            Validity::NonNullable,
+            &DType::Utf8(Nullability::NonNullable),
+        )
+        .unwrap();
+
+        assert_eq!(packed_array.len(), binary_array.len() * arrays.len());
+    }
 }

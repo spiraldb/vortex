@@ -197,18 +197,19 @@ impl FromIterator<LogicalValidity> for Validity {
         // Else, construct the boolean buffer
         let mut buffer = BooleanBufferBuilder::new(validities.iter().map(|v| v.len()).sum());
         for validity in validities {
-            let present = match validity {
-                LogicalValidity::AllValid(count) => BooleanBuffer::new_set(count),
-                LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
-                LogicalValidity::Array(array) => array
-                    .into_bool()
-                    .expect("validity must flatten to BoolArray")
-                    .boolean_buffer(),
+            match validity {
+                LogicalValidity::AllValid(count) => buffer.append_n(count, true),
+                LogicalValidity::AllInvalid(count) => buffer.append_n(count, false),
+                LogicalValidity::Array(array) => {
+                    let array_buffer = array
+                        .into_bool()
+                        .expect("validity must flatten to BoolArray")
+                        .boolean_buffer();
+                    buffer.append_buffer(&array_buffer);
+                }
             };
-            buffer.append_buffer(&present);
         }
-        let bool_array = BoolArray::try_new(buffer.finish(), Validity::NonNullable)
-            .expect("BoolArray::try_new from BooleanBuffer should always succeed");
+        let bool_array = BoolArray::from(buffer.finish());
         Self::Array(bool_array.into_array())
     }
 }
