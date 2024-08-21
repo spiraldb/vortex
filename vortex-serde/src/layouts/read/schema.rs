@@ -10,7 +10,7 @@ impl Schema {
     pub fn project(&self, projection: Projection) -> VortexResult<Self> {
         match projection {
             Projection::All => Ok(self.clone()),
-            Projection::Partial(indices) => {
+            Projection::Flat(indices) => {
                 let DType::Struct(s, n) = &self.0 else {
                     vortex_bail!("Can't project non struct types")
                 };

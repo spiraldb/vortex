@@ -75,7 +75,7 @@ message DType {
 message Field {
   oneof field_type {
     string name = 1;
-    int32 index = 2;
+    uint64 index = 2;
   }
 }
 

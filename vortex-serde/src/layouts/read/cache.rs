@@ -4,7 +4,7 @@ use ahash::HashMap;
 use bytes::Bytes;
 use vortex_dtype::DType;
 
-use crate::layouts::reader::{LayoutPartId, MessageId};
+use crate::layouts::read::{LayoutPartId, MessageId};
 
 #[derive(Default, Debug)]
 pub struct LayoutMessageCache {

@@ -5,7 +5,7 @@ use vortex::array::StructArray;
 use vortex::{Array, IntoArray};
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::layouts::reader::{Layout, ReadResult};
+use crate::layouts::read::{Layout, ReadResult};
 
 #[derive(Debug)]
 pub struct BatchReader {
