@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use futures_util::{Stream, TryStreamExt};
 use vortex::array::ChunkedArray;
 use vortex::stream::ArrayStream;
@@ -96,6 +98,12 @@ impl<W: VortexWrite> StreamArrayWriter<W> {
 pub struct ByteRange {
     pub begin: u64,
     pub end: u64,
+}
+
+impl Display for ByteRange {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {})", self.begin, self.end)
+    }
 }
 
 #[allow(clippy::len_without_is_empty)]
