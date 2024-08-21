@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
 use itertools::Itertools;
@@ -7,6 +9,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::iter::{Accessor, ArrayIter, PrimitiveAccessor};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -178,7 +181,30 @@ impl ArrayVariants for PrimitiveArray {
     }
 }
 
-impl PrimitiveArrayTrait for PrimitiveArray {}
+impl PrimitiveArrayTrait for PrimitiveArray {
+    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+        match self.dtype() {
+            DType::Primitive(PType::F32, _) => {
+                let access = Arc::new(PrimitiveAccessor::new(self.clone()));
+                let iter = ArrayIter::new(access as _);
+                Some(iter)
+            }
+            _ => None,
+        }
+    }
+
+    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
+        match self.dtype() {
+            DType::Primitive(PType::F64, _) => {
+                let access =
+                    Arc::new(PrimitiveAccessor::new(self.clone())) as Arc<dyn Accessor<f64>>;
+                let iter = ArrayIter::new(access);
+                Some(iter)
+            }
+            _ => None,
+        }
+    }
+}
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {

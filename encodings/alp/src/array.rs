@@ -1,7 +1,9 @@
 use std::fmt::Debug;
+use std::marker::PhantomData;
 
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
+use vortex::iter::{Accessor, ArrayIter};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -14,6 +16,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
+use crate::ALPFloat;
 
 impl_encoding!("vortex.alp", 13u16, ALP);
 
@@ -109,7 +112,34 @@ impl ArrayVariants for ALPArray {
     }
 }
 
-impl PrimitiveArrayTrait for ALPArray {}
+struct AlpAccessor<F: ALPFloat> {
+    array: ALPArray,
+    _marker: PhantomData<F>,
+}
+
+impl<F: ALPFloat> Accessor<F> for AlpAccessor<F> {
+    fn len(&self) -> usize {
+        self.array.len()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.array.is_valid(index)
+    }
+
+    fn value_unchecked(&self, index: usize) -> F {
+        todo!()
+    }
+}
+
+impl PrimitiveArrayTrait for ALPArray {
+    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+        todo!()
+    }
+
+    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
+        todo!()
+    }
+}
 
 impl ArrayValidity for ALPArray {
     fn is_valid(&self, index: usize) -> bool {

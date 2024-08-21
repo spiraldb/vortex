@@ -75,7 +75,15 @@ impl ArrayVariants for RoaringIntArray {
     }
 }
 
-impl PrimitiveArrayTrait for RoaringIntArray {}
+impl PrimitiveArrayTrait for RoaringIntArray {
+    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+        todo!()
+    }
+
+    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+        todo!()
+    }
+}
 
 impl ArrayValidity for RoaringIntArray {
     fn is_valid(&self, _index: usize) -> bool {

@@ -63,7 +63,15 @@ impl ArrayVariants for ZigZagArray {
     }
 }
 
-impl PrimitiveArrayTrait for ZigZagArray {}
+impl PrimitiveArrayTrait for ZigZagArray {
+    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+        todo!()
+    }
+
+    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+        todo!()
+    }
+}
 
 impl ArrayValidity for ZigZagArray {
     fn is_valid(&self, index: usize) -> bool {

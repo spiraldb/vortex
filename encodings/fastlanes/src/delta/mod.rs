@@ -100,7 +100,15 @@ impl ArrayVariants for DeltaArray {
     }
 }
 
-impl PrimitiveArrayTrait for DeltaArray {}
+impl PrimitiveArrayTrait for DeltaArray {
+    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+        todo!()
+    }
+
+    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+        todo!()
+    }
+}
 
 impl IntoCanonical for DeltaArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

@@ -2,6 +2,7 @@ use vortex_dtype::DType;
 use vortex_scalar::StructScalar;
 
 use crate::array::sparse::SparseArray;
+use crate::iter::ArrayIter;
 use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
     NullArrayTrait, PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
@@ -55,7 +56,15 @@ impl BoolArrayTrait for SparseArray {
     }
 }
 
-impl PrimitiveArrayTrait for SparseArray {}
+impl PrimitiveArrayTrait for SparseArray {
+    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+        todo!()
+    }
+
+    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
+        todo!()
+    }
+}
 
 impl Utf8ArrayTrait for SparseArray {}
 

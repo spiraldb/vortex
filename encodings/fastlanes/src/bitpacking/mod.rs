@@ -203,7 +203,15 @@ impl ArrayVariants for BitPackedArray {
     }
 }
 
-impl PrimitiveArrayTrait for BitPackedArray {}
+impl PrimitiveArrayTrait for BitPackedArray {
+    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+        todo!()
+    }
+
+    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+        todo!()
+    }
+}
 
 #[cfg(test)]
 mod test {
