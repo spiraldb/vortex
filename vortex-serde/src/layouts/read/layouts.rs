@@ -61,7 +61,11 @@ impl Layout for FlatLayout {
             }
             FlatLayoutState::ReadBatch => {
                 let mut buf = self.cache.remove(&[]).ok_or_else(|| {
-                    vortex_err!("Wrong state transition, message should have been fetched")
+                    vortex_err!(
+                        "Wrong state transition, message {:?} (with range {}) should have been fetched",
+                        self.cache.absolute_id(&[]),
+                        self.range
+                    )
                 })?;
 
                 let mut array_reader = ArrayBufferReader::new();

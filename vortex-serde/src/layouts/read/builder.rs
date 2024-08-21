@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
 use bytes::BytesMut;
@@ -84,7 +85,12 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
                 Projection::All => (Projection::All, Projection::All),
                 Projection::Flat(mut v) => {
                     let original_len = v.len();
-                    v.extend(filter_columns.into_iter());
+                    let existing_fields: HashSet<Field> = v.iter().cloned().collect();
+                    v.extend(
+                        filter_columns
+                            .into_iter()
+                            .filter(|f| !existing_fields.contains(f)),
+                    );
                     (
                         Projection::Flat(v),
                         Projection::Flat((0..original_len).map(Field::from).collect()),
