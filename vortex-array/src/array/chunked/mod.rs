@@ -172,10 +172,10 @@ impl ArrayValidity for ChunkedArray {
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        let validity: Validity = self
+        let validity = self
             .chunks()
             .map(|a| a.with_dyn(|arr| arr.logical_validity()))
-            .collect();
+            .collect::<Validity>();
         validity.to_logical(self.len())
     }
 }
