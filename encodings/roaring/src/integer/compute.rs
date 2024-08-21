@@ -27,4 +27,8 @@ impl ScalarAtFn for RoaringIntArray {
         };
         Ok(scalar)
     }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
+    }
 }

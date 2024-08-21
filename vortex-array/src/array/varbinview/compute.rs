@@ -6,7 +6,6 @@ use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
 use crate::compute::unary::ScalarAtFn;
 use crate::compute::{slice, ArrayCompute, SliceFn};
-use crate::validity::ArrayValidity;
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for VarBinViewArray {
@@ -21,12 +20,12 @@ impl ArrayCompute for VarBinViewArray {
 
 impl ScalarAtFn for VarBinViewArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if self.is_valid(index) {
-            self.bytes_at(index)
-                .map(|bytes| varbin_scalar(Buffer::from(bytes), self.dtype()))
-        } else {
-            Ok(Scalar::null(self.dtype().clone()))
-        }
+        self.bytes_at(index)
+            .map(|bytes| varbin_scalar(Buffer::from(bytes), self.dtype()))
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
     }
 }
 

@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::sparse::SparseArray;
-use crate::compute::unary::{scalar_at, ScalarAtFn};
+use crate::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use crate::compute::{
     search_sorted, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
 };
@@ -33,7 +33,19 @@ impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         match self.find_index(index)? {
             None => self.fill_value().clone().cast(self.dtype()),
-            Some(idx) => scalar_at(&self.values(), idx)?.cast(self.dtype()),
+            Some(idx) => scalar_at_unchecked(&self.values(), idx).cast(self.dtype()),
+        }
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        match self
+            .find_index(index)
+            .expect("Must be able to find the index")
+        {
+            None => self.fill_value().clone().cast(self.dtype()).unwrap(),
+            Some(idx) => scalar_at_unchecked(&self.values(), idx)
+                .cast(self.dtype())
+                .unwrap(),
         }
     }
 }

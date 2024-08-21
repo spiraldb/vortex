@@ -1,8 +1,7 @@
 use vortex::array::PrimitiveArray;
-use vortex::compute::unary::{scalar_at, ScalarAtFn};
+use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
-use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -25,10 +24,14 @@ impl ArrayCompute for RunEndArray {
 
 impl ScalarAtFn for RunEndArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if !self.is_valid(index) {
-            return Ok(Scalar::null(self.dtype().clone()));
-        }
         scalar_at(&self.values(), self.find_physical_index(index)?)
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        let idx = self
+            .find_physical_index(index)
+            .expect("Search must be implemented for the underlying index array");
+        scalar_at_unchecked(&self.values(), idx)
     }
 }
 

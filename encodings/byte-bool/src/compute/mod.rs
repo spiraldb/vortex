@@ -36,12 +36,14 @@ impl ArrayCompute for ByteBoolArray {
 
 impl ScalarAtFn for ByteBoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let scalar = match self.is_valid(index).then(|| self.buffer()[index] == 1) {
-            Some(b) => Scalar::new(self.dtype().clone(), ScalarValue::Bool(b)),
-            None => Scalar::null(self.dtype().clone()),
-        };
+        Ok(self.scalar_at_unchecked(index))
+    }
 
-        Ok(scalar)
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        Scalar::new(
+            self.dtype().clone(),
+            ScalarValue::Bool(self.buffer()[index] == 1),
+        )
     }
 }
 
@@ -174,7 +176,7 @@ impl FillForwardFn for ByteBoolArray {
 
 #[cfg(test)]
 mod tests {
-    use vortex::compute::unary::scalar_at;
+    use vortex::compute::unary::{scalar_at, scalar_at_unchecked};
     use vortex::compute::{compare, slice};
     use vortex::AsArray as _;
 
@@ -188,7 +190,7 @@ mod tests {
         let sliced_arr = slice(vortex_arr.as_array_ref(), 1, 4).unwrap();
         let sliced_arr = ByteBoolArray::try_from(sliced_arr).unwrap();
 
-        let s = scalar_at(sliced_arr.as_array_ref(), 0).unwrap();
+        let s = scalar_at_unchecked(sliced_arr.as_array_ref(), 0);
         assert_eq!(s.into_value().as_bool().unwrap(), Some(true));
 
         let s = scalar_at(sliced_arr.as_array_ref(), 1).unwrap();
@@ -196,7 +198,7 @@ mod tests {
         assert!(s.is_null());
         assert_eq!(s.into_value().as_bool().unwrap(), None);
 
-        let s = scalar_at(sliced_arr.as_array_ref(), 2).unwrap();
+        let s = scalar_at_unchecked(sliced_arr.as_array_ref(), 2);
         assert_eq!(s.into_value().as_bool().unwrap(), Some(false));
     }
 
@@ -208,7 +210,7 @@ mod tests {
         let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq).unwrap();
 
         for i in 0..arr.len() {
-            let s = scalar_at(arr.as_array_ref(), i).unwrap();
+            let s = scalar_at_unchecked(arr.as_array_ref(), i);
             assert!(s.is_valid());
             assert_eq!(s.value(), &ScalarValue::Bool(true));
         }

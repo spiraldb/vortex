@@ -1,11 +1,11 @@
-use vortex::compute::unary::{scalar_at, ScalarAtFn};
+use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{
     search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
     SliceFn, TakeFn,
 };
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::{PrimitiveScalar, Scalar, ScalarValue};
 
 use crate::FoRArray;
@@ -41,19 +41,20 @@ impl TakeFn for FoRArray {
 
 impl ScalarAtFn for FoRArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let encoded_scalar = scalar_at(&self.encoded(), index)?.reinterpret_cast(self.ptype());
-        let encoded = PrimitiveScalar::try_from(&encoded_scalar)?;
-        let reference = PrimitiveScalar::try_from(self.reference())?;
+        Ok(self.scalar_at_unchecked(index))
+    }
 
-        if encoded.ptype() != reference.ptype() {
-            vortex_bail!("Reference and encoded values had different dtypes");
-        }
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        let encoded_scalar =
+            scalar_at_unchecked(&self.encoded(), index).reinterpret_cast(self.ptype());
+        let encoded = PrimitiveScalar::try_from(&encoded_scalar).unwrap();
+        let reference = PrimitiveScalar::try_from(self.reference()).unwrap();
 
         match_each_integer_ptype!(encoded.ptype(), |$P| {
             use num_traits::WrappingAdd;
-            Ok(encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))
+            encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))
                     .map(|v| Scalar::primitive::<$P>(v, encoded.dtype().nullability()))
-                    .unwrap_or_else(|| Scalar::new(encoded.dtype().clone(), ScalarValue::Null)))
+                    .unwrap_or_else(|| Scalar::new(encoded.dtype().clone(), ScalarValue::Null))
         })
     }
 }
