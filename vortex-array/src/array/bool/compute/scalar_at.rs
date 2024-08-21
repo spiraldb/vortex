@@ -10,6 +10,8 @@ impl ScalarAtFn for BoolArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        self.boolean_buffer().value(index).into()
+        // SAFETY:
+        // `scalar_at_unchecked` is fine with undefined behavior, so it should be acceptable here
+        unsafe { self.boolean_buffer().value_unchecked(index).into() }
     }
 }
