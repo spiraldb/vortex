@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1724234195719,
+  "lastUpdate": 1724247484962,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -34523,6 +34523,126 @@ window.BENCHMARK_DATA = {
             "name": "tpch_q22/vortex-file-uncompressed",
             "value": 112378307,
             "range": "± 1206187",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "47e8c560034aecb0b4792dc29d437cde18dad236",
+          "message": "Push filter schema manipulation into layout reader and reuse ipc message writer in file writer (#651)\n\nThis is done in preparation for pruning as we need to be able to mutate\r\nthe filters and read columns based on filters",
+          "timestamp": "2024-08-21T14:29:57+01:00",
+          "tree_id": "614f420514b59b651dbcda8c7d36406a508605c7",
+          "url": "https://github.com/spiraldb/vortex/commit/47e8c560034aecb0b4792dc29d437cde18dad236"
+        },
+        "date": 1724247484554,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tpch_q1/vortex-in-memory-no-pushdown",
+            "value": 474380171,
+            "range": "± 1088686",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-in-memory-pushdown",
+            "value": 518887164,
+            "range": "± 1481790",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/arrow",
+            "value": 463212350,
+            "range": "± 1773472",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/parquet",
+            "value": 671968554,
+            "range": "± 2920657",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-compressed",
+            "value": 745077724,
+            "range": "± 2585384",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-uncompressed",
+            "value": 553912721,
+            "range": "± 9537508",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-no-pushdown",
+            "value": 151028464,
+            "range": "± 388899",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-pushdown",
+            "value": 149400756,
+            "range": "± 352981",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/arrow",
+            "value": 131257347,
+            "range": "± 200945",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/parquet",
+            "value": 165548958,
+            "range": "± 1421107",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-compressed",
+            "value": 183571040,
+            "range": "± 1431759",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-uncompressed",
+            "value": 172539194,
+            "range": "± 1048785",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-in-memory-no-pushdown",
+            "value": 162154788,
+            "range": "± 358030",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-in-memory-pushdown",
+            "value": 182569126,
+            "range": "± 630433",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/arrow",
+            "value": 157827830,
+            "range": "± 1330447",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/parquet",
+            "value": 342668267,
+            "range": "± 1219233",
             "unit": "ns/iter"
           }
         ]
