@@ -13,14 +13,7 @@ impl Display for Scalar {
         match self.dtype() {
             DType::Null => write!(f, "null"),
             DType::Bool(_) => match BoolScalar::try_from(self)
-                .map_err(|err| {
-                    debug_assert!(
-                        false,
-                        "Failed to parse bool from scalar with DType Bool: {}",
-                        err
-                    );
-                    std::fmt::Error
-                })?
+                .map_err(|_| std::fmt::Error)?
                 .value()
             {
                 None => write!(f, "null"),
@@ -34,14 +27,7 @@ impl Display for Scalar {
             }),
             DType::Utf8(_) => {
                 match Utf8Scalar::try_from(self)
-                    .map_err(|err| {
-                        debug_assert!(
-                            false,
-                            "Failed to parse utf8 from scalar with DType Utf8Scalar: {}",
-                            err
-                        );
-                        std::fmt::Error
-                    })?
+                    .map_err(|_| std::fmt::Error)?
                     .value()
                 {
                     None => write!(f, "null"),
@@ -50,14 +36,7 @@ impl Display for Scalar {
             }
             DType::Binary(_) => {
                 match BinaryScalar::try_from(self)
-                    .map_err(|err| {
-                        debug_assert!(
-                            false,
-                            "Failed to parse binary from scalar with DType Binary: {}",
-                            err
-                        );
-                        std::fmt::Error
-                    })?
+                    .map_err(|_| std::fmt::Error)?
                     .value()
                 {
                     None => write!(f, "null"),
