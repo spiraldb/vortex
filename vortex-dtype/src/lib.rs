@@ -16,8 +16,6 @@ mod serde;
 #[cfg(feature = "proto")]
 pub mod proto {
     pub use vortex_proto::dtype;
-
-    pub use super::serde::proto::*;
 }
 
 #[cfg(feature = "flatbuffers")]
