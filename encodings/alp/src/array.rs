@@ -182,6 +182,10 @@ impl PrimitiveArrayTrait for ALPArray {
             _ => None,
         }
     }
+
+    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
+        todo!()
+    }
 }
 
 impl ArrayValidity for ALPArray {

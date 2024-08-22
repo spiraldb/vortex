@@ -212,6 +212,10 @@ impl PrimitiveArrayTrait for BitPackedArray {
     fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
         todo!()
     }
+
+    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
+        todo!()
+    }
 }
 
 #[cfg(test)]

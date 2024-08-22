@@ -1,4 +1,3 @@
-use core::slice;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -8,7 +7,7 @@ use vortex_dtype::{DType, NativePType};
 use vortex_error::VortexResult;
 
 use crate::array::PrimitiveArray;
-use crate::validity::ArrayValidity;
+use crate::validity::Validity;
 use crate::Array;
 
 mod adapter;
@@ -38,6 +37,37 @@ impl<T> ArrayIter<T> {
             overall_idx: 0,
         }
     }
+
+    pub fn load_batch(&mut self) {
+        self.batch_idx = 0;
+        let mut v = self
+            .cached_batch
+            .take()
+            .unwrap_or_else(|| Vec::with_capacity(DEFAULT_BATCH_SIZE));
+        self.accessor.decode_batch(self.overall_idx, &mut v);
+        self.cached_batch = Some(v)
+    }
+}
+
+#[allow(dead_code)]
+pub struct BatchedIter<T> {
+    accessor: Arc<dyn Accessor<T>>,
+    overall_idx: usize,
+}
+
+pub enum Batch<T> {
+    Full([T; 1024]),
+    Partial(Vec<T>),
+}
+
+impl<T: Copy> From<&[T]> for Batch<T> {
+    fn from(value: &[T]) -> Self {
+        if value.len() == 1024 {
+            Self::Full(<[T; 1024]>::try_from(value).unwrap())
+        } else {
+            Self::Partial(value.to_vec())
+        }
+    }
 }
 
 pub trait Accessor<O> {
@@ -47,28 +77,28 @@ pub trait Accessor<O> {
     }
     fn is_valid(&self, index: usize) -> bool;
     fn value_unchecked(&self, index: usize) -> O;
-    fn decode_batch(&self, start_idx: usize, batch_size: Option<usize>) -> Vec<O> {
-        let batch_size = batch_size
-            .unwrap_or(DEFAULT_BATCH_SIZE)
-            .min(self.len() - start_idx);
-        let mut v = Vec::with_capacity(batch_size);
+    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<O>) {
+        let batch_size = DEFAULT_BATCH_SIZE.min(self.len() - start_idx);
+        if batch.capacity() < batch_size {
+            batch.reserve(batch_size - batch.capacity());
+        }
+
         // Safety:
         // We make sure above that we have at least `batch_size` elements to put into
         // the vector and sufficient capacity.
         unsafe {
-            v.set_len(batch_size);
+            batch.set_len(batch_size);
         }
 
-        for idx in start_idx..start_idx + batch_size {
-            v[idx] = self.value_unchecked(idx);
+        for (idx, batch_item) in batch.iter_mut().enumerate().take(batch_size) {
+            *batch_item = self.value_unchecked(start_idx + idx);
         }
-
-        v
     }
 }
 
 pub struct PrimitiveAccessor<T> {
     array: PrimitiveArray,
+    validity: Validity,
     _marker: PhantomData<T>,
 }
 
@@ -78,7 +108,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveAccessor<T> {
     }
 
     fn is_valid(&self, index: usize) -> bool {
-        self.array.is_valid(index)
+        self.validity.is_valid(index)
     }
 
     fn value_unchecked(&self, index: usize) -> T {
@@ -87,40 +117,52 @@ impl<T: NativePType> Accessor<T> for PrimitiveAccessor<T> {
         T::try_from_le_bytes(&self.array.buffer()[start..end]).unwrap()
     }
 
-    fn decode_batch(&self, start_idx: usize, batch_size: Option<usize>) -> Vec<T> {
-        let batch_size = batch_size
-            .unwrap_or(DEFAULT_BATCH_SIZE)
-            .min(self.len() - start_idx);
+    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<T>) {
+        let batch_size = DEFAULT_BATCH_SIZE.min(self.len() - start_idx);
+        if batch.capacity() < batch_size {
+            batch.reserve(batch_size - batch.capacity());
+        }
+
+        // Safety:
+        // We make sure above that we have at least `batch_size` elements to put into
+        // the vector and sufficient capacity.
+        unsafe {
+            batch.set_len(batch_size);
+        }
 
         let start = start_idx * std::mem::size_of::<T>();
         let end = (start_idx + batch_size) * std::mem::size_of::<T>();
 
         let bytes = &self.array.buffer()[start..end];
 
-        let items = unsafe { slice::from_raw_parts(bytes.as_ptr() as _, batch_size) };
+        let bytes_ptr = bytes.as_ptr() as *const T;
 
-        items.to_vec()
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes_ptr, batch.as_mut_ptr(), batch_size);
+        }
     }
 }
 
 impl<T: NativePType> PrimitiveAccessor<T> {
     pub fn new(array: PrimitiveArray) -> Self {
+        let validity = array.validity();
+
         Self {
             array,
+            validity,
             _marker: PhantomData,
         }
     }
 }
 
-impl<T: Copy + std::fmt::Debug> Iterator for ArrayIter<T> {
+impl<T: Copy> Iterator for ArrayIter<T> {
     type Item = Option<T>;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.cached_batch.as_ref() {
                 None => {
-                    self.batch_idx = 0;
-                    self.cached_batch = Some(self.accessor.decode_batch(self.overall_idx, None))
+                    self.load_batch();
                 }
                 Some(batch) => {
                     if self.overall_idx == self.accessor.len() {
@@ -129,13 +171,13 @@ impl<T: Copy + std::fmt::Debug> Iterator for ArrayIter<T> {
                         self.overall_idx += 1;
                         self.batch_idx += 1;
                         return Some(None);
-                    } else if !(self.batch_idx == batch.len()) {
+                    } else if self.batch_idx != batch.len() {
                         let i = batch[self.batch_idx];
                         self.overall_idx += 1;
                         self.batch_idx += 1;
                         return Some(Some(i));
                     } else if self.batch_idx == batch.len() {
-                        self.cached_batch.take();
+                        self.load_batch()
                     }
                 }
             }
@@ -150,7 +192,7 @@ impl<T: Copy + std::fmt::Debug> Iterator for ArrayIter<T> {
     }
 }
 
-impl<T: Copy + std::fmt::Debug> ExactSizeIterator for ArrayIter<T> {}
+impl<T: Copy> ExactSizeIterator for ArrayIter<T> {}
 
 #[cfg(test)]
 mod tests {
@@ -159,15 +201,11 @@ mod tests {
 
     #[test]
     fn iter_example() {
-        let array = PrimitiveArray::from_nullable_vec(vec![Some(1.0_f32); 1025]);
+        let array = PrimitiveArray::from_nullable_vec((0..1025).map(|v| Some(v as f32)).collect());
         let array_iter = array.as_primitive_array_unchecked().float32_iter().unwrap();
 
-        let mut counter = 0;
-
-        for _f in array_iter {
-            counter += 1;
+        for (idx, v) in array_iter.enumerate() {
+            assert_eq!(idx as f32, v.unwrap());
         }
-
-        assert_eq!(counter, 1025);
     }
 }

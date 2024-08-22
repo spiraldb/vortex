@@ -204,6 +204,18 @@ impl PrimitiveArrayTrait for PrimitiveArray {
             _ => None,
         }
     }
+
+    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
+        match self.dtype() {
+            DType::Primitive(PType::U32, _) => {
+                let access =
+                    Arc::new(PrimitiveAccessor::new(self.clone())) as Arc<dyn Accessor<u32>>;
+                let iter = ArrayIter::new(access);
+                Some(iter)
+            }
+            _ => None,
+        }
+    }
 }
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray {

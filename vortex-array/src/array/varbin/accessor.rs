@@ -46,3 +46,21 @@ impl ArrayAccessor<[u8]> for VarBinArray {
         })
     }
 }
+
+// struct VarBinAccessor {
+//     inner: VarBinArray,
+// }
+
+// impl Accessor<&[u8]> for VarBinAccessor {
+//     fn len(&self) -> usize {
+//         self.inner.len()
+//     }
+
+//     fn is_valid(&self, index: usize) -> bool {
+//         self.inner.is_valid(index)
+//     }
+
+//     fn value_unchecked(&self, _index: usize) -> &[u8] {
+//         todo!()
+//     }
+// }

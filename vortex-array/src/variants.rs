@@ -100,6 +100,7 @@ pub trait BoolArrayTrait: ArrayTrait {
 }
 
 pub trait PrimitiveArrayTrait: ArrayTrait {
+    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>>;
     fn float32_iter(&self) -> Option<ArrayIter<f32>>;
     fn float64_iter(&self) -> Option<ArrayIter<f64>>;
 }

@@ -82,6 +82,10 @@ impl PrimitiveArrayTrait for ConstantArray {
     fn float64_iter(&self) -> Option<ArrayIter<f64>> {
         todo!()
     }
+
+    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
+        todo!()
+    }
 }
 
 impl Utf8ArrayTrait for ConstantArray {}
