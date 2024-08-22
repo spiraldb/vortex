@@ -101,7 +101,7 @@ where
     for string in iter {
         match string {
             None => builder.push_null(),
-            Some(s) => builder.push_value(&compressor.compress(s)),
+            Some(s) => builder.push_value(compressor.compress(s).as_ref()),
         }
     }
 
