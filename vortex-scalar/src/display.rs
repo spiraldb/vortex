@@ -45,7 +45,7 @@ impl Display for Scalar {
                         write!(
                             f,
                             "{}",
-                            buf.as_slice().iter().map(|b| format!("{b:?}")).format(",")
+                            buf.as_slice().iter().map(|b| format!("{b:x}")).format(",")
                         )
                     }
                 }
@@ -105,7 +105,7 @@ mod tests {
                 "{}",
                 Scalar::binary(Buffer::from("Hello World!".as_bytes()), NonNullable)
             ),
-            "48656c6c6f20576f726c6421"
+            "48,65,6c,6c,6f,20,57,6f,72,6c,64,21"
         );
         assert_eq!(format!("{}", Scalar::null(DType::Binary(Nullable))), "null");
     }
