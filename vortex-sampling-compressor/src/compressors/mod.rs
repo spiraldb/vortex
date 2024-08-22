@@ -59,6 +59,7 @@ impl Hash for dyn EncodingCompressor + '_ {
 pub struct CompressionTree<'a> {
     compressor: &'a dyn EncodingCompressor,
     children: Vec<Option<CompressionTree<'a>>>,
+    metadata: Option<*const ()>,
 }
 
 impl Display for CompressionTree<'_> {
@@ -79,6 +80,25 @@ impl<'a> CompressionTree<'a> {
         Self {
             compressor,
             children,
+            metadata: None,
+        }
+    }
+
+    /// Save a piece of metadata as part of the compression tree.
+    ///
+    /// This can be specific encoder parameters that were discovered at sample time
+    /// that should be reused when compressing the full array.
+    pub(crate) fn new_with_metadata<T>(
+        compressor: &'a dyn EncodingCompressor,
+        children: Vec<Option<CompressionTree<'a>>>,
+        metadata: Box<T>,
+    ) -> Self {
+        // SAFETY: the memory pointed to will get cleaned up in Drop impl.
+        let ptr = Box::into_raw(metadata) as *const ();
+        Self {
+            compressor,
+            children,
+            metadata: Some(ptr),
         }
     }
 
@@ -107,6 +127,47 @@ impl<'a> CompressionTree<'a> {
         self.compressor
             .can_compress(array)
             .map(|c| c.compress(array, Some(self.clone()), ctx.for_compressor(c)))
+    }
+
+    // /// Access the saved opaque metadata by reference.
+    // ///
+    // /// # Safety
+    // ///
+    // /// It is up to the caller to ensure that the type `T` is the correct type for the stored
+    // /// metadata.
+    // ///
+    // /// The value of `T` will almost always be `EncodingCompressor`-specific.
+    // pub(crate) unsafe fn metadata_ref<T>(&self) -> Option<&T> {
+    //     unsafe { self.metadata.map(|m| &*(m as *const T)) }
+    // }
+
+    /// Access the saved opaque metadata.
+    ///
+    /// This will consume the struct's metadata pointer, giving the caller ownership of
+    /// the memory by returning a `Box<T>`.
+    ///
+    /// # Safety
+    ///
+    /// It is up to the caller to ensure that the type `T` is the correct type for the stored
+    /// metadata.
+    ///
+    /// The value of `T` will almost always be `EncodingCompressor`-specific.
+    pub unsafe fn metadata<T>(&mut self) -> Option<Box<T>> {
+        let metadata = std::mem::take(&mut self.metadata);
+
+        metadata.map(|m| {
+            let ptr = m as *mut T;
+            unsafe { Box::from_raw(ptr) }
+        })
+    }
+}
+
+impl Drop for CompressionTree<'_> {
+    fn drop(&mut self) {
+        if let Some(ptr) = self.metadata {
+            // Recnostruct the box from the pointer to do a manual drop.
+            let _ = unsafe { Box::from_raw(ptr as *mut ()) };
+        }
     }
 }
 

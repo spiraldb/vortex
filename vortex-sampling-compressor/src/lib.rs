@@ -31,8 +31,6 @@ mod sampling;
 
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
-    #[allow(dead_code)]
-    block_size: u32,
     sample_size: u16,
     sample_count: u16,
     max_depth: u8,
@@ -40,9 +38,7 @@ pub struct CompressConfig {
 
 impl Default for CompressConfig {
     fn default() -> Self {
-        // TODO(ngates): we should ensure that sample_size * sample_count <= block_size
         Self {
-            block_size: 65_536,
             // Sample length should always be multiple of 1024
             sample_size: 128,
             sample_count: 8,

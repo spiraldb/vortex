@@ -16,32 +16,26 @@ use crate::FSSTArray;
 /// # Panics
 ///
 /// If the `strings` array is not encoded as either [`VarBinArray`] or [`VarBinViewArray`].
-pub fn fsst_compress(strings: Array, compressor: Option<Compressor>) -> FSSTArray {
+pub fn fsst_compress(strings: Array, compressor: &Compressor) -> FSSTArray {
     let len = strings.len();
     let dtype = strings.dtype().clone();
 
     // Compress VarBinArray
     if let Ok(varbin) = VarBinArray::try_from(&strings) {
-        let compressor = compressor.unwrap_or_else(|| {
-            varbin
-                .with_iterator(|iter| fsst_train_compressor(iter))
-                .unwrap()
-        });
-        return varbin
-            .with_iterator(|iter| fsst_compress_iter(iter, len, dtype, &compressor))
+        let compressed = varbin
+            .with_iterator(|iter| fsst_compress_iter(iter, len, dtype, compressor))
             .unwrap();
+
+        return compressed;
     }
 
     // Compress VarBinViewArray
     if let Ok(varbin_view) = VarBinViewArray::try_from(&strings) {
-        let compressor = compressor.unwrap_or_else(|| {
-            varbin_view
-                .with_iterator(|iter| fsst_train_compressor(iter))
-                .unwrap()
-        });
-        return varbin_view
-            .with_iterator(|iter| fsst_compress_iter(iter, len, dtype, &compressor))
+        let compressed = varbin_view
+            .with_iterator(|iter| fsst_compress_iter(iter, len, dtype, compressor))
             .unwrap();
+
+        return compressed;
     }
 
     panic!(
@@ -50,22 +44,50 @@ pub fn fsst_compress(strings: Array, compressor: Option<Compressor>) -> FSSTArra
     )
 }
 
-fn fsst_train_compressor<'a, I>(iter: I) -> Compressor
+/// Train a compressor from an array.
+///
+/// # Panics
+///
+/// If the provided array is not FSST compressible.
+pub fn fsst_train_compressor(array: &Array, sample_size: usize) -> Compressor {
+    if let Ok(varbin) = VarBinArray::try_from(array) {
+        varbin
+            .with_iterator(|iter| fsst_train_compressor_iter(iter, sample_size))
+            .unwrap()
+    } else if let Ok(varbin_view) = VarBinViewArray::try_from(array) {
+        varbin_view
+            .with_iterator(|iter| fsst_train_compressor_iter(iter, sample_size))
+            .unwrap()
+    } else {
+        panic!(
+            "cannot fsst_compress array with unsupported encoding {:?}",
+            array.encoding().id()
+        )
+    }
+}
+
+/// Train a [compressor][Compressor] from an iterator of bytestrings.
+fn fsst_train_compressor_iter<'a, I>(iter: I, sample_size: usize) -> Compressor
 where
     I: Iterator<Item = Option<&'a [u8]>>,
 {
     // TODO(aduffy): eliminate the copying.
-    let mut sample = Vec::with_capacity(1_024 * 1_024);
+    let mut sample = Vec::with_capacity(sample_size);
     for string in iter {
         match string {
             None => {}
             Some(b) => sample.extend_from_slice(b),
+        }
+
+        if sample.len() >= sample_size {
+            break;
         }
     }
 
     Compressor::train(&sample)
 }
 
+/// Compress from an iterator of bytestrings using FSST.
 pub fn fsst_compress_iter<'a, I>(
     iter: I,
     len: usize,
