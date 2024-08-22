@@ -45,7 +45,7 @@ impl Display for Scalar {
                         write!(
                             f,
                             "{}",
-                            buf.as_slice().iter().map(|b| format!("{b}")).format(",")
+                            buf.as_slice().iter().map(|b| format!("{b:?}")).format(",")
                         )
                     }
                 }
