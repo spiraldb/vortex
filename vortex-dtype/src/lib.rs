@@ -11,6 +11,7 @@ mod dtype;
 mod extension;
 pub mod field;
 mod nullability;
+#[cfg(feature = "flatbuffers")]
 mod project;
 mod ptype;
 mod serde;
