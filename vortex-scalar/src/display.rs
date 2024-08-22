@@ -1,11 +1,12 @@
 use std::fmt::{Display, Formatter};
 
+use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, DType};
 
+use crate::binary::BinaryScalar;
 use crate::bool::BoolScalar;
 use crate::primitive::PrimitiveScalar;
 use crate::utf8::Utf8Scalar;
-use crate::binary::BinaryScalar;
 use crate::Scalar;
 
 impl Display for Scalar {
@@ -31,7 +32,7 @@ impl Display for Scalar {
                     .value()
                 {
                     None => write!(f, "null"),
-                    Some(bs) => f.write_str(bs.as_str()),
+                    Some(bs) => write!(f, "{}", bs.as_str()),
                 }
             }
             DType::Binary(_) => {
@@ -41,13 +42,14 @@ impl Display for Scalar {
                 {
                     None => write!(f, "null"),
                     Some(buf) => {
-                        for &b in buf.as_slice() {
-                            write!(f, "{:x}", b)?;
-                        };
-                        Ok(())
-                    },
+                        write!(
+                            f,
+                            "{}",
+                            buf.as_slice().iter().map(|b| format!("{b}")).format(",")
+                        )
+                    }
                 }
-            },
+            }
             DType::Struct(..) => todo!(),
             DType::List(..) => todo!(),
             DType::Extension(..) => todo!(),
@@ -57,11 +59,11 @@ impl Display for Scalar {
 
 #[cfg(test)]
 mod tests {
-    use crate::Scalar;
-    use vortex_dtype::DType;
-    use vortex_dtype::Nullability::{NonNullable, Nullable};
-    use vortex_dtype::PType;
     use vortex_buffer::Buffer;
+    use vortex_dtype::Nullability::{NonNullable, Nullable};
+    use vortex_dtype::{DType, PType};
+
+    use crate::Scalar;
 
     #[test]
     fn display_bool() {
@@ -84,7 +86,10 @@ mod tests {
         assert_eq!(format!("{}", Scalar::from(0_u64)), "0");
         assert_eq!(format!("{}", Scalar::from(!0_u64)), "18446744073709551615");
 
-        assert_eq!(format!("{}", Scalar::null(DType::Primitive(PType::U8, Nullable))), "null");
+        assert_eq!(
+            format!("{}", Scalar::null(DType::Primitive(PType::U8, Nullable))),
+            "null"
+        );
     }
 
     #[test]
@@ -96,7 +101,10 @@ mod tests {
     #[test]
     fn display_binary() {
         assert_eq!(
-            format!("{}", Scalar::binary(Buffer::from("Hello World!".as_bytes()), NonNullable)),
+            format!(
+                "{}",
+                Scalar::binary(Buffer::from("Hello World!".as_bytes()), NonNullable)
+            ),
             "48656c6c6f20576f726c6421"
         );
         assert_eq!(format!("{}", Scalar::null(DType::Binary(Nullable))), "null");
