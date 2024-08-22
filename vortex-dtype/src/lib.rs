@@ -4,24 +4,25 @@ pub use dtype::*;
 pub use extension::*;
 pub use half;
 pub use nullability::*;
-pub use project::*;
 pub use ptype::*;
 
 mod dtype;
 mod extension;
 pub mod field;
 mod nullability;
-#[cfg(feature = "flatbuffers")]
-mod project;
 mod ptype;
 mod serde;
 
 #[cfg(feature = "proto")]
 pub mod proto {
     pub use vortex_proto::dtype;
+
+    pub use super::serde::proto::*;
 }
 
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     pub use vortex_flatbuffers::dtype::*;
+
+    pub use super::serde::flatbuffers::*;
 }
