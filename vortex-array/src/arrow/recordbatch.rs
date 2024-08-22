@@ -1,7 +1,7 @@
 use arrow_array::cast::as_struct_array;
 use arrow_array::RecordBatch;
 use itertools::Itertools;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexResult};
 
 use crate::array::StructArray;
 use crate::arrow::FromArrowArray;
@@ -42,7 +42,7 @@ impl TryFrom<Array> for RecordBatch {
             vortex_err!("RecordBatch can only be constructed from a Vortex StructArray: {err}")
         })?;
 
-        Ok(RecordBatch::from(struct_arr))
+        RecordBatch::try_from(struct_arr)
     }
 }
 

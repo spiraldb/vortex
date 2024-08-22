@@ -4,7 +4,7 @@ use arrow_schema::{DataType, Field, SchemaRef};
 use itertools::Itertools;
 use vortex_datetime_dtype::arrow::make_temporal_ext_dtype;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::arrow::{FromArrowType, TryFromArrowType};
 

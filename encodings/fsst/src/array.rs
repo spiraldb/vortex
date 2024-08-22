@@ -66,14 +66,14 @@ impl FSSTArray {
     pub fn symbols(&self) -> Array {
         self.array()
             .child(0, &SYMBOLS_DTYPE, self.metadata().symbols_len)
-            .expect("FSSTArray must have a symbols child array")
+            .unwrap_or_else(|| panic!("FSSTArray must have a symbols child array"))
     }
 
     /// Access the codes array
     pub fn codes(&self) -> Array {
         self.array()
             .child(1, &self.metadata().codes_dtype, self.len())
-            .expect("FSSTArray must have a codes child array")
+            .unwrap_or_else(|| panic!("FSSTArray must have a codes child array"))
     }
 
     /// Build a [`Decompressor`][fsst::Decompressor] that can be used to decompress values from
