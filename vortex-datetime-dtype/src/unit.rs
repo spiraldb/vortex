@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+use jiff::Span;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +25,18 @@ pub enum TimeUnit {
     Ms,
     S,
     D,
+}
+
+impl TimeUnit {
+    pub fn to_jiff_span(&self, v: i64) -> Span {
+        match self {
+            TimeUnit::Ns => Span::new().nanoseconds(v),
+            TimeUnit::Us => Span::new().microseconds(v),
+            TimeUnit::Ms => Span::new().milliseconds(v),
+            TimeUnit::S => Span::new().seconds(v),
+            TimeUnit::D => Span::new().days(v),
+        }
+    }
 }
 
 impl Display for TimeUnit {

@@ -13,6 +13,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 arrow-schema = { workspace = true, optional = true }
+jiff = "0.1.8"
 lazy_static = { workspace = true }
 num_enum = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

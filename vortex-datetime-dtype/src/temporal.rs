@@ -1,11 +1,15 @@
+use std::fmt::Display;
+
+use jiff::civil::{Date, Time};
+use jiff::{Timestamp, Zoned};
 use lazy_static::lazy_static;
 use vortex_dtype::ExtID;
 
 use crate::unit::TimeUnit;
 
 lazy_static! {
-    pub static ref DATE_ID: ExtID = ExtID::from("vortex.date");
     pub static ref TIME_ID: ExtID = ExtID::from("vortex.time");
+    pub static ref DATE_ID: ExtID = ExtID::from("vortex.date");
     pub static ref TIMESTAMP_ID: ExtID = ExtID::from("vortex.timestamp");
 }
 
@@ -21,6 +25,35 @@ pub enum TemporalMetadata {
     Time(TimeUnit),
     Date(TimeUnit),
     Timestamp(TimeUnit, Option<String>),
+}
+
+pub enum TemporalJiff {
+    Time(Time),
+    Date(Date),
+    Timestamp(Timestamp),
+    Zoned(Zoned),
+}
+
+impl Display for TemporalJiff {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TemporalJiff::Time(x) => write!(f, "{}", x),
+            TemporalJiff::Date(x) => write!(f, "{}", x),
+            TemporalJiff::Timestamp(x) => write!(f, "{}", x),
+            TemporalJiff::Zoned(x) => write!(f, "{}", x),
+        }
+    }
+}
+
+pub enum TemporalJiffError {
+    Error(String),
+    JiffError(jiff::Error),
+}
+
+impl From<jiff::Error> for TemporalJiffError {
+    fn from(e: jiff::Error) -> TemporalJiffError {
+        TemporalJiffError::JiffError(e)
+    }
 }
 
 impl TemporalMetadata {
@@ -41,6 +74,36 @@ impl TemporalMetadata {
             tz.as_ref().map(|s| s.as_str())
         } else {
             None
+        }
+    }
+
+    pub fn to_jiff(&self, v: i64) -> Result<TemporalJiff, TemporalJiffError> {
+        match self {
+            TemporalMetadata::Time(TimeUnit::D) => Err(TemporalJiffError::Error(
+                "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Time".to_string(),
+            )),
+            TemporalMetadata::Time(unit) => Ok(TemporalJiff::Time(
+                Time::MIN.checked_add(unit.to_jiff_span(v))?,
+            )),
+            TemporalMetadata::Date(unit) => match unit {
+                TimeUnit::D | TimeUnit::Ms => Ok(TemporalJiff::Date(
+                    Date::new(1970, 1, 1)?.checked_add(unit.to_jiff_span(v))?,
+                )),
+                _ => Err(TemporalJiffError::Error(
+                    "Invalid TimeUnit {unit} for TemporalMetadata::Time".to_string(),
+                )),
+            },
+            TemporalMetadata::Timestamp(TimeUnit::D, _) => Err(TemporalJiffError::Error(
+                "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Timestamp".to_string(),
+            )),
+            TemporalMetadata::Timestamp(unit, None) => Ok(TemporalJiff::Timestamp(
+                Timestamp::UNIX_EPOCH.checked_add(unit.to_jiff_span(v))?,
+            )),
+            TemporalMetadata::Timestamp(unit, Some(tz)) => Ok(TemporalJiff::Zoned(
+                Timestamp::UNIX_EPOCH
+                    .checked_add(unit.to_jiff_span(v))?
+                    .intz(tz)?,
+            )),
         }
     }
 }
