@@ -45,11 +45,6 @@ impl Display for TemporalJiff {
     }
 }
 
-pub enum TemporalJiffError {
-    Error(String),
-    JiffError(jiff::Error),
-}
-
 impl TemporalMetadata {
     /// Retrieve the time unit associated with the array.
     ///
