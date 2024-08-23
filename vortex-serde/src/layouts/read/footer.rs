@@ -1,7 +1,8 @@
 use bytes::Bytes;
 use flatbuffers::root;
 use vortex_dtype::field::Field;
-use vortex_dtype::{deserialize_and_project, resolve_field_references, DType};
+use vortex_dtype::flatbuffers::{deserialize_and_project, resolve_field_references};
+use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
 
