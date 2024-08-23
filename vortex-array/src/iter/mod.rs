@@ -99,20 +99,20 @@ impl<'a, T: Copy> Iterator for ArrayIter<'a, T> {
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.len == self.overall_idx + self.batch_idx {
-            return None;
-        }
-
-        if !self.validity.is_valid(self.overall_idx + self.batch_idx) {
+            None
+        } else if !self.validity.is_valid(self.overall_idx + self.batch_idx) {
             self.batch_idx += 1;
-            return Some(None);
-        } else if self.batch_idx == self.cached_batch.len() {
-            self.load_batch();
+            Some(None)
+        } else {
+            if self.batch_idx == self.cached_batch.len() {
+                self.load_batch();
+            }
+
+            let i = unsafe { *self.cached_batch.get_unchecked(self.batch_idx) };
+            self.batch_idx += 1;
+
+            Some(Some(i))
         }
-
-        let i = unsafe { *self.cached_batch.get_unchecked(self.batch_idx) };
-        self.batch_idx += 1;
-
-        Some(Some(i))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
