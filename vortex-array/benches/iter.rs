@@ -51,7 +51,6 @@ fn arrow_iter(c: &mut Criterion) {
     });
 }
 
-#[inline(never)]
 fn do_work(
     mut iter: impl Iterator<Item = Option<u32>>,
 ) -> (u32, impl Iterator<Item = Option<u32>>) {

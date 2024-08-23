@@ -98,7 +98,7 @@ impl<'a, T: Copy> Iterator for ArrayIter<'a, T> {
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.overall_idx + self.batch_idx == self.len {
+        if self.len == self.overall_idx + self.batch_idx {
             return None;
         }
 
@@ -116,14 +116,12 @@ impl<'a, T: Copy> Iterator for ArrayIter<'a, T> {
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        (
-            self.len - self.overall_idx,
-            Some(self.len - self.overall_idx),
-        )
+        let current = self.batch_idx + self.overall_idx;
+        (self.len - current, Some(self.len - current))
     }
 }
 
-// impl<T: Copy> ExactSizeIterator for ArrayIter<'_, T> {}
+impl<T: Copy> ExactSizeIterator for ArrayIter<'_, T> {}
 
 #[cfg(test)]
 mod tests {

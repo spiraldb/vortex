@@ -196,6 +196,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
         PrimitiveArray::validity(self)
     }
 
+    #[inline]
     fn value_unchecked(&self, index: usize) -> T {
         let start = index * std::mem::size_of::<T>();
         let end = (index + 1) * std::mem::size_of::<T>();
