@@ -35,6 +35,13 @@ fn vortex_compress_tpch(c: &mut Criterion) {
         .unwrap();
     let orders_vortex = rt.block_on(tpch::load_table(data_dir, "orders", &tpch::schema::ORDERS));
 
+    // Find the size of the comments column
+    let comments_nbytes = orders_vortex
+        .with_dyn(|a| a.as_struct_array_unchecked().field_by_name("o_comment"))
+        .unwrap()
+        .nbytes();
+    println!("o_comments has size {}B", comments_nbytes);
+
     let compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
     let compressed = compressor.compress(&orders_vortex, None).unwrap();
     let ratio = (orders_vortex.nbytes() as f64) / (compressed.nbytes() as f64);

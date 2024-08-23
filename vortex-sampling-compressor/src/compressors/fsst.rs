@@ -22,7 +22,7 @@ const FSST_SYMBOL_TABLE_SIZE: usize = 4_096;
 /// We use a 16KB sample of text from the input.
 ///
 /// This value is derived from the FSST paper section 4.4
-const DEFAULT_SAMPLE_BYTES: usize = 16 * 1_024;
+// const DEFAULT_SAMPLE_BYTES: usize = 1 << 14;
 
 impl EncodingCompressor for FSSTCompressor {
     fn id(&self) -> &str {
@@ -37,17 +37,15 @@ impl EncodingCompressor for FSSTCompressor {
             return None;
         }
 
+        // if array.nbytes() < 10 * FSST_SYMBOL_TABLE_SIZE {
+        //     return None;
+        // }
+
         // FSST can be applied on top of VarBin, VarBinView, and Dict encodings.
         if array.encoding().id() == VarBin::ID
             || array.encoding().id() == VarBinView::ID
             || array.encoding().id() == Dict::ID
         {
-            return Some(self);
-        }
-
-        // Size-check: FSST has a builtin 4KB overhead due to the symbol table, and usually compresses
-        // between 2-3x depending on the text quality.
-        if array.nbytes() > 10 * FSST_SYMBOL_TABLE_SIZE {
             return Some(self);
         }
 
@@ -61,24 +59,39 @@ impl EncodingCompressor for FSSTCompressor {
         like: Option<CompressionTree<'a>>,
         _ctx: SamplingCompressor<'a>,
     ) -> VortexResult<super::CompressedArray<'a>> {
+        // Size-check: FSST has a builtin 4KB overhead due to the symbol table, and usually compresses
+        // between 2-3x depending on the text quality.
+        //
+        // It's not worth running a full compression step unless the array is large enough.
+        if array.nbytes() < 10 * FSST_SYMBOL_TABLE_SIZE {
+            return Ok(CompressedArray::uncompressed(array.clone()));
+        }
+
         let compressor = like
-            .and_then(|mut c| unsafe { c.metadata::<Compressor>() })
-            .map(|m| {
-                println!("using pretrained compressor");
-                m
+            .map(|mut c| unsafe {
+                // println!(
+                //     "compressing with pre-trained on array of size {}B",
+                //     array.len()
+                // );
+                c.metadata::<Compressor>()
+                    .expect("if like is passed, compressor should exist")
             })
             .unwrap_or_else(|| {
-                println!("training new compressor");
-                Box::new(fsst_train_compressor(array, DEFAULT_SAMPLE_BYTES))
+                // println!(
+                //     "training new compressor on array of len {} bytes {}B",
+                //     array.len(),
+                //     array.nbytes()
+                // );
+                Box::new(fsst_train_compressor(array))
             });
 
         let result_array =
             if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
                 // For a VarBinArray or VarBinViewArray, compress directly.
-                fsst_compress(array.clone(), compressor.as_ref()).into_array()
+                fsst_compress(array, compressor.as_ref()).into_array()
             } else if let Ok(dict) = DictArray::try_from(array) {
                 // For a dict array, just compress the values
-                let values = fsst_compress(dict.values(), compressor.as_ref());
+                let values = fsst_compress(dict, compressor.as_ref());
                 let codes = dict.codes();
 
                 DictArray::try_new(codes, values.into_array())?.into_array()

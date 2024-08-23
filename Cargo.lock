@@ -1552,8 +1552,6 @@ dependencies = [
 [[package]]
 name = "fsst-rs"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71a86d2804d7e23b8b067df618cfeda433bb6291ec68f156f6711e9523cbd779"
 
 [[package]]
 name = "futures"
