@@ -50,12 +50,6 @@ pub enum TemporalJiffError {
     JiffError(jiff::Error),
 }
 
-impl From<jiff::Error> for TemporalJiffError {
-    fn from(e: jiff::Error) -> TemporalJiffError {
-        TemporalJiffError::JiffError(e)
-    }
-}
-
 impl TemporalMetadata {
     /// Retrieve the time unit associated with the array.
     ///
@@ -77,11 +71,11 @@ impl TemporalMetadata {
         }
     }
 
-    pub fn to_jiff(&self, v: i64) -> Result<TemporalJiff, TemporalJiffError> {
+    pub fn to_jiff(&self, v: i64) -> VortexResult<TemporalJiff> {
         match self {
-            TemporalMetadata::Time(TimeUnit::D) => Err(TemporalJiffError::Error(
-                "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Time".to_string(),
-            )),
+            TemporalMetadata::Time(TimeUnit::D) => {
+                vortex_bail!(InvalidArgument: "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Time")
+            }
             TemporalMetadata::Time(unit) => Ok(TemporalJiff::Time(
                 Time::MIN.checked_add(unit.to_jiff_span(v))?,
             )),
@@ -89,13 +83,13 @@ impl TemporalMetadata {
                 TimeUnit::D | TimeUnit::Ms => Ok(TemporalJiff::Date(
                     Date::new(1970, 1, 1)?.checked_add(unit.to_jiff_span(v))?,
                 )),
-                _ => Err(TemporalJiffError::Error(
-                    "Invalid TimeUnit {unit} for TemporalMetadata::Time".to_string(),
-                )),
+                _ => {
+                    vortex_bail!(InvalidArgument: "Invalid TimeUnit {} for TemporalMetadata::Time", unit)
+                }
             },
-            TemporalMetadata::Timestamp(TimeUnit::D, _) => Err(TemporalJiffError::Error(
-                "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Timestamp".to_string(),
-            )),
+            TemporalMetadata::Timestamp(TimeUnit::D, _) => {
+                vortex_bail!(InvalidArgument: "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Timestamp")
+            }
             TemporalMetadata::Timestamp(unit, None) => Ok(TemporalJiff::Timestamp(
                 Timestamp::UNIX_EPOCH.checked_add(unit.to_jiff_span(v))?,
             )),

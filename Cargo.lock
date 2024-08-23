@@ -4389,6 +4389,7 @@ dependencies = [
  "datafusion-common",
  "flatbuffers",
  "flexbuffers",
+ "jiff",
  "object_store",
  "parquet",
  "thiserror",
