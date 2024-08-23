@@ -88,6 +88,7 @@ impl Validity {
         }
     }
 
+    #[inline]
     pub fn is_valid(&self, index: usize) -> bool {
         match self {
             Self::NonNullable | Self::AllValid => true,

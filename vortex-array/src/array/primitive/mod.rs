@@ -1,5 +1,7 @@
 // use std::sync::Arc;
 
+use std::borrow::Cow;
+
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
 use itertools::Itertools;
@@ -9,7 +11,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::iter::{Accessor, ArrayIter, PrimitiveAccessor};
+use crate::iter::{Accessor, ArrayIter};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -171,10 +173,6 @@ impl PrimitiveArray {
             .into_buffer()
             .expect("PrimitiveArray must have a buffer")
     }
-
-    pub fn iter_accessor<T: NativePType>(&self) -> PrimitiveAccessor<'_, T> {
-        PrimitiveAccessor::new(self)
-    }
 }
 
 impl ArrayTrait for PrimitiveArray {}
@@ -187,7 +185,7 @@ impl ArrayVariants for PrimitiveArray {
 
 impl<T: NativePType> Accessor<T> for PrimitiveArray {
     fn len(&self) -> usize {
-        self.len()
+        PrimitiveArray::len(self)
     }
 
     fn is_valid(&self, index: usize) -> bool {
@@ -195,7 +193,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
     }
 
     fn validity(&self) -> Validity {
-        self.validity()
+        PrimitiveArray::validity(self)
     }
 
     fn value_unchecked(&self, index: usize) -> T {
@@ -204,25 +202,16 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
         T::try_from_le_bytes(&self.buffer()[start..end]).unwrap()
     }
 
-    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<T>) {
+    #[inline]
+    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
         let batch_size = usize::min(1024, self.len() - start_idx);
-
-        if batch.capacity() < batch_size {
-            batch.reserve(batch_size - batch.capacity());
-        }
-
-        // Safety:
-        // We make sure above that we have at least `batch_size` elements to put into
-        // the vector and sufficient capacity.
-        unsafe {
-            batch.set_len(batch_size);
-        }
-
         let start = start_idx * std::mem::size_of::<T>();
 
         unsafe {
-            let bytes_ptr = self.buffer().as_ptr().add(start) as _;
-            std::ptr::copy_nonoverlapping(bytes_ptr, batch.as_mut_ptr(), batch_size);
+            Cow::Borrowed(std::slice::from_raw_parts(
+                self.buffer().as_ptr().add(start) as _,
+                batch_size,
+            ))
         }
     }
 }
