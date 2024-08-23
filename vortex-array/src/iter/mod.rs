@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
-use std::sync::Arc;
 
 pub use adapter::*;
 pub use ext::*;
+use vortex_buffer::Buffer;
 use vortex_dtype::{DType, NativePType};
 use vortex_error::VortexResult;
 
@@ -21,23 +21,32 @@ pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
     fn dtype(&self) -> &DType;
 }
 
-pub struct ArrayIter<T> {
-    accessor: Arc<dyn Accessor<T>>,
+#[allow(dead_code)]
+pub struct ArrayIter<'a, T> {
+    accessor: &'a dyn Accessor<T>,
     cached_batch: Option<Vec<T>>,
     batch_idx: usize,
     overall_idx: usize,
+    len: usize,
+    validity: Validity,
 }
 
-impl<T> ArrayIter<T> {
-    pub fn new(accessor: Arc<dyn Accessor<T>>) -> Self {
+impl<'a, T> ArrayIter<'a, T> {
+    pub fn new(accessor: &'a impl Accessor<T>) -> Self {
+        let len = accessor.len();
+        let validity = accessor.validity();
+
         Self {
             accessor,
+            len,
+            validity,
             cached_batch: None,
             batch_idx: 0,
             overall_idx: 0,
         }
     }
 
+    #[inline(never)]
     pub fn load_batch(&mut self) {
         self.batch_idx = 0;
         let mut v = self
@@ -49,35 +58,19 @@ impl<T> ArrayIter<T> {
     }
 }
 
-#[allow(dead_code)]
-pub struct BatchedIter<T> {
-    accessor: Arc<dyn Accessor<T>>,
-    overall_idx: usize,
-}
-
-pub enum Batch<T> {
-    Full([T; 1024]),
-    Partial(Vec<T>),
-}
-
-impl<T: Copy> From<&[T]> for Batch<T> {
-    fn from(value: &[T]) -> Self {
-        if value.len() == 1024 {
-            Self::Full(<[T; 1024]>::try_from(value).unwrap())
-        } else {
-            Self::Partial(value.to_vec())
-        }
-    }
-}
-
-pub trait Accessor<O> {
+pub trait Accessor<T> {
     fn len(&self) -> usize;
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
     fn is_valid(&self, index: usize) -> bool;
-    fn value_unchecked(&self, index: usize) -> O;
-    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<O>) {
+    fn value_unchecked(&self, index: usize) -> T;
+    fn validity(&self) -> Validity {
+        todo!()
+    }
+
+    #[inline(never)]
+    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<T>) {
         let batch_size = DEFAULT_BATCH_SIZE.min(self.len() - start_idx);
         if batch.capacity() < batch_size {
             batch.reserve(batch_size - batch.capacity());
@@ -96,29 +89,40 @@ pub trait Accessor<O> {
     }
 }
 
-pub struct PrimitiveAccessor<T> {
-    array: PrimitiveArray,
+pub struct PrimitiveAccessor<'a, T> {
+    buffer: &'a Buffer,
     validity: Validity,
+    len: usize,
     _marker: PhantomData<T>,
 }
 
-impl<T: NativePType> Accessor<T> for PrimitiveAccessor<T> {
+impl<'a, N: NativePType> Accessor<N> for PrimitiveAccessor<'a, N> {
+    #[inline(never)]
     fn len(&self) -> usize {
-        self.array.len()
+        self.len
     }
 
+    #[inline(never)]
     fn is_valid(&self, index: usize) -> bool {
         self.validity.is_valid(index)
     }
 
-    fn value_unchecked(&self, index: usize) -> T {
-        let start = index * std::mem::size_of::<T>();
-        let end = (index + 1) * std::mem::size_of::<T>();
-        T::try_from_le_bytes(&self.array.buffer()[start..end]).unwrap()
+    #[inline(never)]
+    fn validity(&self) -> Validity {
+        self.validity.clone()
     }
 
-    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<T>) {
+    #[inline(never)]
+    fn value_unchecked(&self, index: usize) -> N {
+        let start = index * std::mem::size_of::<N>();
+        let end = (index + 1) * std::mem::size_of::<N>();
+        N::try_from_le_bytes(&self.buffer[start..end]).unwrap()
+    }
+
+    #[inline(never)]
+    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<N>) {
         let batch_size = DEFAULT_BATCH_SIZE.min(self.len() - start_idx);
+
         if batch.capacity() < batch_size {
             batch.reserve(batch_size - batch.capacity());
         }
@@ -130,69 +134,78 @@ impl<T: NativePType> Accessor<T> for PrimitiveAccessor<T> {
             batch.set_len(batch_size);
         }
 
-        let start = start_idx * std::mem::size_of::<T>();
-        let end = (start_idx + batch_size) * std::mem::size_of::<T>();
-
-        let bytes = &self.array.buffer()[start..end];
-
-        let bytes_ptr = bytes.as_ptr() as *const T;
+        let start = start_idx * std::mem::size_of::<N>();
 
         unsafe {
+            let bytes_ptr = self.buffer.as_ptr().add(start) as _;
             std::ptr::copy_nonoverlapping(bytes_ptr, batch.as_mut_ptr(), batch_size);
         }
     }
 }
 
-impl<T: NativePType> PrimitiveAccessor<T> {
-    pub fn new(array: PrimitiveArray) -> Self {
+impl<'a, T: NativePType> PrimitiveAccessor<'a, T> {
+    pub fn new(array: &'a PrimitiveArray) -> Self {
         let validity = array.validity();
+        let len = array.len();
+        let buffer = array.buffer();
 
         Self {
-            array,
+            buffer,
             validity,
+            len,
             _marker: PhantomData,
         }
     }
 }
 
-impl<T: Copy> Iterator for ArrayIter<T> {
+impl<'a, T: Copy> Iterator for ArrayIter<'a, T> {
     type Item = Option<T>;
 
+    #[allow(clippy::unwrap_in_result)]
+    #[inline(never)]
     fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.cached_batch.as_ref() {
-                None => {
-                    self.load_batch();
-                }
-                Some(batch) => {
-                    if self.overall_idx == self.accessor.len() {
-                        return None;
-                    } else if !self.accessor.is_valid(self.overall_idx) {
-                        self.overall_idx += 1;
-                        self.batch_idx += 1;
-                        return Some(None);
-                    } else if self.batch_idx != batch.len() {
-                        let i = batch[self.batch_idx];
-                        self.overall_idx += 1;
-                        self.batch_idx += 1;
-                        return Some(Some(i));
-                    } else if self.batch_idx == batch.len() {
-                        self.load_batch()
-                    }
-                }
-            }
+        if self.cached_batch.is_none() {
+            self.load_batch();
         }
+
+        if self.overall_idx == self.len {
+            return None;
+        }
+
+        let batch_len = self.cached_batch.as_ref().map(Vec::len).unwrap();
+
+        if !self.validity.is_valid(self.overall_idx) {
+            self.overall_idx += 1;
+            self.batch_idx += 1;
+            return Some(None);
+        }
+
+        if self.batch_idx == batch_len {
+            self.load_batch();
+        };
+
+        let i = unsafe {
+            self.cached_batch
+                .as_ref()
+                .unwrap()
+                .get_unchecked(self.batch_idx)
+        };
+
+        self.overall_idx += 1;
+        self.batch_idx += 1;
+
+        Some(Some(*i))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (
-            self.accessor.len() - self.overall_idx,
-            Some(self.accessor.len() - self.overall_idx),
+            self.len - self.overall_idx,
+            Some(self.len - self.overall_idx),
         )
     }
 }
 
-impl<T: Copy> ExactSizeIterator for ArrayIter<T> {}
+impl<T: Copy> ExactSizeIterator for ArrayIter<'_, T> {}
 
 #[cfg(test)]
 mod tests {
@@ -201,7 +214,8 @@ mod tests {
 
     #[test]
     fn iter_example() {
-        let array = PrimitiveArray::from_nullable_vec((0..1025).map(|v| Some(v as f32)).collect());
+        let array =
+            PrimitiveArray::from_nullable_vec((0..1_000_000).map(|v| Some(v as f32)).collect());
         let array_iter = array.as_primitive_array_unchecked().float32_iter().unwrap();
 
         for (idx, v) in array_iter.enumerate() {

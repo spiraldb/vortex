@@ -1,4 +1,4 @@
-use std::sync::Arc;
+// use std::sync::Arc;
 
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
@@ -171,6 +171,10 @@ impl PrimitiveArray {
             .into_buffer()
             .expect("PrimitiveArray must have a buffer")
     }
+
+    pub fn iter_accessor<T: NativePType>(&self) -> PrimitiveAccessor<'_, T> {
+        PrimitiveAccessor::new(self)
+    }
 }
 
 impl ArrayTrait for PrimitiveArray {}
@@ -181,12 +185,53 @@ impl ArrayVariants for PrimitiveArray {
     }
 }
 
+impl<T: NativePType> Accessor<T> for PrimitiveArray {
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        ArrayValidity::is_valid(self, index)
+    }
+
+    fn validity(&self) -> Validity {
+        self.validity()
+    }
+
+    fn value_unchecked(&self, index: usize) -> T {
+        let start = index * std::mem::size_of::<T>();
+        let end = (index + 1) * std::mem::size_of::<T>();
+        T::try_from_le_bytes(&self.buffer()[start..end]).unwrap()
+    }
+
+    fn decode_batch(&self, start_idx: usize, batch: &mut Vec<T>) {
+        let batch_size = usize::min(1024, self.len() - start_idx);
+
+        if batch.capacity() < batch_size {
+            batch.reserve(batch_size - batch.capacity());
+        }
+
+        // Safety:
+        // We make sure above that we have at least `batch_size` elements to put into
+        // the vector and sufficient capacity.
+        unsafe {
+            batch.set_len(batch_size);
+        }
+
+        let start = start_idx * std::mem::size_of::<T>();
+
+        unsafe {
+            let bytes_ptr = self.buffer().as_ptr().add(start) as _;
+            std::ptr::copy_nonoverlapping(bytes_ptr, batch.as_mut_ptr(), batch_size);
+        }
+    }
+}
+
 impl PrimitiveArrayTrait for PrimitiveArray {
     fn float32_iter(&self) -> Option<ArrayIter<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
-                let access = Arc::new(PrimitiveAccessor::new(self.clone()));
-                let iter = ArrayIter::new(access as _);
+                let iter = ArrayIter::new(self);
                 Some(iter)
             }
             _ => None,
@@ -196,9 +241,8 @@ impl PrimitiveArrayTrait for PrimitiveArray {
     fn float64_iter(&self) -> Option<ArrayIter<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
-                let access =
-                    Arc::new(PrimitiveAccessor::new(self.clone())) as Arc<dyn Accessor<f64>>;
-                let iter = ArrayIter::new(access);
+                // let access = &PrimitiveAccessor::new(self);
+                let iter = ArrayIter::new(self);
                 Some(iter)
             }
             _ => None,
@@ -208,9 +252,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
     fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
         match self.dtype() {
             DType::Primitive(PType::U32, _) => {
-                let access =
-                    Arc::new(PrimitiveAccessor::new(self.clone())) as Arc<dyn Accessor<u32>>;
-                let iter = ArrayIter::new(access);
+                let iter = ArrayIter::new(self);
                 Some(iter)
             }
             _ => None,

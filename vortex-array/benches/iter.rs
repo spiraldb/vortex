@@ -7,22 +7,41 @@ use vortex::variants::ArrayVariants;
 fn std_iter(c: &mut Criterion) {
     let data = (0_u32..1_000_000).map(Some).collect_vec();
     c.bench_function("std_iter", |b| {
-        b.iter_batched(|| data.clone().into_iter(), do_work, BatchSize::SmallInput)
+        b.iter_batched(|| data.iter().copied(), do_work, BatchSize::SmallInput)
+    });
+}
+
+fn std_iter_no_option(c: &mut Criterion) {
+    let data = (0_u32..1_000_000).collect_vec();
+    c.bench_function("std_iter_no_option", |b| {
+        b.iter_batched(
+            || data.iter().copied(),
+            |mut iter| {
+                let mut u = 0;
+                for n in iter.by_ref() {
+                    u += n;
+                }
+                u
+            },
+            BatchSize::SmallInput,
+        )
     });
 }
 
 fn vortex_iter(c: &mut Criterion) {
     let data = PrimitiveArray::from_vec((0_u32..1_000_000).collect_vec(), Validity::AllValid);
+
     c.bench_function("vortex_iter", |b| {
         b.iter_batched(
-            || {
-                data.clone()
-                    .as_primitive_array()
-                    .unwrap()
+            || data.clone(),
+            |arr| {
+                let iter = arr
+                    .as_primitive_array_unchecked()
                     .unsigned32_iter()
-                    .unwrap()
+                    .unwrap();
+                let (u, _) = do_work(iter);
+                u
             },
-            do_work,
             BatchSize::SmallInput,
         )
     });
@@ -35,11 +54,22 @@ fn arrow_iter(c: &mut Criterion) {
     });
 }
 
-fn do_work(iter: impl Iterator<Item = Option<u32>>) {
-    for _i in iter {
-        criterion::black_box(())
+fn do_work(
+    mut iter: impl Iterator<Item = Option<u32>>,
+) -> (u32, impl Iterator<Item = Option<u32>>) {
+    let mut u = 0;
+    for n in iter.by_ref() {
+        u += n.unwrap();
     }
+    (u, iter)
 }
 
-criterion_group!(benches, std_iter, vortex_iter, arrow_iter);
+criterion_group!(
+    name = benches;
+    config = Criterion::default().sample_size(100);
+    targets = std_iter_no_option,
+    std_iter,
+    vortex_iter,
+    arrow_iter,
+);
 criterion_main!(benches);
