@@ -1,9 +1,9 @@
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers;
 #[cfg(feature = "proto")]
-pub mod proto;
+mod proto;
 #[allow(clippy::module_inception)]
-pub mod serde;
+mod serde;
 
 #[cfg(test)]
 #[cfg(feature = "serde")]
