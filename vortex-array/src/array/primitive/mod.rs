@@ -192,7 +192,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
         ArrayValidity::is_valid(self, index)
     }
 
-    fn validity(&self) -> Validity {
+    fn array_validity(&self) -> Validity {
         PrimitiveArray::validity(self)
     }
 

@@ -33,15 +33,12 @@ fn vortex_iter(c: &mut Criterion) {
 
     c.bench_function("vortex_iter", |b| {
         b.iter_batched(
-            || data.clone(),
-            |arr| {
-                let iter = arr
-                    .as_primitive_array_unchecked()
+            || {
+                data.as_primitive_array_unchecked()
                     .unsigned32_iter()
-                    .unwrap();
-                let (u, _) = do_work(iter);
-                u
+                    .unwrap()
             },
+            do_work,
             BatchSize::SmallInput,
         )
     });
@@ -54,6 +51,7 @@ fn arrow_iter(c: &mut Criterion) {
     });
 }
 
+#[inline(never)]
 fn do_work(
     mut iter: impl Iterator<Item = Option<u32>>,
 ) -> (u32, impl Iterator<Item = Option<u32>>) {

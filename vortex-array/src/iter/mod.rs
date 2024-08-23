@@ -38,7 +38,7 @@ where
 {
     pub fn new(accessor: &'a impl Accessor<T>) -> Self {
         let len = accessor.len();
-        let validity = accessor.validity();
+        let validity = accessor.array_validity();
 
         let cached_batch = accessor.decode_batch(0);
 
@@ -60,17 +60,15 @@ where
     }
 }
 
+#[allow(clippy::len_without_is_empty)]
 pub trait Accessor<T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
 {
     fn len(&self) -> usize;
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
     fn is_valid(&self, index: usize) -> bool;
     fn value_unchecked(&self, index: usize) -> T;
-    fn validity(&self) -> Validity {
+    fn array_validity(&self) -> Validity {
         todo!()
     }
 
@@ -129,7 +127,6 @@ impl<'a, T: Copy> Iterator for ArrayIter<'a, T> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::array::PrimitiveArray;
     use crate::variants::ArrayVariants;
 
