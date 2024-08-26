@@ -220,17 +220,17 @@ mod test {
     use vortex_error::VortexResult;
 
     use crate::chunked_reader::ChunkedArrayReader;
-    use crate::writer::ArrayWriter;
+    use crate::stream_writer::StreamArrayWriter;
     use crate::MessageReader;
 
-    fn chunked_array() -> VortexResult<ArrayWriter<Vec<u8>>> {
+    fn chunked_array() -> VortexResult<StreamArrayWriter<Vec<u8>>> {
         let c = ChunkedArray::try_new(
             vec![PrimitiveArray::from((0i32..1000).collect_vec()).into_array(); 10],
             PType::I32.into(),
         )?
         .into_array();
 
-        block_on(async { ArrayWriter::new(vec![]).write_array(c).await })
+        block_on(async { StreamArrayWriter::new(vec![]).write_array(c).await })
     }
 
     #[test]

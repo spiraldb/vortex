@@ -16,7 +16,7 @@ use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
-use crate::validity::{ArrayValidity, LogicalValidity};
+use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray};
 
@@ -42,7 +42,7 @@ impl ChunkedArray {
             }
         }
 
-        let chunk_ends = [0u64]
+        let chunk_offsets = [0u64]
             .into_iter()
             .chain(chunks.iter().map(|c| c.len() as u64))
             .scan(0, |acc, c| {
@@ -51,12 +51,13 @@ impl ChunkedArray {
             })
             .collect_vec();
 
-        let num_chunks = chunk_ends.len() - 1;
-        let length = *chunk_ends.last().unwrap_or_else(|| {
+        let num_chunks = chunk_offsets.len() - 1;
+        let length = *chunk_offsets.last().unwrap_or_else(|| {
             unreachable!("Chunk ends is guaranteed to have at least one element")
         }) as usize;
 
-        let mut children = vec![PrimitiveArray::from_vec(chunk_ends, NonNullable).into_array()];
+        let mut children = Vec::with_capacity(chunks.len() + 1);
+        children.push(PrimitiveArray::from_vec(chunk_offsets, NonNullable).into_array());
         children.extend(chunks);
 
         Self::try_from_parts(
@@ -70,8 +71,8 @@ impl ChunkedArray {
 
     #[inline]
     pub fn chunk(&self, idx: usize) -> Option<Array> {
-        let chunk_start = usize::try_from(&scalar_at(&self.chunk_ends(), idx).ok()?).ok()?;
-        let chunk_end = usize::try_from(&scalar_at(&self.chunk_ends(), idx + 1).ok()?).ok()?;
+        let chunk_start = usize::try_from(&scalar_at(&self.chunk_offsets(), idx).ok()?).ok()?;
+        let chunk_end = usize::try_from(&scalar_at(&self.chunk_offsets(), idx + 1).ok()?).ok()?;
 
         // Offset the index since chunk_ends is child 0.
         self.array()
@@ -83,7 +84,7 @@ impl ChunkedArray {
     }
 
     #[inline]
-    pub fn chunk_ends(&self) -> Array {
+    pub fn chunk_offsets(&self) -> Array {
         self.array()
             .child(0, &Self::ENDS_DTYPE, self.nchunks() + 1)
             .unwrap_or_else(|| panic!("Missing chunk ends in ChunkedArray"))
@@ -92,15 +93,21 @@ impl ChunkedArray {
     pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        let search_result = search_sorted(&self.chunk_ends(), index, SearchSortedSide::Left)
+        let search_result = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
             .unwrap_or_else(|err| {
                 panic!("Search sorted failed in find_chunk_idx: {}", err);
             });
         let index_chunk = match search_result {
-            SearchResult::Found(i) => i,
+            SearchResult::Found(i) => {
+                if i == self.nchunks() {
+                    i - 1
+                } else {
+                    i
+                }
+            }
             SearchResult::NotFound(i) => i - 1,
         };
-        let chunk_start = &scalar_at(&self.chunk_ends(), index_chunk)
+        let chunk_start = &scalar_at(&self.chunk_offsets(), index_chunk)
             .and_then(|s| usize::try_from(&s))
             .unwrap_or_else(|err| {
                 panic!("Failed to find chunk start in find_chunk_idx: {}", err);
@@ -148,7 +155,7 @@ impl FromIterator<Array> for ChunkedArray {
 
 impl AcceptArrayVisitor for ChunkedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_child("chunk_ends", &self.chunk_ends())?;
+        visitor.visit_child("chunk_ends", &self.chunk_offsets())?;
         for (idx, chunk) in self.chunks().enumerate() {
             visitor.visit_child(format!("[{}]", idx).as_str(), &chunk)?;
         }
@@ -157,12 +164,19 @@ impl AcceptArrayVisitor for ChunkedArray {
 }
 
 impl ArrayValidity for ChunkedArray {
-    fn is_valid(&self, _index: usize) -> bool {
-        todo!()
+    fn is_valid(&self, index: usize) -> bool {
+        let (chunk, offset_in_chunk) = self.find_chunk_idx(index);
+        self.chunk(chunk)
+            .expect("must be a valid chunk index")
+            .with_dyn(|a| a.is_valid(offset_in_chunk))
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        todo!()
+        let validity = self
+            .chunks()
+            .map(|a| a.with_dyn(|arr| arr.logical_validity()))
+            .collect::<Validity>();
+        validity.to_logical(self.len())
     }
 }
 
@@ -233,6 +247,11 @@ mod test {
     #[test]
     pub fn slice_end() {
         assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
+    }
+
+    #[test]
+    pub fn slice_exactly_end() {
+        assert_equal_slices(slice(chunked_array().array(), 6, 9).unwrap(), &[7u64, 8, 9]);
     }
 
     #[test]

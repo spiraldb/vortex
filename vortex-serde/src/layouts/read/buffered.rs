@@ -5,7 +5,7 @@ use vortex::compute::slice;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
-use crate::layouts::reader::{Layout, ReadResult};
+use crate::layouts::read::{Layout, ReadResult};
 
 #[derive(Debug)]
 pub struct BufferedReader {

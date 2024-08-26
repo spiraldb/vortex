@@ -15,7 +15,7 @@ use vortex::{Array, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{VortexError, VortexResult};
 use vortex_serde::io::TokioAdapter;
-use vortex_serde::writer::ArrayWriter;
+use vortex_serde::stream_writer::StreamArrayWriter;
 
 use crate::idempotent;
 use crate::reader::BATCH_SIZE;
@@ -57,7 +57,7 @@ pub fn data_vortex_uncompressed(fname_out: &str, downloaded_data: PathBuf) -> Pa
             .unwrap()
             .block_on(async move {
                 let write = tokio::fs::File::create(path).await.unwrap();
-                ArrayWriter::new(TokioAdapter(write))
+                StreamArrayWriter::new(TokioAdapter(write))
                     .write_array(array)
                     .await
                     .unwrap();

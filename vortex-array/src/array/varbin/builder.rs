@@ -34,17 +34,18 @@ impl<O: NativePType> VarBinBuilder<O> {
     }
 
     #[inline]
-    pub fn push_value(&mut self, value: &[u8]) {
+    pub fn push_value(&mut self, value: impl AsRef<[u8]>) {
+        let slice = value.as_ref();
         self.offsets
-            .push(O::from(self.data.len() + value.len()).unwrap_or_else(|| {
+            .push(O::from(self.data.len() + slice.len()).unwrap_or_else(|| {
                 panic!(
                     "Failed to convert sum of {} and {} to offset of type {}",
                     self.data.len(),
-                    value.len(),
+                    slice.len(),
                     std::any::type_name::<O>()
                 )
             }));
-        self.data.extend_from_slice(value);
+        self.data.extend_from_slice(slice);
         self.validity.append_non_null();
     }
 

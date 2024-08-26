@@ -3,15 +3,15 @@ use vortex_scalar::Scalar;
 
 use crate::array::BoolArray;
 use crate::compute::unary::ScalarAtFn;
-use crate::validity::ArrayValidity;
-use crate::ArrayDType;
 
 impl ScalarAtFn for BoolArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if self.is_valid(index) {
-            Ok(self.boolean_buffer().value(index).into())
-        } else {
-            return Ok(Scalar::null(self.dtype().clone()));
-        }
+        Ok(self.scalar_at_unchecked(index))
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        // SAFETY:
+        // `scalar_at_unchecked` is fine with undefined behavior, so it should be acceptable here
+        unsafe { self.boolean_buffer().value_unchecked(index).into() }
     }
 }

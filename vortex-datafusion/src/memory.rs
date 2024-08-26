@@ -9,13 +9,13 @@ use datafusion::prelude::*;
 use datafusion_common::{Result as DFResult, ToDFSchema};
 use datafusion_expr::utils::conjunction;
 use datafusion_expr::{TableProviderFilterPushDown, TableType};
-use datafusion_physical_expr::{create_physical_expr, EquivalenceProperties, PhysicalExpr};
+use datafusion_physical_expr::{create_physical_expr, EquivalenceProperties};
 use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanProperties};
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
-use vortex_error::VortexError;
-use vortex_expr::datafusion::extract_columns_from_expr;
+use vortex_expr::datafusion::convert_expr_to_vortex;
+use vortex_expr::VortexExpr;
 
 use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
@@ -98,16 +98,11 @@ impl TableProvider for VortexMemTable {
                 let df_schema = self.schema_ref.clone().to_dfschema()?;
 
                 let filter_expr = create_physical_expr(&expr, &df_schema, state.execution_props())?;
-
-                let filter_projection =
-                    extract_columns_from_expr(Some(&filter_expr), self.schema_ref.clone())?
-                        .into_iter()
-                        .collect();
+                let filter_expr = convert_expr_to_vortex(filter_expr)?;
 
                 make_filter_then_take_plan(
                     self.schema_ref.clone(),
                     filter_expr,
-                    filter_projection,
                     self.array.clone(),
                     output_projection.clone(),
                     state,
@@ -200,18 +195,12 @@ impl VortexMemTableOptions {
 /// columns.
 fn make_filter_then_take_plan(
     schema: SchemaRef,
-    filter_expr: Arc<dyn PhysicalExpr>,
-    filter_projection: Vec<usize>,
+    filter_expr: Arc<dyn VortexExpr>,
     chunked_array: ChunkedArray,
     output_projection: Vec<usize>,
     _session_state: &dyn Session,
 ) -> DFResult<Arc<dyn ExecutionPlan>> {
-    let row_selector_op = Arc::new(RowSelectorExec::try_new(
-        filter_expr,
-        filter_projection,
-        &chunked_array,
-        schema.clone(),
-    )?);
+    let row_selector_op = Arc::new(RowSelectorExec::try_new(filter_expr, &chunked_array)?);
 
     Ok(Arc::new(TakeRowsExec::new(
         schema.clone(),

@@ -11,7 +11,7 @@ use crate::FSSTArray;
 
 impl IntoCanonical for FSSTArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        let decompressor = self.decompressor()?;
+        let decompressor = self.decompressor();
 
         // Note: the maximum amount of decompressed space for an FSST array is 8 * n_elements,
         // as each code can expand into a symbol of 1-8 bytes.

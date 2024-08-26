@@ -48,8 +48,12 @@ impl ArrayCompute for ConstantArray {
 }
 
 impl ScalarAtFn for ConstantArray {
-    fn scalar_at(&self, _index: usize) -> VortexResult<Scalar> {
-        Ok(self.scalar().clone())
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
+        Ok(<Self as ScalarAtFn>::scalar_at_unchecked(self, index))
+    }
+
+    fn scalar_at_unchecked(&self, _index: usize) -> Scalar {
+        self.scalar().clone()
     }
 }
 

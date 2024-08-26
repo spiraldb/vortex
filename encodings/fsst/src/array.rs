@@ -80,9 +80,14 @@ impl FSSTArray {
     /// this array.
     ///
     /// This is private to the crate to avoid leaking `fsst` as part of the public API.
-    pub(crate) fn decompressor(&self) -> VortexResult<Decompressor> {
+    pub(crate) fn decompressor(&self) -> Decompressor {
         // canonicalize the symbols child array, so we can view it contiguously
-        let symbols_array = self.symbols().into_canonical()?.into_primitive()?;
+        let symbols_array = self
+            .symbols()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
+            .expect("Symbols must be a Primitive Array");
         let symbols = symbols_array.maybe_null_slice::<u64>();
 
         // Transmute the 64-bit symbol values into fsst `Symbol`s.
@@ -90,7 +95,7 @@ impl FSSTArray {
         let symbols = unsafe { std::mem::transmute::<&[u64], &[Symbol]>(symbols) };
 
         // Build a new decompressor that uses these symbols.
-        Ok(Decompressor::new(symbols))
+        Decompressor::new(symbols)
     }
 }
 

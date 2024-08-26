@@ -1,11 +1,7 @@
 #![cfg(feature = "datafusion")]
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion_common::arrow::datatypes::{Schema, SchemaRef};
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
-use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_expr::Operator as DFOperator;
 use datafusion_physical_expr::PhysicalExpr;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -16,17 +12,13 @@ use crate::{BinaryExpr, Column, Operator};
 
 pub fn convert_expr_to_vortex(
     physical_expr: Arc<dyn PhysicalExpr>,
-    input_schema: &Schema,
 ) -> VortexResult<Arc<dyn VortexExpr>> {
-    if physical_expr.data_type(input_schema).unwrap().is_temporal() {
-        vortex_bail!("Doesn't support evaluating operations over temporal values");
-    }
     if let Some(binary_expr) = physical_expr
         .as_any()
         .downcast_ref::<datafusion_physical_expr::expressions::BinaryExpr>()
     {
-        let left = convert_expr_to_vortex(binary_expr.left().clone(), input_schema)?;
-        let right = convert_expr_to_vortex(binary_expr.right().clone(), input_schema)?;
+        let left = convert_expr_to_vortex(binary_expr.left().clone())?;
+        let right = convert_expr_to_vortex(binary_expr.right().clone())?;
         let operator = *binary_expr.op();
 
         return Ok(Arc::new(BinaryExpr::new(left, operator.try_into()?, right)) as _);
@@ -58,38 +50,6 @@ pub fn convert_expr_to_vortex(
     }
 
     vortex_bail!("Couldn't convert DataFusion physical expression to a vortex expression")
-}
-
-/// Extract all indexes of all columns referenced by the physical expressions from the schema
-pub fn extract_columns_from_expr(
-    expr: Option<&Arc<dyn PhysicalExpr>>,
-    schema_ref: SchemaRef,
-) -> DFResult<HashSet<usize>> {
-    let mut predicate_projection = HashSet::new();
-
-    if let Some(expr) = expr {
-        expr.apply(|expr| {
-            if let Some(column) = expr
-                .as_any()
-                .downcast_ref::<datafusion_physical_expr::expressions::Column>()
-            {
-                match schema_ref.column_with_name(column.name()) {
-                    Some(_) => {
-                        predicate_projection.insert(column.index());
-                    }
-                    None => {
-                        return Err(DataFusionError::External(
-                            format!("Could not find expected column {} in schema", column.name())
-                                .into(),
-                        ))
-                    }
-                }
-            }
-            Ok(TreeNodeRecursion::Continue)
-        })?;
-    }
-
-    Ok(predicate_projection)
 }
 
 impl TryFrom<DFOperator> for Operator {

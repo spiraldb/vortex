@@ -1,4 +1,4 @@
-use vortex::compute::unary::{scalar_at, ScalarAtFn};
+use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::Array;
 use vortex_error::VortexResult;
@@ -23,7 +23,16 @@ impl ArrayCompute for DictArray {
 impl ScalarAtFn for DictArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let dict_index: usize = scalar_at(&self.codes(), index)?.as_ref().try_into()?;
-        scalar_at(&self.values(), dict_index)
+        Ok(scalar_at_unchecked(&self.values(), dict_index))
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        let dict_index: usize = scalar_at_unchecked(&self.codes(), index)
+            .as_ref()
+            .try_into()
+            .unwrap();
+
+        scalar_at_unchecked(&self.values(), dict_index)
     }
 }
 

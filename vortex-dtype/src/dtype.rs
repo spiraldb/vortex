@@ -3,9 +3,10 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use DType::*;
 
+use crate::field::Field;
 use crate::nullability::Nullability;
 use crate::{ExtDType, PType};
 
@@ -172,14 +173,22 @@ impl StructDType {
         &self.dtypes
     }
 
-    pub fn project(&self, indices: &[usize]) -> VortexResult<Self> {
-        let mut names = vec![];
-        let mut dtypes = vec![];
+    pub fn project(&self, projection: &[Field]) -> VortexResult<Self> {
+        let mut names = Vec::with_capacity(projection.len());
+        let mut dtypes = Vec::with_capacity(projection.len());
 
-        for &idx in indices.iter() {
-            if idx > self.names.len() {
-                vortex_bail!("Projection column is out of bounds");
-            }
+        for field in projection.iter() {
+            let idx = match field {
+                Field::Name(n) => self
+                    .find_name(n.as_ref())
+                    .ok_or_else(|| vortex_err!("Unknown field {n}"))?,
+                Field::Index(i) => {
+                    if *i > self.names.len() {
+                        vortex_bail!("Projection column is out of bounds");
+                    }
+                    *i
+                }
+            };
 
             names.push(self.names[idx].clone());
             dtypes.push(self.dtypes[idx].clone());

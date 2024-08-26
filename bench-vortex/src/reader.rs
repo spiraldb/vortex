@@ -33,8 +33,9 @@ use vortex_error::{vortex_err, VortexResult};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::chunked_reader::ChunkedArrayReader;
 use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
-use vortex_serde::writer::ArrayWriter;
-use vortex_serde::MessageReader;
+use vortex_serde::stream_reader::StreamArrayReader;
+use vortex_serde::stream_writer::StreamArrayWriter;
+use vortex_serde::DTypeReader;
 
 use crate::{COMPRESSORS, CTX};
 
@@ -49,10 +50,12 @@ pub struct VortexFooter {
 
 pub async fn open_vortex(path: &Path) -> VortexResult<Array> {
     let file = tokio::fs::File::open(path).await.unwrap();
-    let mut msgs = MessageReader::try_new(TokioAdapter(file)).await.unwrap();
-    msgs.array_stream_from_messages(CTX.clone())
-        .await
-        .unwrap()
+    let reader = StreamArrayReader::try_new(TokioAdapter(file), CTX.clone())
+        .await?
+        .load_dtype()
+        .await?;
+    reader
+        .into_array_stream()
         .collect_chunked()
         .await
         .map(vortex::IntoArray::into_array)
@@ -64,7 +67,7 @@ pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
 ) -> VortexResult<()> {
     let chunked = compress_parquet_to_vortex(parquet_path.as_path())?;
 
-    let written = ArrayWriter::new(write)
+    let written = StreamArrayWriter::new(write)
         .write_array_stream(chunked.array_stream())
         .await?;
 
@@ -146,8 +149,7 @@ pub async fn read_vortex_footer_format<R: VortexReadAt>(
     buf.reserve(header_len - buf.len());
     unsafe { buf.set_len(header_len) }
     buf = reader.read_at_into(footer.dtype_range.start, buf).await?;
-    let mut header_reader = MessageReader::try_new(buf).await?;
-    let dtype = header_reader.read_dtype().await?;
+    let dtype = DTypeReader::new(buf).await?.read_dtype().await?;
 
     ChunkedArrayReader::try_new(
         reader,

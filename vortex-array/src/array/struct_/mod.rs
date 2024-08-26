@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use vortex_dtype::field::Field;
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
@@ -97,16 +98,25 @@ impl StructArray {
     /// # Panics
     /// This function will panic an error if the projection references columns not within the
     /// schema boundaries.
-    pub fn project(&self, projection: &[usize]) -> VortexResult<Self> {
+    pub fn project(&self, projection: &[Field]) -> VortexResult<Self> {
         let mut children = Vec::with_capacity(projection.len());
         let mut names = Vec::with_capacity(projection.len());
 
-        for &column_idx in projection {
+        for field in projection.iter() {
+            let idx = match field {
+                Field::Name(n) => self
+                    .names()
+                    .iter()
+                    .position(|name| name.as_ref() == n)
+                    .ok_or_else(|| vortex_err!("Unknown field {n}"))?,
+                Field::Index(i) => *i,
+            };
+
+            names.push(self.names()[idx].clone());
             children.push(
-                self.field(column_idx)
-                    .ok_or(vortex_err!(OutOfBounds: column_idx, 0, self.dtypes().len()))?,
+                self.field(idx)
+                    .ok_or_else(|| vortex_err!(OutOfBounds: idx, 0, self.dtypes().len()))?,
             );
-            names.push(self.names()[column_idx].clone());
         }
 
         StructArray::try_new(
@@ -167,6 +177,7 @@ impl ArrayStatisticsCompute for StructArray {}
 
 #[cfg(test)]
 mod test {
+    use vortex_dtype::field::Field;
     use vortex_dtype::{DType, FieldName, FieldNames, Nullability};
 
     use crate::array::primitive::PrimitiveArray;
@@ -194,7 +205,9 @@ mod test {
         )
         .unwrap();
 
-        let struct_b = struct_a.project(&[2usize, 0]).unwrap();
+        let struct_b = struct_a
+            .project(&[Field::from(2usize), Field::from(0)])
+            .unwrap();
         assert_eq!(
             struct_b.names().as_ref(),
             [FieldName::from("zs"), FieldName::from("xs")],

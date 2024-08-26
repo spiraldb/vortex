@@ -87,13 +87,13 @@ where
         match T::DATA_TYPE {
             DataType::Timestamp(time_unit, tz) => {
                 let tz = tz.clone().map(|s| s.to_string());
-                TemporalArray::new_timestamp(arr.into(), from_arrow_time_unit(time_unit), tz).into()
+                TemporalArray::new_timestamp(arr.into(), time_unit.into(), tz).into()
             }
             DataType::Time32(time_unit) => {
-                TemporalArray::new_time(arr.into(), from_arrow_time_unit(time_unit)).into()
+                TemporalArray::new_time(arr.into(), time_unit.into()).into()
             }
             DataType::Time64(time_unit) => {
-                TemporalArray::new_time(arr.into(), from_arrow_time_unit(time_unit)).into()
+                TemporalArray::new_time(arr.into(), time_unit.into()).into()
             }
             DataType::Date32 => TemporalArray::new_date(arr.into(), TimeUnit::D).into(),
             DataType::Date64 => TemporalArray::new_date(arr.into(), TimeUnit::Ms).into(),
@@ -316,14 +316,5 @@ impl FromArrowArray<ArrowArrayRef> for Array {
                 array.data_type().clone()
             ),
         }
-    }
-}
-
-fn from_arrow_time_unit(time_unit: ArrowTimeUnit) -> TimeUnit {
-    match time_unit {
-        ArrowTimeUnit::Second => TimeUnit::S,
-        ArrowTimeUnit::Millisecond => TimeUnit::Ms,
-        ArrowTimeUnit::Microsecond => TimeUnit::Us,
-        ArrowTimeUnit::Nanosecond => TimeUnit::Ns,
     }
 }

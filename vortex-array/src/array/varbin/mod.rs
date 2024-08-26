@@ -230,6 +230,7 @@ pub fn varbin_scalar(value: Buffer, dtype: &DType) -> Scalar {
 
 #[cfg(test)]
 mod test {
+    use rstest::{fixture, rstest};
     use vortex_dtype::{DType, Nullability};
 
     use crate::array::primitive::PrimitiveArray;
@@ -239,6 +240,7 @@ mod test {
     use crate::validity::Validity;
     use crate::{Array, IntoArray};
 
+    #[fixture]
     fn binary_array() -> Array {
         let values = PrimitiveArray::from(
             "hello worldhello world this is a long string"
@@ -257,20 +259,19 @@ mod test {
         .into_array()
     }
 
-    #[test]
-    pub fn test_scalar_at() {
-        let binary_arr = binary_array();
-        assert_eq!(binary_arr.len(), 2);
-        assert_eq!(scalar_at(&binary_arr, 0).unwrap(), "hello world".into());
+    #[rstest]
+    pub fn test_scalar_at(binary_array: Array) {
+        assert_eq!(binary_array.len(), 2);
+        assert_eq!(scalar_at(&binary_array, 0).unwrap(), "hello world".into());
         assert_eq!(
-            scalar_at(&binary_arr, 1).unwrap(),
+            scalar_at(&binary_array, 1).unwrap(),
             "hello world this is a long string".into()
         )
     }
 
-    #[test]
-    pub fn slice_array() {
-        let binary_arr = slice(&binary_array(), 1, 2).unwrap();
+    #[rstest]
+    pub fn slice_array(binary_array: Array) {
+        let binary_arr = slice(&binary_array, 1, 2).unwrap();
         assert_eq!(
             scalar_at(&binary_arr, 0).unwrap(),
             "hello world this is a long string".into()

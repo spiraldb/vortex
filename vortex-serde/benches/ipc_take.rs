@@ -18,8 +18,8 @@ use vortex::compute::take;
 use vortex::{Context, IntoArray};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::io::FuturesAdapter;
-use vortex_serde::writer::ArrayWriter;
-use vortex_serde::MessageReader;
+use vortex_serde::stream_reader::StreamArrayReader;
+use vortex_serde::stream_writer::StreamArrayWriter;
 
 fn ipc_take(c: &mut Criterion) {
     let mut group = c.benchmark_group("ipc_take");
@@ -62,17 +62,22 @@ fn ipc_take(c: &mut Criterion) {
         let compressed = compressor.compress(&uncompressed).unwrap();
 
         // Try running take over an ArrayView.
-        let buffer = block_on(async { ArrayWriter::new(vec![]).write_array(compressed).await })
-            .unwrap()
-            .into_inner();
+        let buffer =
+            block_on(async { StreamArrayWriter::new(vec![]).write_array(compressed).await })
+                .unwrap()
+                .into_inner();
 
         let ctx_ref = &Arc::new(ctx);
         let ro_buffer = buffer.as_slice();
         let indices_ref = &indices;
 
         b.to_async(FuturesExecutor).iter(|| async move {
-            let mut msgs = MessageReader::try_new(FuturesAdapter(Cursor::new(ro_buffer))).await?;
-            let reader = msgs.array_stream_from_messages(ctx_ref.clone()).await?;
+            let stream_reader =
+                StreamArrayReader::try_new(FuturesAdapter(Cursor::new(ro_buffer)), ctx_ref.clone())
+                    .await?
+                    .load_dtype()
+                    .await?;
+            let reader = stream_reader.into_array_stream();
             pin_mut!(reader);
             let array_view = reader.try_next().await?.unwrap();
             black_box(take(&array_view, indices_ref))

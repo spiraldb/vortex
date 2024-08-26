@@ -14,7 +14,7 @@ use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
 use crate::io::VortexRead;
 use crate::messages::IPCDType;
 
-const FLATBUFFER_SIZE_LENGTH: usize = 4;
+pub const FLATBUFFER_SIZE_LENGTH: usize = 4;
 
 pub struct MessageReader<R> {
     read: R,
@@ -128,15 +128,6 @@ impl<R: VortexRead> MessageReader<R> {
         array_reader.into_array(ctx, dtype).map(Some)
     }
 
-    /// Construct an ArrayStream pulling the DType from the stream.
-    pub async fn array_stream_from_messages(
-        &mut self,
-        ctx: Arc<Context>,
-    ) -> VortexResult<impl ArrayStream + '_> {
-        let dtype = self.read_dtype().await?;
-        Ok(self.array_stream(ctx, dtype))
-    }
-
     pub fn array_stream(&mut self, ctx: Arc<Context>, dtype: DType) -> impl ArrayStream + '_ {
         struct State<'a, R: VortexRead> {
             msgs: &'a mut MessageReader<R>,
@@ -208,6 +199,10 @@ impl<R: VortexRead> MessageReader<R> {
         let page_buffer = Ok(Some(Buffer::from(buffer.freeze())));
         let _ = self.next().await?;
         page_buffer
+    }
+
+    pub fn into_inner(self) -> R {
+        self.read
     }
 }
 

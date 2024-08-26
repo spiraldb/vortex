@@ -40,7 +40,7 @@ fn check_slice_bounds(array: &Array, start: usize, stop: usize) -> VortexResult<
         vortex_bail!(OutOfBounds: stop, 0, array.len());
     }
     if start > stop {
-        vortex_bail!("start ({}) must be <= stop ({})", start, stop);
+        vortex_bail!("start ({start}) must be <= stop ({stop})");
     }
     Ok(())
 }

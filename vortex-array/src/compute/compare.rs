@@ -29,7 +29,7 @@ impl Display for Operator {
             Operator::Lt => "<",
             Operator::Lte => "<=",
         };
-        write!(f, "{display}")
+        Display::fmt(display, f)
     }
 }
 
@@ -50,10 +50,10 @@ impl Operator {
         match self {
             Operator::Eq => Operator::Eq,
             Operator::NotEq => Operator::NotEq,
-            Operator::Gt => Operator::Lte,
-            Operator::Gte => Operator::Lt,
-            Operator::Lt => Operator::Gte,
-            Operator::Lte => Operator::Gt,
+            Operator::Gt => Operator::Lt,
+            Operator::Gte => Operator::Lte,
+            Operator::Lt => Operator::Gt,
+            Operator::Lte => Operator::Gte,
         }
     }
 

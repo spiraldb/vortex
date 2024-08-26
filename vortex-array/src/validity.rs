@@ -4,7 +4,7 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::BoolArray;
-use crate::compute::unary::scalar_at;
+use crate::compute::unary::scalar_at_unchecked;
 use crate::compute::{filter, slice, take};
 use crate::stats::ArrayStatistics;
 use crate::{Array, IntoArray, IntoArrayVariant};
@@ -92,14 +92,12 @@ impl Validity {
         match self {
             Self::NonNullable | Self::AllValid => true,
             Self::AllInvalid => false,
-            Self::Array(a) => scalar_at(a, index)
-                .and_then(|s| bool::try_from(&s))
-                .unwrap_or_else(|err| {
-                    panic!(
-                        "Failed to get bool from Validity Array at index {}: {err}",
-                        index
-                    )
-                }),
+            Self::Array(a) => bool::try_from(&scalar_at_unchecked(a, index)).unwrap_or_else(|err| {
+                panic!(
+                    "Failed to get bool from Validity Array at index {}: {err}",
+                    index
+                )
+            }),
         }
     }
 
@@ -214,22 +212,21 @@ impl FromIterator<LogicalValidity> for Validity {
         // Else, construct the boolean buffer
         let mut buffer = BooleanBufferBuilder::new(validities.iter().map(|v| v.len()).sum());
         for validity in validities {
-            let present = match validity {
-                LogicalValidity::AllValid(count) => BooleanBuffer::new_set(count),
-                LogicalValidity::AllInvalid(count) => BooleanBuffer::new_unset(count),
-                LogicalValidity::Array(array) => array
-                    .into_bool()
-                    .unwrap_or_else(|err| {
-                        panic!("Failed to get Validity Array as BoolArray: {err}")
-                    })
-                    .boolean_buffer(),
+            match validity {
+                LogicalValidity::AllValid(count) => buffer.append_n(count, true),
+                LogicalValidity::AllInvalid(count) => buffer.append_n(count, false),
+                LogicalValidity::Array(array) => {
+                    let array_buffer = array
+                        .into_bool()
+                        .unwrap_or_else(|err| {
+                            panic!("Failed to get Validity Array as BoolArray: {err}")
+                        })
+                        .boolean_buffer();
+                    buffer.append_buffer(&array_buffer);
+                }
             };
-            buffer.append_buffer(&present);
         }
-        let bool_array =
-            BoolArray::try_new(buffer.finish(), Validity::NonNullable).unwrap_or_else(|err| {
-                panic!("BoolArray::try_new from BooleanBuffer should always succeed: {err}")
-            });
+        let bool_array = BoolArray::from(buffer.finish());
         Self::Array(bool_array.into_array())
     }
 }

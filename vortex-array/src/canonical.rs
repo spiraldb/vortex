@@ -219,10 +219,9 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
         .unwrap_or_else(|err| panic!("Failed to canon offsets: {err}"));
     let offsets = match offsets.ptype() {
         PType::I32 | PType::I64 => offsets,
-        // Unless it's u64, everything else can be converted into an i32.
-        // FIXME(ngates): do not copy offsets again
         PType::U64 => offsets.reinterpret_cast(PType::I64),
         PType::U32 => offsets.reinterpret_cast(PType::I32),
+        // Unless it's u64, everything else can be converted into an i32.
         _ => try_cast(&offsets.to_array(), PType::I32.into())
             .and_then(|a| a.into_primitive())
             .unwrap_or_else(|err| panic!("Failed to cast offsets to PrimitiveArray of i32: {err}")),
@@ -313,7 +312,10 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
                     extract_temporal_values!(&temporal_array.temporal_values(), i64);
                 Arc::new(Date64Array::new(scalars, nulls))
             }
-            _ => panic!("invalid time_unit {time_unit} for vortex.date"),
+            _ => panic!(
+                "Invalid TimeUnit {time_unit} for {}",
+                temporal_array.ext_dtype().id()
+            ),
         },
         TemporalMetadata::Time(time_unit) => match time_unit {
             TimeUnit::S => {
@@ -336,7 +338,10 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
                     extract_temporal_values!(&temporal_array.temporal_values(), i64);
                 Arc::new(Time64NanosecondArray::new(scalars, nulls))
             }
-            _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
+            _ => panic!(
+                "Invalid TimeUnit {time_unit} for {}",
+                temporal_array.ext_dtype().id()
+            ),
         },
         TemporalMetadata::Timestamp(time_unit, _) => {
             let (scalars, nulls) = extract_temporal_values!(&temporal_array.temporal_values(), i64);
@@ -345,7 +350,10 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> ArrayRef {
                 TimeUnit::Us => Arc::new(TimestampMicrosecondArray::new(scalars, nulls)),
                 TimeUnit::Ms => Arc::new(TimestampMillisecondArray::new(scalars, nulls)),
                 TimeUnit::S => Arc::new(TimestampSecondArray::new(scalars, nulls)),
-                _ => panic!("invalid TimeUnit for Time32 array {time_unit}"),
+                _ => panic!(
+                    "Invalid TimeUnit {time_unit} for {}",
+                    temporal_array.ext_dtype().id()
+                ),
             }
         }
     }

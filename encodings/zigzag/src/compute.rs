@@ -1,4 +1,4 @@
-use vortex::compute::unary::{scalar_at, ScalarAtFn};
+use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, ArrayCompute, SliceFn};
 use vortex::{Array, IntoArray};
 use vortex_dtype::PType;
@@ -20,7 +20,7 @@ impl ArrayCompute for ZigZagArray {
 
 impl ScalarAtFn for ZigZagArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let scalar = scalar_at(&self.encoded(), index)?;
+        let scalar = scalar_at_unchecked(&self.encoded(), index);
         if scalar.is_null() {
             return Ok(scalar);
         }
@@ -57,6 +57,10 @@ impl ScalarAtFn for ZigZagArray {
             .into()),
             _ => unreachable!(),
         }
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
     }
 }
 

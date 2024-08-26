@@ -28,8 +28,12 @@ impl SliceFn for NullArray {
 }
 
 impl ScalarAtFn for NullArray {
-    fn scalar_at(&self, _index: usize) -> VortexResult<Scalar> {
-        Ok(Scalar::null(DType::Null))
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
+        Ok(<Self as ScalarAtFn>::scalar_at_unchecked(self, index))
+    }
+
+    fn scalar_at_unchecked(&self, _index: usize) -> Scalar {
+        Scalar::null(DType::Null)
     }
 }
 

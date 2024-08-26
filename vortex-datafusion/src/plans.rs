@@ -9,10 +9,10 @@ use std::task::{Context, Poll};
 use arrow_array::cast::AsArray;
 use arrow_array::types::UInt64Type;
 use arrow_array::{ArrayRef, RecordBatch, RecordBatchOptions, UInt64Array};
-use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use arrow_schema::{DataType, Schema, SchemaRef};
 use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
-use datafusion_physical_expr::{EquivalenceProperties, Partitioning, PhysicalExpr};
+use datafusion_physical_expr::{EquivalenceProperties, Partitioning};
 use datafusion_physical_plan::{
     DisplayAs, DisplayFormatType, ExecutionMode, ExecutionPlan, PlanProperties,
 };
@@ -23,8 +23,8 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, AsArray as _, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex_dtype::field::Field;
 use vortex_error::{vortex_err, VortexError};
-use vortex_expr::datafusion::convert_expr_to_vortex;
 use vortex_expr::VortexExpr;
 
 /// Physical plan operator that applies a set of [filters][Expr] against the input, producing a
@@ -32,7 +32,6 @@ use vortex_expr::VortexExpr;
 /// chunks but for different columns.
 pub(crate) struct RowSelectorExec {
     filter_expr: Arc<dyn VortexExpr>,
-    filter_projection: Vec<usize>,
     /// cached PlanProperties object. We do not make use of this.
     cached_plan_props: PlanProperties,
     /// Full array. We only access partitions of this data.
@@ -40,19 +39,18 @@ pub(crate) struct RowSelectorExec {
 }
 
 lazy_static! {
-    static ref ROW_SELECTOR_SCHEMA_REF: SchemaRef = Arc::new(Schema::new(vec![Field::new(
-        "row_idx",
-        DataType::UInt64,
-        false
-    )]));
+    static ref ROW_SELECTOR_SCHEMA_REF: SchemaRef =
+        Arc::new(Schema::new(vec![arrow_schema::Field::new(
+            "row_idx",
+            DataType::UInt64,
+            false
+        )]));
 }
 
 impl RowSelectorExec {
     pub(crate) fn try_new(
-        filter_expr: Arc<dyn PhysicalExpr>,
-        filter_projection: Vec<usize>,
+        filter_expr: Arc<dyn VortexExpr>,
         chunked_array: &ChunkedArray,
-        schema: SchemaRef,
     ) -> DFResult<Self> {
         let cached_plan_props = PlanProperties::new(
             EquivalenceProperties::new(ROW_SELECTOR_SCHEMA_REF.clone()),
@@ -60,11 +58,8 @@ impl RowSelectorExec {
             ExecutionMode::Bounded,
         );
 
-        let filter_expr = convert_expr_to_vortex(filter_expr, schema.as_ref())?;
-
         Ok(Self {
             filter_expr,
-            filter_projection: filter_projection.clone(),
             chunked_array: chunked_array.clone(),
             cached_plan_props,
         })
@@ -131,7 +126,7 @@ impl ExecutionPlan for RowSelectorExec {
         Ok(Box::pin(RowIndicesStream {
             chunked_array: self.chunked_array.clone(),
             chunk_idx: 0,
-            filter_projection: self.filter_projection.clone(),
+            filter_projection: self.filter_expr.references().iter().cloned().collect(),
             conjunction_expr: self.filter_expr.clone(),
         }))
     }
@@ -142,7 +137,7 @@ pub(crate) struct RowIndicesStream {
     chunked_array: ChunkedArray,
     chunk_idx: usize,
     conjunction_expr: Arc<dyn VortexExpr>,
-    filter_projection: Vec<usize>,
+    filter_projection: Vec<Field>,
 }
 
 impl Stream for RowIndicesStream {
@@ -169,7 +164,7 @@ impl Stream for RowIndicesStream {
         // initial batch for us to process.
         let vortex_struct = next_chunk
             .into_struct()?
-            .project(this.filter_projection.as_slice())?;
+            .project(&this.filter_projection)?;
 
         let selection = this
             .conjunction_expr
@@ -204,7 +199,7 @@ pub(crate) struct TakeRowsExec {
     plan_properties: PlanProperties,
 
     // Array storing the indices used to take the plan nodes.
-    projection: Vec<usize>,
+    projection: Vec<Field>,
 
     // Input plan, a stream of indices on which we perform a take against the original dataset.
     input: Arc<dyn ExecutionPlan>,
@@ -234,7 +229,7 @@ impl TakeRowsExec {
 
         Self {
             plan_properties,
-            projection: projection.to_owned(),
+            projection: projection.iter().copied().map(Field::from).collect(),
             input: row_indices,
             output_schema: output_schema.clone(),
             table: table.clone(),
@@ -313,7 +308,7 @@ pub(crate) struct TakeRowsStream<F> {
     chunk_idx: usize,
 
     // Projection based on the schema here
-    output_projection: Vec<usize>,
+    output_projection: Vec<Field>,
     output_schema: SchemaRef,
 
     // The original Vortex array we're taking from
@@ -409,6 +404,7 @@ mod test {
     use vortex::array::{BoolArray, ChunkedArray, PrimitiveArray, StructArray};
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray};
+    use vortex_dtype::field::Field;
     use vortex_dtype::FieldName;
     use vortex_expr::datafusion::convert_expr_to_vortex;
 
@@ -446,8 +442,8 @@ mod test {
         let filtering_stream = RowIndicesStream {
             chunked_array: chunked_array.clone(),
             chunk_idx: 0,
-            conjunction_expr: convert_expr_to_vortex(df_expr, &schema).unwrap(),
-            filter_projection: vec![0, 1],
+            conjunction_expr: convert_expr_to_vortex(df_expr).unwrap(),
+            filter_projection: vec![Field::from(0), Field::from(1)],
         };
 
         let rows: Vec<RecordBatch> = futures::executor::block_on_stream(filtering_stream)
