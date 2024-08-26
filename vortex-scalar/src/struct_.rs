@@ -17,6 +17,10 @@ impl<'a> StructScalar<'a> {
         self.dtype
     }
 
+    pub fn is_null(&self) -> bool {
+        self.fields.is_none()
+    }
+
     pub fn field_by_idx(&self, idx: usize) -> Option<Scalar> {
         let DType::Struct(st, _) = self.dtype() else {
             unreachable!()
@@ -56,7 +60,7 @@ impl<'a> TryFrom<&'a Scalar> for StructScalar<'a> {
     type Error = VortexError;
 
     fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
-        if matches!(value.dtype(), DType::Struct(..)) {
+        if !matches!(value.dtype(), DType::Struct(..)) {
             vortex_bail!("Expected struct scalar, found {}", value.dtype())
         }
         Ok(Self {
