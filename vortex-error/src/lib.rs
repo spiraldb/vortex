@@ -210,6 +210,16 @@ macro_rules! vortex_bail {
     };
 }
 
+#[macro_export]
+macro_rules! vortex_panic {
+    ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
+        panic!("{}", vortex_err!($variant: $fmt, $($arg),*))
+    };
+    ($msg:literal) => {
+        panic!("{}", vortex_err!($msg))
+    };
+}
+
 #[cfg(feature = "datafusion")]
 impl From<VortexError> for datafusion_common::DataFusionError {
     fn from(value: VortexError) -> Self {
