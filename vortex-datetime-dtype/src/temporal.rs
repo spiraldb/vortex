@@ -72,11 +72,11 @@ impl TemporalMetadata {
                 vortex_bail!(InvalidArgument: "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Time")
             }
             TemporalMetadata::Time(unit) => Ok(TemporalJiff::Time(
-                Time::MIN.checked_add(unit.to_jiff_span(v))?,
+                Time::MIN.checked_add(unit.to_jiff_span(v)?)?,
             )),
             TemporalMetadata::Date(unit) => match unit {
                 TimeUnit::D | TimeUnit::Ms => Ok(TemporalJiff::Date(
-                    Date::new(1970, 1, 1)?.checked_add(unit.to_jiff_span(v))?,
+                    Date::new(1970, 1, 1)?.checked_add(unit.to_jiff_span(v)?)?,
                 )),
                 _ => {
                     vortex_bail!(InvalidArgument: "Invalid TimeUnit {} for TemporalMetadata::Time", unit)
@@ -86,11 +86,11 @@ impl TemporalMetadata {
                 vortex_bail!(InvalidArgument: "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Timestamp")
             }
             TemporalMetadata::Timestamp(unit, None) => Ok(TemporalJiff::Timestamp(
-                Timestamp::UNIX_EPOCH.checked_add(unit.to_jiff_span(v))?,
+                Timestamp::UNIX_EPOCH.checked_add(unit.to_jiff_span(v)?)?,
             )),
             TemporalMetadata::Timestamp(unit, Some(tz)) => Ok(TemporalJiff::Zoned(
                 Timestamp::UNIX_EPOCH
-                    .checked_add(unit.to_jiff_span(v))?
+                    .checked_add(unit.to_jiff_span(v)?)?
                     .intz(tz)?,
             )),
         }
