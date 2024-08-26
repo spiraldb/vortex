@@ -213,10 +213,13 @@ macro_rules! vortex_bail {
 #[macro_export]
 macro_rules! vortex_panic {
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
-        panic!("{}", vortex_err!($variant: $fmt, $($arg),*))
+        panic!("{}", $crate::vortex_err!($variant: $fmt, $($arg),*))
+    };
+    ($msg:literal, $err:expr) => {
+        panic!("{}", $crate::vortex_err!(Context: $msg, $err))
     };
     ($msg:literal) => {
-        panic!("{}", vortex_err!($msg))
+        panic!("{}", $crate::vortex_err!($msg))
     };
 }
 
