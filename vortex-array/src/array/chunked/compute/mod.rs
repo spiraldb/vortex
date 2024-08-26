@@ -51,7 +51,12 @@ impl ScalarAtFn for ChunkedArray {
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
-        scalar_at_unchecked(&self.chunk(chunk_index).unwrap(), chunk_offset)
+        scalar_at_unchecked(
+            &self
+                .chunk(chunk_index)
+                .unwrap_or_else(|| panic!("{}", vortex_err!(OutOfBounds: chunk_index, 0, self.nchunks()))),
+            chunk_offset,
+        )
     }
 }
 

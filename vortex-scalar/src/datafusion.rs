@@ -4,24 +4,25 @@ use vortex_buffer::Buffer;
 use vortex_datetime_dtype::arrow::make_temporal_ext_dtype;
 use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, Nullability, PType};
+use vortex_error::VortexError;
 
 use crate::{PValue, Scalar};
 
-impl From<Scalar> for ScalarValue {
-    fn from(value: Scalar) -> Self {
-        match value.dtype {
+impl TryFrom<Scalar> for ScalarValue {
+    type Error = VortexError;
+
+    fn try_from(value: Scalar) -> Result<Self, Self::Error> {
+        Ok(match value.dtype {
             DType::Null => ScalarValue::Null,
             DType::Bool(_) => ScalarValue::Boolean(
                 value
                     .value
-                    .as_bool()
-                    .unwrap_or_else(|err| panic!("Expected a bool scalar: {}", err)),
+                    .as_bool()?,
             ),
             DType::Primitive(ptype, _) => {
                 let pvalue = value
                     .value
-                    .as_pvalue()
-                    .unwrap_or_else(|err| panic!("Expected a pvalue scalar: {}", err));
+                    .as_pvalue()?;
                 match pvalue {
                     None => match ptype {
                         PType::U8 => ScalarValue::UInt8(None),
@@ -54,15 +55,13 @@ impl From<Scalar> for ScalarValue {
             DType::Utf8(_) => ScalarValue::Utf8(
                 value
                     .value
-                    .as_buffer_string()
-                    .unwrap_or_else(|err| panic!("Expected a buffer string: {}", err))
+                    .as_buffer_string()?
                     .map(|b| b.as_str().to_string()),
             ),
             DType::Binary(_) => ScalarValue::Binary(
                 value
                     .value
-                    .as_buffer()
-                    .unwrap_or_else(|err| panic!("Expected a buffer: {}", err))
+                    .as_buffer()?
                     .map(|b| b.into_vec().unwrap_or_else(|buf| buf.as_slice().to_vec())),
             ),
             DType::Struct(..) => {
@@ -73,9 +72,9 @@ impl From<Scalar> for ScalarValue {
             }
             DType::Extension(ext, _) => {
                 if is_temporal_ext_type(ext.id()) {
-                    let metadata = TemporalMetadata::try_from(&ext).unwrap();
-                    let pv = value.value.as_pvalue().expect("must be a pvalue");
-                    return match metadata {
+                    let metadata = TemporalMetadata::try_from(&ext)?;
+                    let pv = value.value.as_pvalue()?;
+                    return Ok(match metadata {
                         TemporalMetadata::Time(u) => match u {
                             TimeUnit::Ns => {
                                 ScalarValue::Time64Nanosecond(pv.and_then(|p| p.as_i64()))
@@ -117,12 +116,12 @@ impl From<Scalar> for ScalarValue {
                                 unreachable!("Unsupported TimeUnit {u} for {}", ext.id())
                             }
                         },
-                    };
+                    });
                 }
 
                 todo!("Non temporal extension scalar conversion")
             }
-        }
+        })
     }
 }
 

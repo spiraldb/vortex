@@ -40,7 +40,7 @@ impl ScalarAtFn for SparseArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         match self
             .find_index(index)
-            .expect("Must be able to find the index")
+            .unwrap_or_else(|err| panic!("{}", err))
         {
             None => self.fill_value().clone().cast(self.dtype()).unwrap(),
             Some(idx) => scalar_at_unchecked(&self.values(), idx)

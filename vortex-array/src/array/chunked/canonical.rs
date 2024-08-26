@@ -230,7 +230,7 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
             slice(&chunk.bytes(), first_offset_value, last_offset_value)?.into_primitive()?;
         data_bytes.extend_from_slice(primitive_bytes.buffer());
 
-        let adjustment_from_previous = *offsets.last().expect("offsets has at least one element");
+        let adjustment_from_previous = *offsets.last().ok_or_else(|| vortex_err!("VarBinArray offsets must have at least one element"))?;
         offsets.extend(
             offsets_arr
                 .maybe_null_slice::<i32>()

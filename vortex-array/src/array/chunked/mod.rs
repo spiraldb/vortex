@@ -6,7 +6,7 @@ use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -167,7 +167,7 @@ impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, index: usize) -> bool {
         let (chunk, offset_in_chunk) = self.find_chunk_idx(index);
         self.chunk(chunk)
-            .expect("must be a valid chunk index")
+            .unwrap_or_else(|| panic!("{}", vortex_err!(OutOfBounds: chunk, 0, self.nchunks())))
             .with_dyn(|a| a.is_valid(offset_in_chunk))
     }
 
