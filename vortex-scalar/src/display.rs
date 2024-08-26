@@ -245,6 +245,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn display_time() {
         fn dtype() -> DType {
@@ -271,6 +272,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn display_date() {
         fn dtype() -> DType {
@@ -310,6 +312,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn display_local_timestamp() {
         fn dtype() -> DType {
@@ -339,6 +342,7 @@ mod tests {
         );
     }
 
+    #[cfg_attr(miri, ignore)]
     #[test]
     fn display_zoned_timestamp() {
         fn dtype() -> DType {
