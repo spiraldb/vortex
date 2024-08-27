@@ -136,6 +136,12 @@ pub enum VortexError {
         #[backtrace]
         object_store::Error,
     ),
+    #[error(transparent)]
+    JiffError(
+        #[from]
+        #[backtrace]
+        jiff::Error,
+    ),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;
