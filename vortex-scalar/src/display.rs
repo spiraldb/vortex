@@ -85,9 +85,7 @@ impl Display for Scalar {
                         write!(
                             f,
                             "{}",
-                            metadata
-                                .to_jiff(i64::from(*v))
-                                .map_err(|_| std::fmt::Error)?
+                            metadata.to_jiff(*v as i64).map_err(|_| std::fmt::Error)?
                         )
                     }
                     ScalarValue::Primitive(PValue::I64(v)) => {
@@ -245,7 +243,6 @@ mod tests {
         );
     }
 
-    #[cfg_attr(miri, ignore)]
     #[test]
     fn display_time() {
         fn dtype() -> DType {
@@ -272,7 +269,6 @@ mod tests {
         );
     }
 
-    #[cfg_attr(miri, ignore)]
     #[test]
     fn display_date() {
         fn dtype() -> DType {
@@ -312,7 +308,6 @@ mod tests {
         );
     }
 
-    #[cfg_attr(miri, ignore)]
     #[test]
     fn display_local_timestamp() {
         fn dtype() -> DType {

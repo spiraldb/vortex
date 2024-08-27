@@ -69,7 +69,7 @@ impl TemporalMetadata {
     pub fn to_jiff(&self, v: i64) -> VortexResult<TemporalJiff> {
         match self {
             TemporalMetadata::Time(TimeUnit::D) => {
-                vortex_bail!(InvalidArgument: "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Time")
+                vortex_bail!("Invalid TimeUnit TimeUnit::D for TemporalMetadata::Time")
             }
             TemporalMetadata::Time(unit) => Ok(TemporalJiff::Time(
                 Time::MIN.checked_add(unit.to_jiff_span(v)?)?,
@@ -79,11 +79,11 @@ impl TemporalMetadata {
                     Date::new(1970, 1, 1)?.checked_add(unit.to_jiff_span(v)?)?,
                 )),
                 _ => {
-                    vortex_bail!(InvalidArgument: "Invalid TimeUnit {} for TemporalMetadata::Time", unit)
+                    vortex_bail!("Invalid TimeUnit {} for TemporalMetadata::Time", unit)
                 }
             },
             TemporalMetadata::Timestamp(TimeUnit::D, _) => {
-                vortex_bail!(InvalidArgument: "Invalid TimeUnit TimeUnit::D for TemporalMetadata::Timestamp")
+                vortex_bail!("Invalid TimeUnit TimeUnit::D for TemporalMetadata::Timestamp")
             }
             TemporalMetadata::Timestamp(unit, None) => Ok(TemporalJiff::Timestamp(
                 Timestamp::UNIX_EPOCH.checked_add(unit.to_jiff_span(v)?)?,
@@ -112,7 +112,7 @@ impl TryFrom<&ExtDType> for TemporalMetadata {
             x if x == DATE_ID.as_ref() => decode_date_metadata(metadata),
             x if x == TIMESTAMP_ID.as_ref() => decode_timestamp_metadata(metadata),
             _ => {
-                vortex_bail!(InvalidArgument: "ExtDType must be one of the known temporal types")
+                vortex_bail!("ExtDType must be one of the known temporal types")
             }
         }
     }
