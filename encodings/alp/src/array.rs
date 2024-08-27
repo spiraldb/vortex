@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
@@ -153,8 +154,8 @@ impl PrimitiveArrayTrait for ALPArray {
     fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
-                let iter = VectorizedArrayIter::new(self);
-                Some(iter)
+                let accessor = Arc::new(self.clone());
+                Some(VectorizedArrayIter::new(accessor))
             }
             _ => None,
         }
@@ -163,8 +164,8 @@ impl PrimitiveArrayTrait for ALPArray {
     fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
-                let iter = VectorizedArrayIter::new(self);
-                Some(iter)
+                let accessor = Arc::new(self.clone());
+                Some(VectorizedArrayIter::new(accessor))
             }
             _ => None,
         }

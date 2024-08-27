@@ -1,4 +1,5 @@
 use std::iter;
+use std::sync::Arc;
 
 use vortex_dtype::DType;
 use vortex_error::VortexError;
@@ -105,19 +106,22 @@ where
 
 impl PrimitiveArrayTrait for ConstantArray {
     fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
-        u32::try_from(self.scalar())
-            .is_ok()
-            .then(|| VectorizedArrayIter::new(self))
+        u32::try_from(self.scalar()).is_ok().then(|| {
+            let accessor = Arc::new(self.clone());
+            VectorizedArrayIter::new(accessor)
+        })
     }
     fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
-        f32::try_from(self.scalar())
-            .is_ok()
-            .then(|| VectorizedArrayIter::new(self))
+        f32::try_from(self.scalar()).is_ok().then(|| {
+            let accessor = Arc::new(self.clone());
+            VectorizedArrayIter::new(accessor)
+        })
     }
     fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
-        f64::try_from(self.scalar())
-            .is_ok()
-            .then(|| VectorizedArrayIter::new(self))
+        f64::try_from(self.scalar()).is_ok().then(|| {
+            let accessor = Arc::new(self.clone());
+            VectorizedArrayIter::new(accessor)
+        })
     }
 }
 

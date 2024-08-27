@@ -1,4 +1,5 @@
-use std::borrow::Cow;
+use std::ptr;
+use std::sync::Arc;
 
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
@@ -200,10 +201,22 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
     }
 
     #[inline]
-    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
+    fn decode_batch(&self, start_idx: usize) -> Vec<T> {
         let batch_size = usize::min(BATCH_SIZE, self.len() - start_idx);
 
-        Cow::Borrowed(&self.buffer().typed()[start_idx..start_idx + batch_size])
+        let mut v = Vec::<T>::with_capacity(batch_size);
+        let null_slice = self.maybe_null_slice::<T>();
+
+        unsafe {
+            v.set_len(batch_size);
+            ptr::copy_nonoverlapping(
+                null_slice.as_ptr().add(start_idx),
+                v.as_mut_ptr(),
+                batch_size,
+            );
+        }
+
+        v
     }
 }
 
@@ -211,8 +224,8 @@ impl PrimitiveArrayTrait for PrimitiveArray {
     fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
-                let iter = VectorizedArrayIter::new(self);
-                Some(iter)
+                let accessor = Arc::new(self.clone());
+                Some(VectorizedArrayIter::new(accessor))
             }
             _ => None,
         }
@@ -221,8 +234,8 @@ impl PrimitiveArrayTrait for PrimitiveArray {
     fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
-                let iter = VectorizedArrayIter::new(self);
-                Some(iter)
+                let accessor = Arc::new(self.clone());
+                Some(VectorizedArrayIter::new(accessor))
             }
             _ => None,
         }
@@ -231,8 +244,8 @@ impl PrimitiveArrayTrait for PrimitiveArray {
     fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
         match self.dtype() {
             DType::Primitive(PType::U32, _) => {
-                let iter = VectorizedArrayIter::new(self);
-                Some(iter)
+                let accessor = Arc::new(self.clone());
+                Some(VectorizedArrayIter::new(accessor))
             }
             _ => None,
         }

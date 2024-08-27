@@ -1,5 +1,5 @@
-use std::borrow::Cow;
 use std::ops::Deref;
+use std::sync::Arc;
 
 pub use adapter::*;
 pub use ext::*;
@@ -34,7 +34,7 @@ where
 
     #[allow(clippy::uninit_vec)]
     #[inline]
-    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
+    fn decode_batch(&self, start_idx: usize) -> Vec<T> {
         let batch_size = BATCH_SIZE.min(self.array_len() - start_idx);
 
         let mut batch = Vec::with_capacity(batch_size);
@@ -49,7 +49,7 @@ where
         for (idx, batch_item) in batch.iter_mut().enumerate().take(batch_size) {
             *batch_item = self.value_unchecked(start_idx + idx);
         }
-        Cow::Owned(batch)
+        batch
     }
 }
 
@@ -57,22 +57,21 @@ where
 /// Note that it doesn't respect per-item validity, and the per-item `Validity` instance should be advised
 /// for correctness, must "high-performance" code will ignore the validity when doing work, and will only
 /// re-use it when reconstructing the result array.
-pub struct VectorizedArrayIter<'a, T>
+pub struct VectorizedArrayIter<T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
 {
-    accessor: &'a dyn Accessor<T>,
+    accessor: Arc<dyn Accessor<T>>,
     validity: Validity,
     current_idx: usize,
     len: usize,
 }
 
-impl<'a, T> VectorizedArrayIter<'a, T>
+impl<T> VectorizedArrayIter<T>
 where
-    [T]: ToOwned<Owned = Vec<T>>,
     T: Copy,
 {
-    pub fn new(accessor: &'a dyn Accessor<T>) -> Self {
+    pub fn new(accessor: Arc<dyn Accessor<T>>) -> Self {
         let len = accessor.array_len();
         let validity = accessor.array_validity();
 
@@ -85,36 +84,37 @@ where
     }
 }
 
-pub struct Batch<'a, T>
+pub struct Batch<T>
 where
-    [T]: ToOwned<Owned = Vec<T>>,
     T: Sized,
 {
-    data: BatchData<'a, T>,
+    data: BatchData<T>,
     validity: Validity,
 }
 
-impl<'a, T> Batch<'a, T>
+impl<T> Batch<T>
 where
-    [T]: ToOwned<Owned = Vec<T>>,
-    T: Sized,
+    T: Copy,
 {
-    pub fn new(data: &'a [T], validity: Validity) -> Self {
+    pub fn new(data: &[T], validity: Validity) -> Self {
         let data = if data.len() == BATCH_SIZE {
             BatchData::Fixed(data.try_into().unwrap())
         } else {
-            BatchData::Variable(Cow::Borrowed(data))
+            BatchData::Variable(data.to_vec())
         };
-
         Self { data, validity }
     }
+}
 
-    pub fn new_from_cow(data: Cow<'a, [T]>, validity: Validity) -> Self {
-        let data = match data {
-            Cow::Borrowed(b) if b.len() == BATCH_SIZE => BatchData::Fixed(b.try_into().unwrap()),
-            _ => BatchData::Variable(data),
-        };
-        Self { data, validity }
+impl<T> Batch<T>
+where
+    T: Clone,
+{
+    pub fn new_from_vec(data: Vec<T>, validity: Validity) -> Self {
+        Self {
+            data: BatchData::Variable(data),
+            validity,
+        }
     }
 
     #[inline]
@@ -139,17 +139,13 @@ where
     }
 }
 
-pub struct FlattenedBatch<'a, T>
-where
-    [T]: ToOwned<Owned = Vec<T>>,
-{
-    inner: Batch<'a, T>,
+pub struct FlattenedBatch<T> {
+    inner: Batch<T>,
     current: usize,
 }
 
-impl<'a, T> Iterator for FlattenedBatch<'a, T>
+impl<T> Iterator for FlattenedBatch<T>
 where
-    [T]: ToOwned<Owned = Vec<T>>,
     T: Copy,
 {
     type Item = Option<T>;
@@ -176,14 +172,14 @@ where
     }
 }
 
-impl<'a, T: Copy> ExactSizeIterator for FlattenedBatch<'a, T> where [T]: ToOwned<Owned = Vec<T>> {}
+impl<T: Copy> ExactSizeIterator for FlattenedBatch<T> {}
 
-impl<'a, T> IntoIterator for Batch<'a, T>
+impl<T> IntoIterator for Batch<T>
 where
     T: Copy,
 {
     type Item = Option<T>;
-    type IntoIter = FlattenedBatch<'a, T>;
+    type IntoIter = FlattenedBatch<T>;
 
     fn into_iter(self) -> Self::IntoIter {
         FlattenedBatch {
@@ -193,34 +189,27 @@ where
     }
 }
 
-pub enum BatchData<'a, T>
+pub enum BatchData<T>
 where
     T: Sized,
-    [T]: ToOwned<Owned = Vec<T>>,
 {
-    Fixed(&'a [T; BATCH_SIZE]),
-    Variable(Cow<'a, [T]>),
+    Fixed([T; BATCH_SIZE]),
+    Variable(Vec<T>),
 }
 
-impl<'a, T> Deref for BatchData<'a, T>
-where
-    [T]: ToOwned<Owned = Vec<T>>,
-{
+impl<T> Deref for BatchData<T> {
     type Target = [T];
 
     fn deref(&self) -> &Self::Target {
         match self {
-            BatchData::Fixed(f) => &**f,
+            BatchData::Fixed(f) => f,
             BatchData::Variable(v) => v.as_ref(),
         }
     }
 }
 
-impl<'a, T: Copy> Iterator for VectorizedArrayIter<'a, T>
-where
-    [T]: ToOwned<Owned = Vec<T>>,
-{
-    type Item = Batch<'a, T>;
+impl<T: Copy> Iterator for VectorizedArrayIter<T> {
+    type Item = Batch<T>;
 
     #[allow(clippy::unwrap_in_result)]
     #[inline(always)]
@@ -236,7 +225,7 @@ where
                 .expect("The slice bounds should always be within the array's limits");
             self.current_idx += data.len();
 
-            let batch = Batch::new_from_cow(data, validity);
+            let batch = Batch::new_from_vec(data, validity);
 
             Some(batch)
         }
@@ -250,7 +239,7 @@ where
     }
 }
 
-impl<T: Copy> ExactSizeIterator for VectorizedArrayIter<'_, T> {}
+impl<T: Copy> ExactSizeIterator for VectorizedArrayIter<T> {}
 
 #[cfg(test)]
 mod tests {
