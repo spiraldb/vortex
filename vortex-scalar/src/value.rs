@@ -61,6 +61,7 @@ impl ScalarValue {
 
     pub fn as_list(&self) -> VortexResult<Option<&Arc<[Self]>>> {
         match self {
+            Self::Null => Ok(None),
             Self::List(l) => Ok(Some(l)),
             _ => Err(vortex_err!("Expected a list scalar, found {:?}", self)),
         }
