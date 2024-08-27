@@ -30,9 +30,7 @@ where
         !self.is_valid(index)
     }
     fn value_unchecked(&self, index: usize) -> T;
-    fn array_validity(&self) -> Validity {
-        todo!("should probably be empty")
-    }
+    fn array_validity(&self) -> Validity;
 
     #[allow(clippy::uninit_vec)]
     #[inline]
@@ -74,7 +72,7 @@ where
     [T]: ToOwned<Owned = Vec<T>>,
     T: Copy,
 {
-    pub fn new(accessor: &'a dyn Accessor<T>) -> Self {
+    pub fn new<A: Accessor<T>>(accessor: &'a dyn Accessor<T>) -> Self {
         let len = accessor.array_len();
         let validity = accessor.array_validity();
 
@@ -134,7 +132,7 @@ where
     }
 
     /// # Safety
-    /// ok
+    /// `index` must be smaller than the batch's length.
     #[inline]
     pub unsafe fn get_unchecked(&self, index: usize) -> &T {
         unsafe { self.data.get_unchecked(index) }
@@ -177,6 +175,8 @@ where
         )
     }
 }
+
+impl<'a, T: Copy> ExactSizeIterator for FlattenedBatch<'a, T> where [T]: ToOwned<Owned = Vec<T>> {}
 
 impl<'a, T> IntoIterator for Batch<'a, T>
 where

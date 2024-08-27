@@ -9,7 +9,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::iter::{Accessor, VectorizedArrayIter};
+use crate::iter::{Accessor, VectorizedArrayIter, BATCH_SIZE};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -201,7 +201,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
 
     #[inline]
     fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
-        let batch_size = usize::min(1024, self.len() - start_idx);
+        let batch_size = usize::min(BATCH_SIZE, self.len() - start_idx);
 
         Cow::Borrowed(&self.buffer().typed()[start_idx..start_idx + batch_size])
     }

@@ -1,10 +1,12 @@
 use std::iter;
 
 use vortex_dtype::DType;
-use vortex_scalar::StructScalar;
+use vortex_error::VortexError;
+use vortex_scalar::{Scalar, StructScalar};
 
 use crate::array::constant::ConstantArray;
-use crate::iter::VectorizedArrayIter;
+use crate::iter::{Accessor, VectorizedArrayIter};
+use crate::validity::ArrayValidity;
 use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
     NullArrayTrait, PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
@@ -74,15 +76,40 @@ impl BoolArrayTrait for ConstantArray {
     }
 }
 
+impl<T> Accessor<T> for ConstantArray
+where
+    [T]: ToOwned<Owned = Vec<T>>,
+    T: Clone,
+    T: TryFrom<Scalar, Error = VortexError>,
+{
+    fn array_len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        ArrayValidity::is_valid(self, index)
+    }
+
+    fn value_unchecked(&self, _index: usize) -> T {
+        T::try_from(self.scalar().clone()).unwrap()
+    }
+}
+
 impl PrimitiveArrayTrait for ConstantArray {
     fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
-        todo!()
+        u32::try_from(self.scalar())
+            .is_ok()
+            .then(|| VectorizedArrayIter::new(self))
     }
     fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
-        todo!()
+        f32::try_from(self.scalar())
+            .is_ok()
+            .then(|| VectorizedArrayIter::new(self))
     }
     fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
-        todo!()
+        f64::try_from(self.scalar())
+            .is_ok()
+            .then(|| VectorizedArrayIter::new(self))
     }
 }
 

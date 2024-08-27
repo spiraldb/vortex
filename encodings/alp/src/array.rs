@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
@@ -126,6 +127,11 @@ where
         ArrayValidity::is_valid(self, index)
     }
 
+    fn array_validity(&self) -> vortex::validity::Validity {
+        self.encoded()
+            .with_dyn(|a| a.logical_validity().into_validity())
+    }
+
     fn value_unchecked(&self, index: usize) -> F {
         if let Some(patches) = self.patches().and_then(|p| {
             p.with_dyn(|arr| {
@@ -141,6 +147,10 @@ where
         let encoded_val = scalar_at_unchecked(&self.encoded(), index);
         let encoded_val = encoded_val.try_into().unwrap();
         F::decode_single(encoded_val, self.exponents())
+    }
+
+    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [F]> {
+        todo!()
     }
 }
 
