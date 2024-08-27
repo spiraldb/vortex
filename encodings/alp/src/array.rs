@@ -22,7 +22,6 @@ pub struct ALPMetadata {
     exponents: Exponents,
     encoded_dtype: DType,
     patches_dtype: Option<DType>,
-    patches_len: usize,
 }
 
 impl ALPArray {
@@ -39,9 +38,19 @@ impl ALPArray {
         };
 
         let length = encoded.len();
+        if let Some(parray) = patches.as_ref() {
+            if parray.len() != length {
+                vortex_bail!(
+                    "Mismatched length in ALPArray between encoded({}) {} and it's patches({}) {}",
+                    encoded.encoding().id(),
+                    encoded.len(),
+                    parray.encoding().id(),
+                    parray.len()
+                )
+            }
+        }
 
         let patches_dtype = patches.as_ref().map(|a| a.dtype().as_nullable());
-        let patches_len = patches.as_ref().map(|a| a.len()).unwrap_or(0);
         let mut children = Vec::with_capacity(2);
         children.push(encoded);
         if let Some(patch) = patches {
@@ -55,7 +64,6 @@ impl ALPArray {
                 exponents,
                 encoded_dtype,
                 patches_dtype,
-                patches_len,
             },
             children.into(),
             Default::default(),
@@ -83,15 +91,13 @@ impl ALPArray {
 
     pub fn patches(&self) -> Option<Array> {
         self.metadata().patches_dtype.as_ref().map(|dt| {
-            self.array()
-                .child(1, dt, self.metadata().patches_len)
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Missing patches with present metadata flag; dtype: {}, patches_len: {}",
-                        dt,
-                        self.metadata().patches_len
-                    )
-                })
+            self.array().child(1, dt, self.len()).unwrap_or_else(|| {
+                panic!(
+                    "Missing patches with present metadata flag; dtype: {}, patches_len: {}",
+                    dt,
+                    self.len()
+                )
+            })
         })
     }
 
