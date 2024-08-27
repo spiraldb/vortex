@@ -1,4 +1,4 @@
-use vortex::array::{BoolArray, ConstantArray, PrimitiveArray, SparseArray};
+use vortex::array::{ConstantArray, PrimitiveArray, SparseArray};
 use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{filter, slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::Validity;
@@ -65,7 +65,9 @@ impl TakeFn for RunEndArray {
             Validity::Array(original_validity) => {
                 let dense_validity = take(&original_validity, indices)?;
                 let dense_nonnull_indices = PrimitiveArray::from(
-                    BoolArray::try_from(dense_validity.clone())?
+                    dense_validity
+                        .clone()
+                        .into_bool()?
                         .boolean_buffer()
                         .set_indices()
                         .map(|idx| idx as u64)
