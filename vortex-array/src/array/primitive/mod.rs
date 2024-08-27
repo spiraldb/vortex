@@ -183,7 +183,7 @@ impl ArrayVariants for PrimitiveArray {
 
 impl<T: NativePType> Accessor<T> for PrimitiveArray {
     fn array_len(&self) -> usize {
-        PrimitiveArray::len(self)
+        self.len()
     }
 
     fn is_valid(&self, index: usize) -> bool {
@@ -191,7 +191,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
     }
 
     fn array_validity(&self) -> Validity {
-        PrimitiveArray::validity(self)
+        self.validity()
     }
 
     #[inline]

@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::ops::Deref;
 
 pub use adapter::*;
 pub use ext::*;
@@ -17,6 +18,41 @@ pub const BATCH_SIZE: usize = 1024;
 /// Analogous to Arrow's RecordBatchReader.
 pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
     fn dtype(&self) -> &DType;
+}
+
+pub trait Accessor<T>
+where
+    [T]: ToOwned<Owned = Vec<T>>,
+{
+    fn array_len(&self) -> usize;
+    fn is_valid(&self, index: usize) -> bool;
+    fn is_null(&self, index: usize) -> bool {
+        !self.is_valid(index)
+    }
+    fn value_unchecked(&self, index: usize) -> T;
+    fn array_validity(&self) -> Validity {
+        todo!("should probably be empty")
+    }
+
+    #[allow(clippy::uninit_vec)]
+    #[inline]
+    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
+        let batch_size = BATCH_SIZE.min(self.array_len() - start_idx);
+
+        let mut batch = Vec::with_capacity(batch_size);
+
+        // Safety:
+        // We've made sure that we have at least `batch_size` elements to put into
+        // the vector and sufficient capacity.
+        unsafe {
+            batch.set_len(batch_size);
+        }
+
+        for (idx, batch_item) in batch.iter_mut().enumerate().take(batch_size) {
+            *batch_item = self.value_unchecked(start_idx + idx);
+        }
+        Cow::Owned(batch)
+    }
 }
 
 /// Iterate over batches of compressed arrays, should help with writing vectorized code.
@@ -120,9 +156,10 @@ where
 {
     type Item = Option<T>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.current == self.inner.data.len() {
-            return None;
+        if self.current == self.inner.len() {
+            None
         } else if !self.inner.is_valid(self.current) {
             self.current += 1;
             Some(None)
@@ -135,8 +172,8 @@ where
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         (
-            self.inner.data.len() - self.current,
-            Some(self.inner.data.len() - self.current),
+            self.inner.len() - self.current,
+            Some(self.inner.len() - self.current),
         )
     }
 }
@@ -146,7 +183,6 @@ where
     T: Copy,
 {
     type Item = Option<T>;
-
     type IntoIter = FlattenedBatch<'a, T>;
 
     fn into_iter(self) -> Self::IntoIter {
@@ -166,66 +202,17 @@ where
     Variable(Cow<'a, [T]>),
 }
 
-impl<'a, T> BatchData<'a, T>
-where
-    T: Sized,
-    [T]: ToOwned<Owned = Vec<T>>,
-{
-    #[inline]
-    pub fn len(&self) -> usize {
-        match self {
-            BatchData::Fixed(f) => f.len(),
-            BatchData::Variable(v) => v.len(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    /// # Safety
-    /// Index must be <= self.len()
-    #[inline]
-    pub unsafe fn get_unchecked(&self, index: usize) -> &T {
-        match self {
-            BatchData::Fixed(f) => unsafe { f.get_unchecked(index) },
-            BatchData::Variable(v) => unsafe { v.get_unchecked(index) },
-        }
-    }
-}
-
-pub trait Accessor<T>
+impl<'a, T> Deref for BatchData<'a, T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
 {
-    fn array_len(&self) -> usize;
-    fn is_valid(&self, index: usize) -> bool;
-    fn is_null(&self, index: usize) -> bool {
-        !self.is_valid(index)
-    }
-    fn value_unchecked(&self, index: usize) -> T;
-    fn array_validity(&self) -> Validity {
-        todo!("should probably be empty")
-    }
+    type Target = [T];
 
-    #[allow(clippy::uninit_vec)]
-    #[inline]
-    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
-        let batch_size = BATCH_SIZE.min(self.array_len() - start_idx);
-
-        let mut batch = Vec::with_capacity(batch_size);
-
-        // Safety:
-        // We've made sure that we have at least `batch_size` elements to put into
-        // the vector and sufficient capacity.
-        unsafe {
-            batch.set_len(batch_size);
+    fn deref(&self) -> &Self::Target {
+        match self {
+            BatchData::Fixed(f) => &**f,
+            BatchData::Variable(v) => v.as_ref(),
         }
-
-        for (idx, batch_item) in batch.iter_mut().enumerate().take(batch_size) {
-            *batch_item = self.value_unchecked(start_idx + idx);
-        }
-        Cow::Owned(batch)
     }
 }
 
