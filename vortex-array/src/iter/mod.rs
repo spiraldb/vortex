@@ -11,7 +11,7 @@ use crate::Array;
 mod adapter;
 mod ext;
 
-pub const DEFAULT_BATCH_SIZE: usize = 1024;
+pub const BATCH_SIZE: usize = 1024;
 
 /// A stream of array chunks along with a DType.
 /// Analogous to Arrow's RecordBatchReader.
@@ -51,6 +51,149 @@ where
     }
 }
 
+pub struct Batch<'a, T>
+where
+    [T]: ToOwned<Owned = Vec<T>>,
+    T: Sized,
+{
+    data: BatchData<'a, T>,
+    validity: Validity,
+}
+
+impl<'a, T> Batch<'a, T>
+where
+    [T]: ToOwned<Owned = Vec<T>>,
+    T: Sized,
+{
+    pub fn new(data: &'a [T], validity: Validity) -> Self {
+        let data = if data.len() == BATCH_SIZE {
+            BatchData::Fixed(data.try_into().unwrap())
+        } else {
+            BatchData::Variable(Cow::Borrowed(data))
+        };
+
+        Self { data, validity }
+    }
+
+    pub fn new_from_cow(data: Cow<'a, [T]>, validity: Validity) -> Self {
+        let data = match data {
+            Cow::Borrowed(b) if b.len() == BATCH_SIZE => BatchData::Fixed(b.try_into().unwrap()),
+            _ => BatchData::Variable(data),
+        };
+        Self { data, validity }
+    }
+
+    #[inline]
+    pub fn is_valid(&self, index: usize) -> bool {
+        self.validity.is_valid(index)
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// # Safety
+    /// ok
+    #[inline]
+    pub unsafe fn get_unchecked(&self, index: usize) -> &T {
+        unsafe { self.data.get_unchecked(index) }
+    }
+}
+
+pub struct FlattenedBatch<'a, T>
+where
+    [T]: ToOwned<Owned = Vec<T>>,
+{
+    inner: Batch<'a, T>,
+    current: usize,
+}
+
+impl<'a, T> Iterator for FlattenedBatch<'a, T>
+where
+    [T]: ToOwned<Owned = Vec<T>>,
+    T: Copy,
+{
+    type Item = Option<T>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current == self.inner.data.len() {
+            return None;
+        } else if !self.inner.is_valid(self.current) {
+            self.current += 1;
+            Some(None)
+        } else {
+            let old = self.current;
+            self.current += 1;
+            Some(Some(unsafe { *self.inner.get_unchecked(old) }))
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (
+            self.inner.data.len() - self.current,
+            Some(self.inner.data.len() - self.current),
+        )
+    }
+}
+
+impl<'a, T> IntoIterator for Batch<'a, T>
+where
+    T: Copy,
+{
+    type Item = Option<T>;
+
+    type IntoIter = FlattenedBatch<'a, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        FlattenedBatch {
+            inner: self,
+            current: 0,
+        }
+    }
+}
+
+pub enum BatchData<'a, T>
+where
+    T: Sized,
+    [T]: ToOwned<Owned = Vec<T>>,
+{
+    Fixed(&'a [T; BATCH_SIZE]),
+    Variable(Cow<'a, [T]>),
+}
+
+impl<'a, T> BatchData<'a, T>
+where
+    T: Sized,
+    [T]: ToOwned<Owned = Vec<T>>,
+{
+    #[inline]
+    pub fn len(&self) -> usize {
+        match self {
+            BatchData::Fixed(f) => f.len(),
+            BatchData::Variable(v) => v.len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
+    /// # Safety
+    /// Index must be <= self.len()
+    #[inline]
+    pub unsafe fn get_unchecked(&self, index: usize) -> &T {
+        match self {
+            BatchData::Fixed(f) => unsafe { f.get_unchecked(index) },
+            BatchData::Variable(v) => unsafe { v.get_unchecked(index) },
+        }
+    }
+}
+
 pub trait Accessor<T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
@@ -68,7 +211,7 @@ where
     #[allow(clippy::uninit_vec)]
     #[inline]
     fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
-        let batch_size = DEFAULT_BATCH_SIZE.min(self.array_len() - start_idx);
+        let batch_size = BATCH_SIZE.min(self.array_len() - start_idx);
 
         let mut batch = Vec::with_capacity(batch_size);
 
@@ -90,7 +233,7 @@ impl<'a, T: Copy> Iterator for VectorizedArrayIter<'a, T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
 {
-    type Item = (Cow<'a, [T]>, Validity);
+    type Item = Batch<'a, T>;
 
     #[allow(clippy::unwrap_in_result)]
     #[inline(always)]
@@ -98,15 +241,17 @@ where
         if self.current_idx == self.accessor.array_len() {
             None
         } else {
-            let batch = self.accessor.decode_batch(self.current_idx);
+            let data = self.accessor.decode_batch(self.current_idx);
 
             let validity = self
                 .validity
-                .slice(self.current_idx, self.current_idx + batch.len())
+                .slice(self.current_idx, self.current_idx + data.len())
                 .expect("The slice bounds should always be within the array's limits");
-            self.current_idx += batch.len();
+            self.current_idx += data.len();
 
-            Some((batch, validity))
+            let batch = Batch::new_from_cow(data, validity);
+
+            Some(batch)
         }
     }
 
@@ -118,26 +263,25 @@ where
     }
 }
 
-// impl IntoIterator for (Cow<'_, [T])
-
 impl<T: Copy> ExactSizeIterator for VectorizedArrayIter<'_, T> {}
 
 #[cfg(test)]
 mod tests {
-    // use crate::array::PrimitiveArray;
-    // use crate::variants::ArrayVariants;
+    use crate::array::PrimitiveArray;
+    use crate::variants::ArrayVariants;
 
-    // #[test]
-    // fn iter_example() {
-    //     let array =
-    //         PrimitiveArray::from_nullable_vec((0..1_000_000).map(|v| Some(v as f32)).collect());
-    //     let array_iter = array
-    //         .as_primitive_array_unchecked()
-    //         .float32_iter()
-    //         .unwrap()
+    #[test]
+    fn iter_example() {
+        let array =
+            PrimitiveArray::from_nullable_vec((0..1_000_000).map(|v| Some(v as f32)).collect());
+        let array_iter = array
+            .as_primitive_array_unchecked()
+            .float32_iter()
+            .unwrap()
+            .flatten();
 
-    //     for (idx, v) in array_iter.enumerate() {
-    //         assert_eq!(idx as f32, v.unwrap());
-    //     }
-    // }
+        for (idx, v) in array_iter.enumerate() {
+            assert_eq!(idx as f32, v.unwrap());
+        }
+    }
 }

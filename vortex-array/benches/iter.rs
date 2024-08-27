@@ -45,6 +45,23 @@ fn vortex_iter(c: &mut Criterion) {
     });
 }
 
+fn vortex_iter_flat(c: &mut Criterion) {
+    let data = PrimitiveArray::from_vec((0_u32..1_000_000).collect_vec(), Validity::AllValid);
+
+    c.bench_function("vortex_iter_flat", |b| {
+        b.iter_batched(
+            || {
+                data.as_primitive_array_unchecked()
+                    .unsigned32_iter()
+                    .unwrap()
+                    .flatten()
+            },
+            do_work,
+            BatchSize::SmallInput,
+        )
+    });
+}
+
 fn arrow_iter(c: &mut Criterion) {
     let data = arrow_array::UInt32Array::from_iter(0_u32..1_000_000);
     c.bench_function("arrow_iter", |b| {
@@ -64,10 +81,10 @@ fn do_work(
 
 fn do_work_vortex(iter: VectorizedArrayIter<u32>) -> u32 {
     let mut sum = 0;
-    for (data, validity) in iter {
-        for idx in 0..data.len() {
-            if validity.is_valid(idx) {
-                sum += unsafe { *data.get_unchecked(idx) };
+    for batch in iter {
+        for idx in 0..batch.len() {
+            if batch.is_valid(idx) {
+                sum += unsafe { *batch.get_unchecked(idx) };
             }
         }
     }
@@ -81,6 +98,7 @@ criterion_group!(
     targets = std_iter_no_option,
     std_iter,
     vortex_iter,
+    vortex_iter_flat,
     arrow_iter,
 );
 criterion_main!(benches);
