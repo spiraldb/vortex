@@ -4,7 +4,7 @@ pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::{Primitive, PrimitiveArray};
-use vortex::iter::ArrayIter;
+use vortex::iter::VectorizedArrayIter;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -77,15 +77,15 @@ impl ArrayVariants for RoaringIntArray {
 }
 
 impl PrimitiveArrayTrait for RoaringIntArray {
-    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
         todo!()
     }
 
-    fn float64_iter(&self) -> Option<vortex::iter::ArrayIter<f64>> {
+    fn float64_iter(&self) -> Option<vortex::iter::VectorizedArrayIter<f64>> {
         todo!()
     }
 
-    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
+    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
         todo!()
     }
 }

@@ -1,12 +1,10 @@
 use std::borrow::Cow;
-use std::marker::PhantomData;
 
 pub use adapter::*;
 pub use ext::*;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
-use crate::array::PrimitiveArray;
 use crate::validity::Validity;
 use crate::Array;
 
@@ -21,107 +19,56 @@ pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
     fn dtype(&self) -> &DType;
 }
 
-#[allow(dead_code)]
-pub struct ArrayIter<'a, A, T>
+/// Iterate over batches of compressed arrays, should help with writing vectorized code.
+/// Note that it doesn't respect per-item validity, and the per-item `Validity` instance should be advised
+/// for correctness, must "high-performance" code will ignore the validity when doing work, and will only
+/// re-use it when reconstructing the result array.
+pub struct VectorizedArrayIter<'a, T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
-    A: Accessor<'a, T>,
 {
-    accessor: A,
-    cached_batch: Cow<'a, [T]>,
-    batch_idx: usize,
-    overall_idx: usize,
+    accessor: &'a dyn Accessor<T>,
+    validity: Validity,
+    current_idx: usize,
     len: usize,
 }
 
-pub struct PrimitiveAccessor<'a, T> {
-    array: &'a PrimitiveArray,
-    validity: Validity,
-    _marker: PhantomData<T>,
-}
-
-impl<'a, T> PrimitiveAccessor<'a, T> {
-    pub fn new(array: &'a PrimitiveArray) -> Self {
-        let validity = array.validity();
-
-        Self {
-            array,
-            validity,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<'a, T> Accessor<'a, T> for PrimitiveAccessor<'a, T>
+impl<'a, T> VectorizedArrayIter<'a, T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
     T: Copy,
 {
-    fn len(&self) -> usize {
-        self.array.len()
-    }
-
-    fn is_valid(&self, index: usize) -> bool {
-        self.validity.is_valid(index)
-    }
-
-    fn value_unchecked(&self, index: usize) -> T {
-        self.array.buffer().typed::<T>()[index]
-    }
-
-    fn decode_batch(&self, start_idx: usize) -> Cow<'a, [T]> {
-        let batch_size = usize::min(1024, self.array.len() - start_idx);
-
-        Cow::Borrowed(&self.array.buffer().typed()[start_idx..start_idx + batch_size])
-    }
-}
-
-impl<'a, A, T> ArrayIter<'a, A, T>
-where
-    [T]: ToOwned<Owned = Vec<T>>,
-    A: Accessor<'a, T>,
-    T: Copy,
-{
-    pub fn new(accessor: A) -> Self {
-        let len = accessor.len();
-
-        let cached_batch = accessor.decode_batch(0);
+    pub fn new(accessor: &'a dyn Accessor<T>) -> Self {
+        let len = accessor.array_len();
+        let validity = accessor.array_validity();
 
         Self {
             accessor,
             len,
-            cached_batch,
-            batch_idx: 0,
-            overall_idx: 0,
-        }
-    }
-
-    #[inline]
-    pub fn maybe_load_batch(&mut self) {
-        if self.batch_idx == self.cached_batch.len() {
-            self.overall_idx += self.batch_idx;
-            self.batch_idx = 0;
-            self.cached_batch = self.accessor.decode_batch(self.overall_idx);
+            validity,
+            current_idx: 0,
         }
     }
 }
 
-#[allow(clippy::len_without_is_empty)]
-pub trait Accessor<'u, T>
+pub trait Accessor<T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
 {
-    fn len(&self) -> usize;
+    fn array_len(&self) -> usize;
     fn is_valid(&self, index: usize) -> bool;
     fn is_null(&self, index: usize) -> bool {
         !self.is_valid(index)
     }
     fn value_unchecked(&self, index: usize) -> T;
+    fn array_validity(&self) -> Validity {
+        todo!("should probably be empty")
+    }
 
     #[allow(clippy::uninit_vec)]
     #[inline]
-    fn decode_batch(&self, start_idx: usize) -> Cow<'u, [T]> {
-        let batch_size = DEFAULT_BATCH_SIZE.min(self.len() - start_idx);
+    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
+        let batch_size = DEFAULT_BATCH_SIZE.min(self.array_len() - start_idx);
 
         let mut batch = Vec::with_capacity(batch_size);
 
@@ -139,52 +86,58 @@ where
     }
 }
 
-impl<'a, A, T: Copy> Iterator for ArrayIter<'a, A, T>
+impl<'a, T: Copy> Iterator for VectorizedArrayIter<'a, T>
 where
-    A: Accessor<'a, T>,
+    [T]: ToOwned<Owned = Vec<T>>,
 {
-    type Item = Option<T>;
+    type Item = (Cow<'a, [T]>, Validity);
 
+    #[allow(clippy::unwrap_in_result)]
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.len == self.overall_idx + self.batch_idx {
-            return None;
-        }
-
-        let v = if !self.accessor.is_valid(self.overall_idx + self.batch_idx) {
-            Some(None)
+        if self.current_idx == self.accessor.array_len() {
+            None
         } else {
-            self.maybe_load_batch();
-            let i = unsafe { *self.cached_batch.get_unchecked(self.batch_idx) };
+            let batch = self.accessor.decode_batch(self.current_idx);
 
-            Some(Some(i))
-        };
+            let validity = self
+                .validity
+                .slice(self.current_idx, self.current_idx + batch.len())
+                .expect("The slice bounds should always be within the array's limits");
+            self.current_idx += batch.len();
 
-        self.batch_idx += 1;
-        v
+            Some((batch, validity))
+        }
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let current = self.batch_idx + self.overall_idx;
-        (self.len - current, Some(self.len - current))
+        (
+            self.len - self.current_idx,
+            Some(self.len - self.current_idx),
+        )
     }
 }
 
-impl<'a, A: Accessor<'a, T>, T: Copy> ExactSizeIterator for ArrayIter<'a, A, T> {}
+// impl IntoIterator for (Cow<'_, [T])
+
+impl<T: Copy> ExactSizeIterator for VectorizedArrayIter<'_, T> {}
 
 #[cfg(test)]
 mod tests {
-    use crate::array::PrimitiveArray;
-    use crate::variants::ArrayVariants;
+    // use crate::array::PrimitiveArray;
+    // use crate::variants::ArrayVariants;
 
-    #[test]
-    fn iter_example() {
-        let array =
-            PrimitiveArray::from_nullable_vec((0..1_000_000).map(|v| Some(v as f32)).collect());
-        let array_iter = array.as_primitive_array_unchecked().float32_iter().unwrap();
+    // #[test]
+    // fn iter_example() {
+    //     let array =
+    //         PrimitiveArray::from_nullable_vec((0..1_000_000).map(|v| Some(v as f32)).collect());
+    //     let array_iter = array
+    //         .as_primitive_array_unchecked()
+    //         .float32_iter()
+    //         .unwrap()
 
-        for (idx, v) in array_iter.enumerate() {
-            assert_eq!(idx as f32, v.unwrap());
-        }
-    }
+    //     for (idx, v) in array_iter.enumerate() {
+    //         assert_eq!(idx as f32, v.unwrap());
+    //     }
+    // }
 }

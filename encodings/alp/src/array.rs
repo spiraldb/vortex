@@ -1,11 +1,9 @@
 use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::scalar_at_unchecked;
-use vortex::iter::{Accessor, ArrayIter};
+use vortex::iter::{Accessor, VectorizedArrayIter};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -115,35 +113,21 @@ impl ArrayVariants for ALPArray {
     }
 }
 
-struct AlpAccessor<F: ALPFloat> {
-    array: ALPArray,
-    _marker: PhantomData<F>,
-}
-
-impl<F: ALPFloat> AlpAccessor<F> {
-    pub(crate) fn new(array: ALPArray) -> Self {
-        Self {
-            array,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<'a, F> Accessor<'a, F> for AlpAccessor<F>
+impl<F> Accessor<F> for ALPArray
 where
     F: ALPFloat + TryFrom<Scalar, Error = VortexError>,
     F::ALPInt: TryFrom<Scalar, Error = VortexError>,
 {
-    fn len(&self) -> usize {
-        todo!()
+    fn array_len(&self) -> usize {
+        self.len()
     }
 
     fn is_valid(&self, index: usize) -> bool {
-        self.array.is_valid(index)
+        ArrayValidity::is_valid(self, index)
     }
 
     fn value_unchecked(&self, index: usize) -> F {
-        if let Some(patches) = self.array.patches().and_then(|p| {
+        if let Some(patches) = self.patches().and_then(|p| {
             p.with_dyn(|arr| {
                 // We need to make sure the value is actually in the patches array
                 arr.is_valid(index)
@@ -154,37 +138,35 @@ where
             return s.try_into().unwrap();
         }
 
-        let encoded_val = scalar_at_unchecked(&self.array.encoded(), index);
+        let encoded_val = scalar_at_unchecked(&self.encoded(), index);
         let encoded_val = encoded_val.try_into().unwrap();
-        F::decode_single(encoded_val, self.array.exponents())
+        F::decode_single(encoded_val, self.exponents())
     }
 }
 
 impl PrimitiveArrayTrait for ALPArray {
-    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
-                let access = Arc::new(AlpAccessor::new(self.clone()));
-                let iter = ArrayIter::new(access as _);
+                let iter = VectorizedArrayIter::new(self);
                 Some(iter)
             }
             _ => None,
         }
     }
 
-    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
+    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
-                let access = Arc::new(AlpAccessor::new(self.clone()));
-                let iter = ArrayIter::new(access as _);
+                let iter = VectorizedArrayIter::new(self);
                 Some(iter)
             }
             _ => None,
         }
     }
 
-    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
-        todo!()
+    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
+        None
     }
 }
 

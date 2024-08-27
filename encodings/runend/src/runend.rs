@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use vortex::array::{Primitive, PrimitiveArray};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
-use vortex::iter::ArrayIter;
+use vortex::iter::VectorizedArrayIter;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -134,15 +134,15 @@ impl ArrayVariants for RunEndArray {
 }
 
 impl PrimitiveArrayTrait for RunEndArray {
-    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
         todo!()
     }
 
-    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
+    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
         todo!()
     }
 
-    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
+    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
         todo!()
     }
 }

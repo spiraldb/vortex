@@ -1,4 +1,4 @@
-// use std::borrow::Cow;
+use std::borrow::Cow;
 
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
@@ -9,7 +9,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::iter::{ArrayIter, PrimitiveAccessor};
+use crate::iter::{Accessor, VectorizedArrayIter};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -181,60 +181,57 @@ impl ArrayVariants for PrimitiveArray {
     }
 }
 
-// impl<T: NativePType> Accessor<T> for PrimitiveArray {
-//     fn len(&self) -> usize {
-//         PrimitiveArray::len(self)
-//     }
+impl<T: NativePType> Accessor<T> for PrimitiveArray {
+    fn array_len(&self) -> usize {
+        PrimitiveArray::len(self)
+    }
 
-//     fn is_valid(&self, index: usize) -> bool {
-//         ArrayValidity::is_valid(self, index)
-//     }
+    fn is_valid(&self, index: usize) -> bool {
+        ArrayValidity::is_valid(self, index)
+    }
 
-//     fn array_validity(&self) -> Validity {
-//         PrimitiveArray::validity(self)
-//     }
+    fn array_validity(&self) -> Validity {
+        PrimitiveArray::validity(self)
+    }
 
-//     #[inline]
-//     fn value_unchecked(&self, index: usize) -> T {
-//         let start = index * std::mem::size_of::<T>();
-//         let end = (index + 1) * std::mem::size_of::<T>();
-//         T::try_from_le_bytes(&self.buffer()[start..end]).unwrap()
-//     }
+    #[inline]
+    fn value_unchecked(&self, index: usize) -> T {
+        self.buffer().typed()[index]
+    }
 
-//     #[inline]
-//     fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
-//         let batch_size = usize::min(1024, self.len() - start_idx);
+    #[inline]
+    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [T]> {
+        let batch_size = usize::min(1024, self.len() - start_idx);
 
-//         Cow::Borrowed(&self.buffer().typed()[start_idx..start_idx + batch_size])
-//     }
-// }
+        Cow::Borrowed(&self.buffer().typed()[start_idx..start_idx + batch_size])
+    }
+}
 
 impl PrimitiveArrayTrait for PrimitiveArray {
-    fn float32_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<f32>, f32>> {
+    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
-                let iter = ArrayIter::new(PrimitiveAccessor::new(self));
+                let iter = VectorizedArrayIter::new(self);
                 Some(iter)
             }
             _ => None,
         }
     }
 
-    fn float64_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<f64>, f64>> {
+    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
-                let access = PrimitiveAccessor::new(self);
-                let iter = ArrayIter::new(access);
+                let iter = VectorizedArrayIter::new(self);
                 Some(iter)
             }
             _ => None,
         }
     }
 
-    fn unsigned32_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<u32>, u32>> {
+    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
         match self.dtype() {
             DType::Primitive(PType::U32, _) => {
-                let iter = ArrayIter::new(PrimitiveAccessor::new(self));
+                let iter = VectorizedArrayIter::new(self);
                 Some(iter)
             }
             _ => None,

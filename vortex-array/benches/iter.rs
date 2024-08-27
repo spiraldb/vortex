@@ -1,6 +1,7 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use itertools::Itertools;
 use vortex::array::PrimitiveArray;
+use vortex::iter::VectorizedArrayIter;
 use vortex::validity::Validity;
 use vortex::variants::ArrayVariants;
 
@@ -38,7 +39,7 @@ fn vortex_iter(c: &mut Criterion) {
                     .unsigned32_iter()
                     .unwrap()
             },
-            do_work,
+            do_work_vortex,
             BatchSize::SmallInput,
         )
     });
@@ -59,6 +60,19 @@ fn do_work(
         u += n.unwrap();
     }
     (u, iter)
+}
+
+fn do_work_vortex(iter: VectorizedArrayIter<u32>) -> u32 {
+    let mut sum = 0;
+    for (data, validity) in iter {
+        for idx in 0..data.len() {
+            if validity.is_valid(idx) {
+                sum += unsafe { *data.get_unchecked(idx) };
+            }
+        }
+    }
+
+    sum
 }
 
 criterion_group!(
