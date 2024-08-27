@@ -72,7 +72,7 @@ where
     [T]: ToOwned<Owned = Vec<T>>,
     T: Copy,
 {
-    pub fn new<A: Accessor<T>>(accessor: &'a dyn Accessor<T>) -> Self {
+    pub fn new(accessor: &'a dyn Accessor<T>) -> Self {
         let len = accessor.array_len();
         let validity = accessor.array_validity();
 

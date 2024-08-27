@@ -6,7 +6,7 @@ use vortex_scalar::{Scalar, StructScalar};
 
 use crate::array::constant::ConstantArray;
 use crate::iter::{Accessor, VectorizedArrayIter};
-use crate::validity::ArrayValidity;
+use crate::validity::{ArrayValidity, Validity};
 use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
     NullArrayTrait, PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
@@ -92,6 +92,14 @@ where
 
     fn value_unchecked(&self, _index: usize) -> T {
         T::try_from(self.scalar().clone()).unwrap()
+    }
+
+    fn array_validity(&self) -> Validity {
+        if self.scalar().is_valid() {
+            Validity::AllValid
+        } else {
+            Validity::AllInvalid
+        }
     }
 }
 

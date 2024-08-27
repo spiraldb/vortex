@@ -148,10 +148,6 @@ where
         let encoded_val = encoded_val.try_into().unwrap();
         F::decode_single(encoded_val, self.exponents())
     }
-
-    fn decode_batch(&self, start_idx: usize) -> Cow<'_, [F]> {
-        todo!()
-    }
 }
 
 impl PrimitiveArrayTrait for ALPArray {
