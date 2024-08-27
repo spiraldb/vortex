@@ -97,6 +97,11 @@ impl Validity {
         }
     }
 
+    #[inline]
+    pub fn is_null(&self, index: usize) -> bool {
+        !self.is_valid(index)
+    }
+
     pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Self> {
         match self {
             Self::Array(a) => Ok(Self::Array(slice(a, start, stop)?)),

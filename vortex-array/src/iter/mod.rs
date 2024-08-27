@@ -1,10 +1,12 @@
 use std::borrow::Cow;
+use std::marker::PhantomData;
 
 pub use adapter::*;
 pub use ext::*;
 use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
+use crate::array::PrimitiveArray;
 use crate::validity::Validity;
 use crate::Array;
 
@@ -20,32 +22,74 @@ pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
 }
 
 #[allow(dead_code)]
-pub struct ArrayIter<'a, T>
+pub struct ArrayIter<'a, A, T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
+    A: Accessor<'a, T>,
 {
-    accessor: &'a dyn Accessor<T>,
+    accessor: A,
     cached_batch: Cow<'a, [T]>,
     batch_idx: usize,
     overall_idx: usize,
     len: usize,
-    validity: Validity,
 }
 
-impl<'a, T> ArrayIter<'a, T>
+pub struct PrimitiveAccessor<'a, T> {
+    array: &'a PrimitiveArray,
+    validity: Validity,
+    _marker: PhantomData<T>,
+}
+
+impl<'a, T> PrimitiveAccessor<'a, T> {
+    pub fn new(array: &'a PrimitiveArray) -> Self {
+        let validity = array.validity();
+
+        Self {
+            array,
+            validity,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> Accessor<'a, T> for PrimitiveAccessor<'a, T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
+    T: Copy,
 {
-    pub fn new(accessor: &'a impl Accessor<T>) -> Self {
+    fn len(&self) -> usize {
+        self.array.len()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        self.validity.is_valid(index)
+    }
+
+    fn value_unchecked(&self, index: usize) -> T {
+        self.array.buffer().typed::<T>()[index]
+    }
+
+    fn decode_batch(&self, start_idx: usize) -> Cow<'a, [T]> {
+        let batch_size = usize::min(1024, self.array.len() - start_idx);
+
+        Cow::Borrowed(&self.array.buffer().typed()[start_idx..start_idx + batch_size])
+    }
+}
+
+impl<'a, A, T> ArrayIter<'a, A, T>
+where
+    [T]: ToOwned<Owned = Vec<T>>,
+    A: Accessor<'a, T>,
+    T: Copy,
+{
+    pub fn new(accessor: A) -> Self {
         let len = accessor.len();
-        let validity = accessor.array_validity();
 
         let cached_batch = accessor.decode_batch(0);
 
         Self {
             accessor,
             len,
-            validity,
             cached_batch,
             batch_idx: 0,
             overall_idx: 0,
@@ -53,66 +97,71 @@ where
     }
 
     #[inline]
-    pub fn load_batch(&mut self) {
-        self.overall_idx += self.batch_idx;
-        self.batch_idx = 0;
-        self.cached_batch = self.accessor.decode_batch(self.overall_idx);
+    pub fn maybe_load_batch(&mut self) {
+        if self.batch_idx == self.cached_batch.len() {
+            self.overall_idx += self.batch_idx;
+            self.batch_idx = 0;
+            self.cached_batch = self.accessor.decode_batch(self.overall_idx);
+        }
     }
 }
 
 #[allow(clippy::len_without_is_empty)]
-pub trait Accessor<T>
+pub trait Accessor<'u, T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
 {
     fn len(&self) -> usize;
     fn is_valid(&self, index: usize) -> bool;
-    fn value_unchecked(&self, index: usize) -> T;
-    fn array_validity(&self) -> Validity {
-        todo!()
+    fn is_null(&self, index: usize) -> bool {
+        !self.is_valid(index)
     }
+    fn value_unchecked(&self, index: usize) -> T;
 
+    #[allow(clippy::uninit_vec)]
     #[inline]
-    fn decode_batch(&self, _start_idx: usize) -> Cow<'_, [T]> {
-        // let batch_size = DEFAULT_BATCH_SIZE.min(self.len() - start_idx);
-        // if batch.capacity() < batch_size {
-        //     batch.reserve(batch_size - batch.capacity());
-        // }
+    fn decode_batch(&self, start_idx: usize) -> Cow<'u, [T]> {
+        let batch_size = DEFAULT_BATCH_SIZE.min(self.len() - start_idx);
 
-        // // Safety:
-        // // We make sure above that we have at least `batch_size` elements to put into
-        // // the vector and sufficient capacity.
-        // unsafe {
-        //     batch.set_len(batch_size);
-        // }
+        let mut batch = Vec::with_capacity(batch_size);
 
-        // for (idx, batch_item) in batch.iter_mut().enumerate().take(batch_size) {
-        //     *batch_item = self.value_unchecked(start_idx + idx);
-        // }
-        todo!()
+        // Safety:
+        // We've made sure that we have at least `batch_size` elements to put into
+        // the vector and sufficient capacity.
+        unsafe {
+            batch.set_len(batch_size);
+        }
+
+        for (idx, batch_item) in batch.iter_mut().enumerate().take(batch_size) {
+            *batch_item = self.value_unchecked(start_idx + idx);
+        }
+        Cow::Owned(batch)
     }
 }
 
-impl<'a, T: Copy> Iterator for ArrayIter<'a, T> {
+impl<'a, A, T: Copy> Iterator for ArrayIter<'a, A, T>
+where
+    A: Accessor<'a, T>,
+{
     type Item = Option<T>;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.len == self.overall_idx + self.batch_idx {
-            None
-        } else if !self.validity.is_valid(self.overall_idx + self.batch_idx) {
-            self.batch_idx += 1;
+            return None;
+        }
+
+        let v = if !self.accessor.is_valid(self.overall_idx + self.batch_idx) {
             Some(None)
         } else {
-            if self.batch_idx == self.cached_batch.len() {
-                self.load_batch();
-            }
-
+            self.maybe_load_batch();
             let i = unsafe { *self.cached_batch.get_unchecked(self.batch_idx) };
-            self.batch_idx += 1;
 
             Some(Some(i))
-        }
+        };
+
+        self.batch_idx += 1;
+        v
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
@@ -121,7 +170,7 @@ impl<'a, T: Copy> Iterator for ArrayIter<'a, T> {
     }
 }
 
-impl<T: Copy> ExactSizeIterator for ArrayIter<'_, T> {}
+impl<'a, A: Accessor<'a, T>, T: Copy> ExactSizeIterator for ArrayIter<'a, A, T> {}
 
 #[cfg(test)]
 mod tests {

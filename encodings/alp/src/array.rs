@@ -129,7 +129,7 @@ impl<F: ALPFloat> AlpAccessor<F> {
     }
 }
 
-impl<F> Accessor<F> for AlpAccessor<F>
+impl<'a, F> Accessor<'a, F> for AlpAccessor<F>
 where
     F: ALPFloat + TryFrom<Scalar, Error = VortexError>,
     F::ALPInt: TryFrom<Scalar, Error = VortexError>,

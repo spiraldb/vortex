@@ -4,7 +4,10 @@ use vortex_dtype::{DType, FieldNames};
 ///
 /// When callers only want to make assumptions about the DType, and not about any specific
 /// encoding, they can use these traits to write encoding-agnostic code.
-use crate::{iter::ArrayIter, Array, ArrayTrait};
+use crate::{
+    iter::{ArrayIter, PrimitiveAccessor},
+    Array, ArrayTrait,
+};
 
 pub trait ArrayVariants {
     fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
@@ -100,9 +103,9 @@ pub trait BoolArrayTrait: ArrayTrait {
 }
 
 pub trait PrimitiveArrayTrait: ArrayTrait {
-    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>>;
-    fn float32_iter(&self) -> Option<ArrayIter<f32>>;
-    fn float64_iter(&self) -> Option<ArrayIter<f64>>;
+    fn unsigned32_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<u32>, u32>>;
+    fn float32_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<f32>, f32>>;
+    fn float64_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<f64>, f64>>;
 }
 
 pub trait Utf8ArrayTrait: ArrayTrait {}

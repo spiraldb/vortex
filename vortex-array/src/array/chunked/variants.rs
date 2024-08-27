@@ -1,7 +1,7 @@
 use vortex_dtype::DType;
 
 use crate::array::chunked::ChunkedArray;
-use crate::iter::ArrayIter;
+use crate::iter::{ArrayIter, PrimitiveAccessor};
 use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
     NullArrayTrait, PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
@@ -56,15 +56,13 @@ impl BoolArrayTrait for ChunkedArray {
 }
 
 impl PrimitiveArrayTrait for ChunkedArray {
-    fn float32_iter(&self) -> Option<ArrayIter<f32>> {
+    fn unsigned32_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<u32>, u32>> {
         todo!()
     }
-
-    fn float64_iter(&self) -> Option<ArrayIter<f64>> {
+    fn float32_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<f32>, f32>> {
         todo!()
     }
-
-    fn unsigned32_iter(&self) -> Option<ArrayIter<u32>> {
+    fn float64_iter(&self) -> Option<ArrayIter<PrimitiveAccessor<f64>, f64>> {
         todo!()
     }
 }
