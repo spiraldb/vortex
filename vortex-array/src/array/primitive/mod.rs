@@ -361,3 +361,38 @@ impl Array {
         PrimitiveArray::try_from(self).expect("expected primitive array")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batched_iter() {
+        let v = PrimitiveArray::from_vec((0_u32..10_000).collect(), Validity::AllValid);
+        let iter = v.u32_iter().unwrap();
+
+        let mut items_counter = 0;
+
+        for batch in iter {
+            let batch_size = batch.len();
+            for idx in 0..batch_size {
+                assert!(batch.is_valid(idx));
+                assert_eq!((items_counter + idx) as u32, unsafe {
+                    *batch.get_unchecked(idx)
+                });
+            }
+
+            items_counter += batch_size;
+        }
+    }
+
+    #[test]
+    fn flattened_iter() {
+        let v = PrimitiveArray::from_vec((0_u32..10_000).collect(), Validity::AllValid);
+        let iter = v.u32_iter().unwrap();
+
+        for (idx, v) in iter.flatten().enumerate() {
+            assert_eq!(idx as u32, v.unwrap());
+        }
+    }
+}
