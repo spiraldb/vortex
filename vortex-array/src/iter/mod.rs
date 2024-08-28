@@ -39,12 +39,20 @@ where
     fn value_unchecked(&self, index: usize) -> T;
     fn array_validity(&self) -> Validity;
 
-    #[allow(clippy::uninit_vec)]
     #[inline]
     fn decode_batch(&self, start_idx: usize) -> Vec<T> {
         let batch_size = self.batch_size(start_idx);
 
         let mut batch = Vec::with_capacity(batch_size);
+
+        for (idx, batch_item) in batch
+            .spare_capacity_mut()
+            .iter_mut()
+            .enumerate()
+            .take(batch_size)
+        {
+            batch_item.write(self.value_unchecked(start_idx + idx));
+        }
 
         // Safety:
         // We've made sure that we have at least `batch_size` elements to put into
@@ -53,9 +61,6 @@ where
             batch.set_len(batch_size);
         }
 
-        for (idx, batch_item) in batch.iter_mut().enumerate().take(batch_size) {
-            *batch_item = self.value_unchecked(start_idx + idx);
-        }
         batch
     }
 }
@@ -91,18 +96,12 @@ where
     }
 }
 
-pub struct Batch<T>
-where
-    T: Sized,
-{
+pub struct Batch<T> {
     data: BatchData<T>,
     validity: Validity,
 }
 
-impl<T> Batch<T>
-where
-    T: Copy,
-{
+impl<T: Copy> Batch<T> {
     pub fn new(data: &[T], validity: Validity) -> Self {
         let data = if data.len() == BATCH_SIZE {
             BatchData::Fixed(data.try_into().unwrap())
@@ -113,10 +112,7 @@ where
     }
 }
 
-impl<T> Batch<T>
-where
-    T: Clone,
-{
+impl<T> Batch<T> {
     pub fn new_from_vec(data: Vec<T>, validity: Validity) -> Self {
         Self {
             data: BatchData::Variable(data),
@@ -181,10 +177,7 @@ where
 
 impl<T: Copy> ExactSizeIterator for FlattenedBatch<T> {}
 
-impl<T> IntoIterator for Batch<T>
-where
-    T: Copy,
-{
+impl<T: Copy> IntoIterator for Batch<T> {
     type Item = Option<T>;
     type IntoIter = FlattenedBatch<T>;
 
@@ -196,10 +189,7 @@ where
     }
 }
 
-pub enum BatchData<T>
-where
-    T: Sized,
-{
+pub enum BatchData<T> {
     Fixed([T; BATCH_SIZE]),
     Variable(Vec<T>),
 }
