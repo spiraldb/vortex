@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use fsst::{Decompressor, Symbol, MAX_CODE};
+use fsst::{Decompressor, Symbol, FSST_CODE_MAX};
 use serde::{Deserialize, Serialize};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
@@ -36,7 +36,7 @@ impl FSSTArray {
         }
 
         // Check: symbols must not have length > MAX_CODE
-        if symbols.len() > MAX_CODE as usize {
+        if symbols.len() > FSST_CODE_MAX as usize {
             vortex_bail!(InvalidArgument: "symbols array must have length <= 255")
         }
 

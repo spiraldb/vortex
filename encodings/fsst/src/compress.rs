@@ -80,7 +80,7 @@ where
         }
     }
 
-    Compressor::train_bulk(&lines)
+    Compressor::train(&lines)
 }
 
 /// Compress from an iterator of bytestrings using FSST.
@@ -93,11 +93,18 @@ pub fn fsst_compress_iter<'a, I>(
 where
     I: Iterator<Item = Option<&'a [u8]>>,
 {
+    // TODO(aduffy): this might be too small.
+    let mut buffer = Vec::with_capacity(16 * 1024 * 1024);
     let mut builder = VarBinBuilder::<i32>::with_capacity(len);
     for string in iter {
         match string {
             None => builder.push_null(),
-            Some(s) => builder.push_value(compressor.compress(s).as_ref()),
+            Some(s) => {
+                // SAFETY: buffer is large enough
+                unsafe { compressor.compress_into(s, &mut buffer) };
+
+                builder.push_value(buffer.as_ref());
+            }
         }
     }
 

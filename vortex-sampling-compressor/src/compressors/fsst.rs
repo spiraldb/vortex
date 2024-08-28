@@ -5,7 +5,6 @@ use fsst::Compressor;
 use vortex::array::{VarBin, VarBinView};
 use vortex::encoding::EncodingRef;
 use vortex::{ArrayDType, ArrayDef, IntoArray};
-use vortex_dict::{Dict, DictArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_fsst::{fsst_compress, fsst_train_compressor, FSSTEncoding, FSST};
@@ -42,10 +41,7 @@ impl EncodingCompressor for FSSTCompressor {
         // }
 
         // FSST can be applied on top of VarBin, VarBinView, and Dict encodings.
-        if array.encoding().id() == VarBin::ID
-            || array.encoding().id() == VarBinView::ID
-            || array.encoding().id() == Dict::ID
-        {
+        if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
             return Some(self);
         }
 
@@ -59,13 +55,22 @@ impl EncodingCompressor for FSSTCompressor {
         like: Option<CompressionTree<'a>>,
         _ctx: SamplingCompressor<'a>,
     ) -> VortexResult<super::CompressedArray<'a>> {
+        // if like.is_some() {
+        //     println!("calling FSSTCompressor::compress as selected encoding");
+        // }
         // Size-check: FSST has a builtin 4KB overhead due to the symbol table, and usually compresses
         // between 2-3x depending on the text quality.
         //
         // It's not worth running a full compression step unless the array is large enough.
-        if array.nbytes() < 10 * FSST_SYMBOL_TABLE_SIZE {
+        if array.nbytes() < 5 * FSST_SYMBOL_TABLE_SIZE {
             return Ok(CompressedArray::uncompressed(array.clone()));
         }
+
+        println!(
+            "begin compress for array nbytes={} len={}",
+            array.nbytes(),
+            array.len()
+        );
 
         let compressor = like
             .map(|mut c| unsafe {
@@ -82,19 +87,23 @@ impl EncodingCompressor for FSSTCompressor {
                 //     array.len(),
                 //     array.nbytes()
                 // );
-                Box::new(fsst_train_compressor(array))
+                let start = std::time::Instant::now();
+                let trained = Box::new(fsst_train_compressor(array));
+                let duration = std::time::Instant::now().duration_since(start);
+                println!("  training new compressor took {}µs", duration.as_micros());
+
+                trained
             });
 
         let result_array =
             if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
                 // For a VarBinArray or VarBinViewArray, compress directly.
-                fsst_compress(array, compressor.as_ref()).into_array()
-            } else if let Ok(dict) = DictArray::try_from(array) {
-                // For a dict array, just compress the values
-                let values = fsst_compress(dict, compressor.as_ref());
-                let codes = dict.codes();
-
-                DictArray::try_new(codes, values.into_array())?.into_array()
+                let start = std::time::Instant::now();
+                let result = fsst_compress(array, compressor.as_ref()).into_array();
+                let duration = std::time::Instant::now().duration_since(start);
+                println!("  compressing took {}µs", duration.as_micros());
+                assert_eq!(result.len(), array.len());
+                result
             } else {
                 vortex_bail!(
                     InvalidArgument: "unsupported encoding for FSSTCompressor {:?}",
