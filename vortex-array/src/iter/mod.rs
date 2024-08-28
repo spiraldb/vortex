@@ -23,11 +23,7 @@ pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
 pub type AccessorRef<T> = Arc<dyn Accessor<T>>;
 
 /// Define the basic behavior required for batched iterators
-pub trait Accessor<T>
-where
-    [T]: ToOwned<Owned = Vec<T>>,
-    Self: Send + Sync,
-{
+pub trait Accessor<T>: Send + Sync {
     fn batch_size(&self, start_idx: usize) -> usize {
         usize::min(BATCH_SIZE, self.array_len() - start_idx)
     }

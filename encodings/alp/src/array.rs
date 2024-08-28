@@ -12,8 +12,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexError, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
@@ -113,15 +112,15 @@ impl ArrayVariants for ALPArray {
     }
 }
 
-struct ALPAccessor<F, I> {
-    encoded: Arc<dyn Accessor<I>>,
+struct ALPAccessor<F: ALPFloat> {
+    encoded: Arc<dyn Accessor<F::ALPInt>>,
     patches: Option<Arc<dyn Accessor<F>>>,
     validity: Validity,
     exponents: Exponents,
 }
-impl<F, I> ALPAccessor<F, I> {
+impl<F: ALPFloat> ALPAccessor<F> {
     fn new(
-        encoded: AccessorRef<I>,
+        encoded: AccessorRef<F::ALPInt>,
         patches: Option<AccessorRef<F>>,
         exponents: Exponents,
         validity: Validity,
@@ -135,11 +134,7 @@ impl<F, I> ALPAccessor<F, I> {
     }
 }
 
-impl<F> Accessor<F> for ALPAccessor<F, F::ALPInt>
-where
-    F: ALPFloat + TryFrom<Scalar, Error = VortexError>,
-    F::ALPInt: TryFrom<Scalar, Error = VortexError>,
-{
+impl<F: ALPFloat> Accessor<F> for ALPAccessor<F> {
     fn array_len(&self) -> usize {
         self.encoded.array_len()
     }
