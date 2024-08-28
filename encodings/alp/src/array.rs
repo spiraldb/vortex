@@ -171,8 +171,8 @@ where
             .collect::<Vec<F>>();
 
         if let Some(patches_accessor) = self.patches.as_ref() {
-            for (idx, item) in values.iter_mut().enumerate() {
-                let index = idx + start_idx;
+            for (index, item) in values.iter_mut().enumerate() {
+                let index = index + start_idx;
                 if patches_accessor.is_valid(index) {
                     *item = patches_accessor.value_unchecked(index);
                 }
@@ -184,6 +184,7 @@ where
 }
 
 impl PrimitiveArrayTrait for ALPArray {
+    #[allow(clippy::unwrap_in_result)]
     fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
@@ -193,7 +194,8 @@ impl PrimitiveArrayTrait for ALPArray {
 
                 let encoded = self
                     .encoded()
-                    .with_dyn(|a| a.as_primitive_array_unchecked().i32_accessor())?;
+                    .with_dyn(|a| a.as_primitive_array_unchecked().i32_accessor())
+                    .expect("This is is an invariant of the ALP algorithm");
 
                 Some(Arc::new(ALPAccessor::new(
                     encoded,
@@ -206,6 +208,7 @@ impl PrimitiveArrayTrait for ALPArray {
         }
     }
 
+    #[allow(clippy::unwrap_in_result)]
     fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
@@ -215,7 +218,8 @@ impl PrimitiveArrayTrait for ALPArray {
 
                 let encoded = self
                     .encoded()
-                    .with_dyn(|a| a.as_primitive_array_unchecked().i64_accessor())?;
+                    .with_dyn(|a| a.as_primitive_array_unchecked().i64_accessor())
+                    .expect("This is is an invariant of the ALP algorithm");
                 Some(Arc::new(ALPAccessor::new(
                     encoded,
                     patches,
