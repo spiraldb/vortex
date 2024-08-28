@@ -1,7 +1,7 @@
 use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::Array;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::DictArray;
@@ -30,7 +30,7 @@ impl ScalarAtFn for DictArray {
         let dict_index: usize = scalar_at_unchecked(&self.codes(), index)
             .as_ref()
             .try_into()
-            .unwrap();
+            .unwrap_or_else(|err| vortex_panic!("Invalid dict index", err));
 
         scalar_at_unchecked(&self.values(), dict_index)
     }

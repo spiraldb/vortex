@@ -153,6 +153,11 @@ pub enum VortexError {
     ),
 }
 
+#[allow(clippy::panic)]
+pub fn __vortex_panic_do_not_call_directly(err: VortexError) -> ! {
+    panic!("{}", err)
+}
+
 pub type VortexResult<T> = Result<T, VortexError>;
 
 impl Debug for VortexError {
@@ -187,7 +192,7 @@ macro_rules! vortex_err {
             $crate::VortexError::MismatchedTypes($expected.to_string().into(), $actual.to_string().into(), Backtrace::capture())
         )
     }};
-    (Context: $fmt:literal $(, $arg:expr)*, $err:expr $(,)?) => {{
+    (Context: $fmt:literal, $err:expr $(,)?) => {{
         use std::backtrace::Backtrace;
         $crate::__private::must_use(
             $crate::VortexError::Context(format!($fmt, $($arg),*).into(), Box::new($err))
@@ -219,14 +224,18 @@ macro_rules! vortex_bail {
 #[macro_export]
 macro_rules! vortex_panic {
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
-        panic!("{}", $crate::vortex_err!($variant: $fmt, $($arg),*))
+        vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
     };
     ($msg:literal, $err:expr) => {
-        panic!("{}", $crate::vortex_err!(Context: $msg, $err))
+        vortex_panic!($crate::vortex_err!(Context: $msg, $err))
     };
     ($msg:literal) => {
-        panic!("{}", $crate::vortex_err!($msg))
+        vortex_panic!($crate::vortex_err!($msg))
     };
+    ($err:expr) => {{
+        let err: $crate::VortexError = $err;
+        $crate::__vortex_panic_do_not_call_directly(err)
+    }};
 }
 
 #[cfg(feature = "datafusion")]

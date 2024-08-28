@@ -5,7 +5,7 @@ use vortex::compute::{
 };
 use vortex::{Array, ArrayDType};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar, ScalarValue};
 
 use crate::FoRArray;
@@ -47,8 +47,8 @@ impl ScalarAtFn for FoRArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let encoded_scalar =
             scalar_at_unchecked(&self.encoded(), index).reinterpret_cast(self.ptype());
-        let encoded = PrimitiveScalar::try_from(&encoded_scalar).unwrap();
-        let reference = PrimitiveScalar::try_from(self.reference()).unwrap();
+        let encoded = PrimitiveScalar::try_from(&encoded_scalar).unwrap_or_else(|err| vortex_panic!("Invalid encoded scalar", err));
+        let reference = PrimitiveScalar::try_from(self.reference()).unwrap_or_else(|err| vortex_panic!("Invalid reference scalar", err));
 
         match_each_integer_ptype!(encoded.ptype(), |$P| {
             use num_traits::WrappingAdd;

@@ -8,7 +8,7 @@ use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
 use vortex::visitor::AcceptArrayVisitor;
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonical};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexResult};
 
 impl_encoding!("vortex.fsst", 24u16, FSST);
 
@@ -85,9 +85,9 @@ impl FSSTArray {
         let symbols_array = self
             .symbols()
             .into_canonical()
-            .unwrap()
+            .unwrap_or_else(|err| vortex_panic!(err))
             .into_primitive()
-            .expect("Symbols must be a Primitive Array");
+            .unwrap_or_else(|err| vortex_panic!(Context: "Symbols must be a Primitive Array", err));
         let symbols = symbols_array.maybe_null_slice::<u64>();
 
         // Transmute the 64-bit symbol values into fsst `Symbol`s.
