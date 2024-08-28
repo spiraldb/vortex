@@ -180,6 +180,7 @@ impl<T: Copy> IntoIterator for Batch<T> {
 }
 
 pub enum BatchData<T> {
+    // TODO(adamgs): We can build higher-level compute functions and use the size info to help with compiler auto-vectorization
     Fixed([T; BATCH_SIZE]),
     Variable(Vec<T>),
 }
