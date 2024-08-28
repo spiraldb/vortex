@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use vortex::array::{Primitive, PrimitiveArray};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
-use vortex::iter::VectorizedArrayIter;
+use vortex::iter::AccessorRef;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -134,15 +134,42 @@ impl ArrayVariants for RunEndArray {
 }
 
 impl PrimitiveArrayTrait for RunEndArray {
-    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
+    fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
         todo!()
     }
 
-    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
+    fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
+        todo!()
+    }
+    fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
         todo!()
     }
 
-    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
+    fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
+        todo!()
+    }
+
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
+        todo!()
+    }
+
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
+        todo!()
+    }
+
+    fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
+        todo!()
+    }
+
+    fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
+        todo!()
+    }
+
+    fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
+        todo!()
+    }
+
+    fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
         todo!()
     }
 }

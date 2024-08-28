@@ -1,12 +1,12 @@
 use std::iter;
 use std::sync::Arc;
 
-use vortex_dtype::DType;
+use vortex_dtype::{DType, PType};
 use vortex_error::VortexError;
 use vortex_scalar::{Scalar, StructScalar};
 
 use crate::array::constant::ConstantArray;
-use crate::iter::{Accessor, VectorizedArrayIter};
+use crate::iter::{Accessor, AccessorRef};
 use crate::validity::{ArrayValidity, Validity};
 use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
@@ -105,23 +105,74 @@ where
 }
 
 impl PrimitiveArrayTrait for ConstantArray {
-    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
-        u32::try_from(self.scalar()).is_ok().then(|| {
-            let accessor = Arc::new(self.clone());
-            VectorizedArrayIter::new(accessor)
-        })
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::F32, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
     }
-    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
-        f32::try_from(self.scalar()).is_ok().then(|| {
-            let accessor = Arc::new(self.clone());
-            VectorizedArrayIter::new(accessor)
-        })
+
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::F64, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
     }
-    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
-        f64::try_from(self.scalar()).is_ok().then(|| {
-            let accessor = Arc::new(self.clone());
-            VectorizedArrayIter::new(accessor)
-        })
+
+    fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U8, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U16, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U32, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U64, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I8, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I16, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I32, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I64, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
     }
 }
 

@@ -34,11 +34,7 @@ fn vortex_iter(c: &mut Criterion) {
 
     c.bench_function("vortex_iter", |b| {
         b.iter_batched(
-            || {
-                data.as_primitive_array_unchecked()
-                    .unsigned32_iter()
-                    .unwrap()
-            },
+            || data.as_primitive_array_unchecked().u32_iter().unwrap(),
             do_work_vortex,
             BatchSize::SmallInput,
         )
@@ -52,7 +48,7 @@ fn vortex_iter_flat(c: &mut Criterion) {
         b.iter_batched(
             || {
                 data.as_primitive_array_unchecked()
-                    .unsigned32_iter()
+                    .u32_iter()
                     .unwrap()
                     .flatten()
             },

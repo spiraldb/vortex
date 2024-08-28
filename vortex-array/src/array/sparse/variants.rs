@@ -2,7 +2,6 @@ use vortex_dtype::DType;
 use vortex_scalar::StructScalar;
 
 use crate::array::sparse::SparseArray;
-use crate::iter::VectorizedArrayIter;
 use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
     NullArrayTrait, PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
@@ -57,13 +56,43 @@ impl BoolArrayTrait for SparseArray {
 }
 
 impl PrimitiveArrayTrait for SparseArray {
-    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
+    fn u32_accessor(&self) -> Option<std::sync::Arc<dyn crate::iter::Accessor<u32>>> {
         todo!()
     }
-    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
+
+    fn u64_accessor(&self) -> Option<std::sync::Arc<dyn crate::iter::Accessor<u64>>> {
         todo!()
     }
-    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
+
+    fn f32_accessor(&self) -> Option<std::sync::Arc<dyn crate::iter::Accessor<f32>>> {
+        todo!()
+    }
+
+    fn f64_accessor(&self) -> Option<std::sync::Arc<dyn crate::iter::Accessor<f64>>> {
+        todo!()
+    }
+
+    fn u8_accessor(&self) -> Option<crate::iter::AccessorRef<u8>> {
+        todo!()
+    }
+
+    fn u16_accessor(&self) -> Option<crate::iter::AccessorRef<u16>> {
+        todo!()
+    }
+
+    fn i8_accessor(&self) -> Option<crate::iter::AccessorRef<i8>> {
+        todo!()
+    }
+
+    fn i16_accessor(&self) -> Option<crate::iter::AccessorRef<i16>> {
+        todo!()
+    }
+
+    fn i32_accessor(&self) -> Option<crate::iter::AccessorRef<i32>> {
+        todo!()
+    }
+
+    fn i64_accessor(&self) -> Option<crate::iter::AccessorRef<i64>> {
         todo!()
     }
 }

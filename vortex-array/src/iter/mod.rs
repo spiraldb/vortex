@@ -20,10 +20,16 @@ pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
     fn dtype(&self) -> &DType;
 }
 
+pub type AccessorRef<T> = Arc<dyn Accessor<T>>;
+
 pub trait Accessor<T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
+    Self: Send + Sync,
 {
+    fn batch_size(&self, start_idx: usize) -> usize {
+        usize::min(BATCH_SIZE, self.array_len() - start_idx)
+    }
     fn array_len(&self) -> usize;
     fn is_valid(&self, index: usize) -> bool;
     fn is_null(&self, index: usize) -> bool {
@@ -35,7 +41,7 @@ where
     #[allow(clippy::uninit_vec)]
     #[inline]
     fn decode_batch(&self, start_idx: usize) -> Vec<T> {
-        let batch_size = BATCH_SIZE.min(self.array_len() - start_idx);
+        let batch_size = self.batch_size(start_idx);
 
         let mut batch = Vec::with_capacity(batch_size);
 
@@ -61,7 +67,7 @@ pub struct VectorizedArrayIter<T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
 {
-    accessor: Arc<dyn Accessor<T>>,
+    accessor: AccessorRef<T>,
     validity: Validity,
     current_idx: usize,
     len: usize,
@@ -252,7 +258,7 @@ mod tests {
             PrimitiveArray::from_nullable_vec((0..1_000_000).map(|v| Some(v as f32)).collect());
         let array_iter = array
             .as_primitive_array_unchecked()
-            .float32_iter()
+            .f32_iter()
             .unwrap()
             .flatten();
 

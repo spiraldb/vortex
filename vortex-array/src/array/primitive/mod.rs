@@ -10,7 +10,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::iter::{Accessor, VectorizedArrayIter, BATCH_SIZE};
+use crate::iter::Accessor;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -202,8 +202,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
 
     #[inline]
     fn decode_batch(&self, start_idx: usize) -> Vec<T> {
-        let batch_size = usize::min(BATCH_SIZE, self.len() - start_idx);
-
+        let batch_size = <Self as Accessor<T>>::batch_size(self, start_idx);
         let mut v = Vec::<T>::with_capacity(batch_size);
         let null_slice = self.maybe_null_slice::<T>();
 
@@ -221,31 +220,101 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
 }
 
 impl PrimitiveArrayTrait for PrimitiveArray {
-    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
+    fn f32_accessor(&self) -> Option<Arc<dyn Accessor<f32>>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
                 let accessor = Arc::new(self.clone());
-                Some(VectorizedArrayIter::new(accessor))
+                Some(accessor)
             }
             _ => None,
         }
     }
 
-    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
+    fn f64_accessor(&self) -> Option<Arc<dyn Accessor<f64>>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
                 let accessor = Arc::new(self.clone());
-                Some(VectorizedArrayIter::new(accessor))
+                Some(accessor)
             }
             _ => None,
         }
     }
 
-    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
+    fn u8_accessor(&self) -> Option<crate::iter::AccessorRef<u8>> {
+        match self.dtype() {
+            DType::Primitive(PType::U8, _) => {
+                let accessor = Arc::new(self.clone());
+                Some(accessor)
+            }
+            _ => None,
+        }
+    }
+
+    fn u16_accessor(&self) -> Option<crate::iter::AccessorRef<u16>> {
+        match self.dtype() {
+            DType::Primitive(PType::U16, _) => {
+                let accessor = Arc::new(self.clone());
+                Some(accessor)
+            }
+            _ => None,
+        }
+    }
+
+    fn u32_accessor(&self) -> Option<Arc<dyn Accessor<u32>>> {
         match self.dtype() {
             DType::Primitive(PType::U32, _) => {
                 let accessor = Arc::new(self.clone());
-                Some(VectorizedArrayIter::new(accessor))
+                Some(accessor)
+            }
+            _ => None,
+        }
+    }
+
+    fn u64_accessor(&self) -> Option<Arc<dyn Accessor<u64>>> {
+        match self.dtype() {
+            DType::Primitive(PType::U64, _) => {
+                let accessor = Arc::new(self.clone());
+                Some(accessor)
+            }
+            _ => None,
+        }
+    }
+
+    fn i8_accessor(&self) -> Option<crate::iter::AccessorRef<i8>> {
+        match self.dtype() {
+            DType::Primitive(PType::I8, _) => {
+                let accessor = Arc::new(self.clone());
+                Some(accessor)
+            }
+            _ => None,
+        }
+    }
+
+    fn i16_accessor(&self) -> Option<crate::iter::AccessorRef<i16>> {
+        match self.dtype() {
+            DType::Primitive(PType::I16, _) => {
+                let accessor = Arc::new(self.clone());
+                Some(accessor)
+            }
+            _ => None,
+        }
+    }
+
+    fn i32_accessor(&self) -> Option<crate::iter::AccessorRef<i32>> {
+        match self.dtype() {
+            DType::Primitive(PType::I32, _) => {
+                let accessor = Arc::new(self.clone());
+                Some(accessor)
+            }
+            _ => None,
+        }
+    }
+
+    fn i64_accessor(&self) -> Option<crate::iter::AccessorRef<i64>> {
+        match self.dtype() {
+            DType::Primitive(PType::I64, _) => {
+                let accessor = Arc::new(self.clone());
+                Some(accessor)
             }
             _ => None,
         }

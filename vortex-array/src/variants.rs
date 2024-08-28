@@ -1,10 +1,12 @@
+//! This module defines array traits for each Vortex DType.
+//!
+//! When callers only want to make assumptions about the DType, and not about any specific
+//! encoding, they can use these traits to write encoding-agnostic code.
+
 use vortex_dtype::{DType, FieldNames};
 
-/// This module defines array traits for each Vortex DType.
-///
-/// When callers only want to make assumptions about the DType, and not about any specific
-/// encoding, they can use these traits to write encoding-agnostic code.
-use crate::{iter::VectorizedArrayIter, Array, ArrayTrait};
+use crate::iter::{AccessorRef, VectorizedArrayIter};
+use crate::{Array, ArrayTrait};
 
 pub trait ArrayVariants {
     fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
@@ -100,9 +102,32 @@ pub trait BoolArrayTrait: ArrayTrait {
 }
 
 pub trait PrimitiveArrayTrait: ArrayTrait {
-    fn unsigned32_iter(&self) -> Option<VectorizedArrayIter<u32>>;
-    fn float32_iter(&self) -> Option<VectorizedArrayIter<f32>>;
-    fn float64_iter(&self) -> Option<VectorizedArrayIter<f64>>;
+    fn u8_accessor(&self) -> Option<AccessorRef<u8>>;
+    fn u16_accessor(&self) -> Option<AccessorRef<u16>>;
+    fn u32_accessor(&self) -> Option<AccessorRef<u32>>;
+    fn u64_accessor(&self) -> Option<AccessorRef<u64>>;
+    fn i8_accessor(&self) -> Option<AccessorRef<i8>>;
+    fn i16_accessor(&self) -> Option<AccessorRef<i16>>;
+    fn i32_accessor(&self) -> Option<AccessorRef<i32>>;
+    fn i64_accessor(&self) -> Option<AccessorRef<i64>>;
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>>;
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>>;
+
+    fn u32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
+        self.u32_accessor().map(VectorizedArrayIter::new)
+    }
+
+    fn u64_iter(&self) -> Option<VectorizedArrayIter<u64>> {
+        self.u64_accessor().map(VectorizedArrayIter::new)
+    }
+
+    fn f32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
+        self.f32_accessor().map(VectorizedArrayIter::new)
+    }
+
+    fn f64_iter(&self) -> Option<VectorizedArrayIter<f64>> {
+        self.f64_accessor().map(VectorizedArrayIter::new)
+    }
 }
 
 pub trait Utf8ArrayTrait: ArrayTrait {}
