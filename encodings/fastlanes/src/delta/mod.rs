@@ -101,47 +101,7 @@ impl ArrayVariants for DeltaArray {
     }
 }
 
-impl PrimitiveArrayTrait for DeltaArray {
-    fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
-        todo!()
-    }
-
-    fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
-        todo!()
-    }
-
-    fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
-        todo!()
-    }
-
-    fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
-        todo!()
-    }
-
-    fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
-        todo!()
-    }
-
-    fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
-        todo!()
-    }
-
-    fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
-        todo!()
-    }
-
-    fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
-        todo!()
-    }
-
-    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
-        todo!()
-    }
-
-    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
-        todo!()
-    }
-}
+impl PrimitiveArrayTrait for DeltaArray {}
 
 impl IntoCanonical for DeltaArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

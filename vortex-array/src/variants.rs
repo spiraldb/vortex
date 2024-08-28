@@ -102,16 +102,45 @@ pub trait BoolArrayTrait: ArrayTrait {
 }
 
 pub trait PrimitiveArrayTrait: ArrayTrait {
-    fn u8_accessor(&self) -> Option<AccessorRef<u8>>;
-    fn u16_accessor(&self) -> Option<AccessorRef<u16>>;
-    fn u32_accessor(&self) -> Option<AccessorRef<u32>>;
-    fn u64_accessor(&self) -> Option<AccessorRef<u64>>;
-    fn i8_accessor(&self) -> Option<AccessorRef<i8>>;
-    fn i16_accessor(&self) -> Option<AccessorRef<i16>>;
-    fn i32_accessor(&self) -> Option<AccessorRef<i32>>;
-    fn i64_accessor(&self) -> Option<AccessorRef<i64>>;
-    fn f32_accessor(&self) -> Option<AccessorRef<f32>>;
-    fn f64_accessor(&self) -> Option<AccessorRef<f64>>;
+    fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
+        None
+    }
+
+    fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
+        None
+    }
+
+    fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
+        None
+    }
+
+    fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
+        None
+    }
+
+    fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
+        None
+    }
+
+    fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
+        None
+    }
+
+    fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
+        None
+    }
+
+    fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
+        None
+    }
+
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
+        None
+    }
+
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
+        None
+    }
 
     fn u32_iter(&self) -> Option<VectorizedArrayIter<u32>> {
         self.u32_accessor().map(VectorizedArrayIter::new)
