@@ -29,9 +29,6 @@ pub trait Accessor<T>: Send + Sync {
     }
     fn array_len(&self) -> usize;
     fn is_valid(&self, index: usize) -> bool;
-    fn is_null(&self, index: usize) -> bool {
-        !self.is_valid(index)
-    }
     fn value_unchecked(&self, index: usize) -> T;
     fn array_validity(&self) -> Validity;
 
@@ -65,10 +62,7 @@ pub trait Accessor<T>: Send + Sync {
 /// Note that it doesn't respect per-item validity, and the per-item `Validity` instance should be advised
 /// for correctness, must "high-performance" code will ignore the validity when doing work, and will only
 /// re-use it when reconstructing the result array.
-pub struct VectorizedArrayIter<T>
-where
-    [T]: ToOwned<Owned = Vec<T>>,
-{
+pub struct VectorizedArrayIter<T> {
     accessor: AccessorRef<T>,
     validity: Validity,
     current_idx: usize,

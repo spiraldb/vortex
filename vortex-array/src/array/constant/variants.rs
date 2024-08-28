@@ -79,7 +79,6 @@ impl BoolArrayTrait for ConstantArray {
 
 impl<T> Accessor<T> for ConstantArray
 where
-    [T]: ToOwned<Owned = Vec<T>>,
     T: Clone,
     T: TryFrom<Scalar, Error = VortexError>,
 {
