@@ -98,17 +98,6 @@ impl Buffer {
             }
         }
     }
-
-    /// Gimme a slice
-    #[inline]
-    pub fn typed<T>(&self) -> &[T] {
-        unsafe {
-            std::slice::from_raw_parts(
-                self.as_ptr() as *const T,
-                self.len() / std::mem::size_of::<T>(),
-            )
-        }
-    }
 }
 
 impl Deref for Buffer {

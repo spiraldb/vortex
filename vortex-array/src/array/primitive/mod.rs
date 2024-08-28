@@ -197,7 +197,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
 
     #[inline]
     fn value_unchecked(&self, index: usize) -> T {
-        self.buffer().typed()[index]
+        self.maybe_null_slice::<T>()[index]
     }
 
     #[inline]

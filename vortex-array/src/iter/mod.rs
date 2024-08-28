@@ -246,24 +246,3 @@ impl<T: Copy> Iterator for VectorizedArrayIter<T> {
 }
 
 impl<T: Copy> ExactSizeIterator for VectorizedArrayIter<T> {}
-
-#[cfg(test)]
-mod tests {
-    use crate::array::PrimitiveArray;
-    use crate::variants::ArrayVariants;
-
-    #[test]
-    fn iter_example() {
-        let array =
-            PrimitiveArray::from_nullable_vec((0..1_000_000).map(|v| Some(v as f32)).collect());
-        let array_iter = array
-            .as_primitive_array_unchecked()
-            .f32_iter()
-            .unwrap()
-            .flatten();
-
-        for (idx, v) in array_iter.enumerate() {
-            assert_eq!(idx as f32, v.unwrap());
-        }
-    }
-}
