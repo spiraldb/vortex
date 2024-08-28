@@ -25,6 +25,7 @@ vortex-scalar = { workspace = true }
 
 [dev-dependencies]
 divan = { workspace = true }
+arrow = { workspace = true }
 
 [[bench]]
 name = "alp_compress"

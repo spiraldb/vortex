@@ -168,6 +168,7 @@ impl<F: ALPFloat> Accessor<F> for ALPAccessor<F> {
         if let Some(patches_accessor) = self.patches.as_ref() {
             for (index, item) in values.iter_mut().enumerate() {
                 let index = index + start_idx;
+
                 if patches_accessor.is_valid(index) {
                     *item = patches_accessor.value_unchecked(index);
                 }
