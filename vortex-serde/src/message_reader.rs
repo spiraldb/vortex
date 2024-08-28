@@ -5,7 +5,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use flatbuffers::{root, root_unchecked};
 use futures_util::stream::try_unfold;
 use vortex::stream::{ArrayStream, ArrayStreamAdapter};
-use vortex::{Array, ArrayView, Context, IntoArray};
+use vortex::{Array, ArrayData, ArrayView, Context, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
@@ -332,7 +332,7 @@ impl ArrayBufferReader {
             self.buffers,
         )?;
 
-        Ok(view.into_array())
+        Ok(ArrayData::from(view.into_array()).into())
     }
 }
 
