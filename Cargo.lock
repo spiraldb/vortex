@@ -2046,6 +2046,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
+name = "jiff"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ef8bc400f8312944a9f879db116fed372c4f0859af672eba2a80f79c767dd19"
+dependencies = [
+ "jiff-tzdb-platform",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "jiff-tzdb"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05fac328b3df1c0f18a3c2ab6cb7e06e4e549f366017d796e3e66b6d6889abe6"
+
+[[package]]
+name = "jiff-tzdb-platform"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8da387d5feaf355954c2c122c194d6df9c57d865125a67984bb453db5336940"
+dependencies = [
+ "jiff-tzdb",
+]
+
+[[package]]
 name = "jobserver"
 version = "0.1.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4300,6 +4325,7 @@ name = "vortex-datetime-dtype"
 version = "0.7.0"
 dependencies = [
  "arrow-schema",
+ "jiff",
  "lazy_static",
  "num_enum 0.7.3",
  "serde",
@@ -4363,6 +4389,7 @@ dependencies = [
  "datafusion-common",
  "flatbuffers",
  "flexbuffers",
+ "jiff",
  "object_store",
  "parquet",
  "thiserror",
@@ -4519,6 +4546,7 @@ dependencies = [
  "flatbuffers",
  "flexbuffers",
  "itertools 0.13.0",
+ "jiff",
  "num-traits",
  "paste",
  "prost",
@@ -4723,7 +4751,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.59.0",
+ "windows-sys 0.48.0",
 ]
 
 [[package]]

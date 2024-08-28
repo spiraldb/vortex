@@ -145,6 +145,12 @@ pub enum VortexError {
         #[backtrace]
         datafusion_common::DataFusionError,
     ),
+    #[error(transparent)]
+    JiffError(
+        #[from]
+        #[backtrace]
+        jiff::Error,
+    ),
 }
 
 pub type VortexResult<T> = Result<T, VortexError>;

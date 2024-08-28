@@ -165,9 +165,10 @@ impl ArrayStatisticsCompute for RunEndArray {}
 
 #[cfg(test)]
 mod test {
-    use vortex::compute::slice;
+    use vortex::array::{BoolArray, PrimitiveArray};
     use vortex::compute::unary::scalar_at;
-    use vortex::validity::Validity;
+    use vortex::compute::{slice, take};
+    use vortex::validity::{ArrayValidity, Validity};
     use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
     use vortex_dtype::{DType, Nullability, PType};
 
@@ -260,6 +261,36 @@ mod test {
         assert_eq!(
             arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
             vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]
+        );
+    }
+
+    #[test]
+    fn with_nulls() {
+        let uncompressed = PrimitiveArray::from_vec(vec![1i32, 0, 3], Validity::AllValid);
+        let validity = BoolArray::from_vec(
+            vec![
+                true, true, false, false, false, true, true, true, true, true,
+            ],
+            Validity::NonNullable,
+        );
+        let arr = RunEndArray::try_new(
+            vec![2u32, 5, 10].into_array(),
+            uncompressed.into(),
+            Validity::Array(validity.into()),
+        )
+        .unwrap();
+
+        let test_indices = PrimitiveArray::from_vec(vec![0, 2, 4, 6], Validity::NonNullable);
+        let taken = take(arr.array(), test_indices.array()).unwrap();
+
+        assert_eq!(taken.len(), test_indices.len());
+
+        let parray = taken.into_primitive().unwrap();
+        assert_eq!(
+            (0..4)
+                .map(|idx| parray.is_valid(idx).then(|| parray.get_as_cast::<i32>(idx)))
+                .collect::<Vec<Option<i32>>>(),
+            vec![Some(1), None, None, Some(3),]
         );
     }
 }
