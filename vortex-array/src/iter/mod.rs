@@ -22,6 +22,7 @@ pub trait ArrayIterator: Iterator<Item = VortexResult<Array>> {
 
 pub type AccessorRef<T> = Arc<dyn Accessor<T>>;
 
+/// Define the basic behavior required for batched iterators
 pub trait Accessor<T>
 where
     [T]: ToOwned<Owned = Vec<T>>,
