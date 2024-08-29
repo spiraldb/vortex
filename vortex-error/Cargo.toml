@@ -24,6 +24,7 @@ arrow-schema = { workspace = true }
 datafusion-common = { workspace = true, optional = true }
 flatbuffers = { workspace = true, optional = true }
 flexbuffers = { workspace = true, optional = true }
+jiff = { workspace = true }
 object_store = { workspace = true, optional = true }
 parquet = { workspace = true, optional = true }
 thiserror = { workspace = true }
