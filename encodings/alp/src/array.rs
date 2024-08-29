@@ -180,7 +180,6 @@ impl<F: ALPFloat> Accessor<F> for ALPAccessor<F> {
 }
 
 impl PrimitiveArrayTrait for ALPArray {
-    #[allow(clippy::unwrap_in_result)]
     fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
@@ -191,7 +190,7 @@ impl PrimitiveArrayTrait for ALPArray {
                 let encoded = self
                     .encoded()
                     .with_dyn(|a| a.as_primitive_array_unchecked().i32_accessor())
-                    .expect("This is is an invariant of the ALP algorithm");
+                    .unwrap_or_else(|| panic!("This is is an invariant of the ALP algorithm"));
 
                 Some(Arc::new(ALPAccessor::new(
                     encoded,

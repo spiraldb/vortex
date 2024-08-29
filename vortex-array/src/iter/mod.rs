@@ -199,7 +199,6 @@ impl<T> Deref for BatchData<T> {
 impl<T: Copy> Iterator for VectorizedArrayIter<T> {
     type Item = Batch<T>;
 
-    #[allow(clippy::unwrap_in_result)]
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.current_idx == self.accessor.array_len() {
@@ -210,7 +209,9 @@ impl<T: Copy> Iterator for VectorizedArrayIter<T> {
             let validity = self
                 .validity
                 .slice(self.current_idx, self.current_idx + data.len())
-                .expect("The slice bounds should always be within the array's limits");
+                .unwrap_or_else(|_| {
+                    panic!("The slice bounds should always be within the array's limits")
+                });
             self.current_idx += data.len();
 
             let batch = Batch::new_from_vec(data, validity);
