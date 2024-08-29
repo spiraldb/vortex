@@ -10,7 +10,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::iter::Accessor;
+use crate::iter::{Accessor, AccessorRef};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -220,7 +220,7 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
 }
 
 impl PrimitiveArrayTrait for PrimitiveArray {
-    fn f32_accessor(&self) -> Option<Arc<dyn Accessor<f32>>> {
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
         match self.dtype() {
             DType::Primitive(PType::F32, _) => {
                 let accessor = Arc::new(self.clone());
@@ -230,7 +230,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn f64_accessor(&self) -> Option<Arc<dyn Accessor<f64>>> {
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
                 let accessor = Arc::new(self.clone());
@@ -240,7 +240,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn u8_accessor(&self) -> Option<crate::iter::AccessorRef<u8>> {
+    fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
         match self.dtype() {
             DType::Primitive(PType::U8, _) => {
                 let accessor = Arc::new(self.clone());
@@ -250,7 +250,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn u16_accessor(&self) -> Option<crate::iter::AccessorRef<u16>> {
+    fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
         match self.dtype() {
             DType::Primitive(PType::U16, _) => {
                 let accessor = Arc::new(self.clone());
@@ -260,7 +260,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn u32_accessor(&self) -> Option<Arc<dyn Accessor<u32>>> {
+    fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
         match self.dtype() {
             DType::Primitive(PType::U32, _) => {
                 let accessor = Arc::new(self.clone());
@@ -270,7 +270,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn u64_accessor(&self) -> Option<Arc<dyn Accessor<u64>>> {
+    fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
         match self.dtype() {
             DType::Primitive(PType::U64, _) => {
                 let accessor = Arc::new(self.clone());
@@ -280,7 +280,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn i8_accessor(&self) -> Option<crate::iter::AccessorRef<i8>> {
+    fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
         match self.dtype() {
             DType::Primitive(PType::I8, _) => {
                 let accessor = Arc::new(self.clone());
@@ -290,7 +290,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn i16_accessor(&self) -> Option<crate::iter::AccessorRef<i16>> {
+    fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
         match self.dtype() {
             DType::Primitive(PType::I16, _) => {
                 let accessor = Arc::new(self.clone());
@@ -300,7 +300,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn i32_accessor(&self) -> Option<crate::iter::AccessorRef<i32>> {
+    fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
         match self.dtype() {
             DType::Primitive(PType::I32, _) => {
                 let accessor = Arc::new(self.clone());
@@ -310,7 +310,7 @@ impl PrimitiveArrayTrait for PrimitiveArray {
         }
     }
 
-    fn i64_accessor(&self) -> Option<crate::iter::AccessorRef<i64>> {
+    fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
         match self.dtype() {
             DType::Primitive(PType::I64, _) => {
                 let accessor = Arc::new(self.clone());
