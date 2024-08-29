@@ -23,3 +23,17 @@ For profiling, you can open in Instruments using the following invocation:
 ```
 cargo instruments -p bench-vortex --bin tpch_benchmark --template Time --profile bench
 ```
+
+# Common Issues
+
+If the benchmarks fail because of this error:
+
+```
+Failed to compress to parquet: No such file or directory (os error 2)
+```
+
+You likely do not have duckdb installed. On macOS, try this:
+
+```
+brew install duckdb
+```
