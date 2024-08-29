@@ -103,6 +103,8 @@ pub trait BoolArrayTrait: ArrayTrait {
     //                                         and the buffer is a slice of that array, omitted slices
     //                                         could be either true or false signified by the initial
     //                                         value returned.
+
+    fn not(&self) -> Array;
 }
 
 pub trait PrimitiveArrayTrait: ArrayTrait {

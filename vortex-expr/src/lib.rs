@@ -1,5 +1,3 @@
-#![feature(iter_intersperse)]
-
 use std::sync::Arc;
 
 pub mod datafusion;
@@ -10,18 +8,23 @@ pub use expr::*;
 pub use operators::*;
 
 pub fn split_conjunction(expr: &Arc<dyn VortexExpr>) -> Vec<Arc<dyn VortexExpr>> {
-    match expr.as_any().downcast_ref::<BinaryExpr>() {
-        Some(bexp) if bexp.op() == Operator::And => {
-            let mut exprs = split_conjunction(bexp.lhs());
-            exprs.extend_from_slice(&split_conjunction(bexp.rhs()));
-            exprs
-        }
-        Some(_) | None => vec![expr.clone()],
-    }
+    split_inner(expr, vec![])
 }
 
-pub fn expr_is_filter(expr: &Arc<dyn VortexExpr>) -> bool {
-    expr.as_any().downcast_ref::<BinaryExpr>().is_some()
+fn split_inner(
+    expr: &Arc<dyn VortexExpr>,
+    mut exprs: Vec<Arc<dyn VortexExpr>>,
+) -> Vec<Arc<dyn VortexExpr>> {
+    match expr.as_any().downcast_ref::<BinaryExpr>() {
+        Some(bexp) if bexp.op() == Operator::And => {
+            let split = split_inner(bexp.lhs(), exprs);
+            split_inner(bexp.rhs(), split)
+        }
+        Some(_) | None => {
+            exprs.push(expr.clone());
+            exprs
+        }
+    }
 }
 
 #[cfg(test)]

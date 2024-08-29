@@ -9,10 +9,10 @@ use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayTrait, Canonical, IntoCanonical, TypedArray};
+use vortex::{impl_encoding, Array, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_error::{VortexExpect as _, VortexResult, VortexUnwrap};
 
 mod compute;
 mod stats;
@@ -100,6 +100,15 @@ impl BoolArrayTrait for ByteBoolArray {
     fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
         todo!()
     }
+
+    fn not(&self) -> Array {
+        ByteBoolArray::try_from_vec(
+            self.maybe_null_slice().iter().map(|v| !v).collect(),
+            self.validity(),
+        )
+        .vortex_unwrap()
+        .into_array()
+    }
 }
 
 impl From<Vec<bool>> for ByteBoolArray {
@@ -114,10 +123,7 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
         let validity = Validity::from_iter(value.iter());
 
         // This doesn't reallocate, and the compiler even vectorizes it
-        let data = value
-            .into_iter()
-            .map(std::option::Option::unwrap_or_default)
-            .collect();
+        let data = value.into_iter().map(Option::unwrap_or_default).collect();
 
         Self::try_from_vec(data, validity)
             .vortex_expect("Failed to create ByteBoolArray from nullable bools")

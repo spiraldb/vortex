@@ -230,8 +230,9 @@ impl<'a> flatbuffers::Follow<'a> for NestedLayout<'a> {
 }
 
 impl<'a> NestedLayout<'a> {
-  pub const VT_CHILDREN: flatbuffers::VOffsetT = 4;
-  pub const VT_ENCODING: flatbuffers::VOffsetT = 6;
+  pub const VT_ENCODING: flatbuffers::VOffsetT = 4;
+  pub const VT_METADATA: flatbuffers::VOffsetT = 6;
+  pub const VT_CHILDREN: flatbuffers::VOffsetT = 8;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -244,24 +245,32 @@ impl<'a> NestedLayout<'a> {
   ) -> flatbuffers::WIPOffset<NestedLayout<'bldr>> {
     let mut builder = NestedLayoutBuilder::new(_fbb);
     if let Some(x) = args.children { builder.add_children(x); }
+    if let Some(x) = args.metadata { builder.add_metadata(x); }
     builder.add_encoding(args.encoding);
     builder.finish()
   }
 
 
   #[inline]
-  pub fn children(&self) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Layout<'a>>>> {
-    // Safety:
-    // Created from valid Table for this object
-    // which contains a valid value in this slot
-    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Layout>>>>(NestedLayout::VT_CHILDREN, None)}
-  }
-  #[inline]
   pub fn encoding(&self) -> u16 {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
     unsafe { self._tab.get::<u16>(NestedLayout::VT_ENCODING, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn metadata(&self) -> Option<flatbuffers::Vector<'a, u8>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'a, u8>>>(NestedLayout::VT_METADATA, None)}
+  }
+  #[inline]
+  pub fn children(&self) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Layout<'a>>>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Layout>>>>(NestedLayout::VT_CHILDREN, None)}
   }
 }
 
@@ -272,22 +281,25 @@ impl flatbuffers::Verifiable for NestedLayout<'_> {
   ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
     use self::flatbuffers::Verifiable;
     v.visit_table(pos)?
-     .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<Layout>>>>("children", Self::VT_CHILDREN, false)?
      .visit_field::<u16>("encoding", Self::VT_ENCODING, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, u8>>>("metadata", Self::VT_METADATA, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<Layout>>>>("children", Self::VT_CHILDREN, false)?
      .finish();
     Ok(())
   }
 }
 pub struct NestedLayoutArgs<'a> {
-    pub children: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Layout<'a>>>>>,
     pub encoding: u16,
+    pub metadata: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
+    pub children: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<Layout<'a>>>>>,
 }
 impl<'a> Default for NestedLayoutArgs<'a> {
   #[inline]
   fn default() -> Self {
     NestedLayoutArgs {
-      children: None,
       encoding: 0,
+      metadata: None,
+      children: None,
     }
   }
 }
@@ -298,12 +310,16 @@ pub struct NestedLayoutBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
 }
 impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> NestedLayoutBuilder<'a, 'b, A> {
   #[inline]
-  pub fn add_children(&mut self, children: flatbuffers::WIPOffset<flatbuffers::Vector<'b , flatbuffers::ForwardsUOffset<Layout<'b >>>>) {
-    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(NestedLayout::VT_CHILDREN, children);
-  }
-  #[inline]
   pub fn add_encoding(&mut self, encoding: u16) {
     self.fbb_.push_slot::<u16>(NestedLayout::VT_ENCODING, encoding, 0);
+  }
+  #[inline]
+  pub fn add_metadata(&mut self, metadata: flatbuffers::WIPOffset<flatbuffers::Vector<'b , u8>>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(NestedLayout::VT_METADATA, metadata);
+  }
+  #[inline]
+  pub fn add_children(&mut self, children: flatbuffers::WIPOffset<flatbuffers::Vector<'b , flatbuffers::ForwardsUOffset<Layout<'b >>>>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(NestedLayout::VT_CHILDREN, children);
   }
   #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> NestedLayoutBuilder<'a, 'b, A> {
@@ -323,8 +339,9 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> NestedLayoutBuilder<'a, 'b, A> 
 impl core::fmt::Debug for NestedLayout<'_> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let mut ds = f.debug_struct("NestedLayout");
-      ds.field("children", &self.children());
       ds.field("encoding", &self.encoding());
+      ds.field("metadata", &self.metadata());
+      ds.field("children", &self.children());
       ds.finish()
   }
 }
@@ -513,6 +530,7 @@ impl<'a> flatbuffers::Follow<'a> for Footer<'a> {
 
 impl<'a> Footer<'a> {
   pub const VT_LAYOUT: flatbuffers::VOffsetT = 4;
+  pub const VT_ROW_COUNT: flatbuffers::VOffsetT = 6;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -524,6 +542,7 @@ impl<'a> Footer<'a> {
     args: &'args FooterArgs<'args>
   ) -> flatbuffers::WIPOffset<Footer<'bldr>> {
     let mut builder = FooterBuilder::new(_fbb);
+    builder.add_row_count(args.row_count);
     if let Some(x) = args.layout { builder.add_layout(x); }
     builder.finish()
   }
@@ -536,6 +555,13 @@ impl<'a> Footer<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<Layout>>(Footer::VT_LAYOUT, None)}
   }
+  #[inline]
+  pub fn row_count(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(Footer::VT_ROW_COUNT, Some(0)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for Footer<'_> {
@@ -546,18 +572,21 @@ impl flatbuffers::Verifiable for Footer<'_> {
     use self::flatbuffers::Verifiable;
     v.visit_table(pos)?
      .visit_field::<flatbuffers::ForwardsUOffset<Layout>>("layout", Self::VT_LAYOUT, false)?
+     .visit_field::<u64>("row_count", Self::VT_ROW_COUNT, false)?
      .finish();
     Ok(())
   }
 }
 pub struct FooterArgs<'a> {
     pub layout: Option<flatbuffers::WIPOffset<Layout<'a>>>,
+    pub row_count: u64,
 }
 impl<'a> Default for FooterArgs<'a> {
   #[inline]
   fn default() -> Self {
     FooterArgs {
       layout: None,
+      row_count: 0,
     }
   }
 }
@@ -570,6 +599,10 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> FooterBuilder<'a, 'b, A> {
   #[inline]
   pub fn add_layout(&mut self, layout: flatbuffers::WIPOffset<Layout<'b >>) {
     self.fbb_.push_slot_always::<flatbuffers::WIPOffset<Layout>>(Footer::VT_LAYOUT, layout);
+  }
+  #[inline]
+  pub fn add_row_count(&mut self, row_count: u64) {
+    self.fbb_.push_slot::<u64>(Footer::VT_ROW_COUNT, row_count, 0);
   }
   #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> FooterBuilder<'a, 'b, A> {
@@ -590,6 +623,7 @@ impl core::fmt::Debug for Footer<'_> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let mut ds = f.debug_struct("Footer");
       ds.field("layout", &self.layout());
+      ds.field("row_count", &self.row_count());
       ds.finish()
   }
 }

@@ -78,6 +78,18 @@ impl BoolArrayTrait for ConstantArray {
             Box::new(iter::empty())
         }
     }
+
+    fn not(&self) -> Array {
+        let val = self
+            .scalar_value()
+            .as_bool()
+            .vortex_expect("Failed to get bool value from constant array");
+        ConstantArray::new(
+            Scalar::new(self.dtype().clone(), val.map(|b| !b).into()),
+            self.len(),
+        )
+        .into_array()
+    }
 }
 
 impl<T> Accessor<T> for ConstantArray
@@ -107,20 +119,6 @@ where
 }
 
 impl PrimitiveArrayTrait for ConstantArray {
-    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
-        match self.dtype() {
-            DType::Primitive(PType::F32, _) => Some(Arc::new(self.clone())),
-            _ => None,
-        }
-    }
-
-    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
-        match self.dtype() {
-            DType::Primitive(PType::F64, _) => Some(Arc::new(self.clone())),
-            _ => None,
-        }
-    }
-
     fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
         match self.dtype() {
             DType::Primitive(PType::U8, _) => Some(Arc::new(self.clone())),
@@ -173,6 +171,20 @@ impl PrimitiveArrayTrait for ConstantArray {
     fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
         match self.dtype() {
             DType::Primitive(PType::I64, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
+        match self.dtype() {
+            DType::Primitive(PType::F32, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
+        match self.dtype() {
+            DType::Primitive(PType::F64, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }

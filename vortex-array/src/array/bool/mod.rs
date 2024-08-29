@@ -6,14 +6,14 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_error::{VortexExpect as _, VortexResult, VortexUnwrap};
 
 use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayTrait, Canonical, IntoCanonical, TypedArray};
+use crate::{impl_encoding, Array, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray};
 
 mod accessors;
 mod compute;
@@ -102,6 +102,12 @@ impl BoolArrayTrait for BoolArray {
 
     fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
         Box::new(BitSliceIterator::new(self.buffer(), 0, self.len()))
+    }
+
+    fn not(&self) -> Array {
+        BoolArray::try_new(!&self.boolean_buffer(), self.validity())
+            .vortex_unwrap()
+            .into_array()
     }
 }
 
