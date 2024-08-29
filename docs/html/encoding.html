@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>Array Encodings &#8212; Vortex  documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d1102ebc" />
+    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=c058f7c8" />
+    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+    <script src="_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Array Data Types" href="dtype.html" />
+    <link rel="prev" title="Vortex documentation" href="index.html" />
+   
+  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+  
+
+  
+  
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="module-vortex.encoding">
+<span id="array-encodings"></span><h1>Array Encodings<a class="headerlink" href="#module-vortex.encoding" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.ALPArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">ALPArray</span></span><a class="headerlink" href="#vortex.encoding.ALPArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.Array">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">Array</span></span><a class="headerlink" href="#vortex.encoding.Array" title="Link to this definition">¶</a></dt>
+<dd><p>The root class for all Vortex arrays.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="vortex.encoding.Array.__len__">
+<span class="sig-name descname"><span class="pre">__len__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.__len__" title="Link to this definition">¶</a></dt>
+<dd><p>Return len(self).</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="vortex.encoding.Array.dtype">
+<span class="sig-name descname"><span class="pre">dtype</span></span><a class="headerlink" href="#vortex.encoding.Array.dtype" title="Link to this definition">¶</a></dt>
+<dd><p>The data type of this array.</p>
+<section id="returns">
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<p><a class="reference internal" href="dtype.html#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
+</section>
+<section id="examples">
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h2>
+<p>By default, <a class="reference internal" href="#vortex.encoding.encode" title="vortex.encoding.encode"><code class="xref py py-func docutils literal notranslate"><span class="pre">vortex.encoding.encode()</span></code></a> uses the largest available bit-width:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">dtype</span>
+<span class="go">int(64, False)</span>
+</pre></div>
+</div>
+<p>Including a <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> forces a nullable type:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">dtype</span>
+<span class="go">int(64, True)</span>
+</pre></div>
+</div>
+<p>A UTF-8 string array:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="s1">&#39;hello, &#39;</span><span class="p">,</span> <span class="s1">&#39;is&#39;</span><span class="p">,</span> <span class="s1">&#39;it&#39;</span><span class="p">,</span> <span class="s1">&#39;me?&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">dtype</span>
+<span class="go">utf8(False)</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vortex.encoding.Array.take">
+<span class="sig-name descname"><span class="pre">take</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">indices</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.take" title="Link to this definition">¶</a></dt>
+<dd><p>Filter, permute, and/or repeat elements by their index.</p>
+<section id="id1">
+<h2>Returns<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
+<p><a class="reference internal" href="#vortex.encoding.Array" title="vortex.encoding.Array"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.encoding.Array</span></code></a></p>
+</section>
+<section id="id2">
+<h2>Examples<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<p>Keep only the first and third elements:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_pyarrow</span><span class="p">()</span>
+<span class="go">&lt;pyarrow.lib.ChunkedArray object at ...&gt;</span>
+<span class="go">[</span>
+<span class="go">  [</span>
+<span class="go">    &quot;a&quot;,</span>
+<span class="go">    &quot;c&quot;</span>
+<span class="go">  ]</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+<p>Permute and repeat the first and second elements:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_pyarrow</span><span class="p">()</span>
+<span class="go">&lt;pyarrow.lib.ChunkedArray object at ...&gt;</span>
+<span class="go">[</span>
+<span class="go">  [</span>
+<span class="go">    &quot;a&quot;,</span>
+<span class="go">    &quot;b&quot;,</span>
+<span class="go">    &quot;b&quot;,</span>
+<span class="go">    &quot;a&quot;</span>
+<span class="go">  ]</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vortex.encoding.Array.to_pyarrow">
+<span class="sig-name descname"><span class="pre">to_pyarrow</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.to_pyarrow" title="Link to this definition">¶</a></dt>
+<dd><p>Convert this array to an Arrow array.</p>
+<section id="id3">
+<h2>Returns<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h2>
+<p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v17.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Array</span></code></a></p>
+</section>
+<section id="id4">
+<h2>Examples<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h2>
+<p>Round-trip an Arrow array through a Vortex array:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_pyarrow</span><span class="p">()</span>
+<span class="go">&lt;pyarrow.lib.ChunkedArray object at ...&gt;</span>
+<span class="go">[</span>
+<span class="go">  [</span>
+<span class="go">    1,</span>
+<span class="go">    2,</span>
+<span class="go">    3</span>
+<span class="go">  ]</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.BitPackedArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">BitPackedArray</span></span><a class="headerlink" href="#vortex.encoding.BitPackedArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.BoolArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">BoolArray</span></span><a class="headerlink" href="#vortex.encoding.BoolArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.ChunkedArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">ChunkedArray</span></span><a class="headerlink" href="#vortex.encoding.ChunkedArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.ConstantArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">ConstantArray</span></span><a class="headerlink" href="#vortex.encoding.ConstantArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.DeltaArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">DeltaArray</span></span><a class="headerlink" href="#vortex.encoding.DeltaArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.DictArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">DictArray</span></span><a class="headerlink" href="#vortex.encoding.DictArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.FoRArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">FoRArray</span></span><a class="headerlink" href="#vortex.encoding.FoRArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.PrimitiveArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">PrimitiveArray</span></span><a class="headerlink" href="#vortex.encoding.PrimitiveArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.RoaringBoolArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">RoaringBoolArray</span></span><a class="headerlink" href="#vortex.encoding.RoaringBoolArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.RoaringIntArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">RoaringIntArray</span></span><a class="headerlink" href="#vortex.encoding.RoaringIntArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.RunEndArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">RunEndArray</span></span><a class="headerlink" href="#vortex.encoding.RunEndArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.SparseArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">SparseArray</span></span><a class="headerlink" href="#vortex.encoding.SparseArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.StructArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">StructArray</span></span><a class="headerlink" href="#vortex.encoding.StructArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.VarBinArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">VarBinArray</span></span><a class="headerlink" href="#vortex.encoding.VarBinArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.VarBinViewArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">VarBinViewArray</span></span><a class="headerlink" href="#vortex.encoding.VarBinViewArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.encoding.ZigZagArray">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">ZigZagArray</span></span><a class="headerlink" href="#vortex.encoding.ZigZagArray" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="vortex.encoding.encode">
+<span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">encode</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">obj</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.encode" title="Link to this definition">¶</a></dt>
+<dd><p>The main entry point for creating enc arrays from other Python objects.</p>
+<section id="parameters">
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
+<dl>
+<dt>obj<span class="classifier"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v17.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Array</span></code></a> or <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a></span></dt><dd><p>The file location of the spreadsheet</p>
+</dd>
+</dl>
+</section>
+<section id="id5">
+<h2>Returns<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h2>
+<dl class="simple">
+<dt><a class="reference internal" href="#vortex.encoding.Array" title="vortex.encoding.Array"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.encoding.Array</span></code></a></dt><dd><p>a list of strings representing the header columns</p>
+</dd>
+</dl>
+</section>
+<section id="id6">
+<h2>Examples<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h2>
+<p>Oops, no examples!</p>
+</section>
+</dd></dl>
+
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+<h1 class="logo"><a href="index.html">Vortex</a></h1>
+
+
+
+
+
+
+
+
+
+<search id="searchbox" style="display: none" role="search">
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
+<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Array Encodings</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.ALPArray"><code class="docutils literal notranslate"><span class="pre">ALPArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.Array"><code class="docutils literal notranslate"><span class="pre">Array</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.BitPackedArray"><code class="docutils literal notranslate"><span class="pre">BitPackedArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.BoolArray"><code class="docutils literal notranslate"><span class="pre">BoolArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.ChunkedArray"><code class="docutils literal notranslate"><span class="pre">ChunkedArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.ConstantArray"><code class="docutils literal notranslate"><span class="pre">ConstantArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.DeltaArray"><code class="docutils literal notranslate"><span class="pre">DeltaArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.DictArray"><code class="docutils literal notranslate"><span class="pre">DictArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.FoRArray"><code class="docutils literal notranslate"><span class="pre">FoRArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.PrimitiveArray"><code class="docutils literal notranslate"><span class="pre">PrimitiveArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.RoaringBoolArray"><code class="docutils literal notranslate"><span class="pre">RoaringBoolArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.RoaringIntArray"><code class="docutils literal notranslate"><span class="pre">RoaringIntArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.RunEndArray"><code class="docutils literal notranslate"><span class="pre">RunEndArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.SparseArray"><code class="docutils literal notranslate"><span class="pre">SparseArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.StructArray"><code class="docutils literal notranslate"><span class="pre">StructArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.VarBinArray"><code class="docutils literal notranslate"><span class="pre">VarBinArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.VarBinViewArray"><code class="docutils literal notranslate"><span class="pre">VarBinViewArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.ZigZagArray"><code class="docutils literal notranslate"><span class="pre">ZigZagArray</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#vortex.encoding.encode"><code class="docutils literal notranslate"><span class="pre">encode()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="dtype.html">Array Data Types</a></li>
+<li class="toctree-l1"><a class="reference internal" href="io.html">Input and Output</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="index.html" title="previous chapter">Vortex documentation</a></li>
+      <li>Next: <a href="dtype.html" title="next chapter">Array Data Types</a></li>
+  </ul></li>
+</ul>
+</div>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &#169;2024, Spiral.
+      
+      |
+      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.0.2</a>
+      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+      
+      |
+      <a href="_sources/encoding.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
