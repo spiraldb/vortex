@@ -36,6 +36,7 @@ futures-util = { workspace = true }
 humansize = { workspace = true }
 itertools = { workspace = true }
 lazy_static = { workspace = true }
+lending-iterator = { workspace = true }
 log = { workspace = true }
 num-traits = { workspace = true }
 num_enum = { workspace = true }

@@ -24,8 +24,8 @@ vortex-error = { workspace = true }
 vortex-scalar = { workspace = true }
 
 [dev-dependencies]
-divan = { workspace = true }
 arrow = { workspace = true }
+divan = { workspace = true }
 
 [[bench]]
 name = "alp_compress"
