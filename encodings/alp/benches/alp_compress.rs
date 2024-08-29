@@ -1,4 +1,4 @@
-use arrow::array::{as_primitive_array, ArrowPrimitiveType};
+use arrow::array::{as_primitive_array, ArrowNativeTypeOp, ArrowPrimitiveType};
 use arrow::datatypes::{Float32Type, Float64Type};
 use divan::{black_box, Bencher};
 use vortex::array::PrimitiveArray;
@@ -50,7 +50,15 @@ where
 fn alp_canonicalize_sum<T: ArrowPrimitiveType>(array: ALPArray) -> T::Native {
     let array = array.into_canonical().unwrap().into_arrow();
     let arrow_primitive = as_primitive_array::<T>(array.as_ref());
-    arrow::compute::sum(arrow_primitive).unwrap()
+    arrow_primitive
+        .iter()
+        .fold(T::default_value(), |acc, value| {
+            if let Some(value) = value {
+                acc.add_wrapping(value)
+            } else {
+                acc
+            }
+        })
 }
 
 fn alp_sum(array: ALPArray) -> f64 {
