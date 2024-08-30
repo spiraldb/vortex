@@ -1,4 +1,3 @@
-use std::ops::Deref;
 use std::sync::Arc;
 
 pub use adapter::*;
@@ -87,27 +86,22 @@ where
 }
 
 pub struct Batch<T> {
-    data: BatchData<T>,
+    data: Vec<T>,
     validity: Validity,
 }
 
 impl<T: Copy> Batch<T> {
     pub fn new(data: &[T], validity: Validity) -> Self {
-        let data = if data.len() == BATCH_SIZE {
-            BatchData::Fixed(data.try_into().unwrap())
-        } else {
-            BatchData::Variable(data.to_vec())
-        };
-        Self { data, validity }
+        Self {
+            data: data.to_vec(),
+            validity,
+        }
     }
 }
 
 impl<T> Batch<T> {
     pub fn new_from_vec(data: Vec<T>, validity: Validity) -> Self {
-        Self {
-            data: BatchData::Variable(data),
-            validity,
-        }
+        Self { data, validity }
     }
 
     #[inline]
@@ -176,23 +170,6 @@ impl<T: Copy> IntoIterator for Batch<T> {
         FlattenedBatch {
             inner: self,
             current: 0,
-        }
-    }
-}
-
-pub enum BatchData<T> {
-    // TODO(adamgs): We can build higher-level compute functions and use the size info to help with compiler auto-vectorization
-    Fixed([T; BATCH_SIZE]),
-    Variable(Vec<T>),
-}
-
-impl<T> Deref for BatchData<T> {
-    type Target = [T];
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            BatchData::Fixed(f) => f,
-            BatchData::Variable(v) => v.as_ref(),
         }
     }
 }
