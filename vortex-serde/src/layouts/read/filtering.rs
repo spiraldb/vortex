@@ -10,10 +10,8 @@ pub struct RowFilter {
 }
 
 impl RowFilter {
-    pub fn new(disjunction: Arc<dyn VortexExpr>) -> Self {
-        Self {
-            filter: disjunction,
-        }
+    pub fn new(filter: Arc<dyn VortexExpr>) -> Self {
+        Self { filter }
     }
 
     pub fn project(&self, _fields: &[FieldPath]) -> Self {
