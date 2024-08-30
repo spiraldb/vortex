@@ -74,6 +74,8 @@ struct PruningPredicateRewriter<'a> {
     stats_to_fetch: HashMap<Field, Vec<Stat>>,
 }
 
+type PruningPredicateStats = (Arc<dyn VortexExpr>, HashMap<Field, Vec<Stat>>);
+
 impl<'a> PruningPredicateRewriter<'a> {
     pub fn try_new(
         column: Field,
@@ -110,7 +112,7 @@ impl<'a> PruningPredicateRewriter<'a> {
             .unwrap_or_else(|| self.other_exp.clone())
     }
 
-    fn rewrite(mut self) -> Option<(Arc<dyn VortexExpr>, HashMap<Field, Vec<Stat>>)> {
+    fn rewrite(mut self) -> Option<PruningPredicateStats> {
         let expr: Option<Arc<dyn VortexExpr>> = match self.operator {
             Operator::Eq => {
                 let min_col = Arc::new(Column::new(self.add_stat_reference(Stat::Min)));
