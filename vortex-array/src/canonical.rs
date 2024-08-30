@@ -206,7 +206,12 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
         .map(Arc::new)
         .collect();
 
-    Arc::new(ArrowStructArray::new(arrow_fields, field_arrays, None))
+    let nulls = struct_array
+        .logical_validity()
+        .to_null_buffer()
+        .expect("logical validity should be convertable to a null buffer");
+
+    Arc::new(ArrowStructArray::new(arrow_fields, field_arrays, nulls))
 }
 
 fn varbin_to_arrow(varbin_array: VarBinArray) -> ArrayRef {
@@ -447,14 +452,15 @@ impl From<Canonical> for Array {
 
 #[cfg(test)]
 mod test {
-    use arrow_array::types::{Int64Type, UInt64Type};
+    use arrow_array::cast::AsArray;
+    use arrow_array::types::{Int32Type, Int64Type, UInt64Type};
     use arrow_array::{
         Array, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
     };
-    use vortex_dtype::Nullability;
+    use vortex_dtype::{DType, Nullability};
     use vortex_scalar::Scalar;
 
-    use crate::array::{PrimitiveArray, SparseArray, StructArray};
+    use crate::array::{BoolArray, PrimitiveArray, SparseArray, StructArray, VarBinArray};
     use crate::validity::Validity;
     use crate::{IntoArray, IntoCanonical};
 
@@ -520,6 +526,62 @@ mod test {
         assert_eq!(
             inner_a.cloned().unwrap(),
             ArrowPrimitiveArray::from(vec![100i64]),
+        );
+    }
+
+    #[test]
+    fn test_nullable_struct_array() {
+        let vortex = StructArray::try_new(
+            vec!["age".into(), "name".into()].into(),
+            vec![
+                PrimitiveArray::from_nullable_vec(vec![
+                    Some(25),
+                    Some(31),
+                    None,
+                    Some(57),
+                    Some(-42),
+                    None,
+                ])
+                .into_array(),
+                VarBinArray::from_iter(
+                    vec![
+                        Some("Joseph"),
+                        None,
+                        Some("Angela"),
+                        Some("Mikhail"),
+                        Some("garbage"),
+                        None,
+                    ],
+                    DType::Utf8(Nullability::Nullable),
+                )
+                .into_array(),
+            ],
+            6,
+            Validity::Array(
+                BoolArray::from(vec![true, true, true, true, false, true]).into_array(),
+            ),
+        )
+        .unwrap();
+
+        let arrow = vortex
+            .into_canonical()
+            .unwrap()
+            .into_arrow()
+            .as_any()
+            .downcast_ref::<ArrowStructArray>()
+            .cloned()
+            .unwrap();
+
+        assert!(!arrow.is_null(0));
+        assert!(!arrow.is_null(1));
+        assert!(!arrow.is_null(2));
+        assert!(!arrow.is_null(3));
+        assert!(arrow.is_null(4));
+        assert!(!arrow.is_null(5));
+
+        assert_eq!(
+            arrow.column(0).as_primitive::<Int32Type>(),
+            &ArrowPrimitiveArray::from(vec![Some(25), Some(31), None, Some(57), Some(-42), None]),
         );
     }
 }
