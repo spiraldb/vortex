@@ -8,62 +8,25 @@ use vortex_dtype::Nullability;
 use vortex_expr::{BinaryExpr, Column, Literal, Operator, VortexExpr};
 use vortex_scalar::Scalar;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ColumnStat {
-    column: Field,
-    stat: Stat,
-}
-
-impl ColumnStat {
-    pub fn new(column: Field, stat: Stat) -> Self {
-        Self { column, stat }
-    }
-
-    pub fn column(&self) -> &Field {
-        &self.column
-    }
-
-    pub fn stat(&self) -> Stat {
-        self.stat
-    }
-}
-
 #[allow(dead_code)]
 pub struct PruningPredicate {
     expr: Arc<dyn VortexExpr>,
-    stat_references: HashMap<Field, ColumnStat>,
+    stats_to_fetch: HashMap<Field, Vec<Stat>>,
 }
 
 impl PruningPredicate {
     pub fn new(original_expr: &Arc<dyn VortexExpr>) -> Self {
-        let (expr, stat_references) = convert_to_pruning_expression(original_expr);
+        let (expr, stats_to_fetch) = convert_to_pruning_expression(original_expr);
         Self {
             expr,
-            stat_references,
+            stats_to_fetch,
         }
-    }
-
-    pub fn references(&self) -> &HashMap<Field, ColumnStat> {
-        &self.stat_references
-    }
-
-    pub fn necessary_statistics(&self) -> HashMap<Field, Vec<Stat>> {
-        let mut to_fetch: HashMap<Field, Vec<Stat>> = HashMap::new();
-        for column_stat in self.stat_references.values() {
-            match to_fetch.entry(column_stat.column().clone()) {
-                Entry::Occupied(o) => o.into_mut().push(column_stat.stat()),
-                Entry::Vacant(v) => {
-                    v.insert(vec![column_stat.stat()]);
-                }
-            }
-        }
-        to_fetch
     }
 }
 
 fn convert_to_pruning_expression(
     expr: &Arc<dyn VortexExpr>,
-) -> (Arc<dyn VortexExpr>, HashMap<Field, ColumnStat>) {
+) -> (Arc<dyn VortexExpr>, HashMap<Field, Vec<Stat>>) {
     // Anything that can't be translated has to be represented as
     // boolean true expression, i.e. the value might be in that chunk
     let fallback = Arc::new(Literal::new(Scalar::bool(true, Nullability::NonNullable)));
@@ -108,7 +71,7 @@ struct PruningPredicateRewriter<'a> {
     column: Field,
     operator: Operator,
     other_exp: &'a Arc<dyn VortexExpr>,
-    references: HashMap<Field, ColumnStat>,
+    stats_to_fetch: HashMap<Field, Vec<Stat>>,
 }
 
 impl<'a> PruningPredicateRewriter<'a> {
@@ -127,22 +90,27 @@ impl<'a> PruningPredicateRewriter<'a> {
             column,
             operator,
             other_exp,
-            references: HashMap::new(),
+            stats_to_fetch: HashMap::new(),
         })
     }
 
     fn add_stat_reference(&mut self, stat: Stat) -> Field {
-        let (new_field, stat_ref) = column_stat_reference(&self.column, stat);
-        self.references.insert(new_field.clone(), stat_ref);
+        let new_field = stat_column_name(&self.column, stat);
+        match self.stats_to_fetch.entry(self.column.clone()) {
+            Entry::Occupied(o) => o.into_mut().push(stat),
+            Entry::Vacant(v) => {
+                v.insert(vec![stat]);
+            }
+        }
         new_field
     }
 
     fn rewrite_other_exp(&mut self, stat: Stat) -> Arc<dyn VortexExpr> {
-        replace_column_with_stat(self.other_exp, stat, &mut self.references)
+        replace_column_with_stat(self.other_exp, stat, &mut self.stats_to_fetch)
             .unwrap_or_else(|| self.other_exp.clone())
     }
 
-    fn rewrite(mut self) -> Option<(Arc<dyn VortexExpr>, HashMap<Field, ColumnStat>)> {
+    fn rewrite(mut self) -> Option<(Arc<dyn VortexExpr>, HashMap<Field, Vec<Stat>>)> {
         let expr: Option<Arc<dyn VortexExpr>> = match self.operator {
             Operator::Eq => {
                 let min_col = Arc::new(Column::new(self.add_stat_reference(Stat::Min)));
@@ -203,24 +171,29 @@ impl<'a> PruningPredicateRewriter<'a> {
             }
             _ => None,
         };
-        expr.map(|e| (e, self.references))
+        expr.map(|e| (e, self.stats_to_fetch))
     }
 }
 
 fn replace_column_with_stat(
     expr: &Arc<dyn VortexExpr>,
     stat: Stat,
-    references: &mut HashMap<Field, ColumnStat>,
+    stats_to_fetch: &mut HashMap<Field, Vec<Stat>>,
 ) -> Option<Arc<dyn VortexExpr>> {
     if let Some(col) = expr.as_any().downcast_ref::<Column>() {
-        let (column, stat_ref) = column_stat_reference(col.field(), stat);
-        references.insert(column.clone(), stat_ref);
-        return Some(Arc::new(Column::new(column)));
+        let new_field = stat_column_name(col.field(), stat);
+        match stats_to_fetch.entry(col.field().clone()) {
+            Entry::Occupied(o) => o.into_mut().push(stat),
+            Entry::Vacant(v) => {
+                v.insert(vec![stat]);
+            }
+        }
+        return Some(Arc::new(Column::new(new_field)));
     }
 
     if let Some(bexp) = expr.as_any().downcast_ref::<BinaryExpr>() {
-        let rewritten_lhs = replace_column_with_stat(bexp.lhs(), stat, references);
-        let rewritten_rhs = replace_column_with_stat(bexp.rhs(), stat, references);
+        let rewritten_lhs = replace_column_with_stat(bexp.lhs(), stat, stats_to_fetch);
+        let rewritten_rhs = replace_column_with_stat(bexp.rhs(), stat, stats_to_fetch);
         if rewritten_lhs.is_none() && rewritten_rhs.is_none() {
             return None;
         }
@@ -232,11 +205,6 @@ fn replace_column_with_stat(
     }
 
     None
-}
-
-fn column_stat_reference(field: &Field, stat: Stat) -> (Field, ColumnStat) {
-    let new_field = stat_column_name(field, stat);
-    (new_field, ColumnStat::new(field.clone(), stat))
 }
 
 fn stat_column_name(field: &Field, stat: Stat) -> Field {
@@ -255,7 +223,7 @@ mod tests {
     use vortex_dtype::field::Field;
     use vortex_expr::{BinaryExpr, Column, Literal, Operator, VortexExpr};
 
-    use crate::layouts::pruning::{convert_to_pruning_expression, stat_column_name, ColumnStat};
+    use crate::layouts::pruning::{convert_to_pruning_expression, stat_column_name};
 
     #[test]
     pub fn pruning_equals() {
@@ -269,16 +237,7 @@ mod tests {
         let (converted, refs) = convert_to_pruning_expression(&eq_expr);
         assert_eq!(
             refs,
-            HashMap::from_iter([
-                (
-                    stat_column_name(&column, Stat::Min),
-                    ColumnStat::new(column.clone(), Stat::Min)
-                ),
-                (
-                    stat_column_name(&column, Stat::Max),
-                    ColumnStat::new(column.clone(), Stat::Max)
-                )
-            ])
+            HashMap::from_iter([(column.clone(), vec![Stat::Min, Stat::Max])])
         );
         let expected_expr: Arc<dyn VortexExpr> = Arc::new(BinaryExpr::new(
             Arc::new(BinaryExpr::new(
@@ -310,22 +269,8 @@ mod tests {
         assert_eq!(
             refs,
             HashMap::from_iter([
-                (
-                    stat_column_name(&column, Stat::Min),
-                    ColumnStat::new(column.clone(), Stat::Min)
-                ),
-                (
-                    stat_column_name(&column, Stat::Max),
-                    ColumnStat::new(column.clone(), Stat::Max)
-                ),
-                (
-                    stat_column_name(&other_col, Stat::Min),
-                    ColumnStat::new(other_col.clone(), Stat::Min)
-                ),
-                (
-                    stat_column_name(&other_col, Stat::Max),
-                    ColumnStat::new(other_col.clone(), Stat::Max)
-                )
+                (column.clone(), vec![Stat::Min, Stat::Max]),
+                (other_col.clone(), vec![Stat::Max, Stat::Min])
             ])
         );
         let expected_expr: Arc<dyn VortexExpr> = Arc::new(BinaryExpr::new(
@@ -358,22 +303,8 @@ mod tests {
         assert_eq!(
             refs,
             HashMap::from_iter([
-                (
-                    stat_column_name(&column, Stat::Min),
-                    ColumnStat::new(column.clone(), Stat::Min)
-                ),
-                (
-                    stat_column_name(&column, Stat::Max),
-                    ColumnStat::new(column.clone(), Stat::Max)
-                ),
-                (
-                    stat_column_name(&other_col, Stat::Min),
-                    ColumnStat::new(other_col.clone(), Stat::Min)
-                ),
-                (
-                    stat_column_name(&other_col, Stat::Max),
-                    ColumnStat::new(other_col.clone(), Stat::Max)
-                )
+                (column.clone(), vec![Stat::Min, Stat::Max]),
+                (other_col.clone(), vec![Stat::Max, Stat::Min])
             ])
         );
         let expected_expr: Arc<dyn VortexExpr> = Arc::new(BinaryExpr::new(
@@ -423,14 +354,8 @@ mod tests {
         assert_eq!(
             refs,
             HashMap::from_iter([
-                (
-                    stat_column_name(&column, Stat::Max),
-                    ColumnStat::new(column.clone(), Stat::Max)
-                ),
-                (
-                    stat_column_name(&other_col, Stat::Min),
-                    ColumnStat::new(other_col.clone(), Stat::Min)
-                )
+                (column.clone(), vec![Stat::Max]),
+                (other_col.clone(), vec![Stat::Min])
             ])
         );
         let expected_expr: Arc<dyn VortexExpr> = Arc::new(BinaryExpr::new(
@@ -454,10 +379,7 @@ mod tests {
         let (converted, refs) = convert_to_pruning_expression(&not_eq_expr);
         assert_eq!(
             refs,
-            HashMap::from_iter([(
-                stat_column_name(&column, Stat::Max),
-                ColumnStat::new(column.clone(), Stat::Max)
-            )])
+            HashMap::from_iter([(column.clone(), vec![Stat::Max]),])
         );
         let expected_expr: Arc<dyn VortexExpr> = Arc::new(BinaryExpr::new(
             Arc::new(Column::new(stat_column_name(&column, Stat::Max))),
@@ -482,14 +404,8 @@ mod tests {
         assert_eq!(
             refs,
             HashMap::from_iter([
-                (
-                    stat_column_name(&column, Stat::Min),
-                    ColumnStat::new(column.clone(), Stat::Min)
-                ),
-                (
-                    stat_column_name(&other_col, Stat::Max),
-                    ColumnStat::new(other_col.clone(), Stat::Max)
-                )
+                (column.clone(), vec![Stat::Min]),
+                (other_col.clone(), vec![Stat::Max])
             ])
         );
         let expected_expr: Arc<dyn VortexExpr> = Arc::new(BinaryExpr::new(
@@ -513,10 +429,7 @@ mod tests {
         let (converted, refs) = convert_to_pruning_expression(&not_eq_expr);
         assert_eq!(
             refs,
-            HashMap::from_iter([(
-                stat_column_name(&column, Stat::Min),
-                ColumnStat::new(column.clone(), Stat::Min)
-            )])
+            HashMap::from_iter([(column.clone(), vec![Stat::Min]),])
         );
         let expected_expr: Arc<dyn VortexExpr> = Arc::new(BinaryExpr::new(
             Arc::new(Column::new(stat_column_name(&column, Stat::Min))),
