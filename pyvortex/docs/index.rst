@@ -6,9 +6,12 @@
 Vortex documentation
 ====================
 
-.. automodule:: vortex
-   :members:
-
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+
+   encoding
+   dtype
+   io
+   expr
+

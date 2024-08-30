@@ -5,7 +5,10 @@ description = "Add your description here"
 authors = [
     { name = "Nicholas Gates", email = "nick@nickgates.com" }
 ]
-dependencies = []
+dependencies = [
+    "black>=24.8.0",
+    "pydata-sphinx-theme>=0.15.4",
+]
 requires-python = ">= 3.11"
 classifiers = ["Private :: Do Not Upload"]
 
@@ -17,7 +20,10 @@ build-backend = "maturin"
 managed = true
 dev-dependencies = [
     "pyarrow>=15.0.0",
-    "pip"
+    "pip",
+    "sphinx>=8.0.2",
+    "ipython>=8.26.0",
+    "pandas>=2.2.2",
 ]
 
 [tool.maturin]
