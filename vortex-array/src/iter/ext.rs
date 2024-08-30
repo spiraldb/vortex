@@ -5,7 +5,7 @@ use crate::array::ChunkedArray;
 use crate::iter::ArrayIterator;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 
-pub trait ArrayIteratorExt: ArrayIterator {
+pub trait ArrayIteratorExt<'a>: ArrayIterator {
     fn into_stream(self) -> impl ArrayStream
     where
         Self: Sized,

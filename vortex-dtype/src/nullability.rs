@@ -7,6 +7,12 @@ pub enum Nullability {
     Nullable,
 }
 
+impl Nullability {
+    pub fn python_repr(&self) -> NullabilityPythonRepr {
+        NullabilityPythonRepr { nullability: self }
+    }
+}
+
 impl From<bool> for Nullability {
     fn from(value: bool) -> Self {
         if value {
@@ -31,6 +37,19 @@ impl Display for Nullability {
         match self {
             Self::NonNullable => write!(f, ""),
             Self::Nullable => write!(f, "?"),
+        }
+    }
+}
+
+pub struct NullabilityPythonRepr<'a> {
+    nullability: &'a Nullability,
+}
+
+impl Display for NullabilityPythonRepr<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.nullability {
+            Nullability::NonNullable => write!(f, "False"),
+            Nullability::Nullable => write!(f, "True"),
         }
     }
 }

@@ -120,6 +120,10 @@ impl DType {
             _ => None,
         }
     }
+
+    pub fn python_repr(&self) -> DTypePythonRepr {
+        DTypePythonRepr { dtype: self }
+    }
 }
 
 impl Display for DType {
@@ -150,6 +154,51 @@ impl Display for DType {
                     .unwrap_or_else(|| "".to_string()),
                 n
             ),
+        }
+    }
+}
+
+pub struct DTypePythonRepr<'a> {
+    dtype: &'a DType,
+}
+
+impl Display for DTypePythonRepr<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self.dtype {
+            Null => write!(f, "null()"),
+            Bool(n) => write!(f, "bool({})", n.python_repr()),
+            Primitive(p, n) => match p {
+                PType::U8 | PType::U16 | PType::U32 | PType::U64 => {
+                    write!(f, "uint({}, {})", p.bit_width(), n.python_repr())
+                }
+                PType::I8 | PType::I16 | PType::I32 | PType::I64 => {
+                    write!(f, "int({}, {})", p.bit_width(), n.python_repr())
+                }
+                PType::F16 | PType::F32 | PType::F64 => {
+                    write!(f, "float({}, {})", p.bit_width(), n.python_repr())
+                }
+            },
+            Utf8(n) => write!(f, "utf8({})", n.python_repr()),
+            Binary(n) => write!(f, "binary({})", n.python_repr()),
+            Struct(st, n) => write!(
+                f,
+                "struct({{{}}}, {})",
+                st.names()
+                    .iter()
+                    .zip(st.dtypes().iter())
+                    .map(|(n, dt)| format!("\"{}\": {}", n, dt.python_repr()))
+                    .join(", "),
+                n.python_repr()
+            ),
+            List(c, n) => write!(f, "list({}, {})", c.python_repr(), n.python_repr()),
+            Extension(ext, n) => {
+                write!(f, "ext(\"{}\", ", ext.id().python_repr())?;
+                match ext.metadata() {
+                    None => write!(f, "None")?,
+                    Some(metadata) => write!(f, "{}", metadata.python_repr())?,
+                };
+                write!(f, ", {})", n.python_repr())
+            }
         }
     }
 }

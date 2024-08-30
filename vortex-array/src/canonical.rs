@@ -209,7 +209,7 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
     let nulls = struct_array
         .logical_validity()
         .to_null_buffer()
-        .expect("null buffer");
+        .expect("logical validity should be convertable to a null buffer");
 
     Arc::new(ArrowStructArray::new(arrow_fields, field_arrays, nulls))
 }

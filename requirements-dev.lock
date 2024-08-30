@@ -11,8 +11,15 @@
 
 -e file:.
 -e file:pyvortex
+alabaster==1.0.0
+    # via sphinx
+asttokens==2.4.1
+    # via stack-data
 babel==2.14.0
     # via mkdocs-material
+    # via sphinx
+black==24.8.0
+    # via vortex
 bracex==2.4
     # via wcmatch
 certifi==2024.2.2
@@ -20,23 +27,36 @@ certifi==2024.2.2
 charset-normalizer==3.3.2
     # via requests
 click==8.1.7
+    # via black
     # via mkdocs
 colorama==0.4.6
     # via mkdocs-material
+decorator==5.1.1
+    # via ipython
+docutils==0.21.2
+    # via sphinx
+executing==2.0.1
+    # via stack-data
 ghp-import==2.1.0
     # via mkdocs
 idna==3.6
     # via requests
+imagesize==1.4.1
+    # via sphinx
 importlib-metadata==7.1.0
     # via mike
 importlib-resources==6.4.0
     # via mike
 iniconfig==2.0.0
     # via pytest
+ipython==8.26.0
+jedi==0.19.1
+    # via ipython
 jinja2==3.1.3
     # via mike
     # via mkdocs
     # via mkdocs-material
+    # via sphinx
 markdown==3.6
     # via mkdocs
     # via mkdocs-material
@@ -44,6 +64,8 @@ markdown==3.6
 markupsafe==2.1.5
     # via jinja2
     # via mkdocs
+matplotlib-inline==0.1.7
+    # via ipython
 maturin==1.5.1
 mergedeep==1.3.4
     # via mkdocs
@@ -56,25 +78,45 @@ mkdocs-include-markdown-plugin==6.0.5
 mkdocs-material==9.5.17
 mkdocs-material-extensions==1.3.1
     # via mkdocs-material
+mypy-extensions==1.0.0
+    # via black
 numpy==1.26.4
+    # via pandas
     # via pyarrow
 packaging==24.0
+    # via black
     # via mkdocs
     # via pytest
+    # via sphinx
 paginate==0.5.6
     # via mkdocs-material
+pandas==2.2.2
+parso==0.8.4
+    # via jedi
 pathspec==0.12.1
+    # via black
     # via mkdocs
+pexpect==4.9.0
+    # via ipython
 pip==24.0
 platformdirs==4.2.0
+    # via black
     # via mkdocs
 pluggy==1.4.0
     # via pytest
+prompt-toolkit==3.0.47
+    # via ipython
+ptyprocess==0.7.0
+    # via pexpect
+pure-eval==0.2.3
+    # via stack-data
 py-cpuinfo==9.0.0
     # via pytest-benchmark
 pyarrow==15.0.2
 pygments==2.17.2
+    # via ipython
     # via mkdocs-material
+    # via sphinx
 pymdown-extensions==10.7.1
     # via mkdocs-material
 pyparsing==3.1.2
@@ -84,6 +126,9 @@ pytest==8.1.1
 pytest-benchmark==4.0.0
 python-dateutil==2.9.0.post0
     # via ghp-import
+    # via pandas
+pytz==2024.1
+    # via pandas
 pyyaml==6.0.1
     # via mike
     # via mkdocs
@@ -95,9 +140,35 @@ regex==2023.12.25
     # via mkdocs-material
 requests==2.31.0
     # via mkdocs-material
+    # via sphinx
 ruff==0.3.5
 six==1.16.0
+    # via asttokens
     # via python-dateutil
+snowballstemmer==2.2.0
+    # via sphinx
+sphinx==8.0.2
+sphinxcontrib-applehelp==2.0.0
+    # via sphinx
+sphinxcontrib-devhelp==2.0.0
+    # via sphinx
+sphinxcontrib-htmlhelp==2.1.0
+    # via sphinx
+sphinxcontrib-jsmath==1.0.1
+    # via sphinx
+sphinxcontrib-qthelp==2.0.0
+    # via sphinx
+sphinxcontrib-serializinghtml==2.0.0
+    # via sphinx
+stack-data==0.6.3
+    # via ipython
+traitlets==5.14.3
+    # via ipython
+    # via matplotlib-inline
+typing-extensions==4.12.2
+    # via ipython
+tzdata==2024.1
+    # via pandas
 urllib3==2.2.1
     # via requests
 verspec==0.1.0
@@ -106,5 +177,7 @@ watchdog==4.0.0
     # via mkdocs
 wcmatch==8.5.1
     # via mkdocs-include-markdown-plugin
+wcwidth==0.2.13
+    # via prompt-toolkit
 zipp==3.18.1
     # via importlib-metadata

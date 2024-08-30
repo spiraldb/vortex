@@ -1,199 +1,22 @@
-use paste::paste;
+use arrow::array::{Array as ArrowArray, ArrayRef};
+use arrow::pyarrow::ToPyArrow;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use vortex::array::{
-    Bool, BoolArray, BoolEncoding, Chunked, ChunkedArray, ChunkedEncoding, Constant, ConstantArray,
-    ConstantEncoding, Primitive, PrimitiveArray, PrimitiveEncoding, Sparse, SparseArray,
-    SparseEncoding, Struct, StructArray, StructEncoding, VarBin, VarBinArray, VarBinEncoding,
-    VarBinView, VarBinViewArray, VarBinViewEncoding,
-};
+use pyo3::types::{IntoPyDict, PyList};
+use vortex::array::ChunkedArray;
 use vortex::compute::take;
-use vortex::encoding::EncodingRef;
-use vortex::{Array, ArrayDType, ArrayData, ArrayDef, ToArray};
-use vortex_alp::{ALPArray, ALPEncoding, ALP};
-use vortex_dict::{Dict, DictArray, DictEncoding};
-use vortex_fastlanes::{
-    BitPacked, BitPackedArray, BitPackedEncoding, Delta, DeltaArray, DeltaEncoding, FoR, FoRArray,
-    FoREncoding,
-};
-use vortex_roaring::{
-    RoaringBool, RoaringBoolArray, RoaringBoolEncoding, RoaringInt, RoaringIntArray,
-    RoaringIntEncoding,
-};
-use vortex_runend::{RunEnd, RunEndArray, RunEndEncoding};
-use vortex_zigzag::{ZigZag, ZigZagArray, ZigZagEncoding};
+use vortex::{Array, ArrayDType, IntoCanonical};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
-use crate::vortex_arrow;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
+/// The root class for all Vortex arrays.
 pub struct PyArray {
-    inner: Array,
+    pub inner: Array,
 }
-
-macro_rules! pyarray {
-    ($E:ident, $T:ident, $TName:tt) => {
-        paste! {
-            #[pyclass(name = $TName, module = "vortex", extends = PyArray, sequence, subclass)]
-            pub struct [<Py $T>] {
-                inner: $T,
-                #[allow(dead_code)]
-                encoding: EncodingRef,
-            }
-
-           impl [<Py $T>] {
-               pub fn wrap(py: Python<'_>, inner: $T) -> PyResult<Py<Self>> {
-                   let init = PyClassInitializer::from(PyArray { inner: inner.to_array().clone() })
-                        .add_subclass([<Py $T>] { inner, encoding: &$E });
-                   Py::new(py, init)
-               }
-
-               pub fn unwrap(&self) -> &$T {
-                   &self.inner
-               }
-           }
-        }
-    };
-}
-
-pyarray!(BoolEncoding, BoolArray, "BoolArray");
-pyarray!(ChunkedEncoding, ChunkedArray, "ChunkedArray");
-pyarray!(ConstantEncoding, ConstantArray, "ConstantArray");
-pyarray!(PrimitiveEncoding, PrimitiveArray, "PrimitiveArray");
-pyarray!(SparseEncoding, SparseArray, "SparseArray");
-pyarray!(StructEncoding, StructArray, "StructArray");
-pyarray!(VarBinEncoding, VarBinArray, "VarBinArray");
-pyarray!(VarBinViewEncoding, VarBinViewArray, "VarBinViewArray");
-
-pyarray!(ALPEncoding, ALPArray, "ALPArray");
-pyarray!(BitPackedEncoding, BitPackedArray, "BitPackedArray");
-pyarray!(FoREncoding, FoRArray, "FoRArray");
-pyarray!(DeltaEncoding, DeltaArray, "DeltaArray");
-pyarray!(DictEncoding, DictArray, "DictArray");
-pyarray!(RunEndEncoding, RunEndArray, "RunEndArray");
-pyarray!(RoaringBoolEncoding, RoaringBoolArray, "RoaringBoolArray");
-pyarray!(RoaringIntEncoding, RoaringIntArray, "RoaringIntArray");
-pyarray!(ZigZagEncoding, ZigZagArray, "ZigZagArray");
 
 impl PyArray {
-    pub fn wrap(py: Python<'_>, inner: ArrayData) -> PyResult<Py<Self>> {
-        let encoding_id = inner.encoding().id();
-        let array = Array::from(inner);
-        // This is the one place where we'd want to have owned kind enum but there's no other place this is used
-        match encoding_id {
-            Bool::ID => PyBoolArray::wrap(
-                py,
-                BoolArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Chunked::ID => PyChunkedArray::wrap(
-                py,
-                ChunkedArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Constant::ID => PyConstantArray::wrap(
-                py,
-                ConstantArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Primitive::ID => PyPrimitiveArray::wrap(
-                py,
-                PrimitiveArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Sparse::ID => PySparseArray::wrap(
-                py,
-                SparseArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Struct::ID => PyStructArray::wrap(
-                py,
-                StructArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            VarBin::ID => PyVarBinArray::wrap(
-                py,
-                VarBinArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            VarBinView::ID => PyVarBinViewArray::wrap(
-                py,
-                VarBinViewArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Dict::ID => PyDictArray::wrap(
-                py,
-                DictArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            RunEnd::ID => PyRunEndArray::wrap(
-                py,
-                RunEndArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            Delta::ID => PyDeltaArray::wrap(
-                py,
-                DeltaArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            FoR::ID => PyFoRArray::wrap(
-                py,
-                FoRArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            BitPacked::ID => PyBitPackedArray::wrap(
-                py,
-                BitPackedArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-
-            ALP::ID => PyALPArray::wrap(
-                py,
-                ALPArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            RoaringBool::ID => PyBitPackedArray::wrap(
-                py,
-                BitPackedArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            RoaringInt::ID => PyBitPackedArray::wrap(
-                py,
-                BitPackedArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            ZigZag::ID => PyZigZagArray::wrap(
-                py,
-                ZigZagArray::try_from(array).map_err(PyVortexError::map_err)?,
-            )?
-            .extract(py),
-            _ => Py::new(py, Self { inner: array }),
-            // ArrayKind::Other(other) => match other.encoding().id() {
-            //     // PyEnc chooses to expose certain encodings as first-class objects.
-            //     // For the remainder, we should have a generic EncArray implementation that supports basic functions.
-            //     ALPEncoding::ID => {
-            //         PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     RoaringBoolEncoding::ID => PyRoaringBoolArray::wrap(
-            //         py,
-            //         inner.into_any().downcast::<RoaringBoolArray>().unwrap(),
-            //     )?
-            //     .extract(py),
-            //     RoaringIntEncoding::ID => PyRoaringIntArray::wrap(
-            //         py,
-            //         inner.into_any().downcast::<RoaringIntArray>().unwrap(),
-            //     )?
-            //     .extract(py),
-            //     ZigZagEncoding::ID => {
-            //         PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     _ => Py::new(py, Self { inner }),
-            //},
-        }
-    }
-
     pub fn unwrap(&self) -> &Array {
         &self.inner
     }
@@ -201,8 +24,65 @@ impl PyArray {
 
 #[pymethods]
 impl PyArray {
-    fn to_pyarrow(self_: PyRef<'_, Self>) -> PyResult<Bound<PyAny>> {
-        vortex_arrow::export_array(self_.py(), &self_.inner)
+    /// Convert this array to an Arrow array.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`pyarrow.Array`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Round-trip an Arrow array through a Vortex array:
+    ///
+    ///     >>> vortex.encode([1, 2, 3]).to_arrow()
+    ///     <pyarrow.lib.Int64Array object at ...>
+    ///     [
+    ///       1,
+    ///       2,
+    ///       3
+    ///     ]
+    fn to_arrow(self_: PyRef<'_, Self>) -> PyResult<Bound<PyAny>> {
+        // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
+        // NOTE(robert): Return RecordBatchStreamReader always?
+        let py = self_.py();
+        let vortex = &self_.inner;
+
+        if let Ok(chunked_array) = ChunkedArray::try_from(vortex) {
+            let chunks: Vec<ArrayRef> = chunked_array
+                .chunks()
+                .map(|chunk| -> PyResult<ArrayRef> {
+                    Ok(chunk
+                        .into_canonical()
+                        .map_err(PyVortexError::map_err)?
+                        .into_arrow())
+                })
+                .collect::<PyResult<Vec<ArrayRef>>>()?;
+            if chunks.is_empty() {
+                return Err(PyValueError::new_err("No chunks in array"));
+            }
+            let pa_data_type = chunks[0].data_type().clone().to_pyarrow(py)?;
+            let chunks: PyResult<Vec<PyObject>> = chunks
+                .iter()
+                .map(|arrow_array| arrow_array.into_data().to_pyarrow(py))
+                .collect();
+
+            // Combine into a chunked array
+            PyModule::import_bound(py, "pyarrow")?.call_method(
+                "chunked_array",
+                (PyList::new_bound(py, chunks?),),
+                Some(&[("type", pa_data_type)].into_py_dict_bound(py)),
+            )
+        } else {
+            Ok(vortex
+                .clone()
+                .into_canonical()
+                .map_err(PyVortexError::map_err)?
+                .into_arrow()
+                .into_data()
+                .to_pyarrow(py)?
+                .into_bound(py))
+        }
     }
 
     fn __len__(&self) -> usize {
@@ -223,44 +103,69 @@ impl PyArray {
         self.inner.nbytes()
     }
 
+    /// The data type of this array.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`vortex.dtype.DType`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// By default, :func:`vortex.encoding.encode` uses the largest available bit-width:
+    ///
+    ///     >>> vortex.encode([1, 2, 3]).dtype
+    ///     int(64, False)
+    ///
+    /// Including a :obj:`None` forces a nullable type:
+    ///
+    ///     >>> vortex.encode([1, None, 2, 3]).dtype
+    ///     int(64, True)
+    ///
+    /// A UTF-8 string array:
+    ///
+    ///     >>> vortex.encode(['hello, ', 'is', 'it', 'me?']).dtype
+    ///     utf8(False)
     #[getter]
     fn dtype(self_: PyRef<Self>) -> PyResult<Py<PyDType>> {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
     }
 
-    fn take(&self, indices: PyRef<'_, Self>) -> PyResult<Py<Self>> {
+    /// Filter, permute, and/or repeat elements by their index.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`vortex.encoding.Array`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Keep only the first and third elements:
+    ///
+    ///     >>> a = vortex.encode(['a', 'b', 'c', 'd'])
+    ///     >>> indices = vortex.encode([0, 2])
+    ///     >>> a.take(indices).to_arrow()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
+    ///       "a",
+    ///       "c"
+    ///     ]
+    ///
+    /// Permute and repeat the first and second elements:
+    ///
+    ///     >>> a = vortex.encode(['a', 'b', 'c', 'd'])
+    ///     >>> indices = vortex.encode([0, 1, 1, 0])
+    ///     >>> a.take(indices).to_arrow()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
+    ///       "a",
+    ///       "b",
+    ///       "b",
+    ///       "a"
+    ///     ]
+    fn take<'py>(&self, indices: PyRef<'py, Self>) -> PyResult<Bound<'py, PyArray>> {
         take(&self.inner, indices.unwrap())
             .map_err(PyVortexError::map_err)
-            .and_then(|arr| Self::wrap(indices.py(), arr.into()))
+            .and_then(|arr| Bound::new(indices.py(), PyArray { inner: arr }))
     }
 }
-//
-// #[pymethods]
-// impl PyRoaringBoolArray {
-//     #[staticmethod]
-//     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-//         RoaringBoolArray::encode(array.unwrap())
-//             .map_err(PyVortexError::map_err)
-//             .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
-//     }
-// }
-//
-// #[pymethods]
-// impl PyRoaringIntArray {
-//     #[staticmethod]
-//     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-//         RoaringIntArray::encode(array.unwrap())
-//             .map_err(PyVortexError::map_err)
-//             .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
-//     }
-// }
-//
-// #[pymethods]
-// impl PyZigZagArray {
-//     #[staticmethod]
-//     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-//         ZigZagArray::encode(array.unwrap())
-//             .map_err(PyVortexError::map_err)
-//             .and_then(|zarray| PyArray::wrap(array.py(), zarray))
-//     }
-// }
