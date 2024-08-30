@@ -85,18 +85,18 @@ fn convert_to_pruning_expression(
         }
 
         if let Some(col) = bexp.lhs().as_any().downcast_ref::<Column>() {
-            return PruningPredicateBuilder::try_new(col.field().clone(), bexp.op(), bexp.rhs())
-                .and_then(column_comparison_to_stat_expr)
+            return PruningPredicateRewriter::try_new(col.field().clone(), bexp.op(), bexp.rhs())
+                .and_then(PruningPredicateRewriter::rewrite)
                 .unwrap_or_else(|| (fallback, HashMap::new()));
         };
 
         if let Some(col) = bexp.rhs().as_any().downcast_ref::<Column>() {
-            return PruningPredicateBuilder::try_new(
+            return PruningPredicateRewriter::try_new(
                 col.field().clone(),
                 bexp.op().swap(),
                 bexp.lhs(),
             )
-            .and_then(column_comparison_to_stat_expr)
+            .and_then(PruningPredicateRewriter::rewrite)
             .unwrap_or_else(|| (fallback, HashMap::new()));
         };
     }
@@ -104,14 +104,14 @@ fn convert_to_pruning_expression(
     (fallback, HashMap::new())
 }
 
-struct PruningPredicateBuilder<'a> {
+struct PruningPredicateRewriter<'a> {
     column: Field,
     operator: Operator,
     other_exp: &'a Arc<dyn VortexExpr>,
     references: HashMap<Field, ColumnStat>,
 }
 
-impl<'a> PruningPredicateBuilder<'a> {
+impl<'a> PruningPredicateRewriter<'a> {
     pub fn try_new(
         column: Field,
         operator: Operator,
@@ -131,90 +131,80 @@ impl<'a> PruningPredicateBuilder<'a> {
         })
     }
 
-    pub fn operator(&self) -> Operator {
-        self.operator
-    }
-
-    pub fn column_stat(&mut self, stat: Stat) -> Field {
+    fn add_stat_reference(&mut self, stat: Stat) -> Field {
         let (new_field, stat_ref) = column_stat_reference(&self.column, stat);
         self.references.insert(new_field.clone(), stat_ref);
         new_field
     }
 
-    pub fn rewrite_other_exp(&mut self, stat: Stat) -> Arc<dyn VortexExpr> {
+    fn rewrite_other_exp(&mut self, stat: Stat) -> Arc<dyn VortexExpr> {
         replace_column_with_stat(self.other_exp, stat, &mut self.references)
             .unwrap_or_else(|| self.other_exp.clone())
     }
 
-    pub fn into_references(self) -> HashMap<Field, ColumnStat> {
-        self.references
+    fn rewrite(mut self) -> Option<(Arc<dyn VortexExpr>, HashMap<Field, ColumnStat>)> {
+        let expr: Option<Arc<dyn VortexExpr>> = match self.operator {
+            Operator::Eq => {
+                let min_col = Arc::new(Column::new(self.add_stat_reference(Stat::Min)));
+                let max_col = Arc::new(Column::new(self.add_stat_reference(Stat::Max)));
+                let replaced_max = self.rewrite_other_exp(Stat::Max);
+                let replaced_min = self.rewrite_other_exp(Stat::Min);
+
+                Some(Arc::new(BinaryExpr::new(
+                    Arc::new(BinaryExpr::new(min_col, Operator::Lte, replaced_max)),
+                    Operator::And,
+                    Arc::new(BinaryExpr::new(replaced_min, Operator::Lte, max_col)),
+                )))
+            }
+            Operator::NotEq => {
+                let min_col = Arc::new(Column::new(self.add_stat_reference(Stat::Min)));
+                let max_col = Arc::new(Column::new(self.add_stat_reference(Stat::Max)));
+                let replaced_max = self.rewrite_other_exp(Stat::Max);
+                let replaced_min = self.rewrite_other_exp(Stat::Min);
+
+                // In case of other_exp is literal both sides of AND will be the same expression
+                Some(Arc::new(BinaryExpr::new(
+                    Arc::new(BinaryExpr::new(
+                        Arc::new(BinaryExpr::new(
+                            min_col.clone(),
+                            Operator::NotEq,
+                            replaced_min.clone(),
+                        )),
+                        Operator::Or,
+                        Arc::new(BinaryExpr::new(
+                            replaced_min,
+                            Operator::NotEq,
+                            max_col.clone(),
+                        )),
+                    )),
+                    Operator::And,
+                    Arc::new(BinaryExpr::new(
+                        Arc::new(BinaryExpr::new(
+                            min_col,
+                            Operator::NotEq,
+                            replaced_max.clone(),
+                        )),
+                        Operator::Or,
+                        Arc::new(BinaryExpr::new(replaced_max, Operator::NotEq, max_col)),
+                    )),
+                )))
+            }
+            op @ Operator::Gt | op @ Operator::Gte => {
+                let max_col = Arc::new(Column::new(self.add_stat_reference(Stat::Max)));
+                let replaced_min = self.rewrite_other_exp(Stat::Min);
+
+                Some(Arc::new(BinaryExpr::new(max_col, op, replaced_min)))
+            }
+            op @ Operator::Lt | op @ Operator::Lte => {
+                let min_col = Arc::new(Column::new(self.add_stat_reference(Stat::Min)));
+                let replaced_max = self.rewrite_other_exp(Stat::Max);
+
+                Some(Arc::new(BinaryExpr::new(min_col, op, replaced_max)))
+            }
+            _ => None,
+        };
+        expr.map(|e| (e, self.references))
     }
-}
-
-fn column_comparison_to_stat_expr(
-    mut builder: PruningPredicateBuilder,
-) -> Option<(Arc<dyn VortexExpr>, HashMap<Field, ColumnStat>)> {
-    let expr: Option<Arc<dyn VortexExpr>> = match builder.operator() {
-        Operator::Eq => {
-            let min_col = Arc::new(Column::new(builder.column_stat(Stat::Min)));
-            let max_col = Arc::new(Column::new(builder.column_stat(Stat::Max)));
-            let replaced_max = builder.rewrite_other_exp(Stat::Max);
-            let replaced_min = builder.rewrite_other_exp(Stat::Min);
-
-            Some(Arc::new(BinaryExpr::new(
-                Arc::new(BinaryExpr::new(min_col, Operator::Lte, replaced_max)),
-                Operator::And,
-                Arc::new(BinaryExpr::new(replaced_min, Operator::Lte, max_col)),
-            )))
-        }
-        Operator::NotEq => {
-            let min_col = Arc::new(Column::new(builder.column_stat(Stat::Min)));
-            let max_col = Arc::new(Column::new(builder.column_stat(Stat::Max)));
-            let replaced_max = builder.rewrite_other_exp(Stat::Max);
-            let replaced_min = builder.rewrite_other_exp(Stat::Min);
-
-            // In case of other_exp is literal both sides of AND will be the same expression
-            Some(Arc::new(BinaryExpr::new(
-                Arc::new(BinaryExpr::new(
-                    Arc::new(BinaryExpr::new(
-                        min_col.clone(),
-                        Operator::NotEq,
-                        replaced_min.clone(),
-                    )),
-                    Operator::Or,
-                    Arc::new(BinaryExpr::new(
-                        replaced_min,
-                        Operator::NotEq,
-                        max_col.clone(),
-                    )),
-                )),
-                Operator::And,
-                Arc::new(BinaryExpr::new(
-                    Arc::new(BinaryExpr::new(
-                        min_col,
-                        Operator::NotEq,
-                        replaced_max.clone(),
-                    )),
-                    Operator::Or,
-                    Arc::new(BinaryExpr::new(replaced_max, Operator::NotEq, max_col)),
-                )),
-            )))
-        }
-        op @ Operator::Gt | op @ Operator::Gte => {
-            let max_col = Arc::new(Column::new(builder.column_stat(Stat::Max)));
-            let replaced_min = builder.rewrite_other_exp(Stat::Min);
-
-            Some(Arc::new(BinaryExpr::new(max_col, op, replaced_min)))
-        }
-        op @ Operator::Lt | op @ Operator::Lte => {
-            let min_col = Arc::new(Column::new(builder.column_stat(Stat::Min)));
-            let replaced_max = builder.rewrite_other_exp(Stat::Max);
-
-            Some(Arc::new(BinaryExpr::new(min_col, op, replaced_max)))
-        }
-        _ => None,
-    };
-    expr.map(|e| (e, builder.into_references()))
 }
 
 fn replace_column_with_stat(
