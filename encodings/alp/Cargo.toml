@@ -24,7 +24,7 @@ vortex-error = { workspace = true }
 vortex-scalar = { workspace = true }
 
 [dev-dependencies]
-arrow = { workspace = true, default-features = false }
+arrow = { workspace = true }
 divan = { workspace = true }
 
 [[bench]]
