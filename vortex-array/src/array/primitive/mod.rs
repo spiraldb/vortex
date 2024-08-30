@@ -219,105 +219,57 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
     }
 }
 
-impl PrimitiveArrayTrait for PrimitiveArray {
-    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
-        match self.dtype() {
-            DType::Primitive(PType::F32, _) => {
-                let accessor = Arc::new(self.clone());
+macro_rules! primitive_accessor_ref {
+    ($self:expr, $ptype:ident) => {
+        match $self.dtype() {
+            DType::Primitive(PType::$ptype, _) => {
+                let accessor = Arc::new($self.clone());
                 Some(accessor)
             }
             _ => None,
         }
+    };
+}
+
+impl PrimitiveArrayTrait for PrimitiveArray {
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
+        primitive_accessor_ref!(self, F32)
     }
 
     fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
-        match self.dtype() {
-            DType::Primitive(PType::F64, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, F64)
     }
 
     fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
-        match self.dtype() {
-            DType::Primitive(PType::U8, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, U8)
     }
 
     fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
-        match self.dtype() {
-            DType::Primitive(PType::U16, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, U16)
     }
 
     fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
-        match self.dtype() {
-            DType::Primitive(PType::U32, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, U32)
     }
 
     fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
-        match self.dtype() {
-            DType::Primitive(PType::U64, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, U64)
     }
 
     fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
-        match self.dtype() {
-            DType::Primitive(PType::I8, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, I8)
     }
 
     fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
-        match self.dtype() {
-            DType::Primitive(PType::I16, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, I16)
     }
 
     fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
-        match self.dtype() {
-            DType::Primitive(PType::I32, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, I32)
     }
 
     fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
-        match self.dtype() {
-            DType::Primitive(PType::I64, _) => {
-                let accessor = Arc::new(self.clone());
-                Some(accessor)
-            }
-            _ => None,
-        }
+        primitive_accessor_ref!(self, I64)
     }
 }
 

@@ -153,6 +153,7 @@ where
         } else {
             let old = self.current;
             self.current += 1;
+            // Safety: We verified that this value is both valid and within the array's bounds
             Some(Some(unsafe { *self.inner.get_unchecked(old) }))
         }
     }
