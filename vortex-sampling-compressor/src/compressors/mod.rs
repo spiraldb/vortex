@@ -1,6 +1,8 @@
+use std::any::Any;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use vortex::encoding::EncodingRef;
 use vortex::Array;
@@ -55,11 +57,25 @@ impl Hash for dyn EncodingCompressor + '_ {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CompressionTree<'a> {
     compressor: &'a dyn EncodingCompressor,
     children: Vec<Option<CompressionTree<'a>>>,
-    metadata: Option<*const ()>,
+    metadata: Option<Arc<dyn EncoderMetadata>>,
+}
+
+impl Debug for CompressionTree<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
+}
+
+/// Metadata that can optionally be attached to a compression tree.
+///
+/// This enables codecs to cache trained parameters from the sampling runs to reuse for
+/// the large run.
+pub trait EncoderMetadata {
+    fn as_any(&self) -> &dyn Any;
 }
 
 impl Display for CompressionTree<'_> {
@@ -88,17 +104,15 @@ impl<'a> CompressionTree<'a> {
     ///
     /// This can be specific encoder parameters that were discovered at sample time
     /// that should be reused when compressing the full array.
-    pub(crate) fn new_with_metadata<T>(
+    pub(crate) fn new_with_metadata(
         compressor: &'a dyn EncodingCompressor,
         children: Vec<Option<CompressionTree<'a>>>,
-        metadata: Box<T>,
+        metadata: Arc<dyn EncoderMetadata>,
     ) -> Self {
-        // SAFETY: the memory pointed to will get cleaned up in Drop impl.
-        let ptr = Box::into_raw(metadata) as *const ();
         Self {
             compressor,
             children,
-            metadata: Some(ptr),
+            metadata: Some(metadata),
         }
     }
 
@@ -129,45 +143,14 @@ impl<'a> CompressionTree<'a> {
             .map(|c| c.compress(array, Some(self.clone()), ctx.for_compressor(c)))
     }
 
-    // /// Access the saved opaque metadata by reference.
-    // ///
-    // /// # Safety
-    // ///
-    // /// It is up to the caller to ensure that the type `T` is the correct type for the stored
-    // /// metadata.
-    // ///
-    // /// The value of `T` will almost always be `EncodingCompressor`-specific.
-    // pub(crate) unsafe fn metadata_ref<T>(&self) -> Option<&T> {
-    //     unsafe { self.metadata.map(|m| &*(m as *const T)) }
-    // }
-
     /// Access the saved opaque metadata.
     ///
-    /// This will consume the struct's metadata pointer, giving the caller ownership of
-    /// the memory by returning a `Box<T>`.
-    ///
-    /// # Safety
-    ///
-    /// It is up to the caller to ensure that the type `T` is the correct type for the stored
-    /// metadata.
+    /// This will consume the owned metadata, giving the caller ownership of
+    /// the Box.
     ///
     /// The value of `T` will almost always be `EncodingCompressor`-specific.
-    pub unsafe fn metadata<T>(&mut self) -> Option<Box<T>> {
-        let metadata = std::mem::take(&mut self.metadata);
-
-        metadata.map(|m| {
-            let ptr = m as *mut T;
-            unsafe { Box::from_raw(ptr) }
-        })
-    }
-}
-
-impl Drop for CompressionTree<'_> {
-    fn drop(&mut self) {
-        if let Some(ptr) = self.metadata {
-            // Recnostruct the box from the pointer to do a manual drop.
-            let _ = unsafe { Box::from_raw(ptr as *mut ()) };
-        }
+    pub fn metadata(&mut self) -> Option<Arc<dyn EncoderMetadata>> {
+        std::mem::take(&mut self.metadata)
     }
 }
 

@@ -1,5 +1,7 @@
+use std::any::Any;
 use std::collections::HashSet;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use fsst::Compressor;
 use vortex::array::{VarBin, VarBinView};
@@ -9,7 +11,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_fsst::{fsst_compress, fsst_train_compressor, FSSTEncoding, FSST};
 
-use super::{CompressedArray, CompressionTree, EncodingCompressor};
+use super::{CompressedArray, CompressionTree, EncoderMetadata, EncodingCompressor};
 use crate::SamplingCompressor;
 
 #[derive(Debug)]
@@ -18,10 +20,11 @@ pub struct FSSTCompressor;
 /// Maximum size in bytes of the FSST symbol table
 const FSST_SYMTAB_MAX_SIZE: usize = 8 * 255 + 255;
 
-/// We use a 16KB sample of text from the input.
-///
-/// This value is derived from the FSST paper section 4.4
-// const DEFAULT_SAMPLE_BYTES: usize = 1 << 14;
+impl EncoderMetadata for Compressor {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
 impl EncodingCompressor for FSSTCompressor {
     fn id(&self) -> &str {
@@ -60,13 +63,17 @@ impl EncodingCompressor for FSSTCompressor {
         }
 
         let compressor = like
-            .and_then(|mut c| unsafe { c.metadata::<Compressor>() })
-            .unwrap_or_else(|| Box::new(fsst_train_compressor(array)));
+            .and_then(|mut tree| tree.metadata())
+            .unwrap_or_else(|| Arc::new(fsst_train_compressor(array)));
+
+        let Some(fsst_compressor) = compressor.as_any().downcast_ref::<Compressor>() else {
+            vortex_bail!("Could not downcast metadata as FSST Compressor")
+        };
 
         let result_array =
             if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
                 // For a VarBinArray or VarBinViewArray, compress directly.
-                fsst_compress(array, compressor.as_ref()).into_array()
+                fsst_compress(array, fsst_compressor).into_array()
             } else {
                 vortex_bail!(
                 InvalidArgument: "unsupported encoding for FSSTCompressor {:?}",
