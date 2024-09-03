@@ -24,7 +24,7 @@ impl From<RecordBatch> for Array {
                 .map(|(array, field)| Array::from_arrow(array.clone(), field.is_nullable()))
                 .collect(),
             value.num_rows(),
-            Validity::AllValid,
+            Validity::NonNullable, // Must match FromArrowType<SchemaRef> for DType
         )
         .unwrap()
         .into()

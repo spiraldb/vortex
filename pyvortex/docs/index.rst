@@ -6,9 +6,13 @@
 Vortex documentation
 ====================
 
-.. automodule:: vortex
-   :members:
+Vortex is an Apache Arrow-compatible toolkit for working with compressed array data.
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
+
+   encoding
+   dtype
+   io
+   expr

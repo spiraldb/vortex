@@ -22,18 +22,25 @@ doctest = false
 
 [dependencies]
 arrow = { workspace = true, features = ["pyarrow"] }
+flexbuffers = { workspace = true }
+futures = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-log = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
 vortex-alp = { workspace = true }
 vortex-array = { workspace = true }
 vortex-dict = { workspace = true }
 vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
+vortex-expr = { workspace = true }
 vortex-fastlanes = { workspace = true }
 vortex-roaring = { workspace = true }
 vortex-runend = { workspace = true }
+vortex-sampling-compressor = { workspace = true }
+vortex-serde = { workspace = true, features = ["tokio"] }
+vortex-scalar = { workspace = true }
 vortex-zigzag = { workspace = true }
 
 # We may need this workaround?
