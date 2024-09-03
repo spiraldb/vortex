@@ -18,6 +18,7 @@ workspace = true
 [lib]
 name = "pyvortex"
 crate-type = ["rlib", "cdylib"]
+doctest = false
 
 [dependencies]
 arrow = { workspace = true, features = ["pyarrow"] }
