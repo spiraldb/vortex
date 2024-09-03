@@ -6,7 +6,7 @@ use vortex::compute::{
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
-use vortex_scalar::{PrimitiveScalar, Scalar, ScalarValue};
+use vortex_scalar::{PrimitiveScalar, Scalar};
 
 use crate::FoRArray;
 
@@ -54,7 +54,7 @@ impl ScalarAtFn for FoRArray {
             use num_traits::WrappingAdd;
             encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))
                     .map(|v| Scalar::primitive::<$P>(v, encoded.dtype().nullability()))
-                    .unwrap_or_else(|| Scalar::new(encoded.dtype().clone(), ScalarValue::Null))
+                    .unwrap_or_else(|| Scalar::null(encoded.dtype().clone()))
         })
     }
 }

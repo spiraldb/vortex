@@ -17,15 +17,15 @@ impl ArrayCompute for ALPArray {
         Some(self)
     }
 
+    fn compare(&self) -> Option<&dyn CompareFn> {
+        Some(self)
+    }
+
     fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-
-    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 }
@@ -50,10 +50,10 @@ impl ScalarAtFn for ALPArray {
 
         match_each_alp_float_ptype!(self.ptype(), |$T| {
             let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.as_ref().try_into().unwrap();
-            Scalar::from(<$T as ALPFloat>::decode_single(
+            Scalar::primitive(<$T as ALPFloat>::decode_single(
                 encoded_val,
                 self.exponents(),
-            ))
+            ), self.dtype().nullability())
         })
     }
 }

@@ -124,6 +124,7 @@ struct ALPAccessor<F: ALPFloat> {
     validity: Validity,
     exponents: Exponents,
 }
+
 impl<F: ALPFloat> ALPAccessor<F> {
     fn new(
         encoded: AccessorRef<F::ALPInt>,

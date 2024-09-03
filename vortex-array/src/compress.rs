@@ -38,9 +38,10 @@ pub fn check_dtype_unchanged(arr: &Array, compressed: &Array) {
         use crate::ArrayDType;
         debug_assert!(
             arr.dtype() == compressed.dtype(),
-            "Compression changed dtype: {:?} -> {:?} for {}",
+            "Compression changed dtype: {} -> {}\nFrom array: {}Into array {}",
             arr.dtype(),
             compressed.dtype(),
+            arr.tree_display(),
             compressed.tree_display(),
         );
     }
