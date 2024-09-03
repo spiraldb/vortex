@@ -10,8 +10,7 @@ use vortex_dtype::DType;
 
 use crate::FSSTArray;
 
-/// Compress an array using FSST. If a compressor is provided, use the existing compressor, else
-/// it will train a new compressor directly from the `strings`.
+/// Compress an array using FSST.
 ///
 /// # Panics
 ///

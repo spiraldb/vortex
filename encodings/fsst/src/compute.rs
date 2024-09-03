@@ -64,10 +64,11 @@ impl ScalarAtFn for FSSTArray {
         let compressed = scalar_at_unchecked(&self.codes(), index);
         let binary_datum = compressed.value().as_buffer().unwrap().unwrap();
 
-        let decompressor = self.decompressor();
-        let decoded_buffer: Buffer = decompressor.decompress(binary_datum.as_slice()).into();
+        self.with_decompressor(|decompressor| {
+            let decoded_buffer: Buffer = decompressor.decompress(binary_datum.as_slice()).into();
 
-        varbin_scalar(decoded_buffer, self.dtype())
+            varbin_scalar(decoded_buffer, self.dtype())
+        })
     }
 }
 

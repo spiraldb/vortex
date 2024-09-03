@@ -98,10 +98,13 @@ impl FSSTArray {
     }
 
     /// Build a [`Decompressor`][fsst::Decompressor] that can be used to decompress values from
-    /// this array.
+    /// this array, and pass it to the given function.
     ///
-    /// This is private to the crate to avoid leaking `fsst` as part of the public API.
-    pub(crate) fn decompressor(&self) -> Decompressor {
+    /// This is private to the crate to avoid leaking `fsst-rs` types as part of the public API.
+    pub(crate) fn with_decompressor<F, R>(&self, apply: F) -> R
+    where
+        F: FnOnce(Decompressor) -> R,
+    {
         // canonicalize the symbols child array, so we can view it contiguously
         let symbols_array = self
             .symbols()
@@ -119,21 +122,13 @@ impl FSSTArray {
             .unwrap();
         let symbol_lengths = symbol_lengths_array.maybe_null_slice::<u8>();
 
-        // SAFETY: we transmute to remove lifetime restrictions.
-        //  Without this, the compiler complains that `symbol_lengths is tied to the lifetime of
-        //  the `symbol_lengths_array` local variable, but it's actually tied to the lifetime of
-        //  the `symbols` child array of self. We can't represent this in the type system right now,
-        //  so we transmute to kill the lifetime complaints.
-        //  This is fine because the returned `Decompressor`'s lifetime is tied to the lifetime
-        //  of these same arrays.
-        let symbol_lengths = unsafe { std::mem::transmute::<&[u8], &[u8]>(symbol_lengths) };
-
         // Transmute the 64-bit symbol values into fsst `Symbol`s.
         // SAFETY: Symbol is guaranteed to be 8 bytes, guaranteed by the compiler.
         let symbols = unsafe { std::mem::transmute::<&[u64], &[Symbol]>(symbols) };
 
         // Build a new decompressor that uses these symbols.
-        Decompressor::new(symbols, symbol_lengths)
+        let decompressor = Decompressor::new(symbols, symbol_lengths);
+        apply(decompressor)
     }
 }
 
