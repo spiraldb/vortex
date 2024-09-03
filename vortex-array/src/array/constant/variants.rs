@@ -1,9 +1,13 @@
 use std::iter;
+use std::sync::Arc;
 
-use vortex_dtype::DType;
-use vortex_scalar::StructScalar;
+use vortex_dtype::{DType, PType};
+use vortex_error::{vortex_panic, VortexError};
+use vortex_scalar::{Scalar, StructScalar};
 
 use crate::array::constant::ConstantArray;
+use crate::iter::{Accessor, AccessorRef};
+use crate::validity::{ArrayValidity, Validity};
 use crate::variants::{
     ArrayVariants, BinaryArrayTrait, BoolArrayTrait, ExtensionArrayTrait, ListArrayTrait,
     NullArrayTrait, PrimitiveArrayTrait, StructArrayTrait, Utf8ArrayTrait,
@@ -73,7 +77,105 @@ impl BoolArrayTrait for ConstantArray {
     }
 }
 
-impl PrimitiveArrayTrait for ConstantArray {}
+impl<T> Accessor<T> for ConstantArray
+where
+    T: Clone,
+    T: TryFrom<Scalar, Error = VortexError>,
+{
+    fn array_len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        ArrayValidity::is_valid(self, index)
+    }
+
+    fn value_unchecked(&self, _index: usize) -> T {
+        T::try_from(self.scalar().clone()).unwrap_or_else(|err| {
+            vortex_panic!("Failed to convert scalar to value", err);
+        })
+    }
+
+    fn array_validity(&self) -> Validity {
+        if self.scalar().is_valid() {
+            Validity::AllValid
+        } else {
+            Validity::AllInvalid
+        }
+    }
+}
+
+impl PrimitiveArrayTrait for ConstantArray {
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::F32, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::F64, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U8, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U16, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U32, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::U64, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I8, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I16, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I32, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+
+    fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
+        match self.scalar().dtype() {
+            DType::Primitive(PType::I64, _) => Some(Arc::new(self.clone())),
+            _ => None,
+        }
+    }
+}
 
 impl Utf8ArrayTrait for ConstantArray {}
 

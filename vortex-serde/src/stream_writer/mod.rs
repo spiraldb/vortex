@@ -11,6 +11,9 @@ use vortex_error::VortexResult;
 use crate::io::VortexWrite;
 use crate::MessageWriter;
 
+#[cfg(test)]
+mod tests;
+
 pub struct StreamArrayWriter<W: VortexWrite> {
     msgs: MessageWriter<W>,
 

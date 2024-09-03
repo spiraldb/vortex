@@ -29,7 +29,7 @@ impl SliceFn for NullArray {
 
 impl ScalarAtFn for NullArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        Ok(<Self as ScalarAtFn>::scalar_at_unchecked(self, index))
+        Ok(self.scalar_at_unchecked(index))
     }
 
     fn scalar_at_unchecked(&self, _index: usize) -> Scalar {

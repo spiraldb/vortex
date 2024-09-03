@@ -195,7 +195,7 @@ macro_rules! vortex_err {
     (Context: $fmt:literal, $err:expr $(,)?) => {{
         use std::backtrace::Backtrace;
         $crate::__private::must_use(
-            $crate::VortexError::Context(format!($fmt, $($arg),*).into(), Box::new($err))
+            $crate::VortexError::Context($fmt.into(), Box::new($err))
         )
     }};
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {{

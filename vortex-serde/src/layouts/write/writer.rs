@@ -126,15 +126,11 @@ impl<W: VortexWrite> LayoutWriter<W> {
                 .zip(chunk.byte_offsets.iter().skip(1))
                 .map(|(begin, end)| Layout::Flat(FlatLayout::new(*begin, *end)))
                 .collect();
-            chunk.byte_offsets.truncate(len);
             chunk.row_offsets.truncate(len);
 
             let metadata_array = StructArray::try_new(
-                ["byte_offset".into(), "row_offset".into()].into(),
-                vec![
-                    chunk.byte_offsets.into_array(),
-                    chunk.row_offsets.into_array(),
-                ],
+                ["row_offset".into()].into(),
+                vec![chunk.row_offsets.into_array()],
                 len,
                 Validity::NonNullable,
             )?;

@@ -17,6 +17,10 @@ impl ArrayCompute for ChunkedArray {
         Some(self)
     }
 
+    fn compare(&self) -> Option<&dyn CompareFn> {
+        Some(self)
+    }
+
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -30,10 +34,6 @@ impl ArrayCompute for ChunkedArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-
-    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 }

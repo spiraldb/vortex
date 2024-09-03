@@ -45,7 +45,7 @@ fn random_string(u: &mut Unstructured) -> Result<Array> {
 fn random_bytes(u: &mut Unstructured) -> Result<Array> {
     let v = Vec::<Option<Vec<u8>>>::arbitrary(u)?;
     let arr = match u.int_in_range(0..=1)? {
-        0 => VarBinArray::from_iter(v, DType::Utf8(Nullability::Nullable)).into_array(),
+        0 => VarBinArray::from_iter(v, DType::Binary(Nullability::Nullable)).into_array(),
         1 => VarBinViewArray::from_iter_nullable_bin(v).into_array(),
         _ => unreachable!(),
     };

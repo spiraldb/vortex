@@ -126,7 +126,8 @@ impl ArrayView {
             .iter()
             .take(idx)
             .map(|child| Self::cumulative_nbuffers(child))
-            .sum();
+            .sum::<usize>()
+            + self.has_buffer() as usize;
         let buffer_count = Self::cumulative_nbuffers(child);
 
         Some(Self {
