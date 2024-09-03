@@ -168,29 +168,6 @@ impl PyArray {
             )?
             .extract(py),
             _ => Py::new(py, Self { inner: array }),
-            // ArrayKind::Other(other) => match other.encoding().id() {
-            //     // PyEnc chooses to expose certain encodings as first-class objects.
-            //     // For the remainder, we should have a generic EncArray implementation that supports basic functions.
-            //     ALPEncoding::ID => {
-            //         PyALPArray::wrap(py, inner.into_any().downcast::<ALPArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     RoaringBoolEncoding::ID => PyRoaringBoolArray::wrap(
-            //         py,
-            //         inner.into_any().downcast::<RoaringBoolArray>().unwrap(),
-            //     )?
-            //     .extract(py),
-            //     RoaringIntEncoding::ID => PyRoaringIntArray::wrap(
-            //         py,
-            //         inner.into_any().downcast::<RoaringIntArray>().unwrap(),
-            //     )?
-            //     .extract(py),
-            //     ZigZagEncoding::ID => {
-            //         PyZigZagArray::wrap(py, inner.into_any().downcast::<ZigZagArray>().unwrap())?
-            //             .extract(py)
-            //     }
-            //     _ => Py::new(py, Self { inner }),
-            //},
         }
     }
 
@@ -234,33 +211,3 @@ impl PyArray {
             .and_then(|arr| Self::wrap(indices.py(), arr.into()))
     }
 }
-//
-// #[pymethods]
-// impl PyRoaringBoolArray {
-//     #[staticmethod]
-//     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-//         RoaringBoolArray::encode(array.unwrap())
-//             .map_err(PyVortexError::map_err)
-//             .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
-//     }
-// }
-//
-// #[pymethods]
-// impl PyRoaringIntArray {
-//     #[staticmethod]
-//     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-//         RoaringIntArray::encode(array.unwrap())
-//             .map_err(PyVortexError::map_err)
-//             .and_then(|zarray| PyArray::wrap(array.py(), zarray.into_array()))
-//     }
-// }
-//
-// #[pymethods]
-// impl PyZigZagArray {
-//     #[staticmethod]
-//     fn encode(array: PyRef<'_, PyArray>) -> PyResult<Py<PyArray>> {
-//         ZigZagArray::encode(array.unwrap())
-//             .map_err(PyVortexError::map_err)
-//             .and_then(|zarray| PyArray::wrap(array.py(), zarray))
-//     }
-// }
