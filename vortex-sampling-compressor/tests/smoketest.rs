@@ -23,6 +23,7 @@ use vortex_sampling_compressor::{CompressConfig, SamplingCompressor};
 #[cfg(test)]
 mod tests {
     use vortex_datetime_dtype::TimeUnit;
+    use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 
     use super::*;
 
@@ -37,6 +38,7 @@ mod tests {
                 // &DeltaCompressor,
                 &DictCompressor,
                 &FoRCompressor,
+                &FSSTCompressor,
                 &DateTimePartsCompressor,
                 &RoaringBoolCompressor,
                 &RoaringIntCompressor,
