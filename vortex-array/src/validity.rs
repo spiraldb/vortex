@@ -5,7 +5,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::BoolArray;
 use crate::compute::unary::scalar_at_unchecked;
-use crate::compute::{and, filter, slice, take};
+use crate::compute::{filter, slice, take};
 use crate::stats::ArrayStatistics;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
