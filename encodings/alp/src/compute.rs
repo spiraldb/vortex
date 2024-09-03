@@ -88,40 +88,35 @@ impl CompareFn for ALPArray {
             match self.dtype() {
                 DType::Primitive(PType::F32, _) => {
                     let value = f32::try_from(scalar_value)?;
-                    let mut values = Vec::with_capacity(self.len());
+                    let mut values = BooleanBufferBuilder::new(self.len());
                     let op_fn = operator.to_fn();
 
                     for batch in self.f32_iter().ok_or(vortex_err!("Expected DType"))? {
                         for v in batch.data() {
-                            values.push(op_fn(value, *v));
+                            values.append(op_fn(value, *v));
                         }
                     }
-
-                    Ok(
-                        BoolArray::from_vec(values, self.logical_validity().into_validity())
-                            .into_array(),
-                    )
+                    BoolArray::try_new(values.finish(), self.logical_validity().into_validity())
+                        .map(|a| a.into_array())
                 }
                 DType::Primitive(PType::F64, _) => {
                     let value = f64::try_from(scalar_value)?;
-                    let mut values = Vec::with_capacity(self.len());
+                    let mut values = BooleanBufferBuilder::new(self.len());
                     let op_fn = operator.to_fn();
 
                     for batch in self.f64_iter().ok_or(vortex_err!("Expected DType"))? {
                         for v in batch.data() {
-                            values.push(op_fn(value, *v));
+                            values.append(op_fn(value, *v));
                         }
                     }
 
-                    Ok(
-                        BoolArray::from_vec(values, self.logical_validity().into_validity())
-                            .into_array(),
-                    )
+                    BoolArray::try_new(values.finish(), self.logical_validity().into_validity())
+                        .map(|a| a.into_array())
                 }
                 _ => unreachable!(),
             }
         } else {
-            let mut values = Vec::with_capacity(self.len());
+            let mut values = BooleanBufferBuilder::new(self.len());
             let mut validity = BooleanBufferBuilder::new(self.len());
             match self.dtype() {
                 DType::Primitive(PType::F32, _) => {
@@ -137,15 +132,15 @@ impl CompareFn for ALPArray {
 
                     for (l_batch, r_batch) in iter.zip(rhs) {
                         for (&l, &r) in l_batch.data().iter().zip(r_batch.data().iter()) {
-                            values.push(op_fn(l, r));
+                            values.append(op_fn(l, r));
                         }
                     }
 
                     for idx in 0..self.len() {
                         validity.append(self.is_valid(idx) & array.with_dyn(|a| a.is_valid(idx)));
                     }
-
-                    Ok(BoolArray::from_vec(values, Validity::from(validity.finish())).into_array())
+                    BoolArray::try_new(values.finish(), Validity::from(validity.finish()))
+                        .map(|a| a.into_array())
                 }
                 DType::Primitive(PType::F64, _) => {
                     let iter = self.f64_iter().ok_or(vortex_err!("Expected DType"))?;
@@ -160,7 +155,7 @@ impl CompareFn for ALPArray {
 
                     for (l_batch, r_batch) in iter.zip(rhs) {
                         for (&l, &r) in l_batch.data().iter().zip(r_batch.data().iter()) {
-                            values.push(op_fn(l, r));
+                            values.append(op_fn(l, r));
                         }
                     }
 
@@ -168,7 +163,8 @@ impl CompareFn for ALPArray {
                         validity.append(self.is_valid(idx) & array.with_dyn(|a| a.is_valid(idx)));
                     }
 
-                    Ok(BoolArray::from_vec(values, Validity::from(validity.finish())).into_array())
+                    BoolArray::try_new(values.finish(), Validity::from(validity.finish()))
+                        .map(|a| a.into_array())
                 }
                 _ => unreachable!(),
             }
