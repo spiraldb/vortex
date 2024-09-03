@@ -111,7 +111,9 @@ impl FSSTArray {
             .expect("Symbols must be a Primitive Array");
         let symbols = symbols_array.maybe_null_slice::<u64>();
 
-        let symbol_lengths_array = self.symbol_lengths().into_canonical()
+        let symbol_lengths_array = self
+            .symbol_lengths()
+            .into_canonical()
             .unwrap()
             .into_primitive()
             .unwrap();

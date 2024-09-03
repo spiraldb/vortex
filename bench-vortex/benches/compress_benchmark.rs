@@ -31,12 +31,7 @@ fn vortex_compress_medicare1(c: &mut Criterion) {
 }
 
 fn vortex_compress_tpch(c: &mut Criterion) {
-    let data_dir = DBGen::new(DBGenOptions {
-        scale_factor: 10,
-        ..DBGenOptions::default()
-    })
-    .generate()
-    .unwrap();
+    let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -47,47 +42,11 @@ fn vortex_compress_tpch(c: &mut Criterion) {
         &tpch::schema::LINEITEM,
     ));
 
-    // Find the size of the comments column
-    // let comments_nbytes = lineitem_vortex
-    //     .with_dyn(|a| a.as_struct_array_unchecked().field_by_name("l_comment"))
-    //     .unwrap()
-    //     .nbytes();
-    // println!("l_comment has size {}B", comments_nbytes);
-
     let compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
-    // let compressed = compressor.compress(&lineitem_vortex, None).unwrap();
-    // let ratio = (lineitem_vortex.nbytes() as f64) / (compressed.nbytes() as f64);
-    // println!("compression ratio (without FSST): {ratio}");
-
-    //
-    // Full LINEITEM table from TPC-H
-    //
-    // let mut group = c.benchmark_group("tpch");
-    // group.sample_size(10);
-    // group.bench_function("lineitem", |b| {
-    //     b.iter(|| {
-    //         std::hint::black_box(compressor.compress(std::hint::black_box(&lineitem_vortex), None))
-    //     });
-    // });
 
     let compressor_fsst = SamplingCompressor::default();
 
-    // group.bench_function("lineitem-fsst", |b| {
-    //     b.iter(|| {
-    //         std::hint::black_box(
-    //             compressor_fsst.compress(std::hint::black_box(&lineitem_vortex), None),
-    //         )
-    //     });
-    // });
-    // group.finish();
-
-    // let compressed = compressor_fsst.compress(&lineitem_vortex, None).unwrap();
-    // let ratio = (lineitem_vortex.nbytes() as f64) / (compressed.nbytes() as f64);
-    // println!("compression ratio (with FSST): {ratio}");
-
-    //
-    // LINEITEM table l_comment column only
-    //
+    // l_comment column only
     let mut group = c.benchmark_group("l_comment");
     let comments = lineitem_vortex.with_dyn(|a| {
         a.as_struct_array_unchecked()
@@ -121,6 +80,7 @@ fn vortex_compress_tpch(c: &mut Criterion) {
         });
     });
 
+    // Compare canonicalizing
     let comments_canonical = comments
         .into_canonical()
         .unwrap()

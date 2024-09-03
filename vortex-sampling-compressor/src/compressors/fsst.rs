@@ -15,8 +15,8 @@ use crate::SamplingCompressor;
 #[derive(Debug)]
 pub struct FSSTCompressor;
 
-/// Size in bytes of the Symbol table for FSST
-const FSST_SYMBOL_TABLE_SIZE: usize = 2_048;
+/// Maximum size in bytes of the FSST symbol table
+const FSST_SYMTAB_MAX_SIZE: usize = 8 * 255 + 255;
 
 /// We use a 16KB sample of text from the input.
 ///
@@ -55,7 +55,7 @@ impl EncodingCompressor for FSSTCompressor {
         // between 2-3x depending on the text quality.
         //
         // It's not worth running a full compression step unless the array is large enough.
-        if array.nbytes() < 10 * FSST_SYMBOL_TABLE_SIZE {
+        if array.nbytes() < 10 * FSST_SYMTAB_MAX_SIZE {
             return Ok(CompressedArray::uncompressed(array.clone()));
         }
 
