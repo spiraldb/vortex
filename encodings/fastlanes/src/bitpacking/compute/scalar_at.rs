@@ -9,7 +9,7 @@ impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         if let Some(patches) = self.patches() {
             // NB: All non-null values are considered patches
-            if self.bit_width() == 0 || patches.with_dyn(|a| a.is_valid(index)) {
+            if patches.with_dyn(|a| a.is_valid(index)) {
                 return scalar_at_unchecked(&patches, index).cast(self.dtype());
             }
         }

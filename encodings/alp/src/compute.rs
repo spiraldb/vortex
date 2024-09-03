@@ -1,6 +1,6 @@
 use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
-use vortex::{Array, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -40,10 +40,10 @@ impl ScalarAtFn for ALPArray {
 
         match_each_alp_float_ptype!(self.ptype(), |$T| {
             let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.as_ref().try_into().unwrap();
-            Scalar::from(<$T as ALPFloat>::decode_single(
+            Scalar::primitive(<$T as ALPFloat>::decode_single(
                 encoded_val,
                 self.exponents(),
-            ))
+            ), self.dtype().nullability())
         })
     }
 }

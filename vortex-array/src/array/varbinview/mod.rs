@@ -238,7 +238,7 @@ impl VarBinViewArray {
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         let view = self.view_at(index);
         unsafe {
-            if view.inlined.size > 12 {
+            if !view.is_inlined() {
                 let data_buf = slice(
                     &self.bytes(view._ref.buffer_index as usize),
                     view._ref.offset as usize,
@@ -247,7 +247,7 @@ impl VarBinViewArray {
                 .into_primitive()?;
                 Ok(data_buf.maybe_null_slice::<u8>().to_vec())
             } else {
-                Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
+                Ok(view.inlined.data[..view.size()].to_vec())
             }
         }
     }

@@ -2,14 +2,13 @@ use std::cmp::min;
 
 use fastlanes::BitPacking;
 use itertools::Itertools;
-use vortex::array::{ConstantArray, PrimitiveArray, SparseArray};
+use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{slice, take, TakeFn};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
 use vortex_error::VortexResult;
-use vortex_scalar::Scalar;
 
 use crate::{unpack_single_primitive, BitPackedArray};
 
@@ -18,16 +17,6 @@ impl TakeFn for BitPackedArray {
         let ptype: PType = self.dtype().try_into()?;
         let validity = self.validity();
         let taken_validity = validity.take(indices)?;
-        if self.bit_width() == 0 {
-            return if let Some(patches) = self.patches() {
-                take(&patches, indices)
-            } else {
-                Ok(
-                    ConstantArray::new(Scalar::null(self.dtype().as_nullable()), indices.len())
-                        .into_array(),
-                )
-            };
-        }
 
         let indices = indices.clone().into_primitive()?;
         let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {

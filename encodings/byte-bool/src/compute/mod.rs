@@ -8,7 +8,7 @@ use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_err, VortexResult};
-use vortex_scalar::{Scalar, ScalarValue};
+use vortex_scalar::Scalar;
 
 use super::ByteBoolArray;
 
@@ -40,10 +40,7 @@ impl ScalarAtFn for ByteBoolArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        Scalar::new(
-            self.dtype().clone(),
-            ScalarValue::Bool(self.buffer()[index] == 1),
-        )
+        Scalar::bool(self.buffer()[index] == 1, self.dtype().nullability())
     }
 }
 
@@ -179,6 +176,7 @@ mod tests {
     use vortex::compute::unary::{scalar_at, scalar_at_unchecked};
     use vortex::compute::{compare, slice};
     use vortex::AsArray as _;
+    use vortex_scalar::ScalarValue;
 
     use super::*;
 
