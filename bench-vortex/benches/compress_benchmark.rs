@@ -7,7 +7,6 @@ use bench_vortex::{compress_taxi_data, tpch};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use vortex::{IntoArray, IntoCanonical};
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
-// use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
 
 fn vortex_compress_taxi(c: &mut Criterion) {
