@@ -9,7 +9,7 @@ Array = _encoding.Array
 compress = _encoding.compress
 
 
-def _to_pandas(self: _encoding.Array, *, name: Optional[str] = None, flatten: bool = False):
+def _Array_to_pandas(self: _encoding.Array, *, name: Optional[str] = None, flatten: bool = False):
     """Construct a Pandas dataframe from this Vortex array.
 
     Parameters
@@ -86,10 +86,10 @@ def _to_pandas(self: _encoding.Array, *, name: Optional[str] = None, flatten: bo
     return table.to_pandas()
 
 
-Array.to_pandas = _to_pandas
+Array.to_pandas = _Array_to_pandas
 
 
-def _to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True):
+def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True):
     """Construct a NumPy array from this Vortex array.
 
     This is an alias for :code:`self.to_arrow().to_numpy(zero_copy_only)`
@@ -111,7 +111,7 @@ def _to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True):
     return self.to_arrow().to_numpy(zero_copy_only=zero_copy_only)
 
 
-Array.to_numpy = _to_numpy
+Array.to_numpy = _Array_to_numpy
 
 
 def from_arrow(arrow: pyarrow.Array) -> _encoding.Array:
