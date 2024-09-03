@@ -5,7 +5,9 @@ use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{compress_taxi_data, tpch};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use vortex::array::ChunkedArray;
 use vortex::{IntoArray, IntoCanonical};
+use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 // use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
 
@@ -29,7 +31,12 @@ fn vortex_compress_medicare1(c: &mut Criterion) {
 }
 
 fn vortex_compress_tpch(c: &mut Criterion) {
-    let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
+    let data_dir = DBGen::new(DBGenOptions {
+        scale_factor: 10,
+        ..DBGenOptions::default()
+    })
+    .generate()
+    .unwrap();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -47,7 +54,7 @@ fn vortex_compress_tpch(c: &mut Criterion) {
     //     .nbytes();
     // println!("l_comment has size {}B", comments_nbytes);
 
-    // let compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
+    let compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
     // let compressed = compressor.compress(&lineitem_vortex, None).unwrap();
     // let ratio = (lineitem_vortex.nbytes() as f64) / (compressed.nbytes() as f64);
     // println!("compression ratio (without FSST): {ratio}");
@@ -88,32 +95,31 @@ fn vortex_compress_tpch(c: &mut Criterion) {
             .unwrap()
     });
 
-    // println!(
-    //     "running l_comment benchmark over array of size {}B",
-    //     comments.nbytes()
-    // );
+    // Print the size of each chunk
+    for (idx, chunk) in ChunkedArray::try_from(comments.clone())
+        .unwrap()
+        .chunks()
+        .enumerate()
+    {
+        println!(
+            "chunk {idx} nbytes = {} len = {}",
+            chunk.nbytes(),
+            chunk.len()
+        );
+    }
 
     group.sample_size(10);
-    // group.bench_function("compress-default", |b| {
-    //     b.iter_with_large_drop(|| {
-    //         std::hint::black_box(compressor.compress(&comments, None)).unwrap()
-    //     });
-    // });
+    group.bench_function("compress-default", |b| {
+        b.iter_with_large_drop(|| {
+            std::hint::black_box(compressor.compress(&comments, None)).unwrap()
+        });
+    });
 
-    // group.bench_function("compress-fsst-chunked", |b| {
-    //     b.iter_with_large_drop(|| {
-    //         std::hint::black_box(compressor_fsst.compress(&comments, None)).unwrap()
-    //     });
-    // });
-
-    // println!(
-    //     "chunked compressed encoding: {}",
-    //     compressor_fsst
-    //         .compress(&comments, None)
-    //         .unwrap()
-    //         .array()
-    //         .tree_display()
-    // );
+    group.bench_function("compress-fsst-chunked", |b| {
+        b.iter_with_large_drop(|| {
+            std::hint::black_box(compressor_fsst.compress(&comments, None)).unwrap()
+        });
+    });
 
     let comments_canonical = comments
         .into_canonical()
@@ -121,24 +127,11 @@ fn vortex_compress_tpch(c: &mut Criterion) {
         .into_varbin()
         .unwrap()
         .into_array();
-    println!(
-        "comments_canonical.nbytes() = {}B",
-        comments_canonical.nbytes()
-    );
     group.bench_function("compress-fsst-canonicalized", |b| {
         b.iter_with_large_drop(|| {
             std::hint::black_box(compressor_fsst.compress(&comments_canonical, None)).unwrap()
         });
     });
-
-    println!(
-        "canonical compressed encoding: {}",
-        compressor_fsst
-            .compress(&comments_canonical, None)
-            .unwrap()
-            .array()
-            .tree_display()
-    );
 
     group.finish();
 }

@@ -154,7 +154,6 @@ impl<'a> SamplingCompressor<'a> {
         arr: &Array,
         like: Option<&CompressionTree<'a>>,
     ) -> VortexResult<CompressedArray<'a>> {
-        println!("BEGIN SamplingCompressor::compress({})", arr.tree_display());
         if arr.is_empty() {
             return Ok(CompressedArray::uncompressed(arr.clone()));
         }
@@ -238,8 +237,6 @@ fn sampled_compression<'a>(
     array: &Array,
     compressor: &SamplingCompressor<'a>,
 ) -> VortexResult<Option<CompressedArray<'a>>> {
-    println!("BEGIN sampled_compression");
-
     // First, we try constant compression and shortcut any sampling.
     if let Some(cc) = ConstantCompressor.can_compress(array) {
         return cc.compress(array, None, compressor.clone()).map(Some);
@@ -325,7 +322,6 @@ fn find_best_compression<'a>(
     sample: &Array,
     ctx: &SamplingCompressor<'a>,
 ) -> VortexResult<CompressedArray<'a>> {
-    println!("begin find_best_compression");
     let mut best = None;
     let mut best_ratio = 1.0;
     for compression in candidates {

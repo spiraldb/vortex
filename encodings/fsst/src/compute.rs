@@ -34,6 +34,7 @@ impl SliceFn for FSSTArray {
         Ok(Self::try_new(
             self.dtype().clone(),
             self.symbols(),
+            self.symbol_lengths(),
             slice(&self.codes(), start, stop)?,
         )?
         .into_array())
@@ -45,7 +46,13 @@ impl TakeFn for FSSTArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let new_codes = take(&self.codes(), indices)?;
 
-        Ok(Self::try_new(self.dtype().clone(), self.symbols(), new_codes)?.into_array())
+        Ok(Self::try_new(
+            self.dtype().clone(),
+            self.symbols(),
+            self.symbol_lengths(),
+            new_codes,
+        )?
+        .into_array())
     }
 }
 
@@ -73,6 +80,12 @@ impl FilterFn for FSSTArray {
     // Filtering an FSSTArray filters the codes array, leaving the symbols array untouched
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         let filtered_codes = filter(&self.codes(), predicate)?;
-        Ok(Self::try_new(self.dtype().clone(), self.symbols(), filtered_codes)?.into_array())
+        Ok(Self::try_new(
+            self.dtype().clone(),
+            self.symbols(),
+            self.symbol_lengths(),
+            filtered_codes,
+        )?
+        .into_array())
     }
 }

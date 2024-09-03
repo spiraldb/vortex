@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use fsst::{Decompressor, Symbol, FSST_CODE_MAX};
+use fsst::{Decompressor, Symbol};
 use serde::{Deserialize, Serialize};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
@@ -13,6 +13,7 @@ use vortex_error::{vortex_bail, VortexResult};
 impl_encoding!("vortex.fsst", 24u16, FSST);
 
 static SYMBOLS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
+static SYMBOL_LENS_DTYPE: DType = DType::Primitive(PType::U8, Nullability::NonNullable);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FSSTMetadata {
@@ -29,15 +30,28 @@ impl FSSTArray {
     /// The `codes` array is a Binary array where each binary datum is a sequence of 8-bit codes.
     /// Each code corresponds either to a symbol, or to the "escape code",
     /// which tells the decoder to emit the following byte without doing a table lookup.
-    pub fn try_new(dtype: DType, symbols: Array, codes: Array) -> VortexResult<Self> {
+    pub fn try_new(
+        dtype: DType,
+        symbols: Array,
+        symbol_lengths: Array,
+        codes: Array,
+    ) -> VortexResult<Self> {
         // Check: symbols must be a u64 array
-        if symbols.dtype() != &DType::Primitive(PType::U64, Nullability::NonNullable) {
+        if symbols.dtype() != &SYMBOLS_DTYPE {
             vortex_bail!(InvalidArgument: "symbols array must be of type u64")
         }
 
+        if symbol_lengths.dtype() != &SYMBOL_LENS_DTYPE {
+            vortex_bail!(InvalidArgument: "symbol_lengths array must be of type u8")
+        }
+
         // Check: symbols must not have length > MAX_CODE
-        if symbols.len() > FSST_CODE_MAX as usize {
-            vortex_bail!(InvalidArgument: "symbols array must have length <= 255")
+        if symbols.len() > 255 {
+            vortex_bail!(InvalidArgument: "symbols array must have length <= 255");
+        }
+
+        if symbols.len() != symbol_lengths.len() {
+            vortex_bail!(InvalidArgument: "symbols and symbol_lengths arrays must have same length");
         }
 
         // Check: strings must be a Binary array.
@@ -48,7 +62,7 @@ impl FSSTArray {
         let symbols_len = symbols.len();
         let len = codes.len();
         let strings_dtype = codes.dtype().clone();
-        let children = Arc::new([symbols, codes]);
+        let children = Arc::new([symbols, symbol_lengths, codes]);
 
         Self::try_from_parts(
             dtype,
@@ -69,10 +83,17 @@ impl FSSTArray {
             .expect("FSSTArray must have a symbols child array")
     }
 
+    /// Access the symbol table array
+    pub fn symbol_lengths(&self) -> Array {
+        self.array()
+            .child(1, &SYMBOL_LENS_DTYPE, self.metadata().symbols_len)
+            .expect("FSSTArray must have a symbols child array")
+    }
+
     /// Access the codes array
     pub fn codes(&self) -> Array {
         self.array()
-            .child(1, &self.metadata().codes_dtype, self.len())
+            .child(2, &self.metadata().codes_dtype, self.len())
             .expect("FSSTArray must have a codes child array")
     }
 
@@ -85,12 +106,24 @@ impl FSSTArray {
         let symbols_array = self.symbols().into_canonical()?.into_primitive()?;
         let symbols = symbols_array.maybe_null_slice::<u64>();
 
+        let symbol_lengths_array = self.symbol_lengths().into_canonical()?.into_primitive()?;
+        let symbol_lengths = symbol_lengths_array.maybe_null_slice::<u8>();
+
+        // SAFETY: we transmute to remove lifetime restrictions.
+        //  Without this, the compiler complains that `symbol_lengths is tied to the lifetime of
+        //  the `symbol_lengths_array` local variable, but it's actually tied to the lifetime of
+        //  the `symbols` child array of self. We can't represent this in the type system right now,
+        //  so we transmute to kill the lifetime complaints.
+        //  This is fine because the returned `Decompressor`'s lifetime is tied to the lifetime
+        //  of these same arrays.
+        let symbol_lengths = unsafe { std::mem::transmute(symbol_lengths) };
+
         // Transmute the 64-bit symbol values into fsst `Symbol`s.
         // SAFETY: Symbol is guaranteed to be 8 bytes, guaranteed by the compiler.
         let symbols = unsafe { std::mem::transmute::<&[u64], &[Symbol]>(symbols) };
 
         // Build a new decompressor that uses these symbols.
-        Ok(Decompressor::new(symbols))
+        Ok(Decompressor::new(symbols, symbol_lengths))
     }
 }
 

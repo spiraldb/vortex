@@ -112,8 +112,12 @@ where
     let symbols_vec: Vec<Symbol> = compressor.symbol_table().to_vec();
     // SAFETY: Symbol and u64 are same size
     let symbols_u64: Vec<u64> = unsafe { std::mem::transmute(symbols_vec) };
-    let symbols = PrimitiveArray::from_vec(symbols_u64, Validity::NonNullable);
+    let symbols = PrimitiveArray::from_vec(symbols_u64, Validity::NonNullable).into_array();
 
-    FSSTArray::try_new(dtype, symbols.into_array(), codes.into_array())
+    let symbol_lengths_vec: Vec<u8> = compressor.symbol_lengths().to_vec();
+    let symbol_lengths =
+        PrimitiveArray::from_vec(symbol_lengths_vec, Validity::NonNullable).into_array();
+
+    FSSTArray::try_new(dtype, symbols, symbol_lengths, codes.into_array())
         .expect("building FSSTArray from parts")
 }

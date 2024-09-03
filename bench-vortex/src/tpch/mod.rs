@@ -30,8 +30,6 @@ pub mod dbgen;
 mod execute;
 pub mod schema;
 
-mod tests;
-
 pub use execute::*;
 
 pub const EXPECTED_ROW_COUNTS: [usize; 23] = [
