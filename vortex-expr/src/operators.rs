@@ -1,7 +1,7 @@
 use core::fmt;
 use std::fmt::{Display, Formatter};
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Operator {
     // comparison
@@ -50,10 +50,10 @@ impl Operator {
         match self {
             Operator::Eq => Operator::Eq,
             Operator::NotEq => Operator::NotEq,
-            Operator::Gt => Operator::Lte,
-            Operator::Gte => Operator::Lt,
-            Operator::Lt => Operator::Gte,
-            Operator::Lte => Operator::Gt,
+            Operator::Gt => Operator::Lt,
+            Operator::Gte => Operator::Lte,
+            Operator::Lt => Operator::Gt,
+            Operator::Lte => Operator::Gte,
             Operator::And => Operator::And,
             Operator::Or => Operator::Or,
         }

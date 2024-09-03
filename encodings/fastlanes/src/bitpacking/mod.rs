@@ -18,10 +18,10 @@ impl_encoding!("fastlanes.bitpacked", 14u16, BitPacked);
 pub struct BitPackedMetadata {
     // TODO(ngates): serialize into compact form
     validity: ValidityMetadata,
-    patches_len: usize,
     bit_width: usize,
     offset: usize, // Know to be <1024
     length: usize, // Store end padding instead <1024
+    has_patches: bool,
 }
 
 /// NB: All non-null values in the patches array are considered patches
@@ -69,12 +69,23 @@ impl BitPackedArray {
             ));
         }
 
+        if let Some(parray) = patches.as_ref() {
+            if parray.len() != length {
+                vortex_bail!(
+                    "Mismatched length in BitPackedArray between encoded {} and it's patches({}) {}",
+                    length,
+                    parray.encoding().id(),
+                    parray.len()
+                )
+            }
+        }
+
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
-            patches_len: patches.as_ref().map(|a| a.len()).unwrap_or_default(),
             offset,
             length,
             bit_width,
+            has_patches: patches.is_some(),
         };
 
         let mut children = Vec::with_capacity(3);
@@ -112,12 +123,12 @@ impl BitPackedArray {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        (self.metadata().patches_len > 0)
+        (self.metadata().has_patches)
             .then(|| {
                 self.array().child(
                     1,
                     &self.dtype().with_nullability(Nullability::Nullable),
-                    self.metadata().patches_len,
+                    self.len(),
                 )
             })
             .flatten()
@@ -129,11 +140,7 @@ impl BitPackedArray {
     }
 
     pub fn validity(&self) -> Validity {
-        let validity_child_idx = if self.metadata().patches_len > 0 {
-            2
-        } else {
-            1
-        };
+        let validity_child_idx = if self.metadata().has_patches { 2 } else { 1 };
 
         self.metadata().validity.to_validity(self.array().child(
             validity_child_idx,

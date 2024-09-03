@@ -13,7 +13,7 @@ impl<'a> Arbitrary<'a> for Array {
 }
 
 fn random_array(u: &mut Unstructured) -> Result<Array> {
-    match u.int_in_range(0..=12).unwrap() {
+    match u.int_in_range(0..=12)? {
         0 => random_primitive::<u8>(u),
         1 => random_primitive::<u16>(u),
         2 => random_primitive::<u32>(u),
@@ -33,7 +33,7 @@ fn random_array(u: &mut Unstructured) -> Result<Array> {
 
 fn random_string(u: &mut Unstructured) -> Result<Array> {
     let v = Vec::<Option<String>>::arbitrary(u)?;
-    let arr = match u.int_in_range(0..=1).unwrap() {
+    let arr = match u.int_in_range(0..=1)? {
         0 => VarBinArray::from_iter(v, DType::Utf8(Nullability::Nullable)).into_array(),
         1 => VarBinViewArray::from_iter_nullable_str(v).into_array(),
         _ => unreachable!(),
@@ -44,8 +44,8 @@ fn random_string(u: &mut Unstructured) -> Result<Array> {
 
 fn random_bytes(u: &mut Unstructured) -> Result<Array> {
     let v = Vec::<Option<Vec<u8>>>::arbitrary(u)?;
-    let arr = match u.int_in_range(0..=1).unwrap() {
-        0 => VarBinArray::from_iter(v, DType::Utf8(Nullability::Nullable)).into_array(),
+    let arr = match u.int_in_range(0..=1)? {
+        0 => VarBinArray::from_iter(v, DType::Binary(Nullability::Nullable)).into_array(),
         1 => VarBinViewArray::from_iter_nullable_bin(v).into_array(),
         _ => unreachable!(),
     };

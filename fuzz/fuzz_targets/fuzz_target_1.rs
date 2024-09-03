@@ -26,7 +26,7 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
                 assert_array_eq(&array, &compressed_array);
                 Corpus::Keep
             }
-            None => return Corpus::Reject,
+            None => Corpus::Reject,
         },
         Action::Slice(range) => {
             let slice = slice(&array, range.start, range.end).unwrap();

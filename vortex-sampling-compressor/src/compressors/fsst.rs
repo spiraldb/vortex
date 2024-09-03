@@ -60,10 +60,7 @@ impl EncodingCompressor for FSSTCompressor {
         }
 
         let compressor = like
-            .map(|mut c| unsafe {
-                c.metadata::<Compressor>()
-                    .expect("if like is passed, compressor should exist")
-            })
+            .and_then(|mut c| unsafe { c.metadata::<Compressor>() })
             .unwrap_or_else(|| Box::new(fsst_train_compressor(array)));
 
         let result_array =

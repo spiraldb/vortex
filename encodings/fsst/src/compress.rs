@@ -103,7 +103,7 @@ where
                 // SAFETY: buffer is large enough
                 unsafe { compressor.compress_into(s, &mut buffer) };
 
-                builder.push_value(buffer.as_ref());
+                builder.push_value(&buffer);
             }
         }
     }

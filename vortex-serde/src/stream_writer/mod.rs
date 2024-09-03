@@ -1,3 +1,5 @@
+use std::fmt::{Display, Formatter};
+
 use futures_util::{Stream, TryStreamExt};
 use vortex::array::ChunkedArray;
 use vortex::stream::ArrayStream;
@@ -9,14 +11,17 @@ use vortex_error::VortexResult;
 use crate::io::VortexWrite;
 use crate::MessageWriter;
 
-pub struct ArrayWriter<W: VortexWrite> {
+#[cfg(test)]
+mod tests;
+
+pub struct StreamArrayWriter<W: VortexWrite> {
     msgs: MessageWriter<W>,
 
     array_layouts: Vec<ArrayLayout>,
     page_ranges: Vec<ByteRange>,
 }
 
-impl<W: VortexWrite> ArrayWriter<W> {
+impl<W: VortexWrite> StreamArrayWriter<W> {
     pub fn new(write: W) -> Self {
         Self {
             msgs: MessageWriter::new(write),
@@ -59,10 +64,7 @@ impl<W: VortexWrite> ArrayWriter<W> {
             byte_offsets.push(self.msgs.tell());
         }
 
-        Ok(ChunkOffsets {
-            byte_offsets,
-            row_offsets,
-        })
+        Ok(ChunkOffsets::new(byte_offsets, row_offsets))
     }
 
     pub async fn write_array_stream<S: ArrayStream + Unpin>(
@@ -101,8 +103,18 @@ pub struct ByteRange {
     pub end: u64,
 }
 
+impl Display for ByteRange {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}, {})", self.begin, self.end)
+    }
+}
+
 #[allow(clippy::len_without_is_empty)]
 impl ByteRange {
+    pub fn new(begin: u64, end: u64) -> Self {
+        Self { begin, end }
+    }
+
     pub fn len(&self) -> usize {
         (self.end - self.begin) as usize
     }
@@ -118,4 +130,13 @@ pub struct ArrayLayout {
 pub struct ChunkOffsets {
     pub byte_offsets: Vec<u64>,
     pub row_offsets: Vec<u64>,
+}
+
+impl ChunkOffsets {
+    pub fn new(byte_offsets: Vec<u64>, row_offsets: Vec<u64>) -> Self {
+        Self {
+            byte_offsets,
+            row_offsets,
+        }
+    }
 }

@@ -1,4 +1,4 @@
-use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder};
+use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, MutableBuffer};
 use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType};
 use vortex_error::{VortexError, VortexResult};
@@ -15,12 +15,18 @@ impl IntoCanonical for SparseArray {
         // Resolve our indices into a vector of usize applying the offset
         let indices = self.resolved_indices();
 
-        let mut validity = BooleanBufferBuilder::new(self.len());
-        validity.append_n(self.len(), false);
+        let validity_buffer =
+            BooleanBufferBuilder::new_from_buffer(MutableBuffer::new_null(self.len()), self.len());
 
         if matches!(self.dtype(), DType::Bool(_)) {
             let values = self.values().into_bool()?.boolean_buffer();
-            canonicalize_sparse_bools(values, &indices, self.len(), self.fill_value(), validity)
+            canonicalize_sparse_bools(
+                values,
+                &indices,
+                self.len(),
+                self.fill_value(),
+                validity_buffer,
+            )
         } else {
             let values = self.values().into_primitive()?;
             match_each_native_ptype!(values.ptype(), |$P| {
@@ -29,7 +35,7 @@ impl IntoCanonical for SparseArray {
                     &indices,
                     self.len(),
                     self.fill_value(),
-                    validity
+                    validity_buffer
                 )
             })
         }
@@ -41,7 +47,7 @@ fn canonicalize_sparse_bools(
     indices: &[usize],
     len: usize,
     fill_value: &Scalar,
-    mut validity: BooleanBufferBuilder,
+    mut validity_buffer: BooleanBufferBuilder,
 ) -> VortexResult<Canonical> {
     let fill_bool: bool = if fill_value.is_null() {
         bool::default()
@@ -51,10 +57,10 @@ fn canonicalize_sparse_bools(
     let mut flat_bools = vec![fill_bool; len];
     for (i, idx) in indices.iter().enumerate() {
         flat_bools[*idx] = values.value(i);
-        validity.set_bit(*idx, true);
+        validity_buffer.set_bit(*idx, true);
     }
 
-    let validity = Validity::from(validity.finish());
+    let validity = Validity::from(validity_buffer.finish());
     let bool_values = BoolArray::from_vec(flat_bools, validity);
 
     Ok(Canonical::Bool(bool_values))

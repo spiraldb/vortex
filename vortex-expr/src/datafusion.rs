@@ -1,11 +1,7 @@
 #![cfg(feature = "datafusion")]
 
-use std::collections::HashSet;
 use std::sync::Arc;
 
-use datafusion_common::arrow::datatypes::SchemaRef;
-use datafusion_common::tree_node::{TreeNode, TreeNodeRecursion};
-use datafusion_common::{DataFusionError, Result as DFResult};
 use datafusion_expr::Operator as DFOperator;
 use datafusion_physical_expr::PhysicalExpr;
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
@@ -32,7 +28,7 @@ pub fn convert_expr_to_vortex(
         .as_any()
         .downcast_ref::<datafusion_physical_expr::expressions::Column>()
     {
-        let expr = Column::new(col_expr.name().to_owned());
+        let expr = Column::from(col_expr.name().to_owned());
 
         return Ok(Arc::new(expr) as _);
     }
@@ -54,38 +50,6 @@ pub fn convert_expr_to_vortex(
     }
 
     vortex_bail!("Couldn't convert DataFusion physical expression to a vortex expression")
-}
-
-/// Extract all indexes of all columns referenced by the physical expressions from the schema
-pub fn extract_columns_from_expr(
-    expr: Option<&Arc<dyn PhysicalExpr>>,
-    schema_ref: SchemaRef,
-) -> DFResult<HashSet<usize>> {
-    let mut predicate_projection = HashSet::new();
-
-    if let Some(expr) = expr {
-        expr.apply(|expr| {
-            if let Some(column) = expr
-                .as_any()
-                .downcast_ref::<datafusion_physical_expr::expressions::Column>()
-            {
-                match schema_ref.column_with_name(column.name()) {
-                    Some(_) => {
-                        predicate_projection.insert(column.index());
-                    }
-                    None => {
-                        return Err(DataFusionError::External(
-                            format!("Could not find expected column {} in schema", column.name())
-                                .into(),
-                        ))
-                    }
-                }
-            }
-            Ok(TreeNodeRecursion::Continue)
-        })?;
-    }
-
-    Ok(predicate_projection)
 }
 
 impl TryFrom<DFOperator> for Operator {

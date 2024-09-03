@@ -21,4 +21,6 @@ pub mod proto {
 #[cfg(feature = "flatbuffers")]
 pub mod flatbuffers {
     pub use vortex_flatbuffers::dtype::*;
+
+    pub use super::serde::flatbuffers::*;
 }

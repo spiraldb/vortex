@@ -20,6 +20,8 @@ use prettytable::{Cell, Row, Table};
 struct Args {
     #[arg(short, long, value_delimiter = ',')]
     queries: Option<Vec<usize>>,
+    #[arg(short, long, value_delimiter = ',')]
+    exclude_queries: Option<Vec<usize>>,
     #[arg(short, long)]
     threads: Option<usize>,
     #[arg(short, long, default_value_t = true, default_missing_value = "true", action = ArgAction::Set)]
@@ -46,10 +48,20 @@ fn main() -> ExitCode {
     }
     .expect("Failed building the Runtime");
 
-    runtime.block_on(bench_main(args.queries, args.iterations, args.warmup))
+    runtime.block_on(bench_main(
+        args.queries,
+        args.exclude_queries,
+        args.iterations,
+        args.warmup,
+    ))
 }
 
-async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool) -> ExitCode {
+async fn bench_main(
+    queries: Option<Vec<usize>>,
+    exclude_queries: Option<Vec<usize>>,
+    iterations: usize,
+    warmup: bool,
+) -> ExitCode {
     // uncomment the below to enable trace logging of datafusion execution
     // setup_logger(LevelFilter::Trace);
 
@@ -84,7 +96,7 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
         table.add_row(Row::new(cells));
     }
 
-    let query_count = queries.as_ref().map_or(21, |c| c.len());
+    let query_count = queries.as_ref().map_or(22, |c| c.len());
 
     // Setup a progress bar
     let progress = ProgressBar::new((query_count * formats.len()) as u64);
@@ -93,10 +105,15 @@ async fn bench_main(queries: Option<Vec<usize>>, iterations: usize, warmup: bool
     let (rows_tx, rows_rx) = sync::mpsc::channel();
     let (row_count_tx, row_count_rx) = sync::mpsc::channel();
     for (q, sql_queries) in tpch_queries() {
-        if let Some(queries) = queries.as_ref() {
-            if !queries.contains(&q) {
-                continue;
-            }
+        if queries
+            .as_ref()
+            .map_or(false, |included| !included.contains(&q))
+        {
+            continue;
+        }
+
+        if exclude_queries.as_ref().map_or(false, |e| e.contains(&q)) {
+            continue;
         }
         let ctxs = ctxs.clone();
         let tx = rows_tx.clone();

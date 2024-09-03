@@ -101,12 +101,20 @@ impl FSSTArray {
     /// this array.
     ///
     /// This is private to the crate to avoid leaking `fsst` as part of the public API.
-    pub(crate) fn decompressor(&self) -> VortexResult<Decompressor> {
+    pub(crate) fn decompressor(&self) -> Decompressor {
         // canonicalize the symbols child array, so we can view it contiguously
-        let symbols_array = self.symbols().into_canonical()?.into_primitive()?;
+        let symbols_array = self
+            .symbols()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
+            .expect("Symbols must be a Primitive Array");
         let symbols = symbols_array.maybe_null_slice::<u64>();
 
-        let symbol_lengths_array = self.symbol_lengths().into_canonical()?.into_primitive()?;
+        let symbol_lengths_array = self.symbol_lengths().into_canonical()
+            .unwrap()
+            .into_primitive()
+            .unwrap();
         let symbol_lengths = symbol_lengths_array.maybe_null_slice::<u8>();
 
         // SAFETY: we transmute to remove lifetime restrictions.
@@ -116,14 +124,14 @@ impl FSSTArray {
         //  so we transmute to kill the lifetime complaints.
         //  This is fine because the returned `Decompressor`'s lifetime is tied to the lifetime
         //  of these same arrays.
-        let symbol_lengths = unsafe { std::mem::transmute(symbol_lengths) };
+        let symbol_lengths = unsafe { std::mem::transmute::<&[u8], &[u8]>(symbol_lengths) };
 
         // Transmute the 64-bit symbol values into fsst `Symbol`s.
         // SAFETY: Symbol is guaranteed to be 8 bytes, guaranteed by the compiler.
         let symbols = unsafe { std::mem::transmute::<&[u64], &[Symbol]>(symbols) };
 
         // Build a new decompressor that uses these symbols.
-        Ok(Decompressor::new(symbols, symbol_lengths))
+        Decompressor::new(symbols, symbol_lengths)
     }
 }
 

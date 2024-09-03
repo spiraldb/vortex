@@ -117,10 +117,7 @@ unsafe impl<T: IoBuf> IoBuf for Slice<T> {
 unsafe impl IoBuf for Buffer {
     #[inline]
     fn read_ptr(&self) -> *const u8 {
-        match self {
-            Buffer::Arrow(b) => b.as_ptr(),
-            Buffer::Bytes(b) => b.as_ptr(),
-        }
+        self.as_ptr()
     }
 
     #[inline]

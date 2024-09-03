@@ -7,6 +7,9 @@ use vortex_flatbuffers::{FlatBufferRoot, WriteFlatBuffer};
 
 use crate::{flatbuffers as fb, DType, ExtDType, ExtID, ExtMetadata, PType, StructDType};
 
+mod project;
+pub use project::*;
+
 impl TryFrom<fb::DType<'_>> for DType {
     type Error = VortexError;
 

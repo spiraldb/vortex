@@ -1,7 +1,7 @@
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
 
-use crate::layouts::writer::layouts::Layout;
+use crate::layouts::write::layouts::Layout;
 
 #[derive(Debug)]
 pub struct Footer {

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use arrow_buffer::BooleanBuffer;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_dtype::{DType, Nullability};
+use vortex_error::VortexResult;
 
 use crate::array::BoolArray;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
@@ -36,21 +37,24 @@ impl ArrayStatisticsCompute for NullableBools<'_> {
             .enumerate()
             .skip_while(|(_, valid)| !*valid)
             .map(|(idx, _)| idx)
-            .next()
-            .ok_or_else(|| vortex_err!("Must be at least one non-null value"))?;
+            .next();
 
-        let mut stats = BoolStatsAccumulator::new_with_leading_nulls(
-            self.0.value(first_non_null_idx),
-            first_non_null_idx,
-        );
-
-        self.0
-            .iter()
-            .zip(self.1.iter())
-            .skip(first_non_null_idx + 1)
-            .map(|(next, valid)| valid.then_some(next))
-            .for_each(|next| stats.nullable_next(next));
-        Ok(stats.into_map(self.0.len()))
+        if let Some(first_non_null) = first_non_null_idx {
+            let mut acc = BoolStatsAccumulator::new(self.0.value(first_non_null));
+            acc.n_nulls(first_non_null);
+            self.0
+                .iter()
+                .zip(self.1.iter())
+                .skip(first_non_null + 1)
+                .map(|(next, valid)| valid.then_some(next))
+                .for_each(|next| acc.nullable_next(next));
+            Ok(acc.finish())
+        } else {
+            Ok(StatsSet::nulls(
+                self.0.len(),
+                &DType::Bool(Nullability::Nullable),
+            ))
+        }
     }
 }
 
@@ -58,7 +62,7 @@ impl ArrayStatisticsCompute for BooleanBuffer {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         let mut stats = BoolStatsAccumulator::new(self.value(0));
         self.iter().skip(1).for_each(|next| stats.next(next));
-        Ok(stats.into_map(self.len()))
+        Ok(stats.finish())
     }
 }
 
@@ -68,6 +72,7 @@ struct BoolStatsAccumulator {
     run_count: usize,
     null_count: usize,
     true_count: usize,
+    len: usize,
 }
 
 impl BoolStatsAccumulator {
@@ -78,13 +83,13 @@ impl BoolStatsAccumulator {
             run_count: 1,
             null_count: 0,
             true_count: if first_value { 1 } else { 0 },
+            len: 1,
         }
     }
 
-    fn new_with_leading_nulls(first_value: bool, leading_null_count: usize) -> Self {
-        let mut stats = Self::new(first_value);
-        stats.null_count += leading_null_count;
-        stats
+    fn n_nulls(&mut self, n_nulls: usize) {
+        self.null_count += n_nulls;
+        self.len += n_nulls;
     }
 
     pub fn nullable_next(&mut self, next: Option<bool>) {
@@ -92,11 +97,14 @@ impl BoolStatsAccumulator {
             Some(n) => self.next(n),
             None => {
                 self.null_count += 1;
+                self.len += 1;
             }
         }
     }
 
     pub fn next(&mut self, next: bool) {
+        self.len += 1;
+
         if next {
             self.true_count += 1
         }
@@ -109,18 +117,21 @@ impl BoolStatsAccumulator {
         }
     }
 
-    pub fn into_map(self, len: usize) -> StatsSet {
+    pub fn finish(self) -> StatsSet {
         StatsSet::from(HashMap::from([
-            (Stat::Min, (self.true_count == len).into()),
+            (Stat::Min, (self.true_count == self.len).into()),
             (Stat::Max, (self.true_count > 0).into()),
             (
                 Stat::IsConstant,
-                (self.true_count == len || self.true_count == 0).into(),
+                (self.null_count == 0 && (self.true_count == self.len || self.true_count == 0)
+                    || self.null_count == self.len)
+                    .into(),
             ),
             (Stat::IsSorted, self.is_sorted.into()),
             (
                 Stat::IsStrictSorted,
-                (self.is_sorted && (len < 2 || (len == 2 && self.true_count == 1))).into(),
+                (self.is_sorted && (self.len < 2 || (self.len == 2 && self.true_count == 1)))
+                    .into(),
             ),
             (Stat::RunCount, self.run_count.into()),
             (Stat::TrueCount, self.true_count.into()),

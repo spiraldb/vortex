@@ -65,7 +65,7 @@ impl ArrayTrait for ConstantArray {}
 impl ArrayValidity for ConstantArray {
     fn is_valid(&self, _index: usize) -> bool {
         match self.metadata().scalar.dtype().is_nullable() {
-            true => !self.scalar().is_null(),
+            true => self.scalar().is_valid(),
             false => true,
         }
     }

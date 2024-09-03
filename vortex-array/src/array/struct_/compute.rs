@@ -3,7 +3,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::struct_::StructArray;
-use crate::compute::unary::{scalar_at, ScalarAtFn};
+use crate::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use crate::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use crate::variants::StructArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
@@ -30,6 +30,15 @@ impl ScalarAtFn for StructArray {
                 .map(|field| scalar_at(&field, index).map(|s| s.into_value()))
                 .try_collect()?,
         ))
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        Scalar::r#struct(
+            self.dtype().clone(),
+            self.children()
+                .map(|field| scalar_at_unchecked(&field, index).into_value())
+                .collect(),
+        )
     }
 }
 

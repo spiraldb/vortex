@@ -1,7 +1,7 @@
-use vortex::array::PrimitiveArray;
-use vortex::compute::unary::{scalar_at, ScalarAtFn};
-use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
-use vortex::validity::ArrayValidity;
+use vortex::array::{ConstantArray, PrimitiveArray, SparseArray};
+use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
+use vortex::compute::{filter, slice, take, ArrayCompute, SliceFn, TakeFn};
+use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexResult};
@@ -25,10 +25,14 @@ impl ArrayCompute for RunEndArray {
 
 impl ScalarAtFn for RunEndArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if !self.is_valid(index) {
-            return Ok(Scalar::null(self.dtype().clone()));
-        }
         scalar_at(&self.values(), self.find_physical_index(index)?)
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        let idx = self
+            .find_physical_index(index)
+            .expect("Search must be implemented for the underlying index array");
+        scalar_at_unchecked(&self.values(), idx)
     }
 }
 
@@ -46,12 +50,41 @@ impl TakeFn for RunEndArray {
                     }
                     self.find_physical_index(idx).map(|loc| loc as u64)
                 })
+
                 .collect::<VortexResult<Vec<_>>>()?
         });
-        take(
-            &self.values(),
-            &PrimitiveArray::from(physical_indices).into_array(),
-        )
+        let physical_indices_array = PrimitiveArray::from(physical_indices).into_array();
+        let dense_values = take(&self.values(), &physical_indices_array)?;
+
+        Ok(match self.validity() {
+            Validity::NonNullable => dense_values,
+            Validity::AllValid => dense_values,
+            Validity::AllInvalid => {
+                ConstantArray::new(Scalar::null(self.dtype().clone()), indices.len()).into_array()
+            }
+            Validity::Array(original_validity) => {
+                let dense_validity = take(&original_validity, indices)?;
+                let dense_nonnull_indices = PrimitiveArray::from(
+                    dense_validity
+                        .clone()
+                        .into_bool()?
+                        .boolean_buffer()
+                        .set_indices()
+                        .map(|idx| idx as u64)
+                        .collect::<Vec<u64>>(),
+                )
+                .into_array();
+                let length = dense_validity.len();
+
+                SparseArray::try_new(
+                    dense_nonnull_indices,
+                    filter(&dense_values, &dense_validity)?,
+                    length,
+                    Scalar::null(self.dtype().clone()),
+                )?
+                .into_array()
+            }
+        })
     }
 }
 

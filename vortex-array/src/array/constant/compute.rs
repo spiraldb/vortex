@@ -18,11 +18,11 @@ use crate::stats::{ArrayStatistics, Stat};
 use crate::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
 
 impl ArrayCompute for ConstantArray {
-    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 
-    fn slice(&self) -> Option<&dyn SliceFn> {
+    fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
 
@@ -30,11 +30,11 @@ impl ArrayCompute for ConstantArray {
         Some(self)
     }
 
-    fn take(&self) -> Option<&dyn TakeFn> {
+    fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
 
-    fn compare(&self) -> Option<&dyn CompareFn> {
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 
@@ -48,8 +48,12 @@ impl ArrayCompute for ConstantArray {
 }
 
 impl ScalarAtFn for ConstantArray {
-    fn scalar_at(&self, _index: usize) -> VortexResult<Scalar> {
-        Ok(self.scalar().clone())
+    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
+        Ok(<Self as ScalarAtFn>::scalar_at_unchecked(self, index))
+    }
+
+    fn scalar_at_unchecked(&self, _index: usize) -> Scalar {
+        self.scalar().clone()
     }
 }
 

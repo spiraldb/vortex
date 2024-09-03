@@ -85,33 +85,34 @@ fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
 }
 
 pub fn decompress(array: FoRArray) -> VortexResult<PrimitiveArray> {
-    let shift = array.shift();
+    let shift = array.shift() as usize;
     let ptype = array.ptype();
     let encoded = array.encoded().into_primitive()?.reinterpret_cast(ptype);
+    let validity = encoded.validity();
     Ok(match_each_integer_ptype!(ptype, |$T| {
         let reference: $T = array.reference().try_into()?;
         PrimitiveArray::from_vec(
-            decompress_primitive(encoded.maybe_null_slice::<$T>(), reference, shift),
-            encoded.validity(),
+            decompress_primitive(encoded.into_maybe_null_slice::<$T>(), reference, shift),
+            validity,
         )
     }))
 }
 
 fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(
-    values: &[T],
+    values: Vec<T>,
     reference: T,
-    shift: u8,
+    shift: usize,
 ) -> Vec<T> {
     if shift > 0 {
         values
-            .iter()
-            .map(|&v| v << shift as usize)
+            .into_iter()
+            .map(|v| v << shift)
             .map(|v| v.wrapping_add(&reference))
             .collect_vec()
     } else {
         values
-            .iter()
-            .map(|&v| v.wrapping_add(&reference))
+            .into_iter()
+            .map(|v| v.wrapping_add(&reference))
             .collect_vec()
     }
 }

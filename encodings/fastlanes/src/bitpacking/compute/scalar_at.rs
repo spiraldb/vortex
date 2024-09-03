@@ -1,4 +1,4 @@
-use vortex::compute::unary::{scalar_at, ScalarAtFn};
+use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::ArrayDType;
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
@@ -7,18 +7,18 @@ use crate::{unpack_single, BitPackedArray};
 
 impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if !self.validity().is_valid(index) {
-            return Ok(Scalar::null(self.dtype().clone()));
-        }
-
         if let Some(patches) = self.patches() {
             // NB: All non-null values are considered patches
-            if self.bit_width() == 0 || patches.with_dyn(|a| a.is_valid(index)) {
-                return scalar_at(&patches, index)?.cast(self.dtype());
+            if patches.with_dyn(|a| a.is_valid(index)) {
+                return scalar_at_unchecked(&patches, index).cast(self.dtype());
             }
         }
 
         unpack_single(self, index)?.cast(self.dtype())
+    }
+
+    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
+        self.scalar_at(index).unwrap()
     }
 }
 
