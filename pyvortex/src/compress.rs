@@ -41,5 +41,5 @@ pub fn compress(
     let compressed = py
         .allow_threads(|| ctx.compress(arr.unwrap(), None))
         .map_err(PyVortexError::map_err)?;
-    PyArray::wrap(py, compressed)
+    Bound::new(array.py(), PyArray::new(inner))
 }
