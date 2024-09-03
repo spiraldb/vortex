@@ -41,10 +41,8 @@ fn _lib(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     let io = PyModule::new_bound(py, "io")?;
     m.add_submodule(&io)?;
 
-    io.add_function(wrap_pyfunction!(io::read_vortex_array, m)?)?;
-    io.add_function(wrap_pyfunction!(io::write_vortex_array, m)?)?;
-    io.add_function(wrap_pyfunction!(io::read_vortex_struct_array, m)?)?;
-    io.add_function(wrap_pyfunction!(io::write_vortex_struct_array, m)?)?;
+    io.add_function(wrap_pyfunction!(io::read, m)?)?;
+    io.add_function(wrap_pyfunction!(io::write, m)?)?;
 
     let expr = PyModule::new_bound(py, "expr")?;
     m.add_submodule(&expr)?;
