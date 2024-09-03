@@ -19,4 +19,12 @@ impl Schema {
             }
         }
     }
+
+    pub fn dtype(&self) -> &DType {
+        &self.0
+    }
+
+    pub fn into_dtype(self) -> DType {
+        self.0
+    }
 }
