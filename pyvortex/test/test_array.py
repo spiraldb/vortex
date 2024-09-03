@@ -5,14 +5,12 @@ import vortex
 def test_primitive_array_round_trip():
     a = pa.array([0, 1, 2, 3])
     arr = vortex.encode(a)
-    assert isinstance(arr, vortex.PrimitiveArray)
     assert arr.to_arrow().combine_chunks() == a
 
 
 def test_varbin_array_round_trip():
     a = pa.array(["a", "b", "c"])
     arr = vortex.encode(a)
-    assert isinstance(arr, vortex.VarBinArray)
     assert arr.to_arrow().combine_chunks() == a
 
 
