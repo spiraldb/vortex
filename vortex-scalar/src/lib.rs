@@ -2,6 +2,8 @@ use std::cmp::Ordering;
 
 use vortex_dtype::DType;
 
+#[cfg(feature = "arbitrary")]
+pub mod arbitrary;
 mod arrow;
 mod binary;
 mod bool;

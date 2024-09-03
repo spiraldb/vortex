@@ -4481,6 +4481,7 @@ dependencies = [
  "libfuzzer-sys",
  "vortex-array",
  "vortex-dtype",
+ "vortex-error",
  "vortex-sampling-compressor",
  "vortex-scalar",
 ]
@@ -4542,8 +4543,10 @@ dependencies = [
 name = "vortex-sampling-compressor"
 version = "0.7.0"
 dependencies = [
+ "arbitrary",
  "chrono",
  "fsst-rs",
+ "lazy_static",
  "log",
  "rand",
  "vortex-alp",
@@ -4564,6 +4567,7 @@ dependencies = [
 name = "vortex-scalar"
 version = "0.7.0"
 dependencies = [
+ "arbitrary",
  "arrow-array",
  "datafusion-common",
  "flatbuffers",
