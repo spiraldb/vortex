@@ -121,7 +121,7 @@ impl CompareFn for ALPArray {
                 _ => unreachable!(),
             }
         } else {
-            let mut values = BooleanBufferBuilder::new(self.len());
+            let mut values = Vec::with_capacity(self.len());
             let mut validity = BooleanBufferBuilder::new(self.len());
             match self.dtype() {
                 DType::Primitive(PType::F32, _) => {
@@ -137,7 +137,7 @@ impl CompareFn for ALPArray {
 
                     for (l_batch, r_batch) in iter.zip(rhs) {
                         for (&l, &r) in l_batch.data().iter().zip(r_batch.data().iter()) {
-                            values.append(op_fn(l, r));
+                            values.push(op_fn(l, r));
                         }
                     }
 
@@ -145,11 +145,7 @@ impl CompareFn for ALPArray {
                         validity.append(self.is_valid(idx) & array.with_dyn(|a| a.is_valid(idx)));
                     }
 
-                    Ok(BoolArray::from_vec(
-                        values.finish().into_iter().collect::<Vec<_>>(),
-                        Validity::from(validity.finish()),
-                    )
-                    .into_array())
+                    Ok(BoolArray::from_vec(values, Validity::from(validity.finish())).into_array())
                 }
                 DType::Primitive(PType::F64, _) => {
                     let iter = self.f64_iter().ok_or(vortex_err!("Expected DType"))?;
@@ -164,7 +160,7 @@ impl CompareFn for ALPArray {
 
                     for (l_batch, r_batch) in iter.zip(rhs) {
                         for (&l, &r) in l_batch.data().iter().zip(r_batch.data().iter()) {
-                            values.append(op_fn(l, r));
+                            values.push(op_fn(l, r));
                         }
                     }
 
@@ -172,11 +168,7 @@ impl CompareFn for ALPArray {
                         validity.append(self.is_valid(idx) & array.with_dyn(|a| a.is_valid(idx)));
                     }
 
-                    Ok(BoolArray::from_vec(
-                        values.finish().into_iter().collect::<Vec<_>>(),
-                        Validity::from(validity.finish()),
-                    )
-                    .into_array())
+                    Ok(BoolArray::from_vec(values, Validity::from(validity.finish())).into_array())
                 }
                 _ => unreachable!(),
             }
