@@ -11,7 +11,6 @@ mod array;
 mod dtype;
 mod encode;
 mod error;
-mod vortex_arrow;
 
 /// A Python module implemented in Rust.
 #[pymodule]
