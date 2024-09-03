@@ -39,7 +39,7 @@ impl EncodingCompressor for FSSTCompressor {
             return None;
         }
 
-        // FSST can be applied on top of VarBin, VarBinView, and Dict encodings.
+        // FSST can be applied on top of VarBin and VarBinView
         if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
             return Some(self);
         }
