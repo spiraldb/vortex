@@ -3,7 +3,7 @@ use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{filter, slice, take, ArrayCompute, FilterFn, SliceFn, TakeFn};
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_buffer::Buffer;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::FSSTArray;
@@ -50,16 +50,7 @@ impl TakeFn for FSSTArray {
 
 impl ScalarAtFn for FSSTArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let compressed = scalar_at_unchecked(&self.codes(), index);
-        let binary_datum = match compressed.value().as_buffer()? {
-            Some(b) => b,
-            None => vortex_bail!("non-nullable scalar must unwrap"),
-        };
-
-        let decompressor = self.decompressor();
-        let decoded_buffer: Buffer = decompressor.decompress(binary_datum.as_slice()).into();
-
-        Ok(varbin_scalar(decoded_buffer, self.dtype()))
+        Ok(self.scalar_at_unchecked(index))
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {

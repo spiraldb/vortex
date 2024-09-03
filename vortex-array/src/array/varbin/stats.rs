@@ -33,8 +33,8 @@ pub fn compute_stats(iter: &mut dyn Iterator<Item = Option<&[u8]>>, dtype: &DTyp
 
     if let Some(first_non_null) = first_value {
         let mut acc = VarBinAccumulator::new(first_non_null);
-        iter.for_each(|n| acc.nullable_next(n));
         acc.n_nulls(leading_nulls);
+        iter.for_each(|n| acc.nullable_next(n));
         acc.finish(dtype)
     } else {
         StatsSet::nulls(leading_nulls, dtype)
@@ -44,12 +44,12 @@ pub fn compute_stats(iter: &mut dyn Iterator<Item = Option<&[u8]>>, dtype: &DTyp
 pub struct VarBinAccumulator<'a> {
     min: &'a [u8],
     max: &'a [u8],
-    is_constant: bool,
     is_sorted: bool,
     is_strict_sorted: bool,
     last_value: &'a [u8],
     null_count: usize,
     runs: usize,
+    len: usize,
 }
 
 impl<'a> VarBinAccumulator<'a> {
@@ -57,27 +57,33 @@ impl<'a> VarBinAccumulator<'a> {
         Self {
             min: value,
             max: value,
-            is_constant: true,
             is_sorted: true,
             is_strict_sorted: true,
             last_value: value,
             runs: 1,
             null_count: 0,
+            len: 1,
         }
     }
 
     pub fn nullable_next(&mut self, val: Option<&'a [u8]>) {
         match val {
-            None => self.null_count += 1,
+            None => {
+                self.null_count += 1;
+                self.len += 1;
+            }
             Some(v) => self.next(v),
         }
     }
 
     pub fn n_nulls(&mut self, null_count: usize) {
+        self.len += null_count;
         self.null_count += null_count;
     }
 
     pub fn next(&mut self, val: &'a [u8]) {
+        self.len += 1;
+
         if val < self.min {
             self.min.clone_from(&val);
         } else if val > self.max {
@@ -95,19 +101,21 @@ impl<'a> VarBinAccumulator<'a> {
             }
             Ordering::Greater => {}
         }
-        self.is_constant = false;
         self.last_value = val;
         self.runs += 1;
     }
 
     pub fn finish(&self, dtype: &DType) -> StatsSet {
+        let is_constant =
+            (self.min == self.max && self.null_count == 0) || self.null_count == self.len;
+
         StatsSet::from(HashMap::from([
             (Stat::Min, varbin_scalar(Buffer::from(self.min), dtype)),
             (Stat::Max, varbin_scalar(Buffer::from(self.max), dtype)),
             (Stat::RunCount, self.runs.into()),
             (Stat::IsSorted, self.is_sorted.into()),
             (Stat::IsStrictSorted, self.is_strict_sorted.into()),
-            (Stat::IsConstant, self.is_constant.into()),
+            (Stat::IsConstant, is_constant.into()),
             (Stat::NullCount, self.null_count.into()),
         ]))
     }

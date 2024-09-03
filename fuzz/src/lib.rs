@@ -1,9 +1,11 @@
+use std::fmt::Debug;
 use std::ops::Range;
 
 use libfuzzer_sys::arbitrary::{Arbitrary, Result, Unstructured};
 use vortex::Array;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
+use vortex_sampling_compressor::compressors::date_time_parts::DateTimePartsCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
 use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
 use vortex_sampling_compressor::compressors::roaring_bool::RoaringBoolCompressor;
@@ -18,7 +20,7 @@ pub struct FuzzArrayAction {
     pub actions: Vec<Action>,
 }
 
-impl std::fmt::Debug for FuzzArrayAction {
+impl Debug for FuzzArrayAction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FuzzArrayAction")
             .field("action", &self.actions)
@@ -27,13 +29,12 @@ impl std::fmt::Debug for FuzzArrayAction {
     }
 }
 
-#[derive()]
 pub enum Action {
     Compress(&'static dyn EncodingCompressor),
     Slice(Range<usize>),
 }
 
-impl std::fmt::Debug for Action {
+impl Debug for Action {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Slice(arg0) => f.debug_tuple("Slice").field(arg0).finish(),
@@ -45,7 +46,7 @@ impl std::fmt::Debug for Action {
 impl<'a> Arbitrary<'a> for FuzzArrayAction {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
         let array = Array::arbitrary(u)?;
-        let action = match u.int_in_range(0..=9)? {
+        let action = match u.int_in_range(0..=10)? {
             0 => {
                 let start = u.choose_index(array.len())?;
                 let stop = u.choose_index(array.len() - start)? + start;
@@ -60,6 +61,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
             7 => Action::Compress(&DEFAULT_RUN_END_COMPRESSOR),
             8 => Action::Compress(&SparseCompressor),
             9 => Action::Compress(&ZigZagCompressor),
+            10 => Action::Compress(&DateTimePartsCompressor),
             _ => unreachable!(),
         };
 

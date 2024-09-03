@@ -4,8 +4,8 @@ use std::mem::size_of;
 use arrow_buffer::buffer::BooleanBuffer;
 use num_traits::PrimInt;
 use vortex_dtype::half::f16;
-use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -40,7 +40,7 @@ impl<T: PStatsType> ArrayStatisticsCompute for &[T] {
         }
         let mut stats = StatsAccumulator::new(self[0]);
         self.iter().skip(1).for_each(|next| stats.next(*next));
-        Ok(stats.into_map())
+        Ok(stats.finish())
     }
 }
 
@@ -59,20 +59,24 @@ impl<'a, T: PStatsType> ArrayStatisticsCompute for NullableValues<'a, T> {
             .enumerate()
             .skip_while(|(_, valid)| !*valid)
             .map(|(idx, _)| idx)
-            .next()
-            .ok_or_else(|| vortex_err!("Must be at least one non-null value"))?;
+            .next();
 
-        let mut stats = StatsAccumulator::new_with_leading_nulls(
-            values[first_non_null_idx],
-            first_non_null_idx,
-        );
-        values
-            .iter()
-            .zip(self.1.iter())
-            .skip(first_non_null_idx + 1)
-            .map(|(next, valid)| valid.then_some(*next))
-            .for_each(|next| stats.nullable_next(next));
-        Ok(stats.into_map())
+        if let Some(first_non_null) = first_non_null_idx {
+            let mut acc = StatsAccumulator::new(values[first_non_null]);
+            acc.n_nulls(first_non_null);
+            self.0
+                .iter()
+                .zip(self.1.iter())
+                .skip(first_non_null + 1)
+                .map(|(next, valid)| valid.then_some(*next))
+                .for_each(|next| acc.nullable_next(next));
+            Ok(acc.finish())
+        } else {
+            Ok(StatsSet::nulls(
+                self.0.len(),
+                &DType::Primitive(T::PTYPE, Nullability::Nullable),
+            ))
+        }
     }
 }
 
@@ -157,13 +161,11 @@ impl<T: PStatsType> StatsAccumulator<T> {
         stats
     }
 
-    fn new_with_leading_nulls(first_value: T, leading_null_count: usize) -> Self {
-        let mut stats = Self::new(first_value);
-        stats.null_count += leading_null_count;
-        stats.bit_widths[0] += leading_null_count;
-        stats.trailing_zeros[T::PTYPE.bit_width()] += leading_null_count;
-        stats.len += leading_null_count;
-        stats
+    fn n_nulls(&mut self, n_nulls: usize) {
+        self.null_count += n_nulls;
+        self.bit_widths[0] += n_nulls;
+        self.trailing_zeros[T::PTYPE.bit_width()] += n_nulls;
+        self.len += n_nulls;
     }
 
     pub fn nullable_next(&mut self, next: Option<T>) {
@@ -203,7 +205,7 @@ impl<T: PStatsType> StatsAccumulator<T> {
         self.prev = next;
     }
 
-    pub fn into_map(self) -> StatsSet {
+    pub fn finish(self) -> StatsSet {
         let is_constant = (self.min == self.max && self.null_count == 0 && self.nan_count == 0)
             || self.null_count == self.len
             || self.nan_count == self.len;
