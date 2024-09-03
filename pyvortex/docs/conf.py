@@ -36,5 +36,5 @@ doctest_global_setup = 'import pyarrow; import vortex'
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'alabaster'
+html_theme = 'pydata_sphinx_theme'
 # html_static_path = ['_static']  # no static files yet

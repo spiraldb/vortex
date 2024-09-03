@@ -11,13 +11,18 @@
 
 -e file:.
 -e file:pyvortex
+accessible-pygments==0.0.5
+    # via pydata-sphinx-theme
 alabaster==1.0.0
     # via sphinx
 asttokens==2.4.1
     # via stack-data
 babel==2.14.0
     # via mkdocs-material
+    # via pydata-sphinx-theme
     # via sphinx
+beautifulsoup4==4.12.3
+    # via pydata-sphinx-theme
 black==24.8.0
     # via vortex
 bracex==2.4
@@ -34,6 +39,7 @@ colorama==0.4.6
 decorator==5.1.1
     # via ipython
 docutils==0.21.2
+    # via pydata-sphinx-theme
     # via sphinx
 executing==2.0.1
     # via stack-data
@@ -86,6 +92,7 @@ numpy==1.26.4
 packaging==24.0
     # via black
     # via mkdocs
+    # via pydata-sphinx-theme
     # via pytest
     # via sphinx
 paginate==0.5.6
@@ -113,9 +120,13 @@ pure-eval==0.2.3
 py-cpuinfo==9.0.0
     # via pytest-benchmark
 pyarrow==15.0.2
+pydata-sphinx-theme==0.15.4
+    # via vortex
 pygments==2.17.2
+    # via accessible-pygments
     # via ipython
     # via mkdocs-material
+    # via pydata-sphinx-theme
     # via sphinx
 pymdown-extensions==10.7.1
     # via mkdocs-material
@@ -147,7 +158,10 @@ six==1.16.0
     # via python-dateutil
 snowballstemmer==2.2.0
     # via sphinx
+soupsieve==2.6
+    # via beautifulsoup4
 sphinx==8.0.2
+    # via pydata-sphinx-theme
 sphinxcontrib-applehelp==2.0.0
     # via sphinx
 sphinxcontrib-devhelp==2.0.0
@@ -167,6 +181,7 @@ traitlets==5.14.3
     # via matplotlib-inline
 typing-extensions==4.12.2
     # via ipython
+    # via pydata-sphinx-theme
 tzdata==2024.1
     # via pandas
 urllib3==2.2.1
