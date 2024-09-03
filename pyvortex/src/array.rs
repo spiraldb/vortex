@@ -13,10 +13,14 @@ use crate::error::PyVortexError;
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 /// The root class for all Vortex arrays.
 pub struct PyArray {
-    pub inner: Array,
+    inner: Array,
 }
 
 impl PyArray {
+    pub fn new(inner: Array) -> PyArray {
+        PyArray { inner }
+    }
+
     pub fn unwrap(&self) -> &Array {
         &self.inner
     }

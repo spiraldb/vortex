@@ -130,7 +130,7 @@ pub fn read_vortex_array<'py>(f: &Bound<'py, PyString>) -> PyResult<Bound<'py, P
         .block_on(run(fname))
         .map_err(PyVortexError::new)?;
 
-    Bound::new(f.py(), PyArray { inner })
+    Bound::new(f.py(), PyArray::new(inner))
 }
 
 #[pyfunction]
@@ -165,7 +165,7 @@ pub fn write_vortex_array(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -
     }
 
     let fname = f.to_str()?; // TODO(dk): support file objects
-    let array = &array.borrow().inner;
+    let array = array.borrow().unwrap().clone();
 
     let wrapper = StructArray::try_new(
         vec!["_".into()].into(),
@@ -354,7 +354,7 @@ pub fn read_vortex_struct_array<'py>(
         .block_on(run(fname, projection, row_filter))
         .map_err(PyVortexError::new)?;
 
-    Bound::new(f.py(), PyArray { inner })
+    Bound::new(f.py(), PyArray::new(inner))
 }
 
 #[pyfunction]
@@ -398,11 +398,11 @@ pub fn write_vortex_struct_array(
     }
 
     let fname = f.to_str()?; // TODO(dk): support file objects
-    let array = &array.borrow().inner;
+    let array = array.borrow().unwrap().clone();
 
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
-        .block_on(run(array, fname))
+        .block_on(run(&array, fname))
         .map_err(PyVortexError::map_err)
 }

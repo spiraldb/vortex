@@ -39,8 +39,8 @@ use crate::error::PyVortexError;
 pub fn compress<'py>(array: &Bound<'py, PyArray>) -> PyResult<Bound<'py, PyArray>> {
     let compressor = SamplingCompressor::default();
     let inner = compressor
-        .compress(&array.borrow().inner, None)
+        .compress(&array.borrow().unwrap(), None)
         .map_err(PyVortexError::new)?
         .into_array();
-    Bound::new(array.py(), PyArray { inner })
+    Bound::new(array.py(), PyArray::new(inner))
 }
