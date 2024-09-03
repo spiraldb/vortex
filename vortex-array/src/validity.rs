@@ -142,29 +142,6 @@ impl Validity {
     }
 }
 
-impl std::ops::BitAnd for &Validity {
-    type Output = Validity;
-
-    fn bitand(self, rhs: Self) -> Self::Output {
-        match (self, rhs) {
-            // Any `AllInvalid` makes the output all invalid values
-            (Validity::AllInvalid, _) | (_, Validity::AllInvalid) => Validity::AllInvalid,
-            // All truthy values on one side, which makes no effect on an `Array` variant
-            (Validity::Array(a), Validity::AllValid)
-            | (Validity::Array(a), Validity::NonNullable)
-            | (Validity::NonNullable, Validity::Array(a))
-            | (Validity::AllValid, Validity::Array(a)) => Validity::Array(a.clone()),
-            (Validity::NonNullable, Validity::NonNullable) => Validity::NonNullable,
-            // Both sides are all valid
-            (Validity::NonNullable, Validity::AllValid)
-            | (Validity::AllValid, Validity::NonNullable)
-            | (Validity::AllValid, Validity::AllValid) => Validity::AllValid,
-            // Here we actually have to do some work
-            (Validity::Array(lhs), Validity::Array(rhs)) => Validity::Array(and(lhs, rhs).unwrap()),
-        }
-    }
-}
-
 impl PartialEq for Validity {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
