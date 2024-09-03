@@ -5,7 +5,6 @@ use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{compress_taxi_data, tpch};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use vortex::array::ChunkedArray;
 use vortex::{IntoArray, IntoCanonical};
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 // use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
@@ -53,19 +52,6 @@ fn vortex_compress_tpch(c: &mut Criterion) {
             .field_by_name("l_comment")
             .unwrap()
     });
-
-    // Print the size of each chunk
-    for (idx, chunk) in ChunkedArray::try_from(comments.clone())
-        .unwrap()
-        .chunks()
-        .enumerate()
-    {
-        println!(
-            "chunk {idx} nbytes = {} len = {}",
-            chunk.nbytes(),
-            chunk.len()
-        );
-    }
 
     group.sample_size(10);
     group.bench_function("compress-default", |b| {
