@@ -1,7 +1,12 @@
+use arrow_array::builder::BooleanBufferBuilder;
+use vortex::array::BoolArray;
 use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
-use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
-use vortex::{Array, IntoArray};
-use vortex_error::VortexResult;
+use vortex::compute::{slice, take, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
+use vortex::validity::{ArrayValidity, Validity};
+use vortex::variants::PrimitiveArrayTrait;
+use vortex::{Array, ArrayDType, IntoArray};
+use vortex_dtype::{DType, PType};
+use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::{match_each_alp_float_ptype, ALPArray, ALPFloat};
@@ -16,6 +21,10 @@ impl ArrayCompute for ALPArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn compare(&self) -> Option<&dyn CompareFn> {
         Some(self)
     }
 }
@@ -68,5 +77,69 @@ impl SliceFn for ALPArray {
             self.patches().map(|p| slice(&p, start, end)).transpose()?,
         )?
         .into_array())
+    }
+}
+
+impl CompareFn for ALPArray {
+    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
+        let mut values = BooleanBufferBuilder::new(self.len());
+        let mut validity = BooleanBufferBuilder::new(self.len());
+        match self.dtype() {
+            DType::Primitive(PType::F32, _) => {
+                let iter = self.f32_iter().ok_or(vortex_err!("Expected DType"))?;
+                let rhs = array
+                    .with_dyn(|a| a.as_primitive_array_unchecked().f32_iter())
+                    .ok_or(vortex_err!(
+                        InvalidArgument:
+                        "Both sides of a `compare` should be of the same DType"
+                    ))?;
+
+                let op_fn = operator.to_fn();
+
+                for (l_batch, r_batch) in iter.zip(rhs) {
+                    for (&l, &r) in l_batch.data().iter().zip(r_batch.data().iter()) {
+                        values.append(op_fn(l, r));
+                    }
+                }
+
+                for idx in 0..self.len() {
+                    validity.append(self.is_valid(idx) & array.with_dyn(|a| a.is_valid(idx)));
+                }
+
+                Ok(BoolArray::from_vec(
+                    values.finish().into_iter().collect::<Vec<_>>(),
+                    Validity::from(validity.finish()),
+                )
+                .into_array())
+            }
+            DType::Primitive(PType::F64, _) => {
+                let iter = self.f64_iter().ok_or(vortex_err!("Expected DType"))?;
+                let rhs = array
+                    .with_dyn(|a| a.as_primitive_array_unchecked().f64_iter())
+                    .ok_or(vortex_err!(
+                        InvalidArgument:
+                        "Both sides of a `compare` should be of the same DType"
+                    ))?;
+
+                let op_fn = operator.to_fn();
+
+                for (l_batch, r_batch) in iter.zip(rhs) {
+                    for (&l, &r) in l_batch.data().iter().zip(r_batch.data().iter()) {
+                        values.append(op_fn(l, r));
+                    }
+                }
+
+                for idx in 0..self.len() {
+                    validity.append(self.is_valid(idx) & array.with_dyn(|a| a.is_valid(idx)));
+                }
+
+                Ok(BoolArray::from_vec(
+                    values.finish().into_iter().collect::<Vec<_>>(),
+                    Validity::from(validity.finish()),
+                )
+                .into_array())
+            }
+            _ => unreachable!(),
+        }
     }
 }

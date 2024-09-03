@@ -70,6 +70,7 @@ impl Operator {
 }
 
 pub trait CompareFn {
+    /// Returns an array with a boolean mask indicating on which elements the `operator` comparison is true, might contain nulls that should be evaluated as `false`.
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;
 }
 

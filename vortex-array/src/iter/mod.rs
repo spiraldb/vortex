@@ -118,6 +118,10 @@ impl<T> Batch<T> {
         self.len() == 0
     }
 
+    pub fn data(&self) -> &[T] {
+        self.data.as_slice()
+    }
+
     /// # Safety
     /// `index` must be smaller than the batch's length.
     #[inline]
