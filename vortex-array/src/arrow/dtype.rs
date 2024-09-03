@@ -46,7 +46,7 @@ impl FromArrowType<SchemaRef> for DType {
                     .map(|f| Self::from_arrow(f.as_ref()))
                     .collect_vec(),
             ),
-            Nullability::NonNullable,
+            Nullability::NonNullable, // Must match From<RecordBatch> for Array
         )
     }
 }

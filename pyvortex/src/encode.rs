@@ -12,12 +12,10 @@ use vortex_dtype::DType;
 
 use crate::array::PyArray;
 use crate::error::PyVortexError;
-use crate::vortex_arrow::map_arrow_err;
 
-/// The main entry point for creating enc arrays from other Python objects.
-///
+// Private, ergo not documented.
 #[pyfunction]
-pub fn encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
+pub fn _encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
     let pa = obj.py().import_bound("pyarrow")?;
     let pa_array = pa.getattr("Array")?;
     let chunked_array = pa.getattr("ChunkedArray")?;
@@ -25,7 +23,8 @@ pub fn encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
 
     if obj.is_instance(&pa_array)? {
         let arrow_array = ArrowArrayData::from_pyarrow_bound(obj).map(make_array)?;
-        let enc_array = Array::from_arrow(arrow_array, false);
+        let is_nullable = arrow_array.is_nullable();
+        let enc_array = Array::from_arrow(arrow_array, is_nullable);
         Bound::new(obj.py(), PyArray::new(enc_array))
     } else if obj.is_instance(&chunked_array)? {
         let chunks: Vec<Bound<PyAny>> = obj.getattr("chunks")?.extract()?;
@@ -54,7 +53,10 @@ pub fn encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| b.map(Array::from).map_err(map_arrow_err))
+            .map(|b| {
+                b.map(Array::from)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))
+            })
             .collect::<PyResult<Vec<_>>>()?;
         Bound::new(
             obj.py(),

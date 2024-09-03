@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::field::Field;
-use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
+use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
@@ -55,14 +55,14 @@ impl StructArray {
 
         let mut children = Vec::with_capacity(fields.len() + 1);
         children.extend(fields);
-        if let Some(v) = validity.into_array() {
+        if let Some(v) = validity.clone().into_array() {
             children.push(v);
         }
 
         Self::try_from_parts(
             DType::Struct(
                 StructDType::new(names, field_dtypes),
-                Nullability::NonNullable,
+                validity.nullability(),
             ),
             length,
             StructMetadata {

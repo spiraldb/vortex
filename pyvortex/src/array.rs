@@ -1,12 +1,17 @@
+use arrow::array::{Array as ArrowArray, ArrayRef};
+use arrow::pyarrow::ToPyArrow;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::{IntoPyDict, PyList};
+use vortex::array::ChunkedArray;
 use vortex::compute::take;
-use vortex::{Array, ArrayDType};
+use vortex::{Array, ArrayDType, IntoCanonical};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
-use crate::vortex_arrow;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
+/// An array of zero or more *rows* each with the same set of *columns*.
 pub struct PyArray {
     inner: Array,
 }
@@ -23,8 +28,65 @@ impl PyArray {
 
 #[pymethods]
 impl PyArray {
+    /// Convert this array to an Arrow array.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`pyarrow.Array`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Round-trip an Arrow array through a Vortex array:
+    ///
+    ///     >>> vortex.encoding.array([1, 2, 3]).to_arrow()
+    ///     <pyarrow.lib.Int64Array object at ...>
+    ///     [
+    ///       1,
+    ///       2,
+    ///       3
+    ///     ]
     fn to_arrow(self_: PyRef<'_, Self>) -> PyResult<Bound<PyAny>> {
-        vortex_arrow::export_array(self_.py(), &self_.inner)
+        // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
+        // NOTE(robert): Return RecordBatchStreamReader always?
+        let py = self_.py();
+        let vortex = &self_.inner;
+
+        if let Ok(chunked_array) = ChunkedArray::try_from(vortex) {
+            let chunks: Vec<ArrayRef> = chunked_array
+                .chunks()
+                .map(|chunk| -> PyResult<ArrayRef> {
+                    Ok(chunk
+                        .into_canonical()
+                        .map_err(PyVortexError::map_err)?
+                        .into_arrow())
+                })
+                .collect::<PyResult<Vec<ArrayRef>>>()?;
+            if chunks.is_empty() {
+                return Err(PyValueError::new_err("No chunks in array"));
+            }
+            let pa_data_type = chunks[0].data_type().clone().to_pyarrow(py)?;
+            let chunks: PyResult<Vec<PyObject>> = chunks
+                .iter()
+                .map(|arrow_array| arrow_array.into_data().to_pyarrow(py))
+                .collect();
+
+            // Combine into a chunked array
+            PyModule::import_bound(py, "pyarrow")?.call_method(
+                "chunked_array",
+                (PyList::new_bound(py, chunks?),),
+                Some(&[("type", pa_data_type)].into_py_dict_bound(py)),
+            )
+        } else {
+            Ok(vortex
+                .clone()
+                .into_canonical()
+                .map_err(PyVortexError::map_err)?
+                .into_arrow()
+                .into_data()
+                .to_pyarrow(py)?
+                .into_bound(py))
+        }
     }
 
     fn __len__(&self) -> usize {
@@ -45,11 +107,66 @@ impl PyArray {
         self.inner.nbytes()
     }
 
+    /// The data type of this array.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`vortex.dtype.DType`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// By default, :func:`vortex.encoding.array` uses the largest available bit-width:
+    ///
+    ///     >>> vortex.encoding.array([1, 2, 3]).dtype
+    ///     int(64, False)
+    ///
+    /// Including a :obj:`None` forces a nullable type:
+    ///
+    ///     >>> vortex.encoding.array([1, None, 2, 3]).dtype
+    ///     int(64, True)
+    ///
+    /// A UTF-8 string array:
+    ///
+    ///     >>> vortex.encoding.array(['hello, ', 'is', 'it', 'me?']).dtype
+    ///     utf8(False)
     #[getter]
     fn dtype(self_: PyRef<Self>) -> PyResult<Py<PyDType>> {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
     }
 
+    /// Filter, permute, and/or repeat elements by their index.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`vortex.encoding.Array`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Keep only the first and third elements:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> indices = vortex.encoding.array([0, 2])
+    ///     >>> a.take(indices).to_arrow()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
+    ///       "a",
+    ///       "c"
+    ///     ]
+    ///
+    /// Permute and repeat the first and second elements:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> indices = vortex.encoding.array([0, 1, 1, 0])
+    ///     >>> a.take(indices).to_arrow()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
+    ///       "a",
+    ///       "b",
+    ///       "b",
+    ///       "a"
+    ///     ]
     fn take<'py>(&self, indices: PyRef<'py, Self>) -> PyResult<Bound<'py, PyArray>> {
         take(&self.inner, indices.unwrap())
             .map_err(PyVortexError::map_err)
