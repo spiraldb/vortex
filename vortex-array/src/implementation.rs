@@ -1,6 +1,6 @@
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
 
 use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, EncodingId, EncodingRef};
 use crate::stats::{ArrayStatistics, Statistics};
@@ -243,9 +243,7 @@ where
                     children: vec![],
                 };
                 array.with_dyn(|a| {
-                    a.accept(&mut visitor).unwrap_or_else(|err| {
-                        panic!("Error while visiting Array View children: {err}")
-                    })
+                    a.accept(&mut visitor).vortex_expect("Error while visiting Array View children")
                 });
                 ArrayData::try_new(
                     encoding,
@@ -256,7 +254,7 @@ where
                     visitor.children.into(),
                     stats,
                 )
-                .unwrap_or_else(|err| panic!("Failed to create ArrayData from Array View: {err}"))
+                .vortex_expect("Failed to create ArrayData from Array View")
             }
         }
     }

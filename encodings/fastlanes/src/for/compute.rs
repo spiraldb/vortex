@@ -47,8 +47,8 @@ impl ScalarAtFn for FoRArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let encoded_scalar =
             scalar_at_unchecked(&self.encoded(), index).reinterpret_cast(self.ptype());
-        let encoded = PrimitiveScalar::try_from(&encoded_scalar).unwrap_or_else(|err| vortex_panic!("Invalid encoded scalar", err));
-        let reference = PrimitiveScalar::try_from(self.reference()).unwrap_or_else(|err| vortex_panic!("Invalid reference scalar", err));
+        let encoded = PrimitiveScalar::try_from(&encoded_scalar).vortex_expect("Invalid encoded scalar");
+        let reference = PrimitiveScalar::try_from(self.reference()).vortex_expect("Invalid reference scalar");
 
         match_each_integer_ptype!(encoded.ptype(), |$P| {
             use num_traits::WrappingAdd;

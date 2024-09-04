@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub use stats::compute_stats;
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability};
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -75,7 +75,7 @@ impl VarBinArray {
     pub fn offsets(&self) -> Array {
         self.array()
             .child(0, &self.metadata().offsets_dtype, self.len() + 1)
-            .unwrap_or_else(|| panic!("Missing offsets in VarBinArray"))
+            .vortex_expect("Missing offsets in VarBinArray")
     }
 
     pub fn first_offset<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -91,7 +91,7 @@ impl VarBinArray {
     pub fn bytes(&self) -> Array {
         self.array()
             .child(1, &DType::BYTES, self.metadata().bytes_len)
-            .unwrap_or_else(|| panic!("Missing bytes in VarBinArray"))
+            .vortex_expect("Missing bytes in VarBinArray")
     }
 
     pub fn validity(&self) -> Validity {

@@ -16,7 +16,7 @@ use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
 use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, NativePType, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::array::{
     BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray,
@@ -212,7 +212,7 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
     let nulls = struct_array
         .logical_validity()
         .to_null_buffer()
-        .unwrap_or_else(|err| vortex_panic!("Failed to get null buffer from logical validity", err));
+        .vortex_expect("Failed to get null buffer from logical validity");
 
     Arc::new(ArrowStructArray::new(arrow_fields, field_arrays, nulls))
 }

@@ -8,7 +8,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::iter::{Accessor, AccessorRef};
 use crate::stats::StatsSet;
@@ -49,13 +49,13 @@ impl PrimitiveArray {
                 PrimitiveMetadata {
                     validity: validity
                         .to_metadata(length)
-                        .unwrap_or_else(|err| panic!("Invalid validity: {err}")),
+                        .vortex_expect("Invalid validity"),
                 },
                 Some(buffer),
                 validity.into_array().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )
-            .unwrap_or_else(|err| panic!("PrimitiveArray::new should never fail! Got: {err}")),
+            .vortex_expect("PrimitiveArray::new should never fail!"),
         }
     }
 
@@ -90,15 +90,18 @@ impl PrimitiveArray {
 
     pub fn ptype(&self) -> PType {
         // TODO(ngates): we can't really cache this anywhere?
-        self.dtype().try_into().unwrap_or_else(|err| {
-            panic!("Failed to convert dtype {} to ptype: {}", self.dtype(), err);
-        })
+        self.dtype()
+            .try_into()
+            .vortex_expect_lazy(|| format!(
+                "Failed to convert dtype {} to ptype",
+                self.dtype()
+            ))
     }
 
     pub fn buffer(&self) -> &Buffer {
         self.array()
             .buffer()
-            .unwrap_or_else(|| panic!("Missing buffer in PrimitiveArray"))
+            .vortex_expect("Missing buffer in PrimitiveArray")
     }
 
     pub fn maybe_null_slice<T: NativePType>(&self) -> &[T] {
@@ -174,7 +177,7 @@ impl PrimitiveArray {
     pub fn into_buffer(self) -> Buffer {
         self.into_array()
             .into_buffer()
-            .unwrap_or_else(|| panic!("PrimitiveArray must have a buffer"))
+            .vortex_expect("PrimitiveArray must have a buffer")
     }
 }
 
@@ -315,7 +318,7 @@ impl AcceptArrayVisitor for PrimitiveArray {
 impl Array {
     pub fn as_primitive(&self) -> PrimitiveArray {
         PrimitiveArray::try_from(self)
-            .unwrap_or_else(|err| panic!("Expected primitive array: {err}"))
+            .vortex_expect("Expected primitive array")
     }
 }
 

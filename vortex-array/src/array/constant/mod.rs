@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::stats::{Stat, StatsSet};
@@ -47,11 +47,11 @@ impl ConstantArray {
             [].into(),
             stats,
         )
-        .unwrap_or_else(|err| {
-            panic!(
-                "Failed to create Constant array of length {} from scalar {}: {}",
-                length, scalar, err
-            );
+        .vortex_expect_lazy(|| {
+            format!(
+                "Failed to create Constant array of length {} from scalar {}",
+                length, scalar
+            )
         })
     }
 

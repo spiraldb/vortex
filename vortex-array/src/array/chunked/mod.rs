@@ -6,7 +6,7 @@ use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -87,16 +87,14 @@ impl ChunkedArray {
     pub fn chunk_offsets(&self) -> Array {
         self.array()
             .child(0, &Self::ENDS_DTYPE, self.nchunks() + 1)
-            .unwrap_or_else(|| panic!("Missing chunk ends in ChunkedArray"))
+            .vortex_expect("Missing chunk ends in ChunkedArray")
     }
 
     pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
         let search_result = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
-            .unwrap_or_else(|err| {
-                panic!("Search sorted failed in find_chunk_idx: {}", err);
-            });
+            .vortex_expect("Search sorted failed in find_chunk_idx");
         let index_chunk = match search_result {
             SearchResult::Found(i) => {
                 if i == self.nchunks() {
@@ -109,9 +107,7 @@ impl ChunkedArray {
         };
         let chunk_start = &scalar_at(&self.chunk_offsets(), index_chunk)
             .and_then(|s| usize::try_from(&s))
-            .unwrap_or_else(|err| {
-                panic!("Failed to find chunk start in find_chunk_idx: {}", err);
-            });
+            .vortex_expect("Failed to find chunk start in find_chunk_idx");
 
         let index_in_chunk = index - chunk_start;
         (index_chunk, index_in_chunk)
@@ -119,13 +115,13 @@ impl ChunkedArray {
 
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| {
-            self.chunk(c).unwrap_or_else(|| {
-                panic!(
+            self.chunk(c).unwrap_or_else(|| 
+                vortex_panic!(
                     "Chunk should {} exist but doesn't (nchunks: {})",
                     c,
                     self.nchunks()
-                );
-            })
+                )
+            )
         })
     }
 
@@ -146,10 +142,8 @@ impl FromIterator<Array> for ChunkedArray {
         let dtype = chunks
             .first()
             .map(|c| c.dtype().clone())
-            .unwrap_or_else(|| panic!("Cannot infer DType from an empty iterator"));
-        Self::try_new(chunks, dtype).unwrap_or_else(|err| {
-            panic!("Failed to create chunked array from iterator: {}", err);
-        })
+            .vortex_expect("Cannot infer DType from an empty iterator");
+        Self::try_new(chunks, dtype).vortex_expect("Failed to create chunked array from iterator")
     }
 }
 
@@ -167,7 +161,7 @@ impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, index: usize) -> bool {
         let (chunk, offset_in_chunk) = self.find_chunk_idx(index);
         self.chunk(chunk)
-            .unwrap_or_else(|| panic!("{}", vortex_err!(OutOfBounds: chunk, 0, self.nchunks())))
+            .unwrap_or_else(|| vortex_panic!(OutOfBounds: chunk, 0, self.nchunks()))
             .with_dyn(|a| a.is_valid(offset_in_chunk))
     }
 

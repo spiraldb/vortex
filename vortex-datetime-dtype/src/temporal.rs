@@ -98,7 +98,7 @@ impl TemporalMetadata {
 }
 
 use vortex_dtype::{ExtDType, ExtMetadata};
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexError, VortexResult};
 
 impl TryFrom<&ExtDType> for TemporalMetadata {
     type Error = VortexError;
@@ -175,7 +175,7 @@ impl From<TemporalMetadata> for ExtMetadata {
                     Some(tz) => {
                         let tz_bytes = tz.as_bytes();
                         let tz_len = u16::try_from(tz_bytes.len())
-                            .unwrap_or_else(|err| panic!("tz did not fit in u16: {err}"));
+                            .unwrap_or_else(|err| vortex_panic!("tz did not fit in u16: {err}"));
                         meta.extend_from_slice(tz_len.to_le_bytes().as_slice());
                         meta.extend_from_slice(tz_bytes);
                     }

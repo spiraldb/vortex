@@ -4,7 +4,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
@@ -112,7 +112,7 @@ where
         let scalars = value.into_iter().map(|v| Self::from(v)).collect_vec();
         let element_dtype = scalars
             .first()
-            .unwrap_or_else(|| panic!("Empty list, could not determine element dtype"))
+            .vortex_expect("Empty list, could not determine element dtype")
             .dtype()
             .clone();
         let dtype = DType::List(Arc::new(element_dtype), NonNullable);

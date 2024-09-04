@@ -94,7 +94,7 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
             if is_temporal_ext_type(ext_dtype.id()) {
                 make_arrow_temporal_dtype(ext_dtype)
             } else {
-                panic!("unsupported extension type \"{}\"", ext_dtype.id())
+                vortex_panic!("unsupported extension type \"{}\"", ext_dtype.id())
             }
         }
     }

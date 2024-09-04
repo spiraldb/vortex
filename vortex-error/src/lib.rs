@@ -14,9 +14,10 @@ impl<T> From<T> for ErrString
 where
     T: Into<Cow<'static, str>>,
 {
+    #[allow(clippy::panic)]
     fn from(msg: T) -> Self {
         if env::var("VORTEX_PANIC_ON_ERR").as_deref().unwrap_or("") == "1" {
-            panic!("{}", msg.into())
+            panic!("{}\nBacktrace:\n{}", msg.into(), Backtrace::capture());
         } else {
             Self(msg.into())
         }
@@ -164,7 +165,7 @@ impl Debug for VortexError {
 pub trait VortexPanic {
     fn panic(self) -> !;
 
-    fn panic_with_context(self, msg: &str) -> !;
+    fn panic_with_context<T: Into<ErrString>>(self, msg: T) -> !;
 }
 
 impl VortexPanic for VortexError {
@@ -175,8 +176,8 @@ impl VortexPanic for VortexError {
     }
 
     #[inline(always)]
-    fn panic_with_context(self, msg: &str) -> ! {
-        VortexError::Context(msg.to_string().into(), Box::new(self)).panic()
+    fn panic_with_context<T: Into<ErrString>>(self, msg: T) -> ! {
+        VortexError::Context(msg.into(), Box::new(self)).panic()
     }
 }
 
@@ -199,6 +200,8 @@ pub trait VortexExpect {
     type Output;
 
     fn vortex_expect(self, msg: &str) -> Self::Output;
+
+    fn vortex_expect_lazy<F: FnOnce() -> String>(self, op: F) -> Self::Output;
 }
 
 impl<T> VortexExpect for VortexResult<T> {
@@ -206,7 +209,12 @@ impl<T> VortexExpect for VortexResult<T> {
 
     #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
-        self.unwrap_or_else(|e| e.panic_with_context(msg))
+        self.unwrap_or_else(|e| e.panic_with_context(msg.to_string()))
+    }
+
+    #[inline(always)]
+    fn vortex_expect_lazy<F: FnOnce() -> String>(self, op: F) -> Self::Output {
+        self.unwrap_or_else(|e| e.panic_with_context(op()))
     }
 }
 
@@ -216,6 +224,11 @@ impl<T> VortexExpect for Option<T> {
     #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
         self.unwrap_or_else(|| VortexError::InvalidArgument(msg.to_string().into(), Backtrace::capture()).panic())
+    }
+
+    #[inline(always)]
+    fn vortex_expect_lazy<F: FnOnce() -> String>(self, op: F) -> Self::Output {
+        self.unwrap_or_else(|| VortexError::InvalidArgument(op().into(), Backtrace::capture()).panic())
     }
 }
 
@@ -276,15 +289,26 @@ macro_rules! vortex_bail {
 
 #[macro_export]
 macro_rules! vortex_panic {
+    (OutOfBounds: $idx:expr, $start:expr, $stop:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(OutOfBounds: $idx, $start, $stop))
+    }};
+    (NotImplemented: $func:expr, $by_whom:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(NotImplemented: $func, $by_whom))
+    }};
+    (MismatchedTypes: $expected:literal, $actual:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(MismatchedTypes: $expected, $actual))
+    }};
+    (MismatchedTypes: $expected:expr, $actual:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(MismatchedTypes: $expected, $actual))
+    }};
+    (Context: $msg:literal, $err:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(Context: $msg, $err))
+    }};
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
         $crate::vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
-    };
-    ($msg:literal, $err:expr) => {{
-        use $crate::VortexPanic;
-        ($err).panic_with_context($msg)
-    }};
-    ($msg:literal) => {
-        $crate::vortex_panic!($crate::vortex_err!($msg))
+    }; 
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::vortex_panic!($crate::vortex_err!($fmt, $($arg),*))
     };
     ($err:expr) => {{
         use $crate::VortexPanic;

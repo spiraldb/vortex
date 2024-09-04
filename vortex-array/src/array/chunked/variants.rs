@@ -1,4 +1,5 @@
 use vortex_dtype::DType;
+use vortex_error::VortexExpect as _;
 
 use crate::array::chunked::ChunkedArray;
 use crate::variants::{
@@ -70,12 +71,10 @@ impl StructArrayTrait for ChunkedArray {
 
         let projected_dtype = self.dtype().as_struct().and_then(|s| s.dtypes().get(idx))?;
         let chunked = ChunkedArray::try_new(chunks, projected_dtype.clone())
-            .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to create new chunked array with dtype {}: {}",
-                    projected_dtype, err
-                )
-            })
+            .vortex_expect_lazy(|| format!(
+                "Failed to create new chunked array with dtype {}",
+                projected_dtype
+            ))
             .into_array();
         Some(chunked)
     }
