@@ -1,4 +1,3 @@
-from typing import Union, Optional
 
 import pyarrow
 
@@ -10,7 +9,7 @@ Array = _encoding.Array
 compress = _encoding.compress
 
 
-def _Array_to_pandas(self: _encoding.Array, *, name: Optional[str] = None, flatten: bool = False):
+def _Array_to_pandas(self: _encoding.Array, *, name: str | None = None, flatten: bool = False):
     """Construct a Pandas dataframe from this Vortex array.
 
     Parameters
@@ -112,7 +111,7 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True):
 Array.to_numpy = _Array_to_numpy
 
 
-def array(obj: Union[pyarrow.Array, list]) -> Array:
+def array(obj: pyarrow.Array | list) -> Array:
     """The main entry point for creating Vortex arrays from other Python objects.
 
     This function is also available as ``vortex.array``.
