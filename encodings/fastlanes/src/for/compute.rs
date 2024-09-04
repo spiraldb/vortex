@@ -97,11 +97,9 @@ where
         + Into<PValue>,
 {
     let min: T = array.reference().try_into()?;
-    let shifted_min = min >> array.shift();
-    let unwrapped_value: T = value.cast(array.dtype())?.as_ref().try_into()?;
-    let shifted_value: T = unwrapped_value >> array.shift();
+    let primitive_value: T = value.cast(array.dtype())?.as_ref().try_into()?;
     // Make sure that smaller values are still smaller and not larger than (which they would be after wrapping_sub)
-    if shifted_value < shifted_min {
+    if primitive_value < min {
         return Ok(SearchResult::NotFound(0));
     }
 
@@ -110,9 +108,9 @@ where
     //
     // For values that are lossy compressed we know they wouldn't be found in the array
     // in order to find index they would be inserted at we search for next value in the compressed space
-    let mut translated_value = shifted_value.wrapping_sub(&shifted_min);
+    let mut translated_value = primitive_value.wrapping_sub(&min) >> array.shift();
     let mut lossy_compressed = false;
-    if (translated_value << array.shift()).wrapping_add(&min) != unwrapped_value {
+    if (translated_value << array.shift()).wrapping_add(&min) != primitive_value {
         translated_value += T::from(1).unwrap();
         lossy_compressed = true;
     }

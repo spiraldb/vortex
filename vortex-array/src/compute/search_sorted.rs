@@ -45,6 +45,9 @@ impl SearchResult {
     }
 }
 
+/// Searches for value assuming the array is sorted.
+///
+/// For nullable arrays we assume that the nulls are sorted last, i.e. they're the greatest value
 pub trait SearchSortedFn {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult>;
 }
