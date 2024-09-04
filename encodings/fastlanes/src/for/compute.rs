@@ -1,7 +1,7 @@
-use std::ops::Shr;
+use std::ops::{AddAssign, Shl, Shr};
 
-use num_traits::WrappingSub;
-use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
+use num_traits::{WrappingAdd, WrappingSub};
+use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{
     search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
     SliceFn, TakeFn,
@@ -90,7 +90,10 @@ where
     T: NativePType
         + for<'a> TryFrom<&'a Scalar, Error = VortexError>
         + Shr<u8, Output = T>
+        + Shl<u8, Output = T>
         + WrappingSub
+        + WrappingAdd
+        + AddAssign
         + Into<PValue>,
 {
     let min: T = array.reference().try_into()?;
@@ -102,28 +105,32 @@ where
         return Ok(SearchResult::NotFound(0));
     }
 
-    let translated_scalar = Scalar::primitive(
-        shifted_value.wrapping_sub(&shifted_min),
-        value.dtype().nullability(),
-    )
-    .reinterpret_cast(array.ptype().to_unsigned());
-
     // When the values in the array are shifted, not all values in the domain are representable in the compressed
-    // space. Multiple different search values can translate to same value in the compressed space. In order to
-    // ensure that we found a value we were looking for we need to check if the value at the found index is equal
-    // to the searched value.
-    match search_sorted(&array.encoded(), translated_scalar, side)? {
-        SearchResult::Found(i) => {
-            let found_scalar = scalar_at(array.array(), i)?;
-            if &found_scalar == value {
-                Ok(SearchResult::Found(i))
-            } else {
-                // This would only ever be +1 since the value originally looked for is larger than the found (translated) value
-                Ok(SearchResult::NotFound(i + 1))
-            }
-        }
-        SearchResult::NotFound(i) => Ok(SearchResult::NotFound(i)),
+    // space. Multiple different search values can translate to same value in the compressed space.
+    //
+    // For values that are lossy compressed we know they wouldn't be found in the array
+    // in order to find index they would be inserted at we search for next value in the compressed space
+    let mut translated_value = shifted_value.wrapping_sub(&shifted_min);
+    let mut lossy_compressed = false;
+    if (translated_value << array.shift()).wrapping_add(&min) != unwrapped_value {
+        translated_value += T::from(1).unwrap();
+        lossy_compressed = true;
     }
+
+    let translated_scalar = Scalar::primitive(translated_value, value.dtype().nullability())
+        .reinterpret_cast(array.ptype().to_unsigned());
+    Ok(
+        match search_sorted(&array.encoded(), translated_scalar, side)? {
+            SearchResult::Found(i) => {
+                if lossy_compressed {
+                    SearchResult::NotFound(i)
+                } else {
+                    SearchResult::Found(i)
+                }
+            }
+            s @ SearchResult::NotFound(_) => s,
+        },
+    )
 }
 
 #[cfg(test)]
@@ -179,6 +186,23 @@ mod test {
         assert_eq!(
             search_sorted(&for_arr, 115, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(2)
+        );
+    }
+
+    #[test]
+    fn search_with_shift_notfound_repeated() {
+        let for_arr = for_compress(&PrimitiveArray::from(vec![62, 62, 114, 114])).unwrap();
+        assert_eq!(
+            search_sorted(&for_arr, 63, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&for_arr, 113, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&for_arr, 115, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(4)
         );
     }
 }
