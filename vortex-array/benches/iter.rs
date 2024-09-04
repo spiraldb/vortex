@@ -66,9 +66,7 @@ fn vortex_binary_add(c: &mut Criterion) {
     c.bench_function("vortex_binary_add", |b| {
         b.iter_batched(
             || (data.clone()),
-            |data| {
-                data.unary(|v: u32| v + 1).unwrap();
-            },
+            |data| data.unary(|v: u32| v + 1).unwrap(),
             BatchSize::SmallInput,
         )
     });
