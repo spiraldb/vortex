@@ -34,8 +34,9 @@ impl From<Scalar> for OtherValue {
 pub trait BinaryFn {
     fn binary<
         I: NativePType + TryFrom<Scalar, Error = VortexError>,
+        U: NativePType + TryFrom<Scalar, Error = VortexError>,
         O: NativePType,
-        F: Fn(I, I) -> O,
+        F: Fn(I, U) -> O,
     >(
         &self,
         other: OtherValue,

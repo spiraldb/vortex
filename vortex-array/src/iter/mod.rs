@@ -128,7 +128,7 @@ impl<T> Batch<T> {
     pub fn as_<N: NativePType>(self) -> Batch<N> {
         assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<N>());
         Batch {
-            data: unsafe { std::mem::transmute(self.data) },
+            data: unsafe { std::mem::transmute::<Vec<T>, Vec<N>>(self.data) },
             validity: self.validity,
         }
     }

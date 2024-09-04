@@ -340,8 +340,9 @@ impl UnaryFn for PrimitiveArray {
 impl BinaryFn for PrimitiveArray {
     fn binary<
         I: NativePType + TryFrom<Scalar, Error = VortexError>,
+        U: NativePType + TryFrom<Scalar, Error = VortexError>,
         O: NativePType,
-        F: Fn(I, I) -> O,
+        F: Fn(I, U) -> O,
     >(
         &self,
         other: OtherValue,
@@ -361,14 +362,14 @@ impl BinaryFn for PrimitiveArray {
 
         let validity = match other {
             OtherValue::Scalar(ref s) => {
-                let s = I::try_from(s.clone())?;
+                let s = U::try_from(s.clone())?;
                 for v in lhs {
                     output.push(binary_fn(*v, s));
                 }
                 self.validity()
             }
             OtherValue::Array(ref a) => {
-                let rhs_iter = flat_array_iter::<I>(a);
+                let rhs_iter = flat_array_iter::<U>(a);
                 let mut start_idx = 0;
                 for batch in rhs_iter {
                     let batch_len = batch.len();
@@ -377,7 +378,7 @@ impl BinaryFn for PrimitiveArray {
                         batch,
                         &binary_fn,
                         start_idx,
-                        &mut output,
+                        output.as_mut_slice(),
                     );
                     start_idx += batch_len;
                 }
@@ -391,18 +392,18 @@ impl BinaryFn for PrimitiveArray {
     }
 }
 
-fn process_batch<I: NativePType, O: NativePType, F: Fn(I, I) -> O>(
+fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> O>(
     lhs: &[I],
-    batch: Batch<I>,
+    batch: Batch<U>,
     f: F,
     start_idx: usize,
-    output: &mut Vec<O>,
+    output: &mut [O],
 ) {
     assert_eq!(batch.len(), lhs.len());
 
     if batch.len() == 1024 {
         let lhs: [I; 1024] = lhs.try_into().unwrap();
-        let rhs: [I; 1024] = batch.data().try_into().unwrap();
+        let rhs: [U; 1024] = batch.data().try_into().unwrap();
 
         for idx in 0_usize..1024 {
             unsafe {
