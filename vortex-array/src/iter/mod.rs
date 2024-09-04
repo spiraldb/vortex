@@ -11,7 +11,7 @@ use crate::Array;
 mod adapter;
 mod ext;
 
-pub const BATCH_SIZE: usize = 1024;
+pub const ITER_BATCH_SIZE: usize = 1024;
 
 /// A stream of array chunks along with a DType.
 /// Analogous to Arrow's RecordBatchReader.
@@ -24,7 +24,7 @@ pub type AccessorRef<T> = Arc<dyn Accessor<T>>;
 /// Define the basic behavior required for batched iterators
 pub trait Accessor<T>: Send + Sync {
     fn batch_size(&self, start_idx: usize) -> usize {
-        usize::min(BATCH_SIZE, self.array_len() - start_idx)
+        usize::min(ITER_BATCH_SIZE, self.array_len() - start_idx)
     }
     fn array_len(&self) -> usize;
     fn is_valid(&self, index: usize) -> bool;

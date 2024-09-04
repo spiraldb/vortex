@@ -12,7 +12,7 @@ use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::elementwise::{flat_array_iter, BinaryFn, UnaryFn};
-use crate::iter::{Accessor, AccessorRef, Batch};
+use crate::iter::{Accessor, AccessorRef, Batch, ITER_BATCH_SIZE};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -398,11 +398,11 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
 ) {
     assert_eq!(batch.len(), lhs.len());
 
-    if batch.len() == 1024 {
-        let lhs: [I; 1024] = lhs.try_into().unwrap();
-        let rhs: [U; 1024] = batch.data().try_into().unwrap();
+    if batch.len() == ITER_BATCH_SIZE {
+        let lhs: [I; ITER_BATCH_SIZE] = lhs.try_into().unwrap();
+        let rhs: [U; ITER_BATCH_SIZE] = batch.data().try_into().unwrap();
 
-        for idx in 0_usize..1024 {
+        for idx in 0_usize..ITER_BATCH_SIZE {
             unsafe {
                 *output.get_unchecked_mut(idx + start_idx) =
                     MaybeUninit::new(f(lhs[idx], rhs[idx]));
