@@ -323,12 +323,12 @@ impl UnaryFn for PrimitiveArray {
         F: Fn(I) -> O,
     >(
         &self,
-        f: F,
+        unary_fn: F,
     ) -> VortexResult<Array> {
         let mut output = Vec::with_capacity(self.len());
 
         for v in self.maybe_null_slice::<I>() {
-            output.push(f(*v));
+            output.push(unary_fn(*v));
         }
 
         Ok(PrimitiveArray::from_vec(output, self.validity()).into_array())
@@ -343,7 +343,7 @@ impl BinaryFn for PrimitiveArray {
     >(
         &self,
         other: OtherValue,
-        f: F,
+        binary_fn: F,
     ) -> VortexResult<Array> {
         if !self.dtype().eq_ignore_nullability(other.dtype()) {
             vortex_bail!(MismatchedTypes: self.dtype(), other.dtype());
@@ -360,14 +360,14 @@ impl BinaryFn for PrimitiveArray {
             OtherValue::Scalar(ref s) => {
                 let s = I::try_from(s.clone())?;
                 for v in lhs {
-                    output.push(f(*v, s));
+                    output.push(binary_fn(*v, s));
                 }
                 self.validity()
             }
             OtherValue::Array(ref a) => {
                 let rhs_iter = flat_array_iter::<I>(a);
                 for (l, r) in lhs.iter().copied().zip(rhs_iter) {
-                    output.push(f(l, r));
+                    output.push(binary_fn(l, r));
                 }
 
                 let rhs = a.with_dyn(|a| a.logical_validity().into_validity());

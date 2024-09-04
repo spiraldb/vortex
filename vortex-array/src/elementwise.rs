@@ -38,14 +38,14 @@ pub trait BinaryFn {
     >(
         &self,
         other: OtherValue,
-        f: F,
+        binary_fn: F,
     ) -> VortexResult<Array>;
 }
 
 pub trait UnaryFn {
     fn unary<I: NativePType + TryFrom<Scalar, Error = VortexError>, O: NativePType, F: Fn(I) -> O>(
         &self,
-        f: F,
+        unary_fn: F,
     ) -> VortexResult<Array>;
 }
 
