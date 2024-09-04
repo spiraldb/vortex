@@ -168,13 +168,30 @@ pub trait VortexPanic {
 }
 
 impl VortexPanic for VortexError {
+    #[inline(always)]
     #[allow(clippy::panic)]
     fn panic(self) -> ! {
         panic!("{}", self)
     }
 
+    #[inline(always)]
     fn panic_with_context(self, msg: &str) -> ! {
         VortexError::Context(msg.to_string().into(), Box::new(self)).panic()
+    }
+}
+
+pub trait VortexUnwrap {
+    type Output;
+
+    fn vortex_unwrap(self) -> Self::Output;
+}
+
+impl<T> VortexUnwrap for VortexResult<T> {
+    type Output = T;
+
+    #[inline(always)]
+    fn vortex_unwrap(self) -> Self::Output {
+        self.unwrap_or_else(|err| err.panic())
     }
 }
 
@@ -187,6 +204,7 @@ pub trait VortexExpect {
 impl<T> VortexExpect for VortexResult<T> {
     type Output = T;
 
+    #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
         self.unwrap_or_else(|e| e.panic_with_context(msg))
     }
@@ -195,6 +213,7 @@ impl<T> VortexExpect for VortexResult<T> {
 impl<T> VortexExpect for Option<T> {
     type Output = T;
 
+    #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
         self.unwrap_or_else(|| VortexError::InvalidArgument(msg.to_string().into(), Backtrace::capture()).panic())
     }
@@ -226,10 +245,10 @@ macro_rules! vortex_err {
             $crate::VortexError::MismatchedTypes($expected.to_string().into(), $actual.to_string().into(), Backtrace::capture())
         )
     }};
-    (Context: $fmt:literal, $err:expr $(,)?) => {{
+    (Context: $msg:literal, $err:expr) => {{
         use std::backtrace::Backtrace;
         $crate::__private::must_use(
-            $crate::VortexError::Context($fmt.into(), Box::new($err))
+            $crate::VortexError::Context($msg.into(), Box::new($err))
         )
     }};
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {{
@@ -262,7 +281,7 @@ macro_rules! vortex_panic {
     };
     ($msg:literal, $err:expr) => {{
         use $crate::VortexPanic;
-        ($err).context_panic($msg)
+        ($err).panic_with_context($msg)
     }};
     ($msg:literal) => {
         $crate::vortex_panic!($crate::vortex_err!($msg))
