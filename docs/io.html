@@ -41,6 +41,7 @@
     <script>DOCUMENTATION_OPTIONS.pagename = 'io';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Row Filter Expressions" href="expr.html" />
     <link rel="prev" title="Array Data Types" href="dtype.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
@@ -151,6 +152,13 @@
   </a>
 </li>
 
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="expr.html">
+    Row Filter Expressions
+  </a>
+</li>
+
   </ul>
 </nav></div>
       
@@ -255,6 +263,13 @@ document.write(`
   </a>
 </li>
 
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="expr.html">
+    Row Filter Expressions
+  </a>
+</li>
+
   </ul>
 </nav></div>
           
@@ -355,7 +370,7 @@ document.write(`
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
 <p>Read an array with a structured column and nulls at multiple levels and in multiple columns.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Angela&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
@@ -437,7 +452,7 @@ document.write(`
 </pre></div>
 </div>
 <p>TODO(DK): Top-level nullness does not work.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Angela&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
@@ -471,7 +486,7 @@ document.write(`
 <section id="id2">
 <h2>Examples<a class="headerlink" href="#id2" title="Link to this heading">#</a></h2>
 <p>Write the array <cite>a</cite> to the local file <cite>a.vortex</cite>.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encode</span><span class="p">([</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">},</span>
@@ -504,6 +519,15 @@ document.write(`
         <p class="prev-next-subtitle">previous</p>
         <p class="prev-next-title">Array Data Types</p>
       </div>
+    </a>
+    <a class="right-next"
+       href="expr.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Row Filter Expressions</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
     </a>
 </div>
                 </footer>
