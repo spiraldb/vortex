@@ -66,7 +66,7 @@ impl UnaryFn for PrimitiveArray {
             output.push(f(*v));
         }
 
-        Ok(PrimitiveArray::from_vec(output, Validity::AllValid).into_array())
+        Ok(PrimitiveArray::from_vec(output, self.validity()).into_array())
     }
 }
 
