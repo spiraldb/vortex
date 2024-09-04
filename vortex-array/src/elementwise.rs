@@ -192,13 +192,16 @@ mod tests {
         let input = PrimitiveArray::from_vec(vec![2u32, 2, 2, 2], Validity::AllValid);
 
         let o = input
-            .binary(Scalar::try_from(2u32).unwrap().into(), |l: u32, r: u32| {
-                if l == r {
-                    1_u8
-                } else {
-                    0_u8
-                }
-            })
+            .binary(
+                Scalar::from(2u32).into(),
+                |l: u32, r: u32| {
+                    if l == r {
+                        1_u8
+                    } else {
+                        0_u8
+                    }
+                },
+            )
             .unwrap();
 
         let output_iter = o
