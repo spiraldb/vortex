@@ -44,6 +44,10 @@ jobs:
         run: rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
 
+      - name: Python doctest
+        run: rye run sphinx-build -M doctest . _build
+        working-directory: pyvortex/docs
+
       - name: License Check
         run: cargo install --locked cargo-deny && cargo deny check
       - uses: rustsec/audit-check@v1.4.1
