@@ -8,8 +8,10 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_scalar::Scalar;
 
+use crate::elementwise::{flat_array_iter, BinaryFn, OtherValue, UnaryFn};
 use crate::iter::{Accessor, AccessorRef};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -314,6 +316,69 @@ impl Array {
     }
 }
 
+impl UnaryFn for PrimitiveArray {
+    fn unary<
+        I: NativePType + TryFrom<Scalar, Error = VortexError>,
+        O: NativePType,
+        F: Fn(I) -> O,
+    >(
+        &self,
+        f: F,
+    ) -> VortexResult<Array> {
+        let mut output = Vec::with_capacity(self.len());
+
+        for v in self.maybe_null_slice::<I>() {
+            output.push(f(*v));
+        }
+
+        Ok(PrimitiveArray::from_vec(output, self.validity()).into_array())
+    }
+}
+
+impl BinaryFn for PrimitiveArray {
+    fn binary<
+        I: NativePType + TryFrom<Scalar, Error = VortexError>,
+        O: NativePType,
+        F: Fn(I, I) -> O,
+    >(
+        &self,
+        other: OtherValue,
+        f: F,
+    ) -> VortexResult<Array> {
+        if !self.dtype().eq_ignore_nullability(other.dtype()) {
+            vortex_bail!(MismatchedTypes: self.dtype(), other.dtype());
+        }
+
+        if self.dtype().as_ptype() != Some(&I::PTYPE) {
+            vortex_bail!(MismatchedTypes: self.dtype(), I::PTYPE);
+        }
+
+        let lhs = self.maybe_null_slice::<I>();
+        let mut output = Vec::with_capacity(self.len());
+
+        let validity = match other {
+            OtherValue::Scalar(ref s) => {
+                let s = I::try_from(s.clone())?;
+                for v in lhs {
+                    output.push(f(*v, s));
+                }
+                self.validity()
+            }
+            OtherValue::Array(ref a) => {
+                let rhs_iter = flat_array_iter::<I>(a);
+                for (l, r) in lhs.iter().copied().zip(rhs_iter) {
+                    output.push(f(l, r));
+                }
+
+                let rhs = a.with_dyn(|a| a.logical_validity().into_validity());
+                self.validity().and(rhs)?
+            }
+        };
+
+        Ok(PrimitiveArray::from_vec(output, validity).into_array())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -345,6 +410,33 @@ mod tests {
 
         for (idx, v) in iter.flatten().enumerate() {
             assert_eq!(idx as u32, v.unwrap());
+        }
+    }
+
+    #[test]
+    fn elementwise_example() {
+        let input = PrimitiveArray::from_vec(vec![2u32, 2, 2, 2], Validity::AllValid);
+
+        let o = input
+            .binary(
+                Scalar::from(2u32).into(),
+                |l: u32, r: u32| {
+                    if l == r {
+                        1_u8
+                    } else {
+                        0_u8
+                    }
+                },
+            )
+            .unwrap();
+
+        let output_iter = o
+            .with_dyn(|a| a.as_primitive_array_unchecked().u8_iter())
+            .unwrap()
+            .flatten();
+
+        for v in output_iter {
+            assert_eq!(v.unwrap(), 1);
         }
     }
 }
