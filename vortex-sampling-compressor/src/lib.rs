@@ -33,17 +33,18 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 10] = [
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 11] = [
         &ALPCompressor as CompressorRef,
         &BitPackedCompressor,
+        &DateTimePartsCompressor,
+        &DEFAULT_RUN_END_COMPRESSOR,
         // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
         // &DeltaCompressor,
         &DictCompressor,
         &FoRCompressor,
-        &DateTimePartsCompressor,
+        &FSSTCompressor,
         &RoaringBoolCompressor,
         &RoaringIntCompressor,
-        &DEFAULT_RUN_END_COMPRESSOR,
         &SparseCompressor,
         &ZigZagCompressor,
     ];
@@ -100,25 +101,7 @@ impl CompressionStrategy for SamplingCompressor<'_> {
 
 impl Default for SamplingCompressor<'_> {
     fn default() -> Self {
-<<<<<<< HEAD
-        Self::new(HashSet::from([
-            &ALPCompressor as CompressorRef,
-            &BitPackedCompressor,
-            // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
-            // &DeltaCompressor,
-            &DictCompressor,
-            &FSSTCompressor,
-            &FoRCompressor,
-            &DateTimePartsCompressor,
-            &RoaringBoolCompressor,
-            &RoaringIntCompressor,
-            &DEFAULT_RUN_END_COMPRESSOR,
-            &SparseCompressor,
-            &ZigZagCompressor,
-        ]))
-=======
         Self::new(HashSet::from(*ALL_COMPRESSORS))
->>>>>>> d45c60ac (Add fuzzing for Take and SearchSorted functions)
     }
 }
 
