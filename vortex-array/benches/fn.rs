@@ -35,7 +35,7 @@ fn vortex_binary_add(c: &mut Criterion) {
     c.bench_function("vortex_binary_add", |b| {
         b.iter_batched(
             || (lhs.clone(), rhs.clone()),
-            |(lhs, rhs)| lhs.binary(rhs.into(), |l: u32, r: u32| l + r),
+            |(lhs, rhs)| lhs.binary(rhs, |l: u32, r: u32| l + r),
             BatchSize::SmallInput,
         )
     });

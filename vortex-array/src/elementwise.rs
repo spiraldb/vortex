@@ -1,5 +1,5 @@
 use vortex_dtype::{DType, NativePType, PType};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::iter::Batch;
@@ -32,12 +32,7 @@ impl From<Scalar> for OtherValue {
 }
 
 pub trait BinaryFn {
-    fn binary<
-        I: NativePType + TryFrom<Scalar, Error = VortexError>,
-        U: NativePType + TryFrom<Scalar, Error = VortexError>,
-        O: NativePType,
-        F: Fn(I, U) -> O,
-    >(
+    fn binary<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> O>(
         &self,
         rhs: Array,
         binary_fn: F,
@@ -45,7 +40,7 @@ pub trait BinaryFn {
 }
 
 pub trait UnaryFn {
-    fn unary<I: NativePType + TryFrom<Scalar, Error = VortexError>, O: NativePType, F: Fn(I) -> O>(
+    fn unary<I: NativePType, O: NativePType, F: Fn(I) -> O>(
         &self,
         unary_fn: F,
     ) -> VortexResult<Array>;
