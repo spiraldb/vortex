@@ -39,7 +39,7 @@ pub trait BinaryFn {
         F: Fn(I, U) -> O,
     >(
         &self,
-        other: OtherValue,
+        rhs: Array,
         binary_fn: F,
     ) -> VortexResult<Array>;
 }
