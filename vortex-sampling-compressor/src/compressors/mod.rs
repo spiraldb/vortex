@@ -1,6 +1,8 @@
+use std::any::Any;
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 use vortex::encoding::EncodingRef;
 use vortex::Array;
@@ -15,6 +17,7 @@ pub mod date_time_parts;
 pub mod delta;
 pub mod dict;
 pub mod r#for;
+pub mod fsst;
 pub mod roaring_bool;
 pub mod roaring_int;
 pub mod runend;
@@ -54,10 +57,25 @@ impl Hash for dyn EncodingCompressor + '_ {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct CompressionTree<'a> {
     compressor: &'a dyn EncodingCompressor,
     children: Vec<Option<CompressionTree<'a>>>,
+    metadata: Option<Arc<dyn EncoderMetadata>>,
+}
+
+impl Debug for CompressionTree<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{self}")
+    }
+}
+
+/// Metadata that can optionally be attached to a compression tree.
+///
+/// This enables codecs to cache trained parameters from the sampling runs to reuse for
+/// the large run.
+pub trait EncoderMetadata {
+    fn as_any(&self) -> &dyn Any;
 }
 
 impl Display for CompressionTree<'_> {
@@ -78,6 +96,23 @@ impl<'a> CompressionTree<'a> {
         Self {
             compressor,
             children,
+            metadata: None,
+        }
+    }
+
+    /// Save a piece of metadata as part of the compression tree.
+    ///
+    /// This can be specific encoder parameters that were discovered at sample time
+    /// that should be reused when compressing the full array.
+    pub(crate) fn new_with_metadata(
+        compressor: &'a dyn EncodingCompressor,
+        children: Vec<Option<CompressionTree<'a>>>,
+        metadata: Arc<dyn EncoderMetadata>,
+    ) -> Self {
+        Self {
+            compressor,
+            children,
+            metadata: Some(metadata),
         }
     }
 
@@ -106,6 +141,16 @@ impl<'a> CompressionTree<'a> {
         self.compressor
             .can_compress(array)
             .map(|c| c.compress(array, Some(self.clone()), ctx.for_compressor(c)))
+    }
+
+    /// Access the saved opaque metadata.
+    ///
+    /// This will consume the owned metadata, giving the caller ownership of
+    /// the Box.
+    ///
+    /// The value of `T` will almost always be `EncodingCompressor`-specific.
+    pub fn metadata(&mut self) -> Option<Arc<dyn EncoderMetadata>> {
+        std::mem::take(&mut self.metadata)
     }
 }
 

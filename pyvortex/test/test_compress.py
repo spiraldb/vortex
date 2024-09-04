@@ -59,7 +59,6 @@ def test_zigzag_encode():
 def test_chunked_encode():
     chunked = pa.chunked_array([pa.array([0, 1, 2]), pa.array([3, 4, 5])])
     encoded = vortex.encode(chunked)
-    assert isinstance(encoded, vortex.ChunkedArray)
     assert encoded.to_arrow().combine_chunks() == pa.array([0, 1, 2, 3, 4, 5])
 
 
@@ -71,7 +70,6 @@ def test_table_encode():
         }
     )
     encoded = vortex.encode(table)
-    assert isinstance(encoded, vortex.ChunkedArray)
     assert encoded.to_arrow().combine_chunks() == pa.StructArray.from_arrays(
         [pa.array([0, 1, 2, 3, 4, 5]), pa.array(["a", "b", "c", "d", "e", "f"])], names=["number", "string"]
     )

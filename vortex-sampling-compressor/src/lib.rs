@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
+use compressors::fsst::FSSTCompressor;
 use log::{debug, info, warn};
 use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
@@ -30,8 +31,6 @@ mod sampling;
 
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
-    #[allow(dead_code)]
-    block_size: u32,
     sample_size: u16,
     sample_count: u16,
     max_depth: u8,
@@ -39,9 +38,7 @@ pub struct CompressConfig {
 
 impl Default for CompressConfig {
     fn default() -> Self {
-        // TODO(ngates): we should ensure that sample_size * sample_count <= block_size
         Self {
-            block_size: 65_536,
             // Sample length should always be multiple of 1024
             sample_size: 128,
             sample_count: 8,
@@ -89,6 +86,7 @@ impl Default for SamplingCompressor<'_> {
             // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
             // &DeltaCompressor,
             &DictCompressor,
+            &FSSTCompressor,
             &FoRCompressor,
             &DateTimePartsCompressor,
             &RoaringBoolCompressor,
