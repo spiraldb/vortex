@@ -154,7 +154,11 @@ pub enum VortexError {
     ),
 }
 
-pub type VortexResult<T> = Result<T, VortexError>;
+impl VortexError {
+    pub fn with_context<T: Into<ErrString>>(self, msg: T) -> Self {
+        VortexError::Context(msg.into(), Box::new(self))
+    }
+}
 
 impl Debug for VortexError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
@@ -162,10 +166,10 @@ impl Debug for VortexError {
     }
 }
 
+pub type VortexResult<T> = Result<T, VortexError>;
+
 pub trait VortexPanic {
     fn panic(self) -> !;
-
-    fn panic_with_context<T: Into<ErrString>>(self, msg: T) -> !;
 }
 
 impl VortexPanic for VortexError {
@@ -173,11 +177,6 @@ impl VortexPanic for VortexError {
     #[allow(clippy::panic)]
     fn panic(self) -> ! {
         panic!("{}", self)
-    }
-
-    #[inline(always)]
-    fn panic_with_context<T: Into<ErrString>>(self, msg: T) -> ! {
-        VortexError::Context(msg.into(), Box::new(self)).panic()
     }
 }
 
@@ -200,8 +199,6 @@ pub trait VortexExpect {
     type Output;
 
     fn vortex_expect(self, msg: &str) -> Self::Output;
-
-    fn vortex_expect_lazy<F: FnOnce() -> String>(self, op: F) -> Self::Output;
 }
 
 impl<T> VortexExpect for VortexResult<T> {
@@ -209,12 +206,7 @@ impl<T> VortexExpect for VortexResult<T> {
 
     #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
-        self.unwrap_or_else(|e| e.panic_with_context(msg.to_string()))
-    }
-
-    #[inline(always)]
-    fn vortex_expect_lazy<F: FnOnce() -> String>(self, op: F) -> Self::Output {
-        self.unwrap_or_else(|e| e.panic_with_context(op()))
+        self.unwrap_or_else(|e| e.with_context(msg.to_string()).panic())
     }
 }
 
@@ -224,11 +216,6 @@ impl<T> VortexExpect for Option<T> {
     #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
         self.unwrap_or_else(|| VortexError::InvalidArgument(msg.to_string().into(), Backtrace::capture()).panic())
-    }
-
-    #[inline(always)]
-    fn vortex_expect_lazy<F: FnOnce() -> String>(self, op: F) -> Self::Output {
-        self.unwrap_or_else(|| VortexError::InvalidArgument(op().into(), Backtrace::capture()).panic())
     }
 }
 
@@ -259,7 +246,6 @@ macro_rules! vortex_err {
         )
     }};
     (Context: $msg:literal, $err:expr) => {{
-        use std::backtrace::Backtrace;
         $crate::__private::must_use(
             $crate::VortexError::Context($msg.into(), Box::new($err))
         )
@@ -307,6 +293,10 @@ macro_rules! vortex_panic {
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
         $crate::vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
     }; 
+    ($err:expr, $fmt:literal $(, $arg:expr)* $(,)?) => {{
+        use $crate::VortexPanic;
+        ($err).with_context(format!($fmt, $($arg),*)).panic()
+    }};
     ($fmt:literal $(, $arg:expr)* $(,)?) => {
         $crate::vortex_panic!($crate::vortex_err!($fmt, $($arg),*))
     };

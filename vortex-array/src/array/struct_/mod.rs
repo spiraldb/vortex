@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::field::Field;
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -30,8 +30,9 @@ impl StructArray {
 
     pub fn children(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nfields()).map(move |idx| {
-            self.field(idx)
-                .unwrap_or_else(|| panic!("Field {} not found, nfields: {}", idx, self.nfields()))
+            self.field(idx).unwrap_or_else(|| {
+                vortex_panic!("Field {} not found, nfields: {}", idx, self.nfields())
+            })
         })
     }
 
@@ -82,9 +83,8 @@ impl StructArray {
         let fields: Vec<Array> = items.iter().map(|(_, array)| array.clone()).collect();
         let len = fields.first().map(|f| f.len()).unwrap_or(0);
 
-        Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable).unwrap_or_else(
-            |err| panic!("Unexpected error while building StructArray from fields: {err}"),
-        )
+        Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)
+            .vortex_expect("Unexpected error while building StructArray from fields")
     }
 
     // TODO(aduffy): Add equivalent function to support field masks for nested column access.

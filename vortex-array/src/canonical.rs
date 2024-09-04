@@ -143,7 +143,7 @@ fn bool_to_arrow(bool_array: BoolArray) -> ArrayRef {
         bool_array
             .logical_validity()
             .to_null_buffer()
-            .unwrap_or_else(|err| panic!("Failed to get null buffer from logical validity: {err}")),
+            .vortex_expect("Failed to get null buffer from logical validity"),
     ))
 }
 

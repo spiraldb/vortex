@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 pub use stats::compute_stats;
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability};
-use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -153,11 +153,11 @@ impl VarBinArray {
             .unwrap_or_else(|| {
                 scalar_at(&self.offsets(), index)
                     .unwrap_or_else(|err| {
-                        panic!("Failed to get offset at index: {}: {}", index, err)
+                        vortex_panic!(err, "Failed to get offset at index: {}", index)
                     })
                     .as_ref()
                     .try_into()
-                    .unwrap_or_else(|err| panic!("Failed to convert offset to usize: {}", err))
+                    .vortex_expect("Failed to convert offset to usize")
             })
     }
 
@@ -222,7 +222,8 @@ impl<'a> FromIterator<Option<&'a str>> for VarBinArray {
 pub fn varbin_scalar(value: Buffer, dtype: &DType) -> Scalar {
     if matches!(dtype, DType::Utf8(_)) {
         Scalar::try_utf8(value, dtype.nullability())
-            .unwrap_or_else(|err| panic!("Failed to create scalar from utf8 buffer: {}", err))
+            .map_err(|err| vortex_err!("Failed to create scalar from utf8 buffer: {}", err))
+            .vortex_unwrap()
     } else {
         Scalar::binary(value, dtype.nullability())
     }

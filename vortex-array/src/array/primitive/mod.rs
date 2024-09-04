@@ -8,7 +8,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::iter::{Accessor, AccessorRef};
 use crate::stats::StatsSet;
@@ -92,10 +92,7 @@ impl PrimitiveArray {
         // TODO(ngates): we can't really cache this anywhere?
         self.dtype()
             .try_into()
-            .vortex_expect_lazy(|| format!(
-                "Failed to convert dtype {} to ptype",
-                self.dtype()
-            ))
+            .unwrap_or_else(|err: VortexError| vortex_panic!(err, "Failed to convert dtype {} to ptype", self.dtype()))
     }
 
     pub fn buffer(&self) -> &Buffer {

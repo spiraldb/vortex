@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use num_traits::{AsPrimitive, Zero};
 use vortex_dtype::{match_each_integer_ptype, DType, NativePType};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexResult};
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
@@ -119,10 +119,10 @@ fn update_non_nullable_slice<O>(
     let new_data = {
         let offset_start = offsets[start]
             .to_usize()
-            .unwrap_or_else(|| panic!("Failed to convert offset to usize: {}", offsets[start]));
+            .unwrap_or_else(|| vortex_panic!("Failed to convert offset to usize: {}", offsets[start]));
         let offset_end = offsets[end]
             .to_usize()
-            .unwrap_or_else(|| panic!("Failed to convert offset to usize: {}", offsets[end]));
+            .unwrap_or_else(|| vortex_panic!("Failed to convert offset to usize: {}", offsets[end]));
         &data[offset_start..offset_end]
     };
     let new_offsets = offsets[start..end + 1]

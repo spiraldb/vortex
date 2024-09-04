@@ -1,6 +1,6 @@
 use ::serde::{Deserialize, Serialize};
 use vortex_dtype::{match_each_integer_ptype, DType};
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
@@ -158,13 +158,10 @@ impl ArrayStatisticsCompute for SparseArray {}
 
 impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
-        match self.find_index(index).vortex_expect_lazy(|| format!(
-                "Error while finding index {} in sparse array",
-                index
-            ))
-        {
-            None => !self.fill_value().is_null(),
-            Some(idx) => self.values().with_dyn(|a| a.is_valid(idx)),
+        match self.find_index(index) {
+            Ok(None) => !self.fill_value().is_null(),
+            Ok(Some(idx)) => self.values().with_dyn(|a| a.is_valid(idx)),
+            Err(e) => vortex_panic!(e, "Error while finding index {} in sparse array", index),
         }
     }
 
