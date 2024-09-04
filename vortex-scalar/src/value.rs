@@ -18,6 +18,8 @@ pub enum ScalarValue {
     Buffer(Buffer),
     BufferString(BufferString),
     List(Arc<[ScalarValue]>),
+    // It's significant that Null is last in this list. As a result generated PartialOrd sorts Scalar
+    // values such that Nulls are last (greatest)
     Null,
 }
 
