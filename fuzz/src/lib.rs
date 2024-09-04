@@ -2,6 +2,7 @@ use std::fmt::Debug;
 use std::iter;
 use std::ops::Range;
 
+use libfuzzer_sys::arbitrary::Error::EmptyChoose;
 use libfuzzer_sys::arbitrary::{Arbitrary, Result, Unstructured};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::scalar_at;
@@ -37,6 +38,10 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                 Action::Slice(start..stop)
             }
             2 => {
+                if len == 0 {
+                    return Err(EmptyChoose);
+                }
+
                 let indices = PrimitiveArray::from(random_vec_in_range(u, 0, len - 1)?).into();
                 let compressed = SamplingCompressor::default()
                     .compress(&indices, None)

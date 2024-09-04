@@ -43,13 +43,6 @@ impl SearchResult {
             Self::NotFound(i) => i,
         }
     }
-
-    pub fn map<F: FnOnce(usize) -> usize>(self, f: F) -> Self {
-        match self {
-            Self::Found(i) => Self::Found(f(i)),
-            Self::NotFound(i) => Self::NotFound(f(i)),
-        }
-    }
 }
 
 pub trait SearchSortedFn {
@@ -62,6 +55,10 @@ pub fn search_sorted<T: Into<Scalar>>(
     side: SearchSortedSide,
 ) -> VortexResult<SearchResult> {
     let scalar = target.into().cast(array.dtype())?;
+    if scalar.is_null() {
+        vortex_bail!("Search sorted with null value is not supported");
+    }
+
     array.with_dyn(|a| {
         if let Some(search_sorted) = a.search_sorted() {
             return search_sorted.search_sorted(&scalar, side);

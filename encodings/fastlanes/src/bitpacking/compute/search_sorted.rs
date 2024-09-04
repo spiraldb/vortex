@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::Greater;
 
 use fastlanes::BitPacking;
+use num_traits::AsPrimitive;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{
     search_sorted, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
@@ -9,7 +10,7 @@ use vortex::compute::{
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArrayVariant};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::{unpack_single_primitive, BitPackedArray};
@@ -17,17 +18,36 @@ use crate::{unpack_single_primitive, BitPackedArray};
 impl SearchSortedFn for BitPackedArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
-            let unwrapped_value: $P = value.cast(self.dtype())?.try_into().unwrap();
-            if let Some(patches_array) = self.patches() {
-                if unwrapped_value as usize >= self.max_packed_value() {
-                    search_sorted(&patches_array, value.clone(), side)
-                } else {
-                    Ok(SearchSorted::search_sorted(&BitPackedSearch::new(self), &unwrapped_value, side))
-                }
-            } else {
-                Ok(SearchSorted::search_sorted(&BitPackedSearch::new(self), &unwrapped_value, side))
-            }
+            search_sorted_typed::<$P>(self, value, side)
         })
+    }
+}
+
+fn search_sorted_typed<T>(
+    array: &BitPackedArray,
+    value: &Scalar,
+    side: SearchSortedSide,
+) -> VortexResult<SearchResult>
+where
+    T: NativePType + TryFrom<Scalar, Error = VortexError> + BitPacking + AsPrimitive<usize>,
+{
+    let unwrapped_value: T = value.cast(array.dtype())?.try_into()?;
+    if let Some(patches_array) = array.patches() {
+        if unwrapped_value.as_() >= array.max_packed_value() {
+            search_sorted(&patches_array, value.clone(), side)
+        } else {
+            Ok(SearchSorted::search_sorted(
+                &BitPackedSearch::new(array),
+                &unwrapped_value,
+                side,
+            ))
+        }
+    } else {
+        Ok(SearchSorted::search_sorted(
+            &BitPackedSearch::new(array),
+            &unwrapped_value,
+            side,
+        ))
     }
 }
 

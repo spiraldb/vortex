@@ -21,7 +21,7 @@ pub fn for_compress(array: &PrimitiveArray) -> VortexResult<Array> {
         if shift == <$T>::PTYPE.bit_width() as u8 {
             match array.validity().to_logical(array.len()) {
                 LogicalValidity::AllValid(l) => {
-                ConstantArray::new(Scalar::zero::<i32>(array.dtype().nullability()), l).into_array()
+                    ConstantArray::new(Scalar::zero::<i32>(array.dtype().nullability()), l).into_array()
                 },
                 LogicalValidity::AllInvalid(l) => {
                     ConstantArray::new(Scalar::null(array.dtype().clone()), l).into_array()
@@ -90,9 +90,9 @@ pub fn decompress(array: FoRArray) -> VortexResult<PrimitiveArray> {
     let encoded = array.encoded().into_primitive()?.reinterpret_cast(ptype);
     let validity = encoded.validity();
     Ok(match_each_integer_ptype!(ptype, |$T| {
-        let reference: $T = array.reference().try_into()?;
+        let min: $T = array.reference().try_into()?;
         PrimitiveArray::from_vec(
-            decompress_primitive(encoded.into_maybe_null_slice::<$T>(), reference, shift),
+            decompress_primitive(encoded.into_maybe_null_slice::<$T>(), min, shift),
             validity,
         )
     }))
@@ -100,19 +100,19 @@ pub fn decompress(array: FoRArray) -> VortexResult<PrimitiveArray> {
 
 fn decompress_primitive<T: NativePType + WrappingAdd + PrimInt>(
     values: Vec<T>,
-    reference: T,
+    min: T,
     shift: usize,
 ) -> Vec<T> {
     if shift > 0 {
         values
             .into_iter()
             .map(|v| v << shift)
-            .map(|v| v.wrapping_add(&reference))
+            .map(|v| v.wrapping_add(&min))
             .collect_vec()
     } else {
         values
             .into_iter()
-            .map(|v| v.wrapping_add(&reference))
+            .map(|v| v.wrapping_add(&min))
             .collect_vec()
     }
 }
