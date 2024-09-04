@@ -1,9 +1,6 @@
-use arrow_array::types::UInt32Type;
-use arrow_array::UInt32Array;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use itertools::Itertools;
 use vortex::array::PrimitiveArray;
-use vortex::elementwise::UnaryFn;
 use vortex::iter::VectorizedArrayIter;
 use vortex::validity::Validity;
 use vortex::variants::ArrayVariants;
@@ -61,28 +58,6 @@ fn vortex_iter_flat(c: &mut Criterion) {
     });
 }
 
-fn vortex_unary_add(c: &mut Criterion) {
-    let data = PrimitiveArray::from_vec((0_u32..1_000_000).collect_vec(), Validity::AllValid);
-    c.bench_function("vortex_unary_add", |b| {
-        b.iter_batched(
-            || (data.clone()),
-            |data| data.unary(|v: u32| v + 1).unwrap(),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
-fn arrow_unary_add(c: &mut Criterion) {
-    let data = UInt32Array::from_iter_values(0_u32..1_000_000);
-    c.bench_function("arrow_unary_add", |b| {
-        b.iter_batched(
-            || data.clone(),
-            |data: arrow_array::PrimitiveArray<UInt32Type>| data.unary::<_, UInt32Type>(|v| v + 1),
-            BatchSize::SmallInput,
-        )
-    });
-}
-
 fn arrow_iter(c: &mut Criterion) {
     let data = arrow_array::UInt32Array::from_iter(0_u32..1_000_000);
     c.bench_function("arrow_iter", |b| {
@@ -121,7 +96,5 @@ criterion_group!(
     vortex_iter,
     vortex_iter_flat,
     arrow_iter,
-    vortex_unary_add,
-    arrow_unary_add
 );
 criterion_main!(benches);

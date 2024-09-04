@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 pub use adapter::*;
 pub use ext::*;
-use vortex_dtype::DType;
+use vortex_dtype::{DType, NativePType};
 use vortex_error::VortexResult;
 
 use crate::validity::Validity;
@@ -123,6 +123,18 @@ impl<T> Batch<T> {
     #[inline]
     pub unsafe fn get_unchecked(&self, index: usize) -> &T {
         unsafe { self.data.get_unchecked(index) }
+    }
+
+    pub fn as_<N: NativePType>(self) -> Batch<N> {
+        assert_eq!(std::mem::size_of::<T>(), std::mem::size_of::<N>());
+        Batch {
+            data: unsafe { std::mem::transmute(self.data) },
+            validity: self.validity,
+        }
+    }
+
+    pub fn data(&self) -> &[T] {
+        self.data.as_ref()
     }
 }
 

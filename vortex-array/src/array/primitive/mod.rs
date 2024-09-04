@@ -12,7 +12,7 @@ use vortex_error::{vortex_bail, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::elementwise::{flat_array_iter, BinaryFn, OtherValue, UnaryFn};
-use crate::iter::{Accessor, AccessorRef};
+use crate::iter::{Accessor, AccessorRef, Batch};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -326,9 +326,11 @@ impl UnaryFn for PrimitiveArray {
         unary_fn: F,
     ) -> VortexResult<Array> {
         let mut output = Vec::with_capacity(self.len());
+        unsafe { output.set_len(self.len()) };
+        let data = self.maybe_null_slice::<I>();
 
-        for v in self.maybe_null_slice::<I>() {
-            output.push(unary_fn(*v));
+        for index in 0..data.len() {
+            unsafe { *output.get_unchecked_mut(index) = unary_fn(data[index]) }
         }
 
         Ok(PrimitiveArray::from_vec(output, self.validity()).into_array())
@@ -349,12 +351,13 @@ impl BinaryFn for PrimitiveArray {
             vortex_bail!(MismatchedTypes: self.dtype(), other.dtype());
         }
 
-        if self.dtype().as_ptype() != Some(&I::PTYPE) {
+        if PType::try_from(self.dtype())? != I::PTYPE {
             vortex_bail!(MismatchedTypes: self.dtype(), I::PTYPE);
         }
 
         let lhs = self.maybe_null_slice::<I>();
         let mut output = Vec::with_capacity(self.len());
+        unsafe { output.set_len(self.len()) };
 
         let validity = match other {
             OtherValue::Scalar(ref s) => {
@@ -366,8 +369,17 @@ impl BinaryFn for PrimitiveArray {
             }
             OtherValue::Array(ref a) => {
                 let rhs_iter = flat_array_iter::<I>(a);
-                for (l, r) in lhs.iter().copied().zip(rhs_iter) {
-                    output.push(binary_fn(l, r));
+                let mut start_idx = 0;
+                for batch in rhs_iter {
+                    let batch_len = batch.len();
+                    process_batch(
+                        &lhs[start_idx..start_idx + batch_len],
+                        batch,
+                        &binary_fn,
+                        start_idx,
+                        &mut output,
+                    );
+                    start_idx += batch_len;
                 }
 
                 let rhs = a.with_dyn(|a| a.logical_validity().into_validity());
@@ -376,6 +388,36 @@ impl BinaryFn for PrimitiveArray {
         };
 
         Ok(PrimitiveArray::from_vec(output, validity).into_array())
+    }
+}
+
+fn process_batch<I: NativePType, O: NativePType, F: Fn(I, I) -> O>(
+    lhs: &[I],
+    batch: Batch<I>,
+    f: F,
+    start_idx: usize,
+    output: &mut Vec<O>,
+) {
+    assert_eq!(batch.len(), lhs.len());
+
+    if batch.len() == 1024 {
+        let lhs: [I; 1024] = lhs.try_into().unwrap();
+        let rhs: [I; 1024] = batch.data().try_into().unwrap();
+
+        for idx in 0_usize..1024 {
+            unsafe {
+                *output.get_unchecked_mut(idx + start_idx) = f(lhs[idx], rhs[idx]);
+            }
+        }
+    } else {
+        let mut lhs = lhs.iter();
+        let rhs = batch.data();
+        for idx in 0..batch.len() {
+            let l = lhs.next().unwrap();
+            unsafe {
+                *output.get_unchecked_mut(idx + start_idx) = f(*l, rhs[idx]);
+            }
+        }
     }
 }
 
