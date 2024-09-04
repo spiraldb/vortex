@@ -1,5 +1,5 @@
-pub use compress::*;
 use ::serde::{Deserialize, Serialize};
+pub use compress::*;
 use vortex::array::{Primitive, PrimitiveArray};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
