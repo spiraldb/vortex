@@ -20,19 +20,19 @@ impl SearchSortedFn for PrimitiveArray {
                 Validity::AllInvalid => Ok(SearchResult::NotFound(0)),
                 Validity::Array(_) => {
                     let pvalue: $T = value.try_into()?;
-                    Ok(NullableSearchSorted::new(self).search_sorted(&pvalue, side))
+                    Ok(SearchSortedNullsLast::new(self).search_sorted(&pvalue, side))
                 }
             }
         })
     }
 }
 
-struct NullableSearchSorted<'a, T> {
+struct SearchSortedNullsLast<'a, T> {
     values: &'a [T],
     validity: Validity,
 }
 
-impl<'a, T: NativePType> NullableSearchSorted<'a, T> {
+impl<'a, T: NativePType> SearchSortedNullsLast<'a, T> {
     pub fn new(array: &'a PrimitiveArray) -> Self {
         Self {
             values: array.maybe_null_slice(),
@@ -41,7 +41,7 @@ impl<'a, T: NativePType> NullableSearchSorted<'a, T> {
     }
 }
 
-impl<'a, T: NativePType> IndexOrd<T> for NullableSearchSorted<'a, T> {
+impl<'a, T: NativePType> IndexOrd<T> for SearchSortedNullsLast<'a, T> {
     fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
         if self.validity.is_null(idx) {
             return Some(Greater);
@@ -51,7 +51,7 @@ impl<'a, T: NativePType> IndexOrd<T> for NullableSearchSorted<'a, T> {
     }
 }
 
-impl<'a, T> Len for NullableSearchSorted<'a, T> {
+impl<'a, T> Len for SearchSortedNullsLast<'a, T> {
     fn len(&self) -> usize {
         self.values.len()
     }

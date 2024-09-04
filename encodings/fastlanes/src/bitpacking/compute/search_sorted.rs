@@ -33,7 +33,9 @@ where
 {
     let unwrapped_value: T = value.cast(array.dtype())?.try_into()?;
     if let Some(patches_array) = array.patches() {
-        if unwrapped_value.as_() >= array.max_packed_value() {
+        // If patches exist they must be the last elements in the array, if the value we're looking for is greater than
+        // max packed value just search the patches
+        if unwrapped_value.as_() > array.max_packed_value() {
             search_sorted(&patches_array, value.clone(), side)
         } else {
             Ok(SearchSorted::search_sorted(

@@ -66,12 +66,11 @@ fn compress_primitive<T: NativePType + WrappingSub + PrimInt>(
 ) -> PrimitiveArray {
     assert!(shift < T::PTYPE.bit_width() as u8);
     let values = if shift > 0 {
-        let shifted_min = min >> shift as usize;
         parray
             .maybe_null_slice::<T>()
             .iter()
-            .map(|&v| v >> shift as usize)
-            .map(|v| v.wrapping_sub(&shifted_min))
+            .map(|&v| v.wrapping_sub(&min))
+            .map(|v| v >> shift as usize)
             .collect_vec()
     } else {
         parray
