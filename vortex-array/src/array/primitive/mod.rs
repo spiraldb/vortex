@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn elementwise_example() {
+    fn binary_fn_example() {
         let input = PrimitiveArray::from_vec(vec![2u32, 2, 2, 2], Validity::AllValid);
 
         let o = input
