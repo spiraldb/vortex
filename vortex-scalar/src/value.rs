@@ -13,12 +13,12 @@ use crate::pvalue::PValue;
 /// cast on-read.
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ScalarValue {
-    Null,
     Bool(bool),
     Primitive(PValue),
     Buffer(Buffer),
     BufferString(BufferString),
     List(Arc<[ScalarValue]>),
+    Null,
 }
 
 impl ScalarValue {

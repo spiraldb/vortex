@@ -6,6 +6,7 @@ use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{
     search_sorted, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
 };
+use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArrayVariant};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::VortexResult;
@@ -17,7 +18,7 @@ impl SearchSortedFn for BitPackedArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
             let unwrapped_value: $P = value.cast(self.dtype())?.try_into().unwrap();
-                if let Some(patches_array) = self.patches() {
+            if let Some(patches_array) = self.patches() {
                 if unwrapped_value as usize >= self.max_packed_value() {
                     search_sorted(&patches_array, value.clone(), side)
                 } else {
@@ -38,6 +39,7 @@ struct BitPackedSearch {
     length: usize,
     bit_width: usize,
     min_patch_offset: Option<usize>,
+    validity: Validity,
 }
 
 impl BitPackedSearch {
@@ -52,6 +54,7 @@ impl BitPackedSearch {
                     .expect("Only Sparse patches are supported")
                     .min_index()
             }),
+            validity: array.validity(),
         }
     }
 }
@@ -63,6 +66,11 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
                 return Some(Greater);
             }
         }
+
+        if self.validity.is_null(idx) {
+            return Some(Greater);
+        }
+
         // SAFETY: Used in search_sorted_by which ensures that idx is within bounds
         let val: T = unsafe {
             unpack_single_primitive(
