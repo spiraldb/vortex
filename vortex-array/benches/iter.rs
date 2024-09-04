@@ -61,9 +61,9 @@ fn vortex_iter_flat(c: &mut Criterion) {
     });
 }
 
-fn vortex_binary_add(c: &mut Criterion) {
+fn vortex_unary_add(c: &mut Criterion) {
     let data = PrimitiveArray::from_vec((0_u32..1_000_000).collect_vec(), Validity::AllValid);
-    c.bench_function("vortex_binary_add", |b| {
+    c.bench_function("vortex_unary_add", |b| {
         b.iter_batched(
             || (data.clone()),
             |data| data.unary(|v: u32| v + 1).unwrap(),
@@ -72,9 +72,9 @@ fn vortex_binary_add(c: &mut Criterion) {
     });
 }
 
-fn arrow_binary_add(c: &mut Criterion) {
+fn arrow_unary_add(c: &mut Criterion) {
     let data = UInt32Array::from_iter_values(0_u32..1_000_000);
-    c.bench_function("arrow_binary_add", |b| {
+    c.bench_function("arrow_unary_add", |b| {
         b.iter_batched(
             || data.clone(),
             |data: arrow_array::PrimitiveArray<UInt32Type>| data.unary::<_, UInt32Type>(|v| v + 1),
@@ -121,7 +121,7 @@ criterion_group!(
     vortex_iter,
     vortex_iter_flat,
     arrow_iter,
-    vortex_binary_add,
-    arrow_binary_add
+    vortex_unary_add,
+    arrow_unary_add
 );
 criterion_main!(benches);
