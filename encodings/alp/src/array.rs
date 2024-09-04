@@ -12,7 +12,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
@@ -212,7 +212,6 @@ impl PrimitiveArrayTrait for ALPArray {
         }
     }
 
-    #[allow(clippy::unwrap_in_result)]
     fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
         match self.dtype() {
             DType::Primitive(PType::F64, _) => {
@@ -223,7 +222,7 @@ impl PrimitiveArrayTrait for ALPArray {
                 let encoded = self
                     .encoded()
                     .with_dyn(|a| a.as_primitive_array_unchecked().i64_accessor())
-                    .expect("This is is an invariant of the ALP algorithm");
+                    .vortex_expect("This is is an invariant of the ALP algorithm");
                 Some(Arc::new(ALPAccessor::new(
                     encoded,
                     patches,

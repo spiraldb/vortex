@@ -153,16 +153,50 @@ pub enum VortexError {
     ),
 }
 
-#[allow(clippy::panic)]
-pub fn __vortex_panic_do_not_call_directly(err: VortexError) -> ! {
-    panic!("{}", err)
-}
-
 pub type VortexResult<T> = Result<T, VortexError>;
 
 impl Debug for VortexError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self, f)
+    }
+}
+
+pub trait VortexPanic {
+    fn panic(self) -> !;
+
+    fn panic_with_context(self, msg: &str) -> !;
+}
+
+impl VortexPanic for VortexError {
+    #[allow(clippy::panic)]
+    fn panic(self) -> ! {
+        panic!("{}", self)
+    }
+
+    fn panic_with_context(self, msg: &str) -> ! {
+        VortexError::Context(msg.to_string().into(), Box::new(self)).panic()
+    }
+}
+
+pub trait VortexExpect {
+    type Output;
+
+    fn vortex_expect(self, msg: &str) -> Self::Output;
+}
+
+impl<T> VortexExpect for VortexResult<T> {
+    type Output = T;
+
+    fn vortex_expect(self, msg: &str) -> Self::Output {
+        self.unwrap_or_else(|e| e.panic_with_context(msg))
+    }
+}
+
+impl<T> VortexExpect for Option<T> {
+    type Output = T;
+
+    fn vortex_expect(self, msg: &str) -> Self::Output {
+        self.unwrap_or_else(|| VortexError::InvalidArgument(msg.to_string().into(), Backtrace::capture()).panic())
     }
 }
 
@@ -224,17 +258,18 @@ macro_rules! vortex_bail {
 #[macro_export]
 macro_rules! vortex_panic {
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
-        vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
+        $crate::vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
     };
-    ($msg:literal, $err:expr) => {
-        vortex_panic!($crate::vortex_err!(Context: $msg, $err))
-    };
+    ($msg:literal, $err:expr) => {{
+        use $crate::VortexPanic;
+        ($err).context_panic($msg)
+    }};
     ($msg:literal) => {
-        vortex_panic!($crate::vortex_err!($msg))
+        $crate::vortex_panic!($crate::vortex_err!($msg))
     };
     ($err:expr) => {{
-        let err: $crate::VortexError = $err;
-        $crate::__vortex_panic_do_not_call_directly(err)
+        use $crate::VortexPanic;
+        ($err).panic()
     }};
 }
 

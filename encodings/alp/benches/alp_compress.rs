@@ -50,7 +50,7 @@ where
 
 fn alp_canonicalize_sum<T: ArrowPrimitiveType>(array: ALPArray) -> T::Native {
     let array = array.into_canonical().unwrap().into_arrow();
-    let arrow_primitive = as_primitive_array::<T>(array.as_ref());
+    let arrow_primitive = as_primitive_array::<T>(array.as_ref().unwrap());
     arrow_primitive
         .iter()
         .fold(T::default_value(), |acc, value| {
