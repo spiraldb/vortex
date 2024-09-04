@@ -1,11 +1,8 @@
-use std::future::{ready, Future};
-use std::io::Write;
 use std::path::PathBuf;
 
 use futures::executor::block_on;
-use vortex_buffer::io_buf::IoBuf;
 use vortex_error::VortexError;
-use vortex_serde::io::VortexWrite;
+use vortex_serde::io::StdFile;
 
 use crate::data_downloads::{data_vortex_uncompressed, download_data};
 use crate::reader::rewrite_parquet_as_vortex;
@@ -36,27 +33,4 @@ pub fn taxi_data_vortex() -> PathBuf {
         })
     })
     .unwrap()
-}
-
-//
-// Test code uses futures_executor with a local pool, and nothing in VortexWrite ties us to Tokio,
-// so this is a simple bridge to allow us to use a `std::fs::File` as a `VortexWrite`.
-//
-
-struct StdFile(std::fs::File);
-
-impl VortexWrite for StdFile {
-    async fn write_all<B: IoBuf>(&mut self, buffer: B) -> std::io::Result<B> {
-        self.0.write_all(buffer.as_slice())?;
-        Ok(buffer)
-    }
-
-    async fn flush(&mut self) -> std::io::Result<()> {
-        self.0.flush()?;
-        Ok(())
-    }
-
-    fn shutdown(&mut self) -> impl Future<Output = std::io::Result<()>> {
-        ready(Ok(()))
-    }
 }

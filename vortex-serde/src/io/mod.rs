@@ -1,3 +1,5 @@
+pub use std::*;
+
 #[cfg(feature = "futures")]
 pub use futures::*;
 #[cfg(feature = "monoio")]
@@ -14,5 +16,6 @@ mod monoio;
 mod object_store;
 pub mod offset;
 mod read;
+mod std;
 mod tokio;
 mod write;
