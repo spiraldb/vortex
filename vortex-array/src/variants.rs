@@ -134,6 +134,10 @@ pub trait PrimitiveArrayTrait: ArrayTrait {
         None
     }
 
+    fn f16_accessor(&self) -> Option<AccessorRef<vortex_dtype::half::f16>> {
+        None
+    }
+
     fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
         None
     }
@@ -172,6 +176,10 @@ pub trait PrimitiveArrayTrait: ArrayTrait {
 
     fn i64_iter(&self) -> Option<VectorizedArrayIter<i64>> {
         self.i64_accessor().map(VectorizedArrayIter::new)
+    }
+
+    fn f16_iter(&self) -> Option<VectorizedArrayIter<vortex_dtype::half::f16>> {
+        self.f16_accessor().map(VectorizedArrayIter::new)
     }
 
     fn f32_iter(&self) -> Option<VectorizedArrayIter<f32>> {
