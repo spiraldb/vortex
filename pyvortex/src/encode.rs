@@ -24,7 +24,8 @@ pub fn encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
 
     if obj.is_instance(&pa_array)? {
         let arrow_array = ArrowArrayData::from_pyarrow_bound(obj).map(make_array)?;
-        let enc_array = Array::from_arrow(arrow_array, false);
+        let is_nullable = arrow_array.is_nullable();
+        let enc_array = Array::from_arrow(arrow_array, is_nullable);
         Bound::new(obj.py(), PyArray::new(enc_array))
     } else if obj.is_instance(&chunked_array)? {
         let chunks: Vec<Bound<PyAny>> = obj.getattr("chunks")?.extract()?;
