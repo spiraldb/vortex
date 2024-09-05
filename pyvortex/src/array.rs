@@ -49,7 +49,6 @@ impl PyArray {
     ///     ]
     fn to_arrow(self_: PyRef<'_, Self>) -> PyResult<Bound<PyAny>> {
         // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
-        // NOTE(robert): Return RecordBatchStreamReader always?
         let py = self_.py();
         let vortex = &self_.inner;
 
