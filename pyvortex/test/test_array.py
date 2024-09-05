@@ -10,7 +10,7 @@ def test_primitive_array_round_trip():
 
 def test_array_with_nulls():
     a = pa.array([b"123", None])
-    arr = vortex.encode(a)
+    arr = vortex.array(a)
     assert arr.to_arrow().combine_chunks() == a
 
 
