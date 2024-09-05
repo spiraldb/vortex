@@ -322,14 +322,17 @@ impl UnaryFn for PrimitiveArray {
         unary_fn: F,
     ) -> VortexResult<Array> {
         let mut output: Vec<MaybeUninit<O>> = Vec::with_capacity(self.len());
+        // Safety: we are going to apply the fn to every element and store it so the full length will be utilized
         unsafe { output.set_len(self.len()) };
 
         for (index, item) in self.maybe_null_slice::<I>().iter().enumerate() {
+            // Safety: This access is bound by the same range as the output's capacity and length, so its within the Vec's allocated memory
             unsafe {
                 *output.get_unchecked_mut(index) = MaybeUninit::new(unary_fn(*item));
             }
         }
 
+        // Safety: `MaybeUninit` is a transparent struct and we know the actual length of the vec.
         let output = unsafe { transmute::<Vec<MaybeUninit<O>>, Vec<O>>(output) };
 
         Ok(PrimitiveArray::from_vec(output, self.validity()).into_array())
@@ -342,6 +345,9 @@ impl BinaryFn for PrimitiveArray {
         rhs: Array,
         binary_fn: F,
     ) -> VortexResult<Array> {
+        if self.len() != rhs.len() {
+            vortex_bail!(InvalidArgument: "Both arguments to `binary` should be of the same length");
+        }
         if !self.dtype().eq_ignore_nullability(rhs.dtype()) {
             vortex_bail!(MismatchedTypes: self.dtype(), rhs.dtype());
         }
@@ -351,7 +357,9 @@ impl BinaryFn for PrimitiveArray {
         }
 
         let lhs = self.maybe_null_slice::<I>();
+
         let mut output: Vec<MaybeUninit<O>> = Vec::with_capacity(self.len());
+        // Safety: we are going to apply the fn to every element and store it so the full length will be utilized
         unsafe { output.set_len(self.len()) };
 
         let validity = self
@@ -374,6 +382,7 @@ impl BinaryFn for PrimitiveArray {
             }
         });
 
+        // Safety: `MaybeUninit` is a transparent struct and we know the actual length of the vec.
         let output = unsafe { transmute::<Vec<MaybeUninit<O>>, Vec<O>>(output) };
 
         Ok(PrimitiveArray::from_vec(output, validity).into_array())
@@ -394,6 +403,7 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
         let rhs: [U; ITER_BATCH_SIZE] = batch.data().try_into().unwrap();
 
         for idx in 0_usize..ITER_BATCH_SIZE {
+            // Safety: output is the same length as the original array, so we know these are still valid indexes
             unsafe {
                 *output.get_unchecked_mut(idx + start_idx) =
                     MaybeUninit::new(f(lhs[idx], rhs[idx]));
@@ -401,6 +411,7 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
         }
     } else {
         for (idx, rhs_item) in batch.data().iter().enumerate() {
+            // Safety: output is the same length as the original array, so we know these are still valid indexes
             unsafe {
                 *output.get_unchecked_mut(idx + start_idx) =
                     MaybeUninit::new(f(lhs[idx], *rhs_item));
