@@ -6,7 +6,7 @@ use vortex::compute::{
     search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
     SliceFn, TakeFn,
 };
-use vortex::{Array, ArrayDType, IntoArray};
+use vortex::{Array, ArrayDType};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, PrimitiveScalar, Scalar};

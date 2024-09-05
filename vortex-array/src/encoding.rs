@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 
 use crate::canonical::{Canonical, IntoCanonical};
 use crate::{Array, ArrayDef, ArrayTrait};
@@ -82,8 +82,9 @@ pub trait ArrayEncodingExt {
     {
         let typed = <<Self::D as ArrayDef>::Array as TryFrom<Array>>::try_from(array.clone())
             .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to convert array to {}: {err}",
+                vortex_panic!(
+                    err,
+                    "Failed to convert array to {}",
                     std::any::type_name::<<Self::D as ArrayDef>::Array>()
                 )
             });

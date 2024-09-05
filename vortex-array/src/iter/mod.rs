@@ -3,7 +3,7 @@ use std::sync::Arc;
 pub use adapter::*;
 pub use ext::*;
 use vortex_dtype::{DType, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::validity::Validity;
 use crate::Array;
@@ -200,9 +200,9 @@ impl<T: Copy> Iterator for VectorizedArrayIter<T> {
             let validity = self
                 .validity
                 .slice(self.current_idx, self.current_idx + data.len())
-                .unwrap_or_else(|_| {
-                    panic!("The slice bounds should always be within the array's limits")
-                });
+                .vortex_expect(
+                    "The slice bounds should always be within the array's limits",
+                );
             self.current_idx += data.len();
 
             let batch = Batch::new_from_vec(data, validity);

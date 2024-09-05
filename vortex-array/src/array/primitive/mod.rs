@@ -418,6 +418,7 @@ impl BinaryFn for PrimitiveArray {
     }
 }
 
+#[allow(clippy::unwrap_used)]
 fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> O>(
     lhs: &[I],
     batch: Batch<U>,
@@ -431,10 +432,7 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
         let lhs: [I; ITER_BATCH_SIZE] = lhs.try_into().unwrap();
         let rhs: [U; ITER_BATCH_SIZE] = batch.data().try_into().unwrap();
         // We know output is of the same length and lhs/rhs
-        let mut output_slice: [_; ITER_BATCH_SIZE] = output
-            [idx_offset..idx_offset + ITER_BATCH_SIZE]
-            .try_into()
-            .unwrap();
+        let mut output_slice: [_; ITER_BATCH_SIZE] = output[idx_offset..idx_offset + ITER_BATCH_SIZE].try_into().unwrap();
 
         for idx in 0..ITER_BATCH_SIZE {
             unsafe {

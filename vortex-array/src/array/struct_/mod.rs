@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::field::Field;
-use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
+use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
