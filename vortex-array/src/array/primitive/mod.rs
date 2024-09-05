@@ -11,15 +11,15 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::elementwise::{BinaryFn, UnaryFn};
+use crate::elementwise::{dyn_cast_array_iter, BinaryFn, UnaryFn};
 use crate::iter::{Accessor, AccessorRef, Batch, ITER_BATCH_SIZE};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, make_iter_from_array, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical,
-    IntoArray, IntoCanonical, TypedArray,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    TypedArray,
 };
 
 mod accessor;
@@ -367,20 +367,19 @@ impl BinaryFn for PrimitiveArray {
             .and(rhs.with_dyn(|a| a.logical_validity().into_validity()))?;
 
         let mut idx_offset = 0;
+        let rhs_iter = dyn_cast_array_iter::<U>(&rhs);
 
-        make_iter_from_array!(rhs, U, | $ITER | {
-            for batch in $ITER {
-                let batch_len = batch.len();
-                process_batch(
-                    &lhs[idx_offset..idx_offset + batch_len],
-                    batch,
-                    &binary_fn,
-                    idx_offset,
-                    output.as_mut_slice(),
-                );
-                idx_offset += batch_len;
-            }
-        });
+        for batch in rhs_iter {
+            let batch_len = batch.len();
+            process_batch(
+                &lhs[idx_offset..idx_offset + batch_len],
+                batch,
+                &binary_fn,
+                idx_offset,
+                output.as_mut_slice(),
+            );
+            idx_offset += batch_len;
+        }
 
         // Safety: `MaybeUninit` is a transparent struct and we know the actual length of the vec.
         let output = unsafe { transmute::<Vec<MaybeUninit<O>>, Vec<O>>(output) };
