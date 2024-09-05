@@ -138,7 +138,7 @@ mod test {
     use vortex::compute::unary::scalar_at;
     use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
 
-    use crate::for_compress;
+    use crate::{for_compress, FoRArray};
 
     #[test]
     fn for_scalar_at() {
@@ -189,29 +189,61 @@ mod test {
     }
 
     #[test]
-    fn search_with_shift_notfound_repeated() {
-        let for_arr = for_compress(&PrimitiveArray::from(vec![62, 62, 114, 114])).unwrap();
+    fn search_with_shift_repeated() {
+        let arr = for_compress(&PrimitiveArray::from(vec![62, 62, 114, 114])).unwrap();
+        let for_array = FoRArray::try_from(arr.clone()).unwrap();
+
+        let min: i32 = for_array.reference().try_into().unwrap();
+        assert_eq!(min, 62);
+        assert_eq!(for_array.shift(), 1);
+
         assert_eq!(
-            search_sorted(&for_arr, 63, SearchSortedSide::Left).unwrap(),
+            search_sorted(&arr, 61, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(0)
+        );
+        assert_eq!(
+            search_sorted(&arr, 61, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(0)
+        );
+        assert_eq!(
+            search_sorted(&arr, 62, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(0)
+        );
+        assert_eq!(
+            search_sorted(&arr, 62, SearchSortedSide::Right).unwrap(),
+            SearchResult::Found(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 63, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(2)
         );
         assert_eq!(
-            search_sorted(&for_arr, 113, SearchSortedSide::Left).unwrap(),
+            search_sorted(&arr, 63, SearchSortedSide::Right).unwrap(),
             SearchResult::NotFound(2)
         );
         assert_eq!(
-            search_sorted(&for_arr, 115, SearchSortedSide::Left).unwrap(),
+            search_sorted(&arr, 113, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 113, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 114, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 114, SearchSortedSide::Right).unwrap(),
+            SearchResult::Found(4)
+        );
+        assert_eq!(
+            search_sorted(&arr, 115, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(4)
         );
-    }
-
-    #[test]
-    fn search_right_with_shift_repeated() {
-        let for_arr =
-            for_compress(&PrimitiveArray::from(vec![8, 8, 8, 40, 40, 40, 48, 50, 58])).unwrap();
         assert_eq!(
-            search_sorted(&for_arr, 39, SearchSortedSide::Right).unwrap(),
-            SearchResult::NotFound(3)
+            search_sorted(&arr, 115, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(4)
         );
     }
 }
