@@ -32,7 +32,7 @@ impl PyDType {
     }
 
     fn __repr__(&self) -> String {
-        format!("{}", self.inner.python_repr())
+        self.inner.python_repr().to_string()
     }
 
     #[classmethod]
