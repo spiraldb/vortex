@@ -108,8 +108,11 @@ where
     // For values that are not representable in the compressed array we know they wouldn't be found in the array
     // in order to find index they would be inserted at we search for next value in the compressed space
     let mut translated_value = primitive_value.wrapping_sub(&min) >> array.shift();
-    let mut translated_side = side;
+
+    // Whether value can be represented in the compressed array. For any value that is not we want to swap the side
+    // and search for next value in the search space to find correct offset for our original value
     let mut representable = true;
+    let mut translated_side = side;
     if (translated_value << array.shift()).wrapping_add(&min) != primitive_value {
         translated_value += T::from(1).unwrap();
         translated_side = SearchSortedSide::Left;
@@ -120,11 +123,13 @@ where
         .reinterpret_cast(array.ptype().to_unsigned());
 
     let search_result = search_sorted(&array.encoded(), translated_scalar, translated_side)?;
-    Ok(if representable && matches!(search_result, SearchResult::Found(_)) {
-        search_result
-    } else {
-        SearchResult::NotFound(search_result.to_index())
-    })
+    Ok(
+        if representable && matches!(search_result, SearchResult::Found(_)) {
+            search_result
+        } else {
+            SearchResult::NotFound(search_result.to_index())
+        },
+    )
 }
 
 #[cfg(test)]
@@ -202,7 +207,8 @@ mod test {
 
     #[test]
     fn search_right_with_shift_repeated() {
-        let for_arr = for_compress(&PrimitiveArray::from(vec![8, 8, 8, 40, 40, 40, 48, 50, 58])).unwrap();
+        let for_arr =
+            for_compress(&PrimitiveArray::from(vec![8, 8, 8, 40, 40, 40, 48, 50, 58])).unwrap();
         assert_eq!(
             search_sorted(&for_arr, 39, SearchSortedSide::Right).unwrap(),
             SearchResult::NotFound(3)
