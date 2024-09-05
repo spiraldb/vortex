@@ -63,8 +63,8 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
             PType::F32 => DataType::Float32,
             PType::F64 => DataType::Float64,
         },
-        DType::Utf8(_) => DataType::Utf8,
-        DType::Binary(_) => DataType::Binary,
+        DType::Utf8(_) => DataType::Utf8View,
+        DType::Binary(_) => DataType::BinaryView,
         DType::Struct(struct_dtype, _) => {
             let mut fields = Vec::with_capacity(struct_dtype.names().len());
             for (field_name, field_dt) in struct_dtype
@@ -127,12 +127,12 @@ mod test {
 
         assert_eq!(
             infer_data_type(&DType::Utf8(Nullability::NonNullable)),
-            DataType::Utf8
+            DataType::Utf8View
         );
 
         assert_eq!(
             infer_data_type(&DType::Binary(Nullability::NonNullable)),
-            DataType::Binary
+            DataType::BinaryView
         );
 
         assert_eq!(
@@ -157,7 +157,7 @@ mod test {
             )),
             DataType::Struct(Fields::from(vec![
                 FieldRef::from(Field::new("field_a", DataType::Boolean, false)),
-                FieldRef::from(Field::new("field_b", DataType::Utf8, true)),
+                FieldRef::from(Field::new("field_b", DataType::Utf8View, true)),
             ]))
         );
     }
@@ -180,7 +180,7 @@ mod test {
             infer_schema(&schema_nonnull),
             Schema::new(Fields::from(vec![
                 Field::new("field_a", DataType::Boolean, false),
-                Field::new("field_b", DataType::Utf8, false),
+                Field::new("field_b", DataType::Utf8View, false),
                 Field::new("field_c", DataType::Int32, true),
             ]))
         );

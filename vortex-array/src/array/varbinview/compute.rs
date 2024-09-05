@@ -4,9 +4,10 @@ use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE_BYTES};
+use crate::arrow::FromArrowArray;
 use crate::compute::unary::ScalarAtFn;
-use crate::compute::{slice, ArrayCompute, SliceFn};
-use crate::{Array, ArrayDType, IntoArray};
+use crate::compute::{slice, ArrayCompute, SliceFn, TakeFn};
+use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 impl ArrayCompute for VarBinViewArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -14,6 +15,10 @@ impl ArrayCompute for VarBinViewArray {
     }
 
     fn slice(&self) -> Option<&dyn SliceFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }
@@ -44,5 +49,17 @@ impl SliceFn for VarBinViewArray {
             self.validity().slice(start, stop)?,
         )?
         .into_array())
+    }
+}
+
+/// Take involves creating a new array that references the old array, just with the given set of views.
+impl TakeFn for VarBinViewArray {
+    fn take(&self, indices: &Array) -> VortexResult<Array> {
+        let array_arrow = self.clone().into_array().into_canonical()?.into_arrow();
+        let indices_arrow = indices.clone().into_canonical()?.into_arrow();
+
+        let take_arrow = arrow_select::take::take(&array_arrow, &indices_arrow, None)?;
+        let nullable = take_arrow.is_nullable();
+        Ok(Array::from_arrow(take_arrow, nullable))
     }
 }

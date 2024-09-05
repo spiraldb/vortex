@@ -55,6 +55,7 @@ impl SliceFn for DictArray {
 
 #[cfg(test)]
 mod test {
+    use vortex::accessor::ArrayAccessor;
     use vortex::array::{PrimitiveArray, VarBinViewArray};
     use vortex::{IntoArray, IntoArrayVariant, ToArray};
 
@@ -86,16 +87,22 @@ mod test {
             None,
             Some("b"),
         ]);
+        assert_eq!(reference.len(), 6);
         let (codes, values) = dict_encode_varbinview(&reference);
         let dict = DictArray::try_new(codes.into_array(), values.into_array()).unwrap();
         let flattened_dict = dict.to_array().into_varbinview().unwrap();
+
         assert_eq!(
-            flattened_dict.views().into_primitive().unwrap().buffer(),
-            reference.views().into_primitive().unwrap().buffer()
-        );
-        assert_eq!(
-            flattened_dict.buffer(0).into_primitive().unwrap().buffer(),
-            reference.buffer(0).into_primitive().unwrap().buffer()
+            flattened_dict
+                .with_iterator(|iter| iter
+                    .map(|slice| slice.map(|s| s.to_vec()))
+                    .collect::<Vec<_>>())
+                .unwrap(),
+            reference
+                .with_iterator(|iter| iter
+                    .map(|slice| slice.map(|s| s.to_vec()))
+                    .collect::<Vec<_>>())
+                .unwrap(),
         );
     }
 }

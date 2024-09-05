@@ -220,7 +220,7 @@ fn pack_views(
         let canonical_chunk = chunk.clone().into_varbinview()?;
 
         for buffer in canonical_chunk.buffers() {
-            let canonical_buffer = buffer.into_canonical()?.into_varbinview()?.into_array();
+            let canonical_buffer = buffer.into_canonical()?.into_primitive()?.into_array();
             buffers.push(canonical_buffer);
         }
 
