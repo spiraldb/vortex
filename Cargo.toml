@@ -36,7 +36,7 @@ include = [
     "flatbuffers/*.fbs",
 ]
 edition = "2021"
-rust-version = "1.76"
+rust-version = "1.81"
 
 [workspace.dependencies]
 libfuzzer-sys = "0.4"

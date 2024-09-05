@@ -1,3 +1,6 @@
+// This code doesn't have usage outside of tests yet, remove once usage is added
+#![allow(dead_code)]
+
 use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
@@ -8,7 +11,6 @@ use vortex_dtype::Nullability;
 use vortex_expr::{BinaryExpr, Column, Literal, Operator, VortexExpr};
 use vortex_scalar::Scalar;
 
-#[allow(dead_code)]
 pub struct PruningPredicate {
     expr: Arc<dyn VortexExpr>,
     stats_to_fetch: HashMap<Field, Vec<Stat>>,
