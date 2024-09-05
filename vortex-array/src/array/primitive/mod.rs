@@ -346,9 +346,9 @@ impl UnaryFn for PrimitiveArray {
 
         for chunk in chunks {
             // We know the size of the chunk, and we know output is the same length as the input array
-            let chunk: [I; CHUNK_SIZE] = chunk.try_into().unwrap();
+            let chunk: [I; CHUNK_SIZE] = chunk.try_into()?;
             let mut output_slice: [_; CHUNK_SIZE] =
-                output[offset..offset + CHUNK_SIZE].try_into().unwrap();
+                output[offset..offset + CHUNK_SIZE].try_into()?;
 
             for idx in 0..CHUNK_SIZE {
                 output_slice[idx] = MaybeUninit::new(unary_fn(chunk[idx]));
