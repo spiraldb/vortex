@@ -16,7 +16,7 @@ use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
 use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, NativePType, PType};
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
 use crate::array::{
     BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray,
@@ -156,9 +156,7 @@ fn primitive_to_arrow(primitive_array: PrimitiveArray) -> ArrayRef {
             array
                 .logical_validity()
                 .to_null_buffer()
-                .unwrap_or_else(|err| {
-                    panic!("Failed to get null buffer from logical validity: {err}")
-                }),
+                .vortex_expect("Failed to get null buffer from logical validity")
         )
     }
 
