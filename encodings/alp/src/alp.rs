@@ -106,10 +106,9 @@ pub trait ALPFloat: Float + Display + 'static {
     fn encode_single(value: Self, exponents: Exponents) -> Result<Self::ALPInt, Self> {
         let encoded = (value * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
             .fast_round();
-        let decoded = encoded * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize];
-
-        if decoded == value && encoded.trunc() == encoded {
-            if let Some(e) = encoded.as_int() {
+        if let Some(e) = encoded.as_int() {
+            let decoded = Self::decode_single(e, exponents);
+            if decoded == value {
                 return Ok(e);
             }
         }
