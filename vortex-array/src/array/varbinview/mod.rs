@@ -238,7 +238,7 @@ impl VarBinViewArray {
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         let view = self.view_at(index);
         unsafe {
-            if view.inlined.size > 12 {
+            if !view.is_inlined() {
                 let data_buf = slice(
                     &self.bytes(view._ref.buffer_index as usize),
                     view._ref.offset as usize,
@@ -247,7 +247,7 @@ impl VarBinViewArray {
                 .into_primitive()?;
                 Ok(data_buf.maybe_null_slice::<u8>().to_vec())
             } else {
-                Ok(view.inlined.data[..view.inlined.size as usize].to_vec())
+                Ok(view.inlined.data[..view.size()].to_vec())
             }
         }
     }
@@ -257,10 +257,15 @@ impl ArrayTrait for VarBinViewArray {}
 
 impl IntoCanonical for VarBinViewArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
+        let arrow_dtype = if matches!(self.dtype(), &DType::Utf8(_)) {
+            &DataType::Utf8
+        } else {
+            &DataType::Binary
+        };
         let nullable = self.dtype().is_nullable();
         let arrow_self = as_arrow(self);
-        let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
-            .map_err(VortexError::ArrowError)?;
+        let arrow_varbin =
+            arrow_cast::cast(arrow_self.deref(), arrow_dtype).map_err(VortexError::ArrowError)?;
         let vortex_array = Array::from_arrow(arrow_varbin, nullable);
 
         Ok(Canonical::VarBin(VarBinArray::try_from(&vortex_array)?))

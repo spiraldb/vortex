@@ -157,7 +157,6 @@ impl FromArrowArray<&ArrowBooleanArray> for Array {
 
 impl FromArrowArray<&ArrowStructArray> for Array {
     fn from_arrow(value: &ArrowStructArray, nullable: bool) -> Self {
-        // TODO(ngates): how should we deal with Arrow "logical nulls"?
         StructArray::try_new(
             value
                 .column_names()

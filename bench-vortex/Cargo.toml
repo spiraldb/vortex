@@ -77,15 +77,19 @@ bench = false
 [[bench]]
 name = "compress_benchmark"
 harness = false
+test = false
 
 [[bench]]
 name = "random_access"
+test = false
 harness = false
 
 [[bench]]
 name = "datafusion_benchmark"
+test = false
 harness = false
 
 [[bench]]
 name = "tpch_benchmark"
+test = false
 harness = false

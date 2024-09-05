@@ -209,7 +209,7 @@ fn struct_to_arrow(struct_array: StructArray) -> ArrayRef {
     let nulls = struct_array
         .logical_validity()
         .to_null_buffer()
-        .expect("logical validity should be convertable to a null buffer");
+        .expect("null buffer");
 
     Arc::new(ArrowStructArray::new(arrow_fields, field_arrays, nulls))
 }
@@ -452,15 +452,20 @@ impl From<Canonical> for Array {
 
 #[cfg(test)]
 mod test {
+    use std::sync::Arc;
+
     use arrow_array::cast::AsArray;
     use arrow_array::types::{Int32Type, Int64Type, UInt64Type};
     use arrow_array::{
-        Array, PrimitiveArray as ArrowPrimitiveArray, StructArray as ArrowStructArray,
+        Array, PrimitiveArray as ArrowPrimitiveArray, StringArray, StructArray as ArrowStructArray,
     };
+    use arrow_buffer::NullBufferBuilder;
+    use arrow_schema::{DataType, Field};
     use vortex_dtype::{DType, Nullability};
     use vortex_scalar::Scalar;
 
     use crate::array::{BoolArray, PrimitiveArray, SparseArray, StructArray, VarBinArray};
+    use crate::arrow::FromArrowArray;
     use crate::validity::Validity;
     use crate::{IntoArray, IntoCanonical};
 
@@ -582,6 +587,50 @@ mod test {
         assert_eq!(
             arrow.column(0).as_primitive::<Int32Type>(),
             &ArrowPrimitiveArray::from(vec![Some(25), Some(31), None, Some(57), Some(-42), None]),
+        )
+    }
+
+    fn roundtrip_struct() {
+        let mut nulls = NullBufferBuilder::new(6);
+        nulls.append_n_non_nulls(4);
+        nulls.append_null();
+        nulls.append_non_null();
+        let names = Arc::new(StringArray::from_iter(vec![
+            Some("Joseph"),
+            None,
+            Some("Angela"),
+            Some("Mikhail"),
+            None,
+            None,
+        ]));
+        let ages = Arc::new(ArrowPrimitiveArray::<Int32Type>::from(vec![
+            Some(25),
+            Some(31),
+            None,
+            Some(57),
+            None,
+            None,
+        ]));
+
+        let arrow_struct = ArrowStructArray::new(
+            vec![
+                Arc::new(Field::new("name", DataType::Utf8, true)),
+                Arc::new(Field::new("age", DataType::Int32, true)),
+            ]
+            .into(),
+            vec![names, ages],
+            nulls.finish(),
+        );
+
+        let vortex_struct = crate::Array::from_arrow(&arrow_struct, true);
+
+        assert_eq!(
+            &arrow_struct,
+            vortex_struct
+                .into_canonical()
+                .unwrap()
+                .into_arrow()
+                .as_struct()
         );
     }
 }

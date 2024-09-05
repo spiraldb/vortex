@@ -28,7 +28,7 @@ pub fn convert_expr_to_vortex(
         .as_any()
         .downcast_ref::<datafusion_physical_expr::expressions::Column>()
     {
-        let expr = Column::new(col_expr.name().to_owned());
+        let expr = Column::from(col_expr.name().to_owned());
 
         return Ok(Arc::new(expr) as _);
     }

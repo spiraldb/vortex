@@ -1,3 +1,6 @@
+use std::ptr;
+use std::sync::Arc;
+
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
 use itertools::Itertools;
@@ -7,6 +10,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
+use crate::iter::{Accessor, AccessorRef};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -71,7 +75,7 @@ impl PrimitiveArray {
 
     /// Creates a new array of type U8
     pub fn from_bytes(bytes: Bytes, validity: Validity) -> Self {
-        let buffer = Buffer::Bytes(bytes);
+        let buffer = Buffer::from(bytes);
 
         PrimitiveArray::new(buffer, PType::U8, validity)
     }
@@ -178,7 +182,96 @@ impl ArrayVariants for PrimitiveArray {
     }
 }
 
-impl PrimitiveArrayTrait for PrimitiveArray {}
+impl<T: NativePType> Accessor<T> for PrimitiveArray {
+    fn array_len(&self) -> usize {
+        self.len()
+    }
+
+    fn is_valid(&self, index: usize) -> bool {
+        ArrayValidity::is_valid(self, index)
+    }
+
+    fn array_validity(&self) -> Validity {
+        self.validity()
+    }
+
+    #[inline]
+    fn value_unchecked(&self, index: usize) -> T {
+        self.maybe_null_slice::<T>()[index]
+    }
+
+    #[inline]
+    fn decode_batch(&self, start_idx: usize) -> Vec<T> {
+        let batch_size = <Self as Accessor<T>>::batch_size(self, start_idx);
+        let mut v = Vec::<T>::with_capacity(batch_size);
+        let null_slice = self.maybe_null_slice::<T>();
+
+        unsafe {
+            v.set_len(batch_size);
+            ptr::copy_nonoverlapping(
+                null_slice.as_ptr().add(start_idx),
+                v.as_mut_ptr(),
+                batch_size,
+            );
+        }
+
+        v
+    }
+}
+
+macro_rules! primitive_accessor_ref {
+    ($self:expr, $ptype:ident) => {
+        match $self.dtype() {
+            DType::Primitive(PType::$ptype, _) => {
+                let accessor = Arc::new($self.clone());
+                Some(accessor)
+            }
+            _ => None,
+        }
+    };
+}
+
+impl PrimitiveArrayTrait for PrimitiveArray {
+    fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
+        primitive_accessor_ref!(self, F32)
+    }
+
+    fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
+        primitive_accessor_ref!(self, F64)
+    }
+
+    fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
+        primitive_accessor_ref!(self, U8)
+    }
+
+    fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
+        primitive_accessor_ref!(self, U16)
+    }
+
+    fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
+        primitive_accessor_ref!(self, U32)
+    }
+
+    fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
+        primitive_accessor_ref!(self, U64)
+    }
+
+    fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
+        primitive_accessor_ref!(self, I8)
+    }
+
+    fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
+        primitive_accessor_ref!(self, I16)
+    }
+
+    fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
+        primitive_accessor_ref!(self, I32)
+    }
+
+    fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
+        primitive_accessor_ref!(self, I64)
+    }
+}
 
 impl<T: NativePType> From<Vec<T>> for PrimitiveArray {
     fn from(values: Vec<T>) -> Self {
@@ -218,5 +311,40 @@ impl AcceptArrayVisitor for PrimitiveArray {
 impl Array {
     pub fn as_primitive(&self) -> PrimitiveArray {
         PrimitiveArray::try_from(self).expect("expected primitive array")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batched_iter() {
+        let v = PrimitiveArray::from_vec((0_u32..10_000).collect(), Validity::AllValid);
+        let iter = v.u32_iter().unwrap();
+
+        let mut items_counter = 0;
+
+        for batch in iter {
+            let batch_size = batch.len();
+            for idx in 0..batch_size {
+                assert!(batch.is_valid(idx));
+                assert_eq!((items_counter + idx) as u32, unsafe {
+                    *batch.get_unchecked(idx)
+                });
+            }
+
+            items_counter += batch_size;
+        }
+    }
+
+    #[test]
+    fn flattened_iter() {
+        let v = PrimitiveArray::from_vec((0_u32..10_000).collect(), Validity::AllValid);
+        let iter = v.u32_iter().unwrap();
+
+        for (idx, v) in iter.flatten().enumerate() {
+            assert_eq!(idx as u32, v.unwrap());
+        }
     }
 }

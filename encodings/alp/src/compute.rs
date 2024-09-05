@@ -1,6 +1,6 @@
 use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
-use vortex::{Array, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
@@ -26,24 +26,21 @@ impl ScalarAtFn for ALPArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        if let Some(patches) = self.patches().and_then(|p| {
-            p.with_dyn(|arr| {
+        if let Some(patches) = self.patches() {
+            if patches.with_dyn(|a| a.is_valid(index)) {
                 // We need to make sure the value is actually in the patches array
-                arr.is_valid(index)
-            })
-            .then_some(p)
-        }) {
-            return scalar_at_unchecked(&patches, index);
+                return scalar_at_unchecked(&patches, index);
+            }
         }
 
         let encoded_val = scalar_at_unchecked(&self.encoded(), index);
 
         match_each_alp_float_ptype!(self.ptype(), |$T| {
             let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.as_ref().try_into().unwrap();
-            Scalar::from(<$T as ALPFloat>::decode_single(
+            Scalar::primitive(<$T as ALPFloat>::decode_single(
                 encoded_val,
                 self.exponents(),
-            ))
+            ), self.dtype().nullability())
         })
     }
 }

@@ -1,44 +1,52 @@
 #![no_main]
 
-use std::collections::HashSet;
-
 use libfuzzer_sys::{fuzz_target, Corpus};
-use vortex::compute::slice;
-use vortex::compute::unary::scalar_at_unchecked;
+use vortex::compute::unary::scalar_at;
+use vortex::compute::{search_sorted, slice, take, SearchResult, SearchSorted, SearchSortedSide};
 use vortex::encoding::EncodingId;
 use vortex::Array;
+use vortex_error::VortexResult;
 use vortex_fuzz::{Action, FuzzArrayAction};
-use vortex_sampling_compressor::compressors::CompressorRef;
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
     let FuzzArrayAction { array, actions } = fuzz_action;
-
-    // TODO(adamg): We actually might want to test empty things, but I'm punting this issue for now
-    if array.is_empty() {
-        return Corpus::Reject;
-    };
-
     match &actions[0] {
-        Action::Compress(c) => match fuzz_compress(&array, *c) {
+        Action::Compress(c) => match fuzz_compress(&array, c) {
             Some(compressed_array) => {
                 assert_array_eq(&array, &compressed_array);
                 Corpus::Keep
             }
-            None => return Corpus::Reject,
+            None => Corpus::Reject,
         },
         Action::Slice(range) => {
             let slice = slice(&array, range.start, range.end).unwrap();
             assert_slice(&array, &slice, range.start);
             Corpus::Keep
         }
+        Action::SearchSorted(s, side) => {
+            if !array_is_sorted(&array).unwrap() {
+                return Corpus::Reject;
+            }
+
+            let search_result = search_sorted(&array, s.clone(), *side).unwrap();
+            assert_search_sorted(&array, s, *side, search_result);
+            Corpus::Keep
+        }
+        Action::Take(indices) => {
+            if indices.is_empty() {
+                return Corpus::Reject;
+            }
+            let taken = take(&array, indices).unwrap();
+            assert_take(&array, &taken, indices);
+            Corpus::Keep
+        }
     }
 });
 
-fn fuzz_compress(array: &Array, compressor_ref: CompressorRef<'_>) -> Option<Array> {
-    let ctx = SamplingCompressor::new(HashSet::from([compressor_ref]));
-    let compressed_array = ctx.compress(array, None).unwrap();
+fn fuzz_compress(array: &Array, compressor: &SamplingCompressor) -> Option<Array> {
+    let compressed_array = compressor.compress(array, None).unwrap();
 
     compressed_array
         .path()
@@ -46,10 +54,36 @@ fn fuzz_compress(array: &Array, compressor_ref: CompressorRef<'_>) -> Option<Arr
         .then(|| compressed_array.into_array())
 }
 
+fn assert_search_sorted(
+    original: &Array,
+    value: &Scalar,
+    side: SearchSortedSide,
+    search_result: SearchResult,
+) {
+    let result = SearchSorted::search_sorted(original, value, side);
+    assert_eq!(
+        result,
+        search_result,
+        "Searching for {value} in {} from {side}",
+        original.encoding().id()
+    )
+}
+
+fn assert_take(original: &Array, taken: &Array, indices: &Array) {
+    assert_eq!(taken.len(), indices.len());
+    for idx in 0..indices.len() {
+        let to_take = usize::try_from(&scalar_at(indices, idx).unwrap()).unwrap();
+        let o = scalar_at(original, to_take).unwrap();
+        let s = scalar_at(taken, idx).unwrap();
+
+        fuzzing_scalar_cmp(o, s, original.encoding().id(), taken.encoding().id(), idx);
+    }
+}
+
 fn assert_slice(original: &Array, slice: &Array, start: usize) {
     for idx in 0..slice.len() {
-        let o = scalar_at_unchecked(original, start + idx);
-        let s = scalar_at_unchecked(slice, idx);
+        let o = scalar_at(original, start + idx).unwrap();
+        let s = scalar_at(slice, idx).unwrap();
 
         fuzzing_scalar_cmp(o, s, original.encoding().id(), slice.encoding().id(), idx);
     }
@@ -58,8 +92,8 @@ fn assert_slice(original: &Array, slice: &Array, start: usize) {
 fn assert_array_eq(lhs: &Array, rhs: &Array) {
     assert_eq!(lhs.len(), rhs.len());
     for idx in 0..lhs.len() {
-        let l = scalar_at_unchecked(lhs, idx);
-        let r = scalar_at_unchecked(rhs, idx);
+        let l = scalar_at(lhs, idx).unwrap();
+        let r = scalar_at(rhs, idx).unwrap();
 
         fuzzing_scalar_cmp(l, r, lhs.encoding().id(), rhs.encoding().id(), idx);
     }
@@ -92,4 +126,20 @@ fn fuzzing_scalar_cmp(
         lhs_encoding, rhs_encoding
     );
     assert_eq!(l.is_valid(), r.is_valid());
+}
+
+fn array_is_sorted(array: &Array) -> VortexResult<bool> {
+    if array.is_empty() {
+        return Ok(true);
+    }
+
+    let mut last_value = scalar_at(array, 0)?;
+    for i in 1..array.len() {
+        let next_value = scalar_at(array, i)?;
+        if next_value < last_value {
+            return Ok(false);
+        }
+        last_value = next_value;
+    }
+    Ok(true)
 }

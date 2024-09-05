@@ -21,7 +21,7 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
             None => {
                 let mut iter = views.iter().map(|view| {
                     if view.is_inlined() {
-                        Some(unsafe { &view.inlined.data as &[u8] })
+                        Some(unsafe { &view.inlined.data[..view.size()] })
                     } else {
                         let offset = unsafe { view._ref.offset as usize };
                         let buffer_idx = unsafe { view._ref.buffer_index as usize };
@@ -37,7 +37,7 @@ impl ArrayAccessor<[u8]> for VarBinViewArray {
                 let mut iter = views.iter().zip(validity.iter()).map(|(view, valid)| {
                     if valid {
                         if view.is_inlined() {
-                            Some(unsafe { &view.inlined.data as &[u8] })
+                            Some(unsafe { &view.inlined.data[..view.size()] })
                         } else {
                             let offset = unsafe { view._ref.offset as usize };
                             let buffer_idx = unsafe { view._ref.buffer_index as usize };
