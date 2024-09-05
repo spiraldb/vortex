@@ -6,6 +6,229 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.7.0...vortex-runend-bool-v0.8.0) - 2024-09-05
+
+### Other
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Fix RunEnd take and scalar_at compute functions ([#588](https://github.com/spiraldb/vortex/pull/588))
+
+## `vortex-bytebool` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-bytebool-v0.7.0...vortex-bytebool-v0.8.0) - 2024-09-05
+
+### Other
+- Fix issues discovered by fuzzer ([#707](https://github.com/spiraldb/vortex/pull/707))
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-zigzag` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-zigzag-v0.7.0...vortex-zigzag-v0.8.0) - 2024-09-05
+
+### Other
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-runend` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-runend-v0.7.0...vortex-runend-v0.8.0) - 2024-09-05
+
+### Other
+- Teach RunEnd take to respect its own validity ([#691](https://github.com/spiraldb/vortex/pull/691))
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Assert expected row count in tpch_benchmark binary ([#620](https://github.com/spiraldb/vortex/pull/620))
+- RunEnd array scalar_at respects validity ([#608](https://github.com/spiraldb/vortex/pull/608))
+- Fix RunEnd take and scalar_at compute functions ([#588](https://github.com/spiraldb/vortex/pull/588))
+
+## `vortex-roaring` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-roaring-v0.7.0...vortex-roaring-v0.8.0) - 2024-09-05
+
+### Other
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-fsst` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-fsst-v0.7.0...vortex-fsst-v0.8.0) - 2024-09-05
+
+### Other
+- FSSTCompressor ([#664](https://github.com/spiraldb/vortex/pull/664))
+- Fix issues discovered by fuzzer ([#707](https://github.com/spiraldb/vortex/pull/707))
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+
+## `vortex-dict` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-dict-v0.7.0...vortex-dict-v0.8.0) - 2024-09-05
+
+### Other
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-datetime-parts` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-parts-v0.7.0...vortex-datetime-parts-v0.8.0) - 2024-09-05
+
+### Other
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-sampling-compressor` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-sampling-compressor-v0.7.0...vortex-sampling-compressor-v0.8.0) - 2024-09-05
+
+### Other
+- Add fuzzing for Take and SearchSorted functions ([#724](https://github.com/spiraldb/vortex/pull/724))
+- FSSTCompressor ([#664](https://github.com/spiraldb/vortex/pull/664))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- FoR compressor handles nullable arrays ([#617](https://github.com/spiraldb/vortex/pull/617))
+- Use then vs then_some for values that have to be lazy ([#599](https://github.com/spiraldb/vortex/pull/599))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-fastlanes` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-fastlanes-v0.7.0...vortex-fastlanes-v0.8.0) - 2024-09-05
+
+### Other
+- Fix issues discovered by fuzzer ([#707](https://github.com/spiraldb/vortex/pull/707))
+- FoR decompression happens in place if possible ([#699](https://github.com/spiraldb/vortex/pull/699))
+- Remove length of patches from ALP and BitPacked array ([#688](https://github.com/spiraldb/vortex/pull/688))
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Bitpacking validity is checked first when getting a scalar ([#630](https://github.com/spiraldb/vortex/pull/630))
+- Fix FoRArray decompression with non 0 shift ([#625](https://github.com/spiraldb/vortex/pull/625))
+- FoR compressor handles nullable arrays ([#617](https://github.com/spiraldb/vortex/pull/617))
+- Basic fuzzing for compression and slicing functions ([#600](https://github.com/spiraldb/vortex/pull/600))
+- Use then vs then_some for values that have to be lazy ([#599](https://github.com/spiraldb/vortex/pull/599))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-serde` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.7.0...vortex-serde-v0.8.0) - 2024-09-05
+
+### Other
+- directly implement VortexReadAt on File ([#738](https://github.com/spiraldb/vortex/pull/738))
+- Teach schema dtype() and into_dtype() ([#714](https://github.com/spiraldb/vortex/pull/714))
+- Add method for converting VortexExpr into equivalent pruning expression ([#701](https://github.com/spiraldb/vortex/pull/701))
+- Primitive and Bool array roundtrip serialization ([#704](https://github.com/spiraldb/vortex/pull/704))
+- Move flatbuffer schema project functions around ([#680](https://github.com/spiraldb/vortex/pull/680))
+- Deduplicate filter projection with result projection ([#668](https://github.com/spiraldb/vortex/pull/668))
+- Push filter schema manipulation into layout reader and reuse ipc message writer in file writer ([#651](https://github.com/spiraldb/vortex/pull/651))
+- Bring back ability to convert ArrayView to ArrayData ([#626](https://github.com/spiraldb/vortex/pull/626))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- Assert expected row count in tpch_benchmark binary ([#620](https://github.com/spiraldb/vortex/pull/620))
+- ArrayBufferReader assumes flatbuffers are validated ([#610](https://github.com/spiraldb/vortex/pull/610))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-expr` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-expr-v0.7.0...vortex-expr-v0.8.0) - 2024-09-05
+
+### Other
+- Add method for converting VortexExpr into equivalent pruning expression ([#701](https://github.com/spiraldb/vortex/pull/701))
+- Fix Operator::swap ([#672](https://github.com/spiraldb/vortex/pull/672))
+- Push filter schema manipulation into layout reader and reuse ipc message writer in file writer ([#651](https://github.com/spiraldb/vortex/pull/651))
+- Support Temporal scalar conversion between datafusion and arrow ([#657](https://github.com/spiraldb/vortex/pull/657))
+- cargo-sort related maintenance  ([#650](https://github.com/spiraldb/vortex/pull/650))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- Generate more structured inputs for fuzzing ([#635](https://github.com/spiraldb/vortex/pull/635))
+- Fix bug where operations were negated instead of swapped when lhs/rhs were flipped ([#619](https://github.com/spiraldb/vortex/pull/619))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-datafusion` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-datafusion-v0.7.0...vortex-datafusion-v0.8.0) - 2024-09-05
+
+### Other
+- Push filter schema manipulation into layout reader and reuse ipc message writer in file writer ([#651](https://github.com/spiraldb/vortex/pull/651))
+- Support Temporal scalar conversion between datafusion and arrow ([#657](https://github.com/spiraldb/vortex/pull/657))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- Remove dead code after disk and in memory table provider unification ([#633](https://github.com/spiraldb/vortex/pull/633))
+- Unify expression evaluation for both Table Providers ([#632](https://github.com/spiraldb/vortex/pull/632))
+- `Exact` support for more expressions  ([#628](https://github.com/spiraldb/vortex/pull/628))
+- Assert expected row count in tpch_benchmark binary ([#620](https://github.com/spiraldb/vortex/pull/620))
+- Fix a bug in vortex in-memory predicate pushdown ([#618](https://github.com/spiraldb/vortex/pull/618))
+- Nulls as false respects original array nullability ([#606](https://github.com/spiraldb/vortex/pull/606))
+- Fix a bug in the handling the conversion physical expression ([#601](https://github.com/spiraldb/vortex/pull/601))
+- Vortex physical expressions support for on-disk data ([#581](https://github.com/spiraldb/vortex/pull/581))
+- *(deps)* update datafusion to v41 (major) ([#595](https://github.com/spiraldb/vortex/pull/595))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-scalar` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-scalar-v0.7.0...vortex-scalar-v0.8.0) - 2024-09-05
+
+### Other
+- Add fuzzing for Take and SearchSorted functions ([#724](https://github.com/spiraldb/vortex/pull/724))
+- impl Display for Time, Date, and Timestamp ([#683](https://github.com/spiraldb/vortex/pull/683))
+- impl Display for StructValue ([#682](https://github.com/spiraldb/vortex/pull/682))
+- impl Display for Utf8Scalar and BinaryScalar ([#678](https://github.com/spiraldb/vortex/pull/678))
+- Add doc to pvalue typed accessor methods ([#658](https://github.com/spiraldb/vortex/pull/658))
+- Support Temporal scalar conversion between datafusion and arrow ([#657](https://github.com/spiraldb/vortex/pull/657))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-proto` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-proto-v0.7.0...vortex-proto-v0.8.0) - 2024-09-05
+
+### Other
+- Push filter schema manipulation into layout reader and reuse ipc message writer in file writer ([#651](https://github.com/spiraldb/vortex/pull/651))
+- cargo-sort related maintenance  ([#650](https://github.com/spiraldb/vortex/pull/650))
+
+## `vortex-flatbuffers` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-flatbuffers-v0.7.0...vortex-flatbuffers-v0.8.0) - 2024-09-05
+
+### Other
+- Push filter schema manipulation into layout reader and reuse ipc message writer in file writer ([#651](https://github.com/spiraldb/vortex/pull/651))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-error` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-error-v0.7.0...vortex-error-v0.8.0) - 2024-09-05
+
+### Other
+- impl Display for Time, Date, and Timestamp ([#683](https://github.com/spiraldb/vortex/pull/683))
+
+## `vortex-dtype` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-dtype-v0.7.0...vortex-dtype-v0.8.0) - 2024-09-05
+
+### Other
+- Move flatbuffer schema project functions around ([#680](https://github.com/spiraldb/vortex/pull/680))
+- DType serde project requires flatbuffers feature ([#679](https://github.com/spiraldb/vortex/pull/679))
+- Push filter schema manipulation into layout reader and reuse ipc message writer in file writer ([#651](https://github.com/spiraldb/vortex/pull/651))
+- Support Temporal scalar conversion between datafusion and arrow ([#657](https://github.com/spiraldb/vortex/pull/657))
+- Get beyond the immediate fuzzing failures ([#611](https://github.com/spiraldb/vortex/pull/611))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-datetime-dtype` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-dtype-v0.7.0...vortex-datetime-dtype-v0.8.0) - 2024-09-05
+
+### Other
+- impl Display for Time, Date, and Timestamp ([#683](https://github.com/spiraldb/vortex/pull/683))
+- Support Temporal scalar conversion between datafusion and arrow ([#657](https://github.com/spiraldb/vortex/pull/657))
+- cargo-sort related maintenance  ([#650](https://github.com/spiraldb/vortex/pull/650))
+
+## `vortex-buffer` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-buffer-v0.7.0...vortex-buffer-v0.8.0) - 2024-09-05
+
+### Other
+- Primitive Iterator API ([#689](https://github.com/spiraldb/vortex/pull/689))
+- Support Temporal scalar conversion between datafusion and arrow ([#657](https://github.com/spiraldb/vortex/pull/657))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
+## `vortex-array` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-array-v0.7.0...vortex-array-v0.8.0) - 2024-09-05
+
+### Other
+- Unary and Binary functions trait ([#726](https://github.com/spiraldb/vortex/pull/726))
+- Add fuzzing for Take and SearchSorted functions ([#724](https://github.com/spiraldb/vortex/pull/724))
+- Fix issues discovered by fuzzer ([#707](https://github.com/spiraldb/vortex/pull/707))
+- Primitive Iterator API ([#689](https://github.com/spiraldb/vortex/pull/689))
+- StructArray roundtrips arrow conversion ([#705](https://github.com/spiraldb/vortex/pull/705))
+- Primitive and Bool array roundtrip serialization ([#704](https://github.com/spiraldb/vortex/pull/704))
+- Fix pack_varbin ([#674](https://github.com/spiraldb/vortex/pull/674))
+- Slightly faster iter of `LogicalValidity` to `Validity` ([#673](https://github.com/spiraldb/vortex/pull/673))
+- Fix Operator::swap ([#672](https://github.com/spiraldb/vortex/pull/672))
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Push filter schema manipulation into layout reader and reuse ipc message writer in file writer ([#651](https://github.com/spiraldb/vortex/pull/651))
+- Faster canonicalization ([#663](https://github.com/spiraldb/vortex/pull/663))
+- Fix slicing of ChunkedArray if end index == array length ([#660](https://github.com/spiraldb/vortex/pull/660))
+- Implement LogicalValidity for ChunkedArray ([#661](https://github.com/spiraldb/vortex/pull/661))
+- Support Temporal scalar conversion between datafusion and arrow ([#657](https://github.com/spiraldb/vortex/pull/657))
+- Bring back ability to convert ArrayView to ArrayData ([#626](https://github.com/spiraldb/vortex/pull/626))
+- Improve Primitive array comparison ([#644](https://github.com/spiraldb/vortex/pull/644))
+- Let chunked arrays use specialized `compare` implementations ([#640](https://github.com/spiraldb/vortex/pull/640))
+- Expand fuzzing space ([#639](https://github.com/spiraldb/vortex/pull/639))
+- Move expression filters out of datafusion ([#638](https://github.com/spiraldb/vortex/pull/638))
+- `Exact` support for more expressions  ([#628](https://github.com/spiraldb/vortex/pull/628))
+- Fix bug where operations were negated instead of swapped when lhs/rhs were flipped ([#619](https://github.com/spiraldb/vortex/pull/619))
+- Get beyond the immediate fuzzing failures ([#611](https://github.com/spiraldb/vortex/pull/611))
+- Basic fuzzing for compression and slicing functions ([#600](https://github.com/spiraldb/vortex/pull/600))
+- Vortex physical expressions support for on-disk data ([#581](https://github.com/spiraldb/vortex/pull/581))
+- Use then vs then_some for values that have to be lazy ([#599](https://github.com/spiraldb/vortex/pull/599))
+- Child assert includes index and encoding id ([#598](https://github.com/spiraldb/vortex/pull/598))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+- Add tests to sparse array slicing + extra length validation ([#590](https://github.com/spiraldb/vortex/pull/590))
+
+## `vortex-alp` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.7.0...vortex-alp-v0.8.0) - 2024-09-05
+
+### Other
+- ALP compressor is better at roundtripping values ([#736](https://github.com/spiraldb/vortex/pull/736))
+- Fix issues discovered by fuzzer ([#707](https://github.com/spiraldb/vortex/pull/707))
+- Primitive Iterator API ([#689](https://github.com/spiraldb/vortex/pull/689))
+- ALP decompress in place ([#700](https://github.com/spiraldb/vortex/pull/700))
+- Remove length of patches from ALP and BitPacked array ([#688](https://github.com/spiraldb/vortex/pull/688))
+- Add `scalar_at_unchecked` ([#666](https://github.com/spiraldb/vortex/pull/666))
+- Fix alp null handling ([#623](https://github.com/spiraldb/vortex/pull/623))
+- Clippy deny `unwrap` & `panic` in functions that return `Result` ([#578](https://github.com/spiraldb/vortex/pull/578))
+
 ## `vortex-array` - [0.7.0](https://github.com/spiraldb/vortex/compare/vortex-array-v0.6.0...vortex-array-v0.7.0) - 2024-08-09
 
 ### Other
