@@ -112,8 +112,8 @@ pure-eval==0.2.3
 py-cpuinfo==9.0.0
     # via pytest-benchmark
 pyarrow==15.0.2
-pydata-sphinx-theme==0.15.4
     # via vortex
+pydata-sphinx-theme==0.15.4
 pygments==2.17.2
     # via accessible-pygments
     # via ipython

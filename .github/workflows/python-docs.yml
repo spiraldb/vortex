@@ -19,17 +19,23 @@ jobs:
       - uses: ./.github/actions/setup-python
 
       - name: build Python docs
-        run: rye run sphinx-build -M html . _build
+        run: |
+          set -ex
+
+          rye sync
+          rye run sphinx-build -M html . _build --fail-on-warning --keep-going
         working-directory: pyvortex/docs
       - run: |
+          set -ex
+
           this_sha=$(git rev-parse HEAD)
 
-          mv pyvortex/docs/_build /tmp/_build
+          mv pyvortex/docs/_build/html /tmp/html
 
           git fetch origin
           git checkout origin/gh-pages-bench
           rm -rf docs
-          mv /tmp/_build docs
+          mv /tmp/html docs
           git add docs
           git config --global user.email "nobody@example.com"
           git config --global user.name "github-action-deploy-python-docs"
