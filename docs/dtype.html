@@ -369,10 +369,10 @@ implemented by the column <em>encoding</em>. Each data type is implemented by on
 <dd><p>Construct a data type for binary strings.</p>
 <section id="parameters">
 <h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h2>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<dl>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="returns">
 <h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h2>
@@ -394,10 +394,10 @@ implemented by the column <em>encoding</em>. Each data type is implemented by on
 <dd><p>Construct a Boolean data type.</p>
 <section id="id1">
 <h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">#</a></h2>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<dl>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id2">
 <h2>Returns<a class="headerlink" href="#id2" title="Link to this heading">#</a></h2>
@@ -424,15 +424,13 @@ implemented by the column <em>encoding</em>. Each data type is implemented by on
 <dd><p>Construct an IEEE 754 binary floating-point data type.</p>
 <section id="id4">
 <h2>Parameters<a class="headerlink" href="#id4" title="Link to this heading">#</a></h2>
-<p>width : one of 16, 32, and 64.</p>
-<blockquote>
-<div><p>The bit width determines the range and precision of the floating-point values. If
+<dl>
+<dt>width<span class="classifier">one of 16, 32, and 64.</span></dt><dd><p>The bit width determines the range and precision of the floating-point values. If
 <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
-</div></blockquote>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+</dd>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id5">
 <h2>Returns<a class="headerlink" href="#id5" title="Link to this heading">#</a></h2>
@@ -456,14 +454,12 @@ infinity.</p>
 <dd><p>Construct a signed integral data type.</p>
 <section id="id7">
 <h2>Parameters<a class="headerlink" href="#id7" title="Link to this heading">#</a></h2>
-<p>width : one of 8, 16, 32, and 64.</p>
-<blockquote>
-<div><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
-</div></blockquote>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<dl>
+<dt>width<span class="classifier">one of 8, 16, 32, and 64.</span></dt><dd><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
+</dd>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id8">
 <h2>Returns<a class="headerlink" href="#id8" title="Link to this heading">#</a></h2>
@@ -508,14 +504,12 @@ infinity.</p>
 <dd><p>Construct an unsigned integral data type.</p>
 <section id="id12">
 <h2>Parameters<a class="headerlink" href="#id12" title="Link to this heading">#</a></h2>
-<p>width : one of 8, 16, 32, and 64.</p>
-<blockquote>
-<div><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
-</div></blockquote>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<dl>
+<dt>width<span class="classifier">one of 8, 16, 32, and 64.</span></dt><dd><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
+</dd>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id13">
 <h2>Returns<a class="headerlink" href="#id13" title="Link to this heading">#</a></h2>
@@ -542,10 +536,10 @@ infinity.</p>
 <dd><p>Construct a UTF-8-encoded string data type.</p>
 <section id="id15">
 <h2>Parameters<a class="headerlink" href="#id15" title="Link to this heading">#</a></h2>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<dl>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id16">
 <h2>Returns<a class="headerlink" href="#id16" title="Link to this heading">#</a></h2>
