@@ -3090,18 +3090,26 @@ name = "pyvortex"
 version = "0.7.0"
 dependencies = [
  "arrow",
+ "flexbuffers",
+ "futures",
+ "itertools 0.13.0",
  "log",
  "paste",
  "pyo3",
  "pyo3-log",
+ "tokio",
  "vortex-alp",
  "vortex-array",
  "vortex-dict",
  "vortex-dtype",
  "vortex-error",
+ "vortex-expr",
  "vortex-fastlanes",
  "vortex-roaring",
  "vortex-runend",
+ "vortex-sampling-compressor",
+ "vortex-scalar",
+ "vortex-serde",
  "vortex-zigzag",
 ]
 

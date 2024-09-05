@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::field::Field;
-use vortex_dtype::{DType, FieldName, FieldNames, Nullability, StructDType};
+use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
@@ -41,6 +41,8 @@ impl StructArray {
         length: usize,
         validity: Validity,
     ) -> VortexResult<Self> {
+        let nullability = validity.nullability();
+
         if names.len() != fields.len() {
             vortex_bail!("Got {} names and {} fields", names.len(), fields.len());
         }
@@ -60,10 +62,7 @@ impl StructArray {
         }
 
         Self::try_from_parts(
-            DType::Struct(
-                StructDType::new(names, field_dtypes),
-                Nullability::NonNullable,
-            ),
+            DType::Struct(StructDType::new(names, field_dtypes), nullability),
             length,
             StructMetadata {
                 length,
