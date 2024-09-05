@@ -11,7 +11,7 @@ def test_primitive_array_round_trip():
 def test_array_with_nulls():
     a = pa.array([b"123", None])
     arr = vortex.encode(a)
-    assert arr.to_pyarrow().combine_chunks() == a
+    assert arr.to_arrow().combine_chunks() == a
 
 
 def test_varbin_array_round_trip():
