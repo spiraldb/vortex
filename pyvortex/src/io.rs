@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use futures::StreamExt;
+use futures::TryStreamExt;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyfunction;
@@ -156,11 +156,7 @@ pub fn read<'py>(
 
         let dtype = stream.schema().into_dtype();
 
-        let vecs = stream
-            .collect::<Vec<VortexResult<Array>>>()
-            .await
-            .into_iter() // TODO(dk) unclear why I need two collects to pacify the compiler
-            .collect::<VortexResult<Vec<Array>>>()?;
+        let vecs: Vec<Array> = stream.try_collect().await?;
 
         if vecs.len() == 1 {
             Ok(vecs.into_iter().next().unwrap())
