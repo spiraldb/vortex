@@ -1,3 +1,4 @@
+use std::mem::{transmute, MaybeUninit};
 use std::ptr;
 use std::sync::Arc;
 
@@ -320,15 +321,16 @@ impl UnaryFn for PrimitiveArray {
         &self,
         unary_fn: F,
     ) -> VortexResult<Array> {
-        let mut output: Vec<O> = Vec::with_capacity(self.len());
+        let mut output: Vec<MaybeUninit<O>> = Vec::with_capacity(self.len());
+        unsafe { output.set_len(self.len()) };
 
         for (index, item) in self.maybe_null_slice::<I>().iter().enumerate() {
             unsafe {
-                *output.get_unchecked_mut(index) = unary_fn(*item);
+                *output.get_unchecked_mut(index) = MaybeUninit::new(unary_fn(*item));
             }
         }
 
-        unsafe { output.set_len(self.len()) };
+        let output = unsafe { transmute::<Vec<MaybeUninit<O>>, Vec<O>>(output) };
 
         Ok(PrimitiveArray::from_vec(output, self.validity()).into_array())
     }
@@ -349,7 +351,8 @@ impl BinaryFn for PrimitiveArray {
         }
 
         let lhs = self.maybe_null_slice::<I>();
-        let mut output: Vec<O> = Vec::with_capacity(self.len());
+        let mut output: Vec<MaybeUninit<O>> = Vec::with_capacity(self.len());
+        unsafe { output.set_len(self.len()) };
 
         let validity = self
             .validity()
@@ -371,7 +374,7 @@ impl BinaryFn for PrimitiveArray {
             }
         });
 
-        unsafe { output.set_len(self.len()) };
+        let output = unsafe { transmute::<Vec<MaybeUninit<O>>, Vec<O>>(output) };
 
         Ok(PrimitiveArray::from_vec(output, validity).into_array())
     }
@@ -382,7 +385,7 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
     batch: Batch<U>,
     f: F,
     start_idx: usize,
-    output: &mut [O],
+    output: &mut [MaybeUninit<O>],
 ) {
     assert_eq!(batch.len(), lhs.len());
 
@@ -392,13 +395,15 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
 
         for idx in 0_usize..ITER_BATCH_SIZE {
             unsafe {
-                *output.get_unchecked_mut(idx + start_idx) = f(lhs[idx], rhs[idx]);
+                *output.get_unchecked_mut(idx + start_idx) =
+                    MaybeUninit::new(f(lhs[idx], rhs[idx]));
             }
         }
     } else {
         for (idx, rhs_item) in batch.data().iter().enumerate() {
             unsafe {
-                *output.get_unchecked_mut(idx + start_idx) = f(lhs[idx], *rhs_item);
+                *output.get_unchecked_mut(idx + start_idx) =
+                    MaybeUninit::new(f(lhs[idx], *rhs_item));
             }
         }
     }
