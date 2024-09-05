@@ -10,6 +10,8 @@
 
 mod array;
 mod canonical;
+mod compress;
 mod compute;
 
 pub use array::*;
+pub use compress::*;

@@ -33,6 +33,7 @@ impl SliceFn for FSSTArray {
         Ok(Self::try_new(
             self.dtype().clone(),
             self.symbols(),
+            self.symbol_lengths(),
             slice(&self.codes(), start, stop)?,
         )?
         .into_array())
@@ -44,7 +45,13 @@ impl TakeFn for FSSTArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let new_codes = take(&self.codes(), indices)?;
 
-        Ok(Self::try_new(self.dtype().clone(), self.symbols(), new_codes)?.into_array())
+        Ok(Self::try_new(
+            self.dtype().clone(),
+            self.symbols(),
+            self.symbol_lengths(),
+            new_codes,
+        )?
+        .into_array())
     }
 }
 
@@ -57,10 +64,11 @@ impl ScalarAtFn for FSSTArray {
         let compressed = scalar_at_unchecked(&self.codes(), index);
         let binary_datum = compressed.value().as_buffer().unwrap().unwrap();
 
-        let decompressor = self.decompressor();
-        let decoded_buffer: Buffer = decompressor.decompress(binary_datum.as_slice()).into();
+        self.with_decompressor(|decompressor| {
+            let decoded_buffer: Buffer = decompressor.decompress(binary_datum.as_slice()).into();
 
-        varbin_scalar(decoded_buffer, self.dtype())
+            varbin_scalar(decoded_buffer, self.dtype())
+        })
     }
 }
 
@@ -68,6 +76,12 @@ impl FilterFn for FSSTArray {
     // Filtering an FSSTArray filters the codes array, leaving the symbols array untouched
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         let filtered_codes = filter(&self.codes(), predicate)?;
-        Ok(Self::try_new(self.dtype().clone(), self.symbols(), filtered_codes)?.into_array())
+        Ok(Self::try_new(
+            self.dtype().clone(),
+            self.symbols(),
+            self.symbol_lengths(),
+            filtered_codes,
+        )?
+        .into_array())
     }
 }

@@ -5,8 +5,6 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vortex_dtype::{DType, PType};
 
-use crate::array::*;
-
 mod array;
 mod dtype;
 mod encode;
@@ -19,25 +17,6 @@ fn _lib(_py: Python, m: &Bound<PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(encode::encode, m)?)?;
     // m.add_function(wrap_pyfunction!(compress::compress, m)?)?;
-
-    m.add_class::<PyArray>()?;
-    m.add_class::<PyBoolArray>()?;
-    m.add_class::<PyBitPackedArray>()?;
-    m.add_class::<PyChunkedArray>()?;
-    m.add_class::<PyConstantArray>()?;
-    m.add_class::<PyDeltaArray>()?;
-    m.add_class::<PyDictArray>()?;
-    m.add_class::<PyFoRArray>()?;
-    m.add_class::<PyPrimitiveArray>()?;
-    m.add_class::<PyRunEndArray>()?;
-    m.add_class::<PyRoaringBoolArray>()?;
-    m.add_class::<PyRoaringIntArray>()?;
-    m.add_class::<PySparseArray>()?;
-    m.add_class::<PyStructArray>()?;
-    m.add_class::<PyVarBinArray>()?;
-    m.add_class::<PyVarBinViewArray>()?;
-    m.add_class::<PyZigZagArray>()?;
-    m.add_class::<PyALPArray>()?;
 
     m.add_class::<PyDType>()?;
 
