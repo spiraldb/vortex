@@ -38,13 +38,10 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                 Action::Slice(start..stop)
             }
             2 => {
-<<<<<<< HEAD
                 if len == 0 {
                     return Err(EmptyChoose);
                 }
 
-=======
->>>>>>> 36c33bd4 (Add fuzzing for Take and SearchSorted functions (#724))
                 let indices = PrimitiveArray::from(random_vec_in_range(u, 0, len - 1)?).into();
                 let compressed = SamplingCompressor::default()
                     .compress(&indices, None)
