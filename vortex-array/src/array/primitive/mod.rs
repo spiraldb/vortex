@@ -316,20 +316,45 @@ impl Array {
     }
 }
 
+// This is an arbitrary value, tried a few seems like this is a better value than smaller ones,
+// I assume there's some hardware dependency here but this seems to be good enough
+const CHUNK_SIZE: usize = 1024;
+
 impl UnaryFn for PrimitiveArray {
     fn unary<I: NativePType, O: NativePType, F: Fn(I) -> O>(
         &self,
         unary_fn: F,
     ) -> VortexResult<Array> {
-        let mut output: Vec<MaybeUninit<O>> = Vec::with_capacity(self.len());
+        let data = self.maybe_null_slice::<I>();
+        let mut output: Vec<MaybeUninit<O>> = Vec::with_capacity(data.len());
         // Safety: we are going to apply the fn to every element and store it so the full length will be utilized
-        unsafe { output.set_len(self.len()) };
+        unsafe { output.set_len(data.len()) };
 
-        for (index, item) in self.maybe_null_slice::<I>().iter().enumerate() {
+        let chunks = data.chunks_exact(CHUNK_SIZE);
+
+        // We start with the reminder because of ownership
+        let reminder_start_idx = data.len() - (data.len() % CHUNK_SIZE);
+        for (index, item) in chunks.remainder().iter().enumerate() {
             // Safety: This access is bound by the same range as the output's capacity and length, so its within the Vec's allocated memory
             unsafe {
-                *output.get_unchecked_mut(index) = MaybeUninit::new(unary_fn(*item));
+                *output.get_unchecked_mut(reminder_start_idx + index) =
+                    MaybeUninit::new(unary_fn(*item));
             }
+        }
+
+        let mut offset = 0;
+
+        for chunk in chunks {
+            // We know the size of the chunk, and we know output is the same length as the input array
+            let chunk: [I; CHUNK_SIZE] = chunk.try_into().unwrap();
+            let mut output_slice: [_; CHUNK_SIZE] =
+                output[offset..offset + CHUNK_SIZE].try_into().unwrap();
+
+            for idx in 0..CHUNK_SIZE {
+                output_slice[idx] = MaybeUninit::new(unary_fn(chunk[idx]));
+            }
+
+            offset += CHUNK_SIZE;
         }
 
         // Safety: `MaybeUninit` is a transparent struct and we know the actual length of the vec.
@@ -482,6 +507,20 @@ mod tests {
 
         for v in output_iter {
             assert_eq!(v.unwrap(), 1);
+        }
+    }
+
+    #[test]
+    fn unary_fn_example() {
+        let input = PrimitiveArray::from_vec(vec![2u32, 2, 2, 2], Validity::AllValid);
+        let output = input.unary(|u: u32| u + 1).unwrap();
+
+        for o in output
+            .with_dyn(|a| a.as_primitive_array_unchecked().u32_iter())
+            .unwrap()
+            .flatten()
+        {
+            assert_eq!(o.unwrap(), 3);
         }
     }
 }
