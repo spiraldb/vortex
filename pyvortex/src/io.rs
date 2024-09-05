@@ -23,7 +23,6 @@ use crate::PyArray;
 /// Parameters
 /// ----------
 /// f : :class:`str`
-///
 ///     The file path.
 ///
 /// Examples
@@ -208,11 +207,9 @@ pub fn read<'py>(
 /// Parameters
 /// ----------
 /// array : :class:`vortex.encoding.Array`
-///
 ///     The array. Must be an array of structures.
 ///
 /// f : :class:`str`
-///
 ///     The file path.
 ///
 /// Examples
