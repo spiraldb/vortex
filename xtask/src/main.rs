@@ -1,15 +1,8 @@
+use cbindgen::Language;
 use clap::Command;
 use xshell::{cmd, Shell};
 
 static FLATC_BIN: &str = "flatc";
-
-fn gen_flatbuffers_command() -> Command {
-    Command::new("generate-fbs")
-}
-
-fn gen_proto_command() -> Command {
-    Command::new("generate-proto")
-}
 
 fn execute_generate_fbs() -> anyhow::Result<()> {
     let sh = Shell::new()?;
@@ -58,14 +51,45 @@ fn execute_generate_proto() -> anyhow::Result<()> {
     Ok(())
 }
 
+const COPYRIGHT_NOTICE_C: &str = r#"
+//   Copyright 2024 SpiralDB, Inc.
+//
+//   Licensed under the Apache License, Version 2.0 (the "License");
+//   you may not use this file except in compliance with the License.
+//   You may obtain a copy of the License at
+//
+//       http://www.apache.org/licenses/LICENSE-2.0
+//
+//   Unless required by applicable law or agreed to in writing, software
+//   distributed under the License is distributed on an "AS IS" BASIS,
+//   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+//   See the License for the specific language governing permissions and
+//   limitations under the License.
+"#;
+
+fn execute_cbindgen() -> anyhow::Result<()> {
+    // Run cbindgen on the vortex-capi subproject
+    let bindings = cbindgen::Builder::new()
+        .with_language(Language::C)
+        .with_crate("vortex-capi")
+        .with_header(COPYRIGHT_NOTICE_C)
+        .with_parse_expand(&["vortex-capi"])
+        .generate()?;
+    bindings.write_to_file("vortex-capi/vortex.h");
+
+    Ok(())
+}
+
 fn main() -> anyhow::Result<()> {
     let cli = Command::new("xtask")
-        .subcommand(gen_flatbuffers_command())
-        .subcommand(gen_proto_command());
+        .subcommand(Command::new("generate-fbs"))
+        .subcommand(Command::new("generate-proto"))
+        .subcommand(Command::new("generate-headers"));
     let args = cli.get_matches();
     match args.subcommand() {
         Some(("generate-fbs", _)) => execute_generate_fbs()?,
         Some(("generate-proto", _)) => execute_generate_proto()?,
+        Some(("generate-headers", _)) => execute_cbindgen()?,
         _ => anyhow::bail!("please use one of the recognized subcommands"),
     }
 

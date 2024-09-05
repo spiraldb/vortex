@@ -1,0 +1,27 @@
+[package]
+name = "vortex-capi"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+paste = { workspace = true }
+vortex-array = { workspace = true }
+vortex-dtype = { workspace = true }
+vortex-expr = { workspace = true }
+vortex-sampling-compressor = { workspace = true }
+
+[build-dependencies]
+cc = { workspace = true }
+
+[lints]
+workspace = true
