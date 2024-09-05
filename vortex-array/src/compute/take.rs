@@ -1,7 +1,7 @@
 use log::info;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 
-use crate::{Array, ArrayDType, IntoCanonical};
+use crate::{Array, IntoCanonical};
 
 pub trait TakeFn {
     fn take(&self, indices: &Array) -> VortexResult<Array>;
@@ -10,10 +10,6 @@ pub trait TakeFn {
 pub fn take(array: &Array, indices: &Array) -> VortexResult<Array> {
     array.with_dyn(|a| {
         if let Some(take) = a.take() {
-            if !indices.dtype().is_int() {
-                vortex_bail!(InvalidArgument: "indices: expected int or uint array, but found: {}", indices.dtype().python_repr());
-            }
-
             return take.take(indices);
         }
 

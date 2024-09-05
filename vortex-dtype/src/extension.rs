@@ -9,10 +9,6 @@ impl ExtID {
     pub fn new(value: Arc<str>) -> Self {
         Self(value)
     }
-
-    pub fn python_repr(&self) -> ExtIDPythonRepr {
-        ExtIDPythonRepr { ext_id: self }
-    }
 }
 
 impl Display for ExtID {
@@ -33,18 +29,6 @@ impl From<&str> for ExtID {
     }
 }
 
-pub struct ExtIDPythonRepr<'a> {
-    ext_id: &'a ExtID,
-}
-
-impl Display for ExtIDPythonRepr<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.ext_id {
-            ExtID(id) => write!(f, "\"{}\"", id.escape_default()),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialOrd, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ExtMetadata(Arc<[u8]>);
@@ -52,10 +36,6 @@ pub struct ExtMetadata(Arc<[u8]>);
 impl ExtMetadata {
     pub fn new(value: Arc<[u8]>) -> Self {
         Self(value)
-    }
-
-    pub fn python_repr(&self) -> ExtMetadataPythonRepr {
-        ExtMetadataPythonRepr { ext_metadata: self }
     }
 }
 
@@ -68,18 +48,6 @@ impl AsRef<[u8]> for ExtMetadata {
 impl From<&[u8]> for ExtMetadata {
     fn from(value: &[u8]) -> Self {
         Self(value.into())
-    }
-}
-
-pub struct ExtMetadataPythonRepr<'a> {
-    ext_metadata: &'a ExtMetadata,
-}
-
-impl Display for ExtMetadataPythonRepr<'_> {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self.ext_metadata {
-            ExtMetadata(metadata) => write!(f, "\"{}\"", metadata.escape_ascii()),
-        }
     }
 }
 

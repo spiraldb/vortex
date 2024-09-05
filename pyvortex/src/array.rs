@@ -9,6 +9,7 @@ use vortex::{Array, ArrayDType, IntoCanonical};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
+use crate::python_repr::PythonRepr;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 /// An array of zero or more *rows* each with the same set of *columns*.
@@ -167,9 +168,19 @@ impl PyArray {
     ///       "b",
     ///       "a"
     ///     ]
-    fn take<'py>(&self, indices: PyRef<'py, Self>) -> PyResult<Bound<'py, PyArray>> {
-        take(&self.inner, indices.unwrap())
+    fn take<'py>(&self, indices: &Bound<'py, PyArray>) -> PyResult<Bound<'py, PyArray>> {
+        let py = indices.py();
+        let indices = &indices.borrow().inner;
+
+        if !indices.dtype().is_int() {
+            return Err(PyValueError::new_err(format!(
+                "indices: expected int or uint array, but found: {}",
+                indices.dtype().python_repr()
+            )));
+        }
+
+        take(&self.inner, indices)
             .map_err(PyVortexError::map_err)
-            .and_then(|arr| Bound::new(indices.py(), PyArray { inner: arr }))
+            .and_then(|arr| Bound::new(py, PyArray { inner: arr }))
     }
 }

@@ -6,6 +6,8 @@ use pyo3::{pyclass, pyfunction, pymethods, Bound, Py, PyAny, PyResult, Python};
 use vortex::arrow::FromArrowType;
 use vortex_dtype::{DType, PType};
 
+use crate::python_repr::PythonRepr;
+
 #[pyclass(name = "DType", module = "vortex", subclass)]
 /// A data type describes the set of operations available on a given column. These operations are
 /// implemented by the column *encoding*. Each data type is implemented by one or more encodings.

@@ -11,6 +11,7 @@ mod encode;
 mod error;
 mod expr;
 mod io;
+mod python_repr;
 
 /// Vortex is an Apache Arrow-compatible toolkit for working with compressed array data.
 #[pymodule]

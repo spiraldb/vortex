@@ -3079,6 +3079,7 @@ dependencies = [
  "arrow",
  "flexbuffers",
  "futures",
+ "itertools 0.13.0",
  "log",
  "paste",
  "pyo3",
