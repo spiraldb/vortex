@@ -26,7 +26,7 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
             Corpus::Keep
         }
         Action::SearchSorted(s, side) => {
-            if !array_is_sorted(&array).unwrap() {
+            if !array_is_sorted(&array).unwrap() || s.is_null() {
                 return Corpus::Reject;
             }
 
@@ -76,7 +76,7 @@ fn assert_take(original: &Array, taken: &Array, indices: &Array) {
         let o = scalar_at(original, to_take).unwrap();
         let s = scalar_at(taken, idx).unwrap();
 
-        fuzzing_scalar_cmp(o, s, original.encoding().id(), taken.encoding().id(), idx);
+        fuzzing_scalar_cmp(o, s, original.encoding().id(), indices.encoding().id(), idx);
     }
 }
 
@@ -122,8 +122,7 @@ fn fuzzing_scalar_cmp(
 
     assert!(
         equal_values,
-        "{l} != {r} at index {idx}, lhs is {} rhs is {}",
-        lhs_encoding, rhs_encoding
+        "{l} != {r} at index {idx}, lhs is {lhs_encoding} rhs is {rhs_encoding}",
     );
     assert_eq!(l.is_valid(), r.is_valid());
 }

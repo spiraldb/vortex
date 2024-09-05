@@ -1,16 +1,59 @@
-use vortex_dtype::match_each_native_ptype;
+use std::cmp::Ordering;
+use std::cmp::Ordering::Greater;
+
+use vortex_dtype::{match_each_native_ptype, NativePType};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::compute::{SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide};
+use crate::compute::{IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide};
+use crate::validity::Validity;
 
 impl SearchSortedFn for PrimitiveArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_native_ptype!(self.ptype(), |$T| {
-            let pvalue: $T = value.try_into()?;
-            Ok(self.maybe_null_slice::<$T>().search_sorted(&pvalue, side))
+            match self.validity() {
+                Validity::NonNullable | Validity::AllValid => {
+                    let pvalue: $T = value.try_into()?;
+                    Ok(self.maybe_null_slice::<$T>().search_sorted(&pvalue, side))
+                }
+                Validity::AllInvalid => Ok(SearchResult::NotFound(0)),
+                Validity::Array(_) => {
+                    let pvalue: $T = value.try_into()?;
+                    Ok(SearchSortedNullsLast::new(self).search_sorted(&pvalue, side))
+                }
+            }
         })
+    }
+}
+
+struct SearchSortedNullsLast<'a, T> {
+    values: &'a [T],
+    validity: Validity,
+}
+
+impl<'a, T: NativePType> SearchSortedNullsLast<'a, T> {
+    pub fn new(array: &'a PrimitiveArray) -> Self {
+        Self {
+            values: array.maybe_null_slice(),
+            validity: array.validity(),
+        }
+    }
+}
+
+impl<'a, T: NativePType> IndexOrd<T> for SearchSortedNullsLast<'a, T> {
+    fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
+        if self.validity.is_null(idx) {
+            return Some(Greater);
+        }
+
+        self.values.index_cmp(idx, elem)
+    }
+}
+
+impl<'a, T> Len for SearchSortedNullsLast<'a, T> {
+    fn len(&self) -> usize {
+        self.values.len()
     }
 }
 

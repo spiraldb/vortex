@@ -1,12 +1,15 @@
+use std::ops::{AddAssign, Shl, Shr};
+
+use num_traits::{WrappingAdd, WrappingSub};
 use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{
     search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
     SliceFn, TakeFn,
 };
 use vortex::{Array, ArrayDType, IntoArray};
-use vortex_dtype::match_each_integer_ptype;
-use vortex_error::VortexResult;
-use vortex_scalar::{PrimitiveScalar, Scalar};
+use vortex_dtype::{match_each_integer_ptype, NativePType};
+use vortex_error::{VortexError, VortexResult};
+use vortex_scalar::{PValue, PrimitiveScalar, Scalar};
 
 use crate::FoRArray;
 
@@ -51,7 +54,6 @@ impl ScalarAtFn for FoRArray {
         let reference = PrimitiveScalar::try_from(self.reference()).unwrap();
 
         match_each_integer_ptype!(encoded.ptype(), |$P| {
-            use num_traits::WrappingAdd;
             encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))
                     .map(|v| Scalar::primitive::<$P>(v, encoded.dtype().nullability()))
                     .unwrap_or_else(|| Scalar::null(encoded.dtype().clone()))
@@ -73,23 +75,63 @@ impl SliceFn for FoRArray {
 impl SearchSortedFn for FoRArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_integer_ptype!(self.ptype(), |$P| {
-            let min: $P = self.reference().try_into().unwrap();
-            let shifted_min = min >> self.shift();
-            let unwrapped_value: $P = value.cast(self.dtype())?.try_into().unwrap();
-            let shifted_value: $P = unwrapped_value >> self.shift();
-            // Make sure that smaller values are still smaller and not larger than (which they would be after wrapping_sub)
-            if shifted_value < shifted_min {
-                return Ok(SearchResult::NotFound(0));
-            }
-
-            let translated_scalar = Scalar::primitive(
-                shifted_value.wrapping_sub(shifted_min),
-                value.dtype().nullability(),
-            )
-            .reinterpret_cast(self.ptype().to_unsigned());
-            search_sorted(&self.encoded(), translated_scalar, side)
+            search_sorted_typed::<$P>(self, value, side)
         })
     }
+}
+
+fn search_sorted_typed<T>(
+    array: &FoRArray,
+    value: &Scalar,
+    side: SearchSortedSide,
+) -> VortexResult<SearchResult>
+where
+    T: NativePType
+        + for<'a> TryFrom<&'a Scalar, Error = VortexError>
+        + Shr<u8, Output = T>
+        + Shl<u8, Output = T>
+        + WrappingSub
+        + WrappingAdd
+        + AddAssign
+        + Into<PValue>,
+{
+    let min: T = array.reference().try_into()?;
+    let primitive_value: T = value.cast(array.dtype())?.as_ref().try_into()?;
+    // Make sure that smaller values are still smaller and not larger than (which they would be after wrapping_sub)
+    if primitive_value < min {
+        return Ok(SearchResult::NotFound(0));
+    }
+
+    // When the values in the array are shifted, not all values in the domain are representable in the compressed
+    // space. Multiple different search values can translate to same value in the compressed space.
+    let encoded_value = primitive_value.wrapping_sub(&min) >> array.shift();
+    let decoded_value = (encoded_value << array.shift()).wrapping_add(&min);
+
+    // We first determine whether the value can be represented in the compressed array. For any value that is not
+    // representable, it is by definition NotFound. For NotFound values, the correct insertion index is by definition
+    // the same regardless of which side we search on.
+    // However, to correctly handle repeated values in the array, we need to search left on the next *representable*
+    // value (i.e., increment the translated value by 1).
+    let representable = decoded_value == primitive_value;
+    let (side, target) = if representable {
+        (side, encoded_value)
+    } else {
+        (
+            SearchSortedSide::Left,
+            encoded_value.wrapping_add(&T::one()),
+        )
+    };
+
+    let target_scalar = Scalar::primitive(target, value.dtype().nullability())
+        .reinterpret_cast(array.ptype().to_unsigned());
+    let search_result = search_sorted(&array.encoded(), target_scalar, side)?;
+    Ok(
+        if representable && matches!(search_result, SearchResult::Found(_)) {
+            search_result
+        } else {
+            SearchResult::NotFound(search_result.to_index())
+        },
+    )
 }
 
 #[cfg(test)]
@@ -98,7 +140,7 @@ mod test {
     use vortex::compute::unary::scalar_at;
     use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
 
-    use crate::for_compress;
+    use crate::{for_compress, FoRArray};
 
     #[test]
     fn for_scalar_at() {
@@ -122,6 +164,88 @@ mod test {
         assert_eq!(
             search_sorted(&for_arr, 1000, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(0)
+        );
+    }
+
+    #[test]
+    fn search_with_shift_notfound() {
+        let for_arr = for_compress(&PrimitiveArray::from(vec![62, 114])).unwrap();
+        assert_eq!(
+            search_sorted(&for_arr, 63, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(1)
+        );
+        let for_arr = for_compress(&PrimitiveArray::from(vec![62, 114])).unwrap();
+        assert_eq!(
+            search_sorted(&for_arr, 61, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(0)
+        );
+        let for_arr = for_compress(&PrimitiveArray::from(vec![62, 114])).unwrap();
+        assert_eq!(
+            search_sorted(&for_arr, 113, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(1)
+        );
+        assert_eq!(
+            search_sorted(&for_arr, 115, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(2)
+        );
+    }
+
+    #[test]
+    fn search_with_shift_repeated() {
+        let arr = for_compress(&PrimitiveArray::from(vec![62, 62, 114, 114])).unwrap();
+        let for_array = FoRArray::try_from(arr.clone()).unwrap();
+
+        let min: i32 = for_array.reference().try_into().unwrap();
+        assert_eq!(min, 62);
+        assert_eq!(for_array.shift(), 1);
+
+        assert_eq!(
+            search_sorted(&arr, 61, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(0)
+        );
+        assert_eq!(
+            search_sorted(&arr, 61, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(0)
+        );
+        assert_eq!(
+            search_sorted(&arr, 62, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(0)
+        );
+        assert_eq!(
+            search_sorted(&arr, 62, SearchSortedSide::Right).unwrap(),
+            SearchResult::Found(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 63, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 63, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 113, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 113, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 114, SearchSortedSide::Left).unwrap(),
+            SearchResult::Found(2)
+        );
+        assert_eq!(
+            search_sorted(&arr, 114, SearchSortedSide::Right).unwrap(),
+            SearchResult::Found(4)
+        );
+        assert_eq!(
+            search_sorted(&arr, 115, SearchSortedSide::Left).unwrap(),
+            SearchResult::NotFound(4)
+        );
+        assert_eq!(
+            search_sorted(&arr, 115, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(4)
         );
     }
 }
