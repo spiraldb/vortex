@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
@@ -61,11 +60,12 @@ pub fn alp_encode(parray: &PrimitiveArray) -> VortexResult<ALPArray> {
 
 pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
     let encoded = array.encoded().into_primitive()?;
+    let validity = encoded.validity();
 
-    let decoded = match_each_alp_float_ptype!(array.dtype().try_into().unwrap(), |$T| {
+    let decoded = match_each_alp_float_ptype!(array.dtype().try_into()?, |$T| {
         PrimitiveArray::from_vec(
-            decompress_primitive::<$T>(encoded.maybe_null_slice(), array.exponents()),
-            encoded.validity(),
+            decompress_primitive::<$T>(encoded.into_maybe_null_slice(), array.exponents()),
+            validity,
         )
     });
 
@@ -95,13 +95,13 @@ fn patch_decoded(array: PrimitiveArray, patches: &Array) -> VortexResult<Primiti
 }
 
 fn decompress_primitive<T: NativePType + ALPFloat>(
-    values: &[T::ALPInt],
+    values: Vec<T::ALPInt>,
     exponents: Exponents,
 ) -> Vec<T> {
     values
-        .iter()
-        .map(|&v| T::decode_single(v, exponents))
-        .collect_vec()
+        .into_iter()
+        .map(|v| T::decode_single(v, exponents))
+        .collect()
 }
 
 #[cfg(test)]
@@ -189,5 +189,16 @@ mod tests {
         assert!(s.is_null());
 
         let _decoded = decompress(encoded).unwrap();
+    }
+
+    #[test]
+    fn roundtrips_close_fractional() {
+        let original = PrimitiveArray::from(vec![195.26274f32, 195.27837, -48.815685]);
+        let alp_arr = alp_encode(&original).unwrap();
+        let decompressed = alp_arr.into_primitive().unwrap();
+        assert_eq!(
+            original.maybe_null_slice::<f32>(),
+            decompressed.maybe_null_slice::<f32>()
+        );
     }
 }

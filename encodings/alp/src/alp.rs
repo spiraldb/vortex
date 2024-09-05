@@ -1,3 +1,4 @@
+use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use itertools::Itertools;
@@ -12,7 +13,13 @@ pub struct Exponents {
     pub f: u8,
 }
 
-pub trait ALPFloat: Float + 'static {
+impl Display for Exponents {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "e: {}, f: {}", self.e, self.f)
+    }
+}
+
+pub trait ALPFloat: Float + Display + 'static {
     type ALPInt: PrimInt;
 
     const FRACTIONAL_BITS: u8;
@@ -77,7 +84,7 @@ pub trait ALPFloat: Float + 'static {
             .iter()
             .enumerate()
             .map(|(i, v)| {
-                match Self::encode_single(*v, &exp) {
+                match Self::encode_single(*v, exp) {
                     Ok(fi) => {
                         prev = fi;
                         fi
@@ -96,13 +103,12 @@ pub trait ALPFloat: Float + 'static {
     }
 
     #[inline]
-    fn encode_single(value: Self, exponents: &Exponents) -> Result<Self::ALPInt, Self> {
+    fn encode_single(value: Self, exponents: Exponents) -> Result<Self::ALPInt, Self> {
         let encoded = (value * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
             .fast_round();
-        let decoded = encoded * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize];
-
-        if decoded == value {
-            if let Some(e) = encoded.as_int() {
+        if let Some(e) = encoded.as_int() {
+            let decoded = Self::decode_single(e, exponents);
+            if decoded == value {
                 return Ok(e);
             }
         }

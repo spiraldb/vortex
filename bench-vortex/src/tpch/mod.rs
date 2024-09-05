@@ -377,6 +377,43 @@ async fn register_vortex(
     Ok(())
 }
 
+/// Load a table as an uncompressed Vortex array.
+pub async fn load_table(data_dir: impl AsRef<Path>, name: &str, schema: &Schema) -> Array {
+    // Create a local session to load the CSV file from the path.
+    let path = data_dir
+        .as_ref()
+        .to_owned()
+        .join(format!("{name}.tbl"))
+        .to_str()
+        .unwrap()
+        .to_string();
+    let record_batches = SessionContext::new()
+        .read_csv(
+            &path,
+            CsvReadOptions::default()
+                .delimiter(b'|')
+                .has_header(false)
+                .file_extension("tbl")
+                .schema(schema),
+        )
+        .await
+        .unwrap()
+        .collect()
+        .await
+        .unwrap();
+
+    let chunks: Vec<Array> = record_batches
+        .iter()
+        .cloned()
+        .map(ArrowStructArray::from)
+        .map(|struct_array| Array::from_arrow(&struct_array, false))
+        .collect();
+
+    let dtype = chunks[0].dtype().clone();
+
+    ChunkedArray::try_new(chunks, dtype).unwrap().into_array()
+}
+
 pub fn tpch_queries() -> impl Iterator<Item = (usize, Vec<String>)> {
     (1..=22).map(|q| (q, tpch_query(q)))
 }

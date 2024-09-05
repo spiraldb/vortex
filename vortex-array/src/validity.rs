@@ -88,12 +88,18 @@ impl Validity {
         }
     }
 
+    #[inline]
     pub fn is_valid(&self, index: usize) -> bool {
         match self {
             Self::NonNullable | Self::AllValid => true,
             Self::AllInvalid => false,
             Self::Array(a) => bool::try_from(&scalar_at_unchecked(a, index)).unwrap(),
         }
+    }
+
+    #[inline]
+    pub fn is_null(&self, index: usize) -> bool {
+        !self.is_valid(index)
     }
 
     pub fn slice(&self, start: usize, stop: usize) -> VortexResult<Self> {

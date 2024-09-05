@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
+use std::fmt::{Display, Formatter};
 
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -11,6 +12,15 @@ use crate::{Array, ArrayDType};
 pub enum SearchSortedSide {
     Left,
     Right,
+}
+
+impl Display for SearchSortedSide {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchSortedSide::Left => write!(f, "left"),
+            SearchSortedSide::Right => write!(f, "right"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
