@@ -10,7 +10,6 @@ use vortex::array::ChunkedArray;
 use vortex::{Array, Context};
 use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
-use vortex_serde::io::TokioAdapter;
 use vortex_serde::layouts::{
     LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
 };
@@ -142,8 +141,8 @@ pub fn read<'py>(
     ) -> VortexResult<Array> {
         let file = File::open(Path::new(fname)).await?;
 
-        let mut builder: LayoutReaderBuilder<TokioAdapter<File>> = LayoutReaderBuilder::new(
-            TokioAdapter(file), // TODO(dk): Why didn't we implement this on File directly?
+        let mut builder: LayoutReaderBuilder<File> = LayoutReaderBuilder::new(
+            file,
             LayoutDeserializer::new(Context::default().into(), LayoutContext::default().into()),
         )
         .with_projection(projection);
