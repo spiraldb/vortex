@@ -41,6 +41,8 @@ impl StructArray {
         length: usize,
         validity: Validity,
     ) -> VortexResult<Self> {
+        let nullability = validity.nullability();
+
         if names.len() != fields.len() {
             vortex_bail!("Got {} names and {} fields", names.len(), fields.len());
         }
@@ -55,15 +57,12 @@ impl StructArray {
 
         let mut children = Vec::with_capacity(fields.len() + 1);
         children.extend(fields);
-        if let Some(v) = validity.clone().into_array() {
+        if let Some(v) = validity.into_array() {
             children.push(v);
         }
 
         Self::try_from_parts(
-            DType::Struct(
-                StructDType::new(names, field_dtypes),
-                validity.nullability(),
-            ),
+            DType::Struct(StructDType::new(names, field_dtypes), nullability),
             length,
             StructMetadata {
                 length,
