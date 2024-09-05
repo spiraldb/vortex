@@ -26,14 +26,11 @@ impl ScalarAtFn for ALPArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        if let Some(patches) = self.patches().and_then(|p| {
-            p.with_dyn(|arr| {
+        if let Some(patches) = self.patches() {
+            if patches.with_dyn(|a| a.is_valid(index)) {
                 // We need to make sure the value is actually in the patches array
-                arr.is_valid(index)
-            })
-            .then_some(p)
-        }) {
-            return scalar_at_unchecked(&patches, index);
+                return scalar_at_unchecked(&patches, index);
+            }
         }
 
         let encoded_val = scalar_at_unchecked(&self.encoded(), index);
