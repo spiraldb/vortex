@@ -42,11 +42,6 @@ impl FlatLayout {
             state: FlatLayoutState::Init,
         }
     }
-
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize {
-        self.range.len()
-    }
 }
 
 impl Layout for FlatLayout {

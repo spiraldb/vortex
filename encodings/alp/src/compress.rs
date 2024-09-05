@@ -191,4 +191,15 @@ mod tests {
 
         let _decoded = decompress(encoded).unwrap();
     }
+
+    #[test]
+    fn roundtrips_close_fractional() {
+        let original = PrimitiveArray::from(vec![195.26274f32, 195.27837, -48.815685]);
+        let alp_arr = alp_encode(&original).unwrap();
+        let decompressed = alp_arr.into_primitive().unwrap();
+        assert_eq!(
+            original.maybe_null_slice::<f32>(),
+            decompressed.maybe_null_slice::<f32>()
+        );
+    }
 }

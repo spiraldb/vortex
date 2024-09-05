@@ -89,3 +89,7 @@ harness = false
 [[bench]]
 name = "iter"
 harness = false
+
+[[bench]]
+name = "fn"
+harness = false

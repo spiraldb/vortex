@@ -166,7 +166,7 @@ impl BitPackedArray {
 
     #[inline]
     pub fn max_packed_value(&self) -> usize {
-        1 << self.bit_width()
+        (1 << self.bit_width()) - 1
     }
 }
 

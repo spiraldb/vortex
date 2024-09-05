@@ -13,6 +13,8 @@ rust-version = { workspace = true }
 
 [dependencies]
 fsst-rs = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+lazy_static = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
 vortex-alp = { workspace = true }
@@ -33,3 +35,6 @@ chrono = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+arbitrary = ["dep:arbitrary"]

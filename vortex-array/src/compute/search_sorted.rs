@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
+use std::fmt::{Display, Formatter};
 
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -11,6 +12,15 @@ use crate::{Array, ArrayDType};
 pub enum SearchSortedSide {
     Left,
     Right,
+}
+
+impl Display for SearchSortedSide {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchSortedSide::Left => write!(f, "left"),
+            SearchSortedSide::Right => write!(f, "right"),
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -33,15 +43,11 @@ impl SearchResult {
             Self::NotFound(i) => i,
         }
     }
-
-    pub fn map<F: FnOnce(usize) -> usize>(self, f: F) -> Self {
-        match self {
-            Self::Found(i) => Self::Found(f(i)),
-            Self::NotFound(i) => Self::NotFound(f(i)),
-        }
-    }
 }
 
+/// Searches for value assuming the array is sorted.
+///
+/// For nullable arrays we assume that the nulls are sorted last, i.e. they're the greatest value
 pub trait SearchSortedFn {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult>;
 }
@@ -52,6 +58,10 @@ pub fn search_sorted<T: Into<Scalar>>(
     side: SearchSortedSide,
 ) -> VortexResult<SearchResult> {
     let scalar = target.into().cast(array.dtype())?;
+    if scalar.is_null() {
+        vortex_bail!("Search sorted with null value is not supported");
+    }
+
     array.with_dyn(|a| {
         if let Some(search_sorted) = a.search_sorted() {
             return search_sorted.search_sorted(&scalar, side);

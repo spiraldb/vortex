@@ -32,7 +32,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::chunked_reader::ChunkedArrayReader;
-use vortex_serde::io::{ObjectStoreExt, TokioAdapter, VortexReadAt, VortexWrite};
+use vortex_serde::io::{ObjectStoreExt, VortexReadAt, VortexWrite};
 use vortex_serde::stream_reader::StreamArrayReader;
 use vortex_serde::stream_writer::StreamArrayWriter;
 use vortex_serde::DTypeReader;
@@ -50,7 +50,7 @@ pub struct VortexFooter {
 
 pub async fn open_vortex(path: &Path) -> VortexResult<Array> {
     let file = tokio::fs::File::open(path).await.unwrap();
-    let reader = StreamArrayReader::try_new(TokioAdapter(file), CTX.clone())
+    let reader = StreamArrayReader::try_new(file, CTX.clone())
         .await?
         .load_dtype()
         .await?;
@@ -178,7 +178,7 @@ pub async fn take_vortex_object_store(
 pub async fn take_vortex_tokio(path: &Path, indices: &[u64]) -> VortexResult<Array> {
     let len = File::open(path)?.metadata()?.len();
     let indices_array = indices.to_vec().into_array();
-    let taken = read_vortex_footer_format(TokioAdapter(tokio::fs::File::open(path).await?), len)
+    let taken = read_vortex_footer_format(tokio::fs::File::open(path).await?, len)
         .await?
         .take_rows(&indices_array)
         .await?;

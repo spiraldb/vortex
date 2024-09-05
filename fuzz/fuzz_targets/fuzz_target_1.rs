@@ -1,27 +1,19 @@
 #![no_main]
 
-use std::collections::HashSet;
-
 use libfuzzer_sys::{fuzz_target, Corpus};
-use vortex::compute::slice;
 use vortex::compute::unary::scalar_at;
+use vortex::compute::{search_sorted, slice, take, SearchResult, SearchSorted, SearchSortedSide};
 use vortex::encoding::EncodingId;
 use vortex::Array;
+use vortex_error::VortexResult;
 use vortex_fuzz::{Action, FuzzArrayAction};
-use vortex_sampling_compressor::compressors::CompressorRef;
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
     let FuzzArrayAction { array, actions } = fuzz_action;
-
-    // TODO(adamg): We actually might want to test empty things, but I'm punting this issue for now
-    if array.is_empty() {
-        return Corpus::Reject;
-    };
-
     match &actions[0] {
-        Action::Compress(c) => match fuzz_compress(&array, *c) {
+        Action::Compress(c) => match fuzz_compress(&array, c) {
             Some(compressed_array) => {
                 assert_array_eq(&array, &compressed_array);
                 Corpus::Keep
@@ -33,17 +25,59 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
             assert_slice(&array, &slice, range.start);
             Corpus::Keep
         }
+        Action::SearchSorted(s, side) => {
+            if !array_is_sorted(&array).unwrap() || s.is_null() {
+                return Corpus::Reject;
+            }
+
+            let search_result = search_sorted(&array, s.clone(), *side).unwrap();
+            assert_search_sorted(&array, s, *side, search_result);
+            Corpus::Keep
+        }
+        Action::Take(indices) => {
+            if indices.is_empty() {
+                return Corpus::Reject;
+            }
+            let taken = take(&array, indices).unwrap();
+            assert_take(&array, &taken, indices);
+            Corpus::Keep
+        }
     }
 });
 
-fn fuzz_compress(array: &Array, compressor_ref: CompressorRef<'_>) -> Option<Array> {
-    let ctx = SamplingCompressor::new(HashSet::from([compressor_ref]));
-    let compressed_array = ctx.compress(array, None).unwrap();
+fn fuzz_compress(array: &Array, compressor: &SamplingCompressor) -> Option<Array> {
+    let compressed_array = compressor.compress(array, None).unwrap();
 
     compressed_array
         .path()
         .is_some()
         .then(|| compressed_array.into_array())
+}
+
+fn assert_search_sorted(
+    original: &Array,
+    value: &Scalar,
+    side: SearchSortedSide,
+    search_result: SearchResult,
+) {
+    let result = SearchSorted::search_sorted(original, value, side);
+    assert_eq!(
+        result,
+        search_result,
+        "Searching for {value} in {} from {side}",
+        original.encoding().id()
+    )
+}
+
+fn assert_take(original: &Array, taken: &Array, indices: &Array) {
+    assert_eq!(taken.len(), indices.len());
+    for idx in 0..indices.len() {
+        let to_take = usize::try_from(&scalar_at(indices, idx).unwrap()).unwrap();
+        let o = scalar_at(original, to_take).unwrap();
+        let s = scalar_at(taken, idx).unwrap();
+
+        fuzzing_scalar_cmp(o, s, original.encoding().id(), indices.encoding().id(), idx);
+    }
 }
 
 fn assert_slice(original: &Array, slice: &Array, start: usize) {
@@ -88,8 +122,23 @@ fn fuzzing_scalar_cmp(
 
     assert!(
         equal_values,
-        "{l} != {r} at index {idx}, lhs is {} rhs is {}",
-        lhs_encoding, rhs_encoding
+        "{l} != {r} at index {idx}, lhs is {lhs_encoding} rhs is {rhs_encoding}",
     );
     assert_eq!(l.is_valid(), r.is_valid());
+}
+
+fn array_is_sorted(array: &Array) -> VortexResult<bool> {
+    if array.is_empty() {
+        return Ok(true);
+    }
+
+    let mut last_value = scalar_at(array, 0)?;
+    for i in 1..array.len() {
+        let next_value = scalar_at(array, i)?;
+        if next_value < last_value {
+            return Ok(false);
+        }
+        last_value = next_value;
+    }
+    Ok(true)
 }

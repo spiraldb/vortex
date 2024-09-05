@@ -5,7 +5,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::BoolArray;
 use crate::compute::unary::scalar_at_unchecked;
-use crate::compute::{filter, slice, take};
+use crate::compute::{and, filter, slice, take};
 use crate::stats::ArrayStatistics;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
@@ -144,6 +144,28 @@ impl Validity {
                 }
             }
         }
+    }
+
+    /// Logically & two Validity values of the same length
+    pub fn and(self, rhs: Validity) -> VortexResult<Validity> {
+        let validity = match (self, rhs) {
+            // Any `AllInvalid` makes the output all invalid values
+            (Validity::AllInvalid, _) | (_, Validity::AllInvalid) => Validity::AllInvalid,
+            // All truthy values on one side, which makes no effect on an `Array` variant
+            (Validity::Array(a), Validity::AllValid)
+            | (Validity::Array(a), Validity::NonNullable)
+            | (Validity::NonNullable, Validity::Array(a))
+            | (Validity::AllValid, Validity::Array(a)) => Validity::Array(a.clone()),
+            (Validity::NonNullable, Validity::NonNullable) => Validity::NonNullable,
+            // Both sides are all valid
+            (Validity::NonNullable, Validity::AllValid)
+            | (Validity::AllValid, Validity::NonNullable)
+            | (Validity::AllValid, Validity::AllValid) => Validity::AllValid,
+            // Here we actually have to do some work
+            (Validity::Array(lhs), Validity::Array(rhs)) => Validity::Array(and(&lhs, &rhs)?),
+        };
+
+        Ok(validity)
     }
 }
 

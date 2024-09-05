@@ -261,10 +261,15 @@ impl ArrayTrait for VarBinViewArray {}
 
 impl IntoCanonical for VarBinViewArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
+        let arrow_dtype = if matches!(self.dtype(), &DType::Utf8(_)) {
+            &DataType::Utf8
+        } else {
+            &DataType::Binary
+        };
         let nullable = self.dtype().is_nullable();
         let arrow_self = as_arrow(self);
-        let arrow_varbin = arrow_cast::cast(arrow_self.deref(), &DataType::Utf8)
-            .map_err(VortexError::ArrowError)?;
+        let arrow_varbin =
+            arrow_cast::cast(arrow_self.deref(), arrow_dtype).map_err(VortexError::ArrowError)?;
         let vortex_array = Array::from_arrow(arrow_varbin, nullable);
 
         Ok(Canonical::VarBin(VarBinArray::try_from(&vortex_array)?))
