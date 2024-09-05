@@ -7,8 +7,6 @@ pub enum Nullability {
     Nullable,
 }
 
-impl Nullability {}
-
 impl From<bool> for Nullability {
     fn from(value: bool) -> Self {
         if value {
