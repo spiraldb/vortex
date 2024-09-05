@@ -19,15 +19,15 @@ impl<R: AsyncRead + Unpin> VortexRead for TokioAdapter<R> {
     }
 }
 
-impl VortexReadAt for TokioAdapter<File> {
+impl VortexReadAt for File {
     async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
-        let std_file = self.0.try_clone().await?.into_std().await;
+        let std_file = self.try_clone().await?.into_std().await;
         std_file.read_exact_at(buffer.as_mut(), pos)?;
         Ok(buffer)
     }
 
     async fn size(&self) -> u64 {
-        self.0.metadata().await.unwrap().len()
+        self.metadata().await.unwrap().len()
     }
 }
 
