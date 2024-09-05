@@ -72,7 +72,7 @@ instance/
 .scrapy
 
 # Sphinx documentation
-docs/_build/
+pyvortex/docs/_build/
 
 # PyBuilder
 .pybuilder/
@@ -196,3 +196,6 @@ data/
 
 # vscode
 .vscode/
+
+# Emacs
+*~
