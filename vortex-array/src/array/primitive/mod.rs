@@ -366,19 +366,19 @@ impl BinaryFn for PrimitiveArray {
             .validity()
             .and(rhs.with_dyn(|a| a.logical_validity().into_validity()))?;
 
-        let mut start_idx = 0;
+        let mut idx_offset = 0;
 
         make_iter_from_array!(rhs, U, | $ITER | {
             for batch in $ITER {
                 let batch_len = batch.len();
                 process_batch(
-                    &lhs[start_idx..start_idx + batch_len],
+                    &lhs[idx_offset..idx_offset + batch_len],
                     batch,
                     &binary_fn,
-                    start_idx,
+                    idx_offset,
                     output.as_mut_slice(),
                 );
-                start_idx += batch_len;
+                idx_offset += batch_len;
             }
         });
 
@@ -393,7 +393,7 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
     lhs: &[I],
     batch: Batch<U>,
     f: F,
-    start_idx: usize,
+    idx_offset: usize,
     output: &mut [MaybeUninit<O>],
 ) {
     assert_eq!(batch.len(), lhs.len());
@@ -401,19 +401,22 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
     if batch.len() == ITER_BATCH_SIZE {
         let lhs: [I; ITER_BATCH_SIZE] = lhs.try_into().unwrap();
         let rhs: [U; ITER_BATCH_SIZE] = batch.data().try_into().unwrap();
+        // We know output is of the same length and lhs/rhs
+        let mut output_slice: [_; ITER_BATCH_SIZE] = output
+            [idx_offset..idx_offset + ITER_BATCH_SIZE]
+            .try_into()
+            .unwrap();
 
-        for idx in 0_usize..ITER_BATCH_SIZE {
-            // Safety: output is the same length as the original array, so we know these are still valid indexes
+        for idx in 0..ITER_BATCH_SIZE {
             unsafe {
-                *output.get_unchecked_mut(idx + start_idx) =
-                    MaybeUninit::new(f(lhs[idx], rhs[idx]));
+                *output_slice.get_unchecked_mut(idx) = MaybeUninit::new(f(lhs[idx], rhs[idx]));
             }
         }
     } else {
         for (idx, rhs_item) in batch.data().iter().enumerate() {
             // Safety: output is the same length as the original array, so we know these are still valid indexes
             unsafe {
-                *output.get_unchecked_mut(idx + start_idx) =
+                *output.get_unchecked_mut(idx + idx_offset) =
                     MaybeUninit::new(f(lhs[idx], *rhs_item));
             }
         }
