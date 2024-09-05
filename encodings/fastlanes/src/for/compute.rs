@@ -105,22 +105,29 @@ where
     // When the values in the array are shifted, not all values in the domain are representable in the compressed
     // space. Multiple different search values can translate to same value in the compressed space.
     //
-    // For values that are lossy compressed we know they wouldn't be found in the array
+    // For values that are not representable in the compressed array we know they wouldn't be found in the array
     // in order to find index they would be inserted at we search for next value in the compressed space
     let mut translated_value = primitive_value.wrapping_sub(&min) >> array.shift();
-    let mut lossy_compressed = false;
+    let mut non_representable = false;
     if (translated_value << array.shift()).wrapping_add(&min) != primitive_value {
         translated_value += T::from(1).unwrap();
-        lossy_compressed = true;
+        non_representable = true;
     }
 
     let translated_scalar = Scalar::primitive(translated_value, value.dtype().nullability())
         .reinterpret_cast(array.ptype().to_unsigned());
+
     Ok(
         match search_sorted(&array.encoded(), translated_scalar, side)? {
             SearchResult::Found(i) => {
-                if lossy_compressed {
-                    SearchResult::NotFound(i)
+                if non_representable {
+                    // If we are searching from the right and our value has not been representable we might have hit
+                    // the next value and need to shift the result
+                    SearchResult::NotFound(if matches!(side, SearchSortedSide::Right) {
+                        i - 1
+                    } else {
+                        i
+                    })
                 } else {
                     SearchResult::Found(i)
                 }
@@ -200,6 +207,15 @@ mod test {
         assert_eq!(
             search_sorted(&for_arr, 115, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(4)
+        );
+    }
+
+    #[test]
+    fn search_with_shift_right() {
+        let for_arr = for_compress(&PrimitiveArray::from(vec![8, 40, 48, 50, 58])).unwrap();
+        assert_eq!(
+            search_sorted(&for_arr, 39, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(1)
         );
     }
 }
