@@ -41,6 +41,7 @@ pub mod compress;
 pub mod compute;
 mod context;
 mod data;
+pub mod elementwise;
 pub mod encoding;
 mod implementation;
 pub mod iter;
