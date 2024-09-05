@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725563723204,
+  "lastUpdate": 1725566410412,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -65311,6 +65311,822 @@ window.BENCHMARK_DATA = {
             "name": "tpch_q22/vortex-file-uncompressed",
             "value": 108366775,
             "range": "± 285635",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "42072fef640d77d53ef5f5c59ad3e1512dbab15d",
+          "message": "fix Python documentation deploy (#751)\n\n1. Build native lib before building docs so that Rust docstrings are\r\navailable to Sphinx.\r\n2. Copy the html folder directly to spiraldb.github.io/vortex/docs\r\nrather than ../docs/html.",
+          "timestamp": "2024-09-05T15:28:16-04:00",
+          "tree_id": "b23c221c83fa893f96353bed17be2ba7d7507f52",
+          "url": "https://github.com/spiraldb/vortex/commit/42072fef640d77d53ef5f5c59ad3e1512dbab15d"
+        },
+        "date": 1725566408942,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tpch_q1/vortex-in-memory-no-pushdown",
+            "value": 459901469,
+            "range": "± 2190155",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-in-memory-pushdown",
+            "value": 512596271,
+            "range": "± 1969758",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/arrow",
+            "value": 444547943,
+            "range": "± 3993473",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/parquet",
+            "value": 654872883,
+            "range": "± 2543377",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-compressed",
+            "value": 723340054,
+            "range": "± 2312184",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-uncompressed",
+            "value": 549101247,
+            "range": "± 1918235",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-no-pushdown",
+            "value": 156230510,
+            "range": "± 1182607",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-pushdown",
+            "value": 155081787,
+            "range": "± 1250582",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/arrow",
+            "value": 137048394,
+            "range": "± 1107980",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/parquet",
+            "value": 172761816,
+            "range": "± 1908884",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-compressed",
+            "value": 190777406,
+            "range": "± 1441434",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-uncompressed",
+            "value": 168881213,
+            "range": "± 1598468",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-in-memory-no-pushdown",
+            "value": 153138000,
+            "range": "± 486574",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-in-memory-pushdown",
+            "value": 192369589,
+            "range": "± 1037121",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/arrow",
+            "value": 146645014,
+            "range": "± 724603",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/parquet",
+            "value": 331602549,
+            "range": "± 1076812",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-file-compressed",
+            "value": 269352784,
+            "range": "± 2441059",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q3/vortex-file-uncompressed",
+            "value": 221206307,
+            "range": "± 4184252",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q4/vortex-in-memory-no-pushdown",
+            "value": 124507421,
+            "range": "± 3970554",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q4/vortex-in-memory-pushdown",
+            "value": 144517564,
+            "range": "± 644647",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q4/arrow",
+            "value": 110253113,
+            "range": "± 921220",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q4/parquet",
+            "value": 227978593,
+            "range": "± 769585",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q4/vortex-file-compressed",
+            "value": 241069104,
+            "range": "± 2368865",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q4/vortex-file-uncompressed",
+            "value": 191622008,
+            "range": "± 3420454",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q5/vortex-in-memory-no-pushdown",
+            "value": 336619386,
+            "range": "± 3697760",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q5/vortex-in-memory-pushdown",
+            "value": 335353890,
+            "range": "± 2815974",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q5/arrow",
+            "value": 327173280,
+            "range": "± 2865877",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q5/parquet",
+            "value": 496607146,
+            "range": "± 12258928",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q5/vortex-file-compressed",
+            "value": 388502707,
+            "range": "± 2607562",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q5/vortex-file-uncompressed",
+            "value": 344611170,
+            "range": "± 6797163",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q6/vortex-in-memory-no-pushdown",
+            "value": 40839545,
+            "range": "± 587121",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q6/vortex-in-memory-pushdown",
+            "value": 80777232,
+            "range": "± 170931",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q6/arrow",
+            "value": 36975181,
+            "range": "± 266305",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q6/parquet",
+            "value": 149844357,
+            "range": "± 1059867",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q6/vortex-file-compressed",
+            "value": 179527450,
+            "range": "± 1548985",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q6/vortex-file-uncompressed",
+            "value": 153312138,
+            "range": "± 1932339",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q7/vortex-in-memory-no-pushdown",
+            "value": 582628656,
+            "range": "± 3271090",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q7/vortex-in-memory-pushdown",
+            "value": 622990683,
+            "range": "± 6455932",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q7/arrow",
+            "value": 577470969,
+            "range": "± 7570291",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q7/parquet",
+            "value": 740297651,
+            "range": "± 7200885",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q7/vortex-file-compressed",
+            "value": 723547899,
+            "range": "± 3786429",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q7/vortex-file-uncompressed",
+            "value": 665834713,
+            "range": "± 9455399",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q8/vortex-in-memory-no-pushdown",
+            "value": 253362866,
+            "range": "± 813530",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q8/vortex-in-memory-pushdown",
+            "value": 258967495,
+            "range": "± 2057480",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q8/arrow",
+            "value": 248960901,
+            "range": "± 583386",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q8/parquet",
+            "value": 499638135,
+            "range": "± 1966235",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q8/vortex-file-compressed",
+            "value": 322873143,
+            "range": "± 2422792",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q8/vortex-file-uncompressed",
+            "value": 279362824,
+            "range": "± 812456",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q9/vortex-in-memory-no-pushdown",
+            "value": 452980997,
+            "range": "± 3405522",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q9/vortex-in-memory-pushdown",
+            "value": 451815231,
+            "range": "± 2580086",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q9/arrow",
+            "value": 439807660,
+            "range": "± 1913500",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q9/parquet",
+            "value": 726471395,
+            "range": "± 5207885",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q9/vortex-file-compressed",
+            "value": 748339781,
+            "range": "± 3413857",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q9/vortex-file-uncompressed",
+            "value": 479639091,
+            "range": "± 2119514",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q10/vortex-in-memory-no-pushdown",
+            "value": 243176022,
+            "range": "± 2314731",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q10/vortex-in-memory-pushdown",
+            "value": 272288503,
+            "range": "± 3851044",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q10/arrow",
+            "value": 231728365,
+            "range": "± 903476",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q10/parquet",
+            "value": 489509911,
+            "range": "± 2741134",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q10/vortex-file-compressed",
+            "value": 657863784,
+            "range": "± 3092260",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q10/vortex-file-uncompressed",
+            "value": 328203097,
+            "range": "± 2124754",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q11/vortex-in-memory-no-pushdown",
+            "value": 229247059,
+            "range": "± 1713712",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q11/vortex-in-memory-pushdown",
+            "value": 230022214,
+            "range": "± 1728093",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q11/arrow",
+            "value": 183152731,
+            "range": "± 771827",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q11/parquet",
+            "value": 192080600,
+            "range": "± 663129",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q11/vortex-file-compressed",
+            "value": 241148639,
+            "range": "± 1617550",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q11/vortex-file-uncompressed",
+            "value": 233803098,
+            "range": "± 2351212",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q12/vortex-in-memory-no-pushdown",
+            "value": 188173966,
+            "range": "± 640538",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q12/vortex-in-memory-pushdown",
+            "value": 218920691,
+            "range": "± 379065",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q12/arrow",
+            "value": 176398175,
+            "range": "± 741268",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q12/parquet",
+            "value": 363714399,
+            "range": "± 1157576",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q12/vortex-file-compressed",
+            "value": 600404909,
+            "range": "± 3333817",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q12/vortex-file-uncompressed",
+            "value": 315181195,
+            "range": "± 1116512",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q13/vortex-in-memory-no-pushdown",
+            "value": 200882790,
+            "range": "± 3067459",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q13/vortex-in-memory-pushdown",
+            "value": 202393883,
+            "range": "± 2183706",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q13/arrow",
+            "value": 198282727,
+            "range": "± 1799772",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q13/parquet",
+            "value": 324496393,
+            "range": "± 3568496",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q13/vortex-file-compressed",
+            "value": 1888045048,
+            "range": "± 4831535",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q13/vortex-file-uncompressed",
+            "value": 231700558,
+            "range": "± 3157623",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q14/vortex-in-memory-no-pushdown",
+            "value": 40230786,
+            "range": "± 238090",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q14/vortex-in-memory-pushdown",
+            "value": 68169102,
+            "range": "± 234711",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q14/arrow",
+            "value": 38970895,
+            "range": "± 761557",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q14/parquet",
+            "value": 221235096,
+            "range": "± 736933",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q14/vortex-file-compressed",
+            "value": 136620221,
+            "range": "± 1094682",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q14/vortex-file-uncompressed",
+            "value": 115463763,
+            "range": "± 814836",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q15/vortex-in-memory-no-pushdown",
+            "value": 68184980,
+            "range": "± 461833",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q15/vortex-in-memory-pushdown",
+            "value": 78515384,
+            "range": "± 437673",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q15/arrow",
+            "value": 66245705,
+            "range": "± 672533",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q15/parquet",
+            "value": 292169219,
+            "range": "± 1378512",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q15/vortex-file-compressed",
+            "value": 248607835,
+            "range": "± 3289964",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q15/vortex-file-uncompressed",
+            "value": 213327381,
+            "range": "± 3405922",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q16/vortex-in-memory-no-pushdown",
+            "value": 123829733,
+            "range": "± 485274",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q16/vortex-in-memory-pushdown",
+            "value": 127789249,
+            "range": "± 549550",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q16/arrow",
+            "value": 108383478,
+            "range": "± 580126",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q16/parquet",
+            "value": 125809544,
+            "range": "± 750472",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q16/vortex-file-compressed",
+            "value": 157175450,
+            "range": "± 877623",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q16/vortex-file-uncompressed",
+            "value": 135835640,
+            "range": "± 1136990",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q17/vortex-in-memory-no-pushdown",
+            "value": 680456775,
+            "range": "± 12933782",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q17/vortex-in-memory-pushdown",
+            "value": 675763892,
+            "range": "± 17253388",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q17/arrow",
+            "value": 600064921,
+            "range": "± 13246299",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q17/parquet",
+            "value": 612392279,
+            "range": "± 9081411",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q17/vortex-file-compressed",
+            "value": 720887190,
+            "range": "± 5553609",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q17/vortex-file-uncompressed",
+            "value": 688138219,
+            "range": "± 14809984",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q18/vortex-in-memory-no-pushdown",
+            "value": 1125912608,
+            "range": "± 9468867",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q18/vortex-in-memory-pushdown",
+            "value": 1108125319,
+            "range": "± 14589458",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q18/arrow",
+            "value": 1121117225,
+            "range": "± 17751318",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q18/parquet",
+            "value": 1297412089,
+            "range": "± 22548203",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q18/vortex-file-compressed",
+            "value": 1239199809,
+            "range": "± 10029567",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q18/vortex-file-uncompressed",
+            "value": 1180698317,
+            "range": "± 12712397",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q19/vortex-in-memory-no-pushdown",
+            "value": 173604078,
+            "range": "± 554883",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q19/vortex-in-memory-pushdown",
+            "value": 278518887,
+            "range": "± 612763",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q19/arrow",
+            "value": 160087302,
+            "range": "± 520507",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q19/parquet",
+            "value": 475480609,
+            "range": "± 4231214",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q19/vortex-file-compressed",
+            "value": 809971601,
+            "range": "± 3061766",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q19/vortex-file-uncompressed",
+            "value": 380309936,
+            "range": "± 992497",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q20/vortex-in-memory-no-pushdown",
+            "value": 267328511,
+            "range": "± 4263069",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q20/vortex-in-memory-pushdown",
+            "value": 272370871,
+            "range": "± 2443937",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q20/arrow",
+            "value": 251113007,
+            "range": "± 9864888",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q20/parquet",
+            "value": 364491010,
+            "range": "± 1727059",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q20/vortex-file-compressed",
+            "value": 589967112,
+            "range": "± 4752042",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q20/vortex-file-uncompressed",
+            "value": 365204521,
+            "range": "± 3592558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q21/vortex-in-memory-no-pushdown",
+            "value": 929357509,
+            "range": "± 5401447",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q21/vortex-in-memory-pushdown",
+            "value": 992371537,
+            "range": "± 7371098",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q21/arrow",
+            "value": 916753106,
+            "range": "± 9545329",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q21/parquet",
+            "value": 1060629969,
+            "range": "± 6358567",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q21/vortex-file-compressed",
+            "value": 1172508071,
+            "range": "± 9598128",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q21/vortex-file-uncompressed",
+            "value": 1056331646,
+            "range": "± 23723347",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q22/vortex-in-memory-no-pushdown",
+            "value": 102305619,
+            "range": "± 485225",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q22/vortex-in-memory-pushdown",
+            "value": 103096812,
+            "range": "± 360313",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q22/arrow",
+            "value": 73379492,
+            "range": "± 294221",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q22/parquet",
+            "value": 102774939,
+            "range": "± 241511",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q22/vortex-file-compressed",
+            "value": 109470765,
+            "range": "± 771090",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q22/vortex-file-uncompressed",
+            "value": 108874408,
+            "range": "± 486136",
             "unit": "ns/iter"
           }
         ]
