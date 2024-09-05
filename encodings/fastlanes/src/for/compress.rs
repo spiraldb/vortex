@@ -21,7 +21,7 @@ pub fn for_compress(array: &PrimitiveArray) -> VortexResult<Array> {
         if shift == <$T>::PTYPE.bit_width() as u8 {
             match array.validity().to_logical(array.len()) {
                 LogicalValidity::AllValid(l) => {
-                    ConstantArray::new(Scalar::zero::<i32>(array.dtype().nullability()), l).into_array()
+                    ConstantArray::new(Scalar::zero::<$T>(array.dtype().nullability()), l).into_array()
                 },
                 LogicalValidity::AllInvalid(l) => {
                     ConstantArray::new(Scalar::null(array.dtype().clone()), l).into_array()
