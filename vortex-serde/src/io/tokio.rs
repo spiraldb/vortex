@@ -19,18 +19,6 @@ impl<R: AsyncRead + Unpin> VortexRead for TokioAdapter<R> {
     }
 }
 
-impl VortexReadAt for TokioAdapter<File> {
-    async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
-        let std_file = self.0.try_clone().await?.into_std().await;
-        std_file.read_exact_at(buffer.as_mut(), pos)?;
-        Ok(buffer)
-    }
-
-    async fn size(&self) -> u64 {
-        self.0.metadata().await.unwrap().len()
-    }
-}
-
 impl<W: AsyncWrite + Unpin> VortexWrite for TokioAdapter<W> {
     async fn write_all<B: IoBuf>(&mut self, buffer: B) -> io::Result<B> {
         self.0.write_all(buffer.as_slice()).await?;
@@ -43,6 +31,25 @@ impl<W: AsyncWrite + Unpin> VortexWrite for TokioAdapter<W> {
 
     async fn shutdown(&mut self) -> io::Result<()> {
         self.0.shutdown().await
+    }
+}
+
+impl VortexRead for File {
+    async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
+        self.read_exact(buffer.as_mut()).await?;
+        Ok(buffer)
+    }
+}
+
+impl VortexReadAt for File {
+    async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
+        let std_file = self.try_clone().await?.into_std().await;
+        std_file.read_exact_at(buffer.as_mut(), pos)?;
+        Ok(buffer)
+    }
+
+    async fn size(&self) -> u64 {
+        self.metadata().await.unwrap().len()
     }
 }
 
