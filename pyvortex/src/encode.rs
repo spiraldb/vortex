@@ -12,7 +12,6 @@ use vortex_dtype::DType;
 
 use crate::array::PyArray;
 use crate::error::PyVortexError;
-use crate::vortex_arrow::map_arrow_err;
 
 /// The main entry point for creating enc arrays from other Python objects.
 ///
@@ -54,7 +53,10 @@ pub fn encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| b.map(Array::from).map_err(map_arrow_err))
+            .map(|b| {
+                b.map(Array::from)
+                    .map_err(|e| PyValueError::new_err(e.to_string()))
+            })
             .collect::<PyResult<Vec<_>>>()?;
         Bound::new(
             obj.py(),
