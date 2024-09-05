@@ -590,7 +590,8 @@ mod test {
         )
     }
 
-    fn roundtrip_struct() {
+    #[test]
+    fn test_roundtrip_struct() {
         let mut nulls = NullBufferBuilder::new(6);
         nulls.append_n_non_nulls(4);
         nulls.append_null();
