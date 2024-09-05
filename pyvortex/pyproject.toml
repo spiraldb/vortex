@@ -6,7 +6,7 @@ authors = [
     { name = "Nicholas Gates", email = "nick@nickgates.com" }
 ]
 dependencies = [
-    "pydata-sphinx-theme>=0.15.4",
+    "pyarrow>=15.0.0",
 ]
 requires-python = ">= 3.11"
 classifiers = ["Private :: Do Not Upload"]
@@ -18,14 +18,15 @@ build-backend = "maturin"
 [tool.rye]
 managed = true
 dev-dependencies = [
-    "pyarrow>=15.0.0",
-    "pip",
-    "sphinx>=8.0.2",
     "ipython>=8.26.0",
     "pandas>=2.2.2",
+    "pip",
+    "pydata-sphinx-theme>=0.15.4",
+    "sphinx>=8.0.2",
 ]
 
 [tool.maturin]
 python-source = "python"
 module-name = "vortex._lib"
 features = ["pyo3/extension-module"]
+include = [{ path = "rust-toolchain.toml", format = "sdist" }]
