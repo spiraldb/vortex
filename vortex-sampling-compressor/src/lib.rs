@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use compressors::fsst::FSSTCompressor;
+use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
@@ -26,8 +27,28 @@ use crate::compressors::zigzag::ZigZagCompressor;
 use crate::compressors::{CompressedArray, CompressionTree, CompressorRef, EncodingCompressor};
 use crate::sampling::stratified_slices;
 
+#[cfg(feature = "arbitrary")]
+pub mod arbitrary;
 pub mod compressors;
 mod sampling;
+
+lazy_static! {
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 11] = [
+        &ALPCompressor as CompressorRef,
+        &BitPackedCompressor,
+        &DateTimePartsCompressor,
+        &DEFAULT_RUN_END_COMPRESSOR,
+        // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
+        // &DeltaCompressor,
+        &DictCompressor,
+        &FoRCompressor,
+        &FSSTCompressor,
+        &RoaringBoolCompressor,
+        &RoaringIntCompressor,
+        &SparseCompressor,
+        &ZigZagCompressor,
+    ];
+}
 
 #[derive(Debug, Clone)]
 pub struct CompressConfig {
@@ -80,21 +101,7 @@ impl CompressionStrategy for SamplingCompressor<'_> {
 
 impl Default for SamplingCompressor<'_> {
     fn default() -> Self {
-        Self::new(HashSet::from([
-            &ALPCompressor as CompressorRef,
-            &BitPackedCompressor,
-            // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
-            // &DeltaCompressor,
-            &DictCompressor,
-            &FSSTCompressor,
-            &FoRCompressor,
-            &DateTimePartsCompressor,
-            &RoaringBoolCompressor,
-            &RoaringIntCompressor,
-            &DEFAULT_RUN_END_COMPRESSOR,
-            &SparseCompressor,
-            &ZigZagCompressor,
-        ]))
+        Self::new(HashSet::from(*ALL_COMPRESSORS))
     }
 }
 
