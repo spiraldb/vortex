@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_err, VortexResult};
 
 /// Dynamic trait used to represent opaque owned Array metadata
+///
 /// Note that this allows us to restrict the ('static + Send + Sync) requirement to just the
 /// metadata trait, and not the entire array trait. We require 'static so that we can downcast
 /// use the Any trait.

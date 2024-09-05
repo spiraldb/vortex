@@ -58,6 +58,7 @@ pub trait Accessor<T>: Send + Sync {
 }
 
 /// Iterate over batches of compressed arrays, should help with writing vectorized code.
+///
 /// Note that it doesn't respect per-item validity, and the per-item `Validity` instance should be advised
 /// for correctness, must "high-performance" code will ignore the validity when doing work, and will only
 /// re-use it when reconstructing the result array.

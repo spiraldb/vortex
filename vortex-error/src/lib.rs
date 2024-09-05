@@ -1,4 +1,6 @@
 #![feature(error_generic_member_access)]
+// False positive since 1.81 moved and stabilised error
+#![allow(clippy::incompatible_msrv)]
 
 use std::backtrace::Backtrace;
 use std::borrow::Cow;
