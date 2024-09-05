@@ -104,25 +104,27 @@ where
 
     // When the values in the array are shifted, not all values in the domain are representable in the compressed
     // space. Multiple different search values can translate to same value in the compressed space.
-    //
-    // For values that are not representable in the compressed array we know they wouldn't be found in the array
-    // in order to find index they would be inserted at we search for next value in the compressed space
-    let mut translated_value = primitive_value.wrapping_sub(&min) >> array.shift();
+    let encoded_value = primitive_value.wrapping_sub(&min) >> array.shift();
+    let decoded_value = (encoded_value << array.shift()).wrapping_add(&min);
 
-    // Whether value can be represented in the compressed array. For any value that is not we want to swap the side
-    // and search for next value in the search space to find correct offset for our original value
-    let mut representable = true;
-    let mut translated_side = side;
-    if (translated_value << array.shift()).wrapping_add(&min) != primitive_value {
-        translated_value += T::from(1).unwrap();
-        translated_side = SearchSortedSide::Left;
-        representable = false;
-    }
+    // We first determine whether the value can be represented in the compressed array. For any value that is not
+    // representable, it is by definition NotFound. For NotFound values, the correct insertion index is by definition
+    // the same regardless of which side we search on.
+    // However, to correctly handle repeated values in the array, we need to search left on the next *representable*
+    // value (i.e., increment the translated value by 1).
+    let representable = decoded_value == primitive_value;
+    let (side, target) = if representable {
+        (side, encoded_value)
+    } else {
+        (
+            SearchSortedSide::Left,
+            encoded_value.wrapping_add(&T::one()),
+        )
+    };
 
-    let translated_scalar = Scalar::primitive(translated_value, value.dtype().nullability())
+    let target_scalar = Scalar::primitive(target, value.dtype().nullability())
         .reinterpret_cast(array.ptype().to_unsigned());
-
-    let search_result = search_sorted(&array.encoded(), translated_scalar, translated_side)?;
+    let search_result = search_sorted(&array.encoded(), target_scalar, side)?;
     Ok(
         if representable && matches!(search_result, SearchResult::Found(_)) {
             search_result
