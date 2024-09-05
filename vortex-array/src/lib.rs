@@ -1,3 +1,5 @@
+#![feature(vec_into_raw_parts)]
+
 //! Vortex crate containing core logic for encoding and memory representation of [arrays](Array).
 //!
 //! At the heart of Vortex are [arrays](Array) and [encodings](crate::encoding::ArrayEncoding).

@@ -5,7 +5,7 @@ use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::HashMap;
 use num_traits::AsPrimitive;
 use vortex::accessor::ArrayAccessor;
-use vortex::array::{PrimitiveArray, VarBinArray};
+use vortex::array::{PrimitiveArray, VarBinArray, VarBinViewArray};
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArray};
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, ToBytes};
@@ -84,6 +84,13 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
 
 /// Dictionary encode varbin array. Specializes for primitive byte arrays to avoid double copying
 pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
+    array
+        .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
+        .unwrap()
+}
+
+/// Dictionary encode a VarbinViewArray.
+pub fn dict_encode_varbinview(array: &VarBinViewArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
         .unwrap()

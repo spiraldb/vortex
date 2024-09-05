@@ -69,7 +69,7 @@ fn vortex_compress_tpch(c: &mut Criterion) {
     let comments_canonical = comments
         .into_canonical()
         .unwrap()
-        .into_varbin()
+        .into_varbinview()
         .unwrap()
         .into_array();
     group.bench_function("compress-fsst-canonicalized", |b| {

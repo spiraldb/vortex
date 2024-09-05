@@ -1,10 +1,13 @@
 use std::collections::HashSet;
 
-use vortex::array::{Primitive, PrimitiveArray, VarBin, VarBinArray};
+use vortex::array::{Primitive, PrimitiveArray, VarBin, VarBinArray, VarBinView, VarBinViewArray};
 use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
-use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray, DictEncoding};
+use vortex_dict::{
+    dict_encode_primitive, dict_encode_varbin, dict_encode_varbinview, Dict, DictArray,
+    DictEncoding,
+};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
@@ -52,6 +55,11 @@ impl EncodingCompressor for DictCompressor {
             VarBin::ID => {
                 let vb = VarBinArray::try_from(array)?;
                 let (codes, values) = dict_encode_varbin(&vb);
+                (codes.into_array(), values.into_array())
+            }
+            VarBinView::ID => {
+                let vb = VarBinViewArray::try_from(array)?;
+                let (codes, values) = dict_encode_varbinview(&vb);
                 (codes.into_array(), values.into_array())
             }
 

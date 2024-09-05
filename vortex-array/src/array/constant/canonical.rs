@@ -1,13 +1,12 @@
 use std::iter;
 
-use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
+use vortex_dtype::{match_each_native_ptype, Nullability, PType};
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_scalar::{BoolScalar, Utf8Scalar};
+use vortex_scalar::{BinaryScalar, BoolScalar, Utf8Scalar};
 
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::VarBinArray;
-use crate::array::BoolArray;
+use crate::array::{BoolArray, VarBinViewArray};
 use crate::validity::Validity;
 use crate::{ArrayDType, Canonical, IntoCanonical};
 
@@ -32,11 +31,21 @@ impl IntoCanonical for ConstantArray {
             let const_value = s
                 .value()
                 .ok_or_else(|| vortex_err!("Constant UTF-8 array has null value"))?;
-            let bytes = const_value.as_bytes();
+            let string = const_value.as_str();
 
-            return Ok(Canonical::VarBin(VarBinArray::from_iter(
+            return Ok(Canonical::VarBinView(VarBinViewArray::from_iter(
+                iter::repeat(Some(string)).take(self.len()),
+            )));
+        }
+
+        if let Ok(b) = BinaryScalar::try_from(self.scalar()) {
+            let const_value = b
+                .value()
+                .ok_or_else(|| vortex_err!("Constant UTF-8 array has null value"))?;
+            let bytes = const_value.as_slice();
+
+            return Ok(Canonical::VarBinView(VarBinViewArray::from_iter(
                 iter::repeat(Some(bytes)).take(self.len()),
-                DType::Utf8(validity.nullability()),
             )));
         }
 

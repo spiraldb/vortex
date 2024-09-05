@@ -1,6 +1,7 @@
-use arrow_buffer::{BooleanBufferBuilder, Buffer, MutableBuffer};
+use arrow_array::UInt8Array;
+use arrow_buffer::{BooleanBufferBuilder, Buffer, MutableBuffer, ScalarBuffer};
 use itertools::Itertools;
-use vortex_dtype::{DType, Nullability, PType, StructDType};
+use vortex_dtype::{DType, PType, StructDType};
 use vortex_error::{vortex_bail, vortex_err, ErrString, VortexResult};
 
 use crate::array::chunked::ChunkedArray;
@@ -8,10 +9,8 @@ use crate::array::extension::ExtensionArray;
 use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
-use crate::array::varbin::VarBinArray;
-use crate::array::BoolArray;
-use crate::compute::slice;
-use crate::compute::unary::{scalar_at_unchecked, try_cast};
+use crate::array::{BinaryView, BoolArray, VarBinViewArray};
+use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
 use crate::variants::StructArrayTrait;
 use crate::{
@@ -115,12 +114,12 @@ pub(crate) fn try_canonicalize_chunks(
             Ok(Canonical::Primitive(prim_array))
         }
         DType::Utf8(_) => {
-            let varbin_array = pack_varbin(chunks.as_slice(), validity, dtype)?;
-            Ok(Canonical::VarBin(varbin_array))
+            let varbin_array = pack_views(chunks.as_slice(), dtype, validity)?;
+            Ok(Canonical::VarBinView(varbin_array))
         }
         DType::Binary(_) => {
-            let varbin_array = pack_varbin(chunks.as_slice(), validity, dtype)?;
-            Ok(Canonical::VarBin(varbin_array))
+            let varbin_array = pack_views(chunks.as_slice(), dtype, validity)?;
+            Ok(Canonical::VarBinView(varbin_array))
         }
         DType::Null => {
             let len = chunks.iter().map(|chunk| chunk.len()).sum();
@@ -201,48 +200,58 @@ fn pack_primitives(
     ))
 }
 
-/// Builds a new [VarBinArray] by repacking the values from the chunks into a single
+/// Builds a new [VarBinViewArray] by repacking the values from the chunks into a single
 /// contiguous array.
 ///
 /// It is expected this function is only called from [try_canonicalize_chunks], and thus all chunks have
 /// been checked to have the same DType already.
-fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexResult<VarBinArray> {
-    let len: usize = chunks.iter().map(|c| c.len()).sum();
-    let mut offsets = Vec::with_capacity(len + 1);
-    offsets.push(0);
-    let mut data_bytes = Vec::new();
-
+fn pack_views(
+    chunks: &[Array],
+    dtype: &DType,
+    validity: Validity,
+) -> VortexResult<VarBinViewArray> {
+    let mut views = Vec::new();
+    let mut buffers = Vec::new();
     for chunk in chunks {
-        let chunk = chunk.clone().into_varbin()?;
-        let offsets_arr = try_cast(
-            chunk.offsets().into_primitive()?.array(),
-            &DType::Primitive(PType::I32, Nullability::NonNullable),
-        )?
-        .into_primitive()?;
+        // Each chunk's views have buffer IDs that are zero-referenced.
+        // As part of the packing operation, we need to rewrite them to be referenced to the global
+        // merged buffers list.
+        let buffers_offset = buffers.len();
+        let canonical_chunk = chunk.clone().into_varbinview()?;
 
-        let first_offset_value: usize =
-            usize::try_from(&scalar_at_unchecked(offsets_arr.array(), 0))?;
-        let last_offset_value: usize = usize::try_from(&scalar_at_unchecked(
-            offsets_arr.array(),
-            offsets_arr.len() - 1,
-        ))?;
-        let primitive_bytes =
-            slice(&chunk.bytes(), first_offset_value, last_offset_value)?.into_primitive()?;
-        data_bytes.extend_from_slice(primitive_bytes.buffer());
+        for buffer in canonical_chunk.buffers() {
+            let canonical_buffer = buffer.into_canonical()?.into_varbinview()?.into_array();
+            buffers.push(canonical_buffer);
+        }
 
-        let adjustment_from_previous = *offsets.last().expect("offsets has at least one element");
-        offsets.extend(
-            offsets_arr
-                .maybe_null_slice::<i32>()
-                .iter()
-                .skip(1)
-                .map(|off| off + adjustment_from_previous - first_offset_value as i32),
-        );
+        for view in canonical_chunk.view_slice() {
+            if view.is_inlined() {
+                // Inlined views can be copied directly into the output
+                views.push(*view);
+            } else {
+                // Referencing views must have their buffer_index adjusted with new offsets
+                let view_ref = view.as_view();
+                views.push(BinaryView::new_view(
+                    view.len(),
+                    *view_ref.prefix(),
+                    (buffers_offset as u32) + view_ref.buffer_index(),
+                    view_ref.offset(),
+                ));
+            }
+        }
     }
 
-    VarBinArray::try_new(
-        PrimitiveArray::from(offsets).into_array(),
-        PrimitiveArray::from(data_bytes).into_array(),
+    // Reinterpret views from Vec<BinaryView> to Vec<u8>.
+    // BinaryView is 16 bytes, so we need to be careful to set the length
+    // and capacity of the new Vec accordingly.
+    let (ptr, length, capacity) = views.into_raw_parts();
+    let views_u8: Vec<u8> = unsafe { Vec::from_raw_parts(ptr.cast(), 16 * length, 16 * capacity) };
+
+    let arrow_views_array = UInt8Array::new(ScalarBuffer::from(views_u8), None);
+
+    VarBinViewArray::try_new(
+        Array::from_arrow(&arrow_views_array, false),
+        buffers,
         dtype.clone(),
         validity,
     )
@@ -250,32 +259,35 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
 
 #[cfg(test)]
 mod tests {
+    use arrow_array::builder::StringViewBuilder;
     use vortex_dtype::{DType, Nullability};
 
     use crate::accessor::ArrayAccessor;
-    use crate::array::builder::VarBinBuilder;
-    use crate::array::chunked::canonical::pack_varbin;
-    use crate::array::VarBinArray;
+    use crate::array::chunked::canonical::pack_views;
+    use crate::arrow::FromArrowArray;
     use crate::compute::slice;
     use crate::validity::Validity;
+    use crate::Array;
 
-    fn varbin_array() -> VarBinArray {
-        let mut builder = VarBinBuilder::<i32>::with_capacity(4);
-        builder.push_value("foo");
-        builder.push_value("bar");
-        builder.push_value("baz");
-        builder.push_value("quak");
-        builder.finish(DType::Utf8(Nullability::NonNullable))
+    fn varbin_array() -> Array {
+        let mut builder = StringViewBuilder::new();
+        builder.append_value("foo");
+        builder.append_value("bar");
+        builder.append_value("baz");
+        builder.append_value("quak");
+        let arrow_view_array = builder.finish();
+
+        Array::from_arrow(&arrow_view_array, false)
     }
 
     #[test]
     pub fn pack_sliced_varbin() {
-        let array1 = slice(varbin_array().array(), 1, 3).unwrap();
-        let array2 = slice(varbin_array().array(), 2, 4).unwrap();
-        let packed = pack_varbin(
+        let array1 = slice(&varbin_array(), 1, 3).unwrap();
+        let array2 = slice(&varbin_array(), 2, 4).unwrap();
+        let packed = pack_views(
             &[array1, array2],
-            Validity::NonNullable,
             &DType::Utf8(Nullability::NonNullable),
+            Validity::NonNullable,
         )
         .unwrap();
         assert_eq!(packed.len(), 4);
