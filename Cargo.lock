@@ -494,7 +494,7 @@ dependencies = [
  "lazy_static",
  "log",
  "mimalloc",
- "object_store",
+ "object_store 0.11.0",
  "parquet",
  "prettytable-rs",
  "rand",
@@ -1026,7 +1026,7 @@ dependencies = [
  "itertools 0.12.1",
  "log",
  "num_cpus",
- "object_store",
+ "object_store 0.10.2",
  "parking_lot",
  "parquet",
  "paste",
@@ -1073,7 +1073,7 @@ dependencies = [
  "instant",
  "libc",
  "num_cpus",
- "object_store",
+ "object_store 0.10.2",
  "parquet",
  "sqlparser",
 ]
@@ -1101,7 +1101,7 @@ dependencies = [
  "futures",
  "hashbrown",
  "log",
- "object_store",
+ "object_store 0.10.2",
  "parking_lot",
  "rand",
  "tempfile",
@@ -2584,6 +2584,27 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e6da452820c715ce78221e8202ccc599b4a52f3e1eb3eedb487b680c81a8e3f3"
 dependencies = [
  "async-trait",
+ "bytes",
+ "chrono",
+ "futures",
+ "humantime",
+ "itertools 0.13.0",
+ "parking_lot",
+ "percent-encoding",
+ "snafu 0.7.5",
+ "tokio",
+ "tracing",
+ "url",
+ "walkdir",
+]
+
+[[package]]
+name = "object_store"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25a0c4b3a0e31f8b66f71ad8064521efa773910196e2cde791436f13409f3b45"
+dependencies = [
+ "async-trait",
  "base64",
  "bytes",
  "chrono",
@@ -2600,7 +2621,7 @@ dependencies = [
  "ring",
  "serde",
  "serde_json",
- "snafu",
+ "snafu 0.8.4",
  "tokio",
  "tracing",
  "url",
@@ -2726,7 +2747,7 @@ dependencies = [
  "lz4_flex",
  "num",
  "num-bigint",
- "object_store",
+ "object_store 0.10.2",
  "paste",
  "seq-macro",
  "snap",
@@ -3666,7 +3687,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e4de37ad025c587a29e8f3f5605c00f70b98715ef90b9061a815b9e59e9042d6"
 dependencies = [
  "doc-comment",
- "snafu-derive",
+ "snafu-derive 0.7.5",
+]
+
+[[package]]
+name = "snafu"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b835cb902660db3415a672d862905e791e54d306c6e8189168c7f3d9ae1c79d"
+dependencies = [
+ "snafu-derive 0.8.4",
 ]
 
 [[package]]
@@ -3679,6 +3709,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "snafu-derive"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "38d1e02fca405f6280643174a50c942219f0bbf4dbf7d480f1dd864d6f211ae5"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.77",
 ]
 
 [[package]]
@@ -4327,7 +4369,7 @@ dependencies = [
  "itertools 0.13.0",
  "lazy_static",
  "log",
- "object_store",
+ "object_store 0.11.0",
  "pin-project",
  "tempfile",
  "tokio",
@@ -4411,7 +4453,7 @@ dependencies = [
  "flatbuffers",
  "flexbuffers",
  "jiff",
- "object_store",
+ "object_store 0.11.0",
  "parquet",
  "thiserror",
  "worker",
@@ -4605,7 +4647,7 @@ dependencies = [
  "futures-util",
  "itertools 0.13.0",
  "monoio",
- "object_store",
+ "object_store 0.11.0",
  "pin-project",
  "rand",
  "simplelog",
