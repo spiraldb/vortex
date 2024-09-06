@@ -7,7 +7,7 @@ use vortex::variants::{ArrayVariants, ExtensionArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compute::decode_to_temporal;
 
@@ -65,19 +65,19 @@ impl DateTimePartsArray {
     pub fn days(&self) -> Array {
         self.array()
             .child(0, &self.metadata().days_dtype, self.len())
-            .unwrap_or_else(|| panic!("DatetimePartsArray missing days array"))
+            .vortex_expect("DatetimePartsArray missing days array")
     }
 
     pub fn seconds(&self) -> Array {
         self.array()
             .child(1, &self.metadata().seconds_dtype, self.len())
-            .unwrap_or_else(|| panic!("DatetimePartsArray missing seconds array"))
+            .vortex_expect("DatetimePartsArray missing seconds array")
     }
 
     pub fn subsecond(&self) -> Array {
         self.array()
             .child(2, &self.metadata().subseconds_dtype, self.len())
-            .unwrap_or_else(|| panic!("DatetimePartsArray missing subsecond array"))
+            .vortex_expect("DatetimePartsArray missing subsecond array")
     }
 }
 

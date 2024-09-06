@@ -191,7 +191,7 @@ impl<T> VortexUnwrap for VortexResult<T> {
 
     #[inline(always)]
     fn vortex_unwrap(self) -> Self::Output {
-        self.unwrap_or_else(|err| err.panic())
+        self.unwrap_or_else(|err| vortex_panic!(err))
     }
 }
 
@@ -206,7 +206,7 @@ impl<T> VortexExpect for VortexResult<T> {
 
     #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
-        self.unwrap_or_else(|e| e.with_context(msg.to_string()).panic())
+        self.unwrap_or_else(|e| vortex_panic!(e.with_context(msg.to_string())))
     }
 }
 
@@ -215,7 +215,10 @@ impl<T> VortexExpect for Option<T> {
 
     #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
-        self.unwrap_or_else(|| VortexError::InvalidArgument(msg.to_string().into(), Backtrace::capture()).panic())
+        self.unwrap_or_else(|| {
+            let err = VortexError::InvalidArgument(msg.to_string().into(), Backtrace::capture());
+            vortex_panic!(err)
+        })
     }
 }
 
@@ -295,7 +298,9 @@ macro_rules! vortex_panic {
     }; 
     ($err:expr, $fmt:literal $(, $arg:expr)* $(,)?) => {{
         use $crate::VortexPanic;
-        ($err).with_context(format!($fmt, $($arg),*)).panic()
+        use $crate::VortexError;
+        let err: VortexError = $err;
+        err.with_context(format!($fmt, $($arg),*)).panic()
     }};
     ($fmt:literal $(, $arg:expr)* $(,)?) => {
         $crate::vortex_panic!($crate::vortex_err!($fmt, $($arg),*))

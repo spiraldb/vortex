@@ -1,13 +1,13 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::array::BoolArray;
 use crate::compute::unary::scalar_at_unchecked;
 use crate::compute::{and, filter, slice, take};
 use crate::stats::ArrayStatistics;
-use crate::{Array, IntoArray, IntoArrayVariant};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -270,6 +270,21 @@ pub enum LogicalValidity {
 }
 
 impl LogicalValidity {
+    pub fn try_new_from_array(array: Array) -> VortexResult<Self> {
+        if !matches!(array.dtype(), &Validity::DTYPE) {
+            vortex_bail!("Expected a non-nullable boolean array");
+        }
+
+        let true_count = array.statistics().compute_true_count().ok_or_else(|| vortex_err!("Failed to compute true count from validity array"))?;
+        if true_count == array.len() {
+            return Ok(Self::AllValid(array.len()));
+        } else if true_count == 0 {
+            return Ok(Self::AllInvalid(array.len()));
+        }
+
+        Ok(Self::Array(array))
+    }
+
     pub fn to_null_buffer(&self) -> VortexResult<Option<NullBuffer>> {
         match self {
             Self::AllValid(_) => Ok(None),
@@ -310,6 +325,14 @@ impl LogicalValidity {
             Self::AllInvalid(_) => Validity::AllInvalid,
             Self::Array(a) => Validity::Array(a),
         }
+    }
+}
+
+impl TryFrom<Array> for LogicalValidity {
+    type Error = VortexError;
+
+    fn try_from(array: Array) -> VortexResult<Self> {
+        Self::try_new_from_array(array)
     }
 }
 

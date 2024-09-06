@@ -9,6 +9,7 @@ use vortex::array::{PrimitiveArray, VarBinArray};
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArray};
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, ToBytes};
+use vortex_error::VortexExpect as _;
 
 #[derive(Debug)]
 struct Value<T>(T);
@@ -65,9 +66,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
             }
         }
     })
-    .unwrap_or_else(|err| {
-        panic!("Failed to iterate over primitive array during dictionary encoding: {err}")
-    });
+    .vortex_expect("Failed to iterate over primitive array during dictionary encoding");
 
     let values_validity = if array.dtype().is_nullable() {
         let mut validity = vec![true; values.len()];
@@ -88,9 +87,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
 pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
-        .unwrap_or_else(|err| {
-            panic!("Failed to iterate over varbin array during dictionary encoding: {err}")
-        })
+        .vortex_expect("Failed to iterate over varbin array during dictionary encoding")
 }
 
 fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
@@ -169,9 +166,7 @@ where
             dtype,
             values_validity,
         )
-        .unwrap_or_else(|err| {
-            panic!("Failed to create VarBinArray dictionary during encoding: {err}")
-        }),
+        .vortex_expect("Failed to create VarBinArray dictionary during encoding")
     )
 }
 

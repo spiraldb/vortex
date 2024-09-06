@@ -257,31 +257,33 @@ pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
     unsafe { BitPacking::unchecked_unpack_single(bit_width, packed_chunk, index_in_chunk) }
 }
 
-pub fn find_best_bit_width(array: &PrimitiveArray) -> Option<usize> {
-    let bit_width_freq = array.statistics().compute_bit_width_freq()?;
+pub fn find_best_bit_width(array: &PrimitiveArray) -> VortexResult<usize> {
+    let bit_width_freq = array.statistics().compute_bit_width_freq()
+        .ok_or_else(|| vortex_err!(ComputeError: "Failed to compute bit width frequency"))?;
 
-    Some(best_bit_width(
+    best_bit_width(
         &bit_width_freq,
         bytes_per_exception(array.ptype()),
-    ))
+    )
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
-fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> usize {
-    let len: usize = bit_width_freq.iter().sum();
-
+fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> VortexResult<usize> {
     if bit_width_freq.len() > u8::MAX as usize {
-        panic!("Too many bit widths");
+        vortex_bail!("Too many bit widths");
     }
 
+    let len: usize = bit_width_freq.iter().sum();
     let mut num_packed = 0;
     let mut best_cost = len * bytes_per_exception;
     let mut best_width = 0;
-    for (bit_width, freq) in bit_width_freq.iter().enumerate() {
+    for (bit_width, freq) in bit_width_freq.iter().enumerate() {        
+        let packed_cost = ((bit_width * len) + 7) / 8; // round up to bytes
+
         num_packed += *freq;
-        let packed_cost = ((bit_width * len) + 7) / 8;
         let exceptions_cost = (len - num_packed) * bytes_per_exception;
+
         let cost = exceptions_cost + packed_cost;
         if cost < best_cost {
             best_cost = cost;
@@ -289,7 +291,7 @@ fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> usize
         }
     }
 
-    best_width
+    Ok(best_width)
 }
 
 fn bytes_per_exception(ptype: PType) -> usize {
@@ -315,7 +317,7 @@ mod test {
         // 10 1-bit values, 20 2-bit, etc.
         let freq = vec![0, 10, 20, 15, 1, 0, 0, 0];
         // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes and zero exceptions
-        assert_eq!(best_bit_width(&freq, bytes_per_exception(PType::U8)), 3);
+        assert_eq!(best_bit_width(&freq, bytes_per_exception(PType::U8)).unwrap(), 3);
     }
 
     #[test]

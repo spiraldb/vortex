@@ -10,7 +10,7 @@ use vortex::compute::{
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArrayVariant};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::{unpack_single_primitive, BitPackedArray};
@@ -67,15 +67,13 @@ struct BitPackedSearch {
 impl BitPackedSearch {
     pub fn new(array: &BitPackedArray) -> Self {
         Self {
-            packed: array.packed().into_primitive().unwrap_or_else(|err| {
-                panic!("Failed to get packed bytes as PrimitiveArray: {err}")
-            }),
+            packed: array.packed().into_primitive().vortex_expect("Failed to get packed bytes as PrimitiveArray"),
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),
             min_patch_offset: array.patches().map(|p| {
                 SparseArray::try_from(p)
-                    .unwrap_or_else(|err| panic!("Only sparse patches are supported: {err}"))
+                    .vortex_expect("Only sparse patches are supported")
                     .min_index()
             }),
             validity: array.validity(),

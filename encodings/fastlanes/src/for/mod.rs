@@ -8,7 +8,7 @@ use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 mod compress;
@@ -50,7 +50,7 @@ impl FoRArray {
         };
         self.array()
             .child(0, dtype, self.len())
-            .unwrap_or_else(|| panic!("FoRArray is missing encoded child array"))
+            .vortex_expect("FoRArray is missing encoded child array")
     }
 
     #[inline]
@@ -67,7 +67,7 @@ impl FoRArray {
     pub fn ptype(&self) -> PType {
         self.dtype()
             .try_into()
-            .unwrap_or_else(|err| panic!("Failed to convert FoRArray DType to PType: {err}"))
+            .unwrap_or_else(|err| vortex_panic!(err, "Failed to convert FoRArray DType {} to PType", self.dtype()))
     }
 }
 

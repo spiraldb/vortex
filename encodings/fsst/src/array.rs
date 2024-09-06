@@ -8,7 +8,7 @@ use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
 use vortex::visitor::AcceptArrayVisitor;
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonical};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
 impl_encoding!("vortex.fsst", 24u16, FSST);
 
@@ -101,25 +101,25 @@ impl FSSTArray {
     /// this array, and pass it to the given function.
     ///
     /// This is private to the crate to avoid leaking `fsst-rs` types as part of the public API.
-    pub(crate) fn with_decompressor<F, R>(&self, apply: F) -> R
+    pub(crate) fn with_decompressor<F, R>(&self, apply: F) -> VortexResult<R>
     where
-        F: FnOnce(Decompressor) -> R,
+        F: FnOnce(Decompressor) -> VortexResult<R>,
     {
         // canonicalize the symbols child array, so we can view it contiguously
         let symbols_array = self
             .symbols()
             .into_canonical()
-            .unwrap_or_else(|err| vortex_panic!(err))
+            .map_err(|err| err.with_context("Failed to canonicalize symbols array"))?
             .into_primitive()
-            .unwrap_or_else(|err| vortex_panic!(Context: "Symbols must be a Primitive Array", err));
+            .map_err(|err| err.with_context("Symbols must be a Primitive Array"))?;
         let symbols = symbols_array.maybe_null_slice::<u64>();
 
         let symbol_lengths_array = self
             .symbol_lengths()
             .into_canonical()
-            .unwrap()
+            .map_err(|err| err.with_context("Failed to canonicalize symbol_lengths array"))?
             .into_primitive()
-            .unwrap();
+            .map_err(|err| err.with_context("Symbol lengths must be a Primitive Array"))?;
         let symbol_lengths = symbol_lengths_array.maybe_null_slice::<u8>();
 
         // Transmute the 64-bit symbol values into fsst `Symbol`s.
