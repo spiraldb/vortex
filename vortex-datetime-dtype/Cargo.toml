@@ -17,7 +17,7 @@ jiff = { workspace = true }
 lazy_static = { workspace = true }
 num_enum = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-vortex-dtype = { workspace = true }
+vortex-dtype = { workspace = true, features = ["serde"] }
 vortex-error = { workspace = true }
 
 [features]
