@@ -63,6 +63,7 @@ mod test {
             .unwrap()
             .into_bool()
             .unwrap();
+        println!("0");
         assert_eq!(to_int_indices(matches), [1u64, 2, 3, 4]);
 
         let matches = compare(&arr, &arr, Operator::NotEq)
