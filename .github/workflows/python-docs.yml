@@ -42,6 +42,11 @@ jobs:
           git add docs
           git config --global user.email "nobody@example.com"
           git config --global user.name "github-action-deploy-python-docs"
-          git commit -m 'Python docs for '$this_sha
-          git push origin HEAD:gh-pages-bench
+
+          # Only try to commit if there exist changes
+          git diff --quiet HEAD || {
+              git commit -m 'Python docs for '$this_sha
+              git push origin HEAD:gh-pages-bench
+          }
+
           git checkout 'HEAD@{2}'
