@@ -24,7 +24,7 @@ use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
 use vortex::{Array, AsArray as _, IntoArray, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::field::Field;
-use vortex_error::{vortex_err, VortexError};
+use vortex_error::{vortex_err, vortex_panic, VortexError};
 use vortex_expr::VortexExpr;
 
 /// Physical plan operator that applies a set of [filters][Expr] against the input, producing a
@@ -219,7 +219,7 @@ impl TakeRowsExec {
     ) -> Self {
         let output_schema =
             Arc::new(schema_ref.project(projection).unwrap_or_else(|err| {
-                panic!("Failed to project schema: {}", VortexError::from(err))
+                vortex_panic!("Failed to project schema: {}", VortexError::from(err))
             }));
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(output_schema.clone()),

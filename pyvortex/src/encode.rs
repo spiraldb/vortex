@@ -55,7 +55,7 @@ pub fn _encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
         let chunks = array_stream
             .into_iter()
             .map(|b| b.map_err(VortexError::ArrowError))
-            .map(|b| b.and_then(Array::try_from).map_err(map_to_pyerr))
+            .map(|b| b.and_then(Array::try_from).map_err(PyVortexError::map_err))
             .collect::<PyResult<Vec<_>>>()?;
         Bound::new(
             obj.py(),

@@ -56,10 +56,9 @@ impl PyArray {
             let chunks: Vec<ArrayRef> = chunked_array
                 .chunks()
                 .map(|chunk| -> PyResult<ArrayRef> {
-                    Ok(chunk
-                        .into_canonical()
-                        .map_err(PyVortexError::map_err)?
-                        .into_arrow())
+                    chunk.into_canonical()
+                        .and_then(|arr| arr.into_arrow())
+                        .map_err(PyVortexError::map_err)
                 })
                 .collect::<PyResult<Vec<ArrayRef>>>()?;
             if chunks.is_empty() {
@@ -81,8 +80,8 @@ impl PyArray {
             Ok(vortex
                 .clone()
                 .into_canonical()
+                .and_then(|arr| arr.into_arrow())
                 .map_err(PyVortexError::map_err)?
-                .into_arrow()
                 .into_data()
                 .to_pyarrow(py)?
                 .into_bound(py))

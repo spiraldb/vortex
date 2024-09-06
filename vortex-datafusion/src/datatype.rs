@@ -24,11 +24,11 @@ use vortex_error::vortex_panic;
 /// has top-level nullability.
 pub(crate) fn infer_schema(dtype: &DType) -> Schema {
     let DType::Struct(struct_dtype, nullable) = dtype else {
-        panic!("only DType::Struct can be converted to arrow schema");
+        vortex_panic!("only DType::Struct can be converted to arrow schema");
     };
 
     if *nullable != Nullability::NonNullable {
-        panic!("top-level struct in Schema must be NonNullable");
+        vortex_panic!("top-level struct in Schema must be NonNullable");
     }
 
     let mut builder = SchemaBuilder::with_capacity(struct_dtype.names().len());
