@@ -1,0 +1,47 @@
+name: Python docs
+
+on:
+  push:
+    branches: [ develop ]
+
+permissions:
+  actions: read
+  contents: write
+  deployments: write
+
+jobs:
+  deploy-python-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup
+      - uses: ./.github/actions/setup-rust
+      - uses: ./.github/actions/setup-python
+
+      - name: build Python docs
+        working-directory: pyvortex
+        run: |
+          set -ex
+
+          rye run maturin develop
+
+          cd docs
+          rye run sphinx-build -M html . _build --fail-on-warning --keep-going
+      - name: commit python docs to gh-pages-bench
+        run: |
+          set -ex
+
+          this_sha=$(git rev-parse HEAD)
+
+          mv pyvortex/docs/_build/html /tmp/html
+
+          git fetch origin
+          git checkout origin/gh-pages-bench
+          rm -rf docs
+          mv /tmp/html docs
+          git add docs
+          git config --global user.email "nobody@example.com"
+          git config --global user.name "github-action-deploy-python-docs"
+          git commit -m 'Python docs for '$this_sha
+          git push origin HEAD:gh-pages-bench
+          git checkout 'HEAD@{2}'

@@ -1,9 +1,8 @@
 # Vortex
 
-[![Build Status](https://github.com/fulcrum-so/vortex/actions/workflows/ci.yml/badge.svg)](https://github.com/fulcrum-so/vortex/actions)
+[![Build Status](https://github.com/fulcrum-so/vortex/actions/workflows/ci.yml/badge.svg)](https://github.com/spiraldb/vortex/actions)
 [![Crates.io](https://img.shields.io/crates/v/vortex-array.svg)](https://crates.io/crates/vortex-array)
-[![Documentation](https://docs.rs/vortex-rs/badge.svg)](https://docs.rs/vortex-array)
-[![Rust](https://img.shields.io/badge/rust-1.76.0%2B-blue.svg?maxAge=3600)](https://github.com/fulcrum-so/vortex)
+[![Documentation](https://docs.rs/vortex-array/badge.svg)](https://docs.rs/vortex-array)
 
 Vortex is an Apache Arrow-compatible toolkit for working with compressed array data. We are using Vortex to develop a
 next-generation columnar file format for multidimensional arrays.

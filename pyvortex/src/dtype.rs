@@ -91,7 +91,6 @@ pub fn dtype_null(py: Python<'_>) -> PyResult<Py<PyDType>> {
 /// Parameters
 /// ----------
 /// nullable : :class:`bool`
-///
 ///     When :obj:`True`, :obj:`None` is a permissible value.
 ///
 /// Returns
@@ -121,11 +120,9 @@ pub fn dtype_bool(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
 /// Parameters
 /// ----------
 /// width : one of 8, 16, 32, and 64.
-///
 ///     The bit width determines the span of valid values. If :obj:`None`, 64 is used.
 ///
 /// nullable : :class:`bool`
-///
 ///     When :obj:`True`, :obj:`None` is a permissible value.
 ///
 /// Returns
@@ -166,11 +163,9 @@ pub fn dtype_int(py: Python<'_>, width: Option<u16>, nullable: bool) -> PyResult
 /// Parameters
 /// ----------
 /// width : one of 8, 16, 32, and 64.
-///
 ///     The bit width determines the span of valid values. If :obj:`None`, 64 is used.
 ///
 /// nullable : :class:`bool`
-///
 ///     When :obj:`True`, :obj:`None` is a permissible value.
 ///
 /// Returns
@@ -211,12 +206,10 @@ pub fn dtype_uint(py: Python<'_>, width: Option<u16>, nullable: bool) -> PyResul
 /// Parameters
 /// ----------
 /// width : one of 16, 32, and 64.
-///
 ///     The bit width determines the range and precision of the floating-point values. If
 ///     :obj:`None`, 64 is used.
 ///
 /// nullable : :class:`bool`
-///
 ///     When :obj:`True`, :obj:`None` is a permissible value.
 ///
 /// Returns
@@ -253,7 +246,6 @@ pub fn dtype_float(py: Python<'_>, width: Option<i8>, nullable: bool) -> PyResul
 /// Parameters
 /// ----------
 /// nullable : :class:`bool`
-///
 ///     When :obj:`True`, :obj:`None` is a permissible value.
 ///
 /// Returns
@@ -279,7 +271,6 @@ pub fn dtype_utf8(py: Python<'_>, nullable: bool) -> PyResult<Py<PyDType>> {
 /// Parameters
 /// ----------
 /// nullable : :class:`bool`
-///
 ///     When :obj:`True`, :obj:`None` is a permissible value.
 ///
 /// Returns
