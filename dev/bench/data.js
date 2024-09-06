@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725632662713,
+  "lastUpdate": 1725646195250,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -69481,6 +69481,96 @@ window.BENCHMARK_DATA = {
             "name": "tpch_q2/vortex-file-compressed",
             "value": 185867923,
             "range": "± 703071",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "35b24ac2b2fd916f8d7690f47349e0f8c2ec68fb",
+          "message": "fix python docs action: commit and push only if changes exist (#759)",
+          "timestamp": "2024-09-06T18:03:24Z",
+          "tree_id": "8a314768bc40fb079006c34ddca7b7d12b1a31ec",
+          "url": "https://github.com/spiraldb/vortex/commit/35b24ac2b2fd916f8d7690f47349e0f8c2ec68fb"
+        },
+        "date": 1725646193645,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tpch_q1/vortex-in-memory-no-pushdown",
+            "value": 464783804,
+            "range": "± 2139396",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-in-memory-pushdown",
+            "value": 502270663,
+            "range": "± 4900869",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/arrow",
+            "value": 448024798,
+            "range": "± 3645819",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/parquet",
+            "value": 652622661,
+            "range": "± 2300803",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-compressed",
+            "value": 720553898,
+            "range": "± 9665957",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-uncompressed",
+            "value": 555973426,
+            "range": "± 2497457",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-no-pushdown",
+            "value": 138958401,
+            "range": "± 1014250",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-pushdown",
+            "value": 138624094,
+            "range": "± 795298",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/arrow",
+            "value": 120040166,
+            "range": "± 460865",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/parquet",
+            "value": 154792430,
+            "range": "± 622979",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-compressed",
+            "value": 186904405,
+            "range": "± 1215851",
             "unit": "ns/iter"
           }
         ]
