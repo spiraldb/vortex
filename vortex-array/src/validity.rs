@@ -1,3 +1,5 @@
+use std::ops::BitAnd;
+
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability};
@@ -7,7 +9,7 @@ use vortex_error::{
 
 use crate::array::BoolArray;
 use crate::compute::unary::scalar_at_unchecked;
-use crate::compute::{and, filter, slice, take};
+use crate::compute::{filter, slice, take};
 use crate::stats::ArrayStatistics;
 use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
@@ -153,7 +155,7 @@ impl Validity {
 
     /// Logically & two Validity values of the same length
     pub fn and(self, rhs: Validity) -> VortexResult<Validity> {
-        let validity = match (self, rhs) {
+        let validity = match (&self, &rhs) {
             // Any `AllInvalid` makes the output all invalid values
             (Validity::AllInvalid, _) | (_, Validity::AllInvalid) => Validity::AllInvalid,
             // All truthy values on one side, which makes no effect on an `Array` variant
@@ -167,7 +169,15 @@ impl Validity {
             | (Validity::AllValid, Validity::NonNullable)
             | (Validity::AllValid, Validity::AllValid) => Validity::AllValid,
             // Here we actually have to do some work
-            (Validity::Array(lhs), Validity::Array(rhs)) => Validity::Array(and(&lhs, &rhs)?),
+            (Validity::Array(lhs), Validity::Array(rhs)) => {
+                let lhs = BoolArray::try_from(lhs)?;
+                let rhs = BoolArray::try_from(rhs)?;
+
+                let lhs = lhs.boolean_buffer();
+                let rhs = rhs.boolean_buffer();
+
+                Validity::from(lhs.bitand(&rhs))
+            }
         };
 
         Ok(validity)

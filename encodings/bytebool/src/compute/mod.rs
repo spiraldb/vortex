@@ -115,16 +115,7 @@ impl CompareFn for ByteBoolArray {
             Operator::Lte => lhs.not().bitor(&rhs),
         };
 
-        let mut validity = Vec::with_capacity(self.len());
-
-        let lhs_validity = self.validity();
-        let rhs_validity = canonical.validity();
-
-        for idx in 0..self.len() {
-            let l = lhs_validity.is_valid(idx);
-            let r = rhs_validity.is_valid(idx);
-            validity.push(l & r);
-        }
+        let validity = self.validity().and(canonical.validity())?;
 
         ByteBoolArray::try_from_vec(Vec::from_iter(result_buf.iter()), validity)
             .map(ByteBoolArray::into_array)
