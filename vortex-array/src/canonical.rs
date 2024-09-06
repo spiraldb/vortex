@@ -40,7 +40,7 @@ use crate::{Array, IntoArray};
 /// decompress it later to pass to a compute kernel, there are multiple suitable Arrow array
 /// variants to hold the data.
 ///
-/// To disambiguate, we choose a canonical physical encoding for every Vortex [`DType`], which
+/// To disambiguate, we choose a canonical physical encoding for every Vortex `DType`, which
 /// will correspond to an arrow-rs [`arrow_schema::DataType`].
 #[derive(Debug, Clone)]
 pub enum Canonical {
