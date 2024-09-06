@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1725571622454,
+  "lastUpdate": 1725632662713,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -69391,6 +69391,96 @@ window.BENCHMARK_DATA = {
             "name": "tpch_q22/vortex-file-uncompressed",
             "value": 112400984,
             "range": "± 2173644",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "adam@spiraldb.com",
+            "name": "Adam Gutglick",
+            "username": "AdamGS"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8b8926b0f6651ea5d54366a006673f8079e34c53",
+          "message": "Better implementation for `Validity::and` (#758)\n\nPrevious implementation was actually buggy because it generated nullable\r\narrays.",
+          "timestamp": "2024-09-06T14:17:02Z",
+          "tree_id": "0700f0ce7b1e7f707249ca23ba8ba52b11097b56",
+          "url": "https://github.com/spiraldb/vortex/commit/8b8926b0f6651ea5d54366a006673f8079e34c53"
+        },
+        "date": 1725632660686,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "tpch_q1/vortex-in-memory-no-pushdown",
+            "value": 462218909,
+            "range": "± 1149612",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-in-memory-pushdown",
+            "value": 503361658,
+            "range": "± 3178070",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/arrow",
+            "value": 449195214,
+            "range": "± 3750969",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/parquet",
+            "value": 649172164,
+            "range": "± 2261928",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-compressed",
+            "value": 714551287,
+            "range": "± 2546499",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q1/vortex-file-uncompressed",
+            "value": 550393935,
+            "range": "± 2141124",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-no-pushdown",
+            "value": 138402793,
+            "range": "± 609496",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-in-memory-pushdown",
+            "value": 137846388,
+            "range": "± 456757",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/arrow",
+            "value": 120744139,
+            "range": "± 558416",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/parquet",
+            "value": 155313978,
+            "range": "± 478309",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "tpch_q2/vortex-file-compressed",
+            "value": 185867923,
+            "range": "± 703071",
             "unit": "ns/iter"
           }
         ]
