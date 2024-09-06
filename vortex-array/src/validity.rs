@@ -1,7 +1,7 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 use crate::array::BoolArray;
 use crate::compute::unary::scalar_at_unchecked;
@@ -29,7 +29,7 @@ impl ValidityMetadata {
             Self::AllValid => Validity::AllValid,
             Self::AllInvalid => Validity::AllInvalid,
             Self::Array => match array {
-                None => panic!("Missing validity array"),
+                None => vortex_panic!("Missing validity array"),
                 Some(a) => Validity::Array(a),
             },
         }
@@ -94,8 +94,9 @@ impl Validity {
             Self::NonNullable | Self::AllValid => true,
             Self::AllInvalid => false,
             Self::Array(a) => bool::try_from(&scalar_at_unchecked(a, index)).unwrap_or_else(|err| {
-                panic!(
-                    "Failed to get bool from Validity Array at index {}: {err}",
+                vortex_panic!(
+                    err, 
+                    "Failed to get bool from Validity Array at index {}",
                     index
                 )
             }),
@@ -176,18 +177,15 @@ impl PartialEq for Validity {
             (Self::AllValid, Self::AllValid) => true,
             (Self::AllInvalid, Self::AllInvalid) => true,
             (Self::Array(a), Self::Array(b)) => {
-                a.clone()
+                let a_buffer = a.clone()
                     .into_bool()
-                    .unwrap_or_else(|err| {
-                        panic!("Failed to get Validity Array as BoolArray: {err}")
-                    })
-                    .boolean_buffer()
-                    == b.clone()
-                        .into_bool()
-                        .unwrap_or_else(|err| {
-                            panic!("Failed to get Validity Array as BoolArray: {err}")
-                        })
-                        .boolean_buffer()
+                    .vortex_expect("Failed to get Validity Array as BoolArray")
+                    .boolean_buffer();
+                let b_buffer = b.clone()
+                    .into_bool()
+                    .vortex_expect("Failed to get Validity Array as BoolArray")
+                    .boolean_buffer();
+                a_buffer == b_buffer
             }
             _ => false,
         }
@@ -246,9 +244,7 @@ impl FromIterator<LogicalValidity> for Validity {
                 LogicalValidity::Array(array) => {
                     let array_buffer = array
                         .into_bool()
-                        .unwrap_or_else(|err| {
-                            panic!("Failed to get Validity Array as BoolArray: {err}")
-                        })
+                        .vortex_expect("Failed to get Validity Array as BoolArray")
                         .boolean_buffer();
                     buffer.append_buffer(&array_buffer);
                 }

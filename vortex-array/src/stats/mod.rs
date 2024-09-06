@@ -6,7 +6,7 @@ use itertools::Itertools;
 pub use statsset::*;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, NativePType};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_panic, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::Array;
@@ -96,11 +96,11 @@ impl dyn Statistics + '_ {
             .map(|s| U::try_from(&s))
             .transpose()
             .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to cast stat {} to {}: {}",
+                vortex_panic!(
+                    err, 
+                    "Failed to cast stat {} to {}",
                     stat,
-                    std::any::type_name::<U>(),
-                    err
+                    std::any::type_name::<U>()
                 )
             })
     }
@@ -113,7 +113,14 @@ impl dyn Statistics + '_ {
             .map(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
-            .unwrap_or_else(|err| panic!("Failed to cast stat {} to {}: {}", stat, U::PTYPE, err))
+            .unwrap_or_else(|err| {
+                vortex_panic!(
+                    err, 
+                    "Failed to cast stat {} to {}",
+                    stat,
+                    U::PTYPE
+                )
+            })
     }
 
     pub fn compute_as<U: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
@@ -124,11 +131,11 @@ impl dyn Statistics + '_ {
             .map(|s| U::try_from(&s))
             .transpose()
             .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to compute stat {} as {}: {}",
+                vortex_panic!(
+                    err, 
+                    "Failed to compute stat {} as {}",
                     stat,
-                    std::any::type_name::<U>(),
-                    err
+                    std::any::type_name::<U>()
                 )
             })
     }
@@ -142,11 +149,11 @@ impl dyn Statistics + '_ {
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
             .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to compute stat {} as cast {}: {}",
+                vortex_panic!(
+                    err, 
+                    "Failed to compute stat {} as cast {}",
                     stat,
-                    U::PTYPE,
-                    err
+                    U::PTYPE
                 )
             })
     }

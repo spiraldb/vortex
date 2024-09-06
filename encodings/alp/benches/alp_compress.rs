@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use arrow::array::{as_primitive_array, ArrowNativeTypeOp, ArrowPrimitiveType};
 use arrow::datatypes::{Float32Type, Float64Type};
 use divan::{black_box, Bencher};

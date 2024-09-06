@@ -4,6 +4,7 @@
 //! encoding, they can use these traits to write encoding-agnostic code.
 
 use vortex_dtype::{DType, FieldNames};
+use vortex_error::VortexExpect as _;
 
 use crate::iter::{AccessorRef, VectorizedArrayIter};
 use crate::{Array, ArrayTrait};
@@ -15,7 +16,7 @@ pub trait ArrayVariants {
 
     fn as_null_array_unchecked(&self) -> &dyn NullArrayTrait {
         self.as_null_array()
-            .unwrap_or_else(|| panic!("Expected NullArray"))
+            .vortex_expect("Expected NullArray")
     }
 
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
@@ -24,7 +25,7 @@ pub trait ArrayVariants {
 
     fn as_bool_array_unchecked(&self) -> &dyn BoolArrayTrait {
         self.as_bool_array()
-            .unwrap_or_else(|| panic!("Expected BoolArray"))
+            .vortex_expect("Expected BoolArray")
     }
 
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
@@ -33,7 +34,7 @@ pub trait ArrayVariants {
 
     fn as_primitive_array_unchecked(&self) -> &dyn PrimitiveArrayTrait {
         self.as_primitive_array()
-            .unwrap_or_else(|| panic!("Expected PrimitiveArray"))
+            .vortex_expect("Expected PrimitiveArray")
     }
 
     fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
@@ -42,7 +43,7 @@ pub trait ArrayVariants {
 
     fn as_utf8_array_unchecked(&self) -> &dyn Utf8ArrayTrait {
         self.as_utf8_array()
-            .unwrap_or_else(|| panic!("Expected Utf8Array"))
+            .vortex_expect("Expected Utf8Array")
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
@@ -51,7 +52,7 @@ pub trait ArrayVariants {
 
     fn as_binary_array_unchecked(&self) -> &dyn BinaryArrayTrait {
         self.as_binary_array()
-            .unwrap_or_else(|| panic!("Expected BinaryArray"))
+            .vortex_expect("Expected BinaryArray")
     }
 
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
@@ -60,7 +61,7 @@ pub trait ArrayVariants {
 
     fn as_struct_array_unchecked(&self) -> &dyn StructArrayTrait {
         self.as_struct_array()
-            .unwrap_or_else(|| panic!("Expected StructArray"))
+            .vortex_expect("Expected StructArray")
     }
 
     fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
@@ -69,7 +70,7 @@ pub trait ArrayVariants {
 
     fn as_list_array_unchecked(&self) -> &dyn ListArrayTrait {
         self.as_list_array()
-            .unwrap_or_else(|| panic!("Expected ListArray"))
+            .vortex_expect("Expected ListArray")
     }
 
     fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {
@@ -78,7 +79,7 @@ pub trait ArrayVariants {
 
     fn as_extension_array_unchecked(&self) -> &dyn ExtensionArrayTrait {
         self.as_extension_array()
-            .unwrap_or_else(|| panic!("Expected ExtensionArray"))
+            .vortex_expect("Expected ExtensionArray")
     }
 }
 

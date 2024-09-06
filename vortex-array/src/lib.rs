@@ -22,7 +22,7 @@ pub use typed::*;
 pub use view::*;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexExpect, VortexResult};
 
 use crate::compute::ArrayCompute;
 use crate::encoding::{ArrayEncodingRef, EncodingRef};
@@ -193,14 +193,15 @@ impl Array {
                 Ok(())
             })
             .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to convert Array to {}: {err}",
+                vortex_panic!(
+                    err, 
+                    "Failed to convert Array to {}",
                     std::any::type_name::<dyn ArrayTrait>()
                 )
             });
 
         // Now we unwrap the optional, which we know to be populated by the closure.
-        result.unwrap_or_else(|| panic!("Failed to get result from Array::with_dyn"))
+        result.vortex_expect("Failed to get result from Array::with_dyn")
     }
 }
 
@@ -260,7 +261,7 @@ pub trait ArrayTrait:
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
         self.accept(&mut visitor)
-            .unwrap_or_else(|err| panic!("Failed to get nbytes from Array: {err}"));
+            .vortex_expect("Failed to get nbytes from Array");
         visitor.0
     }
 }

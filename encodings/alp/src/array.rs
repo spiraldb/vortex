@@ -12,7 +12,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
@@ -84,7 +84,7 @@ impl ALPArray {
     pub fn encoded(&self) -> Array {
         self.array()
             .child(0, &self.metadata().encoded_dtype, self.len())
-            .unwrap_or_else(|| panic!("Missing encoded child in ALPArray"))
+            .vortex_expect("Missing encoded child in ALPArray")
     }
 
     #[inline]
@@ -95,8 +95,8 @@ impl ALPArray {
     pub fn patches(&self) -> Option<Array> {
         self.metadata().patches_dtype.as_ref().map(|dt| {
             self.array().child(1, dt, self.len()).unwrap_or_else(|| {
-                panic!(
-                    "Missing patches with present metadata flag; dtype: {}, patches_len: {}",
+                vortex_panic!(
+                    "Missing patches with present metadata flag; patches dtype: {}, patches_len: {}",
                     dt,
                     self.len()
                 )
@@ -108,7 +108,7 @@ impl ALPArray {
     pub fn ptype(&self) -> PType {
         self.dtype()
             .try_into()
-            .unwrap_or_else(|err| panic!("Failed to convert DType to PType: {err}"))
+            .vortex_expect("Failed to convert DType to PType")
     }
 }
 
@@ -199,7 +199,7 @@ impl PrimitiveArrayTrait for ALPArray {
                 let encoded = self
                     .encoded()
                     .with_dyn(|a| a.as_primitive_array_unchecked().i32_accessor())
-                    .unwrap_or_else(|| panic!("This is is an invariant of the ALP algorithm"));
+                    .vortex_expect("Failed to get underlying encoded i32 array for ALP-encoded f32 array; this violates an invariant of the ALP algorithm");
 
                 Some(Arc::new(ALPAccessor::new(
                     encoded,
@@ -222,7 +222,7 @@ impl PrimitiveArrayTrait for ALPArray {
                 let encoded = self
                     .encoded()
                     .with_dyn(|a| a.as_primitive_array_unchecked().i64_accessor())
-                    .vortex_expect("This is is an invariant of the ALP algorithm");
+                    .vortex_expect("Failed to get underlying encoded i64 array for ALP-encoded f64 array; this violates an invariant of the ALP algorithm");
                 Some(Arc::new(ALPAccessor::new(
                     encoded,
                     patches,
