@@ -60,13 +60,13 @@ impl From<&Scalar> for Arc<dyn Datum> {
                         .value
                         .as_buffer_string()
                         .expect("should be buffer string"),
-                    StringArray
+                    StringViewArray
                 )
             }
             DType::Binary(_) => {
                 value_to_arrow_scalar!(
                     value.value.as_buffer().expect("should be a buffer"),
-                    BinaryArray
+                    BinaryViewArray
                 )
             }
             DType::Struct(..) => {
