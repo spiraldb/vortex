@@ -18,7 +18,8 @@ impl ScalarAtFn for BitPackedArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        self.scalar_at(index).unwrap_or_else(|err| vortex_panic!(err))
+        self.scalar_at(index)
+            .unwrap_or_else(|err| vortex_panic!(err))
     }
 }
 

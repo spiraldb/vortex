@@ -117,12 +117,12 @@ fn update_non_nullable_slice<O>(
     usize: AsPrimitive<O>,
 {
     let new_data = {
-        let offset_start = offsets[start]
-            .to_usize()
-            .unwrap_or_else(|| vortex_panic!("Failed to convert offset to usize: {}", offsets[start]));
-        let offset_end = offsets[end]
-            .to_usize()
-            .unwrap_or_else(|| vortex_panic!("Failed to convert offset to usize: {}", offsets[end]));
+        let offset_start = offsets[start].to_usize().unwrap_or_else(|| {
+            vortex_panic!("Failed to convert offset to usize: {}", offsets[start])
+        });
+        let offset_end = offsets[end].to_usize().unwrap_or_else(|| {
+            vortex_panic!("Failed to convert offset to usize: {}", offsets[end])
+        });
         &data[offset_start..offset_end]
     };
     let new_offsets = offsets[start..end + 1]

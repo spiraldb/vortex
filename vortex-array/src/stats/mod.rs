@@ -97,7 +97,7 @@ impl dyn Statistics + '_ {
             .transpose()
             .unwrap_or_else(|err| {
                 vortex_panic!(
-                    err, 
+                    err,
                     "Failed to cast stat {} to {}",
                     stat,
                     std::any::type_name::<U>()
@@ -114,12 +114,7 @@ impl dyn Statistics + '_ {
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
             .unwrap_or_else(|err| {
-                vortex_panic!(
-                    err, 
-                    "Failed to cast stat {} to {}",
-                    stat,
-                    U::PTYPE
-                )
+                vortex_panic!(err, "Failed to cast stat {} to {}", stat, U::PTYPE)
             })
     }
 
@@ -132,7 +127,7 @@ impl dyn Statistics + '_ {
             .transpose()
             .unwrap_or_else(|err| {
                 vortex_panic!(
-                    err, 
+                    err,
                     "Failed to compute stat {} as {}",
                     stat,
                     std::any::type_name::<U>()
@@ -149,12 +144,7 @@ impl dyn Statistics + '_ {
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
             .unwrap_or_else(|err| {
-                vortex_panic!(
-                    err, 
-                    "Failed to compute stat {} as cast {}",
-                    stat,
-                    U::PTYPE
-                )
+                vortex_panic!(err, "Failed to compute stat {} as cast {}", stat, U::PTYPE)
             })
     }
 

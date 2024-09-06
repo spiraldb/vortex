@@ -22,14 +22,9 @@ impl TryFrom<&Scalar> for Arc<dyn Datum> {
     fn try_from(value: &Scalar) -> Result<Arc<dyn Datum>, Self::Error> {
         match value.dtype() {
             DType::Null => Ok(Arc::new(NullArray::new(1))),
-            DType::Bool(_) => value_to_arrow_scalar!(
-                value.value.as_bool()?,
-                BooleanArray
-            ),
+            DType::Bool(_) => value_to_arrow_scalar!(value.value.as_bool()?, BooleanArray),
             DType::Primitive(ptype, _) => {
-                let pvalue = value
-                    .value
-                    .as_pvalue()?;
+                let pvalue = value.value.as_pvalue()?;
                 Ok(match pvalue {
                     None => match ptype {
                         PType::U8 => Arc::new(UInt8Array::new_null(1)),
@@ -60,20 +55,10 @@ impl TryFrom<&Scalar> for Arc<dyn Datum> {
                 })
             }
             DType::Utf8(_) => {
-                value_to_arrow_scalar!(
-                    value
-                        .value
-                        .as_buffer_string()?,
-                    StringArray
-                )
+                value_to_arrow_scalar!(value.value.as_buffer_string()?, StringArray)
             }
             DType::Binary(_) => {
-                value_to_arrow_scalar!(
-                    value
-                        .value
-                        .as_buffer()?,
-                    BinaryArray
-                )
+                value_to_arrow_scalar!(value.value.as_buffer()?, BinaryArray)
             }
             DType::Struct(..) => {
                 todo!("struct scalar conversion")

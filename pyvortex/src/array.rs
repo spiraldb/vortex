@@ -56,7 +56,8 @@ impl PyArray {
             let chunks: Vec<ArrayRef> = chunked_array
                 .chunks()
                 .map(|chunk| -> PyResult<ArrayRef> {
-                    chunk.into_canonical()
+                    chunk
+                        .into_canonical()
                         .and_then(|arr| arr.into_arrow())
                         .map_err(PyVortexError::map_err)
                 })

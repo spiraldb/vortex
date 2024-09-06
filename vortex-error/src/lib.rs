@@ -295,7 +295,7 @@ macro_rules! vortex_panic {
     }};
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
         $crate::vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
-    }; 
+    };
     ($err:expr, $fmt:literal $(, $arg:expr)* $(,)?) => {{
         use $crate::VortexPanic;
         use $crate::VortexError;

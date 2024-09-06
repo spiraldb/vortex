@@ -127,7 +127,10 @@ impl SparseArray {
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let flat_indices = self.indices().into_primitive().vortex_expect("Failed to convert SparseArray indices to primitive array");
+        let flat_indices = self
+            .indices()
+            .into_primitive()
+            .vortex_expect("Failed to convert SparseArray indices to primitive array");
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
                 .maybe_null_slice::<$P>()
@@ -188,9 +191,7 @@ impl ArrayValidity for SparseArray {
                 false.into(),
             )
         }
-        .vortex_expect(
-            "Error determining logical validity for sparse array"
-        );
+        .vortex_expect("Error determining logical validity for sparse array");
         LogicalValidity::Array(validity.into_array())
     }
 }

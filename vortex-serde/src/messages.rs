@@ -138,7 +138,12 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
                     .vortex_expect("ArrayView is missing metadata during serialization");
                 Some(fbb.create_vector(metadata.as_ref()))
             }
-            Array::View(v) => Some(fbb.create_vector(v.metadata().vortex_expect("ArrayView is missing metadata during serialization"))),
+            Array::View(v) => Some(
+                fbb.create_vector(
+                    v.metadata()
+                        .vortex_expect("ArrayView is missing metadata during serialization"),
+                ),
+            ),
         };
 
         let children = column_data

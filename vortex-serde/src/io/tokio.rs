@@ -50,7 +50,11 @@ impl VortexReadAt for File {
     }
 
     async fn size(&self) -> u64 {
-        self.metadata().await.map_err(|err| VortexError::IOError(err).with_context("Failed to get file metadata")).vortex_unwrap().len()
+        self.metadata()
+            .await
+            .map_err(|err| VortexError::IOError(err).with_context("Failed to get file metadata"))
+            .vortex_unwrap()
+            .len()
     }
 }
 

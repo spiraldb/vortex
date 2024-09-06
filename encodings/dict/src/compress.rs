@@ -166,7 +166,7 @@ where
             dtype,
             values_validity,
         )
-        .vortex_expect("Failed to create VarBinArray dictionary during encoding")
+        .vortex_expect("Failed to create VarBinArray dictionary during encoding"),
     )
 }
 

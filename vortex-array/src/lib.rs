@@ -194,7 +194,7 @@ impl Array {
             })
             .unwrap_or_else(|err| {
                 vortex_panic!(
-                    err, 
+                    err,
                     "Failed to convert Array to {}",
                     std::any::type_name::<dyn ArrayTrait>()
                 )

@@ -14,15 +14,9 @@ impl TryFrom<Scalar> for ScalarValue {
     fn try_from(value: Scalar) -> Result<Self, Self::Error> {
         Ok(match value.dtype {
             DType::Null => ScalarValue::Null,
-            DType::Bool(_) => ScalarValue::Boolean(
-                value
-                    .value
-                    .as_bool()?,
-            ),
+            DType::Bool(_) => ScalarValue::Boolean(value.value.as_bool()?),
             DType::Primitive(ptype, _) => {
-                let pvalue = value
-                    .value
-                    .as_pvalue()?;
+                let pvalue = value.value.as_pvalue()?;
                 match pvalue {
                     None => match ptype {
                         PType::U8 => ScalarValue::UInt8(None),

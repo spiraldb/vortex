@@ -1,7 +1,9 @@
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{
+    vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
+};
 
 use crate::array::BoolArray;
 use crate::compute::unary::scalar_at_unchecked;
@@ -93,13 +95,15 @@ impl Validity {
         match self {
             Self::NonNullable | Self::AllValid => true,
             Self::AllInvalid => false,
-            Self::Array(a) => bool::try_from(&scalar_at_unchecked(a, index)).unwrap_or_else(|err| {
-                vortex_panic!(
-                    err, 
-                    "Failed to get bool from Validity Array at index {}",
-                    index
-                )
-            }),
+            Self::Array(a) => {
+                bool::try_from(&scalar_at_unchecked(a, index)).unwrap_or_else(|err| {
+                    vortex_panic!(
+                        err,
+                        "Failed to get bool from Validity Array at index {}",
+                        index
+                    )
+                })
+            }
         }
     }
 
@@ -177,11 +181,13 @@ impl PartialEq for Validity {
             (Self::AllValid, Self::AllValid) => true,
             (Self::AllInvalid, Self::AllInvalid) => true,
             (Self::Array(a), Self::Array(b)) => {
-                let a_buffer = a.clone()
+                let a_buffer = a
+                    .clone()
                     .into_bool()
                     .vortex_expect("Failed to get Validity Array as BoolArray")
                     .boolean_buffer();
-                let b_buffer = b.clone()
+                let b_buffer = b
+                    .clone()
                     .into_bool()
                     .vortex_expect("Failed to get Validity Array as BoolArray")
                     .boolean_buffer();
@@ -275,7 +281,10 @@ impl LogicalValidity {
             vortex_bail!("Expected a non-nullable boolean array");
         }
 
-        let true_count = array.statistics().compute_true_count().ok_or_else(|| vortex_err!("Failed to compute true count from validity array"))?;
+        let true_count = array
+            .statistics()
+            .compute_true_count()
+            .ok_or_else(|| vortex_err!("Failed to compute true count from validity array"))?;
         if true_count == array.len() {
             return Ok(Self::AllValid(array.len()));
         } else if true_count == 0 {

@@ -174,8 +174,7 @@ impl FromArrowArray<&ArrowStructArray> for Array {
             value.len(),
             nulls(value.nulls(), nullable),
         )
-        .vortex_expect(
-                "Failed to convert Arrow StructArray to Vortex StructArray")
+        .vortex_expect("Failed to convert Arrow StructArray to Vortex StructArray")
         .into()
     }
 }
@@ -234,8 +233,7 @@ impl FromArrowArray<ArrowArrayRef> for Array {
                 array
                     .as_any()
                     .downcast_ref::<StringViewArray>()
-                    .vortex_expect("Expected Arrow StringViewArray for DataType::Utf8View")
-                    ,
+                    .vortex_expect("Expected Arrow StringViewArray for DataType::Utf8View"),
                 nullable,
             ),
             DataType::Struct(_) => Self::from_arrow(array.as_struct(), nullable),
@@ -288,7 +286,10 @@ impl FromArrowArray<ArrowArrayRef> for Array {
                     Self::from_arrow(array.as_primitive::<DurationNanosecondType>(), nullable)
                 }
             },
-            _ => vortex_panic!("Missing array encoding for Arrow data type {}", array.data_type().clone()),
+            _ => vortex_panic!(
+                "Missing array encoding for Arrow data type {}",
+                array.data_type().clone()
+            ),
         }
     }
 }

@@ -158,7 +158,8 @@ impl Statistics for ArrayData {
             .unwrap_or_else(|_| {
                 vortex_panic!(
                     "Failed to acquire write lock on stats map while setting {} to {}",
-                    stat, value
+                    stat,
+                    value
                 )
             })
             .set(stat, value);

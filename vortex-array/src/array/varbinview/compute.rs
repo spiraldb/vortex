@@ -25,8 +25,7 @@ impl ScalarAtFn for VarBinViewArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        <Self as ScalarAtFn>::scalar_at(self, index)
-            .unwrap_or_else(|err| vortex_panic!(err))
+        <Self as ScalarAtFn>::scalar_at(self, index).unwrap_or_else(|err| vortex_panic!(err))
     }
 }
 

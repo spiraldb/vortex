@@ -138,9 +138,10 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
                     Ok((read, buffers)) => {
-                        let mut write_cache = self.messages_cache.write().unwrap_or_else(|poison| {
-                            vortex_panic!("Failed to write to message cache: {poison}")
-                        });
+                        let mut write_cache =
+                            self.messages_cache.write().unwrap_or_else(|poison| {
+                                vortex_panic!("Failed to write to message cache: {poison}")
+                            });
                         for (id, buf) in buffers {
                             write_cache.set(id, buf)
                         }

@@ -76,9 +76,9 @@ fn take_nullable<I: NativePType, O: NativePType>(
             .to_usize()
             .unwrap_or_else(|| vortex_panic!("Failed to convert index to usize: {}", idx));
         if null_buffer.is_valid(idx) {
-            let start = offsets[idx]
-                .to_usize()
-                .unwrap_or_else(|| vortex_panic!("Failed to convert offset to usize: {}", offsets[idx]));
+            let start = offsets[idx].to_usize().unwrap_or_else(|| {
+                vortex_panic!("Failed to convert offset to usize: {}", offsets[idx])
+            });
             let stop = offsets[idx + 1].to_usize().unwrap_or_else(|| {
                 vortex_panic!("Failed to convert offset to usize: {}", offsets[idx + 1])
             });

@@ -200,9 +200,7 @@ impl<T: Copy> Iterator for VectorizedArrayIter<T> {
             let validity = self
                 .validity
                 .slice(self.current_idx, self.current_idx + data.len())
-                .vortex_expect(
-                    "The slice bounds should always be within the array's limits",
-                );
+                .vortex_expect("The slice bounds should always be within the array's limits");
             self.current_idx += data.len();
 
             let batch = Batch::new_from_vec(data, validity);

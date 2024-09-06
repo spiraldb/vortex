@@ -201,8 +201,8 @@ impl VarBinViewArray {
             builder.append_value(s);
         }
         let array = Array::from_arrow(&builder.finish(), false);
-        VarBinViewArray::try_from(array).vortex_expect(
-                "Failed to convert iterator of nullable strings to VarBinViewArray")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of nullable strings to VarBinViewArray")
     }
 
     pub fn from_iter_nullable_str<T: AsRef<str>, I: IntoIterator<Item = Option<T>>>(
@@ -213,8 +213,8 @@ impl VarBinViewArray {
         builder.extend(iter);
 
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).vortex_expect(
-                "Failed to convert iterator of nullable strings to VarBinViewArray")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of nullable strings to VarBinViewArray")
     }
 
     pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -224,8 +224,8 @@ impl VarBinViewArray {
             builder.append_value(b);
         }
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).vortex_expect(
-                "Failed to convert iterator of bytes to VarBinViewArray")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of bytes to VarBinViewArray")
     }
 
     pub fn from_iter_nullable_bin<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
@@ -235,8 +235,8 @@ impl VarBinViewArray {
         let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).vortex_expect(
-                "Failed to convert iterator of nullable bytes to VarBinViewArray")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of nullable bytes to VarBinViewArray")
     }
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {

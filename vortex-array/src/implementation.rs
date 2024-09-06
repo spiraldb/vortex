@@ -243,7 +243,8 @@ where
                     children: vec![],
                 };
                 array.with_dyn(|a| {
-                    a.accept(&mut visitor).vortex_expect("Error while visiting Array View children")
+                    a.accept(&mut visitor)
+                        .vortex_expect("Error while visiting Array View children")
                 });
                 ArrayData::try_new(
                     encoding,

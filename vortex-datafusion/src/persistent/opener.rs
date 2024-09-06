@@ -57,7 +57,7 @@ impl FileOpener for VortexFileOpener {
                     .await?
                     .map_ok(RecordBatch::try_from)
                     .map(|r| r.and_then(|inner| inner))
-                    .map_err(|e| e.into())
+                    .map_err(|e| e.into()),
             ) as _)
         }
         .boxed())

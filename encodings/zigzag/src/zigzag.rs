@@ -21,8 +21,7 @@ pub struct ZigZagMetadata;
 
 impl ZigZagArray {
     pub fn new(encoded: Array) -> Self {
-        Self::try_new(encoded)
-            .vortex_expect("Failed to construct ZigZagArray")
+        Self::try_new(encoded).vortex_expect("Failed to construct ZigZagArray")
     }
 
     pub fn try_new(encoded: Array) -> VortexResult<Self> {
@@ -88,8 +87,6 @@ impl ArrayStatisticsCompute for ZigZagArray {}
 
 impl IntoCanonical for ZigZagArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        zigzag_decode(
-            &self.encoded().into_primitive()?,
-        ).map(Canonical::Primitive)
+        zigzag_decode(&self.encoded().into_primitive()?).map(Canonical::Primitive)
     }
 }

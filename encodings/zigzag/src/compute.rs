@@ -55,7 +55,10 @@ impl ScalarAtFn for ZigZagArray {
                 )
             })?)
             .into()),
-            _ => vortex_bail!("ZigZag can only decode unsigned integers, got {}", pscalar.ptype()),
+            _ => vortex_bail!(
+                "ZigZag can only decode unsigned integers, got {}",
+                pscalar.ptype()
+            ),
         }
     }
 

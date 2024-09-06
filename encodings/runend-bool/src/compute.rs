@@ -35,7 +35,8 @@ impl ScalarAtFn for RunEndBoolArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let start = self.start();
         Scalar::from(value_at_index(
-            self.find_physical_index(index).vortex_expect("Search must be implemented for the underlying index array"),
+            self.find_physical_index(index)
+                .vortex_expect("Search must be implemented for the underlying index array"),
             start,
         ))
     }

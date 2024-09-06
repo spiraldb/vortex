@@ -65,9 +65,13 @@ impl FoRArray {
 
     #[inline]
     pub fn ptype(&self) -> PType {
-        self.dtype()
-            .try_into()
-            .unwrap_or_else(|err| vortex_panic!(err, "Failed to convert FoRArray DType {} to PType", self.dtype()))
+        self.dtype().try_into().unwrap_or_else(|err| {
+            vortex_panic!(
+                err,
+                "Failed to convert FoRArray DType {} to PType",
+                self.dtype()
+            )
+        })
     }
 }
 

@@ -162,9 +162,7 @@ impl Stream for RowIndicesStream {
         // Get the unfiltered record batch.
         // Since this is a one-shot, we only want to poll the inner future once, to create the
         // initial batch for us to process.
-        let vortex_struct = next_chunk
-            .into_struct()?
-            .project(&this.filter_projection)?;
+        let vortex_struct = next_chunk.into_struct()?.project(&this.filter_projection)?;
 
         let selection = this
             .conjunction_expr
@@ -217,10 +215,9 @@ impl TakeRowsExec {
         row_indices: Arc<dyn ExecutionPlan>,
         table: &ChunkedArray,
     ) -> Self {
-        let output_schema =
-            Arc::new(schema_ref.project(projection).unwrap_or_else(|err| {
-                vortex_panic!("Failed to project schema: {}", VortexError::from(err))
-            }));
+        let output_schema = Arc::new(schema_ref.project(projection).unwrap_or_else(|err| {
+            vortex_panic!("Failed to project schema: {}", VortexError::from(err))
+        }));
         let plan_properties = PlanProperties::new(
             EquivalenceProperties::new(output_schema.clone()),
             Partitioning::UnknownPartitioning(1),

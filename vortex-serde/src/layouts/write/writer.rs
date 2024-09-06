@@ -154,7 +154,12 @@ impl<W: VortexWrite> LayoutWriter<W> {
     async fn write_footer(&mut self, footer: Footer) -> VortexResult<(u64, u64)> {
         let dtype_offset = self.msgs.tell();
         self.msgs
-            .write_dtype(&self.dtype.take().ok_or_else(|| vortex_err!("Schema should be written by now"))?)
+            .write_dtype(
+                &self
+                    .dtype
+                    .take()
+                    .ok_or_else(|| vortex_err!("Schema should be written by now"))?,
+            )
             .await?;
         let footer_offset = self.msgs.tell();
         self.msgs.write_message(footer).await?;

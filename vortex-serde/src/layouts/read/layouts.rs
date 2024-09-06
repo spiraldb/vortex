@@ -152,9 +152,7 @@ impl ColumnLayout {
         };
         fb_layout
             .layout_as_nested_layout()
-            .vortex_expect(
-                "ColumnLayout: Failed to read nested layout from flatbuffer"
-            )
+            .vortex_expect("ColumnLayout: Failed to read nested layout from flatbuffer")
     }
 
     fn read_child(
@@ -294,9 +292,7 @@ impl ChunkedLayout {
         };
         fb_layout
             .layout_as_nested_layout()
-            .vortex_expect(
-                "ChunkedLayout: Failed to read nested layout from flatbuffer"
-            )
+            .vortex_expect("ChunkedLayout: Failed to read nested layout from flatbuffer")
     }
 }
 

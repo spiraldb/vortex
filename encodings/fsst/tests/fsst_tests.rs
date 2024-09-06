@@ -30,7 +30,9 @@ fn fsst_array() -> Array {
 
     let compressor = fsst_train_compressor(&input_array).unwrap();
 
-    fsst_compress(&input_array, &compressor).unwrap().into_array()
+    fsst_compress(&input_array, &compressor)
+        .unwrap()
+        .into_array()
 }
 
 #[rstest]

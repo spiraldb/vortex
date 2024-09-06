@@ -67,7 +67,10 @@ struct BitPackedSearch {
 impl BitPackedSearch {
     pub fn new(array: &BitPackedArray) -> Self {
         Self {
-            packed: array.packed().into_primitive().vortex_expect("Failed to get packed bytes as PrimitiveArray"),
+            packed: array
+                .packed()
+                .into_primitive()
+                .vortex_expect("Failed to get packed bytes as PrimitiveArray"),
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),

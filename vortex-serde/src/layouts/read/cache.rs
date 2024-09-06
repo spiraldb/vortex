@@ -58,7 +58,8 @@ impl RelativeLayoutCache {
             .unwrap_or_else(|poison| {
                 vortex_panic!(
                     "Failed to read from layout cache at path {:?} with error {}",
-                    path, poison
+                    path,
+                    poison
                 );
             })
             .get(&self.absolute_id(path))
@@ -70,7 +71,8 @@ impl RelativeLayoutCache {
             .unwrap_or_else(|poison| {
                 vortex_panic!(
                     "Failed to write to layout cache at path {:?} with error {}",
-                    path, poison
+                    path,
+                    poison
                 )
             })
             .remove(&self.absolute_id(path))

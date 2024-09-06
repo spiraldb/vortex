@@ -76,7 +76,10 @@ impl EncodingCompressor for FSSTCompressor {
                 // For a VarBinArray or VarBinViewArray, compress directly.
                 fsst_compress(array, fsst_compressor)?.into_array()
             } else {
-                vortex_bail!("Unsupported encoding for FSSTCompressor: {}", array.encoding().id())
+                vortex_bail!(
+                    "Unsupported encoding for FSSTCompressor: {}",
+                    array.encoding().id()
+                )
             };
 
         Ok(CompressedArray::new(

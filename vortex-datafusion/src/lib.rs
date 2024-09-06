@@ -22,8 +22,8 @@ use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType, IntoArrayVariant};
-use vortex_error::vortex_err;
 use vortex_dtype::field::Field;
+use vortex_error::vortex_err;
 
 pub mod memory;
 pub mod persistent;

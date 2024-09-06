@@ -15,8 +15,7 @@ pub trait ArrayVariants {
     }
 
     fn as_null_array_unchecked(&self) -> &dyn NullArrayTrait {
-        self.as_null_array()
-            .vortex_expect("Expected NullArray")
+        self.as_null_array().vortex_expect("Expected NullArray")
     }
 
     fn as_bool_array(&self) -> Option<&dyn BoolArrayTrait> {
@@ -24,8 +23,7 @@ pub trait ArrayVariants {
     }
 
     fn as_bool_array_unchecked(&self) -> &dyn BoolArrayTrait {
-        self.as_bool_array()
-            .vortex_expect("Expected BoolArray")
+        self.as_bool_array().vortex_expect("Expected BoolArray")
     }
 
     fn as_primitive_array(&self) -> Option<&dyn PrimitiveArrayTrait> {
@@ -42,8 +40,7 @@ pub trait ArrayVariants {
     }
 
     fn as_utf8_array_unchecked(&self) -> &dyn Utf8ArrayTrait {
-        self.as_utf8_array()
-            .vortex_expect("Expected Utf8Array")
+        self.as_utf8_array().vortex_expect("Expected Utf8Array")
     }
 
     fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
@@ -51,8 +48,7 @@ pub trait ArrayVariants {
     }
 
     fn as_binary_array_unchecked(&self) -> &dyn BinaryArrayTrait {
-        self.as_binary_array()
-            .vortex_expect("Expected BinaryArray")
+        self.as_binary_array().vortex_expect("Expected BinaryArray")
     }
 
     fn as_struct_array(&self) -> Option<&dyn StructArrayTrait> {
@@ -60,8 +56,7 @@ pub trait ArrayVariants {
     }
 
     fn as_struct_array_unchecked(&self) -> &dyn StructArrayTrait {
-        self.as_struct_array()
-            .vortex_expect("Expected StructArray")
+        self.as_struct_array().vortex_expect("Expected StructArray")
     }
 
     fn as_list_array(&self) -> Option<&dyn ListArrayTrait> {
@@ -69,8 +64,7 @@ pub trait ArrayVariants {
     }
 
     fn as_list_array_unchecked(&self) -> &dyn ListArrayTrait {
-        self.as_list_array()
-            .vortex_expect("Expected ListArray")
+        self.as_list_array().vortex_expect("Expected ListArray")
     }
 
     fn as_extension_array(&self) -> Option<&dyn ExtensionArrayTrait> {

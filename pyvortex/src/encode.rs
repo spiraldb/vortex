@@ -66,6 +66,8 @@ pub fn _encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
             ),
         )
     } else {
-        Err(PyValueError::new_err("Cannot convert object to Vortex array"))
+        Err(PyValueError::new_err(
+            "Cannot convert object to Vortex array",
+        ))
     }
 }

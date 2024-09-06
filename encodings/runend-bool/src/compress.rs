@@ -29,9 +29,9 @@ pub fn runend_bool_encode_slice(elements: &BooleanBuffer) -> (Vec<u64>, bool) {
         ends.push(e as u64);
     }
 
-    let last_end = ends
-        .last()
-        .vortex_expect("RunEndBoolArray cannot have empty run ends (by construction); this should be impossible");
+    let last_end = ends.last().vortex_expect(
+        "RunEndBoolArray cannot have empty run ends (by construction); this should be impossible",
+    );
     if *last_end != elements.len() as u64 {
         ends.push(elements.len() as u64)
     }

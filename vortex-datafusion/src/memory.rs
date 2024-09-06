@@ -47,9 +47,8 @@ impl VortexMemTable {
             Ok(a) => a,
             _ => {
                 let dtype = array.dtype().clone();
-                ChunkedArray::try_new(vec![array], dtype).vortex_expect(
-                    "Failed to wrap array as a ChunkedArray with 1 chunk",
-                )
+                ChunkedArray::try_new(vec![array], dtype)
+                    .vortex_expect("Failed to wrap array as a ChunkedArray with 1 chunk")
             }
         };
 
@@ -116,7 +115,7 @@ impl TableProvider for VortexMemTable {
                 let output_schema = Arc::new(
                     self.schema_ref
                         .project(output_projection.as_slice())
-                        .map_err(VortexError::from)?
+                        .map_err(VortexError::from)?,
                 );
                 let plan_properties = PlanProperties::new(
                     EquivalenceProperties::new(output_schema),

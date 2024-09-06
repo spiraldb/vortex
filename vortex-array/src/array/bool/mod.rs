@@ -74,8 +74,7 @@ impl BoolArray {
 
     pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
         let buffer = BooleanBuffer::from(bools);
-        Self::try_new(buffer, validity)
-            .vortex_expect("Failed to create BoolArray from vec")
+        Self::try_new(buffer, validity).vortex_expect("Failed to create BoolArray from vec")
     }
 }
 

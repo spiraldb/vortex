@@ -139,9 +139,7 @@ fn null_to_arrow(null_array: NullArray) -> VortexResult<ArrayRef> {
 fn bool_to_arrow(bool_array: BoolArray) -> VortexResult<ArrayRef> {
     Ok(Arc::new(ArrowBoolArray::new(
         bool_array.boolean_buffer(),
-        bool_array
-            .logical_validity()
-            .to_null_buffer()?,
+        bool_array.logical_validity().to_null_buffer()?,
     )))
 }
 
@@ -151,9 +149,7 @@ fn primitive_to_arrow(primitive_array: PrimitiveArray) -> VortexResult<ArrayRef>
     ) -> VortexResult<Arc<ArrowPrimitiveArray<T>>> {
         Ok(Arc::new(ArrowPrimitiveArray::new(
             ScalarBuffer::<T::Native>::new(array.buffer().clone().into_arrow(), 0, array.len()),
-            array
-                .logical_validity()
-                .to_null_buffer()?
+            array.logical_validity().to_null_buffer()?,
         )))
     }
 
@@ -173,18 +169,24 @@ fn primitive_to_arrow(primitive_array: PrimitiveArray) -> VortexResult<ArrayRef>
 }
 
 fn struct_to_arrow(struct_array: StructArray) -> VortexResult<ArrayRef> {
-    let field_arrays: Vec<ArrayRef> = Iterator::zip(struct_array.names().iter(), struct_array.children())
-        .map(|(name, f)| {
-            let canonical = f
-                .into_canonical()
-                .map_err(|err| err.with_context(format!("Failed to canonicalize field {}", name)))?;
-            match canonical {
-                // visit nested structs recursively
-                Canonical::Struct(a) => struct_to_arrow(a),
-                _ => canonical.into_arrow().map_err(|err| err.with_context(format!("Failed to convert canonicalized field {} to arrow", name))),
-            }
-        })
-        .collect::<VortexResult<Vec<_>>>()?;
+    let field_arrays: Vec<ArrayRef> =
+        Iterator::zip(struct_array.names().iter(), struct_array.children())
+            .map(|(name, f)| {
+                let canonical = f.into_canonical().map_err(|err| {
+                    err.with_context(format!("Failed to canonicalize field {}", name))
+                })?;
+                match canonical {
+                    // visit nested structs recursively
+                    Canonical::Struct(a) => struct_to_arrow(a),
+                    _ => canonical.into_arrow().map_err(|err| {
+                        err.with_context(format!(
+                            "Failed to convert canonicalized field {} to arrow",
+                            name
+                        ))
+                    }),
+                }
+            })
+            .collect::<VortexResult<Vec<_>>>()?;
 
     let arrow_fields: Fields = struct_array
         .names()
@@ -201,11 +203,13 @@ fn struct_to_arrow(struct_array: StructArray) -> VortexResult<ArrayRef> {
         .map(Arc::new)
         .collect();
 
-    let nulls = struct_array
-        .logical_validity()
-        .to_null_buffer()?;
+    let nulls = struct_array.logical_validity().to_null_buffer()?;
 
-    Ok(Arc::new(ArrowStructArray::try_new(arrow_fields, field_arrays, nulls)?))
+    Ok(Arc::new(ArrowStructArray::try_new(
+        arrow_fields,
+        field_arrays,
+        nulls,
+    )?))
 }
 
 fn varbin_to_arrow(varbin_array: VarBinArray) -> VortexResult<ArrayRef> {
@@ -282,11 +286,10 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> VortexResult<ArrayRef> {
 fn temporal_to_arrow(temporal_array: TemporalArray) -> VortexResult<ArrayRef> {
     macro_rules! extract_temporal_values {
         ($values:expr, $prim:ty) => {{
-            let temporal_values = try_cast($values, <$prim as NativePType>::PTYPE.into())?.into_primitive()?;
+            let temporal_values =
+                try_cast($values, <$prim as NativePType>::PTYPE.into())?.into_primitive()?;
             let len = temporal_values.len();
-            let nulls = temporal_values
-                .logical_validity()
-                .to_null_buffer()?;
+            let nulls = temporal_values.logical_validity().to_null_buffer()?;
             let scalars =
                 ScalarBuffer::<$prim>::new(temporal_values.into_buffer().into_arrow(), 0, len);
 

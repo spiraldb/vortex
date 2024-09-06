@@ -258,13 +258,12 @@ pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
 }
 
 pub fn find_best_bit_width(array: &PrimitiveArray) -> VortexResult<usize> {
-    let bit_width_freq = array.statistics().compute_bit_width_freq()
+    let bit_width_freq = array
+        .statistics()
+        .compute_bit_width_freq()
         .ok_or_else(|| vortex_err!(ComputeError: "Failed to compute bit width frequency"))?;
 
-    best_bit_width(
-        &bit_width_freq,
-        bytes_per_exception(array.ptype()),
-    )
+    best_bit_width(&bit_width_freq, bytes_per_exception(array.ptype()))
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
@@ -278,7 +277,7 @@ fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> Vorte
     let mut num_packed = 0;
     let mut best_cost = len * bytes_per_exception;
     let mut best_width = 0;
-    for (bit_width, freq) in bit_width_freq.iter().enumerate() {        
+    for (bit_width, freq) in bit_width_freq.iter().enumerate() {
         let packed_cost = ((bit_width * len) + 7) / 8; // round up to bytes
 
         num_packed += *freq;
@@ -317,7 +316,10 @@ mod test {
         // 10 1-bit values, 20 2-bit, etc.
         let freq = vec![0, 10, 20, 15, 1, 0, 0, 0];
         // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes and zero exceptions
-        assert_eq!(best_bit_width(&freq, bytes_per_exception(PType::U8)).unwrap(), 3);
+        assert_eq!(
+            best_bit_width(&freq, bytes_per_exception(PType::U8)).unwrap(),
+            3
+        );
     }
 
     #[test]

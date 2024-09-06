@@ -92,9 +92,9 @@ impl PrimitiveArray {
 
     pub fn ptype(&self) -> PType {
         // TODO(ngates): we can't really cache this anywhere?
-        self.dtype()
-            .try_into()
-            .unwrap_or_else(|err: VortexError| vortex_panic!(err, "Failed to convert dtype {} to ptype", self.dtype()))
+        self.dtype().try_into().unwrap_or_else(|err: VortexError| {
+            vortex_panic!(err, "Failed to convert dtype {} to ptype", self.dtype())
+        })
     }
 
     pub fn buffer(&self) -> &Buffer {
@@ -316,8 +316,7 @@ impl AcceptArrayVisitor for PrimitiveArray {
 
 impl Array {
     pub fn as_primitive(&self) -> PrimitiveArray {
-        PrimitiveArray::try_from(self)
-            .vortex_expect("Expected primitive array")
+        PrimitiveArray::try_from(self).vortex_expect("Expected primitive array")
     }
 }
 
@@ -432,7 +431,10 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
         let lhs: [I; ITER_BATCH_SIZE] = lhs.try_into().unwrap();
         let rhs: [U; ITER_BATCH_SIZE] = batch.data().try_into().unwrap();
         // We know output is of the same length and lhs/rhs
-        let mut output_slice: [_; ITER_BATCH_SIZE] = output[idx_offset..idx_offset + ITER_BATCH_SIZE].try_into().unwrap();
+        let mut output_slice: [_; ITER_BATCH_SIZE] = output
+            [idx_offset..idx_offset + ITER_BATCH_SIZE]
+            .try_into()
+            .unwrap();
 
         for idx in 0..ITER_BATCH_SIZE {
             unsafe {

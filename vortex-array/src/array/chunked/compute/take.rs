@@ -111,7 +111,9 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         .filter_map(|(chunk_idx, indices)| indices.map(|i| (chunk_idx, i)))
         .map(|(chunk_idx, chunk_indices)| {
             take(
-                &chunked.chunk(chunk_idx).ok_or_else(|| vortex_err!(OutOfBounds: chunk_idx, 0, chunked.nchunks()))?,
+                &chunked
+                    .chunk(chunk_idx)
+                    .ok_or_else(|| vortex_err!(OutOfBounds: chunk_idx, 0, chunked.nchunks()))?,
                 &chunk_indices,
             )
         })

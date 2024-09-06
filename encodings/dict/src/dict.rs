@@ -77,7 +77,10 @@ impl ArrayValidity for DictArray {
 
     fn logical_validity(&self) -> LogicalValidity {
         if self.dtype().is_nullable() {
-            let primitive_codes = self.codes().into_primitive().vortex_expect("Failed to convert DictArray codes to primitive array");
+            let primitive_codes = self
+                .codes()
+                .into_primitive()
+                .vortex_expect("Failed to convert DictArray codes to primitive array");
             match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
                 ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
                     LogicalValidity::Array(

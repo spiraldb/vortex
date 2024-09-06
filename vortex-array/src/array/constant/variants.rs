@@ -53,9 +53,11 @@ impl NullArrayTrait for ConstantArray {}
 
 impl BoolArrayTrait for ConstantArray {
     fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
-        let value = self.scalar().value().as_bool().vortex_expect(
-            "Failed to get bool value from constant array"
-        );
+        let value = self
+            .scalar()
+            .value()
+            .as_bool()
+            .vortex_expect("Failed to get bool value from constant array");
         if value.unwrap_or(false) {
             Box::new(0..self.len())
         } else {
@@ -65,9 +67,11 @@ impl BoolArrayTrait for ConstantArray {
 
     fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         // Must be a boolean scalar
-        let value = self.scalar().value().as_bool().vortex_expect(
-            "Failed to get bool value from constant array"
-        );
+        let value = self
+            .scalar()
+            .value()
+            .as_bool()
+            .vortex_expect("Failed to get bool value from constant array");
 
         if value.unwrap_or(false) {
             Box::new(iter::once((0, self.len())))

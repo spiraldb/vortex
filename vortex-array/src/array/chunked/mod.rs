@@ -115,13 +115,13 @@ impl ChunkedArray {
 
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| {
-            self.chunk(c).unwrap_or_else(|| 
+            self.chunk(c).unwrap_or_else(|| {
                 vortex_panic!(
                     "Chunk should {} exist but doesn't (nchunks: {})",
                     c,
                     self.nchunks()
                 )
-            )
+            })
         })
     }
 
