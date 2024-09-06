@@ -159,25 +159,14 @@ impl Validity {
             | (Validity::AllValid, Validity::NonNullable)
             | (Validity::AllValid, Validity::AllValid) => Validity::AllValid,
             // Here we actually have to do some work
-            (Validity::Array(lhs_array), Validity::Array(rhs_array)) => {
-                let lhs_validity = self
-                    .to_logical(lhs_array.len())
-                    .to_null_buffer()?
-                    .map(|b| b.into_inner());
-                let rhs_validity = rhs
-                    .to_logical(rhs_array.len())
-                    .to_null_buffer()?
-                    .map(|b| b.into_inner());
+            (Validity::Array(lhs), Validity::Array(rhs)) => {
+                let lhs = BoolArray::try_from(lhs)?;
+                let rhs = BoolArray::try_from(rhs)?;
 
-                let validity_buffer = match (lhs_validity, rhs_validity) {
-                    (Some(l), Some(r)) => Some(l.bitand(&r)),
-                    (Some(b), None) | (None, Some(b)) => Some(b),
-                    _ => None,
-                };
+                let lhs = lhs.boolean_buffer();
+                let rhs = rhs.boolean_buffer();
 
-                validity_buffer
-                    .map(Validity::from)
-                    .unwrap_or(Validity::AllValid)
+                Validity::from(lhs.bitand(&rhs))
             }
         };
 
