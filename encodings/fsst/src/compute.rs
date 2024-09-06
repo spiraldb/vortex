@@ -70,7 +70,7 @@ impl ScalarAtFn for FSSTArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        ScalarAtFn::scalar_at(self, index).vortex_unwrap()
+        <Self as ScalarAtFn>::scalar_at(self, index).vortex_unwrap()
     }
 }
 

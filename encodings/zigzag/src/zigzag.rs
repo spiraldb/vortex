@@ -5,8 +5,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArrayVariant,
-    IntoCanonical,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant, IntoCanonical
 };
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
@@ -21,7 +20,8 @@ pub struct ZigZagMetadata;
 
 impl ZigZagArray {
     pub fn new(encoded: Array) -> Self {
-        Self::try_new(encoded).vortex_expect("Failed to construct ZigZagArray")
+        Self::try_new(encoded)
+            .vortex_expect("Failed to construct ZigZagArray")
     }
 
     pub fn try_new(encoded: Array) -> VortexResult<Self> {
@@ -43,7 +43,7 @@ impl ZigZagArray {
         PrimitiveArray::try_from(array)
             .map_err(|_| vortex_err!("ZigZag can only encoding primitive arrays"))
             .map(|parray| zigzag_encode(&parray))?
-            .map(vortex::IntoArray::into_array)
+            .map(|a| a.into_array())
     }
 
     pub fn encoded(&self) -> Array {
@@ -87,6 +87,8 @@ impl ArrayStatisticsCompute for ZigZagArray {}
 
 impl IntoCanonical for ZigZagArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        zigzag_decode(&self.encoded().into_primitive()?).map(Canonical::Primitive)
+        zigzag_decode(
+            &self.encoded().into_primitive()?,
+        ).map(Canonical::Primitive)
     }
 }

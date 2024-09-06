@@ -1,7 +1,7 @@
 use std::cmp::max;
 
 use vortex::compute::{slice, SliceFn};
-use vortex::Array;
+use vortex::{Array, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::BitPackedArray;
@@ -22,7 +22,7 @@ impl SliceFn for BitPackedArray {
             stop - start,
             offset,
         )
-        .map(vortex::IntoArray::into_array)
+        .map(|a| a.into_array())
     }
 }
 

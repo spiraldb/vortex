@@ -10,7 +10,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
@@ -57,7 +57,7 @@ impl RoaringBoolArray {
 
     pub fn encode(array: Array) -> VortexResult<Array> {
         if array.encoding().id() == Bool::ID {
-            roaring_bool_encode(BoolArray::try_from(array)?).map(vortex::IntoArray::into_array)
+            roaring_bool_encode(BoolArray::try_from(array)?).map(|a| a.into_array())
         } else {
             vortex_bail!("RoaringInt can only encode boolean arrays")
         }

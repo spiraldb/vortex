@@ -66,7 +66,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
             }
         }
     })
-    .vortex_expect("Failed to iterate over primitive array during dictionary encoding");
+    .vortex_expect("Failed to dictionary encode primitive array");
 
     let values_validity = if array.dtype().is_nullable() {
         let mut validity = vec![true; values.len()];
@@ -87,7 +87,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
 pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) {
     array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
-        .vortex_expect("Failed to iterate over varbin array during dictionary encoding")
+        .vortex_expect("Failed to dictionary encode varbin array")
 }
 
 fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(

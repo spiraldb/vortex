@@ -6,7 +6,7 @@ use vortex::compute::{
     search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
     SliceFn, TakeFn,
 };
-use vortex::{Array, ArrayDType};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, PrimitiveScalar, Scalar};
@@ -38,7 +38,7 @@ impl TakeFn for FoRArray {
             self.reference().clone(),
             self.shift(),
         )
-        .map(vortex::IntoArray::into_array)
+        .map(|a| a.into_array())
     }
 }
 
@@ -70,7 +70,7 @@ impl SliceFn for FoRArray {
             self.reference().clone(),
             self.shift(),
         )
-        .map(vortex::IntoArray::into_array)
+        .map(|a| a.into_array())
     }
 }
 

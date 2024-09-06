@@ -1,7 +1,7 @@
 use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::ArrayCompute;
 use vortex_dtype::PType;
-use vortex_error::{vortex_err, vortex_panic, VortexResult};
+use vortex_error::{vortex_err, VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
 use crate::RoaringIntArray;
@@ -29,6 +29,6 @@ impl ScalarAtFn for RoaringIntArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        <Self as ScalarAtFn>::scalar_at(self, index).unwrap_or_else(|err| vortex_panic!(err))
+        <Self as ScalarAtFn>::scalar_at(self, index).vortex_unwrap()
     }
 }

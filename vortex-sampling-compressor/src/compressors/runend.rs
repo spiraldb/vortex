@@ -67,7 +67,7 @@ impl EncodingCompressor for RunEndCompressor {
                 compressed_values.array,
                 ctx.compress_validity(primitive_array.validity())?,
             )
-            .map(vortex::IntoArray::into_array)?,
+            .map(|a| a.into_array())?,
             Some(CompressionTree::new(
                 self,
                 vec![compressed_ends.path, compressed_values.path],
