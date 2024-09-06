@@ -45,8 +45,7 @@ impl IntoCanonical for VarBinArray {
 
         let arrow_array = into_byteview(&self);
         let array = Array::from_arrow(arrow_array.clone(), arrow_array.is_nullable());
-        let varbinview = VarBinViewArray::try_from(array)
-            .expect("roundtrip through Arrow must return VarBinViewArray");
+        let varbinview = VarBinViewArray::try_from(array)?;
 
         Ok(Canonical::VarBinView(varbinview))
     }
