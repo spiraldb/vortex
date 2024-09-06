@@ -3,6 +3,7 @@ use std::sync::{Arc, RwLock};
 use ahash::HashMap;
 use bytes::Bytes;
 use vortex_dtype::DType;
+use vortex_error::vortex_panic;
 
 use crate::layouts::read::{LayoutPartId, MessageId};
 
@@ -54,10 +55,10 @@ impl RelativeLayoutCache {
     pub fn get(&self, path: &[LayoutPartId]) -> Option<Bytes> {
         self.root
             .read()
-            .unwrap_or_else(|err| {
-                panic!(
+            .unwrap_or_else(|poison| {
+                vortex_panic!(
                     "Failed to read from layout cache at path {:?} with error {}",
-                    path, err
+                    path, poison
                 );
             })
             .get(&self.absolute_id(path))
@@ -66,10 +67,10 @@ impl RelativeLayoutCache {
     pub fn remove(&mut self, path: &[LayoutPartId]) -> Option<Bytes> {
         self.root
             .write()
-            .unwrap_or_else(|err| {
-                panic!(
+            .unwrap_or_else(|poison| {
+                vortex_panic!(
                     "Failed to write to layout cache at path {:?} with error {}",
-                    path, err
+                    path, poison
                 )
             })
             .remove(&self.absolute_id(path))

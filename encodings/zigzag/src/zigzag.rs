@@ -9,7 +9,7 @@ use vortex::{
     IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 
 use crate::compress::zigzag_encode;
 use crate::zigzag_decode;
@@ -22,7 +22,7 @@ pub struct ZigZagMetadata;
 impl ZigZagArray {
     pub fn new(encoded: Array) -> Self {
         Self::try_new(encoded)
-            .unwrap_or_else(|err| panic!("Failed to construct ZigZagArray: {}", err))
+            .vortex_expect("Failed to construct ZigZagArray")
     }
 
     pub fn try_new(encoded: Array) -> VortexResult<Self> {
@@ -49,12 +49,12 @@ impl ZigZagArray {
 
     pub fn encoded(&self) -> Array {
         let ptype = PType::try_from(self.dtype()).unwrap_or_else(|err| {
-            panic!("Failed to convert DType {} to PType: {}", self.dtype(), err)
+            vortex_panic!(err, "Failed to convert DType {} to PType", self.dtype())
         });
         let encoded = DType::from(ptype.to_unsigned()).with_nullability(self.dtype().nullability());
         self.array()
             .child(0, &encoded, self.len())
-            .unwrap_or_else(|| panic!("ZigZagArray is missing its encoded array"))
+            .vortex_expect("ZigZagArray is missing its encoded child array")
     }
 }
 
@@ -88,8 +88,8 @@ impl ArrayStatisticsCompute for ZigZagArray {}
 
 impl IntoCanonical for ZigZagArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        Ok(Canonical::Primitive(zigzag_decode(
+        zigzag_decode(
             &self.encoded().into_primitive()?,
-        )))
+        ).map(Canonical::Primitive)
     }
 }

@@ -7,7 +7,7 @@ use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::ArrayDType;
 use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType, Nullability};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 
 pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray) {
     let validity = if array.dtype().nullability() == Nullability::NonNullable {
@@ -93,14 +93,14 @@ pub fn runend_decode_primitive<
     length: usize,
 ) -> Vec<T> {
     let offset_e = E::from_usize(offset).unwrap_or_else(|| {
-        panic!(
+        vortex_panic!(
             "offset {} cannot be converted to {}",
             offset,
             std::any::type_name::<E>()
         )
     });
     let length_e = E::from_usize(length).unwrap_or_else(|| {
-        panic!(
+        vortex_panic!(
             "length {} cannot be converted to {}",
             length,
             std::any::type_name::<E>()

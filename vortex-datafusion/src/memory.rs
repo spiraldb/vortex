@@ -14,6 +14,7 @@ use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanP
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
+use vortex_error::VortexError;
 use vortex_expr::datafusion::convert_expr_to_vortex;
 use vortex_expr::VortexExpr;
 
@@ -115,12 +116,7 @@ impl TableProvider for VortexMemTable {
                 let output_schema = Arc::new(
                     self.schema_ref
                         .project(output_projection.as_slice())
-                        .unwrap_or_else(|err| {
-                            panic!(
-                                "Failed to project output schema: {}",
-                                VortexError::from(err)
-                            )
-                        }),
+                        .map_err(VortexError::from)?
                 );
                 let plan_properties = PlanProperties::new(
                     EquivalenceProperties::new(output_schema),

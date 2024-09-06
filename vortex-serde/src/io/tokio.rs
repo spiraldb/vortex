@@ -7,7 +7,7 @@ use bytes::BytesMut;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use vortex_buffer::io_buf::IoBuf;
-use vortex_error::VortexError;
+use vortex_error::{VortexError, VortexUnwrap as _};
 
 use crate::io::{VortexRead, VortexReadAt, VortexWrite};
 
@@ -50,7 +50,7 @@ impl VortexReadAt for File {
     }
 
     async fn size(&self) -> u64 {
-        self.metadata().await.unwrap().len()
+        self.metadata().await.map_err(|err| VortexError::IOError(err).with_context("Failed to get file metadata")).vortex_unwrap().len()
     }
 }
 

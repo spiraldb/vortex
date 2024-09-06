@@ -13,7 +13,7 @@ use vortex::compute::{filter, search_sorted, slice, take, SearchSortedSide};
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType};
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
@@ -138,8 +138,8 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
                     Ok((read, buffers)) => {
-                        let mut write_cache = self.messages_cache.write().unwrap_or_else(|err| {
-                            panic!("Failed to write to message cache: {err}")
+                        let mut write_cache = self.messages_cache.write().unwrap_or_else(|poison| {
+                            vortex_panic!("Failed to write to message cache: {poison}")
                         });
                         for (id, buf) in buffers {
                             write_cache.set(id, buf)

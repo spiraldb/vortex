@@ -11,7 +11,7 @@ use object_store::path::Path;
 use object_store::{ObjectStore, WriteMultipart};
 use vortex_buffer::io_buf::IoBuf;
 use vortex_buffer::Buffer;
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{vortex_panic, VortexError, VortexResult};
 
 use crate::io::{VortexRead, VortexReadAt, VortexWrite};
 
@@ -83,8 +83,9 @@ impl VortexReadAt for ObjectStoreReadAt {
             .await
             .map_err(VortexError::ObjectStore)
             .unwrap_or_else(|err| {
-                panic!(
-                    "Failed to get size of object at location {}: {err}",
+                vortex_panic!(
+                    err,
+                    "Failed to get size of object at location {}",
                     self.location
                 )
             })

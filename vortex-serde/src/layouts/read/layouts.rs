@@ -6,7 +6,7 @@ use flatbuffers::{ForwardsUOffset, Vector};
 use vortex::Context;
 use vortex_dtype::field::Field;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 use vortex_flatbuffers::footer as fb;
 
 use super::projections::Projection;
@@ -152,7 +152,9 @@ impl ColumnLayout {
         };
         fb_layout
             .layout_as_nested_layout()
-            .unwrap_or_else(|| panic!("ColumnLayout: Failed to read nested layout from flatbuffer"))
+            .vortex_expect(
+                "ColumnLayout: Failed to read nested layout from flatbuffer"
+            )
     }
 
     fn read_child(
@@ -290,9 +292,11 @@ impl ChunkedLayout {
             let tab = flatbuffers::Table::new(&self.fb_bytes, self.fb_loc);
             fb::Layout::init_from_table(tab)
         };
-        fb_layout.layout_as_nested_layout().unwrap_or_else(|| {
-            panic!("ChunkedLayout: Failed to read nested layout from flatbuffer")
-        })
+        fb_layout
+            .layout_as_nested_layout()
+            .vortex_expect(
+                "ChunkedLayout: Failed to read nested layout from flatbuffer"
+            )
     }
 }
 

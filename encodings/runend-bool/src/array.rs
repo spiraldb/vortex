@@ -10,7 +10,7 @@ use vortex::{
     IntoCanonical,
 };
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::runend_bool_decode;
 
@@ -96,7 +96,7 @@ impl RunEndBoolArray {
     pub fn ends(&self) -> Array {
         self.array()
             .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
-            .unwrap_or_else(|| panic!("RunEndBoolArray is missing its run ends"))
+            .vortex_expect("RunEndBoolArray is missing its run ends")
     }
 }
 

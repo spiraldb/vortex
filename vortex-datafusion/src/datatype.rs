@@ -14,6 +14,7 @@ use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaBuilder};
 use vortex_datetime_dtype::arrow::make_arrow_temporal_dtype;
 use vortex_datetime_dtype::is_temporal_ext_type;
 use vortex_dtype::{DType, Nullability, PType};
+use vortex_error::vortex_panic;
 
 /// Convert a Vortex [struct DType][DType] to an Arrow [Schema].
 ///
@@ -94,7 +95,7 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
             if is_temporal_ext_type(ext_dtype.id()) {
                 make_arrow_temporal_dtype(ext_dtype)
             } else {
-                vortex_panic!("unsupported extension type \"{}\"", ext_dtype.id())
+                vortex_panic!("Unsupported extension type \"{}\"", ext_dtype.id())
             }
         }
     }

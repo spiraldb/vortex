@@ -7,7 +7,7 @@ use vortex::stream::ArrayStream;
 use vortex::Context;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::io::VortexRead;
 use crate::MessageReader;
@@ -44,7 +44,7 @@ impl<R: VortexRead> StreamArrayReader<R> {
         let dtype = self
             .dtype
             .as_ref()
-            .unwrap_or_else(|| panic!("DType not set"))
+            .vortex_expect("Cannot read array from stream: DType not set")
             .deref()
             .clone();
         self.msgs.array_stream(self.ctx.clone(), dtype)
@@ -54,7 +54,7 @@ impl<R: VortexRead> StreamArrayReader<R> {
         let dtype = self
             .dtype
             .as_ref()
-            .unwrap_or_else(|| panic!("DType not set"))
+            .vortex_expect("Cannot read array from stream: DType not set")
             .deref()
             .clone();
         self.msgs.into_array_stream(self.ctx.clone(), dtype)

@@ -3,7 +3,7 @@ use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::{slice, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray, IntoArrayVariant, ToArray};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::compress::value_at_index;

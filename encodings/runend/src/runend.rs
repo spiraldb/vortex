@@ -13,7 +13,7 @@ use vortex::{
     IntoCanonical,
 };
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::{runend_decode, runend_encode};
 
@@ -113,14 +113,14 @@ impl RunEndArray {
     pub fn ends(&self) -> Array {
         self.array()
             .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
-            .unwrap_or_else(|| panic!("RunEndArray is missing its run ends"))
+            .vortex_expect("RunEndArray is missing its run ends")
     }
 
     #[inline]
     pub fn values(&self) -> Array {
         self.array()
             .child(1, self.dtype(), self.metadata().num_runs)
-            .unwrap_or_else(|| panic!("RunEndArray is missing its values"))
+            .vortex_expect("RunEndArray is missing its values")
     }
 }
 

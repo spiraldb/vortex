@@ -2,7 +2,7 @@ use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, ArrayCompute, SliceFn};
 use vortex::{Array, IntoArray};
 use vortex_dtype::PType;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult, VortexUnwrap};
 use vortex_scalar::{PrimitiveScalar, Scalar};
 use zigzag::ZigZag as ExternalZigZag;
 
@@ -55,12 +55,12 @@ impl ScalarAtFn for ZigZagArray {
                 )
             })?)
             .into()),
-            _ => unreachable!(),
+            _ => vortex_bail!("ZigZag can only decode unsigned integers, got {}", pscalar.ptype()),
         }
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
+        <Self as ScalarAtFn>::scalar_at(self, index).vortex_unwrap()
     }
 }
 

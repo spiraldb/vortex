@@ -4,7 +4,7 @@ use vortex::stats::ArrayStatistics;
 use vortex::{flatbuffers as fba, Array};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexError};
+use vortex_error::{vortex_err, VortexError, VortexExpect as _};
 use vortex_flatbuffers::message::Compression;
 use vortex_flatbuffers::{message as fb, FlatBufferRoot, ReadFlatBuffer, WriteFlatBuffer};
 
@@ -135,13 +135,10 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
                     .metadata()
                     .try_serialize_metadata()
                     // TODO(ngates): should we serialize externally to here?
-                    .unwrap_or_else(|err| panic!("Failed to serialize metadata: {}", err));
+                    .vortex_expect("ArrayView is missing metadata during serialization");
                 Some(fbb.create_vector(metadata.as_ref()))
             }
-            Array::View(v) => Some(fbb.create_vector(v.metadata().unwrap_or_else(|| {
-                // TODO(wmanning): should this just return None? why does this panic?
-                panic!("ArrayView is missing metadata during serialization")
-            }))),
+            Array::View(v) => Some(fbb.create_vector(v.metadata().vortex_expect("ArrayView is missing metadata during serialization"))),
         };
 
         let children = column_data

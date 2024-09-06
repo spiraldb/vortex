@@ -14,7 +14,7 @@ use vortex::{
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 mod compress;
 mod compute;
@@ -49,7 +49,7 @@ impl RoaringIntArray {
         Bitmap::deserialize::<Portable>(
             self.array()
                 .buffer()
-                .unwrap_or_else(|| panic!("RoaringBoolArray buffer is missing"))
+                .vortex_expect("RoaringBoolArray buffer is missing")
                 .as_ref(),
         )
     }

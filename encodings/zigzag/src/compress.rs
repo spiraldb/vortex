@@ -13,7 +13,7 @@ pub fn zigzag_encode(parray: &PrimitiveArray) -> VortexResult<ZigZagArray> {
         PType::I16 => zigzag_encode_primitive::<i16>(parray.maybe_null_slice(), parray.validity()),
         PType::I32 => zigzag_encode_primitive::<i32>(parray.maybe_null_slice(), parray.validity()),
         PType::I64 => zigzag_encode_primitive::<i64>(parray.maybe_null_slice(), parray.validity()),
-        _ => vortex_bail!("Unsupported ptype {}", parray.ptype()),
+        _ => vortex_bail!("ZigZag can only encode signed integers, got {}", parray.ptype()),
     };
     ZigZagArray::try_new(encoded.into_array())
 }
@@ -30,14 +30,14 @@ where
     PrimitiveArray::from_vec(encoded.to_vec(), validity)
 }
 
-pub fn zigzag_decode(parray: &PrimitiveArray) -> PrimitiveArray {
-    match parray.ptype() {
+pub fn zigzag_decode(parray: &PrimitiveArray) -> VortexResult<PrimitiveArray> {
+    Ok(match parray.ptype() {
         PType::U8 => zigzag_decode_primitive::<i8>(parray.maybe_null_slice(), parray.validity()),
         PType::U16 => zigzag_decode_primitive::<i16>(parray.maybe_null_slice(), parray.validity()),
         PType::U32 => zigzag_decode_primitive::<i32>(parray.maybe_null_slice(), parray.validity()),
         PType::U64 => zigzag_decode_primitive::<i64>(parray.maybe_null_slice(), parray.validity()),
-        _ => panic!("Unsupported ptype {}", parray.ptype()),
-    }
+        _ => vortex_bail!("ZigZag can only decode unsigned integers, got {}", parray.ptype()),
+    })
 }
 
 fn zigzag_decode_primitive<T: ExternalZigZag + NativePType>(

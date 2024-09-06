@@ -22,6 +22,7 @@ pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
 }
 
 // Taken from apache-datafusion, necessary since you can't require VortexExpr implement PartialEq<dyn VortexExpr>
+#[allow(clippy::unwrap_used)]
 fn unbox_any(any: &dyn Any) -> &dyn Any {
     if any.is::<Arc<dyn VortexExpr>>() {
         any.downcast_ref::<Arc<dyn VortexExpr>>().unwrap().as_any()
@@ -32,7 +33,7 @@ fn unbox_any(any: &dyn Any) -> &dyn Any {
     }
 }
 
-#[derive(Debug, PartialEq, Hash, Clone)]
+#[derive(Debug, PartialEq, Hash, Clone, Eq)]
 pub struct NoOp;
 
 #[derive(Debug, Clone)]
@@ -44,7 +45,7 @@ pub struct BinaryExpr {
 
 impl BinaryExpr {
     pub fn new(lhs: Arc<dyn VortexExpr>, operator: Operator, rhs: Arc<dyn VortexExpr>) -> Self {
-        Self { lhs, rhs, operator }
+        Self { lhs, operator, rhs }
     }
 
     pub fn lhs(&self) -> &Arc<dyn VortexExpr> {
@@ -60,7 +61,7 @@ impl BinaryExpr {
     }
 }
 
-#[derive(Debug, PartialEq, Hash, Clone)]
+#[derive(Debug, PartialEq, Hash, Clone, Eq)]
 pub struct Column {
     field: Field,
 }

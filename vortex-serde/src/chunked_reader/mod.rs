@@ -5,7 +5,7 @@ use vortex::compute::unary::scalar_at;
 use vortex::stream::ArrayStream;
 use vortex::{Array, Context};
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::io::VortexReadAt;
 use crate::stream_reader::StreamArrayReader;
@@ -56,15 +56,12 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         let mut cursor = Cursor::new(&self.read);
         let byte_offset = scalar_at(&self.byte_offsets, 0)
             .and_then(|s| u64::try_from(&s))
-            .unwrap_or_else(|err| {
-                panic!("Failed to convert byte_offset to u64: {err}");
-            });
+            .vortex_expect("Failed to convert byte_offset to u64");
+
         cursor.set_position(byte_offset);
         StreamArrayReader::try_new(cursor, self.context.clone())
             .await
-            .unwrap_or_else(|err| {
-                panic!("Failed to create stream array reader: {err}");
-            })
+            .vortex_expect("Failed to create stream array reader")
             .with_dtype(self.dtype.clone())
             .into_array_stream()
     }

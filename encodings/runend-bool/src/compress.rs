@@ -5,7 +5,7 @@ use num_traits::{AsPrimitive, FromPrimitive};
 use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::validity::Validity;
 use vortex_dtype::{match_each_integer_ptype, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexExpect as _, VortexResult};
 
 pub fn runend_bool_encode(elements: &BoolArray) -> (PrimitiveArray, bool) {
     let (arr, start) = runend_bool_encode_slice(&elements.boolean_buffer());
@@ -31,7 +31,7 @@ pub fn runend_bool_encode_slice(elements: &BooleanBuffer) -> (Vec<u64>, bool) {
 
     let last_end = ends
         .last()
-        .unwrap_or_else(|| panic!("RunEndBoolArray is missing its run ends"));
+        .vortex_expect("RunEndBoolArray cannot have empty run ends (by construction); this should be impossible");
     if *last_end != elements.len() as u64 {
         ends.push(elements.len() as u64)
     }
@@ -59,14 +59,14 @@ pub fn runend_bool_decode_slice<E: NativePType + AsPrimitive<usize> + FromPrimit
     length: usize,
 ) -> Vec<bool> {
     let offset_e = E::from_usize(offset).unwrap_or_else(|| {
-        panic!(
+        vortex_panic!(
             "offset {} cannot be converted to {}",
             offset,
             std::any::type_name::<E>()
         )
     });
     let length_e = E::from_usize(length).unwrap_or_else(|| {
-        panic!(
+        vortex_panic!(
             "length {} cannot be converted to {}",
             length,
             std::any::type_name::<E>()
