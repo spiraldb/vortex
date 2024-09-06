@@ -1,5 +1,3 @@
-use std::ops::BitAnd;
-
 use arrow_buffer::bit_util::ceil;
 use arrow_buffer::{BooleanBuffer, MutableBuffer};
 use vortex_dtype::{match_each_native_ptype, NativePType};
@@ -8,7 +6,6 @@ use vortex_error::VortexResult;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::BoolArray;
 use crate::compute::{CompareFn, Operator};
-use crate::validity::Validity;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for PrimitiveArray {
@@ -19,26 +16,7 @@ impl CompareFn for PrimitiveArray {
             apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), operator.to_fn::<$T>())
         });
 
-        let lhs_validity = self
-            .validity()
-            .to_logical(self.len())
-            .to_null_buffer()?
-            .map(|b| b.into_inner());
-        let rhs_validity = other
-            .validity()
-            .to_logical(self.len())
-            .to_null_buffer()?
-            .map(|b| b.into_inner());
-
-        let validity_buffer = match (lhs_validity, rhs_validity) {
-            (Some(l), Some(r)) => Some(l.bitand(&r)),
-            (Some(b), None) | (None, Some(b)) => Some(b),
-            _ => None,
-        };
-
-        let validity = validity_buffer
-            .map(Validity::from)
-            .unwrap_or(Validity::AllValid);
+        let validity = self.validity().and(other.validity())?;
 
         Ok(BoolArray::try_new(match_mask, validity)?.into_array())
     }

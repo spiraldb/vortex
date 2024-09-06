@@ -1,6 +1,6 @@
 use crate::array::BoolArray;
 use crate::compute::unary::{FillForwardFn, ScalarAtFn};
-use crate::compute::{ArrayCompute, CompareFn, SliceFn, TakeFn};
+use crate::compute::{AndFn, ArrayCompute, CompareFn, OrFn, SliceFn, TakeFn};
 
 mod boolean;
 mod compare;
@@ -32,11 +32,11 @@ impl ArrayCompute for BoolArray {
         Some(self)
     }
 
-    fn and(&self) -> Option<&dyn crate::compute::AndFn> {
+    fn and(&self) -> Option<&dyn AndFn> {
         Some(self)
     }
 
-    fn or(&self) -> Option<&dyn crate::compute::OrFn> {
+    fn or(&self) -> Option<&dyn OrFn> {
         Some(self)
     }
 }
