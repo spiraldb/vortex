@@ -22,7 +22,15 @@ use vortex_sampling_compressor::{CompressConfig, SamplingCompressor};
 
 #[cfg(test)]
 mod tests {
+    use log::{debug, LevelFilter};
+    use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+    use vortex::array::{Bool, ChunkedArray, VarBin};
+    use vortex::variants::{ArrayVariants, StructArrayTrait};
+    use vortex::ArrayDef;
     use vortex_datetime_dtype::TimeUnit;
+    use vortex_datetime_parts::DateTimeParts;
+    use vortex_dict::Dict;
+    use vortex_fastlanes::FoR;
     use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 
     use super::*;
@@ -77,6 +85,127 @@ mod tests {
 
         println!("compressed: {}", compressed.tree_display());
         assert_eq!(compressed.dtype(), to_compress.dtype());
+    }
+
+    #[test]
+    pub fn smoketest_compressor_on_chunked_array() {
+        TermLogger::init(
+            LevelFilter::Debug,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )
+        .unwrap();
+        let compressor = SamplingCompressor::new_with_options(
+            HashSet::from([
+                &ALPCompressor as CompressorRef,
+                &BitPackedCompressor,
+                // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
+                // &DeltaCompressor,
+                &DictCompressor,
+                &FoRCompressor,
+                &FSSTCompressor,
+                &DateTimePartsCompressor,
+                &RoaringBoolCompressor,
+                &RoaringIntCompressor,
+                &DEFAULT_RUN_END_COMPRESSOR,
+                &SparseCompressor,
+                &ZigZagCompressor,
+            ]),
+            CompressConfig::default(),
+        );
+
+        let chunk_size = 1 << 14;
+
+        let ints: Vec<Array> = (0..4).map(|_| make_primitive_column(chunk_size)).collect();
+        let bools: Vec<Array> = (0..4).map(|_| make_bool_column(chunk_size)).collect();
+        let varbins: Vec<Array> = (0..4).map(|_| make_string_column(chunk_size)).collect();
+        let binaries: Vec<Array> = (0..4).map(|_| make_binary_column(chunk_size)).collect();
+        let timestamps: Vec<Array> = (0..4).map(|_| make_timestamp_column(chunk_size)).collect();
+
+        fn chunked(arrays: Vec<Array>) -> Array {
+            let dtype = arrays[0].dtype().clone();
+            ChunkedArray::try_new(arrays, dtype).unwrap().into()
+        }
+
+        let to_compress = StructArray::try_new(
+            vec![
+                "prim_col".into(),
+                "bool_col".into(),
+                "varbin_col".into(),
+                "binary_col".into(),
+                "timestamp_col".into(),
+            ]
+            .into(),
+            vec![
+                chunked(ints),
+                chunked(bools),
+                chunked(varbins),
+                chunked(binaries),
+                chunked(timestamps),
+            ],
+            chunk_size * 4,
+            Validity::NonNullable,
+        )
+        .unwrap()
+        .into_array();
+
+        println!("uncompressed: {}", to_compress.tree_display());
+        let compressed = compressor
+            .compress(&to_compress, None)
+            .unwrap()
+            .into_array();
+
+        println!("compressed: {}", compressed.tree_display());
+        assert_eq!(compressed.dtype(), to_compress.dtype());
+
+        let struct_array: StructArray = compressed.try_into().unwrap();
+        let struct_array: &dyn StructArrayTrait = struct_array.as_struct_array().unwrap();
+
+        let prim_col: ChunkedArray = struct_array
+            .field_by_name("prim_col")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        for chunk in prim_col.chunks() {
+            assert_eq!(chunk.encoding().id(), FoR::ID);
+        }
+
+        let bool_col: ChunkedArray = struct_array
+            .field_by_name("bool_col")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        for chunk in bool_col.chunks() {
+            assert_eq!(chunk.encoding().id(), Bool::ID);
+        }
+
+        let varbin_col: ChunkedArray = struct_array
+            .field_by_name("varbin_col")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        for chunk in varbin_col.chunks() {
+            assert_eq!(chunk.encoding().id(), Dict::ID);
+        }
+
+        let binary_col: ChunkedArray = struct_array
+            .field_by_name("binary_col")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        for chunk in binary_col.chunks() {
+            assert_eq!(chunk.encoding().id(), VarBin::ID);
+        }
+
+        let timestamp_col: ChunkedArray = struct_array
+            .field_by_name("timestamp_col")
+            .unwrap()
+            .try_into()
+            .unwrap();
+        for chunk in timestamp_col.chunks() {
+            assert_eq!(chunk.encoding().id(), DateTimeParts::ID);
+        }
     }
 
     fn make_primitive_column(count: usize) -> Array {

@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use log::debug;
 use vortex::array::{Primitive, PrimitiveArray, VarBin, VarBinArray};
 use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
@@ -31,6 +32,7 @@ impl EncodingCompressor for DictCompressor {
             .compute_is_strict_sorted()
             .unwrap_or(false)
         {
+            debug!("is strict sorted");
             return None;
         }
 
