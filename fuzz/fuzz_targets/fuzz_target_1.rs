@@ -18,7 +18,7 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
     for (action, expected) in actions {
         match action {
             Action::Compress(c) => {
-                match fuzz_compress(&current_array.into_canonical().unwrap().into_array(), &c) {
+                match fuzz_compress(&current_array.into_canonical().unwrap().into(), &c) {
                     Some(compressed_array) => {
                         assert_array_eq(&expected.array(), &compressed_array);
                         current_array = compressed_array;
