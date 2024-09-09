@@ -9,22 +9,22 @@ def test_primitive_array_round_trip():
 
 
 def test_array_with_nulls():
-    a = pa.array([b"123", None])
+    a = pa.array([b"123", None], type=pa.string_view())
     arr = vortex.encode(a)
     assert arr.to_arrow().combine_chunks() == a
 
 
 def test_varbin_array_round_trip():
-    a = pa.array(["a", "b", "c"])
+    a = pa.array(["a", "b", "c"], type=pa.string_view())
     arr = vortex.encode(a)
     assert arr.to_arrow().combine_chunks() == a
 
 
-def test_varbin_array_take():
+def test_varbinview_array_take():
     a = vortex.encode(pa.array(["a", "b", "c", "d"]))
     assert a.take(vortex.encode(pa.array([0, 2]))).to_arrow().combine_chunks() == pa.array(
         ["a", "c"],
-        type=pa.utf8(),
+        type=pa.string_view(),
     )
 
 

@@ -64,8 +64,8 @@ impl FromArrowType<&Field> for DType {
         match field.data_type() {
             DataType::Null => Null,
             DataType::Boolean => Bool(nullability),
-            DataType::Utf8 | DataType::LargeUtf8 => Utf8(nullability),
-            DataType::Binary | DataType::LargeBinary => Binary(nullability),
+            DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => Utf8(nullability),
+            DataType::Binary | DataType::LargeBinary | DataType::BinaryView => Binary(nullability),
             DataType::Date32
             | DataType::Date64
             | DataType::Time32(_)

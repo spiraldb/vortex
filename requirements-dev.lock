@@ -72,7 +72,7 @@ pluggy==1.4.0
     # via pytest
 py-cpuinfo==9.0.0
     # via pytest-benchmark
-pyarrow==15.0.2
+pyarrow==17.0.0
 pygments==2.17.2
     # via mkdocs-material
 pymdown-extensions==10.7.1

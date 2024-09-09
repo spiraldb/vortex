@@ -1,20 +1,24 @@
 use std::sync::Arc;
 
 use arrow_array::builder::GenericByteViewBuilder;
-use arrow_array::types::BinaryViewType;
+use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
 use arrow_array::ArrayRef;
-use vortex_error::VortexResult;
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::varbinview::BinaryView;
 use crate::array::{VarBinArray, VarBinViewArray};
 use crate::arrow::FromArrowArray;
 use crate::validity::ArrayValidity;
-use crate::{Array, Canonical, IntoCanonical};
+use crate::{Array, ArrayDType, Canonical, IntoCanonical};
 
 impl IntoCanonical for VarBinArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        fn into_byteview(array: &VarBinArray) -> ArrayRef {
-            let mut builder = GenericByteViewBuilder::<BinaryViewType>::with_capacity(array.len());
+        fn into_byteview<T, F>(array: &VarBinArray, from_bytes_fn: F) -> ArrayRef
+        where T: ByteViewType,
+            F: Fn(&[u8]) -> &T::Native
+        {
+            let mut builder = GenericByteViewBuilder::<T>::with_capacity(array.len());
             builder.append_block(
                 array
                     .bytes()
@@ -34,7 +38,8 @@ impl IntoCanonical for VarBinArray {
                 if (len as usize) <= BinaryView::MAX_INLINED_SIZE {
                     // Get access to the value using the internal T type here.
                     let bytes = array.bytes_at(idx).unwrap();
-                    builder.append_value(bytes.as_slice());
+                    let value = from_bytes_fn(bytes.as_slice());
+                    builder.append_value(value);
                 } else {
                     unsafe { builder.append_view_unchecked(0, start, end - start) };
                 }
@@ -43,7 +48,15 @@ impl IntoCanonical for VarBinArray {
             Arc::new(builder.finish())
         }
 
-        let arrow_array = into_byteview(&self);
+        let arrow_array = match self.dtype() {
+            DType::Utf8(_) => into_byteview::<StringViewType, _>(&self, |b| unsafe {
+                // SAFETY: VarBinViewArray values are checked at construction. If DType is Utf8,
+                //  then all values must be valid UTF-8 bytes.
+                std::str::from_utf8_unchecked(b)
+            }),
+            DType::Binary(_) => into_byteview::<BinaryViewType, _>(&self, |b| b),
+            _ => vortex_bail!("invalid DType for VarBinViewArray")
+        };
         let array = Array::from_arrow(arrow_array.clone(), arrow_array.is_nullable());
         let varbinview = VarBinViewArray::try_from(array)?;
 
