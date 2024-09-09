@@ -31,7 +31,7 @@ jobs:
         run: |
           set -ex
 
-          this_sha=$(git rev-parse HEAD)
+          built_sha=$(git rev-parse HEAD)
 
           mv docs/_build/html /tmp/html
 
@@ -45,8 +45,8 @@ jobs:
 
           # Only try to commit if there exist changes
           git diff --quiet HEAD || {
-              git commit -m 'Python docs for '$this_sha
+              git commit -m 'Python docs for '$built_sha
               git push origin HEAD:gh-pages-bench
           }
 
-          git checkout 'HEAD@{2}'
+          git checkout $built_sha
