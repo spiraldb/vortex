@@ -19,11 +19,10 @@ jobs:
       - uses: ./.github/actions/setup-python
 
       - name: build Python docs
-        working-directory: pyvortex
         run: |
           set -ex
 
-          rye run maturin develop
+          (cd pyvortex && rye run maturin develop)
 
           cd docs
           rye run sphinx-build -M html . _build --fail-on-warning --keep-going
@@ -33,7 +32,7 @@ jobs:
 
           this_sha=$(git rev-parse HEAD)
 
-          mv pyvortex/docs/_build/html /tmp/html
+          mv docs/_build/html /tmp/html
 
           git fetch origin
           git checkout origin/gh-pages-bench
