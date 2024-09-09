@@ -16,7 +16,7 @@ impl CompareFn for PrimitiveArray {
             apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), operator.to_fn::<$T>())
         });
 
-        let validity = self.validity().and(other.validity())?;
+        let validity = self.validity().and(other.validity())?.into_nullable();
 
         Ok(BoolArray::try_new(match_mask, validity)?.into_array())
     }
