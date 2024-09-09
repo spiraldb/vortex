@@ -347,8 +347,8 @@ impl UnaryFn for PrimitiveArray {
         for chunk in chunks {
             // We know the size of the chunk, and we know output is the same length as the input array
             let chunk: [I; CHUNK_SIZE] = chunk.try_into()?;
-            let mut output_slice: [_; CHUNK_SIZE] =
-                output[offset..offset + CHUNK_SIZE].try_into()?;
+            let output_slice: &mut [_; CHUNK_SIZE] =
+                (&mut output[offset..offset + CHUNK_SIZE]).try_into()?;
 
             for idx in 0..CHUNK_SIZE {
                 output_slice[idx] = MaybeUninit::new(unary_fn(chunk[idx]));
@@ -426,8 +426,8 @@ fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> 
         let lhs: [I; ITER_BATCH_SIZE] = lhs.try_into().unwrap();
         let rhs: [U; ITER_BATCH_SIZE] = batch.data().try_into().unwrap();
         // We know output is of the same length and lhs/rhs
-        let mut output_slice: [_; ITER_BATCH_SIZE] = output
-            [idx_offset..idx_offset + ITER_BATCH_SIZE]
+        let output_slice: &mut [_; ITER_BATCH_SIZE] = (&mut output
+            [idx_offset..idx_offset + ITER_BATCH_SIZE])
             .try_into()
             .unwrap();
 
@@ -513,6 +513,20 @@ mod tests {
     #[test]
     fn unary_fn_example() {
         let input = PrimitiveArray::from_vec(vec![2u32, 2, 2, 2], Validity::AllValid);
+        let output = input.unary(|u: u32| u + 1).unwrap();
+
+        for o in output
+            .with_dyn(|a| a.as_primitive_array_unchecked().u32_iter())
+            .unwrap()
+            .flatten()
+        {
+            assert_eq!(o.unwrap(), 3);
+        }
+    }
+
+    #[test]
+    fn unary_fn_large_example() {
+        let input = PrimitiveArray::from_vec(vec![2u32; 1025], Validity::AllValid);
         let output = input.unary(|u: u32| u + 1).unwrap();
 
         for o in output
