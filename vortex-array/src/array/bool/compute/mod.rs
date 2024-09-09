@@ -1,6 +1,9 @@
+use vortex_error::VortexResult;
+
 use crate::array::BoolArray;
 use crate::compute::unary::{FillForwardFn, ScalarAtFn};
-use crate::compute::{AndFn, ArrayCompute, CompareFn, OrFn, SliceFn, TakeFn};
+use crate::compute::{AndFn, ArrayCompute, CompareFn, Operator, OrFn, SliceFn, TakeFn};
+use crate::Array;
 
 mod boolean;
 mod compare;
@@ -12,8 +15,8 @@ mod slice;
 mod take;
 
 impl ArrayCompute for BoolArray {
-    fn compare(&self) -> Option<&dyn CompareFn> {
-        Some(self)
+    fn compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        Some(CompareFn::compare(self, array, operator))
     }
 
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {

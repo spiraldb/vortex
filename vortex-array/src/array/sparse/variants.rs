@@ -86,4 +86,17 @@ impl StructArrayTrait for SparseArray {
 
 impl ListArrayTrait for SparseArray {}
 
-impl ExtensionArrayTrait for SparseArray {}
+impl ExtensionArrayTrait for SparseArray {
+    fn storage_array(&self) -> Array {
+        SparseArray::try_new_with_offset(
+            self.indices().clone(),
+            self.values()
+                .with_dyn(|a| a.as_extension_array_unchecked().storage_array()),
+            self.len(),
+            self.indices_offset(),
+            self.fill_value().clone(),
+        )
+        .expect("Failed to create new sparse array")
+        .into_array()
+    }
+}

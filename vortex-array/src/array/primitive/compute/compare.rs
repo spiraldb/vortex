@@ -9,8 +9,8 @@ use crate::compute::{CompareFn, Operator};
 use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for PrimitiveArray {
-    fn compare(&self, other: &Array, operator: Operator) -> VortexResult<Array> {
-        let other = other.clone().into_primitive()?;
+    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
+        let other = array.clone().into_primitive()?;
 
         let match_mask = match_each_native_ptype!(self.ptype(), |$T| {
             apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), operator.to_fn::<$T>())

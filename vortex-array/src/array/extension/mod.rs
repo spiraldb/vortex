@@ -60,7 +60,11 @@ impl ArrayVariants for ExtensionArray {
     }
 }
 
-impl ExtensionArrayTrait for ExtensionArray {}
+impl ExtensionArrayTrait for ExtensionArray {
+    fn storage_array(&self) -> Array {
+        self.storage()
+    }
+}
 
 impl IntoCanonical for ExtensionArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

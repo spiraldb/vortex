@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use vortex_dtype::{DType, PType};
 use vortex_error::VortexError;
-use vortex_scalar::{Scalar, StructScalar};
+use vortex_scalar::{ExtScalar, Scalar, ScalarValue, StructScalar};
 
 use crate::array::constant::ConstantArray;
 use crate::iter::{Accessor, AccessorRef};
@@ -190,7 +190,28 @@ impl StructArrayTrait for ConstantArray {
 
 impl ListArrayTrait for ConstantArray {}
 
-impl ExtensionArrayTrait for ConstantArray {}
+impl ExtensionArrayTrait for ConstantArray {
+    fn storage_array(&self) -> Array {
+        let scalar_ext = ExtScalar::try_from(self.scalar()).expect("Expected an extension scalar");
+
+        // FIXME(ngates): there's not enough information to get the storage array.
+        let n = self.dtype().nullability();
+        let storage_dtype = match scalar_ext.value() {
+            ScalarValue::Bool(_) => DType::Binary(n),
+            ScalarValue::Primitive(pvalue) => DType::Primitive(pvalue.ptype(), n),
+            ScalarValue::Buffer(_) => DType::Binary(n),
+            ScalarValue::BufferString(_) => DType::Utf8(n),
+            ScalarValue::List(_) => panic!("List not supported"),
+            ScalarValue::Null => DType::Null,
+        };
+
+        ConstantArray::new(
+            Scalar::new(storage_dtype, scalar_ext.value().clone()),
+            self.len(),
+        )
+        .into_array()
+    }
+}
 
 #[cfg(test)]
 mod test {

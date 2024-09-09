@@ -73,6 +73,10 @@ pub trait CompareFn {
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;
 }
 
+pub trait MaybeCompareFn {
+    fn maybe_compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>>;
+}
+
 pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {
     if left.len() != right.len() {
         vortex_bail!("Compare operations only support arrays of the same length");
@@ -83,15 +87,11 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         vortex_bail!("Compare operations only support arrays of the same type");
     }
 
-    if let Some(selection) =
-        left.with_dyn(|lhs| lhs.compare().map(|lhs| lhs.compare(right, operator)))
-    {
+    if let Some(selection) = left.with_dyn(|lhs| lhs.compare(right, operator)) {
         return selection;
     }
 
-    if let Some(selection) =
-        right.with_dyn(|rhs| rhs.compare().map(|rhs| rhs.compare(left, operator.swap())))
-    {
+    if let Some(selection) = right.with_dyn(|rhs| rhs.compare(left, operator.swap())) {
         return selection;
     }
 

@@ -1,11 +1,14 @@
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
+use vortex::array::StructArray;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, ExtensionArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
@@ -89,7 +92,19 @@ impl ArrayVariants for DateTimePartsArray {
     }
 }
 
-impl ExtensionArrayTrait for DateTimePartsArray {}
+impl ExtensionArrayTrait for DateTimePartsArray {
+    fn storage_array(&self) -> Array {
+        // FIXME(ngates): this needs to be a tuple array so we can implement Compare
+        StructArray::try_new(
+            vec!["days".into(), "seconds".into(), "subseconds".into()].into(),
+            [self.days(), self.seconds(), self.subsecond()].into(),
+            self.len(),
+            self.logical_validity().into_validity(),
+        )
+        .expect("Failed to create struct array")
+        .into_array()
+    }
+}
 
 impl IntoCanonical for DateTimePartsArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

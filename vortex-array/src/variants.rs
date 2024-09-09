@@ -3,7 +3,7 @@
 //! When callers only want to make assumptions about the DType, and not about any specific
 //! encoding, they can use these traits to write encoding-agnostic code.
 
-use vortex_dtype::{DType, FieldNames};
+use vortex_dtype::{DType, ExtDType, FieldNames};
 
 use crate::iter::{AccessorRef, VectorizedArrayIter};
 use crate::{Array, ArrayTrait};
@@ -228,4 +228,13 @@ pub trait StructArrayTrait: ArrayTrait {
 
 pub trait ListArrayTrait: ArrayTrait {}
 
-pub trait ExtensionArrayTrait: ArrayTrait {}
+pub trait ExtensionArrayTrait: ArrayTrait {
+    fn ext_dtype(&self) -> ExtDType {
+        let DType::Extension(ext_dtype, _nullability) = self.dtype().clone() else {
+            panic!("Expected ExtDType")
+        };
+        ext_dtype
+    }
+
+    fn storage_array(&self) -> Array;
+}

@@ -8,14 +8,13 @@ use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl CompareFn for BoolArray {
     // TODO(aduffy): replace these with Arrow compute kernels.
-    fn compare(&self, other: &Array, op: Operator) -> VortexResult<Array> {
-        let flattened = other.clone().into_bool()?;
+    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
+        let flattened = array.clone().into_bool()?;
         let lhs = self.boolean_buffer();
         let rhs = flattened.boolean_buffer();
-        let result_buf = match op {
+        let result_buf = match operator {
             Operator::Eq => lhs.bitxor(&rhs).not(),
             Operator::NotEq => lhs.bitxor(&rhs),
-
             Operator::Gt => lhs.bitand(&rhs.not()),
             Operator::Gte => lhs.bitor(&rhs.not()),
             Operator::Lt => lhs.not().bitand(&rhs),
