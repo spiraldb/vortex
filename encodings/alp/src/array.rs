@@ -199,7 +199,9 @@ impl PrimitiveArrayTrait for ALPArray {
                 let encoded = self
                     .encoded()
                     .with_dyn(|a| a.as_primitive_array_unchecked().i32_accessor())
-                    .vortex_expect("Failed to get underlying encoded i32 array for ALP-encoded f32 array");
+                    .vortex_expect(
+                        "Failed to get underlying encoded i32 array for ALP-encoded f32 array",
+                    );
 
                 Some(Arc::new(ALPAccessor::new(
                     encoded,
@@ -222,7 +224,9 @@ impl PrimitiveArrayTrait for ALPArray {
                 let encoded = self
                     .encoded()
                     .with_dyn(|a| a.as_primitive_array_unchecked().i64_accessor())
-                    .vortex_expect("Failed to get underlying encoded i64 array for ALP-encoded f64 array");
+                    .vortex_expect(
+                        "Failed to get underlying encoded i64 array for ALP-encoded f64 array",
+                    );
                 Some(Arc::new(ALPAccessor::new(
                     encoded,
                     patches,

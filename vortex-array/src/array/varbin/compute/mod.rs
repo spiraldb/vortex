@@ -30,9 +30,6 @@ impl ScalarAtFn for VarBinArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        varbin_scalar(
-            self.bytes_at(index).vortex_unwrap(),
-            self.dtype(),
-        )
+        varbin_scalar(self.bytes_at(index).vortex_unwrap(), self.dtype())
     }
 }

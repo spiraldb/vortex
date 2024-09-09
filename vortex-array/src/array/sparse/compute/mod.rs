@@ -38,15 +38,8 @@ impl ScalarAtFn for SparseArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        match self
-            .find_index(index)
-            .vortex_unwrap()
-        {
-            None => self
-                .fill_value()
-                .clone()
-                .cast(self.dtype())
-                .vortex_unwrap(),
+        match self.find_index(index).vortex_unwrap() {
+            None => self.fill_value().clone().cast(self.dtype()).vortex_unwrap(),
             Some(idx) => scalar_at_unchecked(&self.values(), idx)
                 .cast(self.dtype())
                 .vortex_unwrap(),

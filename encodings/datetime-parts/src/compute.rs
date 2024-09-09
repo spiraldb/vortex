@@ -118,9 +118,7 @@ pub fn decode_to_temporal(array: &DateTimePartsArray) -> VortexResult<TemporalAr
     Ok(TemporalArray::new_timestamp(
         PrimitiveArray::from_vec(values, array.logical_validity().into_validity()).into_array(),
         temporal_metadata.time_unit(),
-        temporal_metadata
-            .time_zone()
-            .map(ToString::to_string),
+        temporal_metadata.time_zone().map(ToString::to_string),
     ))
 }
 

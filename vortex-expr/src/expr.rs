@@ -24,13 +24,11 @@ pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
 // Taken from apache-datafusion, necessary since you can't require VortexExpr implement PartialEq<dyn VortexExpr>
 fn unbox_any(any: &dyn Any) -> &dyn Any {
     if any.is::<Arc<dyn VortexExpr>>() {
-        any
-            .downcast_ref::<Arc<dyn VortexExpr>>()
+        any.downcast_ref::<Arc<dyn VortexExpr>>()
             .vortex_expect("any.is::<Arc<dyn VortexExpr>> returned true but downcast_ref failed")
             .as_any()
     } else if any.is::<Box<dyn VortexExpr>>() {
-        any
-            .downcast_ref::<Box<dyn VortexExpr>>()
+        any.downcast_ref::<Box<dyn VortexExpr>>()
             .vortex_expect("any.is::<Box<dyn VortexExpr>> returned true but downcast_ref failed")
             .as_any()
     } else {
