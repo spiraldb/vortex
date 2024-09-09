@@ -425,6 +425,7 @@ pub fn sort_canonical_array(array: &Array) -> Array {
     }
 }
 
+/// Reverse sorting of Option<T> such that None is last (Greatest)
 fn sort_opt_slice<T: Ord>(s: &mut [Option<T>]) {
     s.sort_by(|a, b| match (a, b) {
         (Some(v), Some(w)) => v.cmp(w),
