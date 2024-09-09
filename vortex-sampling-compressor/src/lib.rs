@@ -199,9 +199,9 @@ impl<'a> SamplingCompressor<'a> {
     fn compress_array(&self, arr: &Array) -> VortexResult<CompressedArray<'a>> {
         match arr.encoding().id() {
             Chunked::ID => {
-                // For chunked arrays, we compress each chunk individually
                 let chunked = ChunkedArray::try_from(arr)?;
-                let compressed_chunks = chunked
+                let less_chunked = chunked.rechunk_default()?;
+                let compressed_chunks = less_chunked
                     .chunks()
                     .map(|chunk| {
                         self.compress_array(&chunk)

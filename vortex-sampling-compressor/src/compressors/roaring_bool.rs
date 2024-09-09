@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use vortex::array::Bool;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::DType;
@@ -20,7 +21,7 @@ impl EncodingCompressor for RoaringBoolCompressor {
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support bool enc arrays
-        if array.encoding().id() != RoaringBool::ID {
+        if array.encoding().id() != Bool::ID {
             return None;
         }
 
