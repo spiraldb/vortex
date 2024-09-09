@@ -1,4 +1,4 @@
-use vortex_error::{vortex_panic, VortexResult};
+use vortex_error::{VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::{varbin_scalar, VarBinArray};
@@ -31,8 +31,7 @@ impl ScalarAtFn for VarBinArray {
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         varbin_scalar(
-            self.bytes_at(index)
-                .unwrap_or_else(|err| vortex_panic!(err)),
+            self.bytes_at(index).vortex_unwrap(),
             self.dtype(),
         )
     }

@@ -5,7 +5,7 @@ use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_datetime_dtype::{TemporalMetadata, TimeUnit};
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_panic, VortexResult};
+use vortex_error::{vortex_bail, VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
 use crate::DateTimePartsArray;
@@ -79,7 +79,7 @@ impl ScalarAtFn for DateTimePartsArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        <Self as ScalarAtFn>::scalar_at(self, index).unwrap_or_else(|err| vortex_panic!(err))
+        <Self as ScalarAtFn>::scalar_at(self, index).vortex_unwrap()
     }
 }
 
@@ -120,7 +120,7 @@ pub fn decode_to_temporal(array: &DateTimePartsArray) -> VortexResult<TemporalAr
         temporal_metadata.time_unit(),
         temporal_metadata
             .time_zone()
-            .map(std::string::ToString::to_string),
+            .map(ToString::to_string),
     ))
 }
 

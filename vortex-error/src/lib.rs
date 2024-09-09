@@ -170,18 +170,6 @@ impl Debug for VortexError {
 
 pub type VortexResult<T> = Result<T, VortexError>;
 
-pub trait VortexPanic {
-    fn panic(self) -> !;
-}
-
-impl VortexPanic for VortexError {
-    #[inline(always)]
-    #[allow(clippy::panic)]
-    fn panic(self) -> ! {
-        panic!("{}", self)
-    }
-}
-
 pub trait VortexUnwrap {
     type Output;
 
@@ -283,8 +271,8 @@ macro_rules! vortex_panic {
     (OutOfBounds: $idx:expr, $start:expr, $stop:expr) => {{
         $crate::vortex_panic!($crate::vortex_err!(OutOfBounds: $idx, $start, $stop))
     }};
-    (NotImplemented: $func:expr, $by_whom:expr) => {{
-        $crate::vortex_panic!($crate::vortex_err!(NotImplemented: $func, $by_whom))
+    (NotImplemented: $func:expr, $for_whom:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(NotImplemented: $func, $for_whom))
     }};
     (MismatchedTypes: $expected:literal, $actual:expr) => {{
         $crate::vortex_panic!($crate::vortex_err!(MismatchedTypes: $expected, $actual))
@@ -299,17 +287,15 @@ macro_rules! vortex_panic {
         $crate::vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
     };
     ($err:expr, $fmt:literal $(, $arg:expr)* $(,)?) => {{
-        use $crate::VortexPanic;
-        use $crate::VortexError;
-        let err: VortexError = $err;
-        err.with_context(format!($fmt, $($arg),*)).panic()
+        let err: $crate::VortexError = $err;
+        panic!("{}", err.with_context(format!($fmt, $($arg),*)))
     }};
     ($fmt:literal $(, $arg:expr)* $(,)?) => {
         $crate::vortex_panic!($crate::vortex_err!($fmt, $($arg),*))
     };
     ($err:expr) => {{
-        use $crate::VortexPanic;
-        ($err).panic()
+        let err: $crate::VortexError = $err;
+        panic!("{}", err)
     }};
 }
 

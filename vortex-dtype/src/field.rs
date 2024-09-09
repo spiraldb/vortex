@@ -59,7 +59,7 @@ impl FieldPath {
         assert_eq!(self.0.len(), 1);
         match &self.0[0] {
             Field::Name(name) => name.as_str(),
-            _ => vortex_panic!("FieldPath is not a name: {self}"),
+            _ => vortex_panic!("FieldPath is not a name: {}", self),
         }
     }
 }

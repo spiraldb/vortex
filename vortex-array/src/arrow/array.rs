@@ -287,7 +287,7 @@ impl FromArrowArray<ArrowArrayRef> for Array {
                 }
             },
             _ => vortex_panic!(
-                "Missing array encoding for Arrow data type {}",
+                "Array encoding not implementedfor Arrow data type {}",
                 array.data_type().clone()
             ),
         }

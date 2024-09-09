@@ -1,4 +1,4 @@
-use vortex_error::{vortex_panic, VortexResult};
+use vortex_error::{VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
 use crate::array::sparse::SparseArray;
@@ -40,16 +40,16 @@ impl ScalarAtFn for SparseArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         match self
             .find_index(index)
-            .unwrap_or_else(|err| vortex_panic!(err))
+            .vortex_unwrap()
         {
             None => self
                 .fill_value()
                 .clone()
                 .cast(self.dtype())
-                .unwrap_or_else(|err| vortex_panic!(err)),
+                .vortex_unwrap(),
             Some(idx) => scalar_at_unchecked(&self.values(), idx)
                 .cast(self.dtype())
-                .unwrap_or_else(|err| vortex_panic!(err)),
+                .vortex_unwrap(),
         }
     }
 }

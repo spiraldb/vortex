@@ -87,19 +87,19 @@ impl DType {
     }
 
     pub fn is_unsigned_int(&self) -> bool {
-        PType::try_from(self).is_ok_and(super::ptype::PType::is_unsigned_int)
+        PType::try_from(self).is_ok_and(PType::is_unsigned_int)
     }
 
     pub fn is_signed_int(&self) -> bool {
-        PType::try_from(self).is_ok_and(super::ptype::PType::is_signed_int)
+        PType::try_from(self).is_ok_and(PType::is_signed_int)
     }
 
     pub fn is_int(&self) -> bool {
-        PType::try_from(self).is_ok_and(super::ptype::PType::is_int)
+        PType::try_from(self).is_ok_and(PType::is_int)
     }
 
     pub fn is_float(&self) -> bool {
-        PType::try_from(self).is_ok_and(super::ptype::PType::is_float)
+        PType::try_from(self).is_ok_and(PType::is_float)
     }
 
     pub fn is_boolean(&self) -> bool {
