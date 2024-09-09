@@ -120,6 +120,15 @@ impl Validity {
         }
     }
 
+    pub fn filter(&self, predicate: &Array) -> VortexResult<Self> {
+        match self {
+            v @ (Validity::NonNullable | Validity::AllValid | Validity::AllInvalid) => {
+                Ok(v.clone())
+            }
+            Validity::Array(arr) => Ok(Validity::Array(filter(arr, predicate)?)),
+        }
+    }
+
     pub fn to_logical(&self, length: usize) -> LogicalValidity {
         match self {
             Self::NonNullable => LogicalValidity::AllValid(length),
@@ -326,12 +335,5 @@ impl IntoArray for LogicalValidity {
             Self::AllInvalid(len) => BoolArray::from(vec![false; len]).into_array(),
             Self::Array(a) => a,
         }
-    }
-}
-
-pub fn filter_validity(validity: Validity, predicate: &Array) -> VortexResult<Validity> {
-    match validity {
-        v @ (Validity::NonNullable | Validity::AllValid | Validity::AllInvalid) => Ok(v),
-        Validity::Array(arr) => Ok(Validity::Array(filter(&arr, predicate)?)),
     }
 }
