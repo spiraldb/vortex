@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use num_traits::WrappingSub;
 use vortex_dtype::{match_each_float_ptype, match_each_integer_ptype, NativePType};
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::{PrimitiveScalar, Scalar};
 
 use crate::array::constant::ConstantArray;
@@ -45,10 +45,7 @@ impl SubtractScalarFn for PrimitiveArray {
     }
 }
 
-fn subtract_scalar_integer<
-    'a,
-    T: NativePType + WrappingSub + for<'b> TryFrom<&'b Scalar, Error = VortexError>,
->(
+fn subtract_scalar_integer<T: NativePType + WrappingSub>(
     subtract_from: &PrimitiveArray,
     to_subtract: T,
 ) -> VortexResult<PrimitiveArray> {

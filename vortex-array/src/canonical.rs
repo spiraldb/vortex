@@ -89,6 +89,18 @@ impl Canonical {
             }
         }
     }
+
+    /// Unwrap Canonical Array back into a regular Array
+    pub fn into_array(self) -> Array {
+        match self {
+            Canonical::Null(a) => a.into_array(),
+            Canonical::Bool(a) => a.into_array(),
+            Canonical::Primitive(a) => a.into_array(),
+            Canonical::Struct(a) => a.into_array(),
+            Canonical::VarBin(a) => a.into_array(),
+            Canonical::Extension(a) => a.into_array(),
+        }
+    }
 }
 
 // Unwrap canonical type back down to specialized type.

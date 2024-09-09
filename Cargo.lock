@@ -4508,7 +4508,9 @@ name = "vortex-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "num-traits",
  "vortex-array",
+ "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
  "vortex-sampling-compressor",
