@@ -146,6 +146,8 @@ impl Validity {
     /// Logically & two Validity values of the same length
     pub fn and(self, rhs: Validity) -> VortexResult<Validity> {
         let validity = match (&self, &rhs) {
+            // Should be pretty clear
+            (Validity::NonNullable, Validity::NonNullable) => Validity::NonNullable,
             // Any `AllInvalid` makes the output all invalid values
             (Validity::AllInvalid, _) | (_, Validity::AllInvalid) => Validity::AllInvalid,
             // All truthy values on one side, which makes no effect on an `Array` variant
@@ -153,7 +155,6 @@ impl Validity {
             | (Validity::Array(a), Validity::NonNullable)
             | (Validity::NonNullable, Validity::Array(a))
             | (Validity::AllValid, Validity::Array(a)) => Validity::Array(a.clone()),
-            (Validity::NonNullable, Validity::NonNullable) => Validity::NonNullable,
             // Both sides are all valid
             (Validity::NonNullable, Validity::AllValid)
             | (Validity::AllValid, Validity::NonNullable)
@@ -171,6 +172,14 @@ impl Validity {
         };
 
         Ok(validity)
+    }
+
+    /// Convert into a nullable variant
+    pub fn into_nullable(self) -> Validity {
+        match self {
+            Self::NonNullable => Self::AllValid,
+            _ => self,
+        }
     }
 }
 
