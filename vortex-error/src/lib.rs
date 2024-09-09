@@ -58,6 +58,8 @@ pub enum VortexError {
     NotImplemented(ErrString, ErrString, Backtrace),
     #[error("expected type: {0} but instead got {1}\nBacktrace:\n{2}")]
     MismatchedTypes(ErrString, ErrString, Backtrace),
+    #[error("{0}\nBacktrace:\n{1}")]
+    AssertionFailed(ErrString, Backtrace),
     #[error("{0}: {1}")]
     Context(ErrString, Box<VortexError>),
     #[error(transparent)]
@@ -216,7 +218,7 @@ impl<T> VortexExpect for Option<T> {
     #[inline(always)]
     fn vortex_expect(self, msg: &str) -> Self::Output {
         self.unwrap_or_else(|| {
-            let err = VortexError::InvalidArgument(msg.to_string().into(), Backtrace::capture());
+            let err = VortexError::AssertionFailed(msg.to_string().into(), Backtrace::capture());
             vortex_panic!(err)
         })
     }
