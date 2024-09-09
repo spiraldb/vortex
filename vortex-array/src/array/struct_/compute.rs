@@ -21,6 +21,10 @@ impl ArrayCompute for StructArray {
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
+
+    fn filter(&self) -> Option<&dyn FilterFn> {
+        Some(self)
+    }
 }
 
 impl ScalarAtFn for StructArray {
