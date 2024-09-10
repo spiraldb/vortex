@@ -12,7 +12,7 @@ requires-python = ">= 3.11"
 classifiers = ["Private :: Do Not Upload"]
 
 [build-system]
-requires = ["maturin>=1.2,<2.0"]
+requires = ["maturin>=1.7.2,<2.0"]  # >=1.7.2: https://github.com/spiraldb/vortex/issues/771
 build-backend = "maturin"
 
 [tool.rye]
