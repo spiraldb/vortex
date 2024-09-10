@@ -5,7 +5,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::scalar_at;
-use crate::compute::{search_sorted, SearchSortedSide};
+use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -84,9 +84,7 @@ impl SparseArray {
             StatsSet::new(),
         )
     }
-}
 
-impl SparseArray {
     #[inline]
     pub fn indices_offset(&self) -> usize {
         self.metadata().indices_offset
@@ -116,13 +114,16 @@ impl SparseArray {
     }
 
     /// Returns the position of a given index in the indices array if it exists.
-    pub fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
+    fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
+        self.search_index(index).map(|r| r.to_found())
+    }
+
+    fn search_index(&self, index: usize) -> VortexResult<SearchResult> {
         search_sorted(
             &self.indices(),
             self.indices_offset() + index,
             SearchSortedSide::Left,
         )
-        .map(|r| r.to_found())
     }
 
     /// Return indices as a vector of usize with the indices_offset applied.
