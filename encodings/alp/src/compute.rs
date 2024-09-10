@@ -1,8 +1,11 @@
-use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
-use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
+use vortex::array::BoolArray;
+use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
+use vortex::compute::{slice, take, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
+use vortex::stats::ArrayStatistics;
+use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
-use vortex_scalar::Scalar;
+use vortex_scalar::{PValue, Scalar};
 
 use crate::{match_each_alp_float_ptype, ALPArray, ALPFloat};
 
@@ -65,5 +68,37 @@ impl SliceFn for ALPArray {
             self.patches().map(|p| slice(&p, start, end)).transpose()?,
         )?
         .into_array())
+    }
+}
+
+impl CompareFn for ALPArray {
+    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
+        if array.statistics().compute_is_constant().unwrap_or_default() {
+            let rhs = scalar_at(array, 0).expect("should be scalar");
+            let pvalue = rhs.value().as_pvalue().expect("Expected primitive value");
+
+            match pvalue {
+                Some(PValue::F32(f)) => {
+                    let encoded = f32::encode_single(f, self.exponents());
+                }
+                Some(PValue::F64(f)) => {
+                    let encoded = f64::encode_single(f, self.exponents());
+                    match encoded {
+                        Some(encoded) => todo!(),
+                        Err(exception) => todo!(),
+                    }
+                }
+                None => {
+                    // Is `null == null => true`?
+                    let bools = (0..self.len()).map(|index| !self.is_valid(index)).collect();
+                    BoolArray::from_vec(bools, Validity::AllValid)
+                }
+                _ => unreachable!(),
+            }
+
+            todo!()
+        } else {
+            todo!()
+        }
     }
 }
