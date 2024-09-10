@@ -95,10 +95,13 @@ where
     // TODO(aduffy): this might be too small.
     let mut buffer = Vec::with_capacity(16 * 1024 * 1024);
     let mut builder = VarBinBuilder::<i32>::with_capacity(len);
+    let mut uncompressed_lengths: Vec<i32> = Vec::with_capacity(len);
     for string in iter {
         match string {
             None => builder.push_null(),
             Some(s) => {
+                uncompressed_lengths.push(s.len() as i32);
+
                 // SAFETY: buffer is large enough
                 unsafe { compressor.compress_into(s, &mut buffer) };
 
@@ -107,7 +110,9 @@ where
         }
     }
 
-    let codes = builder.finish(DType::Binary(dtype.nullability()));
+    let codes = builder
+        .finish(DType::Binary(dtype.nullability()))
+        .into_array();
     let symbols_vec: Vec<Symbol> = compressor.symbol_table().to_vec();
     // SAFETY: Symbol and u64 are same size
     let symbols_u64: Vec<u64> = unsafe { std::mem::transmute(symbols_vec) };
@@ -116,7 +121,9 @@ where
     let symbol_lengths_vec: Vec<u8> = compressor.symbol_lengths().to_vec();
     let symbol_lengths =
         PrimitiveArray::from_vec(symbol_lengths_vec, Validity::NonNullable).into_array();
+    let uncompressed_lengths =
+        PrimitiveArray::from_vec(uncompressed_lengths, Validity::NonNullable).into_array();
 
-    FSSTArray::try_new(dtype, symbols, symbol_lengths, codes.into_array())
+    FSSTArray::try_new(dtype, symbols, symbol_lengths, codes, uncompressed_lengths)
         .expect("building FSSTArray from parts")
 }

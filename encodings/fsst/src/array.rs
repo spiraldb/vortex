@@ -2,8 +2,9 @@ use std::sync::Arc;
 
 use fsst::{Decompressor, Symbol};
 use serde::{Deserialize, Serialize};
+use vortex::array::VarBinArray;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
 use vortex::visitor::AcceptArrayVisitor;
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonical};
@@ -19,6 +20,7 @@ static SYMBOL_LENS_DTYPE: DType = DType::Primitive(PType::U8, Nullability::NonNu
 pub struct FSSTMetadata {
     symbols_len: usize,
     codes_dtype: DType,
+    uncompressed_lengths_dtype: DType,
 }
 
 impl FSSTArray {
@@ -35,6 +37,7 @@ impl FSSTArray {
         symbols: Array,
         symbol_lengths: Array,
         codes: Array,
+        uncompressed_lengths: Array,
     ) -> VortexResult<Self> {
         // Check: symbols must be a u64 array
         if symbols.dtype() != &SYMBOLS_DTYPE {
@@ -54,6 +57,14 @@ impl FSSTArray {
             vortex_bail!(InvalidArgument: "symbols and symbol_lengths arrays must have same length");
         }
 
+        if uncompressed_lengths.len() != codes.len() {
+            vortex_bail!(InvalidArgument: "uncompressed_lengths must be same len as codes");
+        }
+
+        if !uncompressed_lengths.dtype().is_int() {
+            vortex_bail!(InvalidArgument: "uncompressed_lengths must have integer type");
+        }
+
         // Check: strings must be a Binary array.
         if !matches!(codes.dtype(), DType::Binary(_)) {
             vortex_bail!(InvalidArgument: "codes array must be DType::Binary type");
@@ -62,7 +73,8 @@ impl FSSTArray {
         let symbols_len = symbols.len();
         let len = codes.len();
         let strings_dtype = codes.dtype().clone();
-        let children = Arc::new([symbols, symbol_lengths, codes]);
+        let uncompressed_lengths_dtype = uncompressed_lengths.dtype().clone();
+        let children = Arc::new([symbols, symbol_lengths, codes, uncompressed_lengths]);
 
         Self::try_from_parts(
             dtype,
@@ -70,6 +82,7 @@ impl FSSTArray {
             FSSTMetadata {
                 symbols_len,
                 codes_dtype: strings_dtype,
+                uncompressed_lengths_dtype,
             },
             children,
             StatsSet::new(),
@@ -80,21 +93,35 @@ impl FSSTArray {
     pub fn symbols(&self) -> Array {
         self.array()
             .child(0, &SYMBOLS_DTYPE, self.metadata().symbols_len)
-            .expect("FSSTArray must have a symbols child array")
+            .expect("FSSTArray symbols child")
     }
 
     /// Access the symbol table array
     pub fn symbol_lengths(&self) -> Array {
         self.array()
             .child(1, &SYMBOL_LENS_DTYPE, self.metadata().symbols_len)
-            .expect("FSSTArray must have a symbols child array")
+            .expect("FSSTArray symbol_lengths child")
     }
 
     /// Access the codes array
     pub fn codes(&self) -> Array {
         self.array()
             .child(2, &self.metadata().codes_dtype, self.len())
-            .expect("FSSTArray must have a codes child array")
+            .expect("FSSTArray codes child")
+    }
+
+    /// Get the uncompressed length for each element in the array.
+    pub fn uncompressed_lengths(&self) -> Array {
+        self.array()
+            .child(3, &self.metadata().uncompressed_lengths_dtype, self.len())
+            .expect("FSST uncompressed_lengths child")
+    }
+
+    /// Get the validity for this array.
+    pub fn validity(&self) -> Validity {
+        VarBinArray::try_from(self.codes())
+            .expect("codes array must be VarBinArray")
+            .validity()
     }
 
     /// Build a [`Decompressor`][fsst::Decompressor] that can be used to decompress values from

@@ -6,7 +6,7 @@ use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{filter, slice, take};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDef, IntoArray};
+use vortex::{Array, ArrayDef, IntoArray, IntoCanonical};
 use vortex_dtype::{DType, Nullability};
 use vortex_fsst::{fsst_compress, fsst_train_compressor, FSST};
 
@@ -99,4 +99,25 @@ fn test_filter(fsst_array: Array) {
         0,
         "They said it existed and that whoever dared to exceed it was mercilessly struck down"
     );
+}
+
+// Test canonicalizing
+#[rstest]
+fn test_into_canonical(fsst_array: Array) {
+    let canonical_array = fsst_array
+        .clone()
+        .into_canonical()
+        .unwrap()
+        .into_varbin()
+        .unwrap()
+        .into_array();
+
+    assert_eq!(canonical_array.len(), fsst_array.len());
+
+    for i in 0..fsst_array.len() {
+        assert_eq!(
+            scalar_at(&fsst_array, i).unwrap(),
+            scalar_at(&canonical_array, i).unwrap(),
+        );
+    }
 }
