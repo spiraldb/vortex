@@ -113,11 +113,7 @@ impl SparseArray {
         &self.metadata().fill_value
     }
 
-    /// Returns the position of a given index in the indices array if it exists.
-    fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
-        self.search_index(index).map(|r| r.to_found())
-    }
-
+    /// Returns the position or the insertion point of a given index in the indices array.
     fn search_index(&self, index: usize) -> VortexResult<SearchResult> {
         search_sorted(
             &self.indices(),
