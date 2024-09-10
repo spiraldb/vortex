@@ -3,7 +3,7 @@ mod test;
 
 use vortex_datetime_dtype::{TemporalMetadata, TimeUnit, DATE_ID, TIMESTAMP_ID, TIME_ID};
 use vortex_dtype::{DType, ExtDType};
-use vortex_error::VortexError;
+use vortex_error::{vortex_panic, VortexError};
 
 use crate::array::ExtensionArray;
 use crate::variants::ExtensionArrayTrait;
@@ -85,7 +85,7 @@ impl TemporalArray {
                     Some(TemporalMetadata::Date(time_unit).into()),
                 )
             }
-            _ => panic!("invalid TimeUnit {time_unit} for vortex.date"),
+            _ => vortex_panic!("invalid TimeUnit {time_unit} for vortex.date"),
         };
 
         Self {
@@ -117,7 +117,7 @@ impl TemporalArray {
         match time_unit {
             TimeUnit::S | TimeUnit::Ms => assert_width!(i32, array),
             TimeUnit::Us | TimeUnit::Ns => assert_width!(i64, array),
-            TimeUnit::D => panic!("invalid unit D for vortex.time data"),
+            TimeUnit::D => vortex_panic!("invalid unit D for vortex.time data"),
         }
 
         let temporal_metadata = TemporalMetadata::Time(time_unit);

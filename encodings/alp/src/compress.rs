@@ -2,7 +2,7 @@ use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::{NativePType, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::alp::ALPFloat;
@@ -43,7 +43,7 @@ where
                 len,
                 Scalar::null(values.dtype().as_nullable()),
             )
-            .unwrap()
+            .vortex_expect("Failed to create SparseArray for ALP patches")
             .into_array()
         }),
     )
@@ -62,7 +62,8 @@ pub fn decompress(array: ALPArray) -> VortexResult<PrimitiveArray> {
     let encoded = array.encoded().into_primitive()?;
     let validity = encoded.validity();
 
-    let decoded = match_each_alp_float_ptype!(array.dtype().try_into()?, |$T| {
+    let ptype = array.dtype().try_into()?;
+    let decoded = match_each_alp_float_ptype!(ptype, |$T| {
         PrimitiveArray::from_vec(
             decompress_primitive::<$T>(encoded.into_maybe_null_slice(), array.exponents()),
             validity,

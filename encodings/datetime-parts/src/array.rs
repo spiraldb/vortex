@@ -10,7 +10,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
 };
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compute::decode_to_temporal;
 
@@ -68,19 +68,19 @@ impl DateTimePartsArray {
     pub fn days(&self) -> Array {
         self.array()
             .child(0, &self.metadata().days_dtype, self.len())
-            .expect("Missing days array")
+            .vortex_expect("DatetimePartsArray missing days array")
     }
 
     pub fn seconds(&self) -> Array {
         self.array()
             .child(1, &self.metadata().seconds_dtype, self.len())
-            .expect("Missing seconds array")
+            .vortex_expect("DatetimePartsArray missing seconds array")
     }
 
     pub fn subsecond(&self) -> Array {
         self.array()
             .child(2, &self.metadata().subseconds_dtype, self.len())
-            .expect("Missing subsecond array")
+            .vortex_expect("DatetimePartsArray missing subsecond array")
     }
 }
 
@@ -101,7 +101,7 @@ impl ExtensionArrayTrait for DateTimePartsArray {
             self.len(),
             self.logical_validity().into_validity(),
         )
-        .expect("Failed to create struct array")
+        .vortex_expect("Failed to create struct array")
         .into_array()
     }
 }

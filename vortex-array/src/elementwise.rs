@@ -19,6 +19,7 @@ pub trait UnaryFn {
     ) -> VortexResult<Array>;
 }
 
+#[allow(clippy::unwrap_used)]
 pub fn dyn_cast_array_iter<N: NativePType>(array: &Array) -> Box<dyn Iterator<Item = Batch<N>>> {
     match PType::try_from(array.dtype()).unwrap() {
         PType::U8 => Box::new(

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use enum_iterator::all;
 use itertools::Itertools;
 use vortex_dtype::DType;
-use vortex_error::VortexError;
+use vortex_error::{vortex_panic, VortexError, VortexExpect};
 use vortex_scalar::Scalar;
 
 use crate::stats::Stat;
@@ -73,11 +73,11 @@ impl StatsSet {
     fn get_as<T: for<'a> TryFrom<&'a Scalar, Error = VortexError>>(&self, stat: Stat) -> Option<T> {
         self.get(stat).map(|v| {
             T::try_from(v).unwrap_or_else(|err| {
-                panic!(
-                    "Failed to get stat {} as {}: {}",
+                vortex_panic!(
+                    err,
+                    "Failed to get stat {} as {}",
                     stat,
-                    std::any::type_name::<T>(),
-                    err
+                    std::any::type_name::<T>()
                 )
             })
         })
@@ -184,7 +184,9 @@ impl StatsSet {
     fn merge_scalar_stat(&mut self, other: &Self, stat: Stat) {
         if let Entry::Occupied(mut e) = self.values.entry(stat) {
             if let Some(other_value) = other.get_as::<usize>(stat) {
-                let self_value: usize = e.get().try_into().unwrap();
+                let self_value: usize = e.get().try_into().unwrap_or_else(|err: VortexError| {
+                    vortex_panic!(err, "Failed to get stat {} as usize", stat)
+                });
                 e.insert((self_value + other_value).into());
             } else {
                 e.remove();
@@ -204,7 +206,9 @@ impl StatsSet {
         if let Entry::Occupied(mut e) = self.values.entry(stat) {
             if let Some(other_value) = other.get_as::<Vec<u64>>(stat) {
                 // TODO(robert): Avoid the copy here. We could e.get_mut() but need to figure out casting
-                let self_value: Vec<u64> = e.get().try_into().unwrap();
+                let self_value: Vec<u64> = e.get().try_into().unwrap_or_else(|err: VortexError| {
+                    vortex_panic!(err, "Failed to get stat {} as Vec<u64>", stat)
+                });
                 e.insert(
                     self_value
                         .iter()
@@ -223,7 +227,10 @@ impl StatsSet {
     fn merge_run_count(&mut self, other: &Self) {
         if let Entry::Occupied(mut e) = self.values.entry(Stat::RunCount) {
             if let Some(other_value) = other.get_as::<usize>(Stat::RunCount) {
-                let self_value: usize = e.get().try_into().unwrap();
+                let self_value: usize = e
+                    .get()
+                    .try_into()
+                    .vortex_expect("Failed to get run count as usize");
                 e.insert((self_value + other_value + 1).into());
             } else {
                 e.remove();

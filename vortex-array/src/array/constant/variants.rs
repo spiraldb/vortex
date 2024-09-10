@@ -2,7 +2,7 @@ use std::iter;
 use std::sync::Arc;
 
 use vortex_dtype::{DType, PType};
-use vortex_error::VortexError;
+use vortex_error::{vortex_panic, VortexError, VortexExpect as _};
 use vortex_scalar::{ExtScalar, Scalar, ScalarValue, StructScalar};
 
 use crate::array::constant::ConstantArray;
@@ -53,9 +53,11 @@ impl NullArrayTrait for ConstantArray {}
 
 impl BoolArrayTrait for ConstantArray {
     fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
-        let value = self.scalar().value().as_bool().unwrap_or_else(|err| {
-            panic!("Failed to get bool value from constant array: {}", err);
-        });
+        let value = self
+            .scalar()
+            .value()
+            .as_bool()
+            .vortex_expect("Failed to get bool value from constant array");
         if value.unwrap_or(false) {
             Box::new(0..self.len())
         } else {
@@ -65,9 +67,11 @@ impl BoolArrayTrait for ConstantArray {
 
     fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         // Must be a boolean scalar
-        let value = self.scalar().value().as_bool().unwrap_or_else(|err| {
-            panic!("Failed to get bool value from constant array: {}", err);
-        });
+        let value = self
+            .scalar()
+            .value()
+            .as_bool()
+            .vortex_expect("Failed to get bool value from constant array");
 
         if value.unwrap_or(false) {
             Box::new(iter::once((0, self.len())))
@@ -91,7 +95,7 @@ where
     }
 
     fn value_unchecked(&self, _index: usize) -> T {
-        T::try_from(self.scalar().clone()).unwrap()
+        T::try_from(self.scalar().clone()).vortex_expect("Failed to convert scalar to value")
     }
 
     fn array_validity(&self) -> Validity {
@@ -192,7 +196,8 @@ impl ListArrayTrait for ConstantArray {}
 
 impl ExtensionArrayTrait for ConstantArray {
     fn storage_array(&self) -> Array {
-        let scalar_ext = ExtScalar::try_from(self.scalar()).expect("Expected an extension scalar");
+        let scalar_ext =
+            ExtScalar::try_from(self.scalar()).vortex_expect("Expected an extension scalar");
 
         // FIXME(ngates): there's not enough information to get the storage array.
         let n = self.dtype().nullability();
@@ -201,7 +206,7 @@ impl ExtensionArrayTrait for ConstantArray {
             ScalarValue::Primitive(pvalue) => DType::Primitive(pvalue.ptype(), n),
             ScalarValue::Buffer(_) => DType::Binary(n),
             ScalarValue::BufferString(_) => DType::Utf8(n),
-            ScalarValue::List(_) => panic!("List not supported"),
+            ScalarValue::List(_) => vortex_panic!("List not supported"),
             ScalarValue::Null => DType::Null,
         };
 

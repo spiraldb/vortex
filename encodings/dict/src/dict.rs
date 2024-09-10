@@ -13,7 +13,7 @@ use vortex::{
     IntoCanonical,
 };
 use vortex_dtype::{match_each_integer_ptype, DType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 impl_encoding!("vortex.dict", 20u16, Dict);
 
@@ -44,14 +44,14 @@ impl DictArray {
     pub fn values(&self) -> Array {
         self.array()
             .child(0, self.dtype(), self.metadata().values_len)
-            .expect("Missing values")
+            .vortex_expect("DictArray is missing its values child array")
     }
 
     #[inline]
     pub fn codes(&self) -> Array {
         self.array()
             .child(1, &self.metadata().codes_dtype, self.len())
-            .expect("Missing codes")
+            .vortex_expect("DictArray is missing its codes child array")
     }
 }
 
@@ -66,24 +66,28 @@ impl IntoCanonical for DictArray {
 impl ArrayValidity for DictArray {
     fn is_valid(&self, index: usize) -> bool {
         let values_index = scalar_at(&self.codes(), index)
-            .unwrap()
+            .unwrap_or_else(|err| {
+                vortex_panic!(err, "Failed to get index {} from DictArray codes", index)
+            })
             .as_ref()
             .try_into()
-            .unwrap();
+            .vortex_expect("Failed to convert dictionary code to usize");
         self.values().with_dyn(|a| a.is_valid(values_index))
     }
 
     fn logical_validity(&self) -> LogicalValidity {
         if self.dtype().is_nullable() {
-            let primitive_codes = self.codes().into_primitive().unwrap();
+            let primitive_codes = self
+                .codes()
+                .into_primitive()
+                .vortex_expect("Failed to convert DictArray codes to primitive array");
             match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
                 ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
                     LogicalValidity::Array(
                         BoolArray::from(iter.flatten().map(|c| *c != 0).collect::<Vec<_>>())
                             .into_array(),
                     )
-                })
-                .unwrap()
+                }).vortex_expect("Failed to convert DictArray codes into logical validity")
             })
         } else {
             LogicalValidity::AllValid(self.len())

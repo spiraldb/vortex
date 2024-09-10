@@ -1,3 +1,4 @@
+#![allow(clippy::unwrap_used)]
 use std::sync::Arc;
 
 use arrow::ipc::reader::StreamReader as ArrowStreamReader;

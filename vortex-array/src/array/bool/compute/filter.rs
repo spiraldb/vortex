@@ -3,7 +3,6 @@ use vortex_error::{vortex_err, VortexResult};
 
 use crate::array::BoolArray;
 use crate::compute::FilterFn;
-use crate::validity::filter_validity;
 use crate::variants::BoolArrayTrait;
 use crate::{Array, IntoArray};
 
@@ -15,7 +14,7 @@ impl FilterFn for BoolArray {
 
 fn filter_select_bool(arr: &BoolArray, predicate: &Array) -> VortexResult<BoolArray> {
     predicate.with_dyn(|b| {
-        let validity = filter_validity(arr.validity(), predicate)?;
+        let validity = arr.validity().filter(predicate)?;
         let predicate = b.as_bool_array().ok_or(vortex_err!(
             NotImplemented: "as_bool_array",
             predicate.encoding().id()

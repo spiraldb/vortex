@@ -1,6 +1,6 @@
 use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::ArrayDType;
-use vortex_error::VortexResult;
+use vortex_error::{VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
 use crate::{unpack_single, BitPackedArray};
@@ -18,7 +18,7 @@ impl ScalarAtFn for BitPackedArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        self.scalar_at(index).unwrap()
+        self.scalar_at(index).vortex_unwrap()
     }
 }
 

@@ -7,7 +7,9 @@ use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
 use vortex_dtype::{Nullability, PType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{
+    vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
+};
 
 mod compress;
 mod compute;
@@ -113,7 +115,7 @@ impl BitPackedArray {
                 &self.dtype().with_nullability(Nullability::NonNullable),
                 self.packed_len(),
             )
-            .expect("Missing packed array")
+            .vortex_expect("BitpackedArray is missing packed child bytes array")
     }
 
     #[inline]
@@ -159,7 +161,13 @@ impl BitPackedArray {
 
     #[inline]
     pub fn ptype(&self) -> PType {
-        self.dtype().try_into().unwrap()
+        self.dtype().try_into().unwrap_or_else(|err: VortexError| {
+            vortex_panic!(
+                err,
+                "Failed to convert BitpackedArray DType {} to PType",
+                self.dtype()
+            )
+        })
     }
 
     #[inline]

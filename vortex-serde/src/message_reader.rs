@@ -95,7 +95,9 @@ impl<R: VortexRead> MessageReader<R> {
         let buf = self.next().await?;
         let msg = unsafe { root_unchecked::<fb::Message>(&buf) }
             .header_as_schema()
-            .expect("Checked earlier in the function");
+            .ok_or_else(|| {
+                vortex_err!("Expected schema message; this was checked earlier in the function")
+            })?;
 
         Ok(IPCDType::read_flatbuffer(&msg)?.0)
     }
@@ -276,7 +278,7 @@ impl ArrayBufferReader {
                     .zip(
                         ipc_buffers
                             .iter()
-                            .map(|b| b.offset())
+                            .map(vortex_flatbuffers::message::Buffer::offset)
                             .skip(1)
                             .chain([all_buffers_size]),
                     )

@@ -2,6 +2,7 @@
 
 use arrow_schema::{DataType, TimeUnit as ArrowTimeUnit};
 use vortex_dtype::ExtDType;
+use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::temporal::{TemporalMetadata, DATE_ID, TIMESTAMP_ID, TIME_ID};
 use crate::unit::TimeUnit;
@@ -53,26 +54,32 @@ pub fn make_temporal_ext_dtype(data_type: &DataType) -> ExtDType {
 /// panics if the ext_dtype is not a temporal dtype
 pub fn make_arrow_temporal_dtype(ext_dtype: &ExtDType) -> DataType {
     match TemporalMetadata::try_from(ext_dtype)
-        .expect("make_arrow_temporal_dtype must be called with a temporal ExtDType")
+        .vortex_expect("make_arrow_temporal_dtype must be called with a temporal ExtDType")
     {
         TemporalMetadata::Date(time_unit) => match time_unit {
             TimeUnit::D => DataType::Date32,
             TimeUnit::Ms => DataType::Date64,
-            _ => panic!("Invalid TimeUnit {time_unit} for {}", ext_dtype.id()),
+            _ => {
+                vortex_panic!(InvalidArgument: "Invalid TimeUnit {} for {}", time_unit, ext_dtype.id())
+            }
         },
         TemporalMetadata::Time(time_unit) => match time_unit {
             TimeUnit::S => DataType::Time32(ArrowTimeUnit::Second),
             TimeUnit::Ms => DataType::Time32(ArrowTimeUnit::Millisecond),
             TimeUnit::Us => DataType::Time64(ArrowTimeUnit::Microsecond),
             TimeUnit::Ns => DataType::Time64(ArrowTimeUnit::Nanosecond),
-            _ => panic!("Invalid TimeUnit {time_unit} for {}", ext_dtype.id()),
+            _ => {
+                vortex_panic!(InvalidArgument: "Invalid TimeUnit {} for {}", time_unit, ext_dtype.id())
+            }
         },
         TemporalMetadata::Timestamp(time_unit, tz) => match time_unit {
             TimeUnit::Ns => DataType::Timestamp(ArrowTimeUnit::Nanosecond, tz.map(|t| t.into())),
             TimeUnit::Us => DataType::Timestamp(ArrowTimeUnit::Microsecond, tz.map(|t| t.into())),
             TimeUnit::Ms => DataType::Timestamp(ArrowTimeUnit::Millisecond, tz.map(|t| t.into())),
             TimeUnit::S => DataType::Timestamp(ArrowTimeUnit::Second, tz.map(|t| t.into())),
-            _ => panic!("Invalid TimeUnit {time_unit} for {}", ext_dtype.id()),
+            _ => {
+                vortex_panic!(InvalidArgument: "Invalid TimeUnit {} for {}", time_unit, ext_dtype.id())
+            }
         },
     }
 }
@@ -94,14 +101,16 @@ impl From<ArrowTimeUnit> for TimeUnit {
     }
 }
 
-impl From<TimeUnit> for ArrowTimeUnit {
-    fn from(value: TimeUnit) -> Self {
-        match value {
+impl TryFrom<TimeUnit> for ArrowTimeUnit {
+    type Error = VortexError;
+
+    fn try_from(value: TimeUnit) -> VortexResult<Self> {
+        Ok(match value {
             TimeUnit::S => Self::Second,
             TimeUnit::Ms => Self::Millisecond,
             TimeUnit::Us => Self::Microsecond,
             TimeUnit::Ns => Self::Nanosecond,
-            _ => panic!("cannot convert {value} to Arrow TimeUnit"),
-        }
+            _ => vortex_bail!("Cannot convert {value} to Arrow TimeUnit"),
+        })
     }
 }

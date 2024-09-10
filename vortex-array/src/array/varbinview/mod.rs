@@ -10,9 +10,8 @@ use arrow_buffer::ScalarBuffer;
 use arrow_schema::DataType;
 use itertools::Itertools;
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
-use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
@@ -159,8 +158,9 @@ impl VarBinViewArray {
     fn view_slice(&self) -> &[BinaryView] {
         unsafe {
             slice::from_raw_parts(
-                PrimitiveArray::try_from(self.views())
-                    .expect("Views must be a primitive array")
+                self.views()
+                    .into_primitive()
+                    .vortex_expect("Views must be a primitive array")
                     .maybe_null_slice::<u8>()
                     .as_ptr() as _,
                 self.views().len() / VIEW_SIZE,
@@ -176,14 +176,14 @@ impl VarBinViewArray {
     pub fn views(&self) -> Array {
         self.array()
             .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
-            .expect("missing views")
+            .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its views"))
     }
 
     #[inline]
     pub fn bytes(&self, idx: usize) -> Array {
         self.array()
             .child(idx + 1, &DType::BYTES, self.metadata().data_lens[idx])
-            .expect("Missing data buffer")
+            .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its data buffer"))
     }
 
     pub fn validity(&self) -> Validity {
@@ -201,7 +201,8 @@ impl VarBinViewArray {
             builder.append_value(s);
         }
         let array = Array::from_arrow(&builder.finish(), false);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of nullable strings to VarBinViewArray")
     }
 
     pub fn from_iter_nullable_str<T: AsRef<str>, I: IntoIterator<Item = Option<T>>>(
@@ -212,7 +213,8 @@ impl VarBinViewArray {
         builder.extend(iter);
 
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of nullable strings to VarBinViewArray")
     }
 
     pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -222,7 +224,8 @@ impl VarBinViewArray {
             builder.append_value(b);
         }
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of bytes to VarBinViewArray")
     }
 
     pub fn from_iter_nullable_bin<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
@@ -232,7 +235,8 @@ impl VarBinViewArray {
         let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array)
+            .vortex_expect("Failed to convert iterator of nullable bytes to VarBinViewArray")
     }
 
     pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
@@ -277,17 +281,17 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
     let views = var_bin_view
         .views()
         .into_primitive()
-        .expect("views must be primitive");
+        .vortex_expect("Views must be a primitive array");
     assert_eq!(views.ptype(), PType::U8);
     let nulls = var_bin_view
         .logical_validity()
         .to_null_buffer()
-        .expect("null buffer");
+        .vortex_expect("Failed to convert logical validity to null buffer");
 
     let data = (0..var_bin_view.metadata().data_lens.len())
         .map(|i| var_bin_view.bytes(i).into_primitive())
         .collect::<VortexResult<Vec<_>>>()
-        .expect("bytes arrays must be primitive");
+        .vortex_expect("VarBinView byte arrays must be primitive arrays");
     if !data.is_empty() {
         assert_eq!(data[0].ptype(), PType::U8);
         assert!(data.iter().map(|d| d.ptype()).all_equal());
@@ -310,7 +314,7 @@ fn as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
             data,
             nulls,
         )),
-        _ => panic!("expected utf8 or binary, got {}", var_bin_view.dtype()),
+        _ => vortex_panic!("Expected utf8 or binary, got {}", var_bin_view.dtype()),
     }
 }
 

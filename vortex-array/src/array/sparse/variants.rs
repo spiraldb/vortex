@@ -1,4 +1,5 @@
 use vortex_dtype::DType;
+use vortex_error::VortexExpect;
 use vortex_scalar::StructScalar;
 
 use crate::array::sparse::SparseArray;
@@ -96,7 +97,7 @@ impl ExtensionArrayTrait for SparseArray {
             self.indices_offset(),
             self.fill_value().clone(),
         )
-        .expect("Failed to create new sparse array")
+        .vortex_expect("Failed to create new sparse array")
         .into_array()
     }
 }

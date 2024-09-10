@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, ExtDType, ExtID};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
@@ -28,13 +28,13 @@ impl ExtensionArray {
             [storage].into(),
             Default::default(),
         )
-        .expect("Invalid ExtensionArray")
+        .vortex_expect("Invalid ExtensionArray")
     }
 
     pub fn storage(&self) -> Array {
         self.array()
             .child(0, &self.metadata().storage_dtype, self.len())
-            .expect("Missing storage array")
+            .vortex_expect("Missing storage array for ExtensionArray")
     }
 
     #[allow(dead_code)]

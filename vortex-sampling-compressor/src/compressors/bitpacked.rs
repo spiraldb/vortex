@@ -30,7 +30,7 @@ impl EncodingCompressor for BitPackedCompressor {
             return None;
         }
 
-        let bit_width = find_best_bit_width(&parray)?;
+        let bit_width = find_best_bit_width(&parray).ok()?;
 
         // Check that the bit width is less than the type's bit width
         if bit_width == parray.ptype().bit_width() {
@@ -52,8 +52,7 @@ impl EncodingCompressor for BitPackedCompressor {
             .compute_bit_width_freq()
             .ok_or_else(|| vortex_err!(ComputeError: "missing bit width frequency"))?;
 
-        let bit_width = find_best_bit_width(&parray)
-            .ok_or_else(|| vortex_err!(ComputeError: "missing bit width frequency"))?;
+        let bit_width = find_best_bit_width(&parray)?;
         let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
         if bit_width == parray.ptype().bit_width() {

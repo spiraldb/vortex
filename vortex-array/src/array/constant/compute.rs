@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 
 use vortex_dtype::Nullability;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
@@ -104,7 +104,7 @@ impl MaybeCompareFn for ConstantArray {
                 .unwrap_or_default())
         .then(|| {
             let lhs = self.scalar();
-            let rhs = scalar_at(other, 0).unwrap_or_else(|_e| panic!("Expected scalar"));
+            let rhs = scalar_at(other, 0).vortex_expect("Expected scalar");
             let scalar = scalar_cmp(lhs, &rhs, operator);
             Ok(ConstantArray::new(scalar, self.len()).into_array())
         })
@@ -140,7 +140,7 @@ fn constant_array_bool_impl(
     fallback_fn: impl Fn(&Array, &Array) -> Option<VortexResult<Array>>,
 ) -> VortexResult<Array> {
     // If the right side is constant
-    if let Some(true) = other.statistics().get_as::<bool>(Stat::IsConstant) {
+    if other.statistics().get_as::<bool>(Stat::IsConstant) == Some(true) {
         let lhs = constant_array.scalar().value().as_bool()?;
         let rhs = scalar_at(other, 0)?.value().as_bool()?;
 

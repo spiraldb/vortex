@@ -250,7 +250,7 @@ impl flatbuffers::SimpleToVerifyInSlice for Type {}
 pub struct TypeUnionTableOffset {}
 
 pub enum NullOffset {}
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 
 pub struct Null<'a> {
   pub _tab: flatbuffers::Table<'a>,
@@ -329,7 +329,7 @@ impl core::fmt::Debug for Null<'_> {
   }
 }
 pub enum BoolOffset {}
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 
 pub struct Bool<'a> {
   pub _tab: flatbuffers::Table<'a>,
@@ -540,7 +540,7 @@ impl core::fmt::Debug for Primitive<'_> {
   }
 }
 pub enum DecimalOffset {}
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 
 pub struct Decimal<'a> {
   pub _tab: flatbuffers::Table<'a>,
@@ -673,7 +673,7 @@ impl core::fmt::Debug for Decimal<'_> {
   }
 }
 pub enum Utf8Offset {}
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 
 pub struct Utf8<'a> {
   pub _tab: flatbuffers::Table<'a>,
@@ -770,7 +770,7 @@ impl core::fmt::Debug for Utf8<'_> {
   }
 }
 pub enum BinaryOffset {}
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 
 pub struct Binary<'a> {
   pub _tab: flatbuffers::Table<'a>,

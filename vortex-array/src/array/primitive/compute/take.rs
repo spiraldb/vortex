@@ -1,6 +1,6 @@
 use num_traits::PrimInt;
 use vortex_dtype::{match_each_integer_ptype, match_each_native_ptype, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::TakeFn;
@@ -26,7 +26,7 @@ fn take_primitive<T: NativePType, I: NativePType + PrimInt>(array: &[T], indices
         .iter()
         .map(|&idx| {
             array[idx.to_usize().unwrap_or_else(|| {
-                panic!("Failed to convert index to usize: {}", idx);
+                vortex_panic!("Failed to convert index to usize: {}", idx);
             })]
         })
         .collect()

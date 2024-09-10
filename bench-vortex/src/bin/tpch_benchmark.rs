@@ -1,5 +1,3 @@
-#![allow(clippy::use_debug)]
-
 use std::collections::HashMap;
 use std::process::ExitCode;
 use std::sync;

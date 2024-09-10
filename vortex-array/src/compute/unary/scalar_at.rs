@@ -1,4 +1,4 @@
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::{Array, ArrayDType};
@@ -29,6 +29,5 @@ pub fn scalar_at(array: &Array, index: usize) -> VortexResult<Scalar> {
 pub fn scalar_at_unchecked(array: &Array, index: usize) -> Scalar {
     array
         .with_dyn(|a| a.scalar_at().map(|s| s.scalar_at_unchecked(index)))
-        .ok_or_else(|| vortex_err!(NotImplemented: "scalar_at", array.encoding().id()))
-        .unwrap()
+        .unwrap_or_else(|| vortex_panic!(NotImplemented: "scalar_at", array.encoding().id()))
 }

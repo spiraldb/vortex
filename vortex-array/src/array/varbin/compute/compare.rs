@@ -29,9 +29,9 @@ fn compare_constant(
     rhs: &ConstantArray,
     operator: Operator,
 ) -> VortexResult<Array> {
-    let arrow_lhs = lhs.clone().into_canonical()?.into_arrow();
+    let arrow_lhs = lhs.clone().into_canonical()?.into_arrow()?;
     let constant = rhs.slice(0, 1)?.clone();
-    let arrow_rhs = constant.into_canonical()?.into_arrow();
+    let arrow_rhs = constant.into_canonical()?.into_arrow()?;
 
     match arrow_lhs.data_type() {
         DataType::Binary => {

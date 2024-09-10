@@ -11,7 +11,7 @@ use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 mod compute;
 mod stats;
@@ -64,7 +64,9 @@ impl ByteBoolArray {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer().expect("missing mandatory buffer")
+        self.array()
+            .buffer()
+            .vortex_expect("ByteBoolArray is missing the underlying buffer")
     }
 
     fn maybe_null_slice(&self) -> &[bool] {
@@ -93,7 +95,8 @@ impl BoolArrayTrait for ByteBoolArray {
 
 impl From<Vec<bool>> for ByteBoolArray {
     fn from(value: Vec<bool>) -> Self {
-        Self::try_from_vec(value, Validity::AllValid).unwrap()
+        Self::try_from_vec(value, Validity::AllValid)
+            .vortex_expect("Failed to create ByteBoolArray from Vec<bool>")
     }
 }
 
@@ -102,9 +105,13 @@ impl From<Vec<Option<bool>>> for ByteBoolArray {
         let validity = Validity::from_iter(value.iter());
 
         // This doesn't reallocate, and the compiler even vectorizes it
-        let data = value.into_iter().map(|b| b.unwrap_or_default()).collect();
+        let data = value
+            .into_iter()
+            .map(std::option::Option::unwrap_or_default)
+            .collect();
 
-        Self::try_from_vec(data, validity).unwrap()
+        Self::try_from_vec(data, validity)
+            .vortex_expect("Failed to create ByteBoolArray from nullable bools")
     }
 }
 

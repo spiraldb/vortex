@@ -2,6 +2,7 @@ use core::fmt;
 use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
+use vortex_error::vortex_panic;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -58,7 +59,7 @@ impl FieldPath {
         assert_eq!(self.0.len(), 1);
         match &self.0[0] {
             Field::Name(name) => name.as_str(),
-            _ => panic!("FieldPath is not a name"),
+            _ => vortex_panic!("FieldPath is not a name: {}", self),
         }
     }
 }

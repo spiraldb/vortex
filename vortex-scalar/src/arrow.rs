@@ -3,29 +3,29 @@ use std::sync::Arc;
 use arrow_array::*;
 use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, PType};
+use vortex_error::{vortex_bail, VortexError};
 
 use crate::{PValue, Scalar};
 
 macro_rules! value_to_arrow_scalar {
     ($V:expr, $AR:ty) => {
-        std::sync::Arc::new(
+        Ok(std::sync::Arc::new(
             $V.map(<$AR>::new_scalar)
                 .unwrap_or_else(|| arrow_array::Scalar::new(<$AR>::new_null(1))),
-        )
+        ))
     };
 }
 
-impl From<&Scalar> for Arc<dyn Datum> {
-    fn from(value: &Scalar) -> Arc<dyn Datum> {
+impl TryFrom<&Scalar> for Arc<dyn Datum> {
+    type Error = VortexError;
+
+    fn try_from(value: &Scalar) -> Result<Arc<dyn Datum>, Self::Error> {
         match value.dtype() {
-            DType::Null => Arc::new(NullArray::new(1)),
-            DType::Bool(_) => value_to_arrow_scalar!(
-                value.value.as_bool().expect("should be a bool"),
-                BooleanArray
-            ),
+            DType::Null => Ok(Arc::new(NullArray::new(1))),
+            DType::Bool(_) => value_to_arrow_scalar!(value.value.as_bool()?, BooleanArray),
             DType::Primitive(ptype, _) => {
-                let pvalue = value.value.as_pvalue().expect("should be pvalue");
-                match pvalue {
+                let pvalue = value.value.as_pvalue()?;
+                Ok(match pvalue {
                     None => match ptype {
                         PType::U8 => Arc::new(UInt8Array::new_null(1)),
                         PType::U16 => Arc::new(UInt16Array::new_null(1)),
@@ -52,22 +52,13 @@ impl From<&Scalar> for Arc<dyn Datum> {
                         PValue::F32(v) => Arc::new(Float32Array::new_scalar(v)),
                         PValue::F64(v) => Arc::new(Float64Array::new_scalar(v)),
                     },
-                }
+                })
             }
             DType::Utf8(_) => {
-                value_to_arrow_scalar!(
-                    value
-                        .value
-                        .as_buffer_string()
-                        .expect("should be buffer string"),
-                    StringArray
-                )
+                value_to_arrow_scalar!(value.value.as_buffer_string()?, StringArray)
             }
             DType::Binary(_) => {
-                value_to_arrow_scalar!(
-                    value.value.as_buffer().expect("should be a buffer"),
-                    BinaryArray
-                )
+                value_to_arrow_scalar!(value.value.as_buffer()?, BinaryArray)
             }
             DType::Struct(..) => {
                 todo!("struct scalar conversion")
@@ -77,8 +68,8 @@ impl From<&Scalar> for Arc<dyn Datum> {
             }
             DType::Extension(ext, _) => {
                 if is_temporal_ext_type(ext.id()) {
-                    let metadata = TemporalMetadata::try_from(ext).unwrap();
-                    let pv = value.value.as_pvalue().expect("must be a pvalue");
+                    let metadata = TemporalMetadata::try_from(ext)?;
+                    let pv = value.value.as_pvalue()?;
                     return match metadata {
                         TemporalMetadata::Time(u) => match u {
                             TimeUnit::Ns => value_to_arrow_scalar!(
@@ -98,7 +89,7 @@ impl From<&Scalar> for Arc<dyn Datum> {
                                 Time32SecondArray
                             ),
                             TimeUnit::D => {
-                                unreachable!("Unsupported TimeUnit {u} for {}", ext.id())
+                                vortex_bail!("Unsupported TimeUnit {u} for {}", ext.id())
                             }
                         },
                         TemporalMetadata::Date(u) => match u {
@@ -108,7 +99,7 @@ impl From<&Scalar> for Arc<dyn Datum> {
                             TimeUnit::D => {
                                 value_to_arrow_scalar!(pv.and_then(|p| p.as_i32()), Date32Array)
                             }
-                            _ => unreachable!("Unsupported TimeUnit {u} for {}", ext.id()),
+                            _ => vortex_bail!("Unsupported TimeUnit {u} for {}", ext.id()),
                         },
                         TemporalMetadata::Timestamp(u, _) => match u {
                             TimeUnit::Ns => value_to_arrow_scalar!(
@@ -128,7 +119,7 @@ impl From<&Scalar> for Arc<dyn Datum> {
                                 TimestampSecondArray
                             ),
                             TimeUnit::D => {
-                                unreachable!("Unsupported TimeUnit {u} for {}", ext.id())
+                                vortex_bail!("Unsupported TimeUnit {u} for {}", ext.id())
                             }
                         },
                     };

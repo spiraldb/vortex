@@ -4,7 +4,7 @@ use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -27,7 +27,9 @@ pub struct BoolMetadata {
 
 impl BoolArray {
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer().expect("missing buffer")
+        self.array()
+            .buffer()
+            .vortex_expect("Missing buffer in BoolArray")
     }
 
     pub fn boolean_buffer(&self) -> BooleanBuffer {
@@ -72,8 +74,7 @@ impl BoolArray {
 
     pub fn from_vec(bools: Vec<bool>, validity: Validity) -> Self {
         let buffer = BooleanBuffer::from(bools);
-        Self::try_new(buffer, validity)
-            .unwrap_or_else(|err| panic!("Failed to create BoolArray from vec: {}", err))
+        Self::try_new(buffer, validity).vortex_expect("Failed to create BoolArray from vec")
     }
 }
 
@@ -98,7 +99,7 @@ impl BoolArrayTrait for BoolArray {
 impl From<BooleanBuffer> for BoolArray {
     fn from(value: BooleanBuffer) -> Self {
         Self::try_new(value, Validity::NonNullable)
-            .unwrap_or_else(|err| panic!("Failed to create BoolArray from BooleanBuffer: {}", err))
+            .vortex_expect("Failed to create BoolArray from BooleanBuffer")
     }
 }
 
@@ -121,12 +122,8 @@ impl FromIterator<Option<bool>> for BoolArray {
             })
             .collect::<Vec<_>>();
 
-        Self::try_new(BooleanBuffer::from(values), Validity::from(validity)).unwrap_or_else(|err| {
-            panic!(
-                "Failed to create BoolArray from iterator of Option<bool>: {}",
-                err
-            )
-        })
+        Self::try_new(BooleanBuffer::from(values), Validity::from(validity))
+            .vortex_expect("Failed to create BoolArray from iterator of Option<bool>")
     }
 }
 

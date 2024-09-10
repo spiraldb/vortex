@@ -1,5 +1,5 @@
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
@@ -51,7 +51,12 @@ impl ScalarAtFn for ChunkedArray {
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
-        scalar_at_unchecked(&self.chunk(chunk_index).unwrap(), chunk_offset)
+        scalar_at_unchecked(
+            &self
+                .chunk(chunk_index)
+                .unwrap_or_else(|| vortex_panic!(OutOfBounds: chunk_index, 0, self.nchunks())),
+            chunk_offset,
+        )
     }
 }
 
