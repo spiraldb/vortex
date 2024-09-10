@@ -21,8 +21,6 @@ dev-dependencies = [
     "ipython>=8.26.0",
     "pandas>=2.2.2",
     "pip",
-    "pydata-sphinx-theme>=0.15.4",
-    "sphinx>=8.0.2",
 ]
 
 [tool.maturin]

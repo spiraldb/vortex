@@ -19,11 +19,10 @@ jobs:
       - uses: ./.github/actions/setup-python
 
       - name: build Python docs
-        working-directory: pyvortex
         run: |
           set -ex
 
-          rye run maturin develop
+          (cd pyvortex && rye run maturin develop)
 
           cd docs
           rye run sphinx-build -M html . _build --fail-on-warning --keep-going
@@ -31,9 +30,9 @@ jobs:
         run: |
           set -ex
 
-          this_sha=$(git rev-parse HEAD)
+          built_sha=$(git rev-parse HEAD)
 
-          mv pyvortex/docs/_build/html /tmp/html
+          mv docs/_build/html /tmp/html
 
           git fetch origin
           git checkout origin/gh-pages-bench
@@ -45,8 +44,8 @@ jobs:
 
           # Only try to commit if there exist changes
           git diff --quiet HEAD || {
-              git commit -m 'Python docs for '$this_sha
+              git commit -m 'Python docs for '$built_sha
               git push origin HEAD:gh-pages-bench
           }
 
-          git checkout 'HEAD@{2}'
+          git checkout $built_sha
