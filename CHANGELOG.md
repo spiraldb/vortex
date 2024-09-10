@@ -6,6 +6,66 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-serde` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.8.0...vortex-serde-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- overload the name 'Footer' a bit less ([#773](https://github.com/spiraldb/vortex/pull/773))
+
+## `vortex-expr` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-expr-v0.8.0...vortex-expr-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-scalar` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-scalar-v0.8.0...vortex-scalar-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Fuzzer performs multiple operations on the underlying array instead of just one ([#766](https://github.com/spiraldb/vortex/pull/766))
+
+## `vortex-flatbuffers` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-flatbuffers-v0.8.0...vortex-flatbuffers-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-error` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-error-v0.8.0...vortex-error-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-dtype` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-dtype-v0.8.0...vortex-dtype-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-datetime-dtype` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-dtype-v0.8.0...vortex-datetime-dtype-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-array` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-array-v0.8.0...vortex-array-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Fix SearchSorted for SparseArray when searching from Right ([#770](https://github.com/spiraldb/vortex/pull/770))
+- Fix StructArray::filter length calculation ([#769](https://github.com/spiraldb/vortex/pull/769))
+- Fuzzer performs multiple operations on the underlying array instead of just one ([#766](https://github.com/spiraldb/vortex/pull/766))
+- Filter struct arrays ([#767](https://github.com/spiraldb/vortex/pull/767))
+- Fix unary/binary fn on `PrimitiveArray` ([#764](https://github.com/spiraldb/vortex/pull/764))
+- Fix benchmarks ([#762](https://github.com/spiraldb/vortex/pull/762))
+- Better implementation for `Validity::and` ([#758](https://github.com/spiraldb/vortex/pull/758))
+
+## `vortex-alp` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.8.0...vortex-alp-v0.9.0) - 2024-09-10
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
 ## `vortex-runend-bool` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.7.0...vortex-runend-bool-v0.8.0) - 2024-09-05
 
 ### Other
