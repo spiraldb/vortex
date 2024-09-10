@@ -48,7 +48,6 @@ impl MaybeCompareFn for ExtensionArray {
             });
         }
 
-        // FIXME(ngates): this is not necessarily true, any other encoding could be an extension
         if let Ok(rhs_ext) = ExtensionArray::try_from(array) {
             return Some(compare(&self.storage(), &rhs_ext.storage(), operator));
         }
