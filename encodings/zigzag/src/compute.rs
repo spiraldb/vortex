@@ -2,7 +2,7 @@ use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, ArrayCompute, SliceFn};
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::match_each_unsigned_integer_ptype;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_err, VortexResult, VortexUnwrap as _};
 use vortex_scalar::{PrimitiveScalar, Scalar};
 use zigzag::{ZigZag as ExternalZigZag, ZigZag};
 
@@ -30,7 +30,8 @@ impl ScalarAtFn for ZigZagArray {
             Ok(Scalar::primitive(
                 <<$P as ZigZagEncoded>::Int>::decode(pscalar.typed_value::<$P>().ok_or_else(|| {
                     vortex_err!(
-                        "Cannot decode provided scalar: expected u8, got ptype {}",
+                        "Cannot decode provided scalar: expected {}, got ptype {}",
+                        std::any::type_name::<$P>(),
                         pscalar.ptype()
                     )
                 })?),
@@ -40,7 +41,7 @@ impl ScalarAtFn for ZigZagArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
+        <Self as ScalarAtFn>::scalar_at(self, index).vortex_unwrap()
     }
 }
 

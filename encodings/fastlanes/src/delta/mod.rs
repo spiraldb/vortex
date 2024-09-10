@@ -8,7 +8,7 @@ use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
 use vortex_dtype::match_each_unsigned_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 mod compress;
 mod compute;
@@ -61,19 +61,25 @@ impl DeltaArray {
     pub fn bases(&self) -> Array {
         self.array()
             .child(0, self.dtype(), self.bases_len())
-            .expect("Missing bases")
+            .vortex_expect("DeltaArray is missing bases child array")
     }
 
     #[inline]
     pub fn deltas(&self) -> Array {
         self.array()
             .child(1, self.dtype(), self.len())
-            .expect("Missing deltas")
+            .vortex_expect("DeltaArray is missing deltas child array")
     }
 
     #[inline]
     fn lanes(&self) -> usize {
-        let ptype = self.dtype().try_into().unwrap();
+        let ptype = self.dtype().try_into().unwrap_or_else(|err| {
+            vortex_panic!(
+                err,
+                "Failed to convert DeltaArray DType {} to PType",
+                self.dtype()
+            )
+        });
         match_each_unsigned_integer_ptype!(ptype, |$T| {
             <$T as fastlanes::FastLanes>::LANES
         })

@@ -64,7 +64,8 @@ impl EncodingCompressor for FSSTCompressor {
 
         let compressor = like
             .and_then(|mut tree| tree.metadata())
-            .unwrap_or_else(|| Arc::new(fsst_train_compressor(array)));
+            .map(VortexResult::Ok)
+            .unwrap_or_else(|| Ok(Arc::new(fsst_train_compressor(array)?)))?;
 
         let Some(fsst_compressor) = compressor.as_any().downcast_ref::<Compressor>() else {
             vortex_bail!("Could not downcast metadata as FSST Compressor")
@@ -73,11 +74,11 @@ impl EncodingCompressor for FSSTCompressor {
         let result_array =
             if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
                 // For a VarBinArray or VarBinViewArray, compress directly.
-                fsst_compress(array, fsst_compressor).into_array()
+                fsst_compress(array, fsst_compressor)?.into_array()
             } else {
                 vortex_bail!(
-                InvalidArgument: "unsupported encoding for FSSTCompressor {:?}",
-                array.encoding().id()
+                    "Unsupported encoding for FSSTCompressor: {}",
+                    array.encoding().id()
                 )
             };
 

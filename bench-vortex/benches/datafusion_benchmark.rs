@@ -1,5 +1,3 @@
-#![allow(clippy::use_debug)]
-
 use std::collections::HashSet;
 use std::sync::Arc;
 
@@ -83,7 +81,7 @@ fn toy_dataset_arrow() -> RecordBatch {
 }
 
 fn toy_dataset_vortex(compress: bool) -> Array {
-    let uncompressed = toy_dataset_arrow().into();
+    let uncompressed = toy_dataset_arrow().try_into().unwrap();
 
     if !compress {
         return uncompressed;

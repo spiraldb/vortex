@@ -19,6 +19,7 @@ use arrow_schema::{DataType, TimeUnit as ArrowTimeUnit};
 use itertools::Itertools;
 use vortex_datetime_dtype::TimeUnit;
 use vortex_dtype::{DType, NativePType, PType};
+use vortex_error::{vortex_panic, VortexExpect as _};
 
 use crate::array::{
     BoolArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray, VarBinViewArray,
@@ -37,7 +38,7 @@ impl From<Buffer> for ArrayData {
 impl From<NullBuffer> for ArrayData {
     fn from(value: NullBuffer) -> Self {
         BoolArray::try_new(value.into_inner(), Validity::NonNullable)
-            .unwrap()
+            .vortex_expect("Failed to convert null buffer to BoolArray")
             .to_array_data()
     }
 }
@@ -99,7 +100,7 @@ where
             DataType::Date64 => TemporalArray::new_date(arr.into(), TimeUnit::Ms).into(),
             DataType::Duration(_) => unimplemented!(),
             DataType::Interval(_) => unimplemented!(),
-            _ => panic!("Invalid data type for PrimitiveArray"),
+            _ => vortex_panic!("Invalid data type for PrimitiveArray: {}", T::DATA_TYPE),
         }
     }
 }
@@ -112,7 +113,7 @@ where
         let dtype = match T::DATA_TYPE {
             DataType::Binary | DataType::LargeBinary => DType::Binary(nullable.into()),
             DataType::Utf8 | DataType::LargeUtf8 => DType::Utf8(nullable.into()),
-            _ => panic!("Invalid data type for ByteArray"),
+            _ => vortex_panic!("Invalid data type for ByteArray: {}", T::DATA_TYPE),
         };
         VarBinArray::try_new(
             ArrayData::from(value.offsets().clone()).into(),
@@ -120,7 +121,7 @@ where
             dtype,
             nulls(value.nulls(), nullable),
         )
-        .unwrap()
+        .vortex_expect("Failed to convert Arrow GenericByteArray to Vortex VarBinArray")
         .into()
     }
 }
@@ -130,7 +131,7 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
         let dtype = match T::DATA_TYPE {
             DataType::BinaryView => DType::Binary(nullable.into()),
             DataType::Utf8View => DType::Utf8(nullable.into()),
-            _ => panic!("Invalid data type for ByteViewArray"),
+            _ => vortex_panic!("Invalid data type for ByteViewArray: {}", T::DATA_TYPE),
         };
         VarBinViewArray::try_new(
             ArrayData::from(value.views().inner().clone()).into(),
@@ -142,7 +143,7 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
             dtype,
             nulls(value.nulls(), nullable),
         )
-        .unwrap()
+        .vortex_expect("Failed to convert Arrow GenericByteViewArray to Vortex VarBinViewArray")
         .into()
     }
 }
@@ -150,7 +151,7 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
 impl FromArrowArray<&ArrowBooleanArray> for Array {
     fn from_arrow(value: &ArrowBooleanArray, nullable: bool) -> Self {
         BoolArray::try_new(value.values().clone(), nulls(value.nulls(), nullable))
-            .unwrap()
+            .vortex_expect("Failed to convert Arrow BooleanArray to Vortex BoolArray")
             .into()
     }
 }
@@ -173,7 +174,7 @@ impl FromArrowArray<&ArrowStructArray> for Array {
             value.len(),
             nulls(value.nulls(), nullable),
         )
-        .unwrap()
+        .vortex_expect("Failed to convert Arrow StructArray to Vortex StructArray")
         .into()
     }
 }
@@ -222,11 +223,17 @@ impl FromArrowArray<ArrowArrayRef> for Array {
             DataType::Binary => Self::from_arrow(array.as_binary::<i32>(), nullable),
             DataType::LargeBinary => Self::from_arrow(array.as_binary::<i64>(), nullable),
             DataType::BinaryView => Self::from_arrow(
-                array.as_any().downcast_ref::<BinaryViewArray>().unwrap(),
+                array
+                    .as_any()
+                    .downcast_ref::<BinaryViewArray>()
+                    .vortex_expect("Expected Arrow BinaryViewArray for DataType::BinaryView"),
                 nullable,
             ),
             DataType::Utf8View => Self::from_arrow(
-                array.as_any().downcast_ref::<StringViewArray>().unwrap(),
+                array
+                    .as_any()
+                    .downcast_ref::<StringViewArray>()
+                    .vortex_expect("Expected Arrow StringViewArray for DataType::Utf8View"),
                 nullable,
             ),
             DataType::Struct(_) => Self::from_arrow(array.as_struct(), nullable),
@@ -279,8 +286,8 @@ impl FromArrowArray<ArrowArrayRef> for Array {
                     Self::from_arrow(array.as_primitive::<DurationNanosecondType>(), nullable)
                 }
             },
-            _ => panic!(
-                "TODO(robert): Missing array encoding for dtype {}",
+            _ => vortex_panic!(
+                "Array encoding not implementedfor Arrow data type {}",
                 array.data_type().clone()
             ),
         }

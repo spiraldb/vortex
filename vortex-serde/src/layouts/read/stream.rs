@@ -13,7 +13,7 @@ use vortex::compute::{filter, search_sorted, slice, take, SearchSortedSide};
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType};
-use vortex_error::{vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::io::VortexReadAt;
@@ -103,8 +103,8 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     if let Some(read) = self.layout.read()? {
                         match read {
                             ReadResult::GetMsgs(messages) => {
-                                let reader =
-                                    mem::take(&mut self.reader).expect("Invalid state transition");
+                                let reader = mem::take(&mut self.reader)
+                                    .ok_or_else(|| vortex_err!("Invalid state transition"))?;
                                 let read_future = read_ranges(reader, messages).boxed();
                                 self.state = StreamingState::Reading(read_future);
                             }
@@ -138,7 +138,10 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
                     Ok((read, buffers)) => {
-                        let mut write_cache = self.messages_cache.write().unwrap();
+                        let mut write_cache =
+                            self.messages_cache.write().unwrap_or_else(|poison| {
+                                vortex_panic!("Failed to write to message cache: {poison}")
+                            });
                         for (id, buf) in buffers {
                             write_cache.set(id, buf)
                         }

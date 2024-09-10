@@ -36,8 +36,7 @@ async fn main() -> anyhow::Result<()> {
         vec![strings, numbers],
         8,
         Validity::NonNullable,
-    )
-    .unwrap();
+    )?;
 
     let filepath = temp_dir.path().join("a.vtx");
 
@@ -74,7 +73,7 @@ async fn main() -> anyhow::Result<()> {
     let ctx = SessionContext::new();
     ctx.register_table("vortex_tbl", Arc::clone(&provider) as _)?;
 
-    let url = Url::try_from("file://").unwrap();
+    let url = Url::try_from("file://")?;
     ctx.register_object_store(&url, object_store);
 
     run_query(&ctx, "SELECT * FROM vortex_tbl").await?;

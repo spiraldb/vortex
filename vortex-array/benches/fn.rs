@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use arrow_array::types::UInt32Type;
 use arrow_array::UInt32Array;
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};

@@ -2,7 +2,7 @@ use std::sync::{Arc, OnceLock};
 
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexResult};
 
 use crate::stats::StatsSet;
 use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserializeArrayMetadata};
@@ -44,7 +44,7 @@ impl<D: ArrayDef> TypedArray<D> {
                 .as_any()
                 .downcast_ref::<D::Metadata>()
                 .unwrap_or_else(|| {
-                    panic!(
+                    vortex_panic!(
                         "Failed to downcast metadata to {} for typed array with ID {} and encoding {}",
                         std::any::type_name::<D::Metadata>(),
                         D::ID.as_ref(),
@@ -55,7 +55,7 @@ impl<D: ArrayDef> TypedArray<D> {
                 .lazy_metadata
                 .get_or_init(|| {
                     D::Metadata::try_deserialize_metadata(v.metadata()).unwrap_or_else(|err| {
-                        panic!(
+                        vortex_panic!(
                             "Failed to deserialize ArrayView metadata for typed array with ID {} and encoding {}: {}", 
                             D::ID.as_ref(),
                             D::ENCODING.id().as_ref(),

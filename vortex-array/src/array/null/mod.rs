@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
@@ -28,7 +28,7 @@ impl NullArray {
             Arc::new([]),
             StatsSet::nulls(len, &DType::Null),
         )
-        .expect("NullArray::new cannot fail")
+        .vortex_expect("NullArray::new should never fail!")
     }
 }
 

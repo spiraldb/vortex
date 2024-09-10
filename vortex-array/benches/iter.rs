@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use itertools::Itertools;
 use vortex::array::PrimitiveArray;

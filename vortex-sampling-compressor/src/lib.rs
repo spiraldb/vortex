@@ -88,7 +88,7 @@ impl Display for SamplingCompressor<'_> {
 impl CompressionStrategy for SamplingCompressor<'_> {
     #[allow(clippy::same_name_method)]
     fn compress(&self, array: &Array) -> VortexResult<Array> {
-        Self::compress(self, array, None).map(|c| c.into_array())
+        Self::compress(self, array, None).map(compressors::CompressedArray::into_array)
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
@@ -203,7 +203,10 @@ impl<'a> SamplingCompressor<'a> {
                 let chunked = ChunkedArray::try_from(arr)?;
                 let compressed_chunks = chunked
                     .chunks()
-                    .map(|chunk| self.compress_array(&chunk).map(|a| a.into_array()))
+                    .map(|chunk| {
+                        self.compress_array(&chunk)
+                            .map(compressors::CompressedArray::into_array)
+                    })
                     .collect::<VortexResult<Vec<_>>>()?;
                 Ok(CompressedArray::uncompressed(
                     ChunkedArray::try_new(compressed_chunks, chunked.dtype().clone())?.into_array(),
@@ -218,7 +221,10 @@ impl<'a> SamplingCompressor<'a> {
                 let strct = StructArray::try_from(arr)?;
                 let compressed_fields = strct
                     .children()
-                    .map(|field| self.compress_array(&field).map(|a| a.into_array()))
+                    .map(|field| {
+                        self.compress_array(&field)
+                            .map(compressors::CompressedArray::into_array)
+                    })
                     .collect::<VortexResult<Vec<_>>>()?;
                 let validity = self.compress_validity(strct.validity())?;
                 Ok(CompressedArray::uncompressed(

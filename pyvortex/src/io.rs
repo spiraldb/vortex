@@ -9,7 +9,7 @@ use tokio::fs::File;
 use vortex::array::ChunkedArray;
 use vortex::{Array, Context};
 use vortex_dtype::field::Field;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 use vortex_serde::layouts::{
     LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
 };
@@ -157,7 +157,11 @@ pub fn read<'py>(
         let vecs: Vec<Array> = stream.try_collect().await?;
 
         if vecs.len() == 1 {
-            Ok(vecs.into_iter().next().unwrap())
+            vecs.into_iter().next().ok_or_else(|| {
+                vortex_panic!(
+                    "Should be impossible: vecs.len() == 1 but couldn't get first element"
+                )
+            })
         } else {
             ChunkedArray::try_new(vecs, dtype).map(|e| e.into())
         }

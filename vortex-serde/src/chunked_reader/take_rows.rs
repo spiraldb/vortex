@@ -11,7 +11,7 @@ use vortex::stats::ArrayStatistics;
 use vortex::stream::{ArrayStream, ArrayStreamExt};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::chunked_reader::ChunkedArrayReader;
@@ -54,24 +54,30 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         // Coalesce the chunks that we're going to read from.
         let coalesced_chunks = self.coalesce_chunks(chunk_idxs.as_ref());
 
+        let mut start_chunks: Vec<u32> = Vec::with_capacity(coalesced_chunks.len());
+        let mut stop_chunks: Vec<u32> = Vec::with_capacity(coalesced_chunks.len());
+        for (i, chunks) in coalesced_chunks.iter().enumerate() {
+            start_chunks.push(
+                chunks
+                    .first()
+                    .ok_or_else(|| vortex_err!("Coalesced chunk {i} cannot be empty"))?
+                    .chunk_idx,
+            );
+            stop_chunks.push(
+                chunks
+                    .last()
+                    .ok_or_else(|| vortex_err!("Coalesced chunk {i} cannot be empty"))?
+                    .chunk_idx
+                    + 1,
+            );
+        }
+
         // Grab the row and byte offsets for each chunk range.
-        let start_chunks = PrimitiveArray::from(
-            coalesced_chunks
-                .iter()
-                .map(|chunks| chunks[0].chunk_idx)
-                .collect_vec(),
-        )
-        .into_array();
+        let start_chunks = PrimitiveArray::from(start_chunks).into_array();
         let start_rows = take(&self.row_offsets, &start_chunks)?.into_primitive()?;
         let start_bytes = take(&self.byte_offsets, &start_chunks)?.into_primitive()?;
 
-        let stop_chunks = PrimitiveArray::from(
-            coalesced_chunks
-                .iter()
-                .map(|chunks| chunks.last().unwrap().chunk_idx + 1)
-                .collect_vec(),
-        )
-        .into_array();
+        let stop_chunks = PrimitiveArray::from(stop_chunks).into_array();
         let stop_rows = take(&self.row_offsets, &stop_chunks)?.into_primitive()?;
         let stop_bytes = take(&self.byte_offsets, &stop_chunks)?.into_primitive()?;
 
@@ -106,7 +112,6 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         let _hint = self.read.performance_hint();
         chunk_idxs
             .iter()
-            .cloned()
             .map(|chunk_idx| vec![chunk_idx.clone()])
             .collect_vec()
     }
@@ -186,7 +191,7 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
     Ok(chunks
         .keys()
         .sorted()
-        .map(|k| chunks.get(k).unwrap())
+        .map(|k| &chunks[k])
         .cloned()
         .collect_vec())
 }

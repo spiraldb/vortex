@@ -101,7 +101,7 @@ impl SearchSortedFn for ConstantArray {
 
 impl CompareFn for ConstantArray {
     fn compare(&self, rhs: &Array, operator: Operator) -> VortexResult<Array> {
-        if let Some(true) = rhs.statistics().get_as::<bool>(Stat::IsConstant) {
+        if rhs.statistics().get_as::<bool>(Stat::IsConstant) == Some(true) {
             let lhs = self.scalar();
             let rhs = scalar_at(rhs, 0)?;
 
@@ -109,8 +109,8 @@ impl CompareFn for ConstantArray {
 
             Ok(ConstantArray::new(scalar, self.len()).into_array())
         } else {
-            let datum = Arc::<dyn Datum>::from(self.scalar());
-            let rhs = rhs.clone().into_canonical()?.into_arrow();
+            let datum = Arc::<dyn Datum>::try_from(self.scalar())?;
+            let rhs = rhs.clone().into_canonical()?.into_arrow()?;
             let rhs = rhs.as_ref();
 
             let boolean_array = match operator {
@@ -156,7 +156,7 @@ fn constant_array_bool_impl(
     fallback_fn: impl Fn(&Array, &Array) -> Option<VortexResult<Array>>,
 ) -> VortexResult<Array> {
     // If the right side is constant
-    if let Some(true) = other.statistics().get_as::<bool>(Stat::IsConstant) {
+    if other.statistics().get_as::<bool>(Stat::IsConstant) == Some(true) {
         let lhs = constant_array.scalar().value().as_bool()?;
         let rhs = scalar_at(other, 0)?.value().as_bool()?;
 

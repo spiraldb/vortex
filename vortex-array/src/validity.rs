@@ -3,13 +3,15 @@ use std::ops::BitAnd;
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{
+    vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
+};
 
 use crate::array::BoolArray;
 use crate::compute::unary::scalar_at_unchecked;
 use crate::compute::{filter, slice, take};
 use crate::stats::ArrayStatistics;
-use crate::{Array, IntoArray, IntoArrayVariant};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 pub trait ArrayValidity {
     fn is_valid(&self, index: usize) -> bool;
@@ -31,7 +33,7 @@ impl ValidityMetadata {
             Self::AllValid => Validity::AllValid,
             Self::AllInvalid => Validity::AllInvalid,
             Self::Array => match array {
-                None => panic!("Missing validity array"),
+                None => vortex_panic!("Missing validity array"),
                 Some(a) => Validity::Array(a),
             },
         }
@@ -95,7 +97,15 @@ impl Validity {
         match self {
             Self::NonNullable | Self::AllValid => true,
             Self::AllInvalid => false,
-            Self::Array(a) => bool::try_from(&scalar_at_unchecked(a, index)).unwrap(),
+            Self::Array(a) => {
+                bool::try_from(&scalar_at_unchecked(a, index)).unwrap_or_else(|err| {
+                    vortex_panic!(
+                        err,
+                        "Failed to get bool from Validity Array at index {}",
+                        index
+                    )
+                })
+            }
         }
     }
 
@@ -199,8 +209,17 @@ impl PartialEq for Validity {
             (Self::AllValid, Self::AllValid) => true,
             (Self::AllInvalid, Self::AllInvalid) => true,
             (Self::Array(a), Self::Array(b)) => {
-                a.clone().into_bool().unwrap().boolean_buffer()
-                    == b.clone().into_bool().unwrap().boolean_buffer()
+                let a_buffer = a
+                    .clone()
+                    .into_bool()
+                    .vortex_expect("Failed to get Validity Array as BoolArray")
+                    .boolean_buffer();
+                let b_buffer = b
+                    .clone()
+                    .into_bool()
+                    .vortex_expect("Failed to get Validity Array as BoolArray")
+                    .boolean_buffer();
+                a_buffer == b_buffer
             }
             _ => false,
         }
@@ -259,7 +278,7 @@ impl FromIterator<LogicalValidity> for Validity {
                 LogicalValidity::Array(array) => {
                     let array_buffer = array
                         .into_bool()
-                        .expect("validity must flatten to BoolArray")
+                        .vortex_expect("Failed to get Validity Array as BoolArray")
                         .boolean_buffer();
                     buffer.append_buffer(&array_buffer);
                 }
@@ -285,6 +304,24 @@ pub enum LogicalValidity {
 }
 
 impl LogicalValidity {
+    pub fn try_new_from_array(array: Array) -> VortexResult<Self> {
+        if !matches!(array.dtype(), &Validity::DTYPE) {
+            vortex_bail!("Expected a non-nullable boolean array");
+        }
+
+        let true_count = array
+            .statistics()
+            .compute_true_count()
+            .ok_or_else(|| vortex_err!("Failed to compute true count from validity array"))?;
+        if true_count == array.len() {
+            return Ok(Self::AllValid(array.len()));
+        } else if true_count == 0 {
+            return Ok(Self::AllInvalid(array.len()));
+        }
+
+        Ok(Self::Array(array))
+    }
+
     pub fn to_null_buffer(&self) -> VortexResult<Option<NullBuffer>> {
         match self {
             Self::AllValid(_) => Ok(None),
@@ -325,6 +362,14 @@ impl LogicalValidity {
             Self::AllInvalid(_) => Validity::AllInvalid,
             Self::Array(a) => Validity::Array(a),
         }
+    }
+}
+
+impl TryFrom<Array> for LogicalValidity {
+    type Error = VortexError;
+
+    fn try_from(array: Array) -> VortexResult<Self> {
+        Self::try_new_from_array(array)
     }
 }
 

@@ -3,7 +3,7 @@ use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::{slice, ArrayCompute, SliceFn, TakeFn};
 use vortex::{Array, IntoArray, IntoArrayVariant, ToArray};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::compress::value_at_index;
@@ -36,7 +36,7 @@ impl ScalarAtFn for RunEndBoolArray {
         let start = self.start();
         Scalar::from(value_at_index(
             self.find_physical_index(index)
-                .expect("Search must be implemented for the underlying index array"),
+                .vortex_expect("Search must be implemented for the underlying index array"),
             start,
         ))
     }

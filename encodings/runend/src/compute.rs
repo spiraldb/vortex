@@ -4,7 +4,7 @@ use vortex::compute::{filter, slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::RunEndArray;
@@ -31,7 +31,7 @@ impl ScalarAtFn for RunEndArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let idx = self
             .find_physical_index(index)
-            .expect("Search must be implemented for the underlying index array");
+            .vortex_expect("Search must be implemented for the underlying index array");
         scalar_at_unchecked(&self.values(), idx)
     }
 }

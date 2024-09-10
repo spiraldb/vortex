@@ -190,7 +190,8 @@ pub fn compress_taxi_data() -> Array {
     let chunks = reader
         .into_iter()
         .map(|batch_result| batch_result.unwrap())
-        .map(Array::from)
+        .map(Array::try_from)
+        .map(Result::unwrap)
         .map(|array| {
             uncompressed_size += array.nbytes();
             compressor.compress(&array).unwrap()
@@ -288,7 +289,7 @@ mod test {
             let struct_arrow: ArrowStructArray = record_batch.into();
             let arrow_array: ArrowArrayRef = Arc::new(struct_arrow);
             let vortex_array = Array::from_arrow(arrow_array.clone(), false);
-            let vortex_as_arrow = vortex_array.into_canonical().unwrap().into_arrow();
+            let vortex_as_arrow = vortex_array.into_canonical().unwrap().into_arrow().unwrap();
             assert_eq!(vortex_as_arrow.deref(), arrow_array.deref());
         }
     }
@@ -309,7 +310,7 @@ mod test {
             let vortex_array = Array::from_arrow(arrow_array.clone(), false);
 
             let compressed = compressor.compress(&vortex_array).unwrap();
-            let compressed_as_arrow = compressed.into_canonical().unwrap().into_arrow();
+            let compressed_as_arrow = compressed.into_canonical().unwrap().into_arrow().unwrap();
             assert_eq!(compressed_as_arrow.deref(), arrow_array.deref());
         }
     }

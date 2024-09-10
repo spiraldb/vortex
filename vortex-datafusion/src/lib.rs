@@ -219,7 +219,7 @@ impl Stream for VortexRecordBatchStream {
         let chunk = this
             .chunks
             .chunk(this.idx)
-            .expect("nchunks should match precomputed");
+            .ok_or_else(|| vortex_err!("nchunks should match precomputed"))?;
         this.idx += 1;
 
         let struct_array = chunk
@@ -233,7 +233,7 @@ impl Stream for VortexRecordBatchStream {
                 exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
             })?;
 
-        Poll::Ready(Some(Ok(projected_struct.into())))
+        Poll::Ready(Some(Ok(projected_struct.try_into()?)))
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

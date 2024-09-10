@@ -95,9 +95,7 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         } else {
             // Note. this try_cast (memory copy) is unnecessary, could instead upcast in the subtract fn.
             //  and avoid an extra
-            let u64_chunk_indices = try_cast(&chunk_indices, PType::U64.into())
-                .expect("safe to upcast since all indices are positive");
-
+            let u64_chunk_indices = try_cast(&chunk_indices, PType::U64.into())?;
             subtract_scalar(&u64_chunk_indices, &chunk_begin.into())?
         };
 
@@ -113,7 +111,9 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         .filter_map(|(chunk_idx, indices)| indices.map(|i| (chunk_idx, i)))
         .map(|(chunk_idx, chunk_indices)| {
             take(
-                &chunked.chunk(chunk_idx).expect("chunk not found"),
+                &chunked
+                    .chunk(chunk_idx)
+                    .ok_or_else(|| vortex_err!(OutOfBounds: chunk_idx, 0, chunked.nchunks()))?,
                 &chunk_indices,
             )
         })

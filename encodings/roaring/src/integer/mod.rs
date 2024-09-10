@@ -14,7 +14,7 @@ use vortex::{
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 mod compress;
 mod compute;
@@ -49,7 +49,7 @@ impl RoaringIntArray {
         Bitmap::deserialize::<Portable>(
             self.array()
                 .buffer()
-                .expect("RoaringBoolArray buffer is missing")
+                .vortex_expect("RoaringBoolArray buffer is missing")
                 .as_ref(),
         )
     }
@@ -62,7 +62,7 @@ impl RoaringIntArray {
         if array.encoding().id() == Primitive::ID {
             Ok(roaring_int_encode(PrimitiveArray::try_from(array)?)?.into_array())
         } else {
-            Err(vortex_err!("RoaringInt can only encode primitive arrays"))
+            vortex_bail!("RoaringInt can only encode primitive arrays")
         }
     }
 }

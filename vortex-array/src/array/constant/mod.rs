@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::stats::{Stat, StatsSet};
@@ -37,6 +37,7 @@ impl ConstantArray {
             (Stat::IsSorted, true.into()),
             (Stat::RunCount, 1.into()),
         ]));
+
         Self::try_from_parts(
             scalar.dtype().clone(),
             length,
@@ -48,10 +49,12 @@ impl ConstantArray {
             stats,
         )
         .unwrap_or_else(|err| {
-            panic!(
-                "Failed to create Constant array of length {} from scalar {}: {}",
-                length, scalar, err
-            );
+            vortex_panic!(
+                err,
+                "Failed to create Constant array of length {} from scalar {}",
+                length,
+                scalar
+            )
         })
     }
 

@@ -14,6 +14,12 @@ impl PyVortexError {
     }
 }
 
+impl From<VortexError> for PyVortexError {
+    fn from(val: VortexError) -> Self {
+        PyVortexError::new(val)
+    }
+}
+
 impl From<PyVortexError> for PyErr {
     fn from(value: PyVortexError) -> Self {
         PyValueError::new_err(value.0.to_string())

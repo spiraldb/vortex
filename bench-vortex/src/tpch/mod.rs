@@ -247,8 +247,8 @@ async fn register_vortex_file(
         let sts = record_batches
             .iter()
             .cloned()
-            .map(Array::from)
-            .map(|a| a.into_struct().unwrap())
+            .map(Array::try_from)
+            .map(|a| a.unwrap().into_struct().unwrap())
             .collect::<Vec<_>>();
 
         let mut arrays_map: HashMap<Arc<str>, Vec<Array>> = HashMap::default();
@@ -272,7 +272,7 @@ async fn register_vortex_file(
             .iter()
             .map(|field| {
                 let name: Arc<str> = field.name().as_str().into();
-                let dtype = types_map.get(&name).unwrap().clone();
+                let dtype = types_map[&name].clone();
                 let chunks = arrays_map.remove(&name).unwrap();
 
                 (

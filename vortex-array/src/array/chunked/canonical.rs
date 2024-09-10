@@ -152,7 +152,7 @@ fn swizzle_struct_chunks(
             field_chunks.push(
                 chunk
                     .field(field_idx)
-                    .expect("all chunks must have same dtype"),
+                    .ok_or_else(|| vortex_err!("All chunks must have same dtype; missing field at index {}, current chunk dtype: {}", field_idx, chunk.dtype()))?,
             );
         }
         let field_array = ChunkedArray::try_new(field_chunks, field_dtype.clone())?;
@@ -230,7 +230,9 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
             slice(&chunk.bytes(), first_offset_value, last_offset_value)?.into_primitive()?;
         data_bytes.extend_from_slice(primitive_bytes.buffer());
 
-        let adjustment_from_previous = *offsets.last().expect("offsets has at least one element");
+        let adjustment_from_previous = *offsets
+            .last()
+            .ok_or_else(|| vortex_err!("VarBinArray offsets must have at least one element"))?;
         offsets.extend(
             offsets_arr
                 .maybe_null_slice::<i32>()
