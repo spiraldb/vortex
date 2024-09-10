@@ -23,6 +23,7 @@ impl Display for SearchSortedSide {
     }
 }
 
+/// Result of performing search_sorted on an Array
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SearchResult {
     Found(usize),
@@ -30,6 +31,7 @@ pub enum SearchResult {
 }
 
 impl SearchResult {
+    /// Convert search result to an index only if the value have been found
     pub fn to_found(self) -> Option<usize> {
         match self {
             Self::Found(i) => Some(i),
@@ -37,6 +39,7 @@ impl SearchResult {
         }
     }
 
+    /// Extract index out of search result regardless of whether the value have been found or not
     pub fn to_index(self) -> usize {
         match self {
             Self::Found(i) => i,
@@ -44,6 +47,7 @@ impl SearchResult {
         }
     }
 
+    /// Convert search result into an index suitable for index 0 offset ends arrays, like ChunkArray ends
     pub fn to_offset_ends_index(self, len: usize) -> usize {
         match self {
             SearchResult::Found(i) => {
@@ -63,6 +67,7 @@ impl SearchResult {
         }
     }
 
+    /// Convert search result into index suitable for searching non 0 offset ends arrays like ends in RunEndArray
     pub fn to_ends_index(self, len: usize) -> usize {
         let idx = self.to_index();
         if idx == len {
