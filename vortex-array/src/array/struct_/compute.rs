@@ -85,7 +85,7 @@ impl FilterFn for StructArray {
         let length = fields
             .first()
             .map(|a| a.len())
-            .ok_or(vortex_err!("Struct arrays should have at least one field"))?;
+            .ok_or_else(|| vortex_err!("Struct arrays should have at least one field"))?;
 
         Self::try_new(
             self.names().clone(),
