@@ -1,9 +1,10 @@
-use vortex::array::BoolArray;
+use vortex::array::{BoolArray, ConstantArray};
+use vortex::arrow::FromArrowArray;
 use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
-use vortex::compute::{slice, take, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
+use vortex::compute::{compare, slice, take, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::{ArrayValidity, Validity};
-use vortex::{Array, ArrayDType, IntoArray};
+use vortex::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
 use vortex_error::VortexResult;
 use vortex_scalar::{PValue, Scalar};
 
@@ -80,25 +81,69 @@ impl CompareFn for ALPArray {
             match pvalue {
                 Some(PValue::F32(f)) => {
                     let encoded = f32::encode_single(f, self.exponents());
+                    match encoded {
+                        Ok(encoded) => {
+                            let s = ConstantArray::new(encoded, self.len());
+                            compare(&self.encoded(), s.as_array_ref(), operator)
+                        }
+                        Err(exception) => {
+                            if let Some(patches) = self.patches().as_ref() {
+                                let s = ConstantArray::new(exception, self.len());
+                                compare(patches, s.as_array_ref(), operator)
+                            } else {
+                                Ok(
+                                    BoolArray::from_vec(
+                                        vec![false; self.len()],
+                                        Validity::AllValid,
+                                    )
+                                    .into_array(),
+                                )
+                            }
+                        }
+                    }
                 }
                 Some(PValue::F64(f)) => {
                     let encoded = f64::encode_single(f, self.exponents());
                     match encoded {
-                        Some(encoded) => todo!(),
-                        Err(exception) => todo!(),
+                        Ok(encoded) => {
+                            let s = ConstantArray::new(encoded, self.len());
+                            compare(&self.encoded(), s.as_array_ref(), operator)
+                        }
+                        Err(exception) => {
+                            if let Some(patches) = self.patches().as_ref() {
+                                let s = ConstantArray::new(exception, self.len());
+                                compare(patches, s.as_array_ref(), operator)
+                            } else {
+                                Ok(
+                                    BoolArray::from_vec(vec![true; self.len()], Validity::AllValid)
+                                        .into_array(),
+                                )
+                            }
+                        }
                     }
                 }
                 None => {
                     // Is `null == null => true`?
                     let bools = (0..self.len()).map(|index| !self.is_valid(index)).collect();
-                    BoolArray::from_vec(bools, Validity::AllValid)
+                    Ok(BoolArray::from_vec(bools, Validity::AllValid).into_array())
                 }
                 _ => unreachable!(),
             }
-
-            todo!()
         } else {
-            todo!()
+            let lhs = self.clone().into_canonical()?.into_arrow();
+            let rhs = array.clone().into_canonical()?.into_arrow();
+
+            use arrow_ord::cmp;
+            let array = match operator {
+                Operator::Eq => cmp::eq(&lhs.as_ref(), &rhs.as_ref())?,
+                Operator::NotEq => cmp::neq(&lhs.as_ref(), &rhs.as_ref())?,
+                Operator::Gt => cmp::gt(&lhs.as_ref(), &rhs.as_ref())?,
+                Operator::Gte => cmp::gt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+                Operator::Lt => cmp::lt(&lhs.as_ref(), &rhs.as_ref())?,
+                Operator::Lte => cmp::lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
+            };
+
+            Ok(Array::from_arrow(&array, true))
         }
     }
 }
