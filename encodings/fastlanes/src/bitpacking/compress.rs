@@ -3,7 +3,7 @@ use std::mem::size_of;
 use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::stats::ArrayStatistics;
-use vortex::validity::Validity;
+use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
@@ -28,7 +28,9 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
     }
 
     let packed = bitpack(&array, bit_width)?;
-    let patches = (num_exceptions > 0).then(|| bitpack_patches(&array, bit_width, num_exceptions));
+    let patches = (num_exceptions > 0)
+        .then(|| bitpack_patches(&array, bit_width, num_exceptions))
+        .flatten();
 
     BitPackedArray::try_new(packed, array.validity(), patches, bit_width, array.len())
 }
@@ -96,22 +98,27 @@ pub fn bitpack_patches(
     parray: &PrimitiveArray,
     bit_width: usize,
     num_exceptions_hint: usize,
-) -> Array {
+) -> Option<Array> {
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
         for (i, v) in parray.maybe_null_slice::<$T>().iter().enumerate() {
-            if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width {
+            if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width && parray.is_valid(i) {
                 indices.push(i as u64);
                 values.push(*v);
             }
         }
-        SparseArray::try_new(
-            indices.into_array(),
-            PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
-            parray.len(),
-            Scalar::null(parray.dtype().as_nullable()),
-        ).unwrap().into_array()
+
+        (!indices.is_empty()).then(|| {
+            SparseArray::try_new(
+                indices.into_array(),
+                PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
+                parray.len(),
+                Scalar::null(parray.dtype().as_nullable()),
+            )
+            .unwrap()
+            .into_array()
+        })
     })
 }
 
