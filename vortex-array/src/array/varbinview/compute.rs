@@ -1,7 +1,7 @@
 use arrow_buffer::BooleanBufferBuilder;
 use vortex_buffer::Buffer;
 use vortex_error::{vortex_panic, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, ScalarValue};
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
@@ -38,8 +38,13 @@ fn const_compare(
     other: ConstantArray,
     operator: Operator,
 ) -> VortexResult<Array> {
-    let scalar = other.scalar().value().as_buffer_string()?.unwrap();
-    // let op = operator.to_fn();
+    let buffer = match other.scalar().value() {
+        // Self::Null => Ok(None), TODO
+        ScalarValue::Buffer(b) => b.clone(),
+        ScalarValue::BufferString(b) => Buffer::from(b.clone()),
+        _ => unreachable!(),
+    };
+
     let mut builder = BooleanBufferBuilder::new(binview.len());
     for (index, view) in binview.view_slice().iter().enumerate() {
         let (data, data_len) = if view.is_inlined() {
@@ -52,12 +57,12 @@ fn const_compare(
             (data, data_len as usize)
         };
 
-        if scalar.len() != data_len {
+        if buffer.len() != data_len {
             builder.append(false);
             continue;
         }
 
-        let scalar_prefix = &scalar.as_bytes()[0..data_len];
+        let scalar_prefix = &buffer[0..data_len];
 
         let r = match operator {
             Operator::Eq => data == scalar_prefix,
@@ -78,12 +83,12 @@ fn const_compare(
             let bytes = binview.bytes_at(index)?;
 
             let r = match operator {
-                Operator::Eq => bytes == scalar.as_bytes(),
-                Operator::NotEq => bytes != scalar.as_bytes(),
-                Operator::Gt => bytes.as_slice() > scalar.as_bytes(),
-                Operator::Gte => bytes.as_slice() >= scalar.as_bytes(),
-                Operator::Lt => bytes.as_slice() < scalar.as_bytes(),
-                Operator::Lte => bytes.as_slice() >= scalar.as_bytes(),
+                Operator::Eq => bytes.as_slice() == buffer.as_slice(),
+                Operator::NotEq => bytes.as_slice() != buffer.as_slice(),
+                Operator::Gt => bytes.as_slice() > buffer.as_slice(),
+                Operator::Gte => bytes.as_slice() >= buffer.as_slice(),
+                Operator::Lt => bytes.as_slice() < buffer.as_slice(),
+                Operator::Lte => bytes.as_slice() >= buffer.as_slice(),
             };
 
             builder.append(r);
