@@ -260,11 +260,12 @@ impl SubtractScalarFn for ChunkedArray {
 #[cfg(test)]
 mod test {
     use vortex_dtype::{DType, NativePType, Nullability, PType};
+    use vortex_error::VortexResult;
 
     use crate::array::chunked::ChunkedArray;
     use crate::compute::slice;
-    use crate::compute::unary::subtract_scalar;
-    use crate::{Array, IntoArray, IntoArrayVariant, ToArray};
+    use crate::compute::unary::{scalar_at, subtract_scalar};
+    use crate::{assert_arrays_eq, Array, ArrayDType, IntoArray, IntoArrayVariant, ToArray};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
@@ -354,5 +355,68 @@ mod test {
             .maybe_null_slice::<u64>()
             .to_vec();
         assert_eq!(results, &[6u64, 7, 8]);
+    }
+
+    #[test]
+    fn test_rechunk_one_chunk() {
+        let chunked = ChunkedArray::try_new(
+            vec![vec![0u64].into_array()],
+            DType::Primitive(PType::U64, Nullability::NonNullable),
+        )
+        .unwrap();
+
+        let rechunked = chunked.rechunk_default().unwrap();
+
+        assert_arrays_eq!(chunked, rechunked);
+    }
+
+    #[test]
+    fn test_rechunk_two_chunks() {
+        let chunked = ChunkedArray::try_new(
+            vec![vec![0u64].into_array(), vec![5u64].into_array()],
+            DType::Primitive(PType::U64, Nullability::NonNullable),
+        )
+        .unwrap();
+
+        let rechunked = chunked.rechunk_default().unwrap();
+
+        assert_eq!(rechunked.nchunks(), 1);
+        assert_arrays_eq!(chunked, rechunked);
+    }
+
+    #[test]
+    fn test_rechunk_tiny_target_chunks() {
+        let chunked = ChunkedArray::try_new(
+            vec![vec![0u64, 1, 2, 3].into_array(), vec![4u64, 5].into_array()],
+            DType::Primitive(PType::U64, Nullability::NonNullable),
+        )
+        .unwrap();
+
+        let rechunked = chunked.rechunk(1 << 16, 5).unwrap();
+
+        assert_eq!(rechunked.nchunks(), 2);
+        assert!(rechunked.chunks().all(|c| c.len() < 5));
+        assert_arrays_eq!(chunked, rechunked);
+    }
+
+    #[test]
+    fn test_rechunk_with_too_big_chunk() {
+        let chunked = ChunkedArray::try_new(
+            vec![
+                vec![0u64, 1, 2].into_array(),
+                vec![42_u64; 6].into_array(),
+                vec![4u64, 5].into_array(),
+                vec![6u64, 7].into_array(),
+                vec![8u64, 9].into_array(),
+            ],
+            DType::Primitive(PType::U64, Nullability::NonNullable),
+        )
+        .unwrap();
+
+        let rechunked = chunked.rechunk(1 << 16, 5).unwrap();
+        // greedy so should be: [0, 1, 2] [42, 42, 42, 42, 42, 42] [4, 5, 6, 7] [8, 9]
+
+        assert_eq!(rechunked.nchunks(), 4);
+        assert_arrays_eq!(chunked, rechunked);
     }
 }
