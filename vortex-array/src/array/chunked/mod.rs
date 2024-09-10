@@ -135,9 +135,9 @@ impl ChunkedArray {
     }
 
     pub fn rechunk_default(&self) -> VortexResult<Self> {
-        let gibibyte = 1 << 30;
+        let sixteen_megabytes = 1 << 24;
         let chunk_max = 1 << 16; // BtrBlocks uses 64K so we use 64Ki
-        self.rechunk(gibibyte, chunk_max)
+        self.rechunk(sixteen_megabytes, chunk_max)
     }
 
     pub fn rechunk(&self, max_n_bytes: usize, max_n_elements: usize) -> VortexResult<Self> {
