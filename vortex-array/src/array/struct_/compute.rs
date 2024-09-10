@@ -1,11 +1,10 @@
 use itertools::Itertools;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::struct_::StructArray;
 use crate::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use crate::compute::{filter, slice, take, ArrayCompute, FilterFn, SliceFn, TakeFn};
-use crate::stats::ArrayStatistics;
 use crate::variants::StructArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
@@ -83,10 +82,7 @@ impl FilterFn for StructArray {
             .children()
             .map(|field| filter(&field, predicate))
             .try_collect()?;
-
-        let length = fields.iter().next().map(|a| a.len()).unwrap_or_default();
-
-        // let len = fields.iter();
+        let length = fields.first().map(|a| a.len()).unwrap_or_default();
 
         Self::try_new(
             self.names().clone(),
