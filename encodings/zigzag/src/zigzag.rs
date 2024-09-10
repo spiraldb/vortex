@@ -9,7 +9,9 @@ use vortex::{
     IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{
+    vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult, VortexUnwrap as _,
+};
 
 use crate::compress::zigzag_encode;
 use crate::zigzag_decode;
@@ -53,7 +55,7 @@ impl ZigZagArray {
     }
 
     pub fn ptype(&self) -> PType {
-        PType::try_from(self.dtype()).expect("must be a ptype")
+        PType::try_from(self.dtype()).vortex_unwrap()
     }
 }
 

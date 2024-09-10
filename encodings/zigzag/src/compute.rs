@@ -2,7 +2,7 @@ use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{slice, ArrayCompute, SliceFn};
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::match_each_unsigned_integer_ptype;
-use vortex_error::{vortex_bail, vortex_err, VortexResult, VortexUnwrap};
+use vortex_error::{vortex_err, VortexResult, VortexUnwrap as _};
 use vortex_scalar::{PrimitiveScalar, Scalar};
 use zigzag::{ZigZag as ExternalZigZag, ZigZag};
 
