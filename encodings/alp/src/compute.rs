@@ -8,7 +8,7 @@ use vortex::compute::{
 use vortex::stats::ArrayStatistics;
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect, VortexResult};
 use vortex_scalar::{PValue, Scalar};
 
 use crate::{match_each_alp_float_ptype, ALPArray, ALPFloat};
@@ -99,8 +99,11 @@ impl CompareFn for ALPArray {
         if ConstantArray::try_from(array).is_ok()
             || array.statistics().compute_is_constant().unwrap_or_default()
         {
-            let rhs = scalar_at(array, 0).expect("should be scalar");
-            let pvalue = rhs.value().as_pvalue().expect("Expected primitive value");
+            let rhs = scalar_at(array, 0).vortex_expect("should be scalar");
+            let pvalue = rhs
+                .value()
+                .as_pvalue()
+                .vortex_expect("Expected primitive value");
 
             match pvalue {
                 Some(PValue::F32(f)) => {
@@ -154,8 +157,8 @@ impl CompareFn for ALPArray {
                 _ => unreachable!(),
             }
         } else {
-            let lhs = self.clone().into_canonical()?.into_arrow();
-            let rhs = array.clone().into_canonical()?.into_arrow();
+            let lhs = self.clone().into_canonical()?.into_arrow()?;
+            let rhs = array.clone().into_canonical()?.into_arrow()?;
 
             let array = match operator {
                 Operator::Eq => cmp::eq(&lhs.as_ref(), &rhs.as_ref())?,
