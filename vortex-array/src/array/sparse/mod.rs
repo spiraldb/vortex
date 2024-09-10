@@ -5,7 +5,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::scalar_at;
-use crate::compute::{search_sorted, SearchSortedSide};
+use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -84,9 +84,7 @@ impl SparseArray {
             StatsSet::new(),
         )
     }
-}
 
-impl SparseArray {
     #[inline]
     pub fn indices_offset(&self) -> usize {
         self.metadata().indices_offset
@@ -115,14 +113,13 @@ impl SparseArray {
         &self.metadata().fill_value
     }
 
-    /// Returns the position of a given index in the indices array if it exists.
-    pub fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
+    /// Returns the position or the insertion point of a given index in the indices array.
+    fn search_index(&self, index: usize) -> VortexResult<SearchResult> {
         search_sorted(
             &self.indices(),
             self.indices_offset() + index,
             SearchSortedSide::Left,
         )
-        .map(|r| r.to_found())
     }
 
     /// Return indices as a vector of usize with the indices_offset applied.
@@ -161,7 +158,7 @@ impl ArrayStatisticsCompute for SparseArray {}
 
 impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
-        match self.find_index(index) {
+        match self.search_index(index).map(SearchResult::to_found) {
             Ok(None) => !self.fill_value().is_null(),
             Ok(Some(idx)) => self.values().with_dyn(|a| a.is_valid(idx)),
             Err(e) => vortex_panic!(e, "Error while finding index {} in sparse array", index),
@@ -290,9 +287,9 @@ mod test {
     #[test]
     pub fn test_find_index() {
         let sparse = SparseArray::try_from(sparse_array(nullable_fill())).unwrap();
-        assert_eq!(sparse.find_index(0).unwrap(), None);
-        assert_eq!(sparse.find_index(2).unwrap(), Some(0));
-        assert_eq!(sparse.find_index(5).unwrap(), Some(1));
+        assert_eq!(sparse.search_index(0).unwrap().to_found(), None);
+        assert_eq!(sparse.search_index(2).unwrap().to_found(), Some(0));
+        assert_eq!(sparse.search_index(5).unwrap().to_found(), Some(1));
     }
 
     #[test]
