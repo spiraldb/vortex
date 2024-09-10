@@ -79,20 +79,19 @@ impl SliceFn for StructArray {
 
 impl FilterFn for StructArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
-        let fields = self
+        let fields: Vec<Array> = self
             .children()
             .map(|field| filter(&field, predicate))
             .try_collect()?;
 
-        let predicate_true_count = predicate
-            .statistics()
-            .compute_true_count()
-            .ok_or_else(|| vortex_err!("Predicate should always be a boolean array"))?;
+        let length = fields.iter().next().map(|a| a.len()).unwrap_or_default();
+
+        // let len = fields.iter();
 
         Self::try_new(
             self.names().clone(),
             fields,
-            predicate_true_count,
+            length,
             self.validity().filter(predicate)?,
         )
         .map(|a| a.into_array())
