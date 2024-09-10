@@ -86,6 +86,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)] // roaring bit maps uses an unsupported FFI
     pub fn smoketest_compressor_on_chunked_array() {
         let compressor = SamplingCompressor::new_with_options(
             HashSet::from([
