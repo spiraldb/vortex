@@ -37,16 +37,15 @@ use crate::FLATBUFFER_SIZE_LENGTH;
 ///
 pub struct Footer {
     pub(crate) schema_offset: u64,
-    /// This is actually layouts
-    pub(crate) footer_offset: u64,
+    pub(crate) layout_offset: u64,
     pub(crate) leftovers: Bytes,
     pub(crate) leftovers_offset: u64,
     pub(crate) layout_serde: LayoutDeserializer,
 }
 
 impl Footer {
-    pub fn leftovers_footer_offset(&self) -> usize {
-        (self.footer_offset - self.leftovers_offset) as usize
+    pub fn leftovers_layout_offset(&self) -> usize {
+        (self.layout_offset - self.leftovers_offset) as usize
     }
 
     pub fn leftovers_schema_offset(&self) -> usize {
@@ -58,7 +57,7 @@ impl Footer {
         scan: Scan,
         message_cache: RelativeLayoutCache,
     ) -> VortexResult<Box<dyn Layout>> {
-        let start_offset = self.leftovers_footer_offset();
+        let start_offset = self.leftovers_layout_offset();
         let end_offset = self.leftovers.len() - FILE_POSTSCRIPT_SIZE;
         let footer_bytes = self
             .leftovers
@@ -101,7 +100,7 @@ impl Footer {
 
     fn fb_schema(&self) -> VortexResult<fb::Schema> {
         let start_offset = self.leftovers_schema_offset();
-        let end_offset = self.leftovers_footer_offset();
+        let end_offset = self.leftovers_layout_offset();
         let dtype_bytes = &self.leftovers[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
 
         root::<fb::Message>(dtype_bytes)
