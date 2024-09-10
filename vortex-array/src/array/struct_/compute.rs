@@ -5,7 +5,6 @@ use vortex_scalar::Scalar;
 use crate::array::struct_::StructArray;
 use crate::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use crate::compute::{filter, slice, take, ArrayCompute, FilterFn, SliceFn, TakeFn};
-use crate::stats::ArrayStatistics;
 use crate::variants::StructArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
@@ -79,20 +78,19 @@ impl SliceFn for StructArray {
 
 impl FilterFn for StructArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
-        let fields = self
+        let fields: Vec<Array> = self
             .children()
             .map(|field| filter(&field, predicate))
             .try_collect()?;
-
-        let predicate_true_count = predicate
-            .statistics()
-            .compute_true_count()
-            .ok_or_else(|| vortex_err!("Predicate should always be a boolean array"))?;
+        let length = fields
+            .first()
+            .map(|a| a.len())
+            .ok_or_else(|| vortex_err!("Struct arrays should have at least one field"))?;
 
         Self::try_new(
             self.names().clone(),
             fields,
-            predicate_true_count,
+            length,
             self.validity().filter(predicate)?,
         )
         .map(|a| a.into_array())
