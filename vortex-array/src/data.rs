@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::encoding::EncodingRef;
@@ -136,7 +136,7 @@ impl Statistics for ArrayData {
         self.stats_map
             .read()
             .unwrap_or_else(|_| {
-                panic!(
+                vortex_panic!(
                     "Failed to acquire read lock on stats map while getting {}",
                     stat
                 )
@@ -148,7 +148,7 @@ impl Statistics for ArrayData {
     fn to_set(&self) -> StatsSet {
         self.stats_map
             .read()
-            .unwrap_or_else(|_| panic!("Failed to acquire read lock on stats map"))
+            .unwrap_or_else(|_| vortex_panic!("Failed to acquire read lock on stats map"))
             .clone()
     }
 
@@ -156,9 +156,10 @@ impl Statistics for ArrayData {
         self.stats_map
             .write()
             .unwrap_or_else(|_| {
-                panic!(
+                vortex_panic!(
                     "Failed to acquire write lock on stats map while setting {} to {}",
-                    stat, value
+                    stat,
+                    value
                 )
             })
             .set(stat, value);
@@ -171,7 +172,9 @@ impl Statistics for ArrayData {
 
         self.stats_map
             .write()
-            .unwrap_or_else(|_| panic!("Failed to write to stats map while computing {}", stat))
+            .unwrap_or_else(|_| {
+                vortex_panic!("Failed to write to stats map while computing {}", stat)
+            })
             .extend(
                 self.to_array()
                     .with_dyn(|a| a.compute_statistics(stat))

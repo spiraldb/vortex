@@ -41,7 +41,7 @@ impl BatchReader {
                 },
                 None => {
                     debug_assert!(
-                        self.arrays.iter().all(|a| a.is_none()),
+                        self.arrays.iter().all(Option::is_none),
                         "Expected layout to produce an array but it was empty"
                     );
                     return Ok(None);

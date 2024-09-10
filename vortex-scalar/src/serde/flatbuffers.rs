@@ -2,7 +2,7 @@ use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::DType;
-use vortex_error::VortexError;
+use vortex_error::{VortexError, VortexExpect as _};
 use vortex_flatbuffers::{scalar as fb, WriteFlatBuffer};
 
 use crate::{Scalar, ScalarValue};
@@ -54,7 +54,8 @@ impl WriteFlatBuffer for ScalarValue {
     ) -> WIPOffset<Self::Target<'fb>> {
         let mut value_se = flexbuffers::FlexbufferSerializer::new();
         self.serialize(&mut value_se)
-            .expect("Failed to serialize ScalarValue");
+            .map_err(VortexError::FlexBuffersSerError)
+            .vortex_expect("Failed to serialize ScalarValue");
         let flex = Some(fbb.create_vector(value_se.view()));
         fb::ScalarValue::create(fbb, &fb::ScalarValueArgs { flex })
     }

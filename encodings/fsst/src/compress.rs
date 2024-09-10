@@ -7,6 +7,7 @@ use vortex::array::{PrimitiveArray, VarBinArray, VarBinViewArray};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::FSSTArray;
 
@@ -15,29 +16,25 @@ use crate::FSSTArray;
 /// # Panics
 ///
 /// If the `strings` array is not encoded as either [`VarBinArray`] or [`VarBinViewArray`].
-pub fn fsst_compress(strings: &Array, compressor: &Compressor) -> FSSTArray {
+pub fn fsst_compress(strings: &Array, compressor: &Compressor) -> VortexResult<FSSTArray> {
     let len = strings.len();
     let dtype = strings.dtype().clone();
 
     // Compress VarBinArray
     if let Ok(varbin) = VarBinArray::try_from(strings) {
-        let compressed = varbin
+        return varbin
             .with_iterator(|iter| fsst_compress_iter(iter, len, dtype, compressor))
-            .unwrap();
-
-        return compressed;
+            .map_err(|err| err.with_context("Failed to compress VarBinArray with FSST"));
     }
 
     // Compress VarBinViewArray
     if let Ok(varbin_view) = VarBinViewArray::try_from(strings) {
-        let compressed = varbin_view
+        return varbin_view
             .with_iterator(|iter| fsst_compress_iter(iter, len, dtype, compressor))
-            .unwrap();
-
-        return compressed;
+            .map_err(|err| err.with_context("Failed to compress VarBinViewArray with FSST"));
     }
 
-    panic!(
+    vortex_bail!(
         "cannot fsst_compress array with unsupported encoding {:?}",
         strings.encoding().id()
     )
@@ -48,17 +45,17 @@ pub fn fsst_compress(strings: &Array, compressor: &Compressor) -> FSSTArray {
 /// # Panics
 ///
 /// If the provided array is not FSST compressible.
-pub fn fsst_train_compressor(array: &Array) -> Compressor {
+pub fn fsst_train_compressor(array: &Array) -> VortexResult<Compressor> {
     if let Ok(varbin) = VarBinArray::try_from(array) {
         varbin
             .with_iterator(|iter| fsst_train_compressor_iter(iter))
-            .unwrap()
+            .map_err(|err| err.with_context("Failed to train FSST Compressor from VarBinArray"))
     } else if let Ok(varbin_view) = VarBinViewArray::try_from(array) {
         varbin_view
             .with_iterator(|iter| fsst_train_compressor_iter(iter))
-            .unwrap()
+            .map_err(|err| err.with_context("Failed to train FSST Compressor from VarBinViewArray"))
     } else {
-        panic!(
+        vortex_bail!(
             "cannot fsst_compress array with unsupported encoding {:?}",
             array.encoding().id()
         )
@@ -118,5 +115,5 @@ where
         PrimitiveArray::from_vec(symbol_lengths_vec, Validity::NonNullable).into_array();
 
     FSSTArray::try_new(dtype, symbols, symbol_lengths, codes.into_array())
-        .expect("building FSSTArray from parts")
+        .vortex_expect("Failed to build FSSTArray from parts; this should never happen")
 }

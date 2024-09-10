@@ -1,7 +1,7 @@
 use std::io::Cursor;
 use std::sync::Arc;
 
-use arrow_array::cast::AsArray;
+use arrow_array::cast::AsArray as _;
 use arrow_array::types::Int32Type;
 use arrow_array::PrimitiveArray;
 use vortex::arrow::FromArrowArray;
@@ -31,6 +31,6 @@ async fn broken_data() {
         .collect_chunked()
         .await
         .unwrap();
-    let round_tripped = arr.into_canonical().unwrap().into_arrow();
+    let round_tripped = arr.into_canonical().unwrap().into_arrow().unwrap();
     assert_eq!(&arrow_arr, round_tripped.as_primitive::<Int32Type>());
 }

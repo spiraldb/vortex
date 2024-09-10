@@ -81,7 +81,7 @@ impl TableProvider for VortexFileTableProvider {
                     .data_files
                     .iter()
                     .cloned()
-                    .map(|f| f.into())
+                    .map(Into::into)
                     .collect(),
             )
             .with_projection(projection.cloned());

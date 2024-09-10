@@ -175,7 +175,7 @@ fn get_or_cache_toolchain(
         zip_file
             .url()
             .path_segments()
-            .and_then(|segments| segments.last())
+            .and_then(Iterator::last)
             .unwrap(),
     );
 

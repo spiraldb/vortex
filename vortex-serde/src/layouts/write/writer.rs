@@ -7,7 +7,7 @@ use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::io::VortexWrite;
 use crate::layouts::read::{ChunkedLayoutSpec, ColumnLayoutSpec};
@@ -94,7 +94,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
                 row_offsets
                     .last()
                     .map(|off| off + chunk.len() as u64)
-                    .expect("Row offsets should be initialized with a value"),
+                    .ok_or_else(|| vortex_err!("Row offsets should be initialized with a value"))?,
             );
             self.msgs.write_batch(chunk).await?;
             byte_offsets.push(self.msgs.tell());
@@ -154,7 +154,12 @@ impl<W: VortexWrite> LayoutWriter<W> {
     async fn write_footer(&mut self, footer: Footer) -> VortexResult<(u64, u64)> {
         let dtype_offset = self.msgs.tell();
         self.msgs
-            .write_dtype(&self.dtype.take().expect("Needed a schema at this point"))
+            .write_dtype(
+                &self
+                    .dtype
+                    .take()
+                    .ok_or_else(|| vortex_err!("Schema should be written by now"))?,
+            )
             .await?;
         let footer_offset = self.msgs.tell();
         self.msgs.write_message(footer).await?;

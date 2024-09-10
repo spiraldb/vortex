@@ -7,7 +7,7 @@ use vortex::stream::ArrayStream;
 use vortex::Context;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::io::VortexRead;
 use crate::MessageReader;
@@ -41,12 +41,22 @@ impl<R: VortexRead> StreamArrayReader<R> {
 
     /// Reads a single array from the stream.
     pub fn array_stream(&mut self) -> impl ArrayStream + '_ {
-        let dtype = self.dtype.as_ref().expect("DType not set").deref().clone();
+        let dtype = self
+            .dtype
+            .as_ref()
+            .vortex_expect("Cannot read array from stream: DType not set")
+            .deref()
+            .clone();
         self.msgs.array_stream(self.ctx.clone(), dtype)
     }
 
     pub fn into_array_stream(self) -> impl ArrayStream {
-        let dtype = self.dtype.as_ref().expect("DType not set").deref().clone();
+        let dtype = self
+            .dtype
+            .as_ref()
+            .vortex_expect("Cannot read array from stream: DType not set")
+            .deref()
+            .clone();
         self.msgs.into_array_stream(self.ctx.clone(), dtype)
     }
 

@@ -14,9 +14,8 @@ impl<T: PartialOrd> IndexOrd<Option<T>> for SearchNullableSlice<T> {
     fn index_cmp(&self, idx: usize, elem: &Option<T>) -> Option<Ordering> {
         match elem {
             None => unreachable!("Can't search for None"),
-            Some(v) =>
-            // SAFETY: Used in search_sorted_by same as the standard library. The search_sorted ensures idx is in bounds
-            {
+            Some(v) => {
+                // SAFETY: Used in search_sorted_by same as the standard library. The search_sorted ensures idx is in bounds
                 match unsafe { self.0.get_unchecked(idx) } {
                     None => Some(Ordering::Greater),
                     Some(i) => i.partial_cmp(v),

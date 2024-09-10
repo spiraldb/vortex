@@ -32,6 +32,6 @@ impl SliceFn for RoaringBoolArray {
         let slice_bitmap = Bitmap::from_range(start as u32..stop as u32);
         let bitmap = self.bitmap().and(&slice_bitmap).add_offset(-(start as i64));
 
-        Self::try_new(bitmap, stop - start).map(|a| a.into_array())
+        Self::try_new(bitmap, stop - start).map(IntoArray::into_array)
     }
 }

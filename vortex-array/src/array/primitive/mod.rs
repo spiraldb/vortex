@@ -9,7 +9,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::elementwise::{dyn_cast_array_iter, BinaryFn, UnaryFn};
 use crate::iter::{Accessor, AccessorRef, Batch, ITER_BATCH_SIZE};
@@ -49,13 +49,15 @@ impl PrimitiveArray {
                 DType::from(ptype).with_nullability(validity.nullability()),
                 length,
                 PrimitiveMetadata {
-                    validity: validity.to_metadata(length).expect("invalid validity"),
+                    validity: validity
+                        .to_metadata(length)
+                        .vortex_expect("Invalid validity"),
                 },
                 Some(buffer),
                 validity.into_array().into_iter().collect_vec().into(),
                 StatsSet::new(),
             )
-            .expect("should be valid"),
+            .vortex_expect("PrimitiveArray::new should never fail!"),
         }
     }
 
@@ -90,13 +92,15 @@ impl PrimitiveArray {
 
     pub fn ptype(&self) -> PType {
         // TODO(ngates): we can't really cache this anywhere?
-        self.dtype().try_into().unwrap_or_else(|err| {
-            panic!("Failed to convert dtype {} to ptype: {}", self.dtype(), err);
+        self.dtype().try_into().unwrap_or_else(|err: VortexError| {
+            vortex_panic!(err, "Failed to convert dtype {} to ptype", self.dtype())
         })
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array().buffer().expect("missing buffer")
+        self.array()
+            .buffer()
+            .vortex_expect("Missing buffer in PrimitiveArray")
     }
 
     pub fn maybe_null_slice<T: NativePType>(&self) -> &[T] {
@@ -172,7 +176,7 @@ impl PrimitiveArray {
     pub fn into_buffer(self) -> Buffer {
         self.into_array()
             .into_buffer()
-            .expect("PrimitiveArray must have a buffer")
+            .vortex_expect("PrimitiveArray must have a buffer")
     }
 }
 
@@ -312,7 +316,7 @@ impl AcceptArrayVisitor for PrimitiveArray {
 
 impl Array {
     pub fn as_primitive(&self) -> PrimitiveArray {
-        PrimitiveArray::try_from(self).expect("expected primitive array")
+        PrimitiveArray::try_from(self).vortex_expect("Expected primitive array")
     }
 }
 
@@ -413,6 +417,7 @@ impl BinaryFn for PrimitiveArray {
     }
 }
 
+#[allow(clippy::unwrap_used)]
 fn process_batch<I: NativePType, U: NativePType, O: NativePType, F: Fn(I, U) -> O>(
     lhs: &[I],
     batch: Batch<U>,

@@ -14,6 +14,7 @@ use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanP
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::{Array, ArrayDType as _};
+use vortex_error::{VortexError, VortexExpect as _};
 use vortex_expr::datafusion::convert_expr_to_vortex;
 use vortex_expr::VortexExpr;
 
@@ -46,7 +47,8 @@ impl VortexMemTable {
             Ok(a) => a,
             _ => {
                 let dtype = array.dtype().clone();
-                ChunkedArray::try_new(vec![array], dtype).unwrap()
+                ChunkedArray::try_new(vec![array], dtype)
+                    .vortex_expect("Failed to wrap array as a ChunkedArray with 1 chunk")
             }
         };
 
@@ -113,7 +115,7 @@ impl TableProvider for VortexMemTable {
                 let output_schema = Arc::new(
                     self.schema_ref
                         .project(output_projection.as_slice())
-                        .expect("project output schema"),
+                        .map_err(VortexError::from)?,
                 );
                 let plan_properties = PlanProperties::new(
                     EquivalenceProperties::new(output_schema),

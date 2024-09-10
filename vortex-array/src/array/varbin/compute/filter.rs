@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use num_traits::{AsPrimitive, Zero};
 use vortex_dtype::{match_each_integer_ptype, DType, NativePType};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexResult};
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
@@ -67,24 +67,32 @@ where
     if let Some(val) = logical_validity.to_null_buffer()? {
         let mut builder = VarBinBuilder::<O>::with_capacity(selection_count);
 
-        predicate.maybe_null_slices_iter().for_each(|(start, end)| {
+        for (start, end) in predicate.maybe_null_slices_iter() {
             let null_sl = val.slice(start, end - start);
             if null_sl.null_count() == 0 {
                 update_non_nullable_slice(data, offsets, &mut builder, start, end)
             } else {
-                null_sl.iter().enumerate().for_each(|(idx, valid)| {
+                for (idx, valid) in null_sl.iter().enumerate() {
                     if valid {
-                        let (s, e) = (
-                            offsets[idx + start].to_usize().unwrap(),
-                            offsets[idx + start + 1].to_usize().unwrap(),
-                        );
+                        let s = offsets[idx + start].to_usize().ok_or_else(|| {
+                            vortex_err!(
+                                "Failed to convert offset to usize: {}",
+                                offsets[idx + start]
+                            )
+                        })?;
+                        let e = offsets[idx + start + 1].to_usize().ok_or_else(|| {
+                            vortex_err!(
+                                "Failed to convert offset to usize: {}",
+                                offsets[idx + start + 1]
+                            )
+                        })?;
                         builder.push_value(&data[s..e])
                     } else {
                         builder.push_null()
                     }
-                })
+                }
             }
-        });
+        }
 
         return Ok(builder.finish(dtype));
     }
@@ -108,11 +116,18 @@ fn update_non_nullable_slice<O>(
     O: NativePType + 'static + Zero + Copy,
     usize: AsPrimitive<O>,
 {
-    let (offset_start, offset_end) = (&offsets[start], &offsets[end]);
-    let new_data = &data[offset_start.to_usize().unwrap()..offset_end.to_usize().unwrap()];
+    let new_data = {
+        let offset_start = offsets[start].to_usize().unwrap_or_else(|| {
+            vortex_panic!("Failed to convert offset to usize: {}", offsets[start])
+        });
+        let offset_end = offsets[end].to_usize().unwrap_or_else(|| {
+            vortex_panic!("Failed to convert offset to usize: {}", offsets[end])
+        });
+        &data[offset_start..offset_end]
+    };
     let new_offsets = offsets[start..end + 1]
         .iter()
-        .map(|o| *o - *offset_start)
+        .map(|o| *o - offsets[start])
         .dropping(1);
     builder.push_values(new_data, new_offsets, end - start)
 }
@@ -144,17 +159,21 @@ fn filter_select_var_bin_by_index_primitive_offset<O: NativePType>(
     selection_count: usize,
 ) -> VortexResult<VarBinArray> {
     let mut builder = VarBinBuilder::<O>::with_capacity(selection_count);
-    predicate.maybe_null_indices_iter().for_each(|idx| {
+    for idx in predicate.maybe_null_indices_iter() {
         if validity.is_valid(idx) {
             let (start, end) = (
-                offsets[idx].to_usize().unwrap(),
-                offsets[idx + 1].to_usize().unwrap(),
+                offsets[idx].to_usize().ok_or_else(|| {
+                    vortex_err!("Failed to convert offset to usize: {}", offsets[idx])
+                })?,
+                offsets[idx + 1].to_usize().ok_or_else(|| {
+                    vortex_err!("Failed to convert offset to usize: {}", offsets[idx + 1])
+                })?,
             );
             builder.push(Some(&data[start..end]))
         } else {
             builder.push_null()
         }
-    });
+    }
     Ok(builder.finish(dtype))
 }
 

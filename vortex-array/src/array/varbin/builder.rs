@@ -2,6 +2,7 @@ use arrow_buffer::NullBufferBuilder;
 use bytes::BytesMut;
 use num_traits::AsPrimitive;
 use vortex_dtype::{DType, NativePType};
+use vortex_error::{vortex_panic, VortexExpect as _};
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::VarBinArray;
@@ -37,7 +38,14 @@ impl<O: NativePType> VarBinBuilder<O> {
     pub fn push_value(&mut self, value: impl AsRef<[u8]>) {
         let slice = value.as_ref();
         self.offsets
-            .push(O::from(self.data.len() + slice.len()).unwrap());
+            .push(O::from(self.data.len() + slice.len()).unwrap_or_else(|| {
+                vortex_panic!(
+                    "Failed to convert sum of {} and {} to offset of type {}",
+                    self.data.len(),
+                    slice.len(),
+                    std::any::type_name::<O>()
+                )
+            }));
         self.data.extend_from_slice(slice);
         self.validity.append_non_null();
     }
@@ -72,7 +80,8 @@ impl<O: NativePType> VarBinBuilder<O> {
             Validity::NonNullable
         };
 
-        VarBinArray::try_new(offsets.into_array(), data.into_array(), dtype, validity).unwrap()
+        VarBinArray::try_new(offsets.into_array(), data.into_array(), dtype, validity)
+            .vortex_expect("Unexpected error while building VarBinArray")
     }
 }
 
