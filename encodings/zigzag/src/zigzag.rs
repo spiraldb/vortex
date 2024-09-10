@@ -20,10 +20,6 @@ impl_encoding!("vortex.zigzag", 21u16, ZigZag);
 pub struct ZigZagMetadata;
 
 impl ZigZagArray {
-    pub fn new(encoded: Array) -> Self {
-        Self::try_new(encoded).vortex_expect("Failed to construct ZigZagArray")
-    }
-
     pub fn try_new(encoded: Array) -> VortexResult<Self> {
         let encoded_dtype = encoded.dtype().clone();
         if !encoded_dtype.is_unsigned_int() {
@@ -42,7 +38,7 @@ impl ZigZagArray {
     pub fn encode(array: &Array) -> VortexResult<Array> {
         PrimitiveArray::try_from(array)
             .map_err(|_| vortex_err!("ZigZag can only encoding primitive arrays"))
-            .map(|parray| zigzag_encode(&parray))?
+            .and_then(zigzag_encode)
             .map(|a| a.into_array())
     }
 
@@ -54,6 +50,10 @@ impl ZigZagArray {
         self.array()
             .child(0, &encoded, self.len())
             .vortex_expect("ZigZagArray is missing its encoded child array")
+    }
+
+    pub fn ptype(&self) -> PType {
+        PType::try_from(self.dtype()).expect("must be a ptype")
     }
 }
 
@@ -87,6 +87,6 @@ impl ArrayStatisticsCompute for ZigZagArray {}
 
 impl IntoCanonical for ZigZagArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        zigzag_decode(&self.encoded().into_primitive()?).map(Canonical::Primitive)
+        zigzag_decode(self.encoded().into_primitive()?).map(Canonical::Primitive)
     }
 }

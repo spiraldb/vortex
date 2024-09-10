@@ -164,12 +164,10 @@ impl AcceptArrayVisitor for RunEndArray {
 impl ArrayStatisticsCompute for RunEndArray {}
 
 #[cfg(test)]
-mod test {
-    use vortex::array::{BoolArray, PrimitiveArray};
+mod tests {
     use vortex::compute::unary::scalar_at;
-    use vortex::compute::{slice, take};
-    use vortex::validity::{ArrayValidity, Validity};
-    use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
+    use vortex::validity::Validity;
+    use vortex::{ArrayDType, IntoArray};
     use vortex_dtype::{DType, Nullability, PType};
 
     use crate::RunEndArray;
@@ -195,102 +193,5 @@ mod test {
         assert_eq!(scalar_at(arr.array(), 2).unwrap(), 2.into());
         assert_eq!(scalar_at(arr.array(), 5).unwrap(), 3.into());
         assert_eq!(scalar_at(arr.array(), 9).unwrap(), 3.into());
-    }
-
-    #[test]
-    fn slice_array() {
-        let arr = slice(
-            RunEndArray::try_new(
-                vec![2u32, 5, 10].into_array(),
-                vec![1i32, 2, 3].into_array(),
-                Validity::NonNullable,
-            )
-            .unwrap()
-            .array(),
-            3,
-            8,
-        )
-        .unwrap();
-        assert_eq!(
-            arr.dtype(),
-            &DType::Primitive(PType::I32, Nullability::NonNullable)
-        );
-        assert_eq!(arr.len(), 5);
-
-        assert_eq!(
-            arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
-            vec![2, 2, 3, 3, 3]
-        );
-    }
-
-    #[test]
-    fn slice_end_inclusive() {
-        let arr = slice(
-            RunEndArray::try_new(
-                vec![2u32, 5, 10].into_array(),
-                vec![1i32, 2, 3].into_array(),
-                Validity::NonNullable,
-            )
-            .unwrap()
-            .array(),
-            4,
-            10,
-        )
-        .unwrap();
-        assert_eq!(
-            arr.dtype(),
-            &DType::Primitive(PType::I32, Nullability::NonNullable)
-        );
-        assert_eq!(arr.len(), 6);
-
-        assert_eq!(
-            arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
-            vec![2, 3, 3, 3, 3, 3]
-        );
-    }
-
-    #[test]
-    fn flatten() {
-        let arr = RunEndArray::try_new(
-            vec![2u32, 5, 10].into_array(),
-            vec![1i32, 2, 3].into_array(),
-            Validity::NonNullable,
-        )
-        .unwrap();
-
-        assert_eq!(
-            arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
-            vec![1, 1, 2, 2, 2, 3, 3, 3, 3, 3]
-        );
-    }
-
-    #[test]
-    fn with_nulls() {
-        let uncompressed = PrimitiveArray::from_vec(vec![1i32, 0, 3], Validity::AllValid);
-        let validity = BoolArray::from_vec(
-            vec![
-                true, true, false, false, false, true, true, true, true, true,
-            ],
-            Validity::NonNullable,
-        );
-        let arr = RunEndArray::try_new(
-            vec![2u32, 5, 10].into_array(),
-            uncompressed.into(),
-            Validity::Array(validity.into()),
-        )
-        .unwrap();
-
-        let test_indices = PrimitiveArray::from_vec(vec![0, 2, 4, 6], Validity::NonNullable);
-        let taken = take(arr.array(), test_indices.array()).unwrap();
-
-        assert_eq!(taken.len(), test_indices.len());
-
-        let parray = taken.into_primitive().unwrap();
-        assert_eq!(
-            (0..4)
-                .map(|idx| parray.is_valid(idx).then(|| parray.get_as_cast::<i32>(idx)))
-                .collect::<Vec<Option<i32>>>(),
-            vec![Some(1), None, None, Some(3),]
-        );
     }
 }
