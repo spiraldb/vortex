@@ -29,18 +29,28 @@ paste = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-log = { workspace = true }
 tokio = { workspace = true, features = ["fs"] }
+
 vortex-alp = { workspace = true }
 vortex-array = { workspace = true }
+vortex-buffer = { workspace = true }
+vortex-bytebool = { workspace = true }
+vortex-datafusion = { workspace = true }
+vortex-datetime-dtype = { workspace = true }
+vortex-datetime-parts = { workspace = true }
 vortex-dict = { workspace = true }
-vortex-dtype = { workspace = true }
+vortex-dtype = { workspace = true, default-features = false }
 vortex-error = { workspace = true }
 vortex-expr = { workspace = true }
 vortex-fastlanes = { workspace = true }
+vortex-flatbuffers = { workspace = true }
+vortex-fsst = { workspace = true }
+vortex-proto = { workspace = true }
 vortex-roaring = { workspace = true }
 vortex-runend = { workspace = true }
+vortex-runend-bool = { workspace = true }
+vortex-scalar = { workspace = true, default-features = false }
+vortex-serde = { workspace = true, default-features = false, features = ["tokio"] }
 vortex-sampling-compressor = { workspace = true }
-vortex-serde = { workspace = true, features = ["tokio"] }
-vortex-scalar = { workspace = true }
 vortex-zigzag = { workspace = true }
 itertools = { workspace = true }
 
