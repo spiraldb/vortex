@@ -166,8 +166,9 @@ impl ChunkedArray {
             let n_bytes = chunk.nbytes();
             let n_elements = chunk.len();
 
-            if new_chunk_n_bytes + n_bytes > max_n_bytes
-                || new_chunk_n_elements + n_elements > max_n_elements
+            if (new_chunk_n_bytes + n_bytes > max_n_bytes
+                || new_chunk_n_elements + n_elements > max_n_elements)
+                && !chunks_to_combine.is_empty()
             {
                 let canonical = try_canonicalize_chunks(
                     chunks_to_combine,
