@@ -55,15 +55,21 @@ pub struct CompressConfig {
     sample_size: u16,
     sample_count: u16,
     max_depth: u8,
+    target_chunk_bytesize: usize,
+    target_chunk_rowsize: usize,
 }
 
 impl Default for CompressConfig {
     fn default() -> Self {
+        let kib = 1 << 10;
+        let mib = 1 << 20;
         Self {
             // Sample length should always be multiple of 1024
             sample_size: 128,
             sample_count: 8,
             max_depth: 3,
+            target_chunk_bytesize: 16 * mib,
+            target_chunk_rowsize: 64 * kib,
         }
     }
 }
@@ -200,7 +206,10 @@ impl<'a> SamplingCompressor<'a> {
         match arr.encoding().id() {
             Chunked::ID => {
                 let chunked = ChunkedArray::try_from(arr)?;
-                let less_chunked = chunked.rechunk_default()?;
+                let less_chunked = chunked.rechunk(
+                    self.options().target_chunk_bytesize,
+                    self.options().target_chunk_rowsize,
+                )?;
                 let compressed_chunks = less_chunked
                     .chunks()
                     .map(|chunk| {

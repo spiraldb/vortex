@@ -134,13 +134,7 @@ impl ChunkedArray {
         ArrayStreamAdapter::new(self.dtype().clone(), stream::iter(self.chunks().map(Ok)))
     }
 
-    pub fn rechunk_default(&self) -> VortexResult<Self> {
-        let sixteen_megabytes = 1 << 24;
-        let chunk_max = 1 << 16; // BtrBlocks uses 64K so we use 64Ki
-        self.rechunk(sixteen_megabytes, chunk_max)
-    }
-
-    pub fn rechunk(&self, max_n_bytes: usize, max_n_elements: usize) -> VortexResult<Self> {
+    pub fn rechunk(&self, target_bytesize: usize, target_rowsize: usize) -> VortexResult<Self> {
         fn combine_validities(
             dtype: &DType,
             validities: Vec<LogicalValidity>,
@@ -166,8 +160,8 @@ impl ChunkedArray {
             let n_bytes = chunk.nbytes();
             let n_elements = chunk.len();
 
-            if (new_chunk_n_bytes + n_bytes > max_n_bytes
-                || new_chunk_n_elements + n_elements > max_n_elements)
+            if (new_chunk_n_bytes + n_bytes > target_bytesize
+                || new_chunk_n_elements + n_elements > target_rowsize)
                 && !chunks_to_combine.is_empty()
             {
                 let canonical = try_canonicalize_chunks(
@@ -183,7 +177,7 @@ impl ChunkedArray {
                 chunks_to_combine = Vec::new();
             }
 
-            if n_bytes > max_n_bytes || n_elements > max_n_elements {
+            if n_bytes > target_bytesize || n_elements > target_rowsize {
                 new_chunks.push(chunk.into_canonical()?.into()); // TODO(dk): rechunking maybe shouldn't produce canonical chunks
             } else {
                 new_chunk_n_bytes += n_bytes;
