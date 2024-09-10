@@ -9,7 +9,6 @@ use vortex_scalar::Scalar;
 use super::unary::scalar_at;
 use crate::array::ConstantArray;
 use crate::arrow::FromArrowArray;
-use crate::stats::ArrayStatistics;
 use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
@@ -90,9 +89,7 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         vortex_bail!("Compare operations only support arrays of the same type");
     }
 
-    if ConstantArray::try_from(left).is_ok()
-        || left.statistics().compute_is_constant().unwrap_or_default()
-    {
+    if ConstantArray::try_from(left).is_ok() {
         let scalar = scalar_at(left, 0)?;
         let left_const = ConstantArray::new(scalar, left.len()).into_array();
         return compare(right, &left_const, operator.swap());

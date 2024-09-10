@@ -1,24 +1,48 @@
 use arrow_buffer::bit_util::ceil;
-use arrow_buffer::{BooleanBuffer, MutableBuffer};
+use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, MutableBuffer};
 use vortex_dtype::{match_each_native_ptype, NativePType};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect, VortexResult};
+use vortex_scalar::PrimitiveScalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::array::BoolArray;
-use crate::compute::{CompareFn, Operator};
+use crate::array::{BoolArray, ConstantArray};
+use crate::compute::{MaybeCompareFn, Operator};
+use crate::validity::ArrayValidity;
 use crate::{Array, IntoArray, IntoArrayVariant};
 
-impl CompareFn for PrimitiveArray {
-    fn compare(&self, other: &Array, operator: Operator) -> VortexResult<Array> {
-        let other = other.clone().into_primitive()?;
+impl MaybeCompareFn for PrimitiveArray {
+    fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        let fn_impl = || -> VortexResult<Array> {
+            if let Ok(const_array) = ConstantArray::try_from(other) {
+                let mut builder = BooleanBufferBuilder::new(self.len());
+                let primitive_scalar = PrimitiveScalar::try_from(const_array.scalar())
+                    .vortex_expect("Expected a primitive scalar");
 
-        let match_mask = match_each_native_ptype!(self.ptype(), |$T| {
-            apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), operator.to_fn::<$T>())
-        });
+                match_each_native_ptype!(self.ptype(), |$T| {
+                    let op_fn = operator.to_fn::<$T>();
+                    let typed_value = primitive_scalar.typed_value::<$T>().unwrap();
+                    for v in self.maybe_null_slice::<$T>() {
+                        builder.append(op_fn(*v, typed_value));
+                    }
+                });
+                let validity = self
+                    .validity()
+                    .and(const_array.logical_validity().into_validity())?
+                    .into_nullable();
+                Ok(BoolArray::try_new(builder.finish(), validity)?.into_array())
+            } else {
+                let other = other.clone().into_primitive()?;
 
-        let validity = self.validity().and(other.validity())?.into_nullable();
+                let match_mask = match_each_native_ptype!(self.ptype(), |$T| {
+                    apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), operator.to_fn::<$T>())
+                });
 
-        Ok(BoolArray::try_new(match_mask, validity)?.into_array())
+                let validity = self.validity().and(other.validity())?.into_nullable();
+                Ok(BoolArray::try_new(match_mask, validity)?.into_array())
+            }
+        };
+
+        Some(fn_impl())
     }
 }
 

@@ -2,7 +2,7 @@ use vortex_error::VortexResult;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{CastFn, FillForwardFn, ScalarAtFn, SubtractScalarFn};
-use crate::compute::{ArrayCompute, CompareFn, Operator, SearchSortedFn, SliceFn, TakeFn};
+use crate::compute::{ArrayCompute, MaybeCompareFn, Operator, SearchSortedFn, SliceFn, TakeFn};
 use crate::Array;
 
 mod cast;
@@ -21,7 +21,7 @@ impl ArrayCompute for PrimitiveArray {
     }
 
     fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        Some(CompareFn::compare(self, other, operator))
+        MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
