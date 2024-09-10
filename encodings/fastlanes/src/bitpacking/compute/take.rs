@@ -35,9 +35,10 @@ fn take_primitive<T: NativePType + BitPacking>(
         indices
             .maybe_null_slice::<$P>()
             .iter()
-            .chunk_by(|idx| (**idx / 1024) as usize)
+            .map(|i| *i as usize + array.offset())
+            .chunk_by(|idx| idx / 1024)
             .into_iter()
-            .map(|(k, g)| (k, g.map(|idx| (*idx % 1024) as u16).collect()))
+            .map(|(k, g)| (k, g.map(|idx| (idx % 1024) as u16).collect()))
             .collect()
     });
 
@@ -133,10 +134,10 @@ mod test {
     use itertools::Itertools;
     use rand::distributions::Uniform;
     use rand::{thread_rng, Rng};
-    use vortex::array::{Primitive, PrimitiveArray, SparseArray};
-    use vortex::compute::take;
+    use vortex::array::{PrimitiveArray, SparseArray};
     use vortex::compute::unary::scalar_at;
-    use vortex::{ArrayDef, IntoArray, IntoArrayVariant};
+    use vortex::compute::{slice, take};
+    use vortex::{IntoArray, IntoArrayVariant};
 
     use crate::BitPackedArray;
 
@@ -146,15 +147,28 @@ mod test {
 
         // Create a u8 array modulo 63.
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
-
         let bitpacked = BitPackedArray::encode(unpacked.array(), 6).unwrap();
 
-        let result = take(bitpacked.array(), &indices).unwrap();
-        assert_eq!(result.encoding().id(), Primitive::ID);
-
-        let primitive_result = result.into_primitive().unwrap();
+        let primitive_result = take(bitpacked.array(), &indices)
+            .unwrap()
+            .into_primitive()
+            .unwrap();
         let res_bytes = primitive_result.maybe_null_slice::<u8>();
         assert_eq!(res_bytes, &[0, 62, 31, 33, 9, 18]);
+    }
+
+    #[test]
+    fn take_sliced_indices() {
+        let indices = PrimitiveArray::from(vec![1919, 1921]).into_array();
+
+        // Create a u8 array modulo 63.
+        let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
+        let bitpacked = BitPackedArray::encode(unpacked.array(), 6).unwrap();
+        let sliced = slice(bitpacked.array(), 128, 2050).unwrap();
+
+        let primitive_result = take(&sliced, &indices).unwrap().into_primitive().unwrap();
+        let res_bytes = primitive_result.maybe_null_slice::<u8>();
+        assert_eq!(res_bytes, &[31, 33]);
     }
 
     #[test]
