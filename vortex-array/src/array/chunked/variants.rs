@@ -87,7 +87,6 @@ impl ExtensionArrayTrait for ChunkedArray {
     fn storage_array(&self) -> Array {
         ChunkedArray::from_iter(
             self.chunks()
-                .into_iter()
                 .map(|chunk| chunk.with_dyn(|a| a.as_extension_array_unchecked().storage_array())),
         )
         .into_array()

@@ -12,8 +12,8 @@ mod slice;
 mod take;
 
 impl ArrayCompute for VarBinArray {
-    fn compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        MaybeCompareFn::maybe_compare(self, array, operator)
+    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {

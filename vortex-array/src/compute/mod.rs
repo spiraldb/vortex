@@ -39,7 +39,7 @@ pub trait ArrayCompute {
     /// Binary operator implementation for arrays against other arrays.
     ///
     ///See: [CompareFn].
-    fn compare(&self, _array: &Array, _operator: Operator) -> Option<VortexResult<Array>> {
+    fn compare(&self, _other: &Array, _operator: Operator) -> Option<VortexResult<Array>> {
         None
     }
 

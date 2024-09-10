@@ -14,8 +14,8 @@ use crate::stats::{ArrayStatistics, Stat};
 use crate::{Array, ArrayDType, AsArray, IntoArray};
 
 impl ArrayCompute for ConstantArray {
-    fn compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        MaybeCompareFn::maybe_compare(self, array, operator)
+    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -96,17 +96,18 @@ impl SearchSortedFn for ConstantArray {
 }
 
 impl MaybeCompareFn for ConstantArray {
-    fn maybe_compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        if let Some(true) = array.statistics().get_as::<bool>(Stat::IsConstant) {
-            Some({
-                let lhs = self.scalar();
-                let rhs = scalar_at(array, 0).expect("Expected scalar");
-                let scalar = scalar_cmp(lhs, &rhs, operator);
-                Ok(ConstantArray::new(scalar, self.len()).into_array())
-            })
-        } else {
-            None
-        }
+    fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        (ConstantArray::try_from(other).is_ok()
+            || other
+                .statistics()
+                .get_as::<bool>(Stat::IsConstant)
+                .unwrap_or_default())
+        .then(|| {
+            let lhs = self.scalar();
+            let rhs = scalar_at(other, 0).unwrap_or_else(|_e| panic!("Expected scalar"));
+            let scalar = scalar_cmp(lhs, &rhs, operator);
+            Ok(ConstantArray::new(scalar, self.len()).into_array())
+        })
     }
 }
 

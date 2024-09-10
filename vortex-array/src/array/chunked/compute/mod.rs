@@ -17,8 +17,8 @@ impl ArrayCompute for ChunkedArray {
         Some(self)
     }
 
-    fn compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        Some(CompareFn::compare(self, array, operator))
+    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        Some(CompareFn::compare(self, other, operator))
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {

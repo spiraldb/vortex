@@ -70,11 +70,11 @@ impl Operator {
 }
 
 pub trait CompareFn {
-    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array>;
+    fn compare(&self, other: &Array, operator: Operator) -> VortexResult<Array>;
 }
 
 pub trait MaybeCompareFn {
-    fn maybe_compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>>;
+    fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>>;
 }
 
 pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {

@@ -7,6 +7,7 @@ use crate::compute::unary::{scalar_at, scalar_at_unchecked, CastFn, ScalarAtFn};
 use crate::compute::{
     compare, slice, take, ArrayCompute, MaybeCompareFn, Operator, SliceFn, TakeFn,
 };
+use crate::variants::ExtensionArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for ExtensionArray {
@@ -17,8 +18,8 @@ impl ArrayCompute for ExtensionArray {
         None
     }
 
-    fn compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        MaybeCompareFn::maybe_compare(self, array, operator)
+    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -38,8 +39,8 @@ impl MaybeCompareFn for ExtensionArray {
     fn maybe_compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
         if let Ok(const_ext) = ConstantArray::try_from(array) {
             return Some({
-                let scalar_ext =
-                    ExtScalar::try_from(const_ext.scalar()).expect("Expected ExtScalar");
+                let scalar_ext = ExtScalar::try_from(const_ext.scalar())
+                    .unwrap_or_else(|_e| panic!("Expected ExtScalar"));
                 let const_storage = ConstantArray::new(
                     Scalar::new(self.storage().dtype().clone(), scalar_ext.value().clone()),
                     const_ext.len(),

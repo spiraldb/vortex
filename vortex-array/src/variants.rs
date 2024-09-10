@@ -229,8 +229,8 @@ pub trait StructArrayTrait: ArrayTrait {
 pub trait ListArrayTrait: ArrayTrait {}
 
 pub trait ExtensionArrayTrait: ArrayTrait {
-    fn ext_dtype(&self) -> ExtDType {
-        let DType::Extension(ext_dtype, _nullability) = self.dtype().clone() else {
+    fn ext_dtype(&self) -> &ExtDType {
+        let DType::Extension(ext_dtype, _nullability) = self.dtype() else {
             panic!("Expected ExtDType")
         };
         ext_dtype
