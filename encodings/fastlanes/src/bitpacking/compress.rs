@@ -314,7 +314,6 @@ pub fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 #[cfg(test)]
 mod test {
     use vortex::{IntoArrayVariant, ToArray};
-    use vortex_scalar::PrimitiveScalar;
 
     use super::*;
 
@@ -376,11 +375,7 @@ mod test {
             .iter()
             .enumerate()
             .for_each(|(i, v)| {
-                let scalar = unpack_single(&compressed, i).unwrap();
-                let scalar = PrimitiveScalar::try_from(&scalar)
-                    .unwrap()
-                    .typed_value::<u16>()
-                    .unwrap();
+                let scalar: u16 = unpack_single(&compressed, i).unwrap().try_into().unwrap();
                 assert_eq!(scalar, *v);
             });
     }
