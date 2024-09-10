@@ -74,7 +74,9 @@ impl SliceFn for ALPArray {
 
 impl CompareFn for ALPArray {
     fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
-        if array.statistics().compute_is_constant().unwrap_or_default() {
+        if ConstantArray::try_from(array).is_ok()
+            || array.statistics().compute_is_constant().unwrap_or_default()
+        {
             let rhs = scalar_at(array, 0).expect("should be scalar");
             let pvalue = rhs.value().as_pvalue().expect("Expected primitive value");
 
