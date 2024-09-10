@@ -29,6 +29,10 @@ impl ArrayCompute for FoRArray {
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
+
+    fn filter(&self) -> Option<&dyn FilterFn> {
+        Some(self)
+    }
 }
 
 impl TakeFn for FoRArray {

@@ -1,7 +1,10 @@
+use arrow_ord::cmp;
 use vortex::array::{BoolArray, ConstantArray};
 use vortex::arrow::FromArrowArray;
 use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
-use vortex::compute::{compare, slice, take, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
+use vortex::compute::{
+    compare, filter, slice, take, ArrayCompute, CompareFn, FilterFn, Operator, SliceFn, TakeFn,
+};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
@@ -20,6 +23,14 @@ impl ArrayCompute for ALPArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn compare(&self) -> Option<&dyn CompareFn> {
+        Some(self)
+    }
+
+    fn filter(&self) -> Option<&dyn FilterFn> {
         Some(self)
     }
 }
@@ -67,6 +78,17 @@ impl SliceFn for ALPArray {
             slice(&self.encoded(), start, end)?,
             self.exponents(),
             self.patches().map(|p| slice(&p, start, end)).transpose()?,
+        )?
+        .into_array())
+    }
+}
+
+impl FilterFn for ALPArray {
+    fn filter(&self, predicate: &Array) -> VortexResult<Array> {
+        Ok(Self::try_new(
+            filter(&self.encoded(), predicate)?,
+            self.exponents(),
+            self.patches().map(|p| filter(&p, predicate)).transpose()?,
         )?
         .into_array())
     }
@@ -135,7 +157,6 @@ impl CompareFn for ALPArray {
             let lhs = self.clone().into_canonical()?.into_arrow();
             let rhs = array.clone().into_canonical()?.into_arrow();
 
-            use arrow_ord::cmp;
             let array = match operator {
                 Operator::Eq => cmp::eq(&lhs.as_ref(), &rhs.as_ref())?,
                 Operator::NotEq => cmp::neq(&lhs.as_ref(), &rhs.as_ref())?,
