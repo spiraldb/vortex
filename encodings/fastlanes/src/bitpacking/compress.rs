@@ -330,6 +330,26 @@ mod test {
     }
 
     #[test]
+    fn null_patches() {
+        let valid_values = (0..24).map(|v| v < 1 << 4).collect::<Vec<_>>();
+        let values =
+            PrimitiveArray::from_vec((0..24).collect::<Vec<_>>(), Validity::from(valid_values));
+        let compressed = BitPackedArray::encode(values.array(), 4).unwrap();
+        assert!(compressed.patches().is_none());
+        assert_eq!(
+            (0..(1 << 4)).collect::<Vec<_>>(),
+            compressed
+                .logical_validity()
+                .to_null_buffer()
+                .unwrap()
+                .unwrap()
+                .into_inner()
+                .set_indices()
+                .collect::<Vec<_>>()
+        )
+    }
+
+    #[test]
     fn test_compression_roundtrip_fast() {
         compression_roundtrip(125);
     }
@@ -343,7 +363,7 @@ mod test {
     }
 
     fn compression_roundtrip(n: usize) {
-        let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 2047) as u16)));
+        let values = PrimitiveArray::from((0..n).map(|i| (i % 2047) as u16).collect::<Vec<_>>());
         let compressed = BitPackedArray::encode(values.array(), 11).unwrap();
         let decompressed = compressed.to_array().into_primitive().unwrap();
         assert_eq!(
