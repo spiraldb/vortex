@@ -49,34 +49,21 @@ impl ScalarAtFn for SparseArray {
 
 impl SearchSortedFn for SparseArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
-        search_sorted(&self.values(), value.clone(), side).and_then(|sr| match sr {
-            SearchResult::Found(i) => {
-                let index: usize = scalar_at(
-                    &self.indices(),
-                    if i == self.metadata().indices_len {
-                        i - 1
-                    } else {
-                        i
-                    },
-                )?
-                .as_ref()
-                .try_into()?;
-                Ok(SearchResult::Found(
+        search_sorted(&self.values(), value.clone(), side).and_then(|sr| {
+            let sidx = sr.to_offset_ends_index(self.metadata().indices_len);
+            let index: usize = scalar_at(&self.indices(), sidx)?.as_ref().try_into()?;
+            Ok(match sr {
+                SearchResult::Found(i) => SearchResult::Found(
                     if i == self.metadata().indices_len {
                         index + 1
                     } else {
                         index
                     } - self.indices_offset(),
-                ))
-            }
-            SearchResult::NotFound(i) => {
-                let index: usize = scalar_at(&self.indices(), if i == 0 { 0 } else { i - 1 })?
-                    .as_ref()
-                    .try_into()?;
-                Ok(SearchResult::NotFound(
+                ),
+                SearchResult::NotFound(i) => SearchResult::NotFound(
                     if i == 0 { index } else { index + 1 } - self.indices_offset(),
-                ))
-            }
+                ),
+            })
         })
     }
 }

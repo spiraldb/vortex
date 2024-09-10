@@ -11,7 +11,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{scalar_at, subtract_scalar, SubtractScalarFn};
-use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
+use crate::compute::{search_sorted, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
@@ -90,22 +90,13 @@ impl ChunkedArray {
             .vortex_expect("Missing chunk ends in ChunkedArray")
     }
 
-    pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
+    fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        let search_result = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
-            .vortex_expect("Search sorted failed in find_chunk_idx");
-        let index_chunk = match search_result {
-            SearchResult::Found(i) => {
-                if i == self.nchunks() {
-                    i - 1
-                } else {
-                    i
-                }
-            }
-            SearchResult::NotFound(i) => i - 1,
-        };
-        let chunk_start = &scalar_at(&self.chunk_offsets(), index_chunk)
+        let index_chunk = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
+            .vortex_expect("Search sorted failed in find_chunk_idx")
+            .to_offset_ends_index(self.nchunks());
+        let chunk_start = scalar_at(&self.chunk_offsets(), index_chunk)
             .and_then(|s| usize::try_from(&s))
             .vortex_expect("Failed to find chunk start in find_chunk_idx");
 
