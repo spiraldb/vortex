@@ -4509,6 +4509,7 @@ version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
  "vortex-array",
+ "vortex-buffer",
  "vortex-dtype",
  "vortex-error",
  "vortex-sampling-compressor",

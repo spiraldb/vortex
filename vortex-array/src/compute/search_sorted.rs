@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -41,6 +41,15 @@ impl SearchResult {
         match self {
             Self::Found(i) => i,
             Self::NotFound(i) => i,
+        }
+    }
+}
+
+impl Display for SearchResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchResult::Found(i) => write!(f, "Found({i})"),
+            SearchResult::NotFound(i) => write!(f, "NotFound({i})"),
         }
     }
 }
