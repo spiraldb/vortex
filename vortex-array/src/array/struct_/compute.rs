@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::struct_::StructArray;
@@ -82,7 +82,10 @@ impl FilterFn for StructArray {
             .children()
             .map(|field| filter(&field, predicate))
             .try_collect()?;
-        let length = fields.first().map(|a| a.len()).unwrap_or_default();
+        let length = fields
+            .first()
+            .map(|a| a.len())
+            .ok_or(vortex_err!("Struct arrays should have at least one field"))?;
 
         Self::try_new(
             self.names().clone(),
