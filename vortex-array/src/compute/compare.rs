@@ -6,8 +6,11 @@ use vortex_dtype::{DType, NativePType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
+use super::unary::scalar_at;
+use crate::array::ConstantArray;
 use crate::arrow::FromArrowArray;
-use crate::{Array, ArrayDType, IntoCanonical};
+use crate::stats::ArrayStatistics;
+use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Operator {
@@ -85,6 +88,12 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
     // TODO(adamg): This is a placeholder until we figure out type coercion and casting
     if !left.dtype().eq_ignore_nullability(right.dtype()) {
         vortex_bail!("Compare operations only support arrays of the same type");
+    }
+
+    if left.statistics().compute_is_constant().unwrap_or_default() {
+        let scalar = scalar_at(left, 0)?;
+        let left_const = ConstantArray::new(scalar, left.len()).into_array();
+        return compare(right, &left_const, operator.swap());
     }
 
     if let Some(selection) = left.with_dyn(|lhs| lhs.compare(right, operator)) {

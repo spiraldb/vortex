@@ -15,6 +15,7 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+arrow-ord = "53.0.0"
 itertools = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
