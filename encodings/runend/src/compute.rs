@@ -64,21 +64,21 @@ impl TakeFn for RunEndArray {
             }
             Validity::Array(original_validity) => {
                 let dense_validity = take(&original_validity, indices)?;
+                let filtered_values = filter(&dense_values, &dense_validity)?;
+                let length = dense_validity.len();
                 let dense_nonnull_indices = PrimitiveArray::from(
                     dense_validity
-                        .clone()
                         .into_bool()?
                         .boolean_buffer()
                         .set_indices()
                         .map(|idx| idx as u64)
-                        .collect::<Vec<u64>>(),
+                        .collect::<Vec<_>>(),
                 )
                 .into_array();
-                let length = dense_validity.len();
 
                 SparseArray::try_new(
                     dense_nonnull_indices,
-                    filter(&dense_values, &dense_validity)?,
+                    filtered_values,
                     length,
                     Scalar::null(self.dtype().clone()),
                 )?
