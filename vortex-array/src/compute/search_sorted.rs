@@ -50,8 +50,8 @@ impl SearchResult {
     /// Convert search result into an index suitable for searching array of end indices with explicit 0 offset entry,
     /// i.e. first element starts at 0.
     ///
-    /// For example if you have a ChunkedArray with chunk ends array [0, 3, 8, 10], then after searching in that array
-    /// you can use this method if you want to index into that array.
+    /// For example for a ChunkedArray with chunk ends array [0, 3, 8, 10] you can use this method to
+    /// obtain index suitable for indexing into it after performing a search
     pub fn to_offset_ends_index(self, len: usize) -> usize {
         match self {
             SearchResult::Found(i) => {
@@ -68,8 +68,8 @@ impl SearchResult {
     /// Convert search result into an index suitable for searching array of end indices without 0 offset,
     /// i.e. first element implicitly covers 0..0th-element range.
     ///
-    /// For example if you have a RunEndArray with ends array [3, 8, 10], then after searching in that array you can use
-    /// this method if you want to index into that array.
+    /// For example for a RunEndArray with ends array [3, 8, 10], you can use this method to obtain index suitable for
+    /// indexing into it after performing a search
     pub fn to_ends_index(self, len: usize) -> usize {
         let idx = self.to_index();
         if idx == len {
