@@ -2,7 +2,7 @@ use core::fmt;
 use std::fmt::{Display, Formatter};
 
 use arrow_ord::cmp;
-use vortex_dtype::{DType, NativePType, Nullability};
+use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -59,7 +59,7 @@ impl Operator {
         }
     }
 
-    pub fn to_fn<T: NativePType>(&self) -> fn(T, T) -> bool {
+    pub fn to_fn<T: PartialEq + PartialOrd>(&self) -> fn(T, T) -> bool {
         match self {
             Operator::Eq => |l, r| l == r,
             Operator::NotEq => |l, r| l != r,

@@ -8,6 +8,7 @@ use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
 use crate::array::{BoolArray, ConstantArray};
 use crate::compute::unary::ScalarAtFn;
 use crate::compute::{slice, ArrayCompute, MaybeCompareFn, Operator, SliceFn};
+use crate::validity::Validity;
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for VarBinViewArray {
@@ -39,7 +40,11 @@ fn const_compare(
     operator: Operator,
 ) -> VortexResult<Array> {
     let buffer = match other.scalar().value() {
-        // Self::Null => Ok(None), TODO
+        ScalarValue::Null => {
+            return Ok(
+                BoolArray::from_vec(vec![false; binview.len()], Validity::AllInvalid).into_array(),
+            )
+        }
         ScalarValue::Buffer(b) => b.clone(),
         ScalarValue::BufferString(b) => Buffer::from(b.clone()),
         _ => unreachable!(),
@@ -64,14 +69,7 @@ fn const_compare(
 
         let scalar_prefix = &buffer[0..data_len];
 
-        let r = match operator {
-            Operator::Eq => data == scalar_prefix,
-            Operator::NotEq => data != scalar_prefix,
-            Operator::Gt => data > scalar_prefix,
-            Operator::Gte => data >= scalar_prefix,
-            Operator::Lt => data < scalar_prefix,
-            Operator::Lte => data <= scalar_prefix,
-        };
+        let r = operator.to_fn()(data, scalar_prefix);
 
         if !r {
             builder.append(false);
@@ -81,15 +79,7 @@ fn const_compare(
             continue;
         } else {
             let bytes = binview.bytes_at(index)?;
-
-            let r = match operator {
-                Operator::Eq => bytes.as_slice() == buffer.as_slice(),
-                Operator::NotEq => bytes.as_slice() != buffer.as_slice(),
-                Operator::Gt => bytes.as_slice() > buffer.as_slice(),
-                Operator::Gte => bytes.as_slice() >= buffer.as_slice(),
-                Operator::Lt => bytes.as_slice() < buffer.as_slice(),
-                Operator::Lte => bytes.as_slice() >= buffer.as_slice(),
-            };
+            let r = operator.to_fn()(bytes.as_slice(), buffer.as_slice());
 
             builder.append(r);
         }
