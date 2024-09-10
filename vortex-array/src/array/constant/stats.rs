@@ -11,7 +11,7 @@ impl ArrayStatisticsCompute for ConstantArray {
         let mut stats_map = HashMap::from([(Stat::IsConstant, true.into())]);
 
         if let Ok(b) = BoolScalar::try_from(self.scalar()) {
-            let true_count = if b.value().unwrap_or(false) {
+            let true_count = if b.value().unwrap_or_default() {
                 self.len() as u64
             } else {
                 0

@@ -1,13 +1,11 @@
-use arrow_ord::cmp;
 use vortex::array::{BoolArray, ConstantArray};
-use vortex::arrow::FromArrowArray;
 use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{
-    compare, filter, slice, take, ArrayCompute, CompareFn, FilterFn, Operator, SliceFn, TakeFn,
+    compare, filter, slice, take, ArrayCompute, FilterFn, MaybeCompareFn, Operator, SliceFn, TakeFn,
 };
-use vortex::stats::ArrayStatistics;
+use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, AsArray, IntoArray};
 use vortex_error::{VortexExpect, VortexResult};
 use vortex_scalar::{PValue, Scalar};
 
@@ -27,7 +25,7 @@ impl ArrayCompute for ALPArray {
     }
 
     fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        Some(CompareFn::compare(self, other, operator))
+        MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
     fn filter(&self) -> Option<&dyn FilterFn> {
@@ -94,10 +92,13 @@ impl FilterFn for ALPArray {
     }
 }
 
-impl CompareFn for ALPArray {
-    fn compare(&self, array: &Array, operator: Operator) -> VortexResult<Array> {
+impl MaybeCompareFn for ALPArray {
+    fn maybe_compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
         if ConstantArray::try_from(array).is_ok()
-            || array.statistics().compute_is_constant().unwrap_or_default()
+            || array
+                .statistics()
+                .get_as::<bool>(Stat::IsConstant)
+                .unwrap_or_default()
         {
             let rhs = scalar_at(array, 0).vortex_expect("should be scalar");
             let pvalue = rhs
@@ -111,20 +112,18 @@ impl CompareFn for ALPArray {
                     match encoded {
                         Ok(encoded) => {
                             let s = ConstantArray::new(encoded, self.len());
-                            compare(&self.encoded(), s.as_array_ref(), operator)
+                            Some(compare(&self.encoded(), s.as_array_ref(), operator))
                         }
                         Err(exception) => {
                             if let Some(patches) = self.patches().as_ref() {
                                 let s = ConstantArray::new(exception, self.len());
-                                compare(patches, s.as_array_ref(), operator)
+                                Some(compare(patches, s.as_array_ref(), operator))
                             } else {
-                                Ok(
-                                    BoolArray::from_vec(
-                                        vec![false; self.len()],
-                                        Validity::AllValid,
-                                    )
-                                    .into_array(),
+                                Some(Ok(BoolArray::from_vec(
+                                    vec![false; self.len()],
+                                    Validity::AllValid,
                                 )
+                                .into_array()))
                             }
                         }
                     }
@@ -134,17 +133,18 @@ impl CompareFn for ALPArray {
                     match encoded {
                         Ok(encoded) => {
                             let s = ConstantArray::new(encoded, self.len());
-                            compare(&self.encoded(), s.as_array_ref(), operator)
+                            Some(compare(&self.encoded(), s.as_array_ref(), operator))
                         }
                         Err(exception) => {
                             if let Some(patches) = self.patches().as_ref() {
                                 let s = ConstantArray::new(exception, self.len());
-                                compare(patches, s.as_array_ref(), operator)
+                                Some(compare(patches, s.as_array_ref(), operator))
                             } else {
-                                Ok(
-                                    BoolArray::from_vec(vec![true; self.len()], Validity::AllValid)
-                                        .into_array(),
+                                Some(Ok(BoolArray::from_vec(
+                                    vec![true; self.len()],
+                                    Validity::AllValid,
                                 )
+                                .into_array()))
                             }
                         }
                     }
@@ -152,24 +152,14 @@ impl CompareFn for ALPArray {
                 None => {
                     // Is `null == null => true`?
                     let bools = (0..self.len()).map(|index| !self.is_valid(index)).collect();
-                    Ok(BoolArray::from_vec(bools, Validity::AllValid).into_array())
+                    Some(Ok(
+                        BoolArray::from_vec(bools, Validity::AllValid).into_array()
+                    ))
                 }
                 _ => unreachable!(),
             }
         } else {
-            let lhs = self.clone().into_canonical()?.into_arrow()?;
-            let rhs = array.clone().into_canonical()?.into_arrow()?;
-
-            let array = match operator {
-                Operator::Eq => cmp::eq(&lhs.as_ref(), &rhs.as_ref())?,
-                Operator::NotEq => cmp::neq(&lhs.as_ref(), &rhs.as_ref())?,
-                Operator::Gt => cmp::gt(&lhs.as_ref(), &rhs.as_ref())?,
-                Operator::Gte => cmp::gt_eq(&lhs.as_ref(), &rhs.as_ref())?,
-                Operator::Lt => cmp::lt(&lhs.as_ref(), &rhs.as_ref())?,
-                Operator::Lte => cmp::lt_eq(&lhs.as_ref(), &rhs.as_ref())?,
-            };
-
-            Ok(Array::from_arrow(&array, true))
+            None
         }
     }
 }

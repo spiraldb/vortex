@@ -4275,7 +4275,6 @@ name = "vortex-alp"
 version = "0.8.0"
 dependencies = [
  "arrow",
- "arrow-ord",
  "divan",
  "itertools 0.13.0",
  "num-traits",

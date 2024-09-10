@@ -90,7 +90,9 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         vortex_bail!("Compare operations only support arrays of the same type");
     }
 
-    if left.statistics().compute_is_constant().unwrap_or_default() {
+    if ConstantArray::try_from(left).is_ok()
+        || left.statistics().compute_is_constant().unwrap_or_default()
+    {
         let scalar = scalar_at(left, 0)?;
         let left_const = ConstantArray::new(scalar, left.len()).into_array();
         return compare(right, &left_const, operator.swap());
