@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::convert::identity;
 
 use itertools::Itertools;
 use vortex_dtype::match_each_integer_ptype;
@@ -66,10 +67,10 @@ fn take_search_sorted(
             .enumerate()
             .map(|(pos, i)| {
                 array
-                    .find_index(*i as usize)
-                    .map(|r| r.map(|ii| (pos as u64, ii as u64)))
+                    .search_index(*i as usize)
+                    .map(|r| r.to_found().map(|ii| (pos as u64, ii as u64)))
             })
-            .filter_map_ok(|r| r)
+            .filter_map_ok(identity)
             .collect::<VortexResult<Vec<_>>>()?
     });
 

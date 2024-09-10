@@ -158,7 +158,7 @@ impl ArrayStatisticsCompute for SparseArray {}
 
 impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
-        match self.find_index(index) {
+        match self.search_index(index).map(SearchResult::to_found) {
             Ok(None) => !self.fill_value().is_null(),
             Ok(Some(idx)) => self.values().with_dyn(|a| a.is_valid(idx)),
             Err(e) => vortex_panic!(e, "Error while finding index {} in sparse array", index),
@@ -287,9 +287,9 @@ mod test {
     #[test]
     pub fn test_find_index() {
         let sparse = SparseArray::try_from(sparse_array(nullable_fill())).unwrap();
-        assert_eq!(sparse.find_index(0).unwrap(), None);
-        assert_eq!(sparse.find_index(2).unwrap(), Some(0));
-        assert_eq!(sparse.find_index(5).unwrap(), Some(1));
+        assert_eq!(sparse.search_index(0).unwrap().to_found(), None);
+        assert_eq!(sparse.search_index(2).unwrap().to_found(), Some(0));
+        assert_eq!(sparse.search_index(5).unwrap().to_found(), Some(1));
     }
 
     #[test]
