@@ -8,7 +8,7 @@ use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
-use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult, VortexUnwrap};
 use vortex_scalar::Scalar;
 
 use crate::BitPackedArray;
@@ -116,7 +116,7 @@ pub fn bitpack_patches(
                 parray.len(),
                 Scalar::null(parray.dtype().as_nullable()),
             )
-            .vortex_expect("We are manually constructing SparseArray")
+            .vortex_unwrap()
             .into_array()
         })
     })
