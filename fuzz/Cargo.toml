@@ -22,8 +22,8 @@ name = "vortex_fuzz"
 path = "src/lib.rs"
 
 [[bin]]
-name = "fuzz_target_1"
-path = "fuzz_targets/fuzz_target_1.rs"
+name = "array_ops"
+path = "fuzz_targets/array_ops.rs"
 test = false
 doc = false
 bench = false
