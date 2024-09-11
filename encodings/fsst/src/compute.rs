@@ -9,11 +9,7 @@ use vortex_scalar::Scalar;
 use crate::FSSTArray;
 
 impl ArrayCompute for FSSTArray {
-    fn slice(&self) -> Option<&dyn SliceFn> {
-        Some(self)
-    }
-
-    fn take(&self) -> Option<&dyn TakeFn> {
+    fn filter(&self) -> Option<&dyn FilterFn> {
         Some(self)
     }
 
@@ -21,7 +17,11 @@ impl ArrayCompute for FSSTArray {
         Some(self)
     }
 
-    fn filter(&self) -> Option<&dyn FilterFn> {
+    fn slice(&self) -> Option<&dyn SliceFn> {
+        Some(self)
+    }
+
+    fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
 }
@@ -35,6 +35,7 @@ impl SliceFn for FSSTArray {
             self.symbols(),
             self.symbol_lengths(),
             slice(&self.codes(), start, stop)?,
+            slice(&self.uncompressed_lengths(), start, stop)?,
         )?
         .into_array())
     }
@@ -43,13 +44,12 @@ impl SliceFn for FSSTArray {
 impl TakeFn for FSSTArray {
     // Take on an FSSTArray is a simple take on the codes array.
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let new_codes = take(&self.codes(), indices)?;
-
         Ok(Self::try_new(
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            new_codes,
+            take(&self.codes(), indices)?,
+            take(&self.uncompressed_lengths(), indices)?,
         )?
         .into_array())
     }
@@ -77,12 +77,12 @@ impl ScalarAtFn for FSSTArray {
 impl FilterFn for FSSTArray {
     // Filtering an FSSTArray filters the codes array, leaving the symbols array untouched
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
-        let filtered_codes = filter(&self.codes(), predicate)?;
         Ok(Self::try_new(
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            filtered_codes,
+            filter(&self.codes(), predicate)?,
+            filter(&self.uncompressed_lengths(), predicate)?,
         )?
         .into_array())
     }

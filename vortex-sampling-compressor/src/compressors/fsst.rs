@@ -9,7 +9,7 @@ use vortex::encoding::EncodingRef;
 use vortex::{ArrayDType, ArrayDef, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_fsst::{fsst_compress, fsst_train_compressor, FSSTEncoding, FSST};
+use vortex_fsst::{fsst_compress, fsst_train_compressor, FSSTArray, FSSTEncoding, FSST};
 
 use super::{CompressedArray, CompressionTree, EncoderMetadata, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -52,7 +52,7 @@ impl EncodingCompressor for FSSTCompressor {
         array: &vortex::Array,
         // TODO(aduffy): reuse compressor from sample run if we have saved it off.
         like: Option<CompressionTree<'a>>,
-        _ctx: SamplingCompressor<'a>,
+        ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
         // Size-check: FSST has a builtin 2KB overhead due to the symbol table, and usually compresses
         // between 2-3x depending on the text quality.
@@ -63,6 +63,7 @@ impl EncodingCompressor for FSSTCompressor {
         }
 
         let compressor = like
+            .clone()
             .and_then(|mut tree| tree.metadata())
             .map(VortexResult::Ok)
             .unwrap_or_else(|| Ok(Arc::new(fsst_train_compressor(array)?)))?;
@@ -71,10 +72,10 @@ impl EncodingCompressor for FSSTCompressor {
             vortex_bail!("Could not downcast metadata as FSST Compressor")
         };
 
-        let result_array =
+        let fsst_array =
             if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
                 // For a VarBinArray or VarBinViewArray, compress directly.
-                fsst_compress(array, fsst_compressor)?.into_array()
+                fsst_compress(array, fsst_compressor)?
             } else {
                 vortex_bail!(
                     "Unsupported encoding for FSSTCompressor: {}",
@@ -82,10 +83,29 @@ impl EncodingCompressor for FSSTCompressor {
                 )
             };
 
+        // Compress the uncompressed_lengths array.
+        let uncompressed_lengths = ctx
+            .auxiliary("uncompressed_lengths")
+            .excluding(self)
+            .compress(
+                &fsst_array.uncompressed_lengths(),
+                like.as_ref().and_then(|l| l.child(0)),
+            )?;
+
         Ok(CompressedArray::new(
-            result_array,
-            // Save a copy of the compressor that was used to compress this array.
-            Some(CompressionTree::new_with_metadata(self, vec![], compressor)),
+            FSSTArray::try_new(
+                fsst_array.dtype().clone(),
+                fsst_array.symbols(),
+                fsst_array.symbol_lengths(),
+                fsst_array.codes(),
+                uncompressed_lengths.array,
+            )?
+            .into_array(),
+            Some(CompressionTree::new_with_metadata(
+                self,
+                vec![uncompressed_lengths.path],
+                compressor,
+            )),
         ))
     }
 
