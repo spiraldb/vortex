@@ -60,7 +60,7 @@ impl RoaringBoolArray {
         if array.encoding().id() == Bool::ID {
             roaring_bool_encode(BoolArray::try_from(array)?).map(|a| a.into_array())
         } else {
-            vortex_bail!("RoaringInt can only encode boolean arrays")
+            vortex_bail!("RoaringBool can only encode boolean arrays")
         }
     }
 }
@@ -84,12 +84,17 @@ impl BoolArrayTrait for RoaringBoolArray {
 }
 
 impl AcceptArrayVisitor for RoaringBoolArray {
-    fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         // TODO(ngates): should we store a buffer in memory? Or delay serialization?
         //  Or serialize into metadata? The only reason we support buffers is so we can write to
         //  the wire without copying into FlatBuffers. But if we need to allocate to serialize
         //  the bitmap anyway, then may as well shove it into metadata.
-        todo!()
+        visitor.visit_buffer(
+            self.array()
+                .buffer()
+                .ok_or(vortex_err!("roaring bool should have a buffer"))?,
+        )?;
+        Ok(())
     }
 }
 

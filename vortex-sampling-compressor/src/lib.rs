@@ -55,15 +55,21 @@ pub struct CompressConfig {
     sample_size: u16,
     sample_count: u16,
     max_depth: u8,
+    target_block_bytesize: usize,
+    target_block_size: usize,
 }
 
 impl Default for CompressConfig {
     fn default() -> Self {
+        let kib = 1 << 10;
+        let mib = 1 << 20;
         Self {
             // Sample length should always be multiple of 1024
             sample_size: 128,
             sample_count: 8,
             max_depth: 3,
+            target_block_bytesize: 16 * mib,
+            target_block_size: 64 * kib,
         }
     }
 }
@@ -199,9 +205,12 @@ impl<'a> SamplingCompressor<'a> {
     fn compress_array(&self, arr: &Array) -> VortexResult<CompressedArray<'a>> {
         match arr.encoding().id() {
             Chunked::ID => {
-                // For chunked arrays, we compress each chunk individually
                 let chunked = ChunkedArray::try_from(arr)?;
-                let compressed_chunks = chunked
+                let less_chunked = chunked.rechunk(
+                    self.options().target_block_bytesize,
+                    self.options().target_block_size,
+                )?;
+                let compressed_chunks = less_chunked
                     .chunks()
                     .map(|chunk| {
                         self.compress_array(&chunk)
