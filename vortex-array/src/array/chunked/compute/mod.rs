@@ -6,12 +6,14 @@ use crate::array::chunked::ChunkedArray;
 use crate::compute::unary::{
     scalar_at, scalar_at_unchecked, try_cast, CastFn, ScalarAtFn, SubtractScalarFn,
 };
-use crate::compute::{compare, slice, ArrayCompute, CompareFn, FilterFn, Operator, SliceFn, TakeFn};
+use crate::compute::{
+    compare, slice, ArrayCompute, CompareFn, FilterFn, Operator, SliceFn, TakeFn,
+};
 use crate::{Array, IntoArray};
 
+mod filter;
 mod slice;
 mod take;
-mod filter;
 
 impl ArrayCompute for ChunkedArray {
     fn cast(&self) -> Option<&dyn CastFn> {
