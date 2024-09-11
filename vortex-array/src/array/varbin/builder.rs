@@ -16,6 +16,9 @@ pub struct VarBinBuilder<O: NativePType> {
 }
 
 impl<O: NativePType> VarBinBuilder<O> {
+    pub fn new() -> Self {
+        Self::with_capacity(0)
+    }
     pub fn with_capacity(len: usize) -> Self {
         let mut offsets = Vec::with_capacity(len + 1);
         offsets.push(O::zero());

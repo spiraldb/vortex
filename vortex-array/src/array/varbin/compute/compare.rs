@@ -66,38 +66,29 @@ fn compare_constant_arrow<T: ByteArrayType>(
 
 #[cfg(test)]
 mod tests {
-    use itertools::Itertools;
     use vortex_dtype::{DType, Nullability};
     use vortex_scalar::Scalar;
 
     use super::*;
-    use crate::array::PrimitiveArray;
-    use crate::validity::Validity;
-    use crate::{IntoArrayVariant, ToArray};
+    use crate::array::builder::VarBinBuilder;
+    use crate::IntoArrayVariant;
 
     #[test]
     fn basic_test() {
-        let x = vec![
+        let mut builder = VarBinBuilder::<i32>::new();
+        for v in [
             b"one".as_slice(),
             b"two".as_slice(),
             b"three".as_slice(),
             b"four".as_slice(),
             b"five".as_slice(),
             b"six".as_slice(),
-        ]
-        .into_iter()
-        .flat_map(|x| x.iter().cloned())
-        .collect_vec();
+        ] {
+            builder.push_value(v);
+        }
 
-        let bytes = PrimitiveArray::from(x).to_array();
-        let offsets = PrimitiveArray::from(vec![0, 3, 6, 11, 15, 19, 22]).to_array();
-        let arr = VarBinArray::try_new(
-            offsets,
-            bytes,
-            DType::Utf8(Nullability::Nullable),
-            Validity::AllValid,
-        )
-        .unwrap();
+        let arr = builder.finish(DType::Utf8(Nullability::Nullable));
+
         let s = Scalar::utf8("seven".to_string(), Nullability::Nullable);
 
         let constant_array = ConstantArray::new(s, arr.len());
