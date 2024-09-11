@@ -1,5 +1,4 @@
 use vortex::array::{PrimitiveArray, VarBinArray};
-use vortex::validity::Validity;
 use vortex::{ArrayDType, Canonical, IntoArray, IntoCanonical};
 use vortex_error::VortexResult;
 
@@ -8,6 +7,16 @@ use crate::FSSTArray;
 impl IntoCanonical for FSSTArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
         self.with_decompressor(|decompressor| {
+            // FSSTArray has two child arrays:
+            //
+            //  1. A VarBinArray, which holds the string heap of the compressed codes.
+            //  2. An uncompressed_lengths primitive array, storing the length of each original
+            //     string element.
+            //
+            // To speed up canonicalization, we can decompress the entire string-heap in a single
+            // call. We then turn our uncompressed_lengths into an offsets buffer
+            // necessary for a VarBinViewArray and construct the canonical array.
+
             let compressed_bytes = VarBinArray::try_from(self.codes())?.bytes().as_primitive();
 
             // Bulk-decompress the entire array.
@@ -30,10 +39,8 @@ impl IntoCanonical for FSSTArray {
                 offsets.push(offset);
             }
 
-            let offsets_array =
-                PrimitiveArray::from_vec(offsets, Validity::NonNullable).into_array();
-            let uncompressed_bytes_array =
-                PrimitiveArray::from_vec(uncompressed_bytes, Validity::NonNullable).into_array();
+            let offsets_array = PrimitiveArray::from(offsets).into_array();
+            let uncompressed_bytes_array = PrimitiveArray::from(uncompressed_bytes).into_array();
 
             Ok(Canonical::VarBin(VarBinArray::try_new(
                 offsets_array,
