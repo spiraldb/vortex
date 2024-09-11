@@ -64,11 +64,12 @@ impl EncodingCompressor for BitPackedCompressor {
         let packed = bitpack(&parray, bit_width)?;
         let patches = (num_exceptions > 0)
             .then(|| {
-                ctx.auxiliary("patches").compress(
-                    &bitpack_patches(&parray, bit_width, num_exceptions),
-                    like.as_ref().and_then(|l| l.child(0)),
-                )
+                bitpack_patches(&parray, bit_width, num_exceptions).map(|p| {
+                    ctx.auxiliary("patches")
+                        .compress(&p, like.as_ref().and_then(|l| l.child(0)))
+                })
             })
+            .flatten()
             .transpose()?;
 
         Ok(CompressedArray::new(

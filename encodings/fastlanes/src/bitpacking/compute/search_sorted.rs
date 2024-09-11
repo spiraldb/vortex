@@ -38,18 +38,10 @@ where
         if unwrapped_value.as_() > array.max_packed_value() {
             search_sorted(&patches_array, value.clone(), side)
         } else {
-            Ok(SearchSorted::search_sorted(
-                &BitPackedSearch::new(array),
-                &unwrapped_value,
-                side,
-            ))
+            Ok(BitPackedSearch::new(array).search_sorted(&unwrapped_value, side))
         }
     } else {
-        Ok(SearchSorted::search_sorted(
-            &BitPackedSearch::new(array),
-            &unwrapped_value,
-            side,
-        ))
+        Ok(BitPackedSearch::new(array).search_sorted(&unwrapped_value, side))
     }
 }
 

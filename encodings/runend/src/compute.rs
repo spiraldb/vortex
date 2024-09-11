@@ -64,21 +64,21 @@ impl TakeFn for RunEndArray {
             }
             Validity::Array(original_validity) => {
                 let dense_validity = take(&original_validity, indices)?;
+                let filtered_values = filter(&dense_values, &dense_validity)?;
+                let length = dense_validity.len();
                 let dense_nonnull_indices = PrimitiveArray::from(
                     dense_validity
-                        .clone()
                         .into_bool()?
                         .boolean_buffer()
                         .set_indices()
                         .map(|idx| idx as u64)
-                        .collect::<Vec<u64>>(),
+                        .collect::<Vec<_>>(),
                 )
                 .into_array();
-                let length = dense_validity.len();
 
                 SparseArray::try_new(
                     dense_nonnull_indices,
-                    filter(&dense_values, &dense_validity)?,
+                    filtered_values,
                     length,
                     Scalar::null(self.dtype().clone()),
                 )?
@@ -98,7 +98,7 @@ impl SliceFn for RunEndArray {
             slice(&self.values(), slice_begin, slice_end + 1)?,
             self.validity().slice(start, stop)?,
             stop - start,
-            start,
+            start + self.offset(),
         )?
         .into_array())
     }
@@ -222,6 +222,33 @@ mod test {
         assert_eq!(
             arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
             vec![2, 2, 3, 3, 3]
+        );
+    }
+
+    #[test]
+    fn double_slice() {
+        let arr = slice(
+            RunEndArray::try_new(
+                vec![2u32, 5, 10].into_array(),
+                vec![1i32, 2, 3].into_array(),
+                Validity::NonNullable,
+            )
+            .unwrap()
+            .array(),
+            3,
+            8,
+        )
+        .unwrap();
+        assert_eq!(arr.len(), 5);
+
+        let doubly_sliced = slice(&arr, 0, 3).unwrap();
+
+        assert_eq!(
+            doubly_sliced
+                .into_primitive()
+                .unwrap()
+                .maybe_null_slice::<i32>(),
+            vec![2, 2, 3]
         );
     }
 
