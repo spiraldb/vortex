@@ -14,7 +14,7 @@ jobs:
       - name: Install cargo fuzz
         run: cargo install cargo-fuzz
       - name: Run fuzzing target
-        run: RUST_BACKTRACE=1 cargo fuzz run fuzz_target_1 -- -max_total_time=1800
+        run: RUST_BACKTRACE=1 cargo fuzz run array_ops -- -max_total_time=1800
         continue-on-error: true
       - name: Archive crash artifacts
         uses: actions/upload-artifact@v4
