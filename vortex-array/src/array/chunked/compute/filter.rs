@@ -2,7 +2,7 @@ use vortex_error::{VortexExpect, VortexResult};
 
 use crate::array::{ChunkedArray, PrimitiveArray};
 use crate::compute::{slice, take, FilterFn};
-use crate::{Array, ArrayDType, IntoArray};
+use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 // This is modeled after the constant with the equivalent name in arrow-rs.
 const FILTER_SLICES_SELECTIVITY_THRESHOLD: f64 = 0.8;
@@ -89,8 +89,25 @@ fn filter_indices<'a>(
     let mut result = Vec::new();
     let mut current_chunk_id = 0;
     let mut chunk_indices = Vec::new();
+
+    // Avoid find_chunk_idx and use our own to avoid the overhead.
+    // The array should only be some thousands of values in the general case.
+    let chunk_ends = array.chunk_offsets().into_canonical()?.into_primitive()?;
+    let chunk_ends = chunk_ends.maybe_null_slice::<u64>();
+
+    // Mirrors the find_chunk_idx method on ChunkedArray, but avoids all of the overhead
+    // from scalars, dtypes, and metadata cloning.
+    fn find_chunk_idx(idx: usize, chunk_ends: &[u64]) -> (usize, usize) {
+        let chunk_id = chunk_ends
+            .binary_search(&(idx as u64))
+            .unwrap_or_else(|end| end - 1);
+        let chunk_offset = idx - (chunk_ends[chunk_id] as usize);
+
+        (chunk_id, chunk_offset)
+    }
+
     for set_index in set_indices {
-        let (chunk_id, index) = array.find_chunk_idx(set_index);
+        let (chunk_id, index) = find_chunk_idx(set_index, chunk_ends);
         if chunk_id != current_chunk_id {
             // Push the chunk we've accumulated.
             if !chunk_indices.is_empty() {
