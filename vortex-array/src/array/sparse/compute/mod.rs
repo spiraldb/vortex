@@ -1,4 +1,4 @@
-use vortex_error::VortexResult;
+use vortex_error::{VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
 use crate::array::sparse::SparseArray;
@@ -31,40 +31,39 @@ impl ArrayCompute for SparseArray {
 
 impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        match self.find_index(index)? {
+        match self.search_index(index)?.to_found() {
             None => self.fill_value().clone().cast(self.dtype()),
             Some(idx) => scalar_at_unchecked(&self.values(), idx).cast(self.dtype()),
         }
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        match self
-            .find_index(index)
-            .expect("Must be able to find the index")
-        {
-            None => self.fill_value().clone().cast(self.dtype()).unwrap(),
+        match self.search_index(index).vortex_unwrap().to_found() {
+            None => self.fill_value().clone().cast(self.dtype()).vortex_unwrap(),
             Some(idx) => scalar_at_unchecked(&self.values(), idx)
                 .cast(self.dtype())
-                .unwrap(),
+                .vortex_unwrap(),
         }
     }
 }
 
 impl SearchSortedFn for SparseArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
-        search_sorted(&self.values(), value.clone(), side).and_then(|sr| match sr {
-            SearchResult::Found(i) => {
-                let index: usize = scalar_at(&self.indices(), i)?.as_ref().try_into()?;
-                Ok(SearchResult::Found(index - self.indices_offset()))
-            }
-            SearchResult::NotFound(i) => {
-                let index: usize = scalar_at(&self.indices(), if i == 0 { 0 } else { i - 1 })?
-                    .as_ref()
-                    .try_into()?;
-                Ok(SearchResult::NotFound(
+        search_sorted(&self.values(), value.clone(), side).and_then(|sr| {
+            let sidx = sr.to_offset_ends_index(self.metadata().indices_len);
+            let index: usize = scalar_at(&self.indices(), sidx)?.as_ref().try_into()?;
+            Ok(match sr {
+                SearchResult::Found(i) => SearchResult::Found(
+                    if i == self.metadata().indices_len {
+                        index + 1
+                    } else {
+                        index
+                    } - self.indices_offset(),
+                ),
+                SearchResult::NotFound(i) => SearchResult::NotFound(
                     if i == 0 { index } else { index + 1 } - self.indices_offset(),
-                ))
-            }
+                ),
+            })
         })
     }
 }
@@ -110,11 +109,38 @@ mod test {
     }
 
     #[test]
+    pub fn search_not_found_right() {
+        let res = search_sorted(&array(), 56, SearchSortedSide::Right).unwrap();
+        assert_eq!(res, SearchResult::NotFound(16));
+    }
+
+    #[test]
     pub fn search_sliced() {
         let array = slice(&array(), 7, 20).unwrap();
         assert_eq!(
             search_sorted(&array, 22, SearchSortedSide::Left).unwrap(),
             SearchResult::NotFound(2)
+        );
+    }
+
+    #[test]
+    pub fn search_right() {
+        let array = SparseArray::try_new(
+            PrimitiveArray::from(vec![0u64]).into_array(),
+            PrimitiveArray::from_vec(vec![0u8], Validity::AllValid).into_array(),
+            2,
+            Scalar::null(DType::Primitive(PType::U8, Nullability::Nullable)),
+        )
+        .unwrap()
+        .into_array();
+
+        assert_eq!(
+            search_sorted(&array, 0, SearchSortedSide::Right).unwrap(),
+            SearchResult::Found(1)
+        );
+        assert_eq!(
+            search_sorted(&array, 1, SearchSortedSide::Right).unwrap(),
+            SearchResult::NotFound(1)
         );
     }
 }

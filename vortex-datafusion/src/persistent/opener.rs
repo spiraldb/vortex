@@ -5,7 +5,7 @@ use arrow_schema::SchemaRef;
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
 use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
-use futures::{FutureExt as _, TryStreamExt};
+use futures::{FutureExt as _, StreamExt, TryStreamExt};
 use object_store::ObjectStore;
 use vortex::Context;
 use vortex_expr::datafusion::convert_expr_to_vortex;
@@ -55,7 +55,8 @@ impl FileOpener for VortexFileOpener {
                 builder
                     .build()
                     .await?
-                    .map_ok(RecordBatch::from)
+                    .map_ok(RecordBatch::try_from)
+                    .map(|r| r.and_then(|inner| inner))
                     .map_err(|e| e.into()),
             ) as _)
         }

@@ -3,12 +3,12 @@ use std::mem::size_of;
 use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::stats::ArrayStatistics;
-use vortex::validity::Validity;
+use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult, VortexUnwrap};
 use vortex_scalar::Scalar;
 
 use crate::BitPackedArray;
@@ -28,7 +28,9 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
     }
 
     let packed = bitpack(&array, bit_width)?;
-    let patches = (num_exceptions > 0).then(|| bitpack_patches(&array, bit_width, num_exceptions));
+    let patches = (num_exceptions > 0)
+        .then(|| bitpack_patches(&array, bit_width, num_exceptions))
+        .flatten();
 
     BitPackedArray::try_new(packed, array.validity(), patches, bit_width, array.len())
 }
@@ -96,22 +98,27 @@ pub fn bitpack_patches(
     parray: &PrimitiveArray,
     bit_width: usize,
     num_exceptions_hint: usize,
-) -> Array {
+) -> Option<Array> {
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
         for (i, v) in parray.maybe_null_slice::<$T>().iter().enumerate() {
-            if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width {
+            if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width && parray.is_valid(i) {
                 indices.push(i as u64);
                 values.push(*v);
             }
         }
-        SparseArray::try_new(
-            indices.into_array(),
-            PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
-            parray.len(),
-            Scalar::null(parray.dtype().as_nullable()),
-        ).unwrap().into_array()
+
+        (!indices.is_empty()).then(|| {
+            SparseArray::try_new(
+                indices.into_array(),
+                PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
+                parray.len(),
+                Scalar::null(parray.dtype().as_nullable()),
+            )
+            .vortex_unwrap()
+            .into_array()
+        })
     })
 }
 
@@ -257,31 +264,32 @@ pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
     unsafe { BitPacking::unchecked_unpack_single(bit_width, packed_chunk, index_in_chunk) }
 }
 
-pub fn find_best_bit_width(array: &PrimitiveArray) -> Option<usize> {
-    let bit_width_freq = array.statistics().compute_bit_width_freq()?;
+pub fn find_best_bit_width(array: &PrimitiveArray) -> VortexResult<usize> {
+    let bit_width_freq = array
+        .statistics()
+        .compute_bit_width_freq()
+        .ok_or_else(|| vortex_err!(ComputeError: "Failed to compute bit width frequency"))?;
 
-    Some(best_bit_width(
-        &bit_width_freq,
-        bytes_per_exception(array.ptype()),
-    ))
+    best_bit_width(&bit_width_freq, bytes_per_exception(array.ptype()))
 }
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
-fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> usize {
-    let len: usize = bit_width_freq.iter().sum();
-
+fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> VortexResult<usize> {
     if bit_width_freq.len() > u8::MAX as usize {
-        panic!("Too many bit widths");
+        vortex_bail!("Too many bit widths");
     }
 
+    let len: usize = bit_width_freq.iter().sum();
     let mut num_packed = 0;
     let mut best_cost = len * bytes_per_exception;
     let mut best_width = 0;
     for (bit_width, freq) in bit_width_freq.iter().enumerate() {
+        let packed_cost = ((bit_width * len) + 7) / 8; // round up to bytes
+
         num_packed += *freq;
-        let packed_cost = ((bit_width * len) + 7) / 8;
         let exceptions_cost = (len - num_packed) * bytes_per_exception;
+
         let cost = exceptions_cost + packed_cost;
         if cost < best_cost {
             best_cost = cost;
@@ -289,7 +297,7 @@ fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> usize
         }
     }
 
-    best_width
+    Ok(best_width)
 }
 
 fn bytes_per_exception(ptype: PType) -> usize {
@@ -306,7 +314,6 @@ pub fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 #[cfg(test)]
 mod test {
     use vortex::{IntoArrayVariant, ToArray};
-    use vortex_scalar::PrimitiveScalar;
 
     use super::*;
 
@@ -315,7 +322,30 @@ mod test {
         // 10 1-bit values, 20 2-bit, etc.
         let freq = vec![0, 10, 20, 15, 1, 0, 0, 0];
         // 3-bits => (46 * 3) + (8 * 1 * 5) => 178 bits => 23 bytes and zero exceptions
-        assert_eq!(best_bit_width(&freq, bytes_per_exception(PType::U8)), 3);
+        assert_eq!(
+            best_bit_width(&freq, bytes_per_exception(PType::U8)).unwrap(),
+            3
+        );
+    }
+
+    #[test]
+    fn null_patches() {
+        let valid_values = (0..24).map(|v| v < 1 << 4).collect::<Vec<_>>();
+        let values =
+            PrimitiveArray::from_vec((0..24).collect::<Vec<_>>(), Validity::from(valid_values));
+        let compressed = BitPackedArray::encode(values.array(), 4).unwrap();
+        assert!(compressed.patches().is_none());
+        assert_eq!(
+            (0..(1 << 4)).collect::<Vec<_>>(),
+            compressed
+                .logical_validity()
+                .to_null_buffer()
+                .unwrap()
+                .unwrap()
+                .into_inner()
+                .set_indices()
+                .collect::<Vec<_>>()
+        )
     }
 
     #[test]
@@ -332,7 +362,7 @@ mod test {
     }
 
     fn compression_roundtrip(n: usize) {
-        let values = PrimitiveArray::from(Vec::from_iter((0..n).map(|i| (i % 2047) as u16)));
+        let values = PrimitiveArray::from((0..n).map(|i| (i % 2047) as u16).collect::<Vec<_>>());
         let compressed = BitPackedArray::encode(values.array(), 11).unwrap();
         let decompressed = compressed.to_array().into_primitive().unwrap();
         assert_eq!(
@@ -345,11 +375,7 @@ mod test {
             .iter()
             .enumerate()
             .for_each(|(i, v)| {
-                let scalar = unpack_single(&compressed, i).unwrap();
-                let scalar = PrimitiveScalar::try_from(&scalar)
-                    .unwrap()
-                    .typed_value::<u16>()
-                    .unwrap();
+                let scalar: u16 = unpack_single(&compressed, i).unwrap().try_into().unwrap();
                 assert_eq!(scalar, *v);
             });
     }

@@ -103,7 +103,7 @@ impl PartialEq for Scalar {
 
 impl PartialOrd for Scalar {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        if self.dtype() == other.dtype() {
+        if self.dtype().eq_ignore_nullability(other.dtype()) {
             self.value.partial_cmp(&other.value)
         } else {
             None

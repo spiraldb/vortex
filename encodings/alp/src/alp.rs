@@ -4,6 +4,7 @@ use std::mem::size_of;
 use itertools::Itertools;
 use num_traits::{Float, NumCast, PrimInt, Zero};
 use serde::{Deserialize, Serialize};
+use vortex_error::vortex_panic;
 
 const SAMPLE_SIZE: usize = 32;
 
@@ -20,7 +21,7 @@ impl Display for Exponents {
 }
 
 pub trait ALPFloat: Float + Display + 'static {
-    type ALPInt: PrimInt;
+    type ALPInt: PrimInt + Display;
 
     const FRACTIONAL_BITS: u8;
     const MAX_EXPONENT: u8;
@@ -118,7 +119,14 @@ pub trait ALPFloat: Float + Display + 'static {
 
     #[inline]
     fn decode_single(encoded: Self::ALPInt, exponents: Exponents) -> Self {
-        let encoded_float: Self = Self::from(encoded).unwrap();
+        let encoded_float: Self = Self::from(encoded).unwrap_or_else(|| {
+            vortex_panic!(
+                "Failed to convert encoded value {} from {} to {} in ALPFloat::decode_single",
+                encoded,
+                std::any::type_name::<Self::ALPInt>(),
+                std::any::type_name::<Self>()
+            )
+        });
         encoded_float * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize]
     }
 }

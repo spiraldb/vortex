@@ -1,3 +1,5 @@
+#![allow(clippy::panic)]
+
 use futures::StreamExt;
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
 use vortex::{ArrayDType, IntoArray, IntoArrayVariant};

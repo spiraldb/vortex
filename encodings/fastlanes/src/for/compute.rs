@@ -8,7 +8,7 @@ use vortex::compute::{
 };
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, PrimitiveScalar, Scalar};
 
 use crate::FoRArray;
@@ -50,8 +50,10 @@ impl ScalarAtFn for FoRArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let encoded_scalar =
             scalar_at_unchecked(&self.encoded(), index).reinterpret_cast(self.ptype());
-        let encoded = PrimitiveScalar::try_from(&encoded_scalar).unwrap();
-        let reference = PrimitiveScalar::try_from(self.reference()).unwrap();
+        let encoded =
+            PrimitiveScalar::try_from(&encoded_scalar).vortex_expect("Invalid encoded scalar");
+        let reference =
+            PrimitiveScalar::try_from(self.reference()).vortex_expect("Invalid reference scalar");
 
         match_each_integer_ptype!(encoded.ptype(), |$P| {
             encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))

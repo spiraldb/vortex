@@ -4,7 +4,7 @@ use std::sync::Arc;
 use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;
-use vortex_error::{vortex_bail, VortexError, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
@@ -53,7 +53,7 @@ impl<'a> ListScalar<'a> {
     pub fn elements(&self) -> impl Iterator<Item = Scalar> + '_ {
         self.elements
             .as_ref()
-            .map(|e| e.as_ref())
+            .map(AsRef::as_ref)
             .unwrap_or_else(|| &[] as &[ScalarValue])
             .iter()
             .map(|e| Scalar {
@@ -110,7 +110,11 @@ where
 {
     fn from(value: Vec<T>) -> Self {
         let scalars = value.into_iter().map(|v| Self::from(v)).collect_vec();
-        let element_dtype = scalars.first().expect("Empty list").dtype().clone();
+        let element_dtype = scalars
+            .first()
+            .vortex_expect("Empty list, could not determine element dtype")
+            .dtype()
+            .clone();
         let dtype = DType::List(Arc::new(element_dtype), NonNullable);
         Self {
             dtype,

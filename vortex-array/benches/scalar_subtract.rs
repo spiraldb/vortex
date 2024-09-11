@@ -1,3 +1,5 @@
+#![allow(clippy::unwrap_used)]
+
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use itertools::Itertools;
 use rand::distributions::Uniform;

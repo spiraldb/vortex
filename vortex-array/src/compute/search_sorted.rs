@@ -1,6 +1,6 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -23,6 +23,7 @@ impl Display for SearchSortedSide {
     }
 }
 
+/// Result of performing search_sorted on an Array
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SearchResult {
     Found(usize),
@@ -30,6 +31,7 @@ pub enum SearchResult {
 }
 
 impl SearchResult {
+    /// Convert search result to an index only if the value have been found
     pub fn to_found(self) -> Option<usize> {
         match self {
             Self::Found(i) => Some(i),
@@ -37,10 +39,52 @@ impl SearchResult {
         }
     }
 
+    /// Extract index out of search result regardless of whether the value have been found or not
     pub fn to_index(self) -> usize {
         match self {
             Self::Found(i) => i,
             Self::NotFound(i) => i,
+        }
+    }
+
+    /// Convert search result into an index suitable for searching array of end indices with explicit 0 offset entry,
+    /// i.e. first element starts at 0.
+    ///
+    /// For example for a ChunkedArray with chunk ends array [0, 3, 8, 10] you can use this method to
+    /// obtain index suitable for indexing into it after performing a search
+    pub fn to_offset_ends_index(self, len: usize) -> usize {
+        match self {
+            SearchResult::Found(i) => {
+                if i == len {
+                    i - 1
+                } else {
+                    i
+                }
+            }
+            SearchResult::NotFound(i) => i.saturating_sub(1),
+        }
+    }
+
+    /// Convert search result into an index suitable for searching array of end indices without 0 offset,
+    /// i.e. first element implicitly covers 0..0th-element range.
+    ///
+    /// For example for a RunEndArray with ends array [3, 8, 10], you can use this method to obtain index suitable for
+    /// indexing into it after performing a search
+    pub fn to_ends_index(self, len: usize) -> usize {
+        let idx = self.to_index();
+        if idx == len {
+            idx - 1
+        } else {
+            idx
+        }
+    }
+}
+
+impl Display for SearchResult {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SearchResult::Found(i) => write!(f, "Found({i})"),
+            SearchResult::NotFound(i) => write!(f, "NotFound({i})"),
         }
     }
 }

@@ -10,7 +10,7 @@ use vortex::compute::{
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArrayVariant};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
-use vortex_error::{VortexError, VortexResult};
+use vortex_error::{VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::{unpack_single_primitive, BitPackedArray};
@@ -38,18 +38,10 @@ where
         if unwrapped_value.as_() > array.max_packed_value() {
             search_sorted(&patches_array, value.clone(), side)
         } else {
-            Ok(SearchSorted::search_sorted(
-                &BitPackedSearch::new(array),
-                &unwrapped_value,
-                side,
-            ))
+            Ok(BitPackedSearch::new(array).search_sorted(&unwrapped_value, side))
         }
     } else {
-        Ok(SearchSorted::search_sorted(
-            &BitPackedSearch::new(array),
-            &unwrapped_value,
-            side,
-        ))
+        Ok(BitPackedSearch::new(array).search_sorted(&unwrapped_value, side))
     }
 }
 
@@ -67,13 +59,16 @@ struct BitPackedSearch {
 impl BitPackedSearch {
     pub fn new(array: &BitPackedArray) -> Self {
         Self {
-            packed: array.packed().into_primitive().unwrap(),
+            packed: array
+                .packed()
+                .into_primitive()
+                .vortex_expect("Failed to get packed bytes as PrimitiveArray"),
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),
             min_patch_offset: array.patches().map(|p| {
                 SparseArray::try_from(p)
-                    .expect("Only Sparse patches are supported")
+                    .vortex_expect("Only sparse patches are supported")
                     .min_index()
             }),
             validity: array.validity(),

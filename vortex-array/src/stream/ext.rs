@@ -15,8 +15,9 @@ pub trait ArrayStreamExt: ArrayStream {
     {
         async {
             let dtype = self.dtype().clone();
-            let chunks: Vec<Array> = self.try_collect().await.unwrap();
-            ChunkedArray::try_new(chunks, dtype)
+            self.try_collect()
+                .await
+                .and_then(|chunks| ChunkedArray::try_new(chunks, dtype))
         }
     }
 

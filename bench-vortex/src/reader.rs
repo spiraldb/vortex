@@ -20,6 +20,7 @@ use object_store::ObjectStore;
 use parquet::arrow::arrow_reader::{ArrowReaderOptions, ParquetRecordBatchReaderBuilder};
 use parquet::arrow::async_reader::{AsyncFileReader, ParquetObjectReader};
 use parquet::arrow::ParquetRecordBatchStreamBuilder;
+use parquet::file::metadata::RowGroupMetaData;
 use serde::{Deserialize, Serialize};
 use stream::StreamExt;
 use vortex::array::{ChunkedArray, PrimitiveArray};
@@ -58,7 +59,7 @@ pub async fn open_vortex(path: &Path) -> VortexResult<Array> {
         .into_array_stream()
         .collect_chunked()
         .await
-        .map(|a| a.into_array())
+        .map(IntoArray::into_array)
 }
 
 pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
@@ -101,7 +102,7 @@ pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedAr
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
         .map(|record_batch| {
-            let vortex_array = Array::from(record_batch);
+            let vortex_array = Array::try_from(record_batch).unwrap();
             compressor.compress(&vortex_array).unwrap()
         })
         .collect_vec();
@@ -219,7 +220,7 @@ async fn parquet_take_from_stream<T: AsyncFileReader + Unpin + Send + 'static>(
             .metadata()
             .row_groups()
             .iter()
-            .map(|rg| rg.num_rows())
+            .map(RowGroupMetaData::num_rows)
             .scan(0i64, |acc, x| {
                 *acc += x;
                 Some(*acc)
@@ -238,7 +239,7 @@ async fn parquet_take_from_stream<T: AsyncFileReader + Unpin + Send + 'static>(
     let row_group_indices = row_groups
         .keys()
         .sorted()
-        .map(|i| row_groups.get(i).unwrap().clone())
+        .map(|i| row_groups[i].clone())
         .collect_vec();
 
     let reader = builder

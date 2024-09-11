@@ -46,11 +46,11 @@ impl EncodingCompressor for ZigZagCompressor {
         like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
-        let encoded = zigzag_encode(&array.as_primitive())?;
+        let encoded = zigzag_encode(PrimitiveArray::try_from(array)?)?;
         let compressed =
             ctx.compress(&encoded.encoded(), like.as_ref().and_then(|l| l.child(0)))?;
         Ok(CompressedArray::new(
-            ZigZagArray::new(compressed.array).into_array(),
+            ZigZagArray::try_new(compressed.array)?.into_array(),
             Some(CompressionTree::new(self, vec![compressed.path])),
         ))
     }

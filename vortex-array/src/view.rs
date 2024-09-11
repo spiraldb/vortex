@@ -6,7 +6,7 @@ use itertools::Itertools;
 use log::warn;
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::encoding::EncodingRef;
@@ -154,7 +154,7 @@ impl ArrayView {
         let mut collector = ChildrenCollector::default();
         Array::View(self.clone())
             .with_dyn(|a| a.accept(&mut collector))
-            .unwrap();
+            .vortex_expect("Failed to get children");
         collector.children
     }
 

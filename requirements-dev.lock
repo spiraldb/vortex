@@ -17,22 +17,21 @@ alabaster==1.0.0
     # via sphinx
 asttokens==2.4.1
     # via stack-data
-babel==2.14.0
-    # via mkdocs-material
+babel==2.16.0
     # via pydata-sphinx-theme
     # via sphinx
 beautifulsoup4==4.12.3
     # via pydata-sphinx-theme
-bracex==2.4
-    # via wcmatch
-certifi==2024.2.2
+certifi==2024.8.30
     # via requests
 charset-normalizer==3.3.2
     # via requests
 click==8.1.7
     # via mkdocs
-colorama==0.4.6
-    # via mkdocs-material
+contourpy==1.3.0
+    # via matplotlib
+cycler==0.12.1
+    # via matplotlib
 decorator==5.1.1
     # via ipython
 docutils==0.21.2
@@ -40,9 +39,11 @@ docutils==0.21.2
     # via sphinx
 executing==2.0.1
     # via stack-data
+fonttools==4.53.1
+    # via matplotlib
 ghp-import==2.1.0
     # via mkdocs
-idna==3.6
+idna==3.8
     # via requests
 imagesize==1.4.1
     # via sphinx
@@ -58,15 +59,16 @@ jedi==0.19.1
 jinja2==3.1.3
     # via mike
     # via mkdocs
-    # via mkdocs-material
     # via sphinx
+kiwisolver==1.4.7
+    # via matplotlib
 markdown==3.6
     # via mkdocs
-    # via mkdocs-material
-    # via pymdown-extensions
 markupsafe==2.1.5
     # via jinja2
     # via mkdocs
+matplotlib==3.9.2
+    # via pyvortex
 matplotlib-inline==0.1.7
     # via ipython
 maturin==1.5.1
@@ -75,29 +77,31 @@ mergedeep==1.3.4
 mike==2.0.0
 mkdocs==1.5.3
     # via mike
-    # via mkdocs-include-markdown-plugin
-    # via mkdocs-material
-mkdocs-include-markdown-plugin==6.0.5
-mkdocs-material==9.5.17
-mkdocs-material-extensions==1.3.1
-    # via mkdocs-material
 numpy==1.26.4
+    # via contourpy
+    # via matplotlib
     # via pandas
     # via pyarrow
+    # via pyvortex
+    # via xarray
 packaging==24.0
+    # via matplotlib
     # via mkdocs
     # via pydata-sphinx-theme
     # via pytest
     # via sphinx
-paginate==0.5.6
-    # via mkdocs-material
+    # via xarray
 pandas==2.2.2
+    # via pyvortex
+    # via xarray
 parso==0.8.4
     # via jedi
 pathspec==0.12.1
     # via mkdocs
 pexpect==4.9.0
     # via ipython
+pillow==10.4.0
+    # via matplotlib
 pip==24.0
 platformdirs==4.2.0
     # via mkdocs
@@ -117,32 +121,28 @@ pydata-sphinx-theme==0.15.4
 pygments==2.17.2
     # via accessible-pygments
     # via ipython
-    # via mkdocs-material
     # via pydata-sphinx-theme
     # via sphinx
-pymdown-extensions==10.7.1
-    # via mkdocs-material
 pyparsing==3.1.2
+    # via matplotlib
     # via mike
 pytest==8.1.1
     # via pytest-benchmark
 pytest-benchmark==4.0.0
 python-dateutil==2.9.0.post0
     # via ghp-import
+    # via matplotlib
     # via pandas
 pytz==2024.1
     # via pandas
+pyvortex==0.2.3
 pyyaml==6.0.1
     # via mike
     # via mkdocs
-    # via pymdown-extensions
     # via pyyaml-env-tag
 pyyaml-env-tag==0.1
     # via mkdocs
-regex==2023.12.25
-    # via mkdocs-material
-requests==2.31.0
-    # via mkdocs-material
+requests==2.32.3
     # via sphinx
 ruff==0.3.5
 six==1.16.0
@@ -176,15 +176,15 @@ typing-extensions==4.12.2
     # via pydata-sphinx-theme
 tzdata==2024.1
     # via pandas
-urllib3==2.2.1
+urllib3==2.2.2
     # via requests
 verspec==0.1.0
     # via mike
 watchdog==4.0.0
     # via mkdocs
-wcmatch==8.5.1
-    # via mkdocs-include-markdown-plugin
 wcwidth==0.2.13
     # via prompt-toolkit
+xarray==2024.7.0
+    # via pyvortex
 zipp==3.18.1
     # via importlib-metadata

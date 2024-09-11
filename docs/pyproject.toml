@@ -1,0 +1,18 @@
+[project]
+name = "docs"
+version = "0.1.0"
+description = "Vortex documentation."
+authors = []
+dependencies = [
+    "pydata-sphinx-theme>=0.15.4",
+    "sphinx>=8.0.2",
+    "pyvortex"
+]
+requires-python = ">= 3.11"
+
+[tool.rye]
+managed = true
+virtual = true
+
+[tool.rye.scripts]
+build-docs = "sphinx-build -M html . _build --fail-on-warning --keep-going"

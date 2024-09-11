@@ -165,14 +165,14 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             vortex_bail!("Malformed file, invalid magic bytes, got {magic_number:?}")
         }
 
-        let footer_offset =
+        let layout_offset =
             u64::from_le_bytes(buf[magic_bytes_loc - 8..magic_bytes_loc].try_into()?);
         let schema_offset =
             u64::from_le_bytes(buf[magic_bytes_loc - 16..magic_bytes_loc - 8].try_into()?);
 
         Ok(Footer {
             schema_offset,
-            footer_offset,
+            layout_offset,
             leftovers: buf.freeze(),
             leftovers_offset: read_offset,
             layout_serde: self.layout_serde.clone(),

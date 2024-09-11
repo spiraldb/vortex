@@ -10,7 +10,7 @@ use vortex::{
     IntoCanonical,
 };
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::runend_bool_decode;
 
@@ -67,13 +67,8 @@ impl RunEndBoolArray {
     }
 
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        let searched_index =
-            search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)?.to_index();
-        Ok(if searched_index == self.ends().len() {
-            searched_index - 1
-        } else {
-            searched_index
-        })
+        search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
+            .map(|s| s.to_ends_index(self.ends().len()))
     }
 
     pub fn validity(&self) -> Validity {
@@ -96,7 +91,7 @@ impl RunEndBoolArray {
     pub fn ends(&self) -> Array {
         self.array()
             .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
-            .expect("missing ends")
+            .vortex_expect("RunEndBoolArray is missing its run ends")
     }
 }
 

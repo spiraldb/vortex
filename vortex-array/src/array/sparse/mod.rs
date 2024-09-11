@@ -1,11 +1,11 @@
 use ::serde::{Deserialize, Serialize};
 use vortex_dtype::{match_each_integer_ptype, DType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::scalar_at;
-use crate::compute::{search_sorted, SearchSortedSide};
+use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -84,9 +84,7 @@ impl SparseArray {
             StatsSet::new(),
         )
     }
-}
 
-impl SparseArray {
     #[inline]
     pub fn indices_offset(&self) -> usize {
         self.metadata().indices_offset
@@ -96,7 +94,7 @@ impl SparseArray {
     pub fn values(&self) -> Array {
         self.array()
             .child(1, self.dtype(), self.metadata().indices_len)
-            .expect("missing child array")
+            .vortex_expect("Missing child array in SparseArray")
     }
 
     #[inline]
@@ -107,7 +105,7 @@ impl SparseArray {
                 &self.metadata().indices_dtype,
                 self.metadata().indices_len,
             )
-            .expect("missing indices array")
+            .vortex_expect("Missing indices array in SparseArray")
     }
 
     #[inline]
@@ -115,21 +113,21 @@ impl SparseArray {
         &self.metadata().fill_value
     }
 
-    /// Returns the position of a given index in the indices array if it exists.
-    pub fn find_index(&self, index: usize) -> VortexResult<Option<usize>> {
+    /// Returns the position or the insertion point of a given index in the indices array.
+    fn search_index(&self, index: usize) -> VortexResult<SearchResult> {
         search_sorted(
             &self.indices(),
             self.indices_offset() + index,
             SearchSortedSide::Left,
         )
-        .map(|r| r.to_found())
     }
 
     /// Return indices as a vector of usize with the indices_offset applied.
     pub fn resolved_indices(&self) -> Vec<usize> {
-        let flat_indices = self.indices().into_primitive().unwrap_or_else(|err| {
-            panic!("Failed to convert indices to primitive array: {}", err);
-        });
+        let flat_indices = self
+            .indices()
+            .into_primitive()
+            .vortex_expect("Failed to convert SparseArray indices to primitive array");
         match_each_integer_ptype!(flat_indices.ptype(), |$P| {
             flat_indices
                 .maybe_null_slice::<$P>()
@@ -142,9 +140,7 @@ impl SparseArray {
     pub fn min_index(&self) -> usize {
         let min_index: usize = scalar_at(&self.indices(), 0)
             .and_then(|s| s.as_ref().try_into())
-            .unwrap_or_else(|err| {
-                panic!("Failed to get min_index: {}", err);
-            });
+            .vortex_expect("Failed to get min_index from SparseArray");
         min_index - self.indices_offset()
     }
 }
@@ -162,14 +158,10 @@ impl ArrayStatisticsCompute for SparseArray {}
 
 impl ArrayValidity for SparseArray {
     fn is_valid(&self, index: usize) -> bool {
-        match self.find_index(index).unwrap_or_else(|err| {
-            panic!(
-                "Error while finding index {} in sparse array: {}",
-                index, err
-            );
-        }) {
-            None => !self.fill_value().is_null(),
-            Some(idx) => self.values().with_dyn(|a| a.is_valid(idx)),
+        match self.search_index(index).map(SearchResult::to_found) {
+            Ok(None) => !self.fill_value().is_null(),
+            Ok(Some(idx)) => self.values().with_dyn(|a| a.is_valid(idx)),
+            Err(e) => vortex_panic!(e, "Error while finding index {} in sparse array", index),
         }
     }
 
@@ -196,13 +188,7 @@ impl ArrayValidity for SparseArray {
                 false.into(),
             )
         }
-        .unwrap_or_else(|err| {
-            panic!(
-                "Error determining logical validity for sparse array: {}",
-                err
-            );
-        });
-
+        .vortex_expect("Error determining logical validity for sparse array");
         LogicalValidity::Array(validity.into_array())
     }
 }
@@ -301,9 +287,9 @@ mod test {
     #[test]
     pub fn test_find_index() {
         let sparse = SparseArray::try_from(sparse_array(nullable_fill())).unwrap();
-        assert_eq!(sparse.find_index(0).unwrap(), None);
-        assert_eq!(sparse.find_index(2).unwrap(), Some(0));
-        assert_eq!(sparse.find_index(5).unwrap(), Some(1));
+        assert_eq!(sparse.search_index(0).unwrap().to_found(), None);
+        assert_eq!(sparse.search_index(2).unwrap().to_found(), Some(0));
+        assert_eq!(sparse.search_index(5).unwrap().to_found(), Some(1));
     }
 
     #[test]

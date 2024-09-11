@@ -6,12 +6,12 @@ use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{scalar_at, subtract_scalar, SubtractScalarFn};
-use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
+use crate::compute::{search_sorted, SearchSortedSide};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
@@ -87,31 +87,18 @@ impl ChunkedArray {
     pub fn chunk_offsets(&self) -> Array {
         self.array()
             .child(0, &Self::ENDS_DTYPE, self.nchunks() + 1)
-            .expect("missing chunk ends")
+            .vortex_expect("Missing chunk ends in ChunkedArray")
     }
 
-    pub fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
+    fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        let search_result = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
-            .unwrap_or_else(|err| {
-                panic!("Search sorted failed in find_chunk_idx: {}", err);
-            });
-        let index_chunk = match search_result {
-            SearchResult::Found(i) => {
-                if i == self.nchunks() {
-                    i - 1
-                } else {
-                    i
-                }
-            }
-            SearchResult::NotFound(i) => i - 1,
-        };
-        let chunk_start = &scalar_at(&self.chunk_offsets(), index_chunk)
+        let index_chunk = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
+            .vortex_expect("Search sorted failed in find_chunk_idx")
+            .to_offset_ends_index(self.nchunks());
+        let chunk_start = scalar_at(&self.chunk_offsets(), index_chunk)
             .and_then(|s| usize::try_from(&s))
-            .unwrap_or_else(|err| {
-                panic!("Failed to find chunk start in find_chunk_idx: {}", err);
-            });
+            .vortex_expect("Failed to find chunk start in find_chunk_idx");
 
         let index_in_chunk = index - chunk_start;
         (index_chunk, index_in_chunk)
@@ -120,11 +107,11 @@ impl ChunkedArray {
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| {
             self.chunk(c).unwrap_or_else(|| {
-                panic!(
+                vortex_panic!(
                     "Chunk should {} exist but doesn't (nchunks: {})",
                     c,
                     self.nchunks()
-                );
+                )
             })
         })
     }
@@ -146,10 +133,8 @@ impl FromIterator<Array> for ChunkedArray {
         let dtype = chunks
             .first()
             .map(|c| c.dtype().clone())
-            .expect("Cannot create a chunked array from an empty iterator");
-        Self::try_new(chunks, dtype).unwrap_or_else(|err| {
-            panic!("Failed to create chunked array from iterator: {}", err);
-        })
+            .vortex_expect("Cannot infer DType from an empty iterator");
+        Self::try_new(chunks, dtype).vortex_expect("Failed to create chunked array from iterator")
     }
 }
 
@@ -167,7 +152,7 @@ impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, index: usize) -> bool {
         let (chunk, offset_in_chunk) = self.find_chunk_idx(index);
         self.chunk(chunk)
-            .expect("must be a valid chunk index")
+            .unwrap_or_else(|| vortex_panic!(OutOfBounds: chunk, 0, self.nchunks()))
             .with_dyn(|a| a.is_valid(offset_in_chunk))
     }
 

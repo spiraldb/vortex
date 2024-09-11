@@ -9,6 +9,7 @@ use vortex::array::ChunkedArray;
 use vortex::arrow::{FromArrowArray, FromArrowType};
 use vortex::{Array, IntoArray};
 use vortex_dtype::DType;
+use vortex_error::VortexError;
 
 use crate::array::PyArray;
 use crate::error::PyVortexError;
@@ -53,10 +54,8 @@ pub fn _encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
         let dtype = DType::from_arrow(array_stream.schema());
         let chunks = array_stream
             .into_iter()
-            .map(|b| {
-                b.map(Array::from)
-                    .map_err(|e| PyValueError::new_err(e.to_string()))
-            })
+            .map(|b| b.map_err(VortexError::ArrowError))
+            .map(|b| b.and_then(Array::try_from).map_err(PyVortexError::map_err))
             .collect::<PyResult<Vec<_>>>()?;
         Bound::new(
             obj.py(),
@@ -67,6 +66,8 @@ pub fn _encode<'py>(obj: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyArray>> {
             ),
         )
     } else {
-        Err(PyValueError::new_err("Cannot convert object to enc array"))
+        Err(PyValueError::new_err(
+            "Cannot convert object to Vortex array",
+        ))
     }
 }

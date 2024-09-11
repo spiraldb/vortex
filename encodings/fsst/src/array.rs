@@ -9,7 +9,7 @@ use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
 use vortex::visitor::AcceptArrayVisitor;
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonical};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
 impl_encoding!("vortex.fsst", 24u16, FSST);
 
@@ -93,34 +93,34 @@ impl FSSTArray {
     pub fn symbols(&self) -> Array {
         self.array()
             .child(0, &SYMBOLS_DTYPE, self.metadata().symbols_len)
-            .expect("FSSTArray symbols child")
+            .vortex_expect("FSSTArray symbols child")
     }
 
     /// Access the symbol table array
     pub fn symbol_lengths(&self) -> Array {
         self.array()
             .child(1, &SYMBOL_LENS_DTYPE, self.metadata().symbols_len)
-            .expect("FSSTArray symbol_lengths child")
+            .vortex_expect("FSSTArray symbol_lengths child")
     }
 
     /// Access the codes array
     pub fn codes(&self) -> Array {
         self.array()
             .child(2, &self.metadata().codes_dtype, self.len())
-            .expect("FSSTArray codes child")
+            .vortex_expect("FSSTArray codes child")
     }
 
     /// Get the uncompressed length for each element in the array.
     pub fn uncompressed_lengths(&self) -> Array {
         self.array()
             .child(3, &self.metadata().uncompressed_lengths_dtype, self.len())
-            .expect("FSST uncompressed_lengths child")
+            .vortex_expect("FSST uncompressed_lengths child")
     }
 
     /// Get the validity for this array.
     pub fn validity(&self) -> Validity {
         VarBinArray::try_from(self.codes())
-            .expect("codes array must be VarBinArray")
+            .vortex_expect("FSSTArray must have a codes child array")
             .validity()
     }
 
@@ -128,25 +128,25 @@ impl FSSTArray {
     /// this array, and pass it to the given function.
     ///
     /// This is private to the crate to avoid leaking `fsst-rs` types as part of the public API.
-    pub(crate) fn with_decompressor<F, R>(&self, apply: F) -> R
+    pub(crate) fn with_decompressor<F, R>(&self, apply: F) -> VortexResult<R>
     where
-        F: FnOnce(Decompressor) -> R,
+        F: FnOnce(Decompressor) -> VortexResult<R>,
     {
         // canonicalize the symbols child array, so we can view it contiguously
         let symbols_array = self
             .symbols()
             .into_canonical()
-            .unwrap()
+            .map_err(|err| err.with_context("Failed to canonicalize symbols array"))?
             .into_primitive()
-            .expect("Symbols must be a Primitive Array");
+            .map_err(|err| err.with_context("Symbols must be a Primitive Array"))?;
         let symbols = symbols_array.maybe_null_slice::<u64>();
 
         let symbol_lengths_array = self
             .symbol_lengths()
             .into_canonical()
-            .unwrap()
+            .map_err(|err| err.with_context("Failed to canonicalize symbol_lengths array"))?
             .into_primitive()
-            .unwrap();
+            .map_err(|err| err.with_context("Symbol lengths must be a Primitive Array"))?;
         let symbol_lengths = symbol_lengths_array.maybe_null_slice::<u8>();
 
         // Transmute the 64-bit symbol values into fsst `Symbol`s.
@@ -179,11 +179,11 @@ impl ArrayValidity for FSSTArray {
 }
 
 impl ArrayVariants for FSSTArray {
-    fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
+    fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
         Some(self)
     }
 
-    fn as_utf8_array(&self) -> Option<&dyn Utf8ArrayTrait> {
+    fn as_binary_array(&self) -> Option<&dyn BinaryArrayTrait> {
         Some(self)
     }
 }

@@ -1,5 +1,5 @@
 use vortex_buffer::Buffer;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
@@ -25,7 +25,7 @@ impl ScalarAtFn for VarBinViewArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
+        <Self as ScalarAtFn>::scalar_at(self, index).unwrap_or_else(|err| vortex_panic!(err))
     }
 }
 

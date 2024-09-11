@@ -14,9 +14,10 @@ impl<T> From<T> for ErrString
 where
     T: Into<Cow<'static, str>>,
 {
+    #[allow(clippy::panic)]
     fn from(msg: T) -> Self {
         if env::var("VORTEX_PANIC_ON_ERR").as_deref().unwrap_or("") == "1" {
-            panic!("{}", msg.into())
+            panic!("{}\nBacktrace:\n{}", msg.into(), Backtrace::capture());
         } else {
             Self(msg.into())
         }
@@ -57,6 +58,10 @@ pub enum VortexError {
     NotImplemented(ErrString, ErrString, Backtrace),
     #[error("expected type: {0} but instead got {1}\nBacktrace:\n{2}")]
     MismatchedTypes(ErrString, ErrString, Backtrace),
+    #[error("{0}\nBacktrace:\n{1}")]
+    AssertionFailed(ErrString, Backtrace),
+    #[error("{0}: {1}")]
+    Context(ErrString, Box<VortexError>),
     #[error(transparent)]
     ArrowError(
         #[from]
@@ -136,6 +141,13 @@ pub enum VortexError {
         #[backtrace]
         object_store::Error,
     ),
+    #[cfg(feature = "datafusion")]
+    #[error(transparent)]
+    DataFusion(
+        #[from]
+        #[backtrace]
+        datafusion_common::DataFusionError,
+    ),
     #[error(transparent)]
     JiffError(
         #[from]
@@ -144,11 +156,59 @@ pub enum VortexError {
     ),
 }
 
-pub type VortexResult<T> = Result<T, VortexError>;
+impl VortexError {
+    pub fn with_context<T: Into<ErrString>>(self, msg: T) -> Self {
+        VortexError::Context(msg.into(), Box::new(self))
+    }
+}
 
 impl Debug for VortexError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Display::fmt(self, f)
+    }
+}
+
+pub type VortexResult<T> = Result<T, VortexError>;
+
+pub trait VortexUnwrap {
+    type Output;
+
+    fn vortex_unwrap(self) -> Self::Output;
+}
+
+impl<T> VortexUnwrap for VortexResult<T> {
+    type Output = T;
+
+    #[inline(always)]
+    fn vortex_unwrap(self) -> Self::Output {
+        self.unwrap_or_else(|err| vortex_panic!(err))
+    }
+}
+
+pub trait VortexExpect {
+    type Output;
+
+    fn vortex_expect(self, msg: &str) -> Self::Output;
+}
+
+impl<T> VortexExpect for VortexResult<T> {
+    type Output = T;
+
+    #[inline(always)]
+    fn vortex_expect(self, msg: &str) -> Self::Output {
+        self.unwrap_or_else(|e| vortex_panic!(e.with_context(msg.to_string())))
+    }
+}
+
+impl<T> VortexExpect for Option<T> {
+    type Output = T;
+
+    #[inline(always)]
+    fn vortex_expect(self, msg: &str) -> Self::Output {
+        self.unwrap_or_else(|| {
+            let err = VortexError::AssertionFailed(msg.to_string().into(), Backtrace::capture());
+            vortex_panic!(err)
+        })
     }
 }
 
@@ -178,6 +238,11 @@ macro_rules! vortex_err {
             $crate::VortexError::MismatchedTypes($expected.to_string().into(), $actual.to_string().into(), Backtrace::capture())
         )
     }};
+    (Context: $msg:literal, $err:expr) => {{
+        $crate::__private::must_use(
+            $crate::VortexError::Context($msg.into(), Box::new($err))
+        )
+    }};
     ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {{
         use std::backtrace::Backtrace;
         $crate::__private::must_use(
@@ -199,6 +264,39 @@ macro_rules! vortex_bail {
     ($($tt:tt)+) => {
         return Err($crate::vortex_err!($($tt)+))
     };
+}
+
+#[macro_export]
+macro_rules! vortex_panic {
+    (OutOfBounds: $idx:expr, $start:expr, $stop:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(OutOfBounds: $idx, $start, $stop))
+    }};
+    (NotImplemented: $func:expr, $for_whom:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(NotImplemented: $func, $for_whom))
+    }};
+    (MismatchedTypes: $expected:literal, $actual:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(MismatchedTypes: $expected, $actual))
+    }};
+    (MismatchedTypes: $expected:expr, $actual:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(MismatchedTypes: $expected, $actual))
+    }};
+    (Context: $msg:literal, $err:expr) => {{
+        $crate::vortex_panic!($crate::vortex_err!(Context: $msg, $err))
+    }};
+    ($variant:ident: $fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::vortex_panic!($crate::vortex_err!($variant: $fmt, $($arg),*))
+    };
+    ($err:expr, $fmt:literal $(, $arg:expr)* $(,)?) => {{
+        let err: $crate::VortexError = $err;
+        panic!("{}", err.with_context(format!($fmt, $($arg),*)))
+    }};
+    ($fmt:literal $(, $arg:expr)* $(,)?) => {
+        $crate::vortex_panic!($crate::vortex_err!($fmt, $($arg),*))
+    };
+    ($err:expr) => {{
+        let err: $crate::VortexError = $err;
+        panic!("{}", err)
+    }};
 }
 
 #[cfg(feature = "datafusion")]

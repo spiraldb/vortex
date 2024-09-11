@@ -1,5 +1,6 @@
 #[cfg(feature = "array")]
 #[allow(clippy::all)]
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -12,6 +13,7 @@ pub mod array;
 
 #[cfg(feature = "dtype")]
 #[allow(clippy::all)]
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -24,6 +26,7 @@ pub mod dtype;
 
 #[cfg(feature = "scalar")]
 #[allow(clippy::all)]
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -36,6 +39,7 @@ pub mod scalar;
 
 #[cfg(feature = "file")]
 #[allow(clippy::all)]
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
@@ -48,6 +52,7 @@ pub mod footer;
 
 #[cfg(feature = "file")]
 #[allow(clippy::all)]
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[allow(clippy::unwrap_used)]
 #[allow(dead_code)]
 #[allow(non_snake_case)]
