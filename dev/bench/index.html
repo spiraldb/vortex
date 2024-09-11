@@ -123,6 +123,12 @@
 </footer>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+
+<!-- Chart.js Zoom Plugin -->
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<!-- Chart.js Zoom Plugin -->
+
 <script src="data.js"></script>
 <script id="main-script">
     'use strict';
@@ -130,12 +136,12 @@
         function stringToColor(str) {
             // Random colours are generally pretty disgusting...
             const MAP = {
-                "vortex-file-compressed": '#D4FF8F',
-                "vortex-file-uncompressed": '#3E6A00',
-                "vortex-in-memory-no-pushdown": '#00C8F2',
-                "vortex-in-memory-pushdown": '#00769F',
-                "arrow": '#FFD57A',
-                "parquet": '#FFC086',
+                "vortex-file-uncompressed": '#98da8d',
+                "vortex-file-compressed": '#23d100',
+                "vortex-in-memory-no-pushdown": '#79a6df',
+                "vortex-in-memory-pushdown": '#0c53ae',
+                "arrow": '#58067e',
+                "parquet": '#ef7f1d',
             };
 
             if (MAP[str]) {
@@ -249,6 +255,12 @@
                 };
                 const options = {
                     spanGaps: true,
+                    pointStyle: 'crossRot',
+                    elements: {
+                        line: {
+                            borderWidth: 1,
+                        },
+                    },
                     scales: {
                         x: {
                             title: {
@@ -256,6 +268,8 @@
                                 text: name,
                                 padding: {bottom: 50},
                             },
+                            // By default, show the last 50 commits
+                            min: Math.max(0, dataset.commits.length - 50),
                         },
                         y: {
                             title: {
@@ -286,6 +300,15 @@
                                 const seriesName = Array.from(dataset.series.keys())[item.datasetIndex];
                                 const {extra} = dataset.series.get(seriesName)[item.index];
                                 return extra ? '\n' + extra : '';
+                            }
+                        }
+                    },
+                    plugins: {
+                        zoom: {
+                            zoom: {
+                                wheel: {enabled: true},
+                                mode: 'x',
+                                drag: {enabled: true}
                             }
                         }
                     },
