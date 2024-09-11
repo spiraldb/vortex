@@ -15,6 +15,12 @@ pub struct VarBinBuilder<O: NativePType> {
     validity: NullBufferBuilder,
 }
 
+impl<O: NativePType> Default for VarBinBuilder<O> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<O: NativePType> VarBinBuilder<O> {
     pub fn new() -> Self {
         Self::with_capacity(0)
