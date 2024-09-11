@@ -5,7 +5,7 @@ use vortex::compute::{
 };
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, AsArray, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::{VortexExpect, VortexResult};
 use vortex_scalar::{PValue, Scalar};
 
@@ -107,48 +107,8 @@ impl MaybeCompareFn for ALPArray {
                 .vortex_expect("Expected primitive value");
 
             match pvalue {
-                Some(PValue::F32(f)) => {
-                    let encoded = f32::encode_single(f, self.exponents());
-                    match encoded {
-                        Ok(encoded) => {
-                            let s = ConstantArray::new(encoded, self.len());
-                            Some(compare(&self.encoded(), s.array(), operator))
-                        }
-                        Err(exception) => {
-                            if let Some(patches) = self.patches().as_ref() {
-                                let s = ConstantArray::new(exception, self.len());
-                                Some(compare(patches, s.as_array_ref(), operator))
-                            } else {
-                                Some(Ok(BoolArray::from_vec(
-                                    vec![false; self.len()],
-                                    Validity::AllValid,
-                                )
-                                .into_array()))
-                            }
-                        }
-                    }
-                }
-                Some(PValue::F64(f)) => {
-                    let encoded = f64::encode_single(f, self.exponents());
-                    match encoded {
-                        Ok(encoded) => {
-                            let s = ConstantArray::new(encoded, self.len());
-                            Some(compare(&self.encoded(), s.array(), operator))
-                        }
-                        Err(exception) => {
-                            if let Some(patches) = self.patches().as_ref() {
-                                let s = ConstantArray::new(exception, self.len());
-                                Some(compare(patches, s.array(), operator))
-                            } else {
-                                Some(Ok(BoolArray::from_vec(
-                                    vec![true; self.len()],
-                                    Validity::AllValid,
-                                )
-                                .into_array()))
-                            }
-                        }
-                    }
-                }
+                Some(PValue::F32(f)) => Some(alp_scalar_compare(self, f, operator)),
+                Some(PValue::F64(f)) => Some(alp_scalar_compare(self, f, operator)),
                 None => Some(Ok(BoolArray::from_vec(
                     vec![false; self.len()],
                     Validity::AllValid,
@@ -158,6 +118,69 @@ impl MaybeCompareFn for ALPArray {
             }
         } else {
             None
+        }
+    }
+}
+
+fn alp_scalar_compare<F: ALPFloat + Into<Scalar>>(
+    alp: &ALPArray,
+    value: F,
+    operator: Operator,
+) -> VortexResult<Array>
+where
+    F::ALPInt: Into<Scalar>,
+{
+    let encoded = F::encode_single(value, alp.exponents());
+    match encoded {
+        Ok(encoded) => {
+            let s = ConstantArray::new(encoded, alp.len());
+            compare(&alp.encoded(), s.array(), operator)
+        }
+        Err(exception) => {
+            if let Some(patches) = alp.patches().as_ref() {
+                let s = ConstantArray::new(exception, alp.len());
+                compare(patches, s.array(), operator)
+            } else {
+                Ok(BoolArray::from_vec(vec![false; alp.len()], Validity::AllValid).into_array())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::PrimitiveArray;
+    use vortex::IntoArrayVariant;
+
+    use super::*;
+    use crate::alp_encode;
+
+    #[test]
+    fn basic_comparison_test() {
+        let array = PrimitiveArray::from(vec![1.234f32; 1025]);
+        let encoded = alp_encode(&array).unwrap();
+        assert!(encoded.patches().is_none());
+        assert_eq!(
+            encoded.encoded().as_primitive().maybe_null_slice::<i32>(),
+            vec![1234; 1025]
+        );
+
+        let r = alp_scalar_compare(&encoded, 1.3_f32, Operator::Eq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        for v in r.boolean_buffer().iter() {
+            assert!(!v);
+        }
+
+        let r = alp_scalar_compare(&encoded, 1.234f32, Operator::Eq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        for v in r.boolean_buffer().iter() {
+            assert!(v);
         }
     }
 }
