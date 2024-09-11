@@ -1,20 +1,14 @@
-use arrow_buffer::BooleanBufferBuilder;
 use vortex_buffer::Buffer;
 use vortex_error::{vortex_panic, VortexResult};
-use vortex_scalar::{Scalar, ScalarValue};
+use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE};
-use crate::array::{BoolArray, ConstantArray};
 use crate::compute::unary::ScalarAtFn;
-use crate::compute::{slice, ArrayCompute, MaybeCompareFn, Operator, SliceFn};
-use crate::validity::Validity;
+use crate::compute::{slice, ArrayCompute, SliceFn};
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for VarBinViewArray {
-    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        MaybeCompareFn::maybe_compare(self, other, operator)
-    }
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -22,70 +16,6 @@ impl ArrayCompute for VarBinViewArray {
     fn slice(&self) -> Option<&dyn SliceFn> {
         Some(self)
     }
-}
-
-impl MaybeCompareFn for VarBinViewArray {
-    fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        if let Ok(const_array) = ConstantArray::try_from(other) {
-            Some(const_compare(self, const_array, operator))
-        } else {
-            None
-        }
-    }
-}
-
-fn const_compare(
-    binview: &VarBinViewArray,
-    other: ConstantArray,
-    operator: Operator,
-) -> VortexResult<Array> {
-    let buffer = match other.scalar().value() {
-        ScalarValue::Null => {
-            return Ok(
-                BoolArray::from_vec(vec![false; binview.len()], Validity::AllInvalid).into_array(),
-            )
-        }
-        ScalarValue::Buffer(b) => b.clone(),
-        ScalarValue::BufferString(b) => Buffer::from(b.clone()),
-        _ => unreachable!(),
-    };
-
-    let mut builder = BooleanBufferBuilder::new(binview.len());
-    for (index, view) in binview.view_slice().iter().enumerate() {
-        let (data, data_len) = if view.is_inlined() {
-            let data = unsafe { view.inlined.data.as_ref() };
-            let data_len = unsafe { view.inlined.size };
-            (data, data_len as usize)
-        } else {
-            let data = unsafe { view._ref.prefix.as_ref() };
-            let data_len = unsafe { view._ref.size };
-            (data, data_len as usize)
-        };
-
-        if buffer.len() != data_len {
-            builder.append(false);
-            continue;
-        }
-
-        let scalar_prefix = &buffer[0..data_len];
-
-        let r = operator.to_fn()(data, scalar_prefix);
-
-        if !r {
-            builder.append(false);
-            continue;
-        } else if view.is_inlined() {
-            builder.append(true);
-            continue;
-        } else {
-            let bytes = binview.bytes_at(index)?;
-            let r = operator.to_fn()(bytes.as_slice(), buffer.as_slice());
-
-            builder.append(r);
-        }
-    }
-
-    BoolArray::try_new(builder.finish(), binview.validity()).map(|a| a.into_array())
 }
 
 impl ScalarAtFn for VarBinViewArray {
