@@ -4,7 +4,7 @@ use vortex::compute::{
     compare, filter, slice, take, ArrayCompute, FilterFn, MaybeCompareFn, Operator, SliceFn, TakeFn,
 };
 use vortex::stats::{ArrayStatistics, Stat};
-use vortex::validity::{ArrayValidity, Validity};
+use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, AsArray, IntoArray};
 use vortex_error::{VortexExpect, VortexResult};
 use vortex_scalar::{PValue, Scalar};
@@ -149,13 +149,11 @@ impl MaybeCompareFn for ALPArray {
                         }
                     }
                 }
-                None => {
-                    // Is `null == null => true`?
-                    let bools = (0..self.len()).map(|index| !self.is_valid(index)).collect();
-                    Some(Ok(
-                        BoolArray::from_vec(bools, Validity::AllValid).into_array()
-                    ))
-                }
+                None => Some(Ok(BoolArray::from_vec(
+                    vec![false; self.len()],
+                    Validity::AllValid,
+                )
+                .into_array())),
                 _ => unreachable!(),
             }
         } else {

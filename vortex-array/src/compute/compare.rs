@@ -146,11 +146,20 @@ mod tests {
     use crate::IntoArrayVariant;
 
     fn to_int_indices(indices_bits: BoolArray) -> Vec<u64> {
-        let filtered = indices_bits
-            .boolean_buffer()
+        let buffer = indices_bits.boolean_buffer();
+        let null_buffer = indices_bits
+            .validity()
+            .to_logical(indices_bits.len())
+            .to_null_buffer()
+            .unwrap();
+        let is_valid = |idx: usize| match null_buffer.as_ref() {
+            None => true,
+            Some(buffer) => buffer.is_valid(idx),
+        };
+        let filtered = buffer
             .iter()
             .enumerate()
-            .flat_map(|(idx, v)| v.then_some(idx as u64))
+            .flat_map(|(idx, v)| (v && is_valid(idx)).then_some(idx as u64))
             .collect_vec();
         filtered
     }
@@ -167,6 +176,7 @@ mod tests {
             .unwrap()
             .into_bool()
             .unwrap();
+
         assert_eq!(to_int_indices(matches), [1u64, 2, 3, 4]);
 
         let matches = compare(&arr, &arr, Operator::NotEq)
