@@ -89,11 +89,30 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
         vortex_bail!("Compare operations only support arrays of the same type");
     }
 
-    if ConstantArray::try_from(left).is_ok() {
-        let scalar = scalar_at(left, 0)?;
-        let left_const = ConstantArray::new(scalar, left.len()).into_array();
-        return compare(right, &left_const, operator.swap());
+    use crate::stats::ArrayStatistics;
+    use crate::stats::Stat;
+
+    let l_is_const = ConstantArray::try_from(left).is_ok()|| left.statistics().get_as::<bool>(Stat::IsConstant).unwrap_or_default();
+    let r_is_const = ConstantArray::try_from(right).is_ok()|| right.statistics().get_as::<bool>(Stat::IsConstant).unwrap_or_default();
+
+    match (l_is_const, r_is_const) {
+        (true, false) => {
+            let scalar = scalar_at(left, 0)?;
+            let left_const = ConstantArray::new(scalar, left.len()).into_array();
+            return compare(right, &left_const, operator.swap());
+        }
+        (true, true) => {
+            let original_len = left.len();
+            let left = scalar_at(left, 0)?;
+            let right = scalar_at(right, 0)?;
+            let r = scalar_cmp(&left, &right, operator);
+            let arr = ConstantArray::new(r, original_len);
+            return Ok(arr.into_array());
+        }
+        (false, true) | (false, false) => {}
     }
+
+
 
     if let Some(selection) = left.with_dyn(|lhs| lhs.compare(right, operator)) {
         return selection;
