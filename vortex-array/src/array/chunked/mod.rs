@@ -135,25 +135,8 @@ impl ChunkedArray {
     }
 
     pub fn rechunk(&self, target_bytesize: usize, target_rowsize: usize) -> VortexResult<Self> {
-        fn combine_validities(
-            dtype: &DType,
-            validities: Vec<LogicalValidity>,
-        ) -> VortexResult<Validity> {
-            let validity = validities.clone().into_iter().collect::<Validity>();
-            match (dtype.is_nullable(), validity) {
-                (true, validity) => Ok(validity),
-                (false, Validity::AllValid) => Ok(Validity::NonNullable),
-                (false, _) => vortex_bail!(
-                    "for non-nullable dtype, child validities ought to all be AllValid"
-                ),
-            }
-        }
-
-        let dtype = self.dtype();
-
-        let mut new_chunks: Vec<Array> = Vec::new();
-        let mut validities_to_combine: Vec<LogicalValidity> = Vec::new();
-        let mut chunks_to_combine: Vec<Array> = Vec::new();
+        let mut new_chunks = Vec::new();
+        let mut chunks_to_combine = Vec::new();
         let mut new_chunk_n_bytes = 0;
         let mut new_chunk_n_elements = 0;
         for chunk in self.chunks() {
@@ -164,40 +147,35 @@ impl ChunkedArray {
                 || new_chunk_n_elements + n_elements > target_rowsize)
                 && !chunks_to_combine.is_empty()
             {
-                let canonical = try_canonicalize_chunks(
-                    chunks_to_combine,
-                    combine_validities(dtype, validities_to_combine)?,
-                    dtype,
-                )?;
-                new_chunks.push(canonical.into());
+                new_chunks.push(
+                    ChunkedArray::try_new(chunks_to_combine, self.dtype().clone())?
+                        .into_canonical()?
+                        .into(),
+                );
 
                 new_chunk_n_bytes = 0;
                 new_chunk_n_elements = 0;
-                validities_to_combine = Vec::new();
                 chunks_to_combine = Vec::new();
             }
 
             if n_bytes > target_bytesize || n_elements > target_rowsize {
-                new_chunks.push(chunk.into_canonical()?.into()); // TODO(dk): rechunking maybe shouldn't produce canonical chunks
+                new_chunks.push(chunk);
             } else {
                 new_chunk_n_bytes += n_bytes;
                 new_chunk_n_elements += n_elements;
-                validities_to_combine.push(chunk.with_dyn(|x| x.logical_validity()));
                 chunks_to_combine.push(chunk);
             }
         }
 
         if !chunks_to_combine.is_empty() {
-            let canonical = try_canonicalize_chunks(
-                chunks_to_combine,
-                combine_validities(dtype, validities_to_combine)?,
-                dtype,
-            )?;
-            let chunk: Array = canonical.into();
-            new_chunks.push(chunk);
+            new_chunks.push(
+                ChunkedArray::try_new(chunks_to_combine, self.dtype().clone())?
+                    .into_canonical()?
+                    .into(),
+            );
         }
 
-        Self::try_new(new_chunks, dtype.clone())
+        Self::try_new(new_chunks, self.dtype().clone())
     }
 }
 
