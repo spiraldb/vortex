@@ -8,42 +8,57 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::{BoolArray, ConstantArray};
 use crate::compute::{MaybeCompareFn, Operator};
 use crate::validity::ArrayValidity;
-use crate::{Array, IntoArray, IntoArrayVariant};
+use crate::{Array, IntoArray};
 
 impl MaybeCompareFn for PrimitiveArray {
     fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        let fn_impl = || -> VortexResult<Array> {
-            if let Ok(const_array) = ConstantArray::try_from(other) {
-                let mut builder = BooleanBufferBuilder::new(self.len());
-                let primitive_scalar = PrimitiveScalar::try_from(const_array.scalar())
-                    .vortex_expect("Expected a primitive scalar");
+        if let Ok(const_array) = ConstantArray::try_from(other) {
+            return Some(primitive_const_compare(self, const_array, operator));
+        }
 
-                match_each_native_ptype!(self.ptype(), |$T| {
-                    let op_fn = operator.to_fn::<$T>();
-                    let typed_value = primitive_scalar.typed_value::<$T>().unwrap();
-                    for v in self.maybe_null_slice::<$T>() {
-                        builder.append(op_fn(*v, typed_value));
-                    }
-                });
-                let validity = self
-                    .validity()
-                    .and(const_array.logical_validity().into_validity())?
-                    .into_nullable();
-                Ok(BoolArray::try_new(builder.finish(), validity)?.into_array())
-            } else {
-                let other = other.clone().into_primitive()?;
+        if let Ok(primitive) = PrimitiveArray::try_from(other) {
+            let match_mask = match_each_native_ptype!(self.ptype(), |$T| {
+                apply_predicate(self.maybe_null_slice::<$T>(), primitive.maybe_null_slice::<$T>(), operator.to_fn::<$T>())
+            });
 
-                let match_mask = match_each_native_ptype!(self.ptype(), |$T| {
-                    apply_predicate(self.maybe_null_slice::<$T>(), other.maybe_null_slice::<$T>(), operator.to_fn::<$T>())
-                });
+            let validity = self
+                .validity()
+                .and(primitive.validity())
+                .map(|v| v.into_nullable());
 
-                let validity = self.validity().and(other.validity())?.into_nullable();
-                Ok(BoolArray::try_new(match_mask, validity)?.into_array())
-            }
-        };
+            return Some(
+                validity
+                    .and_then(|v| BoolArray::try_new(match_mask, v))
+                    .map(|a| a.into_array()),
+            );
+        }
 
-        Some(fn_impl())
+        None
     }
+}
+
+fn primitive_const_compare(
+    this: &PrimitiveArray,
+    other: ConstantArray,
+    operator: Operator,
+) -> VortexResult<Array> {
+    let mut builder = BooleanBufferBuilder::new(this.len());
+    let primitive_scalar =
+        PrimitiveScalar::try_from(other.scalar()).vortex_expect("Expected a primitive scalar");
+
+    match_each_native_ptype!(this.ptype(), |$T| {
+        let op_fn = operator.to_fn::<$T>();
+        let typed_value = primitive_scalar.typed_value::<$T>().unwrap();
+        for v in this.maybe_null_slice::<$T>() {
+            builder.append(op_fn(*v, typed_value));
+        }
+    });
+
+    let validity = this
+        .validity()
+        .and(other.logical_validity().into_validity())?
+        .into_nullable();
+    Ok(BoolArray::try_new(builder.finish(), validity)?.into_array())
 }
 
 fn apply_predicate<T: NativePType, F: Fn(T, T) -> bool>(

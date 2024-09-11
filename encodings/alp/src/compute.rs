@@ -112,7 +112,7 @@ impl MaybeCompareFn for ALPArray {
                     match encoded {
                         Ok(encoded) => {
                             let s = ConstantArray::new(encoded, self.len());
-                            Some(compare(&self.encoded(), s.as_array_ref(), operator))
+                            Some(compare(&self.encoded(), s.array(), operator))
                         }
                         Err(exception) => {
                             if let Some(patches) = self.patches().as_ref() {
@@ -133,12 +133,12 @@ impl MaybeCompareFn for ALPArray {
                     match encoded {
                         Ok(encoded) => {
                             let s = ConstantArray::new(encoded, self.len());
-                            Some(compare(&self.encoded(), s.as_array_ref(), operator))
+                            Some(compare(&self.encoded(), s.array(), operator))
                         }
                         Err(exception) => {
                             if let Some(patches) = self.patches().as_ref() {
                                 let s = ConstantArray::new(exception, self.len());
-                                Some(compare(patches, s.as_array_ref(), operator))
+                                Some(compare(patches, s.array(), operator))
                             } else {
                                 Some(Ok(BoolArray::from_vec(
                                     vec![true; self.len()],
