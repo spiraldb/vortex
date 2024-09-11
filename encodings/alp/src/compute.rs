@@ -183,4 +183,20 @@ mod tests {
             assert!(v);
         }
     }
+
+    #[test]
+    fn compare_with_patches() {
+        let array =
+            PrimitiveArray::from(vec![1.234f32, 1.5, 19.0, std::f32::consts::E, 1_000_000.9]);
+        let encoded = alp_encode(&array).unwrap();
+        assert!(encoded.patches().is_some());
+
+        let r = alp_scalar_compare(&encoded, 1_000_000.9_f32, Operator::Eq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        let buffer = r.boolean_buffer();
+        assert!(buffer.value(buffer.len() - 1));
+    }
 }
