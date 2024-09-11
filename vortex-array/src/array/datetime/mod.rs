@@ -6,6 +6,7 @@ use vortex_dtype::{DType, ExtDType};
 use vortex_error::{vortex_panic, VortexError};
 
 use crate::array::ExtensionArray;
+use crate::variants::ExtensionArrayTrait;
 use crate::{Array, ArrayDType, ArrayData, IntoArray, ToArrayData};
 
 /// An array wrapper for primitive values that have an associated temporal meaning.

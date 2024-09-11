@@ -1,8 +1,13 @@
-use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
-use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
+use vortex::array::{BoolArray, ConstantArray};
+use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
+use vortex::compute::{
+    compare, filter, slice, take, ArrayCompute, FilterFn, MaybeCompareFn, Operator, SliceFn, TakeFn,
+};
+use vortex::stats::{ArrayStatistics, Stat};
+use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
-use vortex_error::VortexResult;
-use vortex_scalar::Scalar;
+use vortex_error::{VortexExpect, VortexResult};
+use vortex_scalar::{PValue, Scalar};
 
 use crate::{match_each_alp_float_ptype, ALPArray, ALPFloat};
 
@@ -16,6 +21,14 @@ impl ArrayCompute for ALPArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        MaybeCompareFn::maybe_compare(self, other, operator)
+    }
+
+    fn filter(&self) -> Option<&dyn FilterFn> {
         Some(self)
     }
 }
@@ -65,5 +78,148 @@ impl SliceFn for ALPArray {
             self.patches().map(|p| slice(&p, start, end)).transpose()?,
         )?
         .into_array())
+    }
+}
+
+impl FilterFn for ALPArray {
+    fn filter(&self, predicate: &Array) -> VortexResult<Array> {
+        Ok(Self::try_new(
+            filter(&self.encoded(), predicate)?,
+            self.exponents(),
+            self.patches().map(|p| filter(&p, predicate)).transpose()?,
+        )?
+        .into_array())
+    }
+}
+
+impl MaybeCompareFn for ALPArray {
+    fn maybe_compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        if ConstantArray::try_from(array).is_ok()
+            || array
+                .statistics()
+                .get_as::<bool>(Stat::IsConstant)
+                .unwrap_or_default()
+        {
+            let rhs = scalar_at(array, 0).vortex_expect("should be scalar");
+            let pvalue = rhs
+                .value()
+                .as_pvalue()
+                .vortex_expect("Expected primitive value");
+
+            match pvalue {
+                Some(PValue::F32(f)) => Some(alp_scalar_compare(self, f, operator)),
+                Some(PValue::F64(f)) => Some(alp_scalar_compare(self, f, operator)),
+                None => Some(Ok(BoolArray::from_vec(
+                    vec![false; self.len()],
+                    Validity::AllValid,
+                )
+                .into_array())),
+                _ => unreachable!(),
+            }
+        } else {
+            None
+        }
+    }
+}
+
+fn alp_scalar_compare<F: ALPFloat + Into<Scalar>>(
+    alp: &ALPArray,
+    value: F,
+    operator: Operator,
+) -> VortexResult<Array>
+where
+    F::ALPInt: Into<Scalar>,
+{
+    let encoded = F::encode_single(value, alp.exponents());
+    match encoded {
+        Ok(encoded) => {
+            let s = ConstantArray::new(encoded, alp.len());
+            compare(&alp.encoded(), s.array(), operator)
+        }
+        Err(exception) => {
+            if let Some(patches) = alp.patches().as_ref() {
+                let s = ConstantArray::new(exception, alp.len());
+                compare(patches, s.array(), operator)
+            } else {
+                Ok(BoolArray::from_vec(vec![false; alp.len()], Validity::AllValid).into_array())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::PrimitiveArray;
+    use vortex::IntoArrayVariant;
+    use vortex_dtype::{DType, Nullability, PType};
+
+    use super::*;
+    use crate::alp_encode;
+
+    #[test]
+    fn basic_comparison_test() {
+        let array = PrimitiveArray::from(vec![1.234f32; 1025]);
+        let encoded = alp_encode(&array).unwrap();
+        assert!(encoded.patches().is_none());
+        assert_eq!(
+            encoded.encoded().as_primitive().maybe_null_slice::<i32>(),
+            vec![1234; 1025]
+        );
+
+        let r = alp_scalar_compare(&encoded, 1.3_f32, Operator::Eq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        for v in r.boolean_buffer().iter() {
+            assert!(!v);
+        }
+
+        let r = alp_scalar_compare(&encoded, 1.234f32, Operator::Eq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        for v in r.boolean_buffer().iter() {
+            assert!(v);
+        }
+    }
+
+    #[test]
+    fn compare_with_patches() {
+        let array =
+            PrimitiveArray::from(vec![1.234f32, 1.5, 19.0, std::f32::consts::E, 1_000_000.9]);
+        let encoded = alp_encode(&array).unwrap();
+        assert!(encoded.patches().is_some());
+
+        let r = alp_scalar_compare(&encoded, 1_000_000.9_f32, Operator::Eq)
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        let buffer = r.boolean_buffer();
+        assert!(buffer.value(buffer.len() - 1));
+    }
+
+    #[test]
+    fn compare_to_null() {
+        let array = PrimitiveArray::from(vec![1.234f32; 1025]);
+        let encoded = alp_encode(&array).unwrap();
+
+        let other = ConstantArray::new(
+            Scalar::null(DType::Primitive(PType::F32, Nullability::Nullable)),
+            array.len(),
+        );
+
+        let r = encoded
+            .maybe_compare(other.array(), Operator::Eq)
+            .unwrap()
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        for v in r.boolean_buffer().iter() {
+            assert!(!v);
+        }
     }
 }

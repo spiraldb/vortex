@@ -3,8 +3,8 @@ use std::ops::{AddAssign, Shl, Shr};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{
-    search_sorted, slice, take, ArrayCompute, SearchResult, SearchSortedFn, SearchSortedSide,
-    SliceFn, TakeFn,
+    filter, search_sorted, slice, take, ArrayCompute, FilterFn, SearchResult, SearchSortedFn,
+    SearchSortedSide, SliceFn, TakeFn,
 };
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
@@ -29,12 +29,27 @@ impl ArrayCompute for FoRArray {
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
+
+    fn filter(&self) -> Option<&dyn FilterFn> {
+        Some(self)
+    }
 }
 
 impl TakeFn for FoRArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Self::try_new(
             take(&self.encoded(), indices)?,
+            self.reference().clone(),
+            self.shift(),
+        )
+        .map(|a| a.into_array())
+    }
+}
+
+impl FilterFn for FoRArray {
+    fn filter(&self, predicate: &Array) -> VortexResult<Array> {
+        Self::try_new(
+            filter(&self.encoded(), predicate)?,
             self.reference().clone(),
             self.shift(),
         )

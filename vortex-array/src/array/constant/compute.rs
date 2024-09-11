@@ -1,25 +1,21 @@
 use std::cmp::Ordering;
-use std::sync::Arc;
 
-use arrow_array::Datum;
-use arrow_ord::cmp;
 use vortex_dtype::Nullability;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
-use crate::arrow::FromArrowArray;
 use crate::compute::unary::{scalar_at, ScalarAtFn};
 use crate::compute::{
-    scalar_cmp, AndFn, ArrayCompute, CompareFn, FilterFn, Operator, OrFn, SearchResult,
+    scalar_cmp, AndFn, ArrayCompute, FilterFn, MaybeCompareFn, Operator, OrFn, SearchResult,
     SearchSortedFn, SearchSortedSide, SliceFn, TakeFn,
 };
 use crate::stats::{ArrayStatistics, Stat};
-use crate::{Array, ArrayDType, AsArray, IntoArray, IntoCanonical};
+use crate::{Array, ArrayDType, AsArray, IntoArray};
 
 impl ArrayCompute for ConstantArray {
-    fn compare(&self) -> Option<&dyn CompareFn> {
-        Some(self)
+    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -99,31 +95,19 @@ impl SearchSortedFn for ConstantArray {
     }
 }
 
-impl CompareFn for ConstantArray {
-    fn compare(&self, rhs: &Array, operator: Operator) -> VortexResult<Array> {
-        if rhs.statistics().get_as::<bool>(Stat::IsConstant) == Some(true) {
+impl MaybeCompareFn for ConstantArray {
+    fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        (ConstantArray::try_from(other).is_ok()
+            || other
+                .statistics()
+                .get_as::<bool>(Stat::IsConstant)
+                .unwrap_or_default())
+        .then(|| {
             let lhs = self.scalar();
-            let rhs = scalar_at(rhs, 0)?;
-
+            let rhs = scalar_at(other, 0).vortex_expect("Expected scalar");
             let scalar = scalar_cmp(lhs, &rhs, operator);
-
             Ok(ConstantArray::new(scalar, self.len()).into_array())
-        } else {
-            let datum = Arc::<dyn Datum>::try_from(self.scalar())?;
-            let rhs = rhs.clone().into_canonical()?.into_arrow()?;
-            let rhs = rhs.as_ref();
-
-            let boolean_array = match operator {
-                Operator::Eq => cmp::eq(datum.as_ref(), &rhs)?,
-                Operator::NotEq => cmp::neq(datum.as_ref(), &rhs)?,
-                Operator::Gt => cmp::gt(datum.as_ref(), &rhs)?,
-                Operator::Gte => cmp::gt_eq(datum.as_ref(), &rhs)?,
-                Operator::Lt => cmp::lt(datum.as_ref(), &rhs)?,
-                Operator::Lte => cmp::lt_eq(datum.as_ref(), &rhs)?,
-            };
-
-            Ok(Array::from_arrow(&boolean_array, true))
-        }
+        })
     }
 }
 

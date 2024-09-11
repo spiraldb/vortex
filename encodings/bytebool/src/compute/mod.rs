@@ -1,11 +1,8 @@
-use std::ops::{BitAnd, BitOr, BitXor, Not};
-
-use arrow_buffer::BooleanBuffer;
 use num_traits::AsPrimitive;
 use vortex::compute::unary::{FillForwardFn, ScalarAtFn};
-use vortex::compute::{ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
+use vortex::compute::{ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::{ArrayValidity, Validity};
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, Nullability};
 use vortex_error::{vortex_err, VortexResult};
 use vortex_scalar::Scalar;
@@ -13,10 +10,6 @@ use vortex_scalar::Scalar;
 use super::ByteBoolArray;
 
 impl ArrayCompute for ByteBoolArray {
-    fn compare(&self) -> Option<&dyn CompareFn> {
-        Some(self)
-    }
-
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
         None
     }
@@ -99,29 +92,6 @@ impl TakeFn for ByteBoolArray {
     }
 }
 
-impl CompareFn for ByteBoolArray {
-    fn compare(&self, other: &Array, op: Operator) -> VortexResult<Array> {
-        let canonical = other.clone().into_bool()?;
-        let lhs = BooleanBuffer::from(self.maybe_null_slice());
-        let rhs = canonical.boolean_buffer();
-
-        let result_buf = match op {
-            Operator::Eq => lhs.bitxor(&rhs).not(),
-            Operator::NotEq => lhs.bitxor(&rhs),
-
-            Operator::Gt => lhs.bitand(&rhs.not()),
-            Operator::Gte => lhs.bitor(&rhs.not()),
-            Operator::Lt => lhs.not().bitand(&rhs),
-            Operator::Lte => lhs.not().bitor(&rhs),
-        };
-
-        let validity = self.validity().and(canonical.validity())?;
-
-        ByteBoolArray::try_from_vec(Vec::from_iter(result_buf.iter()), validity)
-            .map(ByteBoolArray::into_array)
-    }
-}
-
 impl FillForwardFn for ByteBoolArray {
     fn fill_forward(&self) -> VortexResult<Array> {
         let validity = self.logical_validity();
@@ -165,7 +135,7 @@ impl FillForwardFn for ByteBoolArray {
 #[cfg(test)]
 mod tests {
     use vortex::compute::unary::{scalar_at, scalar_at_unchecked};
-    use vortex::compute::{compare, slice};
+    use vortex::compute::{compare, slice, Operator};
     use vortex::AsArray as _;
     use vortex_scalar::ScalarValue;
 

@@ -42,14 +42,6 @@ impl ExtensionArray {
     pub fn id(&self) -> &ExtID {
         self.ext_dtype().id()
     }
-
-    #[inline]
-    pub fn ext_dtype(&self) -> &ExtDType {
-        let DType::Extension(ext, _) = self.dtype() else {
-            unreachable!();
-        };
-        ext
-    }
 }
 
 impl ArrayTrait for ExtensionArray {}
@@ -60,7 +52,11 @@ impl ArrayVariants for ExtensionArray {
     }
 }
 
-impl ExtensionArrayTrait for ExtensionArray {}
+impl ExtensionArrayTrait for ExtensionArray {
+    fn storage_array(&self) -> Array {
+        self.storage()
+    }
+}
 
 impl IntoCanonical for ExtensionArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

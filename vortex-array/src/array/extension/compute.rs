@@ -1,10 +1,14 @@
-use vortex_error::VortexResult;
-use vortex_scalar::Scalar;
+use vortex_error::{VortexExpect, VortexResult};
+use vortex_scalar::{ExtScalar, Scalar};
 
 use crate::array::extension::ExtensionArray;
+use crate::array::ConstantArray;
 use crate::compute::unary::{scalar_at, scalar_at_unchecked, CastFn, ScalarAtFn};
-use crate::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
-use crate::{Array, IntoArray};
+use crate::compute::{
+    compare, slice, take, ArrayCompute, MaybeCompareFn, Operator, SliceFn, TakeFn,
+};
+use crate::variants::ExtensionArrayTrait;
+use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for ExtensionArray {
     fn cast(&self) -> Option<&dyn CastFn> {
@@ -12,6 +16,10 @@ impl ArrayCompute for ExtensionArray {
         // TODO(ngates): we should allow some extension arrays to implement a callback
         //  to support this
         None
+    }
+
+    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -24,6 +32,28 @@ impl ArrayCompute for ExtensionArray {
 
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
+    }
+}
+
+impl MaybeCompareFn for ExtensionArray {
+    fn maybe_compare(&self, array: &Array, operator: Operator) -> Option<VortexResult<Array>> {
+        if let Ok(const_ext) = ConstantArray::try_from(array) {
+            return Some({
+                let scalar_ext =
+                    ExtScalar::try_from(const_ext.scalar()).vortex_expect("Expected ExtScalar");
+                let const_storage = ConstantArray::new(
+                    Scalar::new(self.storage().dtype().clone(), scalar_ext.value().clone()),
+                    const_ext.len(),
+                );
+                compare(&self.storage(), const_storage.array(), operator)
+            });
+        }
+
+        if let Ok(rhs_ext) = ExtensionArray::try_from(array) {
+            return Some(compare(&self.storage(), &rhs_ext.storage(), operator));
+        }
+
+        None
     }
 }
 
