@@ -359,7 +359,7 @@ mod test {
         )
         .unwrap();
 
-        let rechunked = chunked.rechunk_default().unwrap();
+        let rechunked = chunked.rechunk(1 << 16, 1 << 16).unwrap();
 
         assert_arrays_eq!(chunked, rechunked);
     }
@@ -372,7 +372,7 @@ mod test {
         )
         .unwrap();
 
-        let rechunked = chunked.rechunk_default().unwrap();
+        let rechunked = chunked.rechunk(1 << 16, 1 << 16).unwrap();
 
         assert_eq!(rechunked.nchunks(), 1);
         assert_arrays_eq!(chunked, rechunked);
