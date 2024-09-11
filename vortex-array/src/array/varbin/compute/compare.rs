@@ -1,17 +1,15 @@
+use std::sync::Arc;
+
 use arrow_array::cast::AsArray;
 use arrow_array::types::ByteArrayType;
-use arrow_array::{
-    Array as ArrowArray, BinaryArray, GenericByteArray, LargeBinaryArray, LargeStringArray, Scalar,
-    StringArray,
-};
-use arrow_cast::cast;
+use arrow_array::{Array as ArrowArray, Datum, GenericByteArray};
 use arrow_ord::cmp;
 use arrow_schema::DataType;
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::{ConstantArray, VarBinArray};
 use crate::arrow::FromArrowArray;
-use crate::compute::{MaybeCompareFn, Operator, SliceFn};
+use crate::compute::{MaybeCompareFn, Operator};
 use crate::{Array, IntoCanonical};
 
 impl MaybeCompareFn for VarBinArray {
@@ -30,29 +28,18 @@ fn compare_constant(
     operator: Operator,
 ) -> VortexResult<Array> {
     let arrow_lhs = lhs.clone().into_canonical()?.into_arrow()?;
-    let constant = rhs.slice(0, 1)?.clone();
-    let arrow_rhs = constant.into_canonical()?.into_arrow()?;
+    let constant = Arc::<dyn Datum>::try_from(rhs.scalar())?;
 
     match arrow_lhs.data_type() {
         DataType::Binary => {
-            let arrow_rhs = cast(arrow_rhs.as_ref(), &DataType::Binary)?;
-            let scalar = Scalar::<BinaryArray>::new(arrow_rhs.as_binary().clone());
-            compare_constant_arrow(arrow_lhs.as_binary(), &scalar, operator)
+            compare_constant_arrow(arrow_lhs.as_binary::<i32>(), constant, operator)
         }
         DataType::LargeBinary => {
-            let arrow_rhs = cast(arrow_rhs.as_ref(), &DataType::LargeBinary)?;
-            let scalar = Scalar::<LargeBinaryArray>::new(arrow_rhs.as_binary().clone());
-            compare_constant_arrow(arrow_lhs.as_binary(), &scalar, operator)
+            compare_constant_arrow(arrow_lhs.as_binary::<i64>(), constant, operator)
         }
-        DataType::Utf8 => {
-            let arrow_rhs = cast(arrow_rhs.as_ref(), &DataType::Utf8)?;
-            let scalar = Scalar::<StringArray>::new(arrow_rhs.as_string().clone());
-            compare_constant_arrow(arrow_lhs.as_string(), &scalar, operator)
-        }
+        DataType::Utf8 => compare_constant_arrow(arrow_lhs.as_string::<i32>(), constant, operator),
         DataType::LargeUtf8 => {
-            let arrow_rhs = cast(arrow_rhs.as_ref(), &DataType::LargeUtf8)?;
-            let scalar = Scalar::<LargeStringArray>::new(arrow_rhs.as_string().clone());
-            compare_constant_arrow(arrow_lhs.as_string(), &scalar, operator)
+            compare_constant_arrow(arrow_lhs.as_string::<i64>(), constant, operator)
         }
         _ => {
             vortex_bail!("Cannot compare VarBinArray with non-binary type");
@@ -62,9 +49,10 @@ fn compare_constant(
 
 fn compare_constant_arrow<T: ByteArrayType>(
     lhs: &GenericByteArray<T>,
-    rhs: &Scalar<GenericByteArray<T>>,
+    rhs: Arc<dyn Datum>,
     operator: Operator,
 ) -> VortexResult<Array> {
+    let rhs = rhs.as_ref();
     let array = match operator {
         Operator::Eq => cmp::eq(lhs, rhs)?,
         Operator::NotEq => cmp::neq(lhs, rhs)?,
