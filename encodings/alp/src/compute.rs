@@ -151,6 +151,7 @@ where
 mod tests {
     use vortex::array::PrimitiveArray;
     use vortex::IntoArrayVariant;
+    use vortex_dtype::{DType, Nullability, PType};
 
     use super::*;
     use crate::alp_encode;
@@ -198,5 +199,27 @@ mod tests {
 
         let buffer = r.boolean_buffer();
         assert!(buffer.value(buffer.len() - 1));
+    }
+
+    #[test]
+    fn compare_to_null() {
+        let array = PrimitiveArray::from(vec![1.234f32; 1025]);
+        let encoded = alp_encode(&array).unwrap();
+
+        let other = ConstantArray::new(
+            Scalar::null(DType::Primitive(PType::F32, Nullability::Nullable)),
+            array.len(),
+        );
+
+        let r = encoded
+            .maybe_compare(other.array(), Operator::Eq)
+            .unwrap()
+            .unwrap()
+            .into_bool()
+            .unwrap();
+
+        for v in r.boolean_buffer().iter() {
+            assert!(!v);
+        }
     }
 }
