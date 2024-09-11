@@ -2,7 +2,6 @@
 //!
 //! Vortex is a chunked array library that's able to
 
-use canonical::try_canonicalize_chunks;
 use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
