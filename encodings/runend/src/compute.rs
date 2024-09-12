@@ -50,7 +50,6 @@ impl TakeFn for RunEndArray {
                     }
                     self.find_physical_index(idx).map(|loc| loc as u64)
                 })
-
                 .collect::<VortexResult<Vec<_>>>()?
         });
         let physical_indices_array = PrimitiveArray::from(physical_indices).into_array();

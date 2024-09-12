@@ -83,11 +83,16 @@ fn take_primitive<T: NativePType + BitPacking>(
 
         if !prefer_bulk_patch {
             if let Some(ref patches) = patches {
-                let patches_slice = slice(
-                    patches.array(),
-                    chunk * 1024,
-                    min((chunk + 1) * 1024, patches.len()),
-                )?;
+                // NOTE: we need to subtract the array offset before slicing into the patches.
+                // This is because BitPackedArray is rounded to block boundaries, but patches
+                // is sliced exactly.
+                let patches_start = if chunk == 0 {
+                    0
+                } else {
+                    (chunk * 1024) - array.offset()
+                };
+                let patches_end = min((chunk + 1) * 1024 - array.offset(), patches.len());
+                let patches_slice = slice(patches.array(), patches_start, patches_end)?;
                 let patches_slice = SparseArray::try_from(patches_slice)?;
                 let offsets = PrimitiveArray::from(offsets);
                 do_patch_for_take_primitive(&patches_slice, &offsets, &mut output)?;
