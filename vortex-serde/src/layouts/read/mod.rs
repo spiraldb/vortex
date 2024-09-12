@@ -45,7 +45,7 @@ pub type MessageId = Vec<LayoutPartId>;
 
 #[derive(Debug)]
 pub enum ReadResult {
-    GetMsgs(Vec<(MessageId, ByteRange)>),
+    ReadMore(Vec<(MessageId, ByteRange)>),
     Batch(Array),
 }
 
@@ -57,7 +57,7 @@ pub trait Layout: Debug + Send {
     /// and then call back into this function.
     ///
     /// The layout is finished reading when it returns None
-    fn read(&mut self) -> VortexResult<Option<ReadResult>>;
+    fn read_next(&mut self) -> VortexResult<Option<ReadResult>>;
 
     // TODO(robert): Support stats pruning via planning. Requires propagating all the metadata
     //  to top level and then pushing down the result of it

@@ -152,7 +152,7 @@ pub fn read<'py>(
 
         let stream = builder.build().await?;
 
-        let dtype = stream.schema().into_dtype();
+        let dtype = stream.schema().into();
 
         let vecs: Vec<Array> = stream.try_collect().await?;
 

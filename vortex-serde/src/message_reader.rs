@@ -78,7 +78,7 @@ impl<R: VortexRead> MessageReader<R> {
 
     async fn next(&mut self) -> VortexResult<Buffer> {
         if self.finished {
-            vortex_bail!("Reader is finished, should've checked peek!")
+            vortex_bail!("Reader is finished, should've peeked!")
         }
         self.prev_message = self.message.split();
         if !self.load_next_message().await? {
@@ -314,6 +314,7 @@ impl ArrayBufferReader {
         .ok_or_else(|| vortex_err!("Checked in previous step"))
     }
 
+    /// Provide buffered array
     pub fn into_array(self, ctx: Arc<Context>, dtype: DType) -> VortexResult<Array> {
         let length = self.fb_bytes_as_batch()?.length() as usize;
         let fb_msg = self

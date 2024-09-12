@@ -23,8 +23,10 @@ impl Schema {
     pub fn dtype(&self) -> &DType {
         &self.0
     }
+}
 
-    pub fn into_dtype(self) -> DType {
-        self.0
+impl From<Schema> for DType {
+    fn from(value: Schema) -> Self {
+        value.0
     }
 }

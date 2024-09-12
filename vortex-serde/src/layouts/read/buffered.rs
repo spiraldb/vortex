@@ -34,11 +34,11 @@ impl BufferedReader {
     fn buffer(&mut self) -> VortexResult<Option<ReadResult>> {
         while self.buffered_row_count() < self.batch_size {
             if let Some(mut layout) = self.layouts.pop_front() {
-                let read = layout.read()?;
+                let read = layout.read_next()?;
                 if let Some(rr) = read {
                     self.layouts.push_front(layout);
                     match rr {
-                        g @ ReadResult::GetMsgs(..) => {
+                        g @ ReadResult::ReadMore(..) => {
                             return Ok(Some(g));
                         }
                         ReadResult::Batch(a) => self.arrays.push_back(a),
@@ -60,7 +60,7 @@ impl BufferedReader {
 
         if let Some(rr) = self.buffer()? {
             match rr {
-                g @ ReadResult::GetMsgs(..) => return Ok(Some(g)),
+                g @ ReadResult::ReadMore(..) => return Ok(Some(g)),
                 ReadResult::Batch(_) => {
                     unreachable!("Batches should be handled inside the buffer call")
                 }

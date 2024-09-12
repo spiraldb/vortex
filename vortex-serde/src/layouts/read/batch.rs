@@ -24,7 +24,7 @@ impl BatchReader {
         }
     }
 
-    pub fn read(&mut self) -> VortexResult<Option<ReadResult>> {
+    pub(crate) fn read(&mut self) -> VortexResult<Option<ReadResult>> {
         let mut messages = Vec::new();
         for (i, child_array) in self
             .arrays
@@ -32,9 +32,9 @@ impl BatchReader {
             .enumerate()
             .filter(|(_, a)| a.is_none())
         {
-            match self.children[i].read()? {
+            match self.children[i].read_next()? {
                 Some(rr) => match rr {
-                    ReadResult::GetMsgs(message) => {
+                    ReadResult::ReadMore(message) => {
                         messages.extend(message);
                     }
                     ReadResult::Batch(a) => *child_array = Some(a),
@@ -60,7 +60,7 @@ impl BatchReader {
                     .into_array(),
             )));
         } else {
-            Ok(Some(ReadResult::GetMsgs(messages)))
+            Ok(Some(ReadResult::ReadMore(messages)))
         }
     }
 }

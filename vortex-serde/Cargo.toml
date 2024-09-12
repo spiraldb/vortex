@@ -12,6 +12,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+arrow-schema = { workspace = true }
 ahash = { workspace = true }
 bytes = { workspace = true }
 flatbuffers = { workspace = true }

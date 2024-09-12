@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use arrow_schema::Schema;
 use vortex::array::{ConstantArray, StructArray};
 use vortex::compute::{compare, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
@@ -13,12 +14,17 @@ use vortex_scalar::Scalar;
 
 use crate::Operator;
 
+const NON_PRIMITIVE_COST_ESTIMATE: usize = 64;
+const COLUMN_COST_MULTIPLIER: usize = 1024;
+
 pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
     fn as_any(&self) -> &dyn Any;
 
     fn evaluate(&self, array: &Array) -> VortexResult<Array>;
 
     fn references(&self) -> HashSet<Field>;
+
+    fn estimate_cost(&self, arrow_schema: &Schema) -> usize;
 }
 
 // Taken from apache-datafusion, necessary since you can't require VortexExpr implement PartialEq<dyn VortexExpr>
@@ -110,6 +116,23 @@ impl VortexExpr for Column {
     fn references(&self) -> HashSet<Field> {
         HashSet::from([self.field.clone()])
     }
+
+    fn estimate_cost(&self, schema: &Schema) -> usize {
+        let field = match self.field() {
+            Field::Name(name) => {
+                schema
+                    .column_with_name(name)
+                    .vortex_expect("Expression should reference value in schema")
+                    .1
+            }
+            Field::Index(idx) => schema.field(*idx),
+        };
+
+        field
+            .data_type()
+            .primitive_width()
+            .unwrap_or(NON_PRIMITIVE_COST_ESTIMATE * COLUMN_COST_MULTIPLIER)
+    }
 }
 
 impl PartialEq<dyn Any> for Column {
@@ -143,6 +166,15 @@ impl VortexExpr for Literal {
 
     fn references(&self) -> HashSet<Field> {
         HashSet::new()
+    }
+
+    fn estimate_cost(&self, _schema: &Schema) -> usize {
+        match self.value.dtype() {
+            vortex_dtype::DType::Null => 0,
+            vortex_dtype::DType::Bool(_) => 1,
+            vortex_dtype::DType::Primitive(p, _) => p.byte_width(),
+            _ => NON_PRIMITIVE_COST_ESTIMATE,
+        }
     }
 }
 
@@ -183,6 +215,10 @@ impl VortexExpr for BinaryExpr {
         res.extend(self.rhs.references());
         res
     }
+
+    fn estimate_cost(&self, arrow_schema: &Schema) -> usize {
+        self.lhs.estimate_cost(arrow_schema) + self.rhs.estimate_cost(arrow_schema)
+    }
 }
 
 impl PartialEq<dyn Any> for BinaryExpr {
@@ -205,6 +241,10 @@ impl VortexExpr for NoOp {
 
     fn references(&self) -> HashSet<Field> {
         HashSet::new()
+    }
+
+    fn estimate_cost(&self, _arrow_schema: &Schema) -> usize {
+        0
     }
 }
 
