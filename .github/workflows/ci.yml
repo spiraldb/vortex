@@ -37,6 +37,8 @@ jobs:
         run: cargo doc --no-deps
       - name: Rust Test
         run: cargo test --workspace --all-features
+      - name: Rust Bench as test
+        run: cargo bench -- --test
       - name: Rust Build
         run: cargo build --all-features --all-targets
 
