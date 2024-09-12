@@ -208,7 +208,7 @@ mod test {
     }
 
     #[test]
-    fn whiteboard_test_case() {
+    fn true_fill_value() {
         let predicate = BoolArray::from_vec(
             vec![false, true, false, true, false, true, true],
             Validity::NonNullable,
