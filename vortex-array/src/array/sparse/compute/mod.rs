@@ -81,6 +81,7 @@ impl FilterFn for SparseArray {
         let buffer = predicate.boolean_buffer();
         let mut coordinate_indices = Vec::new();
         let mut value_indices = Vec::new();
+        let mut last_inserted_index = 0;
 
         let flat_indices = self
             .indices()
@@ -93,7 +94,11 @@ impl FilterFn for SparseArray {
                 .map(|v| (*v as usize) - self.indices_offset());
             for (value_idx, coordinate) in indices.enumerate() {
                 if buffer.value(coordinate) {
-                    coordinate_indices.push(coordinate as u64);
+                    // We count the number of truthy values between this coordinate and the previous truthy one
+                    let adjusted_coordinate = buffer.slice(last_inserted_index, coordinate).count_set_bits() as u64;
+                    coordinate_indices.push(adjusted_coordinate);
+                    last_inserted_index = coordinate;
+
                     value_indices.push(value_idx as u64);
                 }
             }
@@ -102,7 +107,7 @@ impl FilterFn for SparseArray {
         Ok(SparseArray::try_new(
             PrimitiveArray::from(coordinate_indices).into_array(),
             take(&self.values(), PrimitiveArray::from(value_indices).array())?,
-            self.len(),
+            buffer.count_set_bits(),
             self.fill_value().clone(),
         )?
         .into_array())
@@ -197,7 +202,7 @@ mod test {
         let filtered_array = filter(&array, &predicate).unwrap();
         let filtered_array = SparseArray::try_from(filtered_array).unwrap();
 
-        assert_eq!(filtered_array.len(), array.len());
+        assert_eq!(filtered_array.len(), 1);
         assert_eq!(filtered_array.values().len(), 1);
         assert_eq!(filtered_array.indices().len(), 1);
     }
