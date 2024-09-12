@@ -79,7 +79,7 @@ impl FilterFn for SparseArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         let predicate = predicate.clone().into_bool()?;
         let buffer = predicate.boolean_buffer();
-        let mut coordinate_indices = Vec::new();
+        let mut coordinate_indices: Vec<u64> = Vec::new();
         let mut value_indices = Vec::new();
         let mut last_inserted_index = 0;
 
@@ -96,7 +96,7 @@ impl FilterFn for SparseArray {
                 if buffer.value(coordinate) {
                     // We count the number of truthy values between this coordinate and the previous truthy one
                     let adjusted_coordinate = buffer.slice(last_inserted_index, coordinate - last_inserted_index).count_set_bits() as u64;
-                    coordinate_indices.push(adjusted_coordinate);
+                    coordinate_indices.push(adjusted_coordinate + coordinate_indices.last().copied().unwrap_or_default());
                     last_inserted_index = coordinate;
 
                     value_indices.push(value_idx as u64);
@@ -125,7 +125,7 @@ mod test {
     use crate::array::BoolArray;
     use crate::compute::{filter, search_sorted, slice, SearchResult, SearchSortedSide};
     use crate::validity::Validity;
-    use crate::{Array, IntoArray};
+    use crate::{Array, IntoArray, IntoArrayVariant};
 
     #[fixture]
     fn array() -> Array {
@@ -205,5 +205,30 @@ mod test {
         assert_eq!(filtered_array.len(), 1);
         assert_eq!(filtered_array.values().len(), 1);
         assert_eq!(filtered_array.indices().len(), 1);
+    }
+
+    #[test]
+    fn whiteboard_test_case() {
+        let predicate = BoolArray::from_vec(
+            vec![false, true, false, true, false, true, true],
+            Validity::NonNullable,
+        )
+        .into_array();
+        let array = SparseArray::try_new(
+            PrimitiveArray::from(vec![0_u64, 3, 6]).into_array(),
+            PrimitiveArray::from_vec(vec![33_i32, 44, 55], Validity::AllValid).into_array(),
+            7,
+            Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable)),
+        )
+        .unwrap()
+        .into_array();
+
+        let filtered_array = filter(&array, &predicate).unwrap();
+        let filtered_array = SparseArray::try_from(filtered_array).unwrap();
+
+        assert_eq!(filtered_array.len(), 4);
+        let primitive = filtered_array.indices().into_primitive().unwrap();
+
+        assert_eq!(primitive.maybe_null_slice::<u64>(), &[1, 3]);
     }
 }
