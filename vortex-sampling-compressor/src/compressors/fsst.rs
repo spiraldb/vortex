@@ -40,7 +40,7 @@ impl EncodingCompressor for FSSTCompressor {
         }
 
         // FSST can be applied on top of VarBin and VarBinView
-        if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
+        if array.is_encoding(VarBin::ID) || array.is_encoding(VarBinView::ID) {
             return Some(self);
         }
 
@@ -72,16 +72,15 @@ impl EncodingCompressor for FSSTCompressor {
             vortex_bail!("Could not downcast metadata as FSST Compressor")
         };
 
-        let fsst_array =
-            if array.encoding().id() == VarBin::ID || array.encoding().id() == VarBinView::ID {
-                // For a VarBinArray or VarBinViewArray, compress directly.
-                fsst_compress(array, fsst_compressor)?
-            } else {
-                vortex_bail!(
-                    "Unsupported encoding for FSSTCompressor: {}",
-                    array.encoding().id()
-                )
-            };
+        let fsst_array = if array.is_encoding(VarBin::ID) || array.is_encoding(VarBinView::ID) {
+            // For a VarBinArray or VarBinViewArray, compress directly.
+            fsst_compress(array, fsst_compressor)?
+        } else {
+            vortex_bail!(
+                "Unsupported encoding for FSSTCompressor: {}",
+                array.encoding().id()
+            )
+        };
 
         // Compress the uncompressed_lengths array.
         let uncompressed_lengths = ctx

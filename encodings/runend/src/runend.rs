@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
-use vortex::array::{Primitive, PrimitiveArray};
+use vortex::array::PrimitiveArray;
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
@@ -86,10 +86,9 @@ impl RunEndArray {
 
     /// Run the array through run-end encoding.
     pub fn encode(array: Array) -> VortexResult<Self> {
-        if array.encoding().id() == Primitive::ID {
-            let primitive = PrimitiveArray::try_from(array)?;
-            let (ends, values) = runend_encode(&primitive);
-            Self::try_new(ends.into_array(), values.into_array(), primitive.validity())
+        if let Ok(parray) = PrimitiveArray::try_from(array) {
+            let (ends, values) = runend_encode(&parray);
+            Self::try_new(ends.into_array(), values.into_array(), parray.validity())
         } else {
             vortex_bail!("REE can only encode primitive arrays")
         }

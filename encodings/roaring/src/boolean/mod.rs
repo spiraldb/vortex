@@ -4,7 +4,7 @@ use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
 pub use compress::*;
 pub use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
-use vortex::array::{Bool, BoolArray};
+use vortex::array::BoolArray;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
@@ -51,8 +51,8 @@ impl RoaringBoolArray {
     }
 
     pub fn encode(array: Array) -> VortexResult<Array> {
-        if array.encoding().id() == Bool::ID {
-            roaring_bool_encode(BoolArray::try_from(array)?).map(|a| a.into_array())
+        if let Ok(bools) = BoolArray::try_from(array) {
+            roaring_bool_encode(bools).map(|a| a.into_array())
         } else {
             vortex_bail!("RoaringBool can only encode boolean arrays")
         }

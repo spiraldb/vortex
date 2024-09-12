@@ -25,7 +25,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_panic, VortexExpect, VortexResult};
 
 use crate::compute::ArrayCompute;
-use crate::encoding::{ArrayEncodingRef, EncodingRef};
+use crate::encoding::{ArrayEncodingRef, EncodingId, EncodingRef};
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::{ArrayStatistics, ArrayStatisticsCompute};
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
@@ -161,6 +161,10 @@ impl Array {
             self.dtype().clone(),
             futures_util::stream::once(ready(Ok(self))),
         )
+    }
+
+    pub fn is_encoding(&self, id: EncodingId) -> bool {
+        self.encoding().id() == id
     }
 
     #[inline]
