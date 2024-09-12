@@ -95,7 +95,7 @@ impl FilterFn for SparseArray {
             for (value_idx, coordinate) in indices.enumerate() {
                 if buffer.value(coordinate) {
                     // We count the number of truthy values between this coordinate and the previous truthy one
-                    let adjusted_coordinate = buffer.slice(last_inserted_index, coordinate).count_set_bits() as u64;
+                    let adjusted_coordinate = buffer.slice(last_inserted_index, coordinate - last_inserted_index).count_set_bits() as u64;
                     coordinate_indices.push(adjusted_coordinate);
                     last_inserted_index = coordinate;
 
