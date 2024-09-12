@@ -45,15 +45,24 @@ fn primitive_const_compare(
         PrimitiveScalar::try_from(other.scalar()).vortex_expect("Expected a primitive scalar");
 
     let buffer = match_each_native_ptype!(this.ptype(), |$T| {
-        let op_fn = operator.to_fn::<$T>();
         let typed_value = primitive_scalar.typed_value::<$T>().unwrap();
-        let slice = this.maybe_null_slice::<$T>();
-        BooleanBuffer::collect_bool(this.len(), |idx| {
-            op_fn(unsafe { *slice.get_unchecked(idx) }, typed_value)
-        })
+        primitive_value_compare::<$T>(this, typed_value, operator)
     });
 
     Ok(BoolArray::try_new(buffer, this.validity().into_nullable())?.into_array())
+}
+
+fn primitive_value_compare<T: NativePType>(
+    this: &PrimitiveArray,
+    value: T,
+    op: Operator,
+) -> BooleanBuffer {
+    let op_fn = op.to_fn::<T>();
+    let slice = this.maybe_null_slice::<T>();
+
+    BooleanBuffer::collect_bool(this.len(), |idx| {
+        op_fn(unsafe { *slice.get_unchecked(idx) }, value)
+    })
 }
 
 fn apply_predicate<T: NativePType, F: Fn(T, T) -> bool>(

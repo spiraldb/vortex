@@ -1,3 +1,4 @@
+mod assertions;
 mod bool;
 mod chunked;
 mod constant;
