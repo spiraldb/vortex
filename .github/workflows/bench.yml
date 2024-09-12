@@ -25,9 +25,11 @@ jobs:
           version: v1.0.0
 
       - name: Run benchmark
+        shell: bash
         run: cargo bench --bench tpch_benchmark -- --output-format bencher | tee output.txt
 
       - name: Store benchmark result
+        if: '!cancelled()'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Vortex benchmarks
