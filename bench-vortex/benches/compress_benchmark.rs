@@ -19,7 +19,7 @@ fn vortex_compress_taxi(c: &mut Criterion) {
 
 fn vortex_compress_medicare1(c: &mut Criterion) {
     let dataset = BenchmarkDatasets::PBI(Medicare1);
-    dataset.as_uncompressed();
+    dataset.write_as_parquet();
     let mut group = c.benchmark_group("end to end - medicare");
     group.sample_size(10);
     group.bench_function("compress", |b| {
