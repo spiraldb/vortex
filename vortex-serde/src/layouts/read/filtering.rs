@@ -1,9 +1,10 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use arrow_schema::Schema;
 use vortex_dtype::field::FieldPath;
 use vortex_expr::{BinaryExpr, VortexExpr};
+
+use crate::layouts::Schema;
 
 #[derive(Debug, Clone)]
 pub struct RowFilter {

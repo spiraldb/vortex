@@ -3,7 +3,6 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use arrow_schema::Schema;
 use vortex::array::{ConstantArray, StructArray};
 use vortex::compute::{compare, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
@@ -24,7 +23,7 @@ pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
 
     fn references(&self) -> HashSet<Field>;
 
-    fn estimate_cost(&self, arrow_schema: &Schema) -> usize;
+    fn estimate_cost(&self, schema: &Schema) -> usize;
 }
 
 // Taken from apache-datafusion, necessary since you can't require VortexExpr implement PartialEq<dyn VortexExpr>
