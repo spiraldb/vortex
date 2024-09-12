@@ -123,9 +123,9 @@ impl<'a> PruningPredicateRewriter<'a> {
                 let replaced_min = self.rewrite_other_exp(Stat::Min);
 
                 Some(Arc::new(BinaryExpr::new(
-                    Arc::new(BinaryExpr::new(min_col, Operator::Lte, replaced_max)),
-                    Operator::And,
-                    Arc::new(BinaryExpr::new(replaced_min, Operator::Lte, max_col)),
+                    Arc::new(BinaryExpr::new(min_col, Operator::Gt, replaced_max)),
+                    Operator::Or,
+                    Arc::new(BinaryExpr::new(replaced_min, Operator::Gt, max_col)),
                 )))
             }
             Operator::NotEq => {
@@ -139,25 +139,17 @@ impl<'a> PruningPredicateRewriter<'a> {
                     Arc::new(BinaryExpr::new(
                         Arc::new(BinaryExpr::new(
                             min_col.clone(),
-                            Operator::NotEq,
+                            Operator::Eq,
                             replaced_min.clone(),
                         )),
-                        Operator::Or,
-                        Arc::new(BinaryExpr::new(
-                            replaced_min,
-                            Operator::NotEq,
-                            max_col.clone(),
-                        )),
+                        Operator::And,
+                        Arc::new(BinaryExpr::new(replaced_min, Operator::Eq, max_col.clone())),
                     )),
-                    Operator::And,
+                    Operator::Or,
                     Arc::new(BinaryExpr::new(
-                        Arc::new(BinaryExpr::new(
-                            min_col,
-                            Operator::NotEq,
-                            replaced_max.clone(),
-                        )),
-                        Operator::Or,
-                        Arc::new(BinaryExpr::new(replaced_max, Operator::NotEq, max_col)),
+                        Arc::new(BinaryExpr::new(min_col, Operator::Eq, replaced_max.clone())),
+                        Operator::And,
+                        Arc::new(BinaryExpr::new(replaced_max, Operator::Eq, max_col)),
                     )),
                 )))
             }
@@ -165,13 +157,21 @@ impl<'a> PruningPredicateRewriter<'a> {
                 let max_col = Arc::new(Column::new(self.add_stat_reference(Stat::Max)));
                 let replaced_min = self.rewrite_other_exp(Stat::Min);
 
-                Some(Arc::new(BinaryExpr::new(max_col, op, replaced_min)))
+                Some(Arc::new(BinaryExpr::new(
+                    max_col,
+                    op.inverse()?,
+                    replaced_min,
+                )))
             }
             op @ Operator::Lt | op @ Operator::Lte => {
                 let min_col = Arc::new(Column::new(self.add_stat_reference(Stat::Min)));
                 let replaced_max = self.rewrite_other_exp(Stat::Max);
 
-                Some(Arc::new(BinaryExpr::new(min_col, op, replaced_max)))
+                Some(Arc::new(BinaryExpr::new(
+                    min_col,
+                    op.inverse()?,
+                    replaced_max,
+                )))
             }
             _ => None,
         };
