@@ -24,6 +24,11 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
       - uses: ./.github/actions/setup-python
+      # Required to run benchmarks
+      - name: Install DuckDB
+        uses: opt-nc/setup-duckdb-action@v1.0.9
+        with:
+          version: v1.0.0
 
       - name: Python Lint - Format
         run: rye run ruff format --check .

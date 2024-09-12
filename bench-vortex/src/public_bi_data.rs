@@ -456,7 +456,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 &path_for_file_type(self, output_fname, "parquet"),
                 |output_path| write_csv_as_parquet(f, output_path),
             )
-            .expect("Failed to compress to parquet");
+            .unwrap();
             let pq_size = compressed.metadata().unwrap().size();
             info!(
                 "Parquet size: {}, {}B",
