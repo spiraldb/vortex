@@ -142,7 +142,7 @@ impl SparseArray {
     /// If this sparse array has no indices (i.e. all elements are equal to fill_value)
     /// then it returns None.
     pub fn min_index(&self) -> Option<usize> {
-        (self.indices().len() > 0).then(|| {
+        (!self.indices().is_empty()).then(|| {
             let min_index: usize = scalar_at(&self.indices(), 0)
                 .and_then(|s| s.as_ref().try_into())
                 .vortex_expect("SparseArray indices is non-empty");
