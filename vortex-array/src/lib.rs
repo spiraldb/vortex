@@ -11,13 +11,13 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::future::ready;
 
+pub use ::paste;
 pub use canonical::*;
 pub use context::*;
 pub use data::*;
 pub use implementation::*;
 use itertools::Itertools;
 pub use metadata::*;
-pub use ::paste;
 pub use typed::*;
 pub use view::*;
 use vortex_buffer::Buffer;
