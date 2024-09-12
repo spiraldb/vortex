@@ -79,8 +79,8 @@ impl FilterFn for SparseArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         let predicate = predicate.clone().into_bool()?;
         let buffer = predicate.boolean_buffer();
-        let mut array_indices = Vec::new();
-        let mut indexes = Vec::new();
+        let mut coordinate_indices = Vec::new();
+        let mut value_indices = Vec::new();
 
         let flat_indices = self
             .indices()
@@ -91,17 +91,17 @@ impl FilterFn for SparseArray {
                 .maybe_null_slice::<$P>()
                 .iter()
                 .map(|v| (*v as usize) - self.indices_offset());
-            for (idx, sparse_idx) in indices.enumerate() {
-                if buffer.value(sparse_idx) {
-                    array_indices.push(sparse_idx as u64);
-                    indexes.push(idx as u64);
+            for (value_idx, coordinate) in indices.enumerate() {
+                if buffer.value(coordinate) {
+                    coordinate_indices.push(coordinate as u64);
+                    value_indices.push(value_idx as u64);
                 }
             }
         });
 
         Ok(SparseArray::try_new(
-            PrimitiveArray::from(array_indices).into_array(),
-            take(&self.values(), PrimitiveArray::from(indexes).array())?,
+            PrimitiveArray::from(coordinate_indices).into_array(),
+            take(&self.values(), PrimitiveArray::from(value_indices).array())?,
             self.len(),
             self.fill_value().clone(),
         )?
