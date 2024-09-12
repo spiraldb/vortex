@@ -12,6 +12,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
 
 jobs:
   build:
@@ -54,7 +55,6 @@ jobs:
     name: 'miri'
     runs-on: ubuntu-latest
     env:
-      RUST_BACKTRACE: 1
       MIRIFLAGS: -Zmiri-strict-provenance -Zmiri-symbolic-alignment-check -Zmiri-backtrace=full
     steps:
       - uses: actions/checkout@v4
@@ -62,3 +62,20 @@ jobs:
       - uses: ./.github/actions/setup-rust
       - name: Run tests with Miri
         run: cargo miri test
+
+  bench-test:
+    name: 'bench test'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup
+
+      - uses: ./.github/actions/setup-rust
+      - uses: ./.github/actions/setup-python
+      # Required to run benchmarks
+      - name: Install DuckDB
+        uses: opt-nc/setup-duckdb-action@v1.0.9
+        with:
+          version: v1.0.0
+      - name: Rust Bench as test
+        run: cargo bench --benches -- --test
