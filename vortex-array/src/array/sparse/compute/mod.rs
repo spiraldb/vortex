@@ -77,8 +77,7 @@ impl SearchSortedFn for SparseArray {
 
 impl FilterFn for SparseArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
-        let predicate = predicate.clone().into_bool()?;
-        let buffer = predicate.boolean_buffer();
+        let buffer = predicate.clone().into_bool()?.boolean_buffer();
         let mut coordinate_indices: Vec<u64> = Vec::new();
         let mut value_indices = Vec::new();
         let mut last_inserted_index = 0;
@@ -98,7 +97,6 @@ impl FilterFn for SparseArray {
                     let adjusted_coordinate = buffer.slice(last_inserted_index, coordinate - last_inserted_index).count_set_bits() as u64;
                     coordinate_indices.push(adjusted_coordinate + coordinate_indices.last().copied().unwrap_or_default());
                     last_inserted_index = coordinate;
-
                     value_indices.push(value_idx as u64);
                 }
             }
