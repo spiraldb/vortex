@@ -125,7 +125,8 @@ impl BitPackedArray {
 
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        (self.metadata().has_patches)
+        self.metadata()
+            .has_patches
             .then(|| {
                 self.array().child(
                     1,

@@ -114,6 +114,10 @@ fn filter_indices<'a>(
                 let chunk = array
                     .chunk(current_chunk_id)
                     .vortex_expect("find_chunk_idx must return valid chunk ID");
+                // println!(
+                //     "LOOP: taking indices {chunk_indices:?} for chunk {current_chunk_id} (of {} chunks)",
+                //     array.nchunks()
+                // );
                 let filtered_chunk = take(
                     &chunk,
                     &PrimitiveArray::from(chunk_indices.clone()).into_array(),
@@ -121,7 +125,7 @@ fn filter_indices<'a>(
                 result.push(filtered_chunk);
             }
 
-            // Advance the chunk forward, reset the chunk buffer.
+            // Advance the chunk forward, reset the chunk indices buffer.
             current_chunk_id = chunk_id;
             chunk_indices.clear();
         }
@@ -133,6 +137,10 @@ fn filter_indices<'a>(
         let chunk = array
             .chunk(current_chunk_id)
             .vortex_expect("find_chunk_idx must return valid chunk ID");
+        // println!(
+        //     "LAST: taking indices {chunk_indices:?} for chunk {current_chunk_id} (of {} chunks)",
+        //     array.nchunks()
+        // );
         let filtered_chunk = take(
             &chunk,
             &PrimitiveArray::from(chunk_indices.clone()).into_array(),
