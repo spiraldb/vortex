@@ -1,3 +1,4 @@
+use std::env;
 use std::sync::Arc;
 
 use bench_vortex::reader::{
@@ -44,21 +45,24 @@ fn random_access_vortex(c: &mut Criterion) {
         })
     });
 
-    group.sample_size(10).bench_function("R2", |b| {
-        let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap()) as Arc<dyn ObjectStore>;
-        let r2_path = object_store::path::Path::from_url_path(
-            taxi_vortex.file_name().unwrap().to_str().unwrap(),
-        )
-        .unwrap();
-
-        b.to_async(Runtime::new().unwrap()).iter(|| async {
-            black_box(
-                take_vortex_object_store(&r2_fs, &r2_path, &INDICES)
-                    .await
-                    .unwrap(),
+    if env::var("AWS_ACCESS_KEY_ID").is_ok() {
+        group.sample_size(10).bench_function("R2", |b| {
+            let r2_fs =
+                Arc::new(AmazonS3Builder::from_env().build().unwrap()) as Arc<dyn ObjectStore>;
+            let r2_path = object_store::path::Path::from_url_path(
+                taxi_vortex.file_name().unwrap().to_str().unwrap(),
             )
-        })
-    });
+            .unwrap();
+
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                black_box(
+                    take_vortex_object_store(&r2_fs, &r2_path, &INDICES)
+                        .await
+                        .unwrap(),
+                )
+            })
+        });
+    }
 }
 
 fn random_access_parquet(c: &mut Criterion) {
@@ -71,21 +75,23 @@ fn random_access_parquet(c: &mut Criterion) {
             .iter(|| async { black_box(take_parquet(&taxi_parquet, &INDICES).await.unwrap()) })
     });
 
-    group.bench_function("R2", |b| {
-        let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap());
-        let r2_parquet_path = object_store::path::Path::from_url_path(
-            taxi_parquet.file_name().unwrap().to_str().unwrap(),
-        )
-        .unwrap();
-
-        b.to_async(Runtime::new().unwrap()).iter(|| async {
-            black_box(
-                take_parquet_object_store(r2_fs.clone(), &r2_parquet_path, &INDICES)
-                    .await
-                    .unwrap(),
+    if env::var("AWS_ACCESS_KEY_ID").is_ok() {
+        group.bench_function("R2", |b| {
+            let r2_fs = Arc::new(AmazonS3Builder::from_env().build().unwrap());
+            let r2_parquet_path = object_store::path::Path::from_url_path(
+                taxi_parquet.file_name().unwrap().to_str().unwrap(),
             )
-        })
-    });
+            .unwrap();
+
+            b.to_async(Runtime::new().unwrap()).iter(|| async {
+                black_box(
+                    take_parquet_object_store(r2_fs.clone(), &r2_parquet_path, &INDICES)
+                        .await
+                        .unwrap(),
+                )
+            })
+        });
+    }
 }
 
 criterion_group!(benches, random_access_vortex, random_access_parquet);
