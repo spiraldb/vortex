@@ -47,12 +47,11 @@ impl SearchResult {
         }
     }
 
-    /// Convert search result into an index suitable for searching array of end indices with explicit 0 offset entry,
-    /// i.e. first element starts at 0.
+    /// Convert search result into an index suitable for searching array of offset indices, i.e. first element starts at 0.
     ///
-    /// For example for a ChunkedArray with chunk ends array [0, 3, 8, 10] you can use this method to
+    /// For example for a ChunkedArray with chunk offsets array [0, 3, 8, 10] you can use this method to
     /// obtain index suitable for indexing into it after performing a search
-    pub fn to_offset_ends_index(self, len: usize) -> usize {
+    pub fn to_offsets_index(self, len: usize) -> usize {
         match self {
             SearchResult::Found(i) => {
                 if i == len {

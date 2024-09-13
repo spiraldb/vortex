@@ -2,9 +2,12 @@ use std::cmp::Ordering;
 
 use vortex::accessor::ArrayAccessor;
 use vortex::array::{BoolArray, PrimitiveArray, VarBinArray};
+use vortex::compute::unary::scalar_at;
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_float_ptype, match_each_integer_ptype, DType};
+
+use crate::take::take_canonical_array;
 
 pub fn sort_canonical_array(array: &Array) -> Array {
     match array.dtype() {
@@ -83,6 +86,16 @@ pub fn sort_canonical_array(array: &Array) -> Array {
                 .unwrap();
             sort_opt_slice(&mut opt_values);
             VarBinArray::from_iter(opt_values, array.dtype().clone()).into_array()
+        }
+        DType::Struct(..) => {
+            let mut sort_indices = (0..array.len()).collect::<Vec<_>>();
+            sort_indices.sort_by(|a, b| {
+                scalar_at(array, *a)
+                    .unwrap()
+                    .partial_cmp(&scalar_at(array, *b).unwrap())
+                    .unwrap()
+            });
+            take_canonical_array(array, &sort_indices)
         }
         _ => unreachable!("Not a canonical array"),
     }

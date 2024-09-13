@@ -42,6 +42,10 @@ impl<'a> StructScalar<'a> {
         st.find_name(name).and_then(|idx| self.field_by_idx(idx))
     }
 
+    pub fn fields(&self) -> Option<&[ScalarValue]> {
+        self.fields.as_deref()
+    }
+
     pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
         todo!()
     }

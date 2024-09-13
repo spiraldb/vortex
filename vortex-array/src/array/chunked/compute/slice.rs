@@ -38,3 +38,67 @@ impl SliceFn for ChunkedArray {
         Self::try_new(chunks, self.dtype().clone()).map(|a| a.into_array())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use vortex_dtype::{DType, NativePType, Nullability, PType};
+
+    use crate::array::ChunkedArray;
+    use crate::compute::slice;
+    use crate::{Array, IntoArray, IntoArrayVariant};
+
+    fn chunked_array() -> ChunkedArray {
+        ChunkedArray::try_new(
+            vec![
+                vec![1u64, 2, 3].into_array(),
+                vec![4u64, 5, 6].into_array(),
+                vec![7u64, 8, 9].into_array(),
+            ],
+            DType::Primitive(PType::U64, Nullability::NonNullable),
+        )
+        .unwrap()
+    }
+
+    fn assert_equal_slices<T: NativePType>(arr: Array, slice: &[T]) {
+        let mut values = Vec::with_capacity(arr.len());
+        ChunkedArray::try_from(arr)
+            .unwrap()
+            .chunks()
+            .map(|a| a.into_primitive().unwrap())
+            .for_each(|a| values.extend_from_slice(a.maybe_null_slice::<T>()));
+        assert_eq!(values, slice);
+    }
+
+    #[test]
+    pub fn slice_middle() {
+        assert_equal_slices(slice(chunked_array().array(), 2, 5).unwrap(), &[3u64, 4, 5])
+    }
+
+    #[test]
+    pub fn slice_begin() {
+        assert_equal_slices(slice(chunked_array().array(), 1, 3).unwrap(), &[2u64, 3]);
+    }
+
+    #[test]
+    pub fn slice_aligned() {
+        assert_equal_slices(slice(chunked_array().array(), 3, 6).unwrap(), &[4u64, 5, 6]);
+    }
+
+    #[test]
+    pub fn slice_many_aligned() {
+        assert_equal_slices(
+            slice(chunked_array().array(), 0, 6).unwrap(),
+            &[1u64, 2, 3, 4, 5, 6],
+        );
+    }
+
+    #[test]
+    pub fn slice_end() {
+        assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
+    }
+
+    #[test]
+    pub fn slice_exactly_end() {
+        assert_equal_slices(slice(chunked_array().array(), 6, 9).unwrap(), &[7u64, 8, 9]);
+    }
+}
