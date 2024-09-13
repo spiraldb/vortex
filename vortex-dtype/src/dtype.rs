@@ -51,7 +51,10 @@ impl DType {
             Primitive(_, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
-            Struct(st, _) => st.dtypes().iter().all(DType::is_nullable),
+            Struct(st, n) => {
+                matches!(n, Nullable)
+                    || !st.dtypes.is_empty() && st.dtypes().iter().all(DType::is_nullable)
+            }
             List(_, n) => matches!(n, Nullable),
             Extension(_, n) => matches!(n, Nullable),
         }

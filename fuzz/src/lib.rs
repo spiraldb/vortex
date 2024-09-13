@@ -16,7 +16,7 @@ use vortex::compute::{SearchResult, SearchSortedSide};
 use vortex::{Array, ArrayDType};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::arbitrary::random_scalar;
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, StructScalar};
 
 use crate::search_sorted::search_sorted_canonical_array;
 use crate::slice::slice_canonical_array;
@@ -64,7 +64,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
         let mut current_array = array.clone();
         let mut actions = Vec::new();
         let action_count = u.int_in_range(1..=4)?;
-        while actions.len() < action_count {
+        for _ in 0..action_count {
             actions.push(match u.int_in_range(0..=3)? {
                 0 => {
                     if actions
@@ -72,7 +72,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                         .map(|(l, _)| matches!(l, Action::Compress(_)))
                         .unwrap_or(false)
                     {
-                        continue;
+                        return Err(EmptyChoose);
                     }
                     (
                         Action::Compress(u.arbitrary()?),
@@ -114,7 +114,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                         random_scalar(u, current_array.dtype())?
                     };
 
-                    if scalar.is_null() {
+                    if scalar_contains_null_fields(&scalar) {
                         return Err(EmptyChoose);
                     }
 
@@ -128,7 +128,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                     (
                         Action::SearchSorted(scalar.clone(), side),
                         ExpectedValue::Search(search_sorted_canonical_array(
-                            &sorted, &scalar, side,
+                            &sorted, &scalar, side, None,
                         )),
                     )
                 }
@@ -149,4 +149,18 @@ fn random_vec_in_range(u: &mut Unstructured<'_>, min: usize, max: usize) -> Resu
         }
     })
     .collect::<Result<Vec<_>>>()
+}
+
+fn scalar_contains_null_fields(scalar: &Scalar) -> bool {
+    if scalar.is_null() {
+        return true;
+    }
+
+    if let Ok(st) = StructScalar::try_from(scalar) {
+        (0..st.fields().unwrap().len())
+            .filter_map(|i| st.field_by_idx(i))
+            .any(|s| scalar_contains_null_fields(&s))
+    } else {
+        false
+    }
 }

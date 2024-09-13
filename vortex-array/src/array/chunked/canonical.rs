@@ -1,5 +1,4 @@
 use arrow_buffer::{BooleanBufferBuilder, Buffer, MutableBuffer};
-use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, vortex_err, ErrString, VortexResult};
 
@@ -13,7 +12,6 @@ use crate::array::BoolArray;
 use crate::compute::slice;
 use crate::compute::unary::{scalar_at_unchecked, try_cast};
 use crate::validity::Validity;
-use crate::variants::StructArrayTrait;
 use crate::{
     Array, ArrayDType, ArrayValidity, Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
 };
@@ -136,21 +134,15 @@ fn swizzle_struct_chunks(
     validity: Validity,
     struct_dtype: &StructDType,
 ) -> VortexResult<StructArray> {
-    let chunks: Vec<StructArray> = chunks.iter().map(StructArray::try_from).try_collect()?;
-
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
-
     let mut field_arrays = Vec::new();
 
     for (field_idx, field_dtype) in struct_dtype.dtypes().iter().enumerate() {
-        let mut field_chunks = Vec::new();
-        for chunk in &chunks {
-            field_chunks.push(
-                chunk
-                    .field(field_idx)
-                    .ok_or_else(|| vortex_err!("All chunks must have same dtype; missing field at index {}, current chunk dtype: {}", field_idx, chunk.dtype()))?,
-            );
-        }
+        let field_chunks = chunks.iter().map(|c| c.with_dyn(|d|
+            d.as_struct_array_unchecked()
+                .field(field_idx)
+                .ok_or_else(|| vortex_err!("All chunks must have same dtype; missing field at index {}, current chunk dtype: {}", field_idx, c.dtype())),
+        )).collect::<VortexResult<Vec<_>>>()?;
         let field_array = ChunkedArray::try_new(field_chunks, field_dtype.clone())?;
         field_arrays.push(field_array.into_array());
     }

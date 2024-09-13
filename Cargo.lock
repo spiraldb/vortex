@@ -4431,6 +4431,7 @@ dependencies = [
 name = "vortex-dtype"
 version = "0.8.0"
 dependencies = [
+ "arbitrary",
  "flatbuffers",
  "half",
  "itertools 0.13.0",
@@ -4520,6 +4521,7 @@ dependencies = [
 name = "vortex-fuzz"
 version = "0.0.0"
 dependencies = [
+ "arrow-buffer",
  "libfuzzer-sys",
  "vortex-array",
  "vortex-buffer",

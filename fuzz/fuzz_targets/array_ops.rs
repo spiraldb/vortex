@@ -78,7 +78,7 @@ fn assert_search_sorted(
     assert_eq!(
         search_result,
         expected,
-        "Expected to find {s} at {expected} in ({}) but instead found it at {search_result} in step {step}",
+        "Expected to find {s} at {expected} in {} from {side} but instead found it at {search_result} in step {step}",
         array.encoding().id()
     );
 }

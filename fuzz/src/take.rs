@@ -71,16 +71,15 @@ pub fn take_canonical_array(array: &Array, indices: &[usize]) -> Array {
                 .iter()
                 .collect::<Vec<_>>();
 
-            let len = taken_children[0].len();
             StructArray::try_new(
                 struct_array.names().clone(),
                 taken_children,
-                len,
+                indices.len(),
                 Validity::from(indices.iter().map(|i| vec_validity[*i]).collect::<Vec<_>>()),
             )
             .unwrap()
             .into_array()
         }
-        _ => unreachable!("Array::arbitrary will not generate other dtypes"),
+        _ => unreachable!("Not a canonical array"),
     }
 }
