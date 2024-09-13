@@ -88,8 +88,7 @@ pub fn sort_canonical_array(array: &Array) -> Array {
             VarBinArray::from_iter(opt_values, array.dtype().clone()).into_array()
         }
         DType::Struct(..) => {
-            let struct_array = array.clone().into_struct().unwrap();
-            let mut sort_indices = (0..struct_array.len()).collect::<Vec<_>>();
+            let mut sort_indices = (0..array.len()).collect::<Vec<_>>();
             sort_indices.sort_by(|a, b| {
                 scalar_at(array, *a)
                     .unwrap()
