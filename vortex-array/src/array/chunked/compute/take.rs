@@ -126,7 +126,7 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
 mod test {
     use crate::array::chunked::ChunkedArray;
     use crate::compute::take;
-    use crate::{ArrayDType, AsArray, IntoArray, IntoArrayVariant};
+    use crate::{ArrayDType, IntoArray, IntoArrayVariant};
 
     #[test]
     fn test_take() {
@@ -137,7 +137,7 @@ mod test {
         assert_eq!(arr.len(), 9);
         let indices = vec![0u64, 0, 6, 4].into_array();
 
-        let result = &ChunkedArray::try_from(take(arr.as_array_ref(), &indices).unwrap())
+        let result = &ChunkedArray::try_from(take(arr.array(), &indices).unwrap())
             .unwrap()
             .into_array()
             .into_primitive()
