@@ -48,8 +48,13 @@ impl StructArray {
             vortex_bail!("Got {} names and {} fields", names.len(), fields.len());
         }
 
-        if fields.iter().any(|a| a.len() != length) {
-            vortex_bail!("Expected all struct fields to have length {}", length);
+        for field in fields.iter() {
+            if field.len() != length {
+                vortex_bail!(
+                    "Expected all struct fields to have length {length}, found {}",
+                    field.len()
+                );
+            }
         }
 
         let field_dtypes: Vec<_> = fields.iter().map(|d| d.dtype()).cloned().collect();
