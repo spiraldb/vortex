@@ -3,10 +3,11 @@ use std::cmp::Ordering;
 use vortex::accessor::ArrayAccessor;
 use vortex::compute::{IndexOrd, Len, SearchResult, SearchSorted, SearchSortedSide};
 use vortex::validity::ArrayValidity;
+use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_buffer::{Buffer, BufferString};
 use vortex_dtype::{match_each_native_ptype, DType};
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, StructScalar};
 
 struct SearchNullableSlice<T>(Vec<Option<T>>);
 
@@ -91,6 +92,22 @@ pub fn search_sorted_canonical_array(
                 Buffer::try_from(scalar).unwrap().to_vec()
             };
             SearchNullableSlice(opt_values).search_sorted(&Some(to_find), side)
+        }
+        DType::Struct(..) => {
+            let strct = array.clone().into_struct().unwrap();
+            let scalar_fields: StructScalar = scalar.try_into().unwrap();
+            let mut res: Option<SearchResult> = None;
+            for (c, i) in strct.children().zip(0..strct.names().len()) {
+                res = Some(search_sorted_canonical_array(
+                    &c,
+                    &scalar_fields.field_by_idx(i).unwrap(),
+                    side,
+                ));
+                if let SearchResult::NotFound(u) = res.unwrap() {
+                    return SearchResult::NotFound(u);
+                }
+            }
+            res.unwrap()
         }
         _ => unreachable!("Not a canonical array"),
     }

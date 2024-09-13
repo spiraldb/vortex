@@ -9,6 +9,10 @@ use crate::variants::StructArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
 impl ArrayCompute for StructArray {
+    fn filter(&self) -> Option<&dyn FilterFn> {
+        Some(self)
+    }
+
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
@@ -18,10 +22,6 @@ impl ArrayCompute for StructArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
-        Some(self)
-    }
-
-    fn filter(&self) -> Option<&dyn FilterFn> {
         Some(self)
     }
 }
