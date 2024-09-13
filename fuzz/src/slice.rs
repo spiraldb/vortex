@@ -55,7 +55,7 @@ pub fn slice_canonical_array(array: &Array, start: usize, stop: usize) -> Array 
         }
         DType::Struct(..) => {
             let struct_array = array.clone().into_struct().unwrap();
-            let taken_children = struct_array
+            let sliced_children = struct_array
                 .children()
                 .map(|c| slice_canonical_array(&c, start, stop))
                 .collect::<Vec<_>>();
@@ -68,10 +68,10 @@ pub fn slice_canonical_array(array: &Array, start: usize, stop: usize) -> Array 
                 .iter()
                 .collect::<Vec<_>>();
 
-            let len = taken_children[0].len();
+            let len = sliced_children[0].len();
             StructArray::try_new(
                 struct_array.names().clone(),
-                taken_children,
+                sliced_children,
                 len,
                 Validity::from(Vec::from(&vec_validity[start..stop])),
             )
