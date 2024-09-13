@@ -40,30 +40,33 @@ mod tests {
             vec![
                 PrimitiveArray::from(Vec::<u64>::new()).into_array(),
                 PrimitiveArray::from(Vec::<u64>::new()).into_array(),
-                PrimitiveArray::from(vec![1u64]).into_array(),
+                PrimitiveArray::from(vec![1u64, 2]).into_array(),
                 PrimitiveArray::from(Vec::<u64>::new()).into_array(),
                 PrimitiveArray::from(Vec::<u64>::new()).into_array(),
-            ],
-            DType::Primitive(PType::U64, Nullability::NonNullable),
-        )
-        .unwrap();
-        assert_eq!(scalar_at(array.array(), 0).unwrap(), 1u64.into());
-    }
-
-    #[test]
-    fn empty_children_trailing() {
-        let array = ChunkedArray::try_new(
-            vec![
-                PrimitiveArray::from(vec![1u64]).into_array(),
-                PrimitiveArray::from(Vec::<u64>::new()).into_array(),
-                PrimitiveArray::from(Vec::<u64>::new()).into_array(),
-                PrimitiveArray::from(vec![2u64]).into_array(),
             ],
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
         assert_eq!(scalar_at(array.array(), 0).unwrap(), 1u64.into());
         assert_eq!(scalar_at(array.array(), 1).unwrap(), 2u64.into());
+    }
+
+    #[test]
+    fn empty_children_trailing() {
+        let array = ChunkedArray::try_new(
+            vec![
+                PrimitiveArray::from(vec![1u64, 2]).into_array(),
+                PrimitiveArray::from(Vec::<u64>::new()).into_array(),
+                PrimitiveArray::from(Vec::<u64>::new()).into_array(),
+                PrimitiveArray::from(vec![3u64, 4]).into_array(),
+            ],
+            DType::Primitive(PType::U64, Nullability::NonNullable),
+        )
+        .unwrap();
+        assert_eq!(scalar_at(array.array(), 0).unwrap(), 1u64.into());
+        assert_eq!(scalar_at(array.array(), 1).unwrap(), 2u64.into());
+        assert_eq!(scalar_at(array.array(), 2).unwrap(), 3u64.into());
+        assert_eq!(scalar_at(array.array(), 3).unwrap(), 4u64.into());
     }
 
     #[test]
@@ -72,13 +75,15 @@ mod tests {
             vec![
                 PrimitiveArray::from(Vec::<u64>::new()).into_array(),
                 PrimitiveArray::from(Vec::<u64>::new()).into_array(),
-                PrimitiveArray::from(vec![1u64]).into_array(),
-                PrimitiveArray::from(vec![2u64]).into_array(),
+                PrimitiveArray::from(vec![1u64, 2]).into_array(),
+                PrimitiveArray::from(vec![3u64, 4]).into_array(),
             ],
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
         assert_eq!(scalar_at(array.array(), 0).unwrap(), 1u64.into());
         assert_eq!(scalar_at(array.array(), 1).unwrap(), 2u64.into());
+        assert_eq!(scalar_at(array.array(), 2).unwrap(), 3u64.into());
+        assert_eq!(scalar_at(array.array(), 3).unwrap(), 4u64.into());
     }
 }

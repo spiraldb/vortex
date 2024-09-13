@@ -2,9 +2,7 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
-use crate::compute::unary::{
-    try_cast, CastFn, ScalarAtFn, SubtractScalarFn,
-};
+use crate::compute::unary::{try_cast, CastFn, ScalarAtFn, SubtractScalarFn};
 use crate::compute::{compare, slice, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
 use crate::{Array, IntoArray};
 
