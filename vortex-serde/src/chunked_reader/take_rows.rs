@@ -172,8 +172,9 @@ fn find_chunks(row_offsets: &Array, indices: &Array) -> VortexResult<Vec<ChunkIn
     let mut chunks = HashMap::new();
 
     for (pos, idx) in indices.maybe_null_slice::<u64>().iter().enumerate() {
-        let chunk_idx = search_sorted(row_offsets.array(), *idx, SearchSortedSide::Left)?
-            .to_offset_ends_index(row_offsets.len());
+        let chunk_idx = search_sorted(row_offsets.array(), *idx, SearchSortedSide::Right)?
+            .to_index()
+            .saturating_sub(1);
         chunks
             .entry(chunk_idx as u32)
             .and_modify(|chunk_indices: &mut ChunkIndices| {

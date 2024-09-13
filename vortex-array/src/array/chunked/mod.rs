@@ -93,9 +93,10 @@ impl ChunkedArray {
     fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        let index_chunk = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
+        let index_chunk = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Right)
             .vortex_expect("Search sorted failed in find_chunk_idx")
-            .to_offset_ends_index(self.nchunks());
+            .to_index()
+            .saturating_sub(1);
         let chunk_start = scalar_at(&self.chunk_offsets(), index_chunk)
             .and_then(|s| usize::try_from(&s))
             .vortex_expect("Failed to find chunk start in find_chunk_idx");
