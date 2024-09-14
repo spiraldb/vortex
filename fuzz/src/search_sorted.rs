@@ -1,16 +1,14 @@
 use std::cmp::Ordering;
-use std::cmp::Ordering::{Equal, Greater};
 
 use arrow_buffer::BooleanBuffer;
 use vortex::accessor::ArrayAccessor;
+use vortex::compute::unary::scalar_at;
 use vortex::compute::{IndexOrd, Len, SearchResult, SearchSorted, SearchSortedSide};
 use vortex::validity::ArrayValidity;
-use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_buffer::{Buffer, BufferString};
 use vortex_dtype::{match_each_native_ptype, DType};
-use vortex_error::VortexExpect;
-use vortex_scalar::{Scalar, StructScalar};
+use vortex_scalar::Scalar;
 
 struct SearchNullableSlice<T>(Vec<Option<T>>);
 
@@ -21,7 +19,7 @@ impl<T: PartialOrd> IndexOrd<Option<T>> for SearchNullableSlice<T> {
             Some(v) => {
                 // SAFETY: Used in search_sorted_by same as the standard library. The search_sorted ensures idx is in bounds
                 match unsafe { self.0.get_unchecked(idx) } {
-                    None => Some(Greater),
+                    None => Some(Ordering::Greater),
                     Some(i) => i.partial_cmp(v),
                 }
             }
@@ -30,24 +28,6 @@ impl<T: PartialOrd> IndexOrd<Option<T>> for SearchNullableSlice<T> {
 }
 
 impl<T> Len for SearchNullableSlice<T> {
-    fn len(&self) -> usize {
-        self.0.len()
-    }
-}
-
-struct SearchEmptyStruct<'a>(&'a BooleanBuffer);
-
-impl<'a> IndexOrd<Scalar> for SearchEmptyStruct<'a> {
-    fn index_cmp(&self, idx: usize, _elem: &Scalar) -> Option<Ordering> {
-        if !self.0.value(idx) {
-            Some(Greater)
-        } else {
-            Some(Equal)
-        }
-    }
-}
-
-impl<'a> Len for SearchEmptyStruct<'a> {
     fn len(&self) -> usize {
         self.0.len()
     }
@@ -128,46 +108,10 @@ pub fn search_sorted_canonical_array(
             SearchNullableSlice(opt_values).search_sorted(&Some(to_find), side)
         }
         DType::Struct(..) => {
-            let strct = array.clone().into_struct().unwrap();
-            let struct_scalar: StructScalar = scalar.try_into().unwrap();
-            let mut validity = strct
-                .logical_validity()
-                .into_array()
-                .into_bool()
-                .unwrap()
-                .boolean_buffer();
-            if let Some(adv) = additional_validity {
-                validity = &validity & adv;
-            }
-            if strct.nfields() == 0 {
-                SearchEmptyStruct(&validity)
-                    .search_sorted(&Scalar::r#struct(array.dtype().clone(), vec![]), side)
-            } else {
-                let mut results = Vec::new();
-                for (c, i) in strct.children().zip(0..strct.names().len()) {
-                    let res = search_sorted_canonical_array(
-                        &c,
-                        &struct_scalar.field_by_idx(i).unwrap(),
-                        side,
-                        Some(&validity),
-                    );
-                    if let SearchResult::NotFound(u) = res {
-                        return SearchResult::NotFound(
-                            [u].into_iter()
-                                .chain(results.into_iter())
-                                .max()
-                                .vortex_expect("There's at least one result"),
-                        );
-                    }
-                    results.push(res.to_index());
-                }
-                SearchResult::Found(
-                    results
-                        .into_iter()
-                        .max()
-                        .vortex_expect("there's at least one field"),
-                )
-            }
+            let scalar_vals = (0..array.len())
+                .map(|i| scalar_at(array, i).unwrap())
+                .collect::<Vec<_>>();
+            scalar_vals.search_sorted(scalar, side)
         }
         _ => unreachable!("Not a canonical array"),
     }
