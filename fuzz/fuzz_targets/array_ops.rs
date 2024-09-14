@@ -3,7 +3,9 @@
 use std::collections::HashSet;
 
 use libfuzzer_sys::{fuzz_target, Corpus};
-use vortex::array::{BoolEncoding, PrimitiveEncoding, VarBinEncoding, VarBinViewEncoding};
+use vortex::array::{
+    BoolEncoding, PrimitiveEncoding, StructEncoding, VarBinEncoding, VarBinViewEncoding,
+};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, slice, take, SearchResult, SearchSortedSide};
 use vortex::encoding::{EncodingId, EncodingRef};
@@ -45,6 +47,7 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
                     &VarBinEncoding,
                     &VarBinViewEncoding,
                     &BoolEncoding,
+                    &StructEncoding,
                 ])
                 .contains(&current_array.encoding())
                 {

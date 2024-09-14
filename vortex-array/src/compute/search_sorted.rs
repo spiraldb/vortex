@@ -111,7 +111,7 @@ pub fn search_sorted<T: Into<Scalar>>(
         }
 
         if a.scalar_at().is_some() {
-            return Ok(SearchSorted::search_sorted(array, &scalar, side));
+            return Ok(array.search_sorted(&scalar, side));
         }
 
         vortex_bail!(

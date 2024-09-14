@@ -51,9 +51,7 @@ impl DType {
             Primitive(_, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
-            Struct(_, n) => {
-                matches!(n, Nullable)
-            }
+            Struct(_, n) => matches!(n, Nullable),
             List(_, n) => matches!(n, Nullable),
             Extension(_, n) => matches!(n, Nullable),
         }
@@ -74,7 +72,16 @@ impl DType {
             Primitive(p, _) => Primitive(*p, nullability),
             Utf8(_) => Utf8(nullability),
             Binary(_) => Binary(nullability),
-            Struct(st, _) => Struct(st.clone(), nullability),
+            Struct(st, _) => Struct(
+                StructDType::new(
+                    st.names.clone(),
+                    st.dtypes()
+                        .iter()
+                        .map(|d| d.with_nullability(nullability))
+                        .collect::<Vec<_>>(),
+                ),
+                nullability,
+            ),
             List(c, _) => List(c.clone(), nullability),
             Extension(ext, _) => Extension(ext.clone(), nullability),
         }
