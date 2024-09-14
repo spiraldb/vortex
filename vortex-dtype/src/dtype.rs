@@ -72,16 +72,7 @@ impl DType {
             Primitive(p, _) => Primitive(*p, nullability),
             Utf8(_) => Utf8(nullability),
             Binary(_) => Binary(nullability),
-            Struct(st, _) => Struct(
-                StructDType::new(
-                    st.names.clone(),
-                    st.dtypes()
-                        .iter()
-                        .map(|d| d.with_nullability(nullability))
-                        .collect::<Vec<_>>(),
-                ),
-                nullability,
-            ),
+            Struct(st, _) => Struct(st.clone(), nullability),
             List(c, _) => List(c.clone(), nullability),
             Extension(ext, _) => Extension(ext.clone(), nullability),
         }
