@@ -109,14 +109,9 @@ pub fn search_sorted_canonical_array(
         }
         DType::Struct(..) => {
             let scalar_vals = (0..array.len())
-                .map(|i| {
-                    let s = scalar_at(array, i).unwrap();
-                    println!("S {i} dtype: {}", s.dtype());
-                    s
-                })
+                .map(|i| scalar_at(array, i).unwrap())
                 .collect::<Vec<_>>();
-            println!("Array dtype {}", array.dtype());
-            scalar_vals.search_sorted(scalar, side)
+            scalar_vals.search_sorted(&scalar.cast(array.dtype()).unwrap(), side)
         }
         _ => unreachable!("Not a canonical array"),
     }
