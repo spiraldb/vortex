@@ -143,7 +143,6 @@ pub fn search_sorted_canonical_array(
                 SearchEmptyStruct(&validity)
                     .search_sorted(&Scalar::r#struct(array.dtype().clone(), vec![]), side)
             } else {
-                // This value will never be returned since there's at least one child
                 let mut results = Vec::new();
                 for (c, i) in strct.children().zip(0..strct.names().len()) {
                     let res = search_sorted_canonical_array(
