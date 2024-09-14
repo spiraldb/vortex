@@ -206,9 +206,19 @@ mod test {
     use std::mem;
 
     use crate::dtype::DType;
+    use crate::{Nullability, StructDType};
 
     #[test]
     fn size_of() {
         assert_eq!(mem::size_of::<DType>(), 40);
+    }
+
+    #[test]
+    fn is_nullable() {
+        assert!(!DType::Struct(
+            StructDType::new(vec![].into(), Vec::new()),
+            Nullability::NonNullable
+        )
+        .is_nullable());
     }
 }
