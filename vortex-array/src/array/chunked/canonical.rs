@@ -304,14 +304,12 @@ mod tests {
         let canonical_struct = chunked.into_struct().unwrap();
         let canonical_varbin = canonical_struct.field(0).unwrap().into_varbin().unwrap();
         let original_varbin = struct_array.field(0).unwrap().into_varbin().unwrap();
-        original_varbin
-            .with_iterator(|oit| {
-                canonical_varbin
-                    .with_iterator(|cit| {
-                        assert_eq!(oit.collect::<Vec<_>>(), cit.collect::<Vec<_>>());
-                    })
-                    .unwrap()
-            })
+        let orig_values = original_varbin
+            .with_iterator(|it| it.map(|a| a.map(|v| v.to_vec())).collect::<Vec<_>>())
             .unwrap();
+        let canon_values = canonical_varbin
+            .with_iterator(|it| it.map(|a| a.map(|v| v.to_vec())).collect::<Vec<_>>())
+            .unwrap();
+        assert_eq!(orig_values, canon_values);
     }
 }
