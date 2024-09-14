@@ -152,15 +152,19 @@ pub fn search_sorted_canonical_array(
                         Some(&validity),
                     );
                     if let SearchResult::NotFound(u) = res {
-                        return SearchResult::NotFound(u);
+                        return SearchResult::NotFound(
+                            [u].into_iter()
+                                .chain(results.into_iter())
+                                .max()
+                                .vortex_expect("There's at least one result"),
+                        );
                     }
                     results.push(res.to_index());
                 }
                 SearchResult::Found(
                     results
-                        .iter()
+                        .into_iter()
                         .max()
-                        .copied()
                         .vortex_expect("there's at least one field"),
                 )
             }
