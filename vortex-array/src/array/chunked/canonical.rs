@@ -245,9 +245,11 @@ mod tests {
     use crate::accessor::ArrayAccessor;
     use crate::array::builder::VarBinBuilder;
     use crate::array::chunked::canonical::pack_varbin;
-    use crate::array::VarBinArray;
+    use crate::array::{ChunkedArray, StructArray, VarBinArray};
     use crate::compute::slice;
     use crate::validity::Validity;
+    use crate::variants::StructArrayTrait;
+    use crate::{ArrayDType, IntoArray, IntoArrayVariant, ToArray};
 
     fn varbin_array() -> VarBinArray {
         let mut builder = VarBinBuilder::<i32>::with_capacity(4);
@@ -277,5 +279,39 @@ mod tests {
             })
             .unwrap();
         assert_eq!(values, &["bar", "baz", "baz", "quak"]);
+    }
+
+    #[test]
+    pub fn pack_nested_structs() {
+        let struct_array = StructArray::try_new(
+            vec!["a".into()].into(),
+            vec![varbin_array().into_array()],
+            4,
+            Validity::NonNullable,
+        )
+        .unwrap();
+        let dtype = struct_array.dtype().clone();
+        let chunked = ChunkedArray::try_new(
+            vec![
+                ChunkedArray::try_new(vec![struct_array.to_array()], dtype.clone())
+                    .unwrap()
+                    .into_array(),
+            ],
+            dtype,
+        )
+        .unwrap()
+        .into_array();
+        let canonical_struct = chunked.into_struct().unwrap();
+        let canonical_varbin = canonical_struct.field(0).unwrap().into_varbin().unwrap();
+        let original_varbin = struct_array.field(0).unwrap().into_varbin().unwrap();
+        original_varbin
+            .with_iterator(|oit| {
+                canonical_varbin
+                    .with_iterator(|cit| {
+                        assert_eq!(oit.collect::<Vec<_>>(), cit.collect::<Vec<_>>());
+                    })
+                    .unwrap()
+            })
+            .unwrap();
     }
 }
