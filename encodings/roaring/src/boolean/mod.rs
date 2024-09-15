@@ -10,12 +10,11 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
-    TypedArray,
+    impl_encoding, Array, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_dtype::Nullability::{NonNullable, Nullable};
+use vortex_dtype::Nullability::NonNullable;
 use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 
 mod compress;
@@ -48,12 +47,7 @@ impl RoaringBoolArray {
 
     pub fn bitmap(&self) -> Bitmap {
         //TODO(@jdcasale): figure out a way to avoid this deserialization per-call
-        Bitmap::deserialize::<Portable>(
-            self.array()
-                .buffer()
-                .vortex_expect("RoaringBoolArray buffer is missing")
-                .as_ref(),
-        )
+        Bitmap::deserialize::<Portable>(self.buffer().as_ref())
     }
 
     pub fn encode(array: Array) -> VortexResult<Array> {
@@ -62,6 +56,12 @@ impl RoaringBoolArray {
         } else {
             vortex_bail!("RoaringBool can only encode boolean arrays")
         }
+    }
+
+    pub fn buffer(&self) -> &Buffer {
+        self.array()
+            .buffer()
+            .vortex_expect("Missing buffer in PrimitiveArray")
     }
 }
 
@@ -89,24 +89,19 @@ impl AcceptArrayVisitor for RoaringBoolArray {
         //  Or serialize into metadata? The only reason we support buffers is so we can write to
         //  the wire without copying into FlatBuffers. But if we need to allocate to serialize
         //  the bitmap anyway, then may as well shove it into metadata.
-        visitor.visit_buffer(
-            self.array()
-                .buffer()
-                .ok_or(vortex_err!("roaring bool should have a buffer"))?,
-        )?;
-        Ok(())
+        visitor.visit_buffer(self.buffer())
     }
 }
 
 impl ArrayStatisticsCompute for RoaringBoolArray {}
 
 impl ArrayValidity for RoaringBoolArray {
-    fn logical_validity(&self) -> LogicalValidity {
-        LogicalValidity::AllValid(self.len())
-    }
-
     fn is_valid(&self, _index: usize) -> bool {
         true
+    }
+
+    fn logical_validity(&self) -> LogicalValidity {
+        LogicalValidity::AllValid(self.len())
     }
 }
 
@@ -119,55 +114,29 @@ impl IntoCanonical for RoaringBoolArray {
             .to_bitset()
             .ok_or_else(|| vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
 
-        let bytes = &bitset.as_slice()[0..bitset.size_in_bytes()];
-        let buffer = ArrowBuffer::from_slice_ref(bytes);
-        Ok(Canonical::Bool(BoolArray::try_new(
-            BooleanBuffer::new(buffer, 0, bitset.size_in_bits()),
-            match self.dtype().nullability() {
-                NonNullable => Validity::NonNullable,
-                Nullable => Validity::AllValid,
-            },
-        )?))
+        let buffer = ArrowBuffer::from_slice_ref(bitset.as_slice());
+        BoolArray::try_new(
+            BooleanBuffer::new(buffer, 0, self.len()),
+            Validity::NonNullable,
+        )
+        .map(Canonical::Bool)
     }
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod test {
     use vortex::array::BoolArray;
-    use vortex::compute::unary::scalar_at;
     use vortex::IntoArray;
-    use vortex_error::VortexResult;
-    use vortex_scalar::Scalar;
 
     use crate::RoaringBoolArray;
 
     #[test]
     #[cfg_attr(miri, ignore)]
-    pub fn iter() -> VortexResult<()> {
+    pub fn iter() {
         let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
-        let array = RoaringBoolArray::encode(bool.into_array())?;
-        let round_trip = RoaringBoolArray::try_from(array)?;
+        let array = RoaringBoolArray::encode(bool.into_array()).unwrap();
+        let round_trip = RoaringBoolArray::try_from(array).unwrap();
         let values = round_trip.bitmap().to_vec();
         assert_eq!(values, vec![0, 2, 3]);
-
-        Ok(())
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    pub fn test_scalar_at() -> VortexResult<()> {
-        let bool: BoolArray = BoolArray::from(vec![true, false, true, true]);
-        let array = RoaringBoolArray::encode(bool.into_array())?;
-
-        let truthy: Scalar = true.into();
-        let falsy: Scalar = false.into();
-
-        assert_eq!(scalar_at(&array, 0)?, truthy);
-        assert_eq!(scalar_at(&array, 1)?, falsy);
-        assert_eq!(scalar_at(&array, 2)?, truthy);
-        assert_eq!(scalar_at(&array, 3)?, truthy);
-
-        Ok(())
     }
 }

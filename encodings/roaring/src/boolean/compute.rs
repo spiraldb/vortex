@@ -35,3 +35,46 @@ impl SliceFn for RoaringBoolArray {
         Self::try_new(bitmap, stop - start).map(IntoArray::into_array)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::BoolArray;
+    use vortex::compute::slice;
+    use vortex::compute::unary::scalar_at;
+    use vortex::{IntoArray, IntoArrayVariant};
+    use vortex_scalar::Scalar;
+
+    use crate::RoaringBoolArray;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    pub fn test_scalar_at() {
+        let bool = BoolArray::from(vec![true, false, true, true]);
+        let array = RoaringBoolArray::encode(bool.into_array()).unwrap();
+
+        let truthy: Scalar = true.into();
+        let falsy: Scalar = false.into();
+
+        assert_eq!(scalar_at(&array, 0).unwrap(), truthy);
+        assert_eq!(scalar_at(&array, 1).unwrap(), falsy);
+        assert_eq!(scalar_at(&array, 2).unwrap(), truthy);
+        assert_eq!(scalar_at(&array, 3).unwrap(), truthy);
+    }
+
+    #[test]
+    pub fn test_slice() {
+        let bool = BoolArray::from(vec![true, false, true, true]);
+        let array = RoaringBoolArray::encode(bool.into_array()).unwrap();
+        let sliced = slice(&array, 1, 3).unwrap();
+
+        assert_eq!(
+            sliced
+                .into_bool()
+                .unwrap()
+                .boolean_buffer()
+                .iter()
+                .collect::<Vec<_>>(),
+            &[false, true]
+        );
+    }
+}
