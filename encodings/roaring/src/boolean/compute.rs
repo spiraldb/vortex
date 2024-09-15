@@ -62,6 +62,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     pub fn test_slice() {
         let bool = BoolArray::from(vec![true, false, true, true]);
         let array = RoaringBoolArray::encode(bool.into_array()).unwrap();
