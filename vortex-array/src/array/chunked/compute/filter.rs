@@ -126,9 +126,8 @@ fn filter_slices<'a>(
                 ChunkFilter::Slices(slices) => slices.push(end_slice),
             }
 
-            #[allow(clippy::needless_range_loop)]
-            for chunk in (start_chunk + 1)..end_chunk {
-                chunk_filters[chunk] = ChunkFilter::All;
+            for chunk in &mut chunk_filters[start_chunk + 1..end_chunk] {
+                *chunk = ChunkFilter::All;
             }
         }
     }

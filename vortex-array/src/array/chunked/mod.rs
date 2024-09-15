@@ -168,11 +168,6 @@ impl ChunkedArray {
 /// A tuple (chunk_id, chunk_offset) that encodes the chunk and the offset within chunk
 /// where the global index is found, if present.
 pub fn find_chunk_idx(chunk_ends: &Array, index: usize) -> (usize, usize) {
-    assert!(
-        index <= chunk_ends.len(),
-        "Index out of bounds of the array"
-    );
-
     // Since there might be duplicate values in offsets because of empty chunks we want to search from right
     // and take the last chunk (we subtract 1 since there's a leading 0)
     let index_chunk = search_sorted(chunk_ends, index, SearchSortedSide::Right)
