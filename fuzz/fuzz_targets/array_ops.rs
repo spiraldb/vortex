@@ -8,7 +8,7 @@ use vortex::array::{
 };
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, slice, take, SearchResult, SearchSortedSide};
-use vortex::encoding::{EncodingId, EncodingRef};
+use vortex::encoding::EncodingRef;
 use vortex::{Array, IntoCanonical};
 use vortex_fuzz::{sort_canonical_array, Action, FuzzArrayAction};
 use vortex_sampling_compressor::SamplingCompressor;
@@ -81,7 +81,8 @@ fn assert_search_sorted(
     assert_eq!(
         search_result,
         expected,
-        "Expected to find {s} at {expected} in {} from {side} but instead found it at {search_result} in step {step}",
+        "Expected to find {s}({}) at {expected} in {} from {side} but instead found it at {search_result} in step {step}",
+        s.dtype(),
         array.encoding().id()
     );
 }
@@ -92,19 +93,18 @@ fn assert_array_eq(lhs: &Array, rhs: &Array, step: usize) {
         let l = scalar_at(lhs, idx).unwrap();
         let r = scalar_at(rhs, idx).unwrap();
 
-        fuzzing_scalar_cmp(l, r, lhs.encoding().id(), rhs.encoding().id(), idx, step);
+        assert_eq!(l.is_valid(), r.is_valid());
+        assert!(
+            equal_scalar_values(l.value(), r.value()),
+            "{l} != {r} at index {idx}, lhs is {} rhs is {} in step {step}",
+            lhs.encoding().id(),
+            rhs.encoding().id()
+        );
     }
 }
 
-fn fuzzing_scalar_cmp(
-    l: Scalar,
-    r: Scalar,
-    lhs_encoding: EncodingId,
-    rhs_encoding: EncodingId,
-    idx: usize,
-    step: usize,
-) {
-    let equal_values = match (l.value(), r.value()) {
+fn equal_scalar_values(l: &ScalarValue, r: &ScalarValue) -> bool {
+    match (l, r) {
         (ScalarValue::Primitive(l), ScalarValue::Primitive(r))
             if l.ptype().is_float() && r.ptype().is_float() =>
         {
@@ -115,12 +115,10 @@ fn fuzzing_scalar_cmp(
                 _ => unreachable!(),
             }
         }
-        _ => l.value() == r.value(),
-    };
-
-    assert!(
-        equal_values,
-        "{l} != {r} at index {idx}, lhs is {lhs_encoding} rhs is {rhs_encoding} in step {step}",
-    );
-    assert_eq!(l.is_valid(), r.is_valid());
+        (ScalarValue::List(lc), ScalarValue::List(rc)) => lc
+            .iter()
+            .zip(rc.iter())
+            .all(|(l, r)| equal_scalar_values(l, r)),
+        _ => l == r,
+    }
 }

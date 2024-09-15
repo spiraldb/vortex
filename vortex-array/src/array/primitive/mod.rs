@@ -197,13 +197,13 @@ impl<T: NativePType> Accessor<T> for PrimitiveArray {
         ArrayValidity::is_valid(self, index)
     }
 
-    fn array_validity(&self) -> Validity {
-        self.validity()
-    }
-
     #[inline]
     fn value_unchecked(&self, index: usize) -> T {
         self.maybe_null_slice::<T>()[index]
+    }
+
+    fn array_validity(&self) -> Validity {
+        self.validity()
     }
 
     #[inline]

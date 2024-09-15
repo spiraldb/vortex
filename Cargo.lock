@@ -4523,6 +4523,7 @@ version = "0.0.0"
 dependencies = [
  "arrow-buffer",
  "libfuzzer-sys",
+ "num-traits",
  "vortex-array",
  "vortex-buffer",
  "vortex-dtype",
