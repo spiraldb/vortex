@@ -4,18 +4,23 @@ use crate::{DType, FieldNames, Nullability, PType, StructDType};
 
 impl<'a> Arbitrary<'a> for DType {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        Ok(match u.int_in_range(0..=4)? {
-            0 => DType::Bool(u.arbitrary()?),
-            1 => DType::Struct(u.arbitrary()?, u.arbitrary()?),
-            2 => DType::Utf8(u.arbitrary()?),
-            3 => DType::Binary(u.arbitrary()?),
-            4 => DType::Primitive(u.arbitrary()?, u.arbitrary()?),
-            // Null,
-            // List(Arc<DType>, Nullability),
-            // Extension(ExtDType, Nullability),
-            _ => unreachable!("Number out of range"),
-        })
+        random_dtype(u, 2)
     }
+}
+
+fn random_dtype(u: &mut Unstructured<'_>, depth: u8) -> Result<DType> {
+    let max_dtype_kind = if depth == 0 { 3 } else { 4 };
+    Ok(match u.int_in_range(0..=max_dtype_kind)? {
+        0 => DType::Bool(u.arbitrary()?),
+        1 => DType::Primitive(u.arbitrary()?, u.arbitrary()?),
+        2 => DType::Utf8(u.arbitrary()?),
+        3 => DType::Binary(u.arbitrary()?),
+        4 => DType::Struct(random_struct_dtype(u, depth - 1)?, u.arbitrary()?),
+        // Null,
+        // List(Arc<DType>, Nullability),
+        // Extension(ExtDType, Nullability),
+        _ => unreachable!("Number out of range"),
+    })
 }
 
 impl<'a> Arbitrary<'a> for Nullability {
@@ -49,10 +54,14 @@ impl<'a> Arbitrary<'a> for PType {
 
 impl<'a> Arbitrary<'a> for StructDType {
     fn arbitrary(u: &mut Unstructured<'a>) -> Result<Self> {
-        let names: FieldNames = u.arbitrary()?;
-        let dtypes = (0..names.len())
-            .map(|_| u.arbitrary())
-            .collect::<Result<Vec<_>>>()?;
-        Ok(StructDType::new(names, dtypes))
+        random_struct_dtype(u, 1)
     }
+}
+
+fn random_struct_dtype(u: &mut Unstructured<'_>, depth: u8) -> Result<StructDType> {
+    let names: FieldNames = u.arbitrary()?;
+    let dtypes = (0..names.len())
+        .map(|_| random_dtype(u, depth))
+        .collect::<Result<Vec<_>>>()?;
+    Ok(StructDType::new(names, dtypes))
 }
