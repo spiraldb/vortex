@@ -2,7 +2,7 @@ use arrow_buffer::BooleanBufferBuilder;
 use vortex_error::{VortexExpect, VortexResult};
 
 use crate::array::{BoolArray, ChunkedArray, PrimitiveArray};
-use crate::compute::{filter, take, FilterFn};
+use crate::compute::{filter, take, FilterFn, SearchSorted, SearchSortedSide};
 use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 // This is modeled after the constant with the equivalent name in arrow-rs.
@@ -204,9 +204,9 @@ fn filter_indices<'a>(
 // from scalars, dtypes, and metadata cloning.
 fn find_chunk_idx(idx: usize, chunk_ends: &[u64]) -> (usize, usize) {
     let chunk_id = chunk_ends
-        .binary_search(&(idx as u64))
-        .map(|i| if i == chunk_ends.len() { i - 1 } else { i })
-        .unwrap_or_else(|end| end - 1);
+        .search_sorted(&(idx as u64), SearchSortedSide::Right)
+        .to_ends_index(chunk_ends.len())
+        .saturating_sub(1);
     let chunk_offset = idx - (chunk_ends[chunk_id] as usize);
 
     (chunk_id, chunk_offset)
