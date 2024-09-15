@@ -93,18 +93,7 @@ impl ChunkedArray {
     fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        // Since there might be duplicate values in offsets because of empty chunks we want to search from right
-        // and take the last chunk (we subtract 1 since there's a leading 0)
-        let index_chunk = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Right)
-            .vortex_expect("Search sorted failed in find_chunk_idx")
-            .to_ends_index(self.nchunks() + 1)
-            .saturating_sub(1);
-        let chunk_start = scalar_at(&self.chunk_offsets(), index_chunk)
-            .and_then(|s| usize::try_from(&s))
-            .vortex_expect("Failed to find chunk start in find_chunk_idx");
-
-        let index_in_chunk = index - chunk_start;
-        (index_chunk, index_in_chunk)
+        find_chunk_idx(&self.chunk_offsets(), index)
     }
 
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
@@ -170,6 +159,32 @@ impl ChunkedArray {
 
         Self::try_new(new_chunks, self.dtype().clone())
     }
+}
+
+/// Search the given array of chunk ends for an index.
+///
+/// # Returns
+///
+/// A tuple (chunk_id, chunk_offset) that encodes the chunk and the offset within chunk
+/// where the global index is found, if present.
+pub fn find_chunk_idx(chunk_ends: &Array, index: usize) -> (usize, usize) {
+    assert!(
+        index <= chunk_ends.len(),
+        "Index out of bounds of the array"
+    );
+
+    // Since there might be duplicate values in offsets because of empty chunks we want to search from right
+    // and take the last chunk (we subtract 1 since there's a leading 0)
+    let index_chunk = search_sorted(chunk_ends, index, SearchSortedSide::Right)
+        .vortex_expect("Search sorted failed in find_chunk_idx")
+        .to_ends_index(chunk_ends.len())
+        .saturating_sub(1);
+    let chunk_start = scalar_at(chunk_ends, index_chunk)
+        .and_then(|s| usize::try_from(&s))
+        .vortex_expect("Failed to find chunk start in find_chunk_idx");
+
+    let index_in_chunk = index - chunk_start;
+    (index_chunk, index_in_chunk)
 }
 
 impl ArrayTrait for ChunkedArray {}
