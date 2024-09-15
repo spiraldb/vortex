@@ -78,11 +78,13 @@ impl RunEndArray {
         Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
+    /// Convert the given logical index to an index into the `values` array
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
         search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
             .map(|s| s.to_ends_index(self.ends().len()))
     }
 
+    /// Run the array through run-end encoding.
     pub fn encode(array: Array) -> VortexResult<Self> {
         if array.encoding().id() == Primitive::ID {
             let primitive = PrimitiveArray::try_from(array)?;
@@ -99,11 +101,18 @@ impl RunEndArray {
             .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
     }
 
+    /// The offset that the `ends` is relative to.
+    ///
+    /// This is generally zero for a "new" array, and non-zero after a slicing operation.
     #[inline]
     pub fn offset(&self) -> usize {
         self.metadata().offset
     }
 
+    /// The encoded "ends" of value runs.
+    ///
+    /// The `i`-th element indicates that there is a run of the same value, beginning
+    /// at `ends[i]` (inclusive) and terminating at `ends[i+1]` (exclusive).
     #[inline]
     pub fn ends(&self) -> Array {
         self.array()
@@ -111,6 +120,10 @@ impl RunEndArray {
             .vortex_expect("RunEndArray is missing its run ends")
     }
 
+    /// The scalar values.
+    ///
+    /// The `i`-th element is the scalar value for the `i`-th repeated run. The run begins
+    /// at `ends[i]` (inclusive) and terminates at `ends[i+1]` (exclusive).
     #[inline]
     pub fn values(&self) -> Array {
         self.array()

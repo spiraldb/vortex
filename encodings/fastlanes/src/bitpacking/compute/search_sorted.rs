@@ -66,7 +66,7 @@ impl BitPackedSearch {
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),
-            min_patch_offset: array.patches().map(|p| {
+            min_patch_offset: array.patches().and_then(|p| {
                 SparseArray::try_from(p)
                     .vortex_expect("Only sparse patches are supported")
                     .min_index()

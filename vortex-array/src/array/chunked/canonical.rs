@@ -34,10 +34,6 @@ pub(crate) fn try_canonicalize_chunks(
     validity: Validity,
     dtype: &DType,
 ) -> VortexResult<Canonical> {
-    if chunks.is_empty() {
-        vortex_bail!(InvalidArgument: "chunks must be non-empty")
-    }
-
     let mismatched = chunks
         .iter()
         .filter(|chunk| !chunk.dtype().eq(dtype))

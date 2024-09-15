@@ -3,9 +3,12 @@ use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
 use crate::compute::unary::{try_cast, CastFn, ScalarAtFn, SubtractScalarFn};
-use crate::compute::{compare, slice, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
+use crate::compute::{
+    compare, slice, ArrayCompute, CompareFn, FilterFn, Operator, SliceFn, TakeFn,
+};
 use crate::{Array, IntoArray};
 
+mod filter;
 mod scalar_at;
 mod slice;
 mod take;
@@ -32,6 +35,10 @@ impl ArrayCompute for ChunkedArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn filter(&self) -> Option<&dyn FilterFn> {
         Some(self)
     }
 }
