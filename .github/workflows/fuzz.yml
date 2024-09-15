@@ -13,6 +13,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install cargo fuzz
         run: cargo install cargo-fuzz
+      - uses: actions/cache@v4
+        name: Restore corpus
+        with:
+          path: fuzz/corpus
+          key: array_ops
       - name: Run fuzzing target
         run: RUST_BACKTRACE=1 cargo fuzz run array_ops -- -max_total_time=1800
         continue-on-error: true
@@ -21,10 +26,3 @@ jobs:
         with:
           name: fuzzing-crash-artifacts
           path: fuzz/artifacts
-      - name: Archive fuzzing corpus
-        uses: actions/upload-artifact@v4
-        with:
-          name: fuzzing-corpus
-          path: fuzz/corpus
-
-
