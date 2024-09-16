@@ -19,7 +19,9 @@ jobs:
         name: Restore corpus
         with:
           path: fuzz/corpus
-          key: array_ops
+          key: array_ops-${{ hashFiles('fuzz/corpus/array_ops/*') }}
+          restore-keys: |
+            array_ops-
       - name: Run fuzzing target
         run: RUST_BACKTRACE=1 cargo fuzz run array_ops -- -max_total_time=1800
         continue-on-error: true
