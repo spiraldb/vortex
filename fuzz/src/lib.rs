@@ -1,3 +1,4 @@
+mod filter;
 mod search_sorted;
 mod slice;
 mod sort;
@@ -18,6 +19,7 @@ use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::arbitrary::random_scalar;
 use vortex_scalar::Scalar;
 
+use crate::filter::filter_canonical_array;
 use crate::search_sorted::search_sorted_canonical_array;
 use crate::slice::slice_canonical_array;
 use crate::take::take_canonical_array;
@@ -56,6 +58,7 @@ pub enum Action {
     Slice(Range<usize>),
     Take(Array),
     SearchSorted(Scalar, SearchSortedSide),
+    Filter(Array),
 }
 
 impl<'a> Arbitrary<'a> for FuzzArrayAction {
@@ -65,7 +68,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
         let mut actions = Vec::new();
         let action_count = u.int_in_range(1..=4)?;
         for _ in 0..action_count {
-            actions.push(match u.int_in_range(0..=3)? {
+            actions.push(match u.int_in_range(0..=4)? {
                 0 => {
                     if actions
                         .last()
@@ -132,6 +135,12 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                         )),
                     )
                 }
+                4 => {
+                    let mask: Vec<bool> = (0..len)
+                        .map(|_| T::arbitrary(u))
+                        .collect::<Result<Vec<_>>>()?;
+                    let filtered = filter_canonical_array(&current_array, &mask);
+                }
                 _ => unreachable!(),
             })
         }
@@ -149,4 +158,13 @@ fn random_vec_in_range(u: &mut Unstructured<'_>, min: usize, max: usize) -> Resu
         }
     })
     .collect::<Result<Vec<_>>>()
+}
+
+fn arbitrary_vec_of_len<'a, T: Arbitrary<'a>>(
+    u: &mut Unstructured<'a>,
+    len: usize,
+) -> Result<Vec<T>> {
+    (0..len)
+        .map(|_| T::arbitrary(u))
+        .collect::<Result<Vec<_>>>()
 }
