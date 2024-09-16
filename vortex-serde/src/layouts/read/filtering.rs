@@ -20,8 +20,8 @@ impl RowFilter {
         todo!()
     }
 
-    pub fn reorder(mut self, arrow_schema: &Schema) -> RowFilter {
-        let expr = reorder_expr_impl(self.filter.clone(), arrow_schema);
+    pub fn reorder(mut self, schema: &Schema) -> RowFilter {
+        let expr = reorder_expr_impl(self.filter.clone(), schema);
         self.filter = expr;
         self
     }
