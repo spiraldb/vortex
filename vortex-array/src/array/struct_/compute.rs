@@ -5,6 +5,7 @@ use vortex_scalar::Scalar;
 use crate::array::struct_::StructArray;
 use crate::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use crate::compute::{filter, slice, take, ArrayCompute, FilterFn, SliceFn, TakeFn};
+use crate::stats::ArrayStatistics;
 use crate::variants::StructArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
@@ -85,6 +86,7 @@ impl FilterFn for StructArray {
         let length = fields
             .first()
             .map(|a| a.len())
+            .or_else(|| predicate.statistics().compute_true_count())
             .ok_or_else(|| vortex_err!("Struct arrays should have at least one field"))?;
 
         Self::try_new(
@@ -94,5 +96,24 @@ impl FilterFn for StructArray {
             self.validity().filter(predicate)?,
         )
         .map(|a| a.into_array())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::array::{BoolArray, StructArray};
+    use crate::compute::filter;
+    use crate::validity::Validity;
+    use crate::IntoArray;
+
+    #[test]
+    fn filter_empty_struct() {
+        let struct_arr =
+            StructArray::try_new(vec![].into(), vec![], 10, Validity::NonNullable).unwrap();
+        let mask = vec![
+            false, true, false, true, false, true, false, true, false, true,
+        ];
+        let filtered = filter(struct_arr.as_ref(), &BoolArray::from(mask).into_array()).unwrap();
+        assert_eq!(filtered.len(), 5);
     }
 }
