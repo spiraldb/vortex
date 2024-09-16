@@ -4634,6 +4634,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "vortex-schema"
+version = "0.8.0"
+dependencies = [
+ "vortex-dtype",
+ "vortex-error",
+]
+
+[[package]]
 name = "vortex-serde"
 version = "0.8.0"
 dependencies = [
@@ -4666,6 +4674,7 @@ dependencies = [
  "vortex-flatbuffers",
  "vortex-sampling-compressor",
  "vortex-scalar",
+ "vortex-schema",
 ]
 
 [[package]]

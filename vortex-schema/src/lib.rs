@@ -1,12 +1,18 @@
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 
-use super::projections::Projection;
+use self::projection::Projection;
+
+pub mod projection;
 
 #[derive(Clone, Debug)]
 pub struct Schema(pub(crate) DType);
 
 impl Schema {
+    pub fn new(schema_dtype: DType) -> Self {
+        Self(schema_dtype)
+    }
+
     pub fn project(&self, projection: Projection) -> VortexResult<Self> {
         match projection {
             Projection::All => Ok(self.clone()),
@@ -23,8 +29,10 @@ impl Schema {
     pub fn dtype(&self) -> &DType {
         &self.0
     }
+}
 
-    pub fn into_dtype(self) -> DType {
-        self.0
+impl From<Schema> for DType {
+    fn from(value: Schema) -> Self {
+        value.0
     }
 }

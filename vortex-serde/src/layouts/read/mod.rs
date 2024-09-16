@@ -12,16 +12,14 @@ mod context;
 mod filtering;
 mod footer;
 mod layouts;
-mod projections;
-mod schema;
 mod stream;
 
 pub use builder::LayoutReaderBuilder;
 pub use context::*;
 pub use filtering::RowFilter;
-pub use projections::Projection;
-pub use schema::Schema;
 pub use stream::LayoutBatchStream;
+pub use vortex_schema::projection::Projection;
+pub use vortex_schema::Schema;
 
 use crate::stream_writer::ByteRange;
 

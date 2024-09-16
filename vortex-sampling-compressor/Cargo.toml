@@ -12,8 +12,8 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-fsst-rs = { workspace = true }
 arbitrary = { workspace = true, optional = true }
+fsst-rs = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
