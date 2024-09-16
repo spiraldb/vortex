@@ -323,7 +323,6 @@
                                 var clickedChart = this.chart;
 
                                 charts.forEach(function(chart) {
-
                                     chart.data.datasets.forEach(function(ds, idx) {
                                         if (ds.label === datasetLabel) {
                                             chart.getDatasetMeta(idx).hidden = wasVisible;
