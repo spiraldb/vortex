@@ -6,6 +6,101 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-serde` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.8.0...vortex-serde-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Simplify/idiomize the way arrays return `&Array` ([#826](https://github.com/spiraldb/vortex/pull/826))
+- Reorder row filters ([#825](https://github.com/spiraldb/vortex/pull/825))
+- Introduce a new `vortex-schema` crate ([#819](https://github.com/spiraldb/vortex/pull/819))
+- Convert pruning filters to express whether the block should be pruned and not whether it should stay ([#800](https://github.com/spiraldb/vortex/pull/800))
+- Fix ChunkedArray find_chunk_idx for empty chunks ([#802](https://github.com/spiraldb/vortex/pull/802))
+- More explicit API for converting search sorted results into indices ([#777](https://github.com/spiraldb/vortex/pull/777))
+- overload the name 'Footer' a bit less ([#773](https://github.com/spiraldb/vortex/pull/773))
+
+## `vortex-expr` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-expr-v0.8.0...vortex-expr-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Reorder row filters ([#825](https://github.com/spiraldb/vortex/pull/825))
+
+## `vortex-scalar` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-scalar-v0.8.0...vortex-scalar-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Define consistent float ordering ([#808](https://github.com/spiraldb/vortex/pull/808))
+- Actually fuzz Struct and Chunked Arrays ([#805](https://github.com/spiraldb/vortex/pull/805))
+- Fuzz Chunked and Struct arrays ([#801](https://github.com/spiraldb/vortex/pull/801))
+- Fuzzer performs multiple operations on the underlying array instead of just one ([#766](https://github.com/spiraldb/vortex/pull/766))
+
+## `vortex-flatbuffers` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-flatbuffers-v0.8.0...vortex-flatbuffers-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-error` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-error-v0.8.0...vortex-error-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-dtype` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-dtype-v0.8.0...vortex-dtype-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Add description to new `vortex-schema` crate ([#829](https://github.com/spiraldb/vortex/pull/829))
+- Define consistent float ordering ([#808](https://github.com/spiraldb/vortex/pull/808))
+- Actually fuzz Struct and Chunked Arrays ([#805](https://github.com/spiraldb/vortex/pull/805))
+
+## `vortex-datetime-dtype` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-dtype-v0.8.0...vortex-datetime-dtype-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+## `vortex-array` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-array-v0.8.0...vortex-array-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Handle filtering empty struct arrays ([#827](https://github.com/spiraldb/vortex/pull/827))
+- Simplify/idiomize the way arrays return `&Array` ([#826](https://github.com/spiraldb/vortex/pull/826))
+- Define consistent float ordering ([#808](https://github.com/spiraldb/vortex/pull/808))
+- Actually fuzz Struct and Chunked Arrays ([#805](https://github.com/spiraldb/vortex/pull/805))
+- Add is_encoding to array and fix cases of redundant encoding id checks ([#796](https://github.com/spiraldb/vortex/pull/796))
+- implement FilterFn for ChunkedArray ([#794](https://github.com/spiraldb/vortex/pull/794))
+- Fix ChunkedArray find_chunk_idx for empty chunks ([#802](https://github.com/spiraldb/vortex/pull/802))
+- Fuzz Chunked and Struct arrays ([#801](https://github.com/spiraldb/vortex/pull/801))
+- implement FilterFn for SparseArray ([#799](https://github.com/spiraldb/vortex/pull/799))
+- Better scalar compare using collect_bool ([#792](https://github.com/spiraldb/vortex/pull/792))
+- greedily combine chunks before compressing ([#783](https://github.com/spiraldb/vortex/pull/783))
+- Introduce MaybeCompareFn trait to allow for partial compare specializations ([#768](https://github.com/spiraldb/vortex/pull/768))
+- More explicit API for converting search sorted results into indices ([#777](https://github.com/spiraldb/vortex/pull/777))
+- Fix slicing already sliced SparseArray ([#780](https://github.com/spiraldb/vortex/pull/780))
+- Fix SearchSorted for SparseArray when searching from Right ([#770](https://github.com/spiraldb/vortex/pull/770))
+- Fix StructArray::filter length calculation ([#769](https://github.com/spiraldb/vortex/pull/769))
+- Fuzzer performs multiple operations on the underlying array instead of just one ([#766](https://github.com/spiraldb/vortex/pull/766))
+- Filter struct arrays ([#767](https://github.com/spiraldb/vortex/pull/767))
+- Fix unary/binary fn on `PrimitiveArray` ([#764](https://github.com/spiraldb/vortex/pull/764))
+- Fix benchmarks ([#762](https://github.com/spiraldb/vortex/pull/762))
+- Better implementation for `Validity::and` ([#758](https://github.com/spiraldb/vortex/pull/758))
+
+## `vortex-alp` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.8.0...vortex-alp-v0.9.0) - 2024-09-16
+
+### Added
+- more Results, fewer panics, always have backtraces ([#761](https://github.com/spiraldb/vortex/pull/761))
+
+### Other
+- Simplify/idiomize the way arrays return `&Array` ([#826](https://github.com/spiraldb/vortex/pull/826))
+- Introduce MaybeCompareFn trait to allow for partial compare specializations ([#768](https://github.com/spiraldb/vortex/pull/768))
+
 ## `vortex-runend-bool` - [0.8.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.7.0...vortex-runend-bool-v0.8.0) - 2024-09-05
 
 ### Other
