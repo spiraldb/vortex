@@ -1,5 +1,5 @@
 use itertools::Itertools;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::struct_::StructArray;
@@ -87,7 +87,7 @@ impl FilterFn for StructArray {
             .first()
             .map(|a| a.len())
             .or_else(|| predicate.statistics().compute_true_count())
-            .ok_or_else(|| vortex_err!("Struct arrays should have at least one field"))?;
+            .unwrap_or_default();
 
         Self::try_new(
             self.names().clone(),
@@ -115,5 +115,13 @@ mod tests {
         ];
         let filtered = filter(struct_arr.as_ref(), &BoolArray::from(mask).into_array()).unwrap();
         assert_eq!(filtered.len(), 5);
+    }
+
+    #[test]
+    fn filter_empty_struct_with_empty_filter() {
+        let struct_arr =
+            StructArray::try_new(vec![].into(), vec![], 0, Validity::NonNullable).unwrap();
+        let filtered = filter(struct_arr.as_ref(), &BoolArray::from(vec![]).into_array()).unwrap();
+        assert_eq!(filtered.len(), 0);
     }
 }
