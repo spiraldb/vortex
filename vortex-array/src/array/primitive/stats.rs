@@ -193,7 +193,7 @@ impl<T: PStatsType> StatsAccumulator<T> {
         if next.is_eq(self.prev) {
             self.is_strict_sorted = false;
         } else {
-            if next < self.prev {
+            if matches!(next.compare(self.prev), Ordering::Less) {
                 self.is_sorted = false;
             }
             self.run_count += 1;
