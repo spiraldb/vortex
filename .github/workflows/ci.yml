@@ -42,7 +42,7 @@ jobs:
 
       - name: Pytest - PyVortex
         run: |
-          maturn develop --skip-install
+          maturin develop --skip-install
           rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
 
