@@ -314,7 +314,7 @@ impl ArrayBufferReader {
         .ok_or_else(|| vortex_err!("Checked in previous step"))
     }
 
-    /// Provide buffered array
+    /// Produce the array buffered in the reader
     pub fn into_array(self, ctx: Arc<Context>, dtype: DType) -> VortexResult<Array> {
         let length = self.fb_bytes_as_batch()?.length() as usize;
         let fb_msg = self
