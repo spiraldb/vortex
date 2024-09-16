@@ -1,4 +1,5 @@
 use core::fmt::Display;
+use std::cmp::Ordering;
 use std::mem;
 
 use num_traits::NumCast;
@@ -7,7 +8,7 @@ use vortex_dtype::half::f16;
 use vortex_dtype::PType;
 use vortex_error::{vortex_err, VortexError};
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PValue {
     U8(u8),
     U16(u16),
@@ -20,6 +21,25 @@ pub enum PValue {
     F16(f16),
     F32(f32),
     F64(f64),
+}
+
+impl PartialOrd for PValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Self::U8(s), Self::U8(o)) => s.partial_cmp(o),
+            (Self::U16(s), Self::U16(o)) => s.partial_cmp(o),
+            (Self::U32(s), Self::U32(o)) => s.partial_cmp(o),
+            (Self::U64(s), Self::U64(o)) => s.partial_cmp(o),
+            (Self::I8(s), Self::I8(o)) => s.partial_cmp(o),
+            (Self::I16(s), Self::I16(o)) => s.partial_cmp(o),
+            (Self::I32(s), Self::I32(o)) => s.partial_cmp(o),
+            (Self::I64(s), Self::I64(o)) => s.partial_cmp(o),
+            (Self::F16(s), Self::F16(o)) => Some(s.total_cmp(o)),
+            (Self::F32(s), Self::F32(o)) => Some(s.total_cmp(o)),
+            (Self::F64(s), Self::F64(o)) => Some(s.total_cmp(o)),
+            (..) => None,
+        }
+    }
 }
 
 macro_rules! as_primitive {

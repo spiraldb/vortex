@@ -68,16 +68,15 @@ pub fn slice_canonical_array(array: &Array, start: usize, stop: usize) -> Array 
                 .iter()
                 .collect::<Vec<_>>();
 
-            let len = sliced_children[0].len();
             StructArray::try_new(
                 struct_array.names().clone(),
                 sliced_children,
-                len,
+                stop - start,
                 Validity::from(Vec::from(&vec_validity[start..stop])),
             )
             .unwrap()
             .into_array()
         }
-        _ => unreachable!("Array::arbitrary will not generate other dtypes"),
+        _ => unreachable!("Not a canonical array"),
     }
 }

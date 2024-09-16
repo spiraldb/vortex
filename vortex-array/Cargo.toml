@@ -52,7 +52,7 @@ vortex-scalar = { workspace = true }
 
 [features]
 default = ["flatbuffers", "serde"]
-arbitrary = ["dep:arbitrary"]
+arbitrary = ["dep:arbitrary", "vortex-dtype/arbitrary"]
 flatbuffers = [
     "dep:flatbuffers",
     "dep:flexbuffers",

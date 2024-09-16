@@ -1,13 +1,13 @@
 use std::cmp::Ordering;
 
 use vortex::accessor::ArrayAccessor;
+use vortex::compute::unary::scalar_at;
 use vortex::compute::{IndexOrd, Len, SearchResult, SearchSorted, SearchSortedSide};
 use vortex::validity::ArrayValidity;
-use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_buffer::{Buffer, BufferString};
 use vortex_dtype::{match_each_native_ptype, DType};
-use vortex_scalar::{Scalar, StructScalar};
+use vortex_scalar::Scalar;
 
 struct SearchNullableSlice<T>(Vec<Option<T>>);
 
@@ -40,18 +40,16 @@ pub fn search_sorted_canonical_array(
     match array.dtype() {
         DType::Bool(_) => {
             let bool_array = array.clone().into_bool().unwrap();
+            let validity = bool_array
+                .logical_validity()
+                .into_array()
+                .into_bool()
+                .unwrap()
+                .boolean_buffer();
             let opt_values = bool_array
                 .boolean_buffer()
                 .iter()
-                .zip(
-                    bool_array
-                        .logical_validity()
-                        .into_array()
-                        .into_bool()
-                        .unwrap()
-                        .boolean_buffer()
-                        .iter(),
-                )
+                .zip(validity.iter())
                 .map(|(b, v)| v.then_some(b))
                 .collect::<Vec<_>>();
             let to_find = scalar.try_into().unwrap();
@@ -59,20 +57,18 @@ pub fn search_sorted_canonical_array(
         }
         DType::Primitive(p, _) => match_each_native_ptype!(p, |$P| {
             let primitive_array = array.clone().into_primitive().unwrap();
+            let validity = primitive_array
+                .logical_validity()
+                .into_array()
+                .into_bool()
+                .unwrap()
+                .boolean_buffer();
             let opt_values = primitive_array
                 .maybe_null_slice::<$P>()
                 .iter()
                 .copied()
-                .zip(
-                    primitive_array
-                        .logical_validity()
-                        .into_array()
-                        .into_bool()
-                        .unwrap()
-                        .boolean_buffer()
-                        .iter(),
-                )
-                            .map(|(b, v)| v.then_some(b))
+                .zip(validity.iter())
+                .map(|(b, v)| v.then_some(b))
                 .collect::<Vec<_>>();
             let to_find: $P = scalar.try_into().unwrap();
             SearchNullableSlice(opt_values).search_sorted(&Some(to_find), side)
@@ -94,20 +90,10 @@ pub fn search_sorted_canonical_array(
             SearchNullableSlice(opt_values).search_sorted(&Some(to_find), side)
         }
         DType::Struct(..) => {
-            let strct = array.clone().into_struct().unwrap();
-            let scalar_fields: StructScalar = scalar.try_into().unwrap();
-            let mut res: Option<SearchResult> = None;
-            for (c, i) in strct.children().zip(0..strct.names().len()) {
-                res = Some(search_sorted_canonical_array(
-                    &c,
-                    &scalar_fields.field_by_idx(i).unwrap(),
-                    side,
-                ));
-                if let SearchResult::NotFound(u) = res.unwrap() {
-                    return SearchResult::NotFound(u);
-                }
-            }
-            res.unwrap()
+            let scalar_vals = (0..array.len())
+                .map(|i| scalar_at(array, i).unwrap())
+                .collect::<Vec<_>>();
+            scalar_vals.search_sorted(&scalar.cast(array.dtype()).unwrap(), side)
         }
         _ => unreachable!("Not a canonical array"),
     }

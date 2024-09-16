@@ -51,7 +51,7 @@ impl DType {
             Primitive(_, n) => matches!(n, Nullable),
             Utf8(n) => matches!(n, Nullable),
             Binary(n) => matches!(n, Nullable),
-            Struct(st, _) => st.dtypes().iter().all(DType::is_nullable),
+            Struct(_, n) => matches!(n, Nullable),
             List(_, n) => matches!(n, Nullable),
             Extension(_, n) => matches!(n, Nullable),
         }
@@ -203,9 +203,19 @@ mod test {
     use std::mem;
 
     use crate::dtype::DType;
+    use crate::{Nullability, StructDType};
 
     #[test]
     fn size_of() {
         assert_eq!(mem::size_of::<DType>(), 40);
+    }
+
+    #[test]
+    fn is_nullable() {
+        assert!(!DType::Struct(
+            StructDType::new(vec![].into(), Vec::new()),
+            Nullability::NonNullable
+        )
+        .is_nullable());
     }
 }
