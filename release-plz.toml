@@ -1,6 +1,8 @@
 [workspace]
 # set the path of all the crates to the changelog to the root of the repository
 changelog_path = "./CHANGELOG.md"
+git_release_enable = false
+git_tag_enable = false
 
 # This uses the single-changelog template from https://release-plz.ieni.dev/docs/extra/single-changelog
 [changelog]
@@ -18,3 +20,9 @@ body = """
 {% endfor -%}
 {% endfor -%}
 """
+
+[[package]]
+name = "vortex-array"
+git_tag_enable = true
+git_release_enable = true
+git_tag_name = "v{{ version }}"
