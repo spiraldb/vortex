@@ -4475,6 +4475,7 @@ dependencies = [
  "vortex-error",
  "vortex-proto",
  "vortex-scalar",
+ "vortex-schema",
 ]
 
 [[package]]

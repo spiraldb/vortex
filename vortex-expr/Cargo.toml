@@ -31,6 +31,7 @@ vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
 vortex-proto = { workspace = true, optional = true }
 vortex-scalar = { workspace = true }
+vortex-schema = { workspace = true }
 
 [features]
 datafusion = [

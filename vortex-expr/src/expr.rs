@@ -8,8 +8,10 @@ use vortex::compute::{compare, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, IntoArray};
 use vortex_dtype::field::Field;
-use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult, VortexUnwrap};
 use vortex_scalar::Scalar;
+use vortex_schema::Schema;
 
 use crate::Operator;
 
@@ -117,20 +119,9 @@ impl VortexExpr for Column {
     }
 
     fn estimate_cost(&self, schema: &Schema) -> usize {
-        let field = match self.field() {
-            Field::Name(name) => {
-                schema
-                    .column_with_name(name)
-                    .vortex_expect("Expression should reference value in schema")
-                    .1
-            }
-            Field::Index(idx) => schema.field(*idx),
-        };
+        let field_dtype = schema.field_type(self.field()).vortex_unwrap();
 
-        field
-            .data_type()
-            .primitive_width()
-            .unwrap_or(NON_PRIMITIVE_COST_ESTIMATE * COLUMN_COST_MULTIPLIER)
+        dtype_cost_estimate(&field_dtype) * COLUMN_COST_MULTIPLIER
     }
 }
 
@@ -168,12 +159,7 @@ impl VortexExpr for Literal {
     }
 
     fn estimate_cost(&self, _schema: &Schema) -> usize {
-        match self.value.dtype() {
-            vortex_dtype::DType::Null => 0,
-            vortex_dtype::DType::Bool(_) => 1,
-            vortex_dtype::DType::Primitive(p, _) => p.byte_width(),
-            _ => NON_PRIMITIVE_COST_ESTIMATE,
-        }
+        dtype_cost_estimate(self.value.dtype())
     }
 }
 
@@ -215,8 +201,8 @@ impl VortexExpr for BinaryExpr {
         res
     }
 
-    fn estimate_cost(&self, arrow_schema: &Schema) -> usize {
-        self.lhs.estimate_cost(arrow_schema) + self.rhs.estimate_cost(arrow_schema)
+    fn estimate_cost(&self, schema: &Schema) -> usize {
+        self.lhs.estimate_cost(schema) + self.rhs.estimate_cost(schema)
     }
 }
 
@@ -242,7 +228,7 @@ impl VortexExpr for NoOp {
         HashSet::new()
     }
 
-    fn estimate_cost(&self, _arrow_schema: &Schema) -> usize {
+    fn estimate_cost(&self, _schema: &Schema) -> usize {
         0
     }
 }
@@ -250,5 +236,14 @@ impl VortexExpr for NoOp {
 impl PartialEq<dyn Any> for NoOp {
     fn eq(&self, other: &dyn Any) -> bool {
         unbox_any(other).downcast_ref::<Self>().is_some()
+    }
+}
+
+fn dtype_cost_estimate(dtype: &DType) -> usize {
+    match dtype {
+        vortex_dtype::DType::Null => 0,
+        vortex_dtype::DType::Bool(_) => 1,
+        vortex_dtype::DType::Primitive(p, _) => p.byte_width(),
+        _ => NON_PRIMITIVE_COST_ESTIMATE,
     }
 }
