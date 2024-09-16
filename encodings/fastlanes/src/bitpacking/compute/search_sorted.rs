@@ -4,7 +4,7 @@ use std::cmp::Ordering::Greater;
 use fastlanes::BitPacking;
 use itertools::Itertools;
 use num_traits::AsPrimitive;
-use vortex::array::{PrimitiveArray, SparseArray};
+use vortex::array::SparseArray;
 use vortex::compute::{
     search_sorted, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
 };
@@ -29,19 +29,20 @@ impl SearchSortedFn for BitPackedArray {
         sides: &[SearchSortedSide],
     ) -> VortexResult<Vec<SearchResult>> {
         // Construct searcher once upfront, since it is fairly expensive
-        let searcher = BitPackedSearch::new(self);
-        values
-            .iter()
-            .zip(sides.iter().copied())
-            .map(|(value, side)| {
-                match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
+        match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
+            let searcher = BitPackedSearch::<'_, $P>::new(self);
+
+            values
+                .iter()
+                .zip(sides.iter().copied())
+                .map(|(value, side)| {
                     // Unwrap to native value
                     let value: $P = value.cast(self.dtype())?.try_into()?;
 
                     Ok(searcher.search_sorted(&value, side))
                 })
-            })
-            .try_collect()
+                .try_collect()
+        })
     }
 }
 
@@ -60,17 +61,17 @@ where
         if unwrapped_value.as_() > array.max_packed_value() {
             search_sorted(&patches_array, value.clone(), side)
         } else {
-            Ok(BitPackedSearch::new(array).search_sorted(&unwrapped_value, side))
+            Ok(BitPackedSearch::<'_, T>::new(array).search_sorted(&unwrapped_value, side))
         }
     } else {
-        Ok(BitPackedSearch::new(array).search_sorted(&unwrapped_value, side))
+        Ok(BitPackedSearch::<'_, T>::new(array).search_sorted(&unwrapped_value, side))
     }
 }
 
 /// This wrapper exists, so that you can't invoke SearchSorted::search_sorted directly on BitPackedArray as it omits searching patches
 #[derive(Debug)]
-struct BitPackedSearch {
-    packed: PrimitiveArray,
+struct BitPackedSearch<'a, T> {
+    packed_maybe_null_slice: &'a [T],
     offset: usize,
     length: usize,
     bit_width: usize,
@@ -78,10 +79,10 @@ struct BitPackedSearch {
     validity: Validity,
 }
 
-impl BitPackedSearch {
-    pub fn new(array: &BitPackedArray) -> Self {
+impl<'a, T: NativePType + BitPacking> BitPackedSearch<'a, T> {
+    pub fn new(array: &'a BitPackedArray) -> Self {
         Self {
-            packed: array.packed().as_primitive(),
+            packed_maybe_null_slice: array.packed_slice::<T>(),
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),
@@ -95,7 +96,7 @@ impl BitPackedSearch {
     }
 }
 
-impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
+impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch<'_, T> {
     fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
         if let Some(min_patch) = self.min_patch_offset {
             if idx >= min_patch {
@@ -110,7 +111,7 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
         // SAFETY: Used in search_sorted_by which ensures that idx is within bounds
         let val: T = unsafe {
             unpack_single_primitive(
-                self.packed.maybe_null_slice::<T>(),
+                self.packed_maybe_null_slice,
                 self.bit_width,
                 idx + self.offset,
             )
@@ -119,7 +120,7 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
     }
 }
 
-impl Len for BitPackedSearch {
+impl<T> Len for BitPackedSearch<'_, T> {
     fn len(&self) -> usize {
         self.length
     }
