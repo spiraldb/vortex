@@ -5,13 +5,6 @@ inputs:
     description: 'Rye version to use'
     required: true
     default: '0.36.0'
-outputs:
-  python-major-version:
-    description: "The installed Python major version"
-    value: ${{ steps.Rye Install.outputs.python-major-version }}
-  python-version:
-    description: "The installed Python version"
-    value: ${{ steps.Rye Install.outputs.python-version }}
 runs:
   using: "composite"
   steps:
@@ -29,12 +22,7 @@ runs:
 
     - name: Rye Install
       shell: bash
-      run: |
-        curl -sSf https://rye.astral.sh/get | bash
-        printf python-major-version= >> $GITHUB_OUTPUT
-        python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")' >> $GITHUB_OUTPUT
-        printf python-version= >> $GITHUB_OUTPUT
-        python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}")' >> $GITHUB_OUTPUT
+      run: curl -sSf https://rye.astral.sh/get | bash
       if: steps.rye-cache.outputs.cache-hit != 'true'
       env:
         RYE_VERSION: "${{ inputs.rye-version }}"

@@ -11,8 +11,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/cleanup
     - uses: ./.github/actions/setup-rust
-    - name: setup-python
-      uses: ./.github/actions/setup-python
+    - uses: ./.github/actions/setup-python
     - name: rust-toolchain
       shell: bash
       run: echo "version=$(cat rust-toolchain.toml | grep channel | awk -F'\"' '{print $2}')" >> $GITHUB_OUTPUT
@@ -22,21 +21,21 @@ jobs:
         rust-toolchain: ${{ steps.rust-toolchain.version }}
         working-directory: pyvortex
         target: x86_64
-        args: --release --interpreter python${{ steps.setup-python.python-major-version }} --sdist
+        args: --release --interpreter python3.11 --sdist
     - name: Build wheels - aarch64
       uses: PyO3/maturin-action@v1
       with:
         rust-toolchain: ${{ steps.rust-toolchain.version }}
         working-directory: pyvortex
         target: aarch64  # NB: aarch64 becomes arm64 in the wheel's platform tag.
-        args: --release --interpreter python${{ steps.setup-python.python-major-version }}
+        args: --release --interpreter python3.11
     - name: Build wheels - universal2
       uses: PyO3/maturin-action@v1
       with:
         rust-toolchain: ${{ steps.rust-toolchain.version }}
         working-directory: pyvortex
         target: universal2-apple-darwin
-        args: --release --interpreter python${{ steps.setup-python.python-major-version }}
+        args: --release --interpreter python3.11
     - name: test wheel
       run: |
         set -ex
@@ -72,7 +71,7 @@ jobs:
         working-directory: pyvortex
         target: x86_64
         manylinux: auto
-        args: --release --interpreter python${{ steps.setup-python.python-major-version }}
+        args: --release --interpreter python3.11
     - name: test wheel
       run: |
         set -ex
