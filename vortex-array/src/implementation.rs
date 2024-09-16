@@ -6,8 +6,8 @@ use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, Encodin
 use crate::stats::{ArrayStatistics, Statistics};
 use crate::visitor::ArrayVisitor;
 use crate::{
-    Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, AsArray, GetArrayMetadata,
-    IntoArray, ToArrayData, TryDeserializeArrayMetadata,
+    Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, GetArrayMetadata, IntoArray,
+    ToArrayData, TryDeserializeArrayMetadata,
 };
 
 /// Trait the defines the set of types relating to an array.
@@ -40,11 +40,12 @@ macro_rules! impl_encoding {
             pub struct [<$Name Array>] {
                 typed: $crate::TypedArray<$Name>
             }
-            impl [<$Name Array>] {
-                pub fn array(&self) -> &$crate::Array {
+            impl AsRef<$crate::Array> for [<$Name Array>] {
+                fn as_ref(&self) -> &$crate::Array {
                     self.typed.array()
                 }
-
+            }
+            impl [<$Name Array>] {
                 #[allow(clippy::same_name_method)]
                 fn metadata(&self) -> &[<$Name Metadata>] {
                     self.typed.metadata()
@@ -73,11 +74,6 @@ macro_rules! impl_encoding {
                 #[allow(clippy::same_name_method)]
                 fn metadata(&self) -> std::sync::Arc<dyn $crate::ArrayMetadata> {
                     std::sync::Arc::new(self.metadata().clone())
-                }
-            }
-            impl $crate::AsArray for [<$Name Array>] {
-                fn as_array_ref(&self) -> &$crate::Array {
-                    self.typed.array()
                 }
             }
             impl $crate::ToArray for [<$Name Array>] {
@@ -161,46 +157,40 @@ macro_rules! impl_encoding {
     };
 }
 
-impl AsArray for Array {
-    fn as_array_ref(&self) -> &Array {
-        self
-    }
-}
-
-impl<T: AsArray> ArrayEncodingRef for T {
+impl<T: AsRef<Array>> ArrayEncodingRef for T {
     fn encoding(&self) -> EncodingRef {
-        self.as_array_ref().encoding()
+        self.as_ref().encoding()
     }
 }
 
-impl<T: AsArray> ArrayDType for T {
+impl<T: AsRef<Array>> ArrayDType for T {
     fn dtype(&self) -> &DType {
-        match self.as_array_ref() {
+        match self.as_ref() {
             Array::Data(d) => d.dtype(),
             Array::View(v) => v.dtype(),
         }
     }
 }
 
-impl<T: AsArray> ArrayLen for T {
+impl<T: AsRef<Array>> ArrayLen for T {
     fn len(&self) -> usize {
-        match self.as_array_ref() {
+        match self.as_ref() {
             Array::Data(d) => d.len(),
             Array::View(v) => v.len(),
         }
     }
 
     fn is_empty(&self) -> bool {
-        match self.as_array_ref() {
+        match self.as_ref() {
             Array::Data(d) => d.is_empty(),
             Array::View(v) => v.is_empty(),
         }
     }
 }
 
-impl<T: AsArray> ArrayStatistics for T {
+impl<T: AsRef<Array>> ArrayStatistics for T {
     fn statistics(&self) -> &(dyn Statistics + '_) {
-        match self.as_array_ref() {
+        match self.as_ref() {
             Array::Data(d) => d.statistics(),
             Array::View(v) => v.statistics(),
         }

@@ -21,12 +21,11 @@ mod tests {
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
     use crate::validity::ArrayValidity;
-    use crate::AsArray;
 
     #[test]
     fn test_slice() {
         let arr = BoolArray::from_iter([Some(true), Some(true), None, Some(false), None]);
-        let sliced_arr = slice(arr.as_array_ref(), 1, 4).unwrap();
+        let sliced_arr = slice(arr.as_ref(), 1, 4).unwrap();
         let sliced_arr = BoolArray::try_from(sliced_arr).unwrap();
 
         assert_eq!(sliced_arr.len(), 3);

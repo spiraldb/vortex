@@ -5,7 +5,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexResult};
 
 use crate::stats::StatsSet;
-use crate::{Array, ArrayData, ArrayDef, AsArray, IntoArray, ToArray, TryDeserializeArrayMetadata};
+use crate::{Array, ArrayData, ArrayDef, IntoArray, ToArray, TryDeserializeArrayMetadata};
 
 #[derive(Debug, Clone)]
 pub struct TypedArray<D: ArrayDef> {
@@ -96,12 +96,6 @@ impl<'a, D: ArrayDef> TryFrom<&'a Array> for TypedArray<D> {
 
     fn try_from(value: &'a Array) -> Result<Self, Self::Error> {
         value.clone().try_into()
-    }
-}
-
-impl<D: ArrayDef> AsArray for TypedArray<D> {
-    fn as_array_ref(&self) -> &Array {
-        &self.array
     }
 }
 
