@@ -30,6 +30,7 @@ vortex-error = { workspace = true, features = ["object_store"] }
 vortex-expr = { workspace = true }
 vortex-flatbuffers = { workspace = true, features = ["file"] }
 vortex-scalar = { workspace = true, features = ["flatbuffers"] }
+vortex-schema = { workspace = true }
 
 [dev-dependencies]
 arrow = { workspace = true }

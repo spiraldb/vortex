@@ -93,9 +93,12 @@ impl ChunkedArray {
     fn find_chunk_idx(&self, index: usize) -> (usize, usize) {
         assert!(index <= self.len(), "Index out of bounds of the array");
 
-        let index_chunk = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Left)
+        // Since there might be duplicate values in offsets because of empty chunks we want to search from right
+        // and take the last chunk (we subtract 1 since there's a leading 0)
+        let index_chunk = search_sorted(&self.chunk_offsets(), index, SearchSortedSide::Right)
             .vortex_expect("Search sorted failed in find_chunk_idx")
-            .to_offset_ends_index(self.nchunks());
+            .to_ends_index(self.nchunks() + 1)
+            .saturating_sub(1);
         let chunk_start = scalar_at(&self.chunk_offsets(), index_chunk)
             .and_then(|s| usize::try_from(&s))
             .vortex_expect("Failed to find chunk start in find_chunk_idx");
@@ -221,11 +224,10 @@ impl SubtractScalarFn for ChunkedArray {
 
 #[cfg(test)]
 mod test {
-    use vortex_dtype::{DType, NativePType, Nullability, PType};
+    use vortex_dtype::{DType, Nullability, PType};
     use vortex_error::VortexResult;
 
     use crate::array::chunked::ChunkedArray;
-    use crate::compute::slice;
     use crate::compute::unary::{scalar_at, subtract_scalar};
     use crate::{assert_arrays_eq, Array, ArrayDType, IntoArray, IntoArrayVariant, ToArray};
 
@@ -239,49 +241,6 @@ mod test {
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap()
-    }
-
-    fn assert_equal_slices<T: NativePType>(arr: Array, slice: &[T]) {
-        let mut values = Vec::with_capacity(arr.len());
-        ChunkedArray::try_from(arr)
-            .unwrap()
-            .chunks()
-            .map(|a| a.into_primitive().unwrap())
-            .for_each(|a| values.extend_from_slice(a.maybe_null_slice::<T>()));
-        assert_eq!(values, slice);
-    }
-
-    #[test]
-    pub fn slice_middle() {
-        assert_equal_slices(slice(chunked_array().array(), 2, 5).unwrap(), &[3u64, 4, 5])
-    }
-
-    #[test]
-    pub fn slice_begin() {
-        assert_equal_slices(slice(chunked_array().array(), 1, 3).unwrap(), &[2u64, 3]);
-    }
-
-    #[test]
-    pub fn slice_aligned() {
-        assert_equal_slices(slice(chunked_array().array(), 3, 6).unwrap(), &[4u64, 5, 6]);
-    }
-
-    #[test]
-    pub fn slice_many_aligned() {
-        assert_equal_slices(
-            slice(chunked_array().array(), 0, 6).unwrap(),
-            &[1u64, 2, 3, 4, 5, 6],
-        );
-    }
-
-    #[test]
-    pub fn slice_end() {
-        assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
-    }
-
-    #[test]
-    pub fn slice_exactly_end() {
-        assert_equal_slices(slice(chunked_array().array(), 6, 9).unwrap(), &[7u64, 8, 9]);
     }
 
     #[test]

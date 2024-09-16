@@ -6,6 +6,8 @@ pub use half;
 pub use nullability::*;
 pub use ptype::*;
 
+#[cfg(feature = "arbitrary")]
+mod arbitrary;
 mod dtype;
 mod extension;
 pub mod field;

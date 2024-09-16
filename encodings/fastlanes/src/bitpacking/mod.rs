@@ -1,6 +1,6 @@
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
-use vortex::array::{Primitive, PrimitiveArray};
+use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -80,6 +80,10 @@ impl BitPackedArray {
                     parray.len()
                 )
             }
+
+            if SparseArray::try_from(parray)?.indices().is_empty() {
+                vortex_bail!("cannot construct BitPackedArray using patches without indices");
+            }
         }
 
         let metadata = BitPackedMetadata {
@@ -123,9 +127,14 @@ impl BitPackedArray {
         self.metadata().bit_width
     }
 
+    /// Access the patches array.
+    ///
+    /// If present, patches MUST be a `SparseArray` with equal-length to this array, and whose
+    /// indices indicate the locations of patches. The indices must have non-zero length.
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        (self.metadata().has_patches)
+        self.metadata()
+            .has_patches
             .then(|| {
                 self.array().child(
                     1,
@@ -152,8 +161,8 @@ impl BitPackedArray {
     }
 
     pub fn encode(array: &Array, bit_width: usize) -> VortexResult<Self> {
-        if array.encoding().id() == Primitive::ID {
-            bitpack_encode(PrimitiveArray::try_from(array)?, bit_width)
+        if let Ok(parray) = PrimitiveArray::try_from(array) {
+            bitpack_encode(parray, bit_width)
         } else {
             vortex_bail!("Bitpacking can only encode primitive arrays");
         }

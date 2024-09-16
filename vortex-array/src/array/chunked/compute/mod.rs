@@ -1,14 +1,15 @@
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_err, vortex_panic, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
-use crate::compute::unary::{
-    scalar_at, scalar_at_unchecked, try_cast, CastFn, ScalarAtFn, SubtractScalarFn,
+use crate::compute::unary::{try_cast, CastFn, ScalarAtFn, SubtractScalarFn};
+use crate::compute::{
+    compare, slice, ArrayCompute, CompareFn, FilterFn, Operator, SliceFn, TakeFn,
 };
-use crate::compute::{compare, slice, ArrayCompute, CompareFn, Operator, SliceFn, TakeFn};
 use crate::{Array, IntoArray};
 
+mod filter;
+mod scalar_at;
 mod slice;
 mod take;
 
@@ -36,27 +37,9 @@ impl ArrayCompute for ChunkedArray {
     fn take(&self) -> Option<&dyn TakeFn> {
         Some(self)
     }
-}
 
-impl ScalarAtFn for ChunkedArray {
-    fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
-        scalar_at(
-            &self
-                .chunk(chunk_index)
-                .ok_or_else(|| vortex_err!(OutOfBounds: chunk_index, 0, self.nchunks()))?,
-            chunk_offset,
-        )
-    }
-
-    fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
-        scalar_at_unchecked(
-            &self
-                .chunk(chunk_index)
-                .unwrap_or_else(|| vortex_panic!(OutOfBounds: chunk_index, 0, self.nchunks())),
-            chunk_offset,
-        )
+    fn filter(&self) -> Option<&dyn FilterFn> {
+        Some(self)
     }
 }
 

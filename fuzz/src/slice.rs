@@ -1,6 +1,7 @@
 use vortex::accessor::ArrayAccessor;
-use vortex::array::{BoolArray, PrimitiveArray, VarBinArray};
+use vortex::array::{BoolArray, PrimitiveArray, StructArray, VarBinArray};
 use vortex::validity::{ArrayValidity, Validity};
+use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_native_ptype, DType};
 
@@ -52,6 +53,30 @@ pub fn slice_canonical_array(array: &Array, start: usize, stop: usize) -> Array 
             VarBinArray::from_iter(Vec::from(&values[start..stop]), array.dtype().clone())
                 .into_array()
         }
-        _ => unreachable!("Array::arbitrary will not generate other dtypes"),
+        DType::Struct(..) => {
+            let struct_array = array.clone().into_struct().unwrap();
+            let sliced_children = struct_array
+                .children()
+                .map(|c| slice_canonical_array(&c, start, stop))
+                .collect::<Vec<_>>();
+            let vec_validity = struct_array
+                .logical_validity()
+                .into_array()
+                .into_bool()
+                .unwrap()
+                .boolean_buffer()
+                .iter()
+                .collect::<Vec<_>>();
+
+            StructArray::try_new(
+                struct_array.names().clone(),
+                sliced_children,
+                stop - start,
+                Validity::from(Vec::from(&vec_validity[start..stop])),
+            )
+            .unwrap()
+            .into_array()
+        }
+        _ => unreachable!("Not a canonical array"),
     }
 }

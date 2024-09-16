@@ -1,5 +1,4 @@
 use arrow_buffer::{BooleanBufferBuilder, Buffer, MutableBuffer};
-use itertools::Itertools;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_error::{vortex_bail, vortex_err, ErrString, VortexResult};
 
@@ -13,7 +12,6 @@ use crate::array::BoolArray;
 use crate::compute::slice;
 use crate::compute::unary::{scalar_at_unchecked, try_cast};
 use crate::validity::Validity;
-use crate::variants::StructArrayTrait;
 use crate::{
     Array, ArrayDType, ArrayValidity, Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
 };
@@ -34,10 +32,6 @@ pub(crate) fn try_canonicalize_chunks(
     validity: Validity,
     dtype: &DType,
 ) -> VortexResult<Canonical> {
-    if chunks.is_empty() {
-        vortex_bail!(InvalidArgument: "chunks must be non-empty")
-    }
-
     let mismatched = chunks
         .iter()
         .filter(|chunk| !chunk.dtype().eq(dtype))
@@ -140,21 +134,15 @@ fn swizzle_struct_chunks(
     validity: Validity,
     struct_dtype: &StructDType,
 ) -> VortexResult<StructArray> {
-    let chunks: Vec<StructArray> = chunks.iter().map(StructArray::try_from).try_collect()?;
-
     let len = chunks.iter().map(|chunk| chunk.len()).sum();
-
     let mut field_arrays = Vec::new();
 
     for (field_idx, field_dtype) in struct_dtype.dtypes().iter().enumerate() {
-        let mut field_chunks = Vec::new();
-        for chunk in &chunks {
-            field_chunks.push(
-                chunk
-                    .field(field_idx)
-                    .ok_or_else(|| vortex_err!("All chunks must have same dtype; missing field at index {}, current chunk dtype: {}", field_idx, chunk.dtype()))?,
-            );
-        }
+        let field_chunks = chunks.iter().map(|c| c.with_dyn(|d|
+            d.as_struct_array_unchecked()
+                .field(field_idx)
+                .ok_or_else(|| vortex_err!("All chunks must have same dtype; missing field at index {}, current chunk dtype: {}", field_idx, c.dtype())),
+        )).collect::<VortexResult<Vec<_>>>()?;
         let field_array = ChunkedArray::try_new(field_chunks, field_dtype.clone())?;
         field_arrays.push(field_array.into_array());
     }
@@ -257,9 +245,11 @@ mod tests {
     use crate::accessor::ArrayAccessor;
     use crate::array::builder::VarBinBuilder;
     use crate::array::chunked::canonical::pack_varbin;
-    use crate::array::VarBinArray;
+    use crate::array::{ChunkedArray, StructArray, VarBinArray};
     use crate::compute::slice;
     use crate::validity::Validity;
+    use crate::variants::StructArrayTrait;
+    use crate::{ArrayDType, IntoArray, IntoArrayVariant, ToArray};
 
     fn varbin_array() -> VarBinArray {
         let mut builder = VarBinBuilder::<i32>::with_capacity(4);
@@ -289,5 +279,37 @@ mod tests {
             })
             .unwrap();
         assert_eq!(values, &["bar", "baz", "baz", "quak"]);
+    }
+
+    #[test]
+    pub fn pack_nested_structs() {
+        let struct_array = StructArray::try_new(
+            vec!["a".into()].into(),
+            vec![varbin_array().into_array()],
+            4,
+            Validity::NonNullable,
+        )
+        .unwrap();
+        let dtype = struct_array.dtype().clone();
+        let chunked = ChunkedArray::try_new(
+            vec![
+                ChunkedArray::try_new(vec![struct_array.to_array()], dtype.clone())
+                    .unwrap()
+                    .into_array(),
+            ],
+            dtype,
+        )
+        .unwrap()
+        .into_array();
+        let canonical_struct = chunked.into_struct().unwrap();
+        let canonical_varbin = canonical_struct.field(0).unwrap().into_varbin().unwrap();
+        let original_varbin = struct_array.field(0).unwrap().into_varbin().unwrap();
+        let orig_values = original_varbin
+            .with_iterator(|it| it.map(|a| a.map(|v| v.to_vec())).collect::<Vec<_>>())
+            .unwrap();
+        let canon_values = canonical_varbin
+            .with_iterator(|it| it.map(|a| a.map(|v| v.to_vec())).collect::<Vec<_>>())
+            .unwrap();
+        assert_eq!(orig_values, canon_values);
     }
 }

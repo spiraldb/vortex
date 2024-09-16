@@ -15,10 +15,10 @@ use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_err, vortex_panic, VortexError, VortexResult};
 use vortex_scalar::Scalar;
+use vortex_schema::Schema;
 
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::LayoutMessageCache;
-use crate::layouts::read::schema::Schema;
 use crate::layouts::read::{Layout, MessageId, ReadResult, Scan};
 use crate::layouts::Projection;
 use crate::stream_writer::ByteRange;
@@ -56,7 +56,7 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
     }
 
     pub fn schema(&self) -> Schema {
-        Schema(self.dtype.clone())
+        Schema::new(self.dtype.clone())
     }
 
     // TODO(robert): Push this logic down to layouts

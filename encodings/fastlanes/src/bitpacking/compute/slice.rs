@@ -1,8 +1,9 @@
 use std::cmp::max;
 
+use vortex::array::SparseArray;
 use vortex::compute::{slice, SliceFn};
 use vortex::{Array, IntoArray};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect, VortexResult};
 
 use crate::BitPackedArray;
 
@@ -19,9 +20,19 @@ impl SliceFn for BitPackedArray {
         Self::try_new_from_offset(
             slice(&self.packed(), encoded_start, encoded_stop)?,
             self.validity().slice(start, stop)?,
-            self.patches().map(|p| slice(&p, start, stop)).transpose()?,
+            self.patches()
+                .map(|p| slice(&p, start, stop))
+                .transpose()?
+                .filter(|a| {
+                    // If the sliced patch_indices is empty, we should not propagate the patches.
+                    // There may be other logic that depends on Some(patches) indicating non-empty.
+                    !SparseArray::try_from(a)
+                        .vortex_expect("BitPackedArray must encode patches as SparseArray")
+                        .indices()
+                        .is_empty()
+                }),
             self.bit_width(),
-            offset_stop - offset_start,
+            stop - start,
             offset,
         )
         .map(|a| a.into_array())
@@ -30,9 +41,10 @@ impl SliceFn for BitPackedArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::array::PrimitiveArray;
-    use vortex::compute::slice;
+    use itertools::Itertools;
+    use vortex::array::{PrimitiveArray, SparseArray};
     use vortex::compute::unary::scalar_at;
+    use vortex::compute::{slice, take};
     use vortex::IntoArray;
 
     use crate::BitPackedArray;
@@ -139,5 +151,52 @@ mod test {
         );
         assert_eq!(doubly_sliced.offset(), 639);
         assert_eq!(doubly_sliced.len(), 784);
+    }
+
+    #[test]
+    fn slice_empty_patches() {
+        // We create an array that has 1 element that does not fit in the 6-bit range.
+        let array =
+            BitPackedArray::encode(PrimitiveArray::from((0u32..=64).collect_vec()).array(), 6)
+                .unwrap();
+
+        assert!(array.patches().is_some());
+
+        let patch_indices = SparseArray::try_from(array.patches().unwrap())
+            .unwrap()
+            .indices();
+        assert_eq!(patch_indices.len(), 1);
+
+        // Slicing drops the empty patches array.
+        let sliced = slice(&array.into_array(), 0, 64).unwrap();
+        let sliced_bp = BitPackedArray::try_from(sliced).unwrap();
+        assert!(sliced_bp.patches().is_none());
+    }
+
+    #[test]
+    fn take_after_slice() {
+        // Check that our take implementation respects the offsets applied after slicing.
+
+        let array = BitPackedArray::encode(
+            PrimitiveArray::from((63u32..).take(3072).collect_vec()).array(),
+            6,
+        )
+        .unwrap();
+
+        // Slice the array.
+        // The resulting array will still have 3 1024-element chunks.
+        let sliced = slice(array.array(), 922, 2061).unwrap();
+
+        // Take one element from each chunk.
+        // Chunk 1: physical indices  922-1023, logical indices    0-101
+        // Chunk 2: physical indices 1024-2047, logical indices  102-1125
+        // Chunk 3: physical indices 2048-2060, logical indices 1126-1138
+
+        let taken = take(
+            &sliced,
+            PrimitiveArray::from(vec![101i64, 1125i64, 1138i64]).array(),
+        )
+        .unwrap();
+        assert_eq!(taken.len(), 3);
     }
 }

@@ -8,8 +8,8 @@ use vortex_dtype::field::Field;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 use vortex_flatbuffers::footer as fb;
+use vortex_schema::projection::Projection;
 
-use super::projections::Projection;
 use crate::layouts::read::batch::BatchReader;
 use crate::layouts::read::buffered::BufferedReader;
 use crate::layouts::read::cache::RelativeLayoutCache;

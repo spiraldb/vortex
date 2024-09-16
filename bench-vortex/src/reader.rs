@@ -121,7 +121,8 @@ pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResu
             csv_path.as_path().to_str().unwrap(),
             output_path.to_str().unwrap()
         ))
-        .status()?
+        .status()
+        .unwrap()
         .exit_ok()
         .unwrap();
     Ok(())

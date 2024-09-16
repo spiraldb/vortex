@@ -63,7 +63,8 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
         let array = Array::arbitrary(u)?;
         let mut current_array = array.clone();
         let mut actions = Vec::new();
-        for _ in 0..u.int_in_range(1..=4)? {
+        let action_count = u.int_in_range(1..=4)?;
+        for _ in 0..action_count {
             actions.push(match u.int_in_range(0..=3)? {
                 0 => {
                     if actions
@@ -71,7 +72,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                         .map(|(l, _)| matches!(l, Action::Compress(_)))
                         .unwrap_or(false)
                     {
-                        continue;
+                        return Err(EmptyChoose);
                     }
                     (
                         Action::Compress(u.arbitrary()?),

@@ -42,8 +42,46 @@ impl<'a> StructScalar<'a> {
         st.find_name(name).and_then(|idx| self.field_by_idx(idx))
     }
 
-    pub fn cast(&self, _dtype: &DType) -> VortexResult<Scalar> {
-        todo!()
+    pub fn fields(&self) -> Option<&[ScalarValue]> {
+        self.fields.as_deref()
+    }
+
+    pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
+        let DType::Struct(st, _) = dtype else {
+            vortex_bail!("Can only cast struct to another struct")
+        };
+        let DType::Struct(own_st, _) = self.dtype() else {
+            unreachable!()
+        };
+
+        if st.dtypes().len() != own_st.dtypes().len() {
+            vortex_bail!(
+                "Cannot cast between structs with different number of fields: {} and {}",
+                own_st.dtypes().len(),
+                st.dtypes().len()
+            );
+        }
+
+        if let Some(fs) = self.fields() {
+            let fields = fs
+                .iter()
+                .enumerate()
+                .map(|(i, f)| {
+                    Scalar {
+                        dtype: own_st.dtypes()[i].clone(),
+                        value: f.clone(),
+                    }
+                    .cast(&st.dtypes()[i])
+                    .map(|s| s.value)
+                })
+                .collect::<VortexResult<Vec<_>>>()?;
+            Ok(Scalar {
+                dtype: dtype.clone(),
+                value: ScalarValue::List(fields.into()),
+            })
+        } else {
+            Ok(Scalar::null(dtype.clone()))
+        }
     }
 }
 

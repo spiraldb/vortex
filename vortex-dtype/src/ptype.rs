@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
 use std::panic::RefUnwindSafe;
@@ -30,7 +31,6 @@ pub enum PType {
 pub trait NativePType:
     Send
     + Sync
-    + Sized
     + Clone
     + Copy
     + Debug
@@ -48,6 +48,10 @@ pub trait NativePType:
     const PTYPE: PType;
 
     fn is_nan(self) -> bool;
+
+    fn compare(self, other: Self) -> Ordering;
+
+    fn is_eq(self, other: Self) -> bool;
 }
 
 macro_rules! native_ptype {
@@ -57,6 +61,14 @@ macro_rules! native_ptype {
 
             fn is_nan(self) -> bool {
                 false
+            }
+
+            fn compare(self, other: Self) -> Ordering {
+                self.cmp(&other)
+            }
+
+            fn is_eq(self, other: Self) -> bool {
+                self == other
             }
         }
     };
@@ -69,6 +81,14 @@ macro_rules! native_float_ptype {
 
             fn is_nan(self) -> bool {
                 <$T>::is_nan(self)
+            }
+
+            fn compare(self, other: Self) -> Ordering {
+                self.total_cmp(&other)
+            }
+
+            fn is_eq(self, other: Self) -> bool {
+                self.to_bits() == other.to_bits()
             }
         }
     };
