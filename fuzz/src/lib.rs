@@ -139,10 +139,10 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                     let mask = (0..current_array.len())
                         .map(|_| bool::arbitrary(u))
                         .collect::<Result<Vec<_>>>()?;
-                    let filtered = filter_canonical_array(&current_array, &mask);
+                    current_array = filter_canonical_array(&current_array, &mask);
                     (
                         Action::Filter(BoolArray::from(mask).into_array()),
-                        ExpectedValue::Array(filtered),
+                        ExpectedValue::Array(current_array.clone()),
                     )
                 }
                 _ => unreachable!(),
