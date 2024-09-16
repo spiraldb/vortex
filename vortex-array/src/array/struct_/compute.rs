@@ -121,8 +121,7 @@ mod tests {
     fn filter_empty_struct_with_empty_filter() {
         let struct_arr =
             StructArray::try_new(vec![].into(), vec![], 0, Validity::NonNullable).unwrap();
-        let mask = vec![];
-        let filtered = filter(struct_arr.as_ref(), &BoolArray::from(mask).into_array()).unwrap();
+        let filtered = filter(struct_arr.as_ref(), &BoolArray::from(vec![]).into_array()).unwrap();
         assert_eq!(filtered.len(), 0);
     }
 }
