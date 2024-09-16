@@ -31,8 +31,19 @@ vortex-dtype = { workspace = true }
 vortex-error = { workspace = true }
 vortex-proto = { workspace = true, optional = true }
 vortex-scalar = { workspace = true }
+vortex-schema = { workspace = true }
 
 [features]
-datafusion = ["dep:datafusion-common", "dep:datafusion-expr", "dep:datafusion-physical-expr", "dep:arrow-schema", "vortex-scalar/datafusion"]
-proto = ["dep:prost", "vortex-dtype/proto", "vortex-scalar/proto", "vortex-proto/expr"]
+datafusion = [
+    "dep:datafusion-common",
+    "dep:datafusion-expr",
+    "dep:datafusion-physical-expr",
+    "vortex-scalar/datafusion",
+]
+proto = [
+    "dep:prost",
+    "vortex-dtype/proto",
+    "vortex-scalar/proto",
+    "vortex-proto/expr",
+]
 serde = ["dep:serde", "vortex-dtype/serde", "vortex-scalar/serde"]

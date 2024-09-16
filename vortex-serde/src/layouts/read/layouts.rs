@@ -45,11 +45,11 @@ impl FlatLayout {
 }
 
 impl Layout for FlatLayout {
-    fn read(&mut self) -> VortexResult<Option<ReadResult>> {
+    fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match self.state {
             FlatLayoutState::Init => {
                 self.state = FlatLayoutState::ReadBatch;
-                Ok(Some(ReadResult::GetMsgs(vec![(
+                Ok(Some(ReadResult::ReadMore(vec![(
                     self.cache.absolute_id(&[]),
                     self.range,
                 )])))
@@ -177,7 +177,7 @@ impl ColumnLayout {
 }
 
 impl Layout for ColumnLayout {
-    fn read(&mut self) -> VortexResult<Option<ReadResult>> {
+    fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ColumnLayoutState::Init => {
                 let DType::Struct(s, ..) = self.message_cache.dtype() else {
@@ -210,7 +210,7 @@ impl Layout for ColumnLayout {
 
                 let reader = BatchReader::new(s.names().clone(), column_layouts);
                 self.state = ColumnLayoutState::ReadColumns(reader);
-                self.read()
+                self.read_next()
             }
             ColumnLayoutState::ReadColumns(br) => br.read(),
         }
@@ -297,7 +297,7 @@ impl ChunkedLayout {
 }
 
 impl Layout for ChunkedLayout {
-    fn read(&mut self) -> VortexResult<Option<ReadResult>> {
+    fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ChunkedLayoutState::Init => {
                 let children = self
@@ -320,7 +320,7 @@ impl Layout for ChunkedLayout {
                     .collect::<VortexResult<VecDeque<_>>>()?;
                 let reader = BufferedReader::new(children, self.scan.batch_size);
                 self.state = ChunkedLayoutState::ReadChunks(reader);
-                self.read()
+                self.read_next()
             }
             ChunkedLayoutState::ReadChunks(cr) => cr.read(),
         }

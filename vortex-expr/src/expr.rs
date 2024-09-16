@@ -8,10 +8,15 @@ use vortex::compute::{compare, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, IntoArray};
 use vortex_dtype::field::Field;
-use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult, VortexUnwrap};
 use vortex_scalar::Scalar;
+use vortex_schema::Schema;
 
 use crate::Operator;
+
+const NON_PRIMITIVE_COST_ESTIMATE: usize = 64;
+const COLUMN_COST_MULTIPLIER: usize = 1024;
 
 pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
     fn as_any(&self) -> &dyn Any;
@@ -19,6 +24,8 @@ pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
     fn evaluate(&self, array: &Array) -> VortexResult<Array>;
 
     fn references(&self) -> HashSet<Field>;
+
+    fn estimate_cost(&self, schema: &Schema) -> usize;
 }
 
 // Taken from apache-datafusion, necessary since you can't require VortexExpr implement PartialEq<dyn VortexExpr>
@@ -110,6 +117,12 @@ impl VortexExpr for Column {
     fn references(&self) -> HashSet<Field> {
         HashSet::from([self.field.clone()])
     }
+
+    fn estimate_cost(&self, schema: &Schema) -> usize {
+        let field_dtype = schema.field_type(self.field()).vortex_unwrap();
+
+        dtype_cost_estimate(&field_dtype) * COLUMN_COST_MULTIPLIER
+    }
 }
 
 impl PartialEq<dyn Any> for Column {
@@ -143,6 +156,10 @@ impl VortexExpr for Literal {
 
     fn references(&self) -> HashSet<Field> {
         HashSet::new()
+    }
+
+    fn estimate_cost(&self, _schema: &Schema) -> usize {
+        dtype_cost_estimate(self.value.dtype())
     }
 }
 
@@ -183,6 +200,10 @@ impl VortexExpr for BinaryExpr {
         res.extend(self.rhs.references());
         res
     }
+
+    fn estimate_cost(&self, schema: &Schema) -> usize {
+        self.lhs.estimate_cost(schema) + self.rhs.estimate_cost(schema)
+    }
 }
 
 impl PartialEq<dyn Any> for BinaryExpr {
@@ -206,10 +227,23 @@ impl VortexExpr for NoOp {
     fn references(&self) -> HashSet<Field> {
         HashSet::new()
     }
+
+    fn estimate_cost(&self, _schema: &Schema) -> usize {
+        0
+    }
 }
 
 impl PartialEq<dyn Any> for NoOp {
     fn eq(&self, other: &dyn Any) -> bool {
         unbox_any(other).downcast_ref::<Self>().is_some()
+    }
+}
+
+fn dtype_cost_estimate(dtype: &DType) -> usize {
+    match dtype {
+        vortex_dtype::DType::Null => 0,
+        vortex_dtype::DType::Bool(_) => 1,
+        vortex_dtype::DType::Primitive(p, _) => p.byte_width(),
+        _ => NON_PRIMITIVE_COST_ESTIMATE,
     }
 }

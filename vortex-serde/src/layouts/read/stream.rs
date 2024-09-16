@@ -100,9 +100,9 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
         loop {
             match &mut self.state {
                 StreamingState::Init => {
-                    if let Some(read) = self.layout.read()? {
+                    if let Some(read) = self.layout.read_next()? {
                         match read {
-                            ReadResult::GetMsgs(messages) => {
+                            ReadResult::ReadMore(messages) => {
                                 let reader = mem::take(&mut self.reader)
                                     .ok_or_else(|| vortex_err!("Invalid state transition"))?;
                                 let read_future = read_ranges(reader, messages).boxed();
@@ -121,7 +121,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     }
 
                     if let Some(row_filter) = &self.scan.filter {
-                        let mask = row_filter.filter.evaluate(&batch)?;
+                        let mask = row_filter.evaluate(&batch)?;
                         let filter_array = null_as_false(mask.into_bool()?)?;
                         batch = filter(&batch, &filter_array)?;
                     }

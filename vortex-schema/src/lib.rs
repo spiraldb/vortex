@@ -1,5 +1,6 @@
+use vortex_dtype::field::Field;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use self::projection::Projection;
 
@@ -28,6 +29,20 @@ impl Schema {
 
     pub fn dtype(&self) -> &DType {
         &self.0
+    }
+
+    pub fn field_type(&self, field: &Field) -> VortexResult<DType> {
+        let DType::Struct(s, _) = &self.0 else {
+            vortex_bail!("Can't project non struct types")
+        };
+
+        let idx = match field {
+            Field::Name(name) => s.find_name(name),
+            Field::Index(i) => Some(*i),
+        };
+
+        idx.and_then(|idx| s.dtypes().get(idx).cloned())
+            .ok_or_else(|| vortex_err!("Couldn't find struct by {field}"))
     }
 }
 

@@ -44,11 +44,11 @@ pub struct Footer {
 }
 
 impl Footer {
-    pub fn leftovers_layout_offset(&self) -> usize {
+    fn leftovers_layout_offset(&self) -> usize {
         (self.layout_offset - self.leftovers_offset) as usize
     }
 
-    pub fn leftovers_schema_offset(&self) -> usize {
+    fn leftovers_schema_offset(&self) -> usize {
         (self.schema_offset - self.leftovers_offset) as usize
     }
 
