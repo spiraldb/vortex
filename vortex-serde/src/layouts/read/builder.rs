@@ -77,7 +77,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         let (read_projection, result_projection) = if let Some(filter_columns) = self
             .row_filter
             .as_ref()
-            .map(|f| f.filter.references())
+            .map(|f| f.references())
             .filter(|refs| !refs.is_empty())
             .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
             .transpose()?
