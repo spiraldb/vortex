@@ -41,7 +41,9 @@ jobs:
         run: cargo build --all-features --all-targets
 
       - name: Pytest - PyVortex
-        run: rye run pytest --benchmark-disable test/
+        run: |
+          maturn develop --skip-install
+          rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
 
       - name: License Check
