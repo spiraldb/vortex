@@ -88,11 +88,7 @@ fn filter_slices<'a>(
 
     for (slice_start, slice_end) in set_slices {
         let (start_chunk, start_idx) = find_chunk_idx(slice_start, chunk_ends);
-        // NOTE: we adjust slice end back by one, in case it ends on a chunk boundary, we do not
-        // want to index into the unused chunk.
-        let (end_chunk, end_idx) = find_chunk_idx(slice_end - 1, chunk_ends);
-        // Adjust back to an exclusive range
-        let end_idx = end_idx + 1;
+        let (end_chunk, end_idx) = find_chunk_idx(slice_end, chunk_ends);
 
         if start_chunk == end_chunk {
             // start == end means that the slice lies within a single chunk.
@@ -106,11 +102,11 @@ fn filter_slices<'a>(
             }
         } else {
             // start != end means that the range is split over at least two chunks:
-            // start chunk: append a slice from (start_idx, start_chunk_end).
+            // start chunk: append a slice from (start_idx, start_chunk_end), i.e. whole chunk.
             // end chunk: append a slice from (0, end_idx).
             // chunks between start and end: append ChunkFilter::All.
-            let start_chunk_end = chunk_ends[start_chunk + 1];
-            let start_slice = (start_idx, start_chunk_end as _);
+            let start_chunk_len = chunk_ends[start_chunk + 1] - chunk_ends[start_chunk];
+            let start_slice = (start_idx, start_chunk_len as _);
             match &mut chunk_filters[start_chunk] {
                 f @ (ChunkFilter::All | ChunkFilter::None) => {
                     *f = ChunkFilter::Slices(vec![start_slice])
@@ -118,12 +114,14 @@ fn filter_slices<'a>(
                 ChunkFilter::Slices(slices) => slices.push(start_slice),
             }
 
-            let end_slice = (0, end_idx);
-            match &mut chunk_filters[end_chunk] {
-                f @ (ChunkFilter::All | ChunkFilter::None) => {
-                    *f = ChunkFilter::Slices(vec![end_slice]);
+            if end_idx != 0 {
+                let end_slice = (0, end_idx);
+                match &mut chunk_filters[end_chunk] {
+                    f @ (ChunkFilter::All | ChunkFilter::None) => {
+                        *f = ChunkFilter::Slices(vec![end_slice]);
+                    }
+                    ChunkFilter::Slices(slices) => slices.push(end_slice),
                 }
-                ChunkFilter::Slices(slices) => slices.push(end_slice),
             }
 
             for chunk in &mut chunk_filters[start_chunk + 1..end_chunk] {
@@ -215,9 +213,13 @@ fn find_chunk_idx(idx: usize, chunk_ends: &[u64]) -> (usize, usize) {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
+    use vortex_dtype::half::f16;
+    use vortex_dtype::{DType, Nullability, PType};
 
     use crate::array::chunked::compute::filter::slices_to_predicate;
-    use crate::IntoArrayVariant;
+    use crate::array::{BoolArray, ChunkedArray, PrimitiveArray};
+    use crate::compute::filter;
+    use crate::{IntoArray, IntoArrayVariant};
 
     #[test]
     fn test_slices_to_predicate() {
@@ -235,5 +237,39 @@ mod test {
             bools,
             vec![false, false, true, true, false, false, true, true, false, true, false],
         )
+    }
+
+    #[test]
+    fn filter_chunked_floats() {
+        let chunked = ChunkedArray::try_new(
+            vec![
+                PrimitiveArray::from(vec![f16::from_f32(0.1463623)]).into_array(),
+                PrimitiveArray::from(vec![
+                    f16::NAN,
+                    f16::from_f32(0.24987793),
+                    f16::from_f32(0.22497559),
+                    f16::from_f32(0.22497559),
+                    f16::from_f32(-36160.0),
+                ])
+                .into_array(),
+                PrimitiveArray::from(vec![
+                    f16::NAN,
+                    f16::NAN,
+                    f16::from_f32(0.22497559),
+                    f16::from_f32(0.22497559),
+                    f16::from_f32(3174.0),
+                ])
+                .into_array(),
+            ],
+            DType::Primitive(PType::F16, Nullability::NonNullable),
+        )
+        .unwrap()
+        .into_array();
+        let mask = BoolArray::from(vec![
+            true, false, false, true, true, true, true, true, true, true, true,
+        ])
+        .into_array();
+        let filtered = filter(&chunked, &mask).unwrap();
+        assert_eq!(filtered.len(), 9);
     }
 }
