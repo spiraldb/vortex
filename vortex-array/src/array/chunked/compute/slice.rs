@@ -71,34 +71,43 @@ mod tests {
 
     #[test]
     pub fn slice_middle() {
-        assert_equal_slices(slice(chunked_array().array(), 2, 5).unwrap(), &[3u64, 4, 5])
+        assert_equal_slices(
+            slice(chunked_array().as_ref(), 2, 5).unwrap(),
+            &[3u64, 4, 5],
+        )
     }
 
     #[test]
     pub fn slice_begin() {
-        assert_equal_slices(slice(chunked_array().array(), 1, 3).unwrap(), &[2u64, 3]);
+        assert_equal_slices(slice(chunked_array().as_ref(), 1, 3).unwrap(), &[2u64, 3]);
     }
 
     #[test]
     pub fn slice_aligned() {
-        assert_equal_slices(slice(chunked_array().array(), 3, 6).unwrap(), &[4u64, 5, 6]);
+        assert_equal_slices(
+            slice(chunked_array().as_ref(), 3, 6).unwrap(),
+            &[4u64, 5, 6],
+        );
     }
 
     #[test]
     pub fn slice_many_aligned() {
         assert_equal_slices(
-            slice(chunked_array().array(), 0, 6).unwrap(),
+            slice(chunked_array().as_ref(), 0, 6).unwrap(),
             &[1u64, 2, 3, 4, 5, 6],
         );
     }
 
     #[test]
     pub fn slice_end() {
-        assert_equal_slices(slice(chunked_array().array(), 7, 8).unwrap(), &[8u64]);
+        assert_equal_slices(slice(chunked_array().as_ref(), 7, 8).unwrap(), &[8u64]);
     }
 
     #[test]
     pub fn slice_exactly_end() {
-        assert_equal_slices(slice(chunked_array().array(), 6, 9).unwrap(), &[7u64, 8, 9]);
+        assert_equal_slices(
+            slice(chunked_array().as_ref(), 6, 9).unwrap(),
+            &[7u64, 8, 9],
+        );
     }
 }

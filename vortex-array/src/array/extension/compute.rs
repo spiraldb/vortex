@@ -45,7 +45,7 @@ impl MaybeCompareFn for ExtensionArray {
                     Scalar::new(self.storage().dtype().clone(), scalar_ext.value().clone()),
                     const_ext.len(),
                 );
-                compare(&self.storage(), const_storage.array(), operator)
+                compare(&self.storage(), const_storage.as_ref(), operator)
             });
         }
 

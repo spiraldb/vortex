@@ -75,8 +75,8 @@ impl ChunkedArray {
         let chunk_end = usize::try_from(&scalar_at(&self.chunk_offsets(), idx + 1).ok()?).ok()?;
 
         // Offset the index since chunk_ends is child 0.
-        self.array()
-            .child(idx + 1, self.array().dtype(), chunk_end - chunk_start)
+        self.as_ref()
+            .child(idx + 1, self.as_ref().dtype(), chunk_end - chunk_start)
     }
 
     pub fn nchunks(&self) -> usize {
@@ -85,7 +85,7 @@ impl ChunkedArray {
 
     #[inline]
     pub fn chunk_offsets(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &Self::ENDS_DTYPE, self.nchunks() + 1)
             .vortex_expect("Missing chunk ends in ChunkedArray")
     }

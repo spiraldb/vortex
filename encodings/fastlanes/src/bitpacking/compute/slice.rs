@@ -52,15 +52,15 @@ mod test {
     #[test]
     pub fn slice_block() {
         let arr = BitPackedArray::encode(
-            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).array(),
+            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).as_ref(),
             6,
         )
         .unwrap()
         .into_array();
         let sliced = BitPackedArray::try_from(slice(&arr, 1024, 2048).unwrap()).unwrap();
-        assert_eq!(scalar_at(sliced.array(), 0).unwrap(), (1024u32 % 64).into());
+        assert_eq!(scalar_at(sliced.as_ref(), 0).unwrap(), (1024u32 % 64).into());
         assert_eq!(
-            scalar_at(sliced.array(), 1023).unwrap(),
+            scalar_at(sliced.as_ref(), 1023).unwrap(),
             (2047u32 % 64).into()
         );
         assert_eq!(sliced.offset(), 0);
@@ -70,15 +70,15 @@ mod test {
     #[test]
     pub fn slice_within_block() {
         let arr = BitPackedArray::encode(
-            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).array(),
+            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).as_ref(),
             6,
         )
         .unwrap()
         .into_array();
         let sliced = BitPackedArray::try_from(slice(&arr, 512, 1434).unwrap()).unwrap();
-        assert_eq!(scalar_at(sliced.array(), 0).unwrap(), (512u32 % 64).into());
+        assert_eq!(scalar_at(sliced.as_ref(), 0).unwrap(), (512u32 % 64).into());
         assert_eq!(
-            scalar_at(sliced.array(), 921).unwrap(),
+            scalar_at(sliced.as_ref(), 921).unwrap(),
             (1433u32 % 64).into()
         );
         assert_eq!(sliced.offset(), 512);
@@ -88,12 +88,12 @@ mod test {
     #[test]
     fn slice_within_block_u8s() {
         let packed = BitPackedArray::encode(
-            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
+            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).as_ref(),
             7,
         )
         .unwrap();
 
-        let compressed = slice(packed.array(), 768, 9999).unwrap();
+        let compressed = slice(packed.as_ref(), 768, 9999).unwrap();
         assert_eq!(
             scalar_at(&compressed, 0).unwrap(),
             ((768 % 63) as u8).into()
@@ -107,12 +107,12 @@ mod test {
     #[test]
     fn slice_block_boundary_u8s() {
         let packed = BitPackedArray::encode(
-            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).array(),
+            PrimitiveArray::from((0..10_000).map(|i| (i % 63) as u8).collect::<Vec<_>>()).as_ref(),
             7,
         )
         .unwrap();
 
-        let compressed = slice(packed.array(), 7168, 9216).unwrap();
+        let compressed = slice(packed.as_ref(), 7168, 9216).unwrap();
         assert_eq!(
             scalar_at(&compressed, 0).unwrap(),
             ((7168 % 63) as u8).into()
@@ -126,27 +126,27 @@ mod test {
     #[test]
     fn double_slice_within_block() {
         let arr = BitPackedArray::encode(
-            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).array(),
+            PrimitiveArray::from((0u32..2048).map(|v| v % 64).collect::<Vec<_>>()).as_ref(),
             6,
         )
         .unwrap()
         .into_array();
         let sliced = BitPackedArray::try_from(slice(&arr, 512, 1434).unwrap()).unwrap();
-        assert_eq!(scalar_at(sliced.array(), 0).unwrap(), (512u32 % 64).into());
+        assert_eq!(scalar_at(sliced.as_ref(), 0).unwrap(), (512u32 % 64).into());
         assert_eq!(
-            scalar_at(sliced.array(), 921).unwrap(),
+            scalar_at(sliced.as_ref(), 921).unwrap(),
             (1433u32 % 64).into()
         );
         assert_eq!(sliced.offset(), 512);
         assert_eq!(sliced.len(), 922);
         let doubly_sliced =
-            BitPackedArray::try_from(slice(sliced.array(), 127, 911).unwrap()).unwrap();
+            BitPackedArray::try_from(slice(sliced.as_ref(), 127, 911).unwrap()).unwrap();
         assert_eq!(
-            scalar_at(doubly_sliced.array(), 0).unwrap(),
+            scalar_at(doubly_sliced.as_ref(), 0).unwrap(),
             ((512u32 + 127) % 64).into()
         );
         assert_eq!(
-            scalar_at(doubly_sliced.array(), 783).unwrap(),
+            scalar_at(doubly_sliced.as_ref(), 783).unwrap(),
             ((512u32 + 910) % 64).into()
         );
         assert_eq!(doubly_sliced.offset(), 639);
@@ -157,7 +157,7 @@ mod test {
     fn slice_empty_patches() {
         // We create an array that has 1 element that does not fit in the 6-bit range.
         let array =
-            BitPackedArray::encode(PrimitiveArray::from((0u32..=64).collect_vec()).array(), 6)
+            BitPackedArray::encode(PrimitiveArray::from((0u32..=64).collect_vec()).as_ref(), 6)
                 .unwrap();
 
         assert!(array.patches().is_some());
@@ -178,14 +178,14 @@ mod test {
         // Check that our take implementation respects the offsets applied after slicing.
 
         let array = BitPackedArray::encode(
-            PrimitiveArray::from((63u32..).take(3072).collect_vec()).array(),
+            PrimitiveArray::from((63u32..).take(3072).collect_vec()).as_ref(),
             6,
         )
         .unwrap();
 
         // Slice the array.
         // The resulting array will still have 3 1024-element chunks.
-        let sliced = slice(array.array(), 922, 2061).unwrap();
+        let sliced = slice(array.as_ref(), 922, 2061).unwrap();
 
         // Take one element from each chunk.
         // Chunk 1: physical indices  922-1023, logical indices    0-101
@@ -194,7 +194,7 @@ mod test {
 
         let taken = take(
             &sliced,
-            PrimitiveArray::from(vec![101i64, 1125i64, 1138i64]).array(),
+            PrimitiveArray::from(vec![101i64, 1125i64, 1138i64]).as_ref(),
         )
         .unwrap();
         assert_eq!(taken.len(), 3);

@@ -97,7 +97,7 @@ impl RunEndArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
+            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
     }
 
     /// The offset that the `ends` is relative to.
@@ -114,7 +114,7 @@ impl RunEndArray {
     /// at `ends[i]` (inclusive) and terminating at `ends[i+1]` (exclusive).
     #[inline]
     pub fn ends(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
             .vortex_expect("RunEndArray is missing its run ends")
     }
@@ -125,7 +125,7 @@ impl RunEndArray {
     /// at `ends[i]` (inclusive) and terminates at `ends[i+1]` (exclusive).
     #[inline]
     pub fn values(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(1, self.dtype(), self.metadata().num_runs)
             .vortex_expect("RunEndArray is missing its values")
     }
@@ -196,9 +196,9 @@ mod tests {
         // 0, 1 => 1
         // 2, 3, 4 => 2
         // 5, 6, 7, 8, 9 => 3
-        assert_eq!(scalar_at(arr.array(), 0).unwrap(), 1.into());
-        assert_eq!(scalar_at(arr.array(), 2).unwrap(), 2.into());
-        assert_eq!(scalar_at(arr.array(), 5).unwrap(), 3.into());
-        assert_eq!(scalar_at(arr.array(), 9).unwrap(), 3.into());
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap(), 1.into());
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap(), 2.into());
+        assert_eq!(scalar_at(arr.as_ref(), 5).unwrap(), 3.into());
+        assert_eq!(scalar_at(arr.as_ref(), 9).unwrap(), 3.into());
     }
 }

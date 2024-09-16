@@ -134,12 +134,12 @@ where
     match encoded {
         Ok(encoded) => {
             let s = ConstantArray::new(encoded, alp.len());
-            compare(&alp.encoded(), s.array(), operator)
+            compare(&alp.encoded(), s.as_ref(), operator)
         }
         Err(exception) => {
             if let Some(patches) = alp.patches().as_ref() {
                 let s = ConstantArray::new(exception, alp.len());
-                compare(patches, s.array(), operator)
+                compare(patches, s.as_ref(), operator)
             } else {
                 Ok(BoolArray::from_vec(vec![false; alp.len()], Validity::AllValid).into_array())
             }
@@ -212,7 +212,7 @@ mod tests {
         );
 
         let r = encoded
-            .maybe_compare(other.array(), Operator::Eq)
+            .maybe_compare(other.as_ref(), Operator::Eq)
             .unwrap()
             .unwrap()
             .into_bool()

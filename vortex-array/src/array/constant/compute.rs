@@ -152,7 +152,7 @@ fn constant_array_bool_impl(
         Ok(ConstantArray::new(scalar, constant_array.len()).into_array())
     } else {
         // try and use a the rhs specialized implementation if it exists
-        match fallback_fn(other, constant_array.as_array_ref()) {
+        match fallback_fn(other, constant_array.as_ref()) {
             Some(r) => r,
             None => vortex_bail!("Operation is not supported"),
         }

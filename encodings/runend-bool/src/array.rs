@@ -74,7 +74,7 @@ impl RunEndBoolArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
+            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
     }
 
     #[inline]
@@ -89,7 +89,7 @@ impl RunEndBoolArray {
 
     #[inline]
     pub fn ends(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
             .vortex_expect("RunEndBoolArray is missing its run ends")
     }
@@ -166,9 +166,9 @@ mod test {
         assert_eq!(arr.len(), 5);
         assert_eq!(arr.dtype(), &DType::Bool(Nullability::NonNullable));
 
-        assert_eq!(scalar_at(arr.array(), 0).unwrap(), false.into());
-        assert_eq!(scalar_at(arr.array(), 2).unwrap(), true.into());
-        assert_eq!(scalar_at(arr.array(), 4).unwrap(), false.into());
+        assert_eq!(scalar_at(arr.as_ref(), 0).unwrap(), false.into());
+        assert_eq!(scalar_at(arr.as_ref(), 2).unwrap(), true.into());
+        assert_eq!(scalar_at(arr.as_ref(), 4).unwrap(), false.into());
     }
 
     #[test]
@@ -181,7 +181,7 @@ mod test {
                 Validity::NonNullable,
             )
             .unwrap()
-            .array(),
+            .as_ref(),
             2,
             8,
         )

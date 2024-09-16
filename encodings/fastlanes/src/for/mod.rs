@@ -48,7 +48,7 @@ impl FoRArray {
         } else {
             self.dtype()
         };
-        self.array()
+        self.as_ref()
             .child(0, dtype, self.len())
             .vortex_expect("FoRArray is missing encoded child array")
     }

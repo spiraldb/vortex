@@ -14,7 +14,7 @@ impl TakeFn for PrimitiveArray {
             match_each_integer_ptype!(indices.ptype(), |$I| {
                 Ok(PrimitiveArray::from_vec(
                     take_primitive(self.maybe_null_slice::<$T>(), indices.maybe_null_slice::<$I>()),
-                    validity.take(indices.array())?,
+                    validity.take(indices.as_ref())?,
                 ).into_array())
             })
         })

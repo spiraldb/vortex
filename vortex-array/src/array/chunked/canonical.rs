@@ -203,15 +203,15 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
     for chunk in chunks {
         let chunk = chunk.clone().into_varbin()?;
         let offsets_arr = try_cast(
-            chunk.offsets().into_primitive()?.array(),
+            chunk.offsets().into_primitive()?.as_ref(),
             &DType::Primitive(PType::I32, Nullability::NonNullable),
         )?
         .into_primitive()?;
 
         let first_offset_value: usize =
-            usize::try_from(&scalar_at_unchecked(offsets_arr.array(), 0))?;
+            usize::try_from(&scalar_at_unchecked(offsets_arr.as_ref(), 0))?;
         let last_offset_value: usize = usize::try_from(&scalar_at_unchecked(
-            offsets_arr.array(),
+            offsets_arr.as_ref(),
             offsets_arr.len() - 1,
         ))?;
         let primitive_bytes =
@@ -262,8 +262,8 @@ mod tests {
 
     #[test]
     pub fn pack_sliced_varbin() {
-        let array1 = slice(varbin_array().array(), 1, 3).unwrap();
-        let array2 = slice(varbin_array().array(), 2, 4).unwrap();
+        let array1 = slice(varbin_array().as_ref(), 1, 3).unwrap();
+        let array2 = slice(varbin_array().as_ref(), 2, 4).unwrap();
         let packed = pack_varbin(
             &[array1, array2],
             Validity::NonNullable,

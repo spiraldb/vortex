@@ -30,14 +30,14 @@ mod tests {
 
         assert_eq!(sliced_arr.len(), 3);
 
-        let s = scalar_at(sliced_arr.as_array_ref(), 0).unwrap();
+        let s = scalar_at(sliced_arr.as_ref(), 0).unwrap();
         assert_eq!(s.into_value().as_bool().unwrap(), Some(true));
 
-        let s = scalar_at(sliced_arr.as_array_ref(), 1).unwrap();
+        let s = scalar_at(sliced_arr.as_ref(), 1).unwrap();
         assert!(!sliced_arr.is_valid(1));
         assert!(s.is_null());
 
-        let s = scalar_at(sliced_arr.as_array_ref(), 2).unwrap();
+        let s = scalar_at(sliced_arr.as_ref(), 2).unwrap();
         assert_eq!(s.into_value().as_bool().unwrap(), Some(false));
     }
 }

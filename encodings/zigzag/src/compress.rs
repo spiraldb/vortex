@@ -69,6 +69,6 @@ mod test {
             (-10_000..10_000).map(|i| i as i64),
         )))
         .unwrap();
-        assert_eq!(compressed.array().encoding().id(), ZigZagEncoding.id());
+        assert_eq!(compressed.as_ref().encoding().id(), ZigZagEncoding.id());
     }
 }

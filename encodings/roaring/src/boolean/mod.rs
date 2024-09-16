@@ -59,7 +59,7 @@ impl RoaringBoolArray {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array()
+        self.as_ref()
             .buffer()
             .vortex_expect("Missing buffer in PrimitiveArray")
     }

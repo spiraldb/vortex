@@ -27,7 +27,7 @@ impl ByteBoolArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(0, &Validity::DTYPE, self.len()))
+            .to_validity(self.as_ref().child(0, &Validity::DTYPE, self.len()))
     }
 
     pub fn try_new(buffer: Buffer, validity: Validity) -> VortexResult<Self> {
@@ -64,7 +64,7 @@ impl ByteBoolArray {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array()
+        self.as_ref()
             .buffer()
             .vortex_expect("ByteBoolArray is missing the underlying buffer")
     }

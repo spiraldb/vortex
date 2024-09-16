@@ -125,8 +125,8 @@ mod test {
     #[test]
     fn ree_take() {
         let taken = take(
-            ree_array().array(),
-            PrimitiveArray::from(vec![9, 8, 1, 3]).array(),
+            ree_array().as_ref(),
+            PrimitiveArray::from(vec![9, 8, 1, 3]).as_ref(),
         )
         .unwrap();
         assert_eq!(
@@ -137,7 +137,7 @@ mod test {
 
     #[test]
     fn ree_take_end() {
-        let taken = take(ree_array().array(), PrimitiveArray::from(vec![11]).array()).unwrap();
+        let taken = take(ree_array().as_ref(), PrimitiveArray::from(vec![11]).as_ref()).unwrap();
         assert_eq!(
             taken.into_primitive().unwrap().maybe_null_slice::<i32>(),
             &[5]
@@ -147,12 +147,12 @@ mod test {
     #[test]
     #[should_panic]
     fn ree_take_out_of_bounds() {
-        take(ree_array().array(), PrimitiveArray::from(vec![12]).array()).unwrap();
+        take(ree_array().as_ref(), PrimitiveArray::from(vec![12]).as_ref()).unwrap();
     }
 
     #[test]
     fn ree_scalar_at_end() {
-        let scalar = scalar_at(ree_array().array(), 11).unwrap();
+        let scalar = scalar_at(ree_array().as_ref(), 11).unwrap();
         assert_eq!(scalar, 5.into());
     }
 
@@ -165,7 +165,7 @@ mod test {
             Validity::AllInvalid,
         )
         .unwrap();
-        let scalar = scalar_at(null_ree.array(), 11).unwrap();
+        let scalar = scalar_at(null_ree.as_ref(), 11).unwrap();
         assert_eq!(scalar, Scalar::null(null_ree.dtype().clone()));
     }
 
@@ -179,7 +179,7 @@ mod test {
             ]),
         )
         .unwrap();
-        let sliced = slice(array.array(), 4, 10).unwrap();
+        let sliced = slice(array.as_ref(), 4, 10).unwrap();
         let sliced_primitive = sliced.into_primitive().unwrap();
         assert_eq!(
             sliced_primitive.maybe_null_slice::<i32>(),
@@ -207,7 +207,7 @@ mod test {
                 Validity::NonNullable,
             )
             .unwrap()
-            .array(),
+            .as_ref(),
             3,
             8,
         )
@@ -233,7 +233,7 @@ mod test {
                 Validity::NonNullable,
             )
             .unwrap()
-            .array(),
+            .as_ref(),
             3,
             8,
         )
@@ -260,7 +260,7 @@ mod test {
                 Validity::NonNullable,
             )
             .unwrap()
-            .array(),
+            .as_ref(),
             4,
             10,
         )
@@ -309,7 +309,7 @@ mod test {
         .unwrap();
 
         let test_indices = PrimitiveArray::from_vec(vec![0, 2, 4, 6], Validity::NonNullable);
-        let taken = take(arr.array(), test_indices.array()).unwrap();
+        let taken = take(arr.as_ref(), test_indices.as_ref()).unwrap();
 
         assert_eq!(taken.len(), test_indices.len());
 

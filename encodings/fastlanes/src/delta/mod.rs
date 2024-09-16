@@ -59,14 +59,14 @@ impl DeltaArray {
 
     #[inline]
     pub fn bases(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, self.dtype(), self.bases_len())
             .vortex_expect("DeltaArray is missing bases child array")
     }
 
     #[inline]
     pub fn deltas(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(1, self.dtype(), self.len())
             .vortex_expect("DeltaArray is missing deltas child array")
     }
@@ -88,7 +88,7 @@ impl DeltaArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
+            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
     }
 
     fn bases_len(&self) -> usize {

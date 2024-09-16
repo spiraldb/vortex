@@ -250,3 +250,9 @@ where
         }
     }
 }
+
+impl AsRef<Array> for Array {
+    fn as_ref(&self) -> &Array {
+        self
+    }
+}

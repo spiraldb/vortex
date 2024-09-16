@@ -110,7 +110,6 @@ mod tests {
     use core::f64;
 
     use vortex::compute::unary::scalar_at;
-    use vortex::AsArray;
 
     use super::*;
 
@@ -182,11 +181,11 @@ mod tests {
         assert_eq!(encoded.exponents(), Exponents { e: 3, f: 0 });
 
         for idx in 0..3 {
-            let s = scalar_at(encoded.as_array_ref(), idx).unwrap();
+            let s = scalar_at(encoded.as_ref(), idx).unwrap();
             assert!(s.is_valid());
         }
 
-        let s = scalar_at(encoded.as_array_ref(), 4).unwrap();
+        let s = scalar_at(encoded.as_ref(), 4).unwrap();
         assert!(s.is_null());
 
         let _decoded = decompress(encoded).unwrap();

@@ -42,14 +42,14 @@ impl DictArray {
 
     #[inline]
     pub fn values(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, self.dtype(), self.metadata().values_len)
             .vortex_expect("DictArray is missing its values child array")
     }
 
     #[inline]
     pub fn codes(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(1, &self.metadata().codes_dtype, self.len())
             .vortex_expect("DictArray is missing its codes child array")
     }

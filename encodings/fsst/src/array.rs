@@ -91,28 +91,28 @@ impl FSSTArray {
 
     /// Access the symbol table array
     pub fn symbols(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &SYMBOLS_DTYPE, self.metadata().symbols_len)
             .vortex_expect("FSSTArray symbols child")
     }
 
     /// Access the symbol table array
     pub fn symbol_lengths(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(1, &SYMBOL_LENS_DTYPE, self.metadata().symbols_len)
             .vortex_expect("FSSTArray symbol_lengths child")
     }
 
     /// Access the codes array
     pub fn codes(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(2, &self.metadata().codes_dtype, self.len())
             .vortex_expect("FSSTArray codes child")
     }
 
     /// Get the uncompressed length for each element in the array.
     pub fn uncompressed_lengths(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(3, &self.metadata().uncompressed_lengths_dtype, self.len())
             .vortex_expect("FSST uncompressed_lengths child")
     }

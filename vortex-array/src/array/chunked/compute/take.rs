@@ -137,7 +137,7 @@ mod test {
         assert_eq!(arr.len(), 9);
         let indices = vec![0u64, 0, 6, 4].into_array();
 
-        let result = &ChunkedArray::try_from(take(arr.array(), &indices).unwrap())
+        let result = &ChunkedArray::try_from(take(arr.as_ref(), &indices).unwrap())
             .unwrap()
             .into_array()
             .into_primitive()
