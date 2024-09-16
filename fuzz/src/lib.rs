@@ -16,7 +16,7 @@ use vortex::compute::{SearchResult, SearchSortedSide};
 use vortex::{Array, ArrayDType};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::arbitrary::random_scalar;
-use vortex_scalar::{Scalar, StructScalar};
+use vortex_scalar::Scalar;
 
 use crate::search_sorted::search_sorted_canonical_array;
 use crate::slice::slice_canonical_array;
@@ -114,7 +114,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                         random_scalar(u, current_array.dtype())?
                     };
 
-                    if scalar_contains_null_fields(&scalar) {
+                    if scalar.is_null() {
                         return Err(EmptyChoose);
                     }
 
@@ -128,7 +128,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                     (
                         Action::SearchSorted(scalar.clone(), side),
                         ExpectedValue::Search(search_sorted_canonical_array(
-                            &sorted, &scalar, side, None,
+                            &sorted, &scalar, side,
                         )),
                     )
                 }
@@ -149,18 +149,4 @@ fn random_vec_in_range(u: &mut Unstructured<'_>, min: usize, max: usize) -> Resu
         }
     })
     .collect::<Result<Vec<_>>>()
-}
-
-fn scalar_contains_null_fields(scalar: &Scalar) -> bool {
-    if scalar.is_null() {
-        return true;
-    }
-
-    if let Ok(st) = StructScalar::try_from(scalar) {
-        (0..st.fields().unwrap().len())
-            .filter_map(|i| st.field_by_idx(i))
-            .any(|s| scalar_contains_null_fields(&s))
-    } else {
-        false
-    }
 }

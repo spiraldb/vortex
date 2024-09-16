@@ -1,6 +1,5 @@
 use std::cmp::Ordering;
 
-use arrow_buffer::BooleanBuffer;
 use vortex::accessor::ArrayAccessor;
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{IndexOrd, Len, SearchResult, SearchSorted, SearchSortedSide};
@@ -37,20 +36,16 @@ pub fn search_sorted_canonical_array(
     array: &Array,
     scalar: &Scalar,
     side: SearchSortedSide,
-    additional_validity: Option<&BooleanBuffer>,
 ) -> SearchResult {
     match array.dtype() {
         DType::Bool(_) => {
             let bool_array = array.clone().into_bool().unwrap();
-            let mut validity = bool_array
+            let validity = bool_array
                 .logical_validity()
                 .into_array()
                 .into_bool()
                 .unwrap()
                 .boolean_buffer();
-            if let Some(adv) = additional_validity {
-                validity = &validity & adv;
-            }
             let opt_values = bool_array
                 .boolean_buffer()
                 .iter()
@@ -62,15 +57,12 @@ pub fn search_sorted_canonical_array(
         }
         DType::Primitive(p, _) => match_each_native_ptype!(p, |$P| {
             let primitive_array = array.clone().into_primitive().unwrap();
-            let mut validity = primitive_array
+            let validity = primitive_array
                 .logical_validity()
                 .into_array()
                 .into_bool()
                 .unwrap()
                 .boolean_buffer();
-            if let Some(adv) = additional_validity {
-                validity = &validity & adv;
-            }
             let opt_values = primitive_array
                 .maybe_null_slice::<$P>()
                 .iter()
@@ -84,17 +76,7 @@ pub fn search_sorted_canonical_array(
         DType::Utf8(_) | DType::Binary(_) => {
             let utf8 = array.clone().into_varbin().unwrap();
             let opt_values = utf8
-                .with_iterator(|iter| {
-                    if let Some(adv) = additional_validity {
-                        iter.enumerate()
-                            .map(|(i, v)| {
-                                adv.value(i).then(|| v.map(|u| u.to_vec())).unwrap_or(None)
-                            })
-                            .collect::<Vec<_>>()
-                    } else {
-                        iter.map(|v| v.map(|u| u.to_vec())).collect::<Vec<_>>()
-                    }
-                })
+                .with_iterator(|iter| iter.map(|v| v.map(|u| u.to_vec())).collect::<Vec<_>>())
                 .unwrap();
             let to_find = if matches!(array.dtype(), DType::Utf8(_)) {
                 BufferString::try_from(scalar)
