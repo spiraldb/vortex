@@ -8,10 +8,10 @@ inputs:
 outputs:
   python-major-version:
     description: "The installed Python major version"
-    value: ${{ steps.rye-install.outputs.python-major-version }}
+    value: ${{ steps.Rye Install.outputs.python-major-version }}
   python-version:
     description: "The installed Python version"
-    value: ${{ steps.rye-install.outputs.python-version }}
+    value: ${{ steps.Rye Install.outputs.python-version }}
 runs:
   using: "composite"
   steps:
@@ -27,7 +27,7 @@ runs:
       with:
         python-version: '3.11.9'
 
-    - name: rye-install
+    - name: Rye Install
       shell: bash
       run: |
         curl -sSf https://rye.astral.sh/get | bash
