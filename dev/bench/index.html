@@ -319,16 +319,10 @@
                                 var index = legendItem.datasetIndex;
 
                                 var wasVisible = this.chart.isDatasetVisible(index);
-                                this.chart.getDatasetMeta(index).hidden = wasVisible;
-                                this.chart.update();
-
                                 var datasetLabel = this.chart.data.datasets[index].label;
                                 var clickedChart = this.chart;
 
                                 charts.forEach(function(chart) {
-                                    if (chart === clickedChart) {
-                                        return;
-                                    }
 
                                     chart.data.datasets.forEach(function(ds, idx) {
                                         if (ds.label === datasetLabel) {
