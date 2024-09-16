@@ -1,3 +1,4 @@
+mod filter;
 mod search_sorted;
 mod slice;
 mod sort;
@@ -10,14 +11,15 @@ use std::ops::Range;
 use libfuzzer_sys::arbitrary::Error::EmptyChoose;
 use libfuzzer_sys::arbitrary::{Arbitrary, Result, Unstructured};
 pub use sort::sort_canonical_array;
-use vortex::array::PrimitiveArray;
+use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{SearchResult, SearchSortedSide};
-use vortex::{Array, ArrayDType};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::arbitrary::random_scalar;
 use vortex_scalar::Scalar;
 
+use crate::filter::filter_canonical_array;
 use crate::search_sorted::search_sorted_canonical_array;
 use crate::slice::slice_canonical_array;
 use crate::take::take_canonical_array;
@@ -56,6 +58,7 @@ pub enum Action {
     Slice(Range<usize>),
     Take(Array),
     SearchSorted(Scalar, SearchSortedSide),
+    Filter(Array),
 }
 
 impl<'a> Arbitrary<'a> for FuzzArrayAction {
@@ -65,7 +68,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
         let mut actions = Vec::new();
         let action_count = u.int_in_range(1..=4)?;
         for _ in 0..action_count {
-            actions.push(match u.int_in_range(0..=3)? {
+            actions.push(match u.int_in_range(0..=4)? {
                 0 => {
                     if actions
                         .last()
@@ -130,6 +133,16 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                         ExpectedValue::Search(search_sorted_canonical_array(
                             &sorted, &scalar, side,
                         )),
+                    )
+                }
+                4 => {
+                    let mask = (0..current_array.len())
+                        .map(|_| bool::arbitrary(u))
+                        .collect::<Result<Vec<_>>>()?;
+                    let filtered = filter_canonical_array(&current_array, &mask);
+                    (
+                        Action::Filter(BoolArray::from(mask).into_array()),
+                        ExpectedValue::Array(filtered),
                     )
                 }
                 _ => unreachable!(),
