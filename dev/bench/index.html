@@ -236,6 +236,8 @@
 
         function renderAllChars(dataSets) {
 
+            var charts = [];
+
             function renderGraph(parent, name, dataset) {
                 const canvas = document.createElement('canvas');
                 canvas.className = 'benchmark-chart';
@@ -310,6 +312,26 @@
                                 mode: 'x',
                                 drag: {enabled: true}
                             }
+                        },
+                        legend: {
+                            display: true,
+                            onClick: function (e, legendItem) {
+                                var index = legendItem.datasetIndex;
+
+                                var wasVisible = this.chart.isDatasetVisible(index);
+                                var datasetLabel = this.chart.data.datasets[index].label;
+                                var clickedChart = this.chart;
+
+                                charts.forEach(function(chart) {
+                                    chart.data.datasets.forEach(function(ds, idx) {
+                                        if (ds.label === datasetLabel) {
+                                            chart.getDatasetMeta(idx).hidden = wasVisible;
+                                        }
+                                    });
+
+                                    chart.update();
+                                });
+                            }
                         }
                     },
                     onClick: (_mouseEvent, activeElems) => {
@@ -323,7 +345,7 @@
                     },
                 };
 
-                new Chart(canvas, {
+                return new Chart(canvas, {
                     type: 'line',
                     data,
                     options,
@@ -345,7 +367,7 @@
                 setElem.appendChild(graphsElem);
 
                 for (const [benchName, benches] of benchSet.entries()) {
-                    renderGraph(graphsElem, benchName, benches)
+                    charts.push(renderGraph(graphsElem, benchName, benches))
                 }
             }
 
