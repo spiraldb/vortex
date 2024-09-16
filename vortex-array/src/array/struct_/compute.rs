@@ -113,7 +113,7 @@ mod tests {
         let mask = vec![
             false, true, false, true, false, true, false, true, false, true,
         ];
-        let filtered = filter(struct_arr.array(), &BoolArray::from(mask).into_array()).unwrap();
+        let filtered = filter(struct_arr.as_ref(), &BoolArray::from(mask).into_array()).unwrap();
         assert_eq!(filtered.len(), 5);
     }
 }
