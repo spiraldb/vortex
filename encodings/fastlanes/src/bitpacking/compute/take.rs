@@ -92,7 +92,7 @@ fn take_primitive<T: NativePType + BitPacking>(
                     (chunk * 1024) - array.offset()
                 };
                 let patches_end = min((chunk + 1) * 1024 - array.offset(), patches.len());
-                let patches_slice = slice(patches.array(), patches_start, patches_end)?;
+                let patches_slice = slice(patches.as_ref(), patches_start, patches_end)?;
                 let patches_slice = SparseArray::try_from(patches_slice)?;
                 let offsets = PrimitiveArray::from(offsets);
                 do_patch_for_take_primitive(&patches_slice, &offsets, &mut output)?;
@@ -114,7 +114,7 @@ fn do_patch_for_take_primitive<T: NativePType>(
     indices: &PrimitiveArray,
     output: &mut [T],
 ) -> VortexResult<()> {
-    let taken_patches = take(patches.array(), indices.array())?;
+    let taken_patches = take(patches.as_ref(), indices.as_ref())?;
     let taken_patches = SparseArray::try_from(taken_patches)?;
 
     let base_index = output.len() - indices.len();
@@ -152,9 +152,9 @@ mod test {
 
         // Create a u8 array modulo 63.
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
-        let bitpacked = BitPackedArray::encode(unpacked.array(), 6).unwrap();
+        let bitpacked = BitPackedArray::encode(unpacked.as_ref(), 6).unwrap();
 
-        let primitive_result = take(bitpacked.array(), &indices)
+        let primitive_result = take(bitpacked.as_ref(), &indices)
             .unwrap()
             .into_primitive()
             .unwrap();
@@ -168,8 +168,8 @@ mod test {
 
         // Create a u8 array modulo 63.
         let unpacked = PrimitiveArray::from((0..4096).map(|i| (i % 63) as u8).collect::<Vec<_>>());
-        let bitpacked = BitPackedArray::encode(unpacked.array(), 6).unwrap();
-        let sliced = slice(bitpacked.array(), 128, 2050).unwrap();
+        let bitpacked = BitPackedArray::encode(unpacked.as_ref(), 6).unwrap();
+        let sliced = slice(bitpacked.as_ref(), 128, 2050).unwrap();
 
         let primitive_result = take(&sliced, &indices).unwrap().into_primitive().unwrap();
         let res_bytes = primitive_result.maybe_null_slice::<u8>();
@@ -182,7 +182,7 @@ mod test {
         let num_patches: usize = 128;
         let values = (0..u16::MAX as u32 + num_patches as u32).collect::<Vec<_>>();
         let uncompressed = PrimitiveArray::from(values.clone());
-        let packed = BitPackedArray::encode(uncompressed.array(), 16).unwrap();
+        let packed = BitPackedArray::encode(uncompressed.as_ref(), 16).unwrap();
         assert!(packed.patches().is_some());
 
         let patches = SparseArray::try_from(packed.patches().unwrap()).unwrap();
@@ -199,7 +199,7 @@ mod test {
             .map(|i| i as u32)
             .collect_vec()
             .into();
-        let taken = take(packed.array(), random_indices.array()).unwrap();
+        let taken = take(packed.as_ref(), random_indices.as_ref()).unwrap();
 
         // sanity check
         random_indices
@@ -208,7 +208,7 @@ mod test {
             .enumerate()
             .for_each(|(ti, i)| {
                 assert_eq!(
-                    u32::try_from(scalar_at(packed.array(), *i as usize).unwrap().as_ref())
+                    u32::try_from(scalar_at(packed.as_ref(), *i as usize).unwrap().as_ref())
                         .unwrap(),
                     values[*i as usize]
                 );
@@ -231,7 +231,7 @@ mod test {
 
         values.iter().enumerate().for_each(|(i, v)| {
             assert_eq!(
-                u32::try_from(scalar_at(packed.array(), i).unwrap().as_ref()).unwrap(),
+                u32::try_from(scalar_at(packed.as_ref(), i).unwrap().as_ref()).unwrap(),
                 *v
             );
         });

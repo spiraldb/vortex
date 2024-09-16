@@ -104,7 +104,7 @@ impl FilterFn for SparseArray {
 
         Ok(SparseArray::try_new(
             PrimitiveArray::from(coordinate_indices).into_array(),
-            take(&self.values(), PrimitiveArray::from(value_indices).array())?,
+            take(&self.values(), PrimitiveArray::from(value_indices).as_ref())?,
             buffer.count_set_bits(),
             self.fill_value().clone(),
         )?

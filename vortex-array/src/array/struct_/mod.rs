@@ -21,7 +21,7 @@ pub struct StructMetadata {
 
 impl StructArray {
     pub fn validity(&self) -> Validity {
-        self.metadata().validity.to_validity(self.array().child(
+        self.metadata().validity.to_validity(self.as_ref().child(
             self.nfields(),
             &Validity::DTYPE,
             self.len(),
@@ -144,7 +144,7 @@ impl StructArrayTrait for StructArray {
     fn field(&self, idx: usize) -> Option<Array> {
         self.dtypes()
             .get(idx)
-            .and_then(|dtype| self.array().child(idx, dtype, self.len()))
+            .and_then(|dtype| self.as_ref().child(idx, dtype, self.len()))
     }
 }
 

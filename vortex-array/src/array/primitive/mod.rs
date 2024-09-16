@@ -87,7 +87,7 @@ impl PrimitiveArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(0, &Validity::DTYPE, self.len()))
+            .to_validity(self.as_ref().child(0, &Validity::DTYPE, self.len()))
     }
 
     pub fn ptype(&self) -> PType {
@@ -98,7 +98,7 @@ impl PrimitiveArray {
     }
 
     pub fn buffer(&self) -> &Buffer {
-        self.array()
+        self.as_ref()
             .buffer()
             .vortex_expect("Missing buffer in PrimitiveArray")
     }

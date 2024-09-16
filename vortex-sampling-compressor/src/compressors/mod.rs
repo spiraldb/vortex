@@ -170,11 +170,6 @@ impl<'a> CompressedArray<'a> {
     }
 
     #[inline]
-    pub fn array(&self) -> &Array {
-        &self.array
-    }
-
-    #[inline]
     pub fn into_array(self) -> Array {
         self.array
     }
@@ -192,5 +187,11 @@ impl<'a> CompressedArray<'a> {
     #[inline]
     pub fn nbytes(&self) -> usize {
         self.array.nbytes()
+    }
+}
+
+impl AsRef<Array> for CompressedArray<'_> {
+    fn as_ref(&self) -> &Array {
+        &self.array
     }
 }

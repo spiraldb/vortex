@@ -5,7 +5,7 @@ use vortex_error::VortexResult;
 
 use crate::array::BoolArray;
 use crate::compute::TakeFn;
-use crate::{Array, AsArray, IntoArray, IntoArrayVariant};
+use crate::{Array, IntoArray, IntoArrayVariant};
 
 impl TakeFn for BoolArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
@@ -14,7 +14,7 @@ impl TakeFn for BoolArray {
         match_each_integer_ptype!(indices.ptype(), |$I| {
             Ok(BoolArray::from_vec(
                 take_bool(&self.boolean_buffer(), indices.maybe_null_slice::<$I>()),
-                validity.take(indices.as_array_ref())?,
+                validity.take(indices.as_ref())?,
             ).into_array())
         })
     }

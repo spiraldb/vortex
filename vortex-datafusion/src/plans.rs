@@ -22,7 +22,7 @@ use pin_project::pin_project;
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
-use vortex::{Array, AsArray as _, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, IntoArray, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::field::Field;
 use vortex_error::{vortex_err, vortex_panic, VortexError};
 use vortex_expr::VortexExpr;
@@ -166,7 +166,7 @@ impl Stream for RowIndicesStream {
 
         let selection = this
             .conjunction_expr
-            .evaluate(vortex_struct.as_array_ref())
+            .evaluate(vortex_struct.as_ref())
             .map_err(|e| DataFusionError::External(e.into()))?
             .into_canonical()?
             .into_arrow()?;

@@ -47,8 +47,8 @@ mod tests {
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
-        assert_eq!(scalar_at(array.array(), 0).unwrap(), 1u64.into());
-        assert_eq!(scalar_at(array.array(), 1).unwrap(), 2u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 0).unwrap(), 1u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 1).unwrap(), 2u64.into());
     }
 
     #[test]
@@ -63,10 +63,10 @@ mod tests {
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
-        assert_eq!(scalar_at(array.array(), 0).unwrap(), 1u64.into());
-        assert_eq!(scalar_at(array.array(), 1).unwrap(), 2u64.into());
-        assert_eq!(scalar_at(array.array(), 2).unwrap(), 3u64.into());
-        assert_eq!(scalar_at(array.array(), 3).unwrap(), 4u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 0).unwrap(), 1u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 1).unwrap(), 2u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 2).unwrap(), 3u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 3).unwrap(), 4u64.into());
     }
 
     #[test]
@@ -81,9 +81,9 @@ mod tests {
             DType::Primitive(PType::U64, Nullability::NonNullable),
         )
         .unwrap();
-        assert_eq!(scalar_at(array.array(), 0).unwrap(), 1u64.into());
-        assert_eq!(scalar_at(array.array(), 1).unwrap(), 2u64.into());
-        assert_eq!(scalar_at(array.array(), 2).unwrap(), 3u64.into());
-        assert_eq!(scalar_at(array.array(), 3).unwrap(), 4u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 0).unwrap(), 1u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 1).unwrap(), 2u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 2).unwrap(), 3u64.into());
+        assert_eq!(scalar_at(array.as_ref(), 3).unwrap(), 4u64.into());
     }
 }

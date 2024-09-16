@@ -92,14 +92,14 @@ impl SparseArray {
 
     #[inline]
     pub fn values(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(1, self.dtype(), self.metadata().indices_len)
             .vortex_expect("Missing child array in SparseArray")
     }
 
     #[inline]
     pub fn indices(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(
                 0,
                 &self.metadata().indices_dtype,

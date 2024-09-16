@@ -78,7 +78,7 @@ impl Validity {
         }
     }
 
-    pub fn array(&self) -> Option<&Array> {
+    pub fn as_array(&self) -> Option<&Array> {
         match self {
             Self::Array(a) => Some(a),
             _ => None,

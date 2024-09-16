@@ -49,7 +49,7 @@ impl ZigZagArray {
             vortex_panic!(err, "Failed to convert DType {} to PType", self.dtype())
         });
         let encoded = DType::from(ptype.to_unsigned()).with_nullability(self.dtype().nullability());
-        self.array()
+        self.as_ref()
             .child(0, &encoded, self.len())
             .vortex_expect("ZigZagArray is missing its encoded child array")
     }

@@ -76,7 +76,7 @@ impl VarBinArray {
 
     #[inline]
     pub fn offsets(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &self.metadata().offsets_dtype, self.len() + 1)
             .vortex_expect("Missing offsets in VarBinArray")
     }
@@ -92,7 +92,7 @@ impl VarBinArray {
 
     #[inline]
     pub fn bytes(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(1, &DType::BYTES, self.metadata().bytes_len)
             .vortex_expect("Missing bytes in VarBinArray")
     }
@@ -100,7 +100,7 @@ impl VarBinArray {
     pub fn validity(&self) -> Validity {
         self.metadata()
             .validity
-            .to_validity(self.array().child(2, &Validity::DTYPE, self.len()))
+            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
     }
 
     pub fn sliced_bytes(&self) -> VortexResult<Array> {

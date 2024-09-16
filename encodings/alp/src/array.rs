@@ -82,7 +82,7 @@ impl ALPArray {
     }
 
     pub fn encoded(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &self.metadata().encoded_dtype, self.len())
             .vortex_expect("Missing encoded child in ALPArray")
     }
@@ -94,7 +94,7 @@ impl ALPArray {
 
     pub fn patches(&self) -> Option<Array> {
         self.metadata().patches_dtype.as_ref().map(|dt| {
-            self.array().child(1, dt, self.len()).unwrap_or_else(|| {
+            self.as_ref().child(1, dt, self.len()).unwrap_or_else(|| {
                 vortex_panic!(
                     "Missing patches with present metadata flag; patches dtype: {}, patches_len: {}",
                     dt,

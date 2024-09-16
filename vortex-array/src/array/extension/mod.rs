@@ -32,7 +32,7 @@ impl ExtensionArray {
     }
 
     pub fn storage(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &self.metadata().storage_dtype, self.len())
             .vortex_expect("Missing storage array for ExtensionArray")
     }

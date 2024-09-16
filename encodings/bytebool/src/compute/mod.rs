@@ -136,7 +136,6 @@ impl FillForwardFn for ByteBoolArray {
 mod tests {
     use vortex::compute::unary::{scalar_at, scalar_at_unchecked};
     use vortex::compute::{compare, slice, Operator};
-    use vortex::AsArray as _;
     use vortex_scalar::ScalarValue;
 
     use super::*;
@@ -146,18 +145,18 @@ mod tests {
         let original = vec![Some(true), Some(true), None, Some(false), None];
         let vortex_arr = ByteBoolArray::from(original.clone());
 
-        let sliced_arr = slice(vortex_arr.as_array_ref(), 1, 4).unwrap();
+        let sliced_arr = slice(vortex_arr.as_ref(), 1, 4).unwrap();
         let sliced_arr = ByteBoolArray::try_from(sliced_arr).unwrap();
 
-        let s = scalar_at_unchecked(sliced_arr.as_array_ref(), 0);
+        let s = scalar_at_unchecked(sliced_arr.as_ref(), 0);
         assert_eq!(s.into_value().as_bool().unwrap(), Some(true));
 
-        let s = scalar_at(sliced_arr.as_array_ref(), 1).unwrap();
+        let s = scalar_at(sliced_arr.as_ref(), 1).unwrap();
         assert!(!sliced_arr.is_valid(1));
         assert!(s.is_null());
         assert_eq!(s.into_value().as_bool().unwrap(), None);
 
-        let s = scalar_at_unchecked(sliced_arr.as_array_ref(), 2);
+        let s = scalar_at_unchecked(sliced_arr.as_ref(), 2);
         assert_eq!(s.into_value().as_bool().unwrap(), Some(false));
     }
 
@@ -166,10 +165,10 @@ mod tests {
         let lhs = ByteBoolArray::from(vec![true; 5]);
         let rhs = ByteBoolArray::from(vec![true; 5]);
 
-        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq).unwrap();
+        let arr = compare(lhs.as_ref(), rhs.as_ref(), Operator::Eq).unwrap();
 
         for i in 0..arr.len() {
-            let s = scalar_at_unchecked(arr.as_array_ref(), i);
+            let s = scalar_at_unchecked(arr.as_ref(), i);
             assert!(s.is_valid());
             assert_eq!(s.value(), &ScalarValue::Bool(true));
         }
@@ -180,7 +179,7 @@ mod tests {
         let lhs = ByteBoolArray::from(vec![false; 5]);
         let rhs = ByteBoolArray::from(vec![true; 5]);
 
-        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq).unwrap();
+        let arr = compare(lhs.as_ref(), rhs.as_ref(), Operator::Eq).unwrap();
 
         for i in 0..arr.len() {
             let s = scalar_at(&arr, i).unwrap();
@@ -194,7 +193,7 @@ mod tests {
         let lhs = ByteBoolArray::from(vec![true; 5]);
         let rhs = ByteBoolArray::from(vec![Some(true), Some(true), Some(true), Some(false), None]);
 
-        let arr = compare(lhs.as_array_ref(), rhs.as_array_ref(), Operator::Eq).unwrap();
+        let arr = compare(lhs.as_ref(), rhs.as_ref(), Operator::Eq).unwrap();
 
         for i in 0..3 {
             let s = scalar_at(&arr, i).unwrap();

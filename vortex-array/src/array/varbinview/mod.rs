@@ -174,20 +174,20 @@ impl VarBinViewArray {
 
     #[inline]
     pub fn views(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
             .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its views"))
     }
 
     #[inline]
     pub fn bytes(&self, idx: usize) -> Array {
-        self.array()
+        self.as_ref()
             .child(idx + 1, &DType::BYTES, self.metadata().data_lens[idx])
             .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its data buffer"))
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata().validity.to_validity(self.array().child(
+        self.metadata().validity.to_validity(self.as_ref().child(
             self.metadata().data_lens.len() + 1,
             &Validity::DTYPE,
             self.len(),
@@ -377,11 +377,11 @@ mod test {
             VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]);
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
-            scalar_at(binary_arr.array(), 0).unwrap(),
+            scalar_at(binary_arr.as_ref(), 0).unwrap(),
             Scalar::from("hello world")
         );
         assert_eq!(
-            scalar_at(binary_arr.array(), 1).unwrap(),
+            scalar_at(binary_arr.as_ref(), 1).unwrap(),
             Scalar::from("hello world this is a long string")
         );
     }

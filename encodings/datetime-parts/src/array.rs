@@ -66,19 +66,19 @@ impl DateTimePartsArray {
     }
 
     pub fn days(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(0, &self.metadata().days_dtype, self.len())
             .vortex_expect("DatetimePartsArray missing days array")
     }
 
     pub fn seconds(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(1, &self.metadata().seconds_dtype, self.len())
             .vortex_expect("DatetimePartsArray missing seconds array")
     }
 
     pub fn subsecond(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(2, &self.metadata().subseconds_dtype, self.len())
             .vortex_expect("DatetimePartsArray missing subsecond array")
     }

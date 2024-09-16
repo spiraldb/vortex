@@ -11,7 +11,7 @@ use vortex_scalar::Scalar;
 use crate::FoRArray;
 
 pub fn for_compress(array: &PrimitiveArray) -> VortexResult<Array> {
-    let shift = trailing_zeros(array.array());
+    let shift = trailing_zeros(array.as_ref());
     let min = array
         .statistics()
         .compute(Stat::Min)
@@ -162,7 +162,7 @@ mod test {
         let unsigned: Vec<u8> = (0..=u8::MAX).collect_vec();
         assert_eq!(encoded_bytes, unsigned.as_slice());
 
-        let decompressed = compressed.array().clone().into_primitive().unwrap();
+        let decompressed = compressed.as_ref().clone().into_primitive().unwrap();
         assert_eq!(
             decompressed.maybe_null_slice::<i8>(),
             array.maybe_null_slice::<i8>()

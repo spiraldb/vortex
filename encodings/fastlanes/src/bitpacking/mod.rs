@@ -113,7 +113,7 @@ impl BitPackedArray {
 
     #[inline]
     pub fn packed(&self) -> Array {
-        self.array()
+        self.as_ref()
             .child(
                 0,
                 &self.dtype().with_nullability(Nullability::NonNullable),
@@ -136,7 +136,7 @@ impl BitPackedArray {
         self.metadata()
             .has_patches
             .then(|| {
-                self.array().child(
+                self.as_ref().child(
                     1,
                     &self.dtype().with_nullability(Nullability::Nullable),
                     self.len(),
@@ -153,7 +153,7 @@ impl BitPackedArray {
     pub fn validity(&self) -> Validity {
         let validity_child_idx = if self.metadata().has_patches { 2 } else { 1 };
 
-        self.metadata().validity.to_validity(self.array().child(
+        self.metadata().validity.to_validity(self.as_ref().child(
             validity_child_idx,
             &Validity::DTYPE,
             self.len(),
@@ -240,7 +240,7 @@ mod test {
     fn test_encode() {
         let values = vec![Some(1), None, Some(1), None, Some(1), None, Some(u64::MAX)];
         let uncompressed = PrimitiveArray::from_nullable_vec(values);
-        let packed = BitPackedArray::encode(uncompressed.array(), 1).unwrap();
+        let packed = BitPackedArray::encode(uncompressed.as_ref(), 1).unwrap();
         let expected = &[1, 0, 1, 0, 1, 0, u64::MAX];
         let results = packed
             .into_array()
@@ -255,9 +255,9 @@ mod test {
     fn test_encode_too_wide() {
         let values = vec![Some(1u8), None, Some(1), None, Some(1), None];
         let uncompressed = PrimitiveArray::from_nullable_vec(values);
-        let _packed = BitPackedArray::encode(uncompressed.array(), 8)
+        let _packed = BitPackedArray::encode(uncompressed.as_ref(), 8)
             .expect_err("Cannot pack value into the same width");
-        let _packed = BitPackedArray::encode(uncompressed.array(), 9)
+        let _packed = BitPackedArray::encode(uncompressed.as_ref(), 9)
             .expect_err("Cannot pack value into larger width");
     }
 }

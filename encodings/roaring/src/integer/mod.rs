@@ -47,7 +47,7 @@ impl RoaringIntArray {
     pub fn bitmap(&self) -> Bitmap {
         //TODO(@jdcasale): figure out a way to avoid this deserialization per-call
         Bitmap::deserialize::<Portable>(
-            self.array()
+            self.as_ref()
                 .buffer()
                 .vortex_expect("RoaringBoolArray buffer is missing")
                 .as_ref(),

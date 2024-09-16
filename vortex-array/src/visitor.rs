@@ -17,7 +17,7 @@ pub trait ArrayVisitor {
 
     /// Utility for visiting Array validity.
     fn visit_validity(&mut self, validity: &Validity) -> VortexResult<()> {
-        if let Some(v) = validity.array() {
+        if let Some(v) = validity.as_array() {
             self.visit_child("validity", v)
         } else {
             Ok(())
