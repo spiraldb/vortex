@@ -98,3 +98,22 @@ impl FilterFn for StructArray {
         .map(|a| a.into_array())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::array::{BoolArray, StructArray};
+    use crate::compute::filter;
+    use crate::validity::Validity;
+    use crate::IntoArray;
+
+    #[test]
+    fn filter_empty_struct() {
+        let struct_arr =
+            StructArray::try_new(vec![].into(), vec![], 10, Validity::NonNullable).unwrap();
+        let mask = vec![
+            false, true, false, true, false, true, false, true, false, true,
+        ];
+        let filtered = filter(struct_arr.array(), &BoolArray::from(mask).into_array()).unwrap();
+        assert_eq!(filtered.len(), 5);
+    }
+}
