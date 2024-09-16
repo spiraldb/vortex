@@ -137,7 +137,11 @@ mod test {
 
     #[test]
     fn ree_take_end() {
-        let taken = take(ree_array().as_ref(), PrimitiveArray::from(vec![11]).as_ref()).unwrap();
+        let taken = take(
+            ree_array().as_ref(),
+            PrimitiveArray::from(vec![11]).as_ref(),
+        )
+        .unwrap();
         assert_eq!(
             taken.into_primitive().unwrap().maybe_null_slice::<i32>(),
             &[5]
@@ -147,7 +151,11 @@ mod test {
     #[test]
     #[should_panic]
     fn ree_take_out_of_bounds() {
-        take(ree_array().as_ref(), PrimitiveArray::from(vec![12]).as_ref()).unwrap();
+        take(
+            ree_array().as_ref(),
+            PrimitiveArray::from(vec![12]).as_ref(),
+        )
+        .unwrap();
     }
 
     #[test]

@@ -58,7 +58,10 @@ mod test {
         .unwrap()
         .into_array();
         let sliced = BitPackedArray::try_from(slice(&arr, 1024, 2048).unwrap()).unwrap();
-        assert_eq!(scalar_at(sliced.as_ref(), 0).unwrap(), (1024u32 % 64).into());
+        assert_eq!(
+            scalar_at(sliced.as_ref(), 0).unwrap(),
+            (1024u32 % 64).into()
+        );
         assert_eq!(
             scalar_at(sliced.as_ref(), 1023).unwrap(),
             (2047u32 % 64).into()
