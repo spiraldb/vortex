@@ -20,7 +20,7 @@ bench = false
 workspace = true
 
 [dependencies]
-arrow-schema = { workspace = true }
+arrow-schema = { workspace = true, optional = true }
 datafusion-common = { workspace = true, optional = true }
 datafusion-expr = { workspace = true, optional = true }
 datafusion-physical-expr = { workspace = true, optional = true }
