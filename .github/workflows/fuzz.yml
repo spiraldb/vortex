@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: ./.github/actions/cleanup
+      - uses: ./.github/actions/setup-rust
       - name: Install cargo fuzz
         run: cargo install cargo-fuzz
       - uses: actions/cache@v4
