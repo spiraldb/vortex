@@ -176,8 +176,8 @@ impl<'a> SamplingCompressor<'a> {
             if let Some(compressed) = l.compress(arr, self) {
                 let compressed = compressed?;
 
-                check_validity_unchanged(arr, compressed.array());
-                check_dtype_unchanged(arr, compressed.array());
+                check_validity_unchanged(arr, compressed.as_ref());
+                check_dtype_unchanged(arr, compressed.as_ref());
                 return Ok(compressed);
             } else {
                 warn!(
@@ -190,8 +190,8 @@ impl<'a> SamplingCompressor<'a> {
         // Otherwise, attempt to compress the array
         let compressed = self.compress_array(arr)?;
 
-        check_validity_unchanged(arr, compressed.array());
-        check_dtype_unchanged(arr, compressed.array());
+        check_validity_unchanged(arr, compressed.as_ref());
+        check_dtype_unchanged(arr, compressed.as_ref());
         Ok(compressed)
     }
 
