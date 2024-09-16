@@ -96,7 +96,7 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch {
                 idx + self.offset,
             )
         };
-        val.partial_cmp(elem)
+        Some(val.compare(*elem))
     }
 }
 
