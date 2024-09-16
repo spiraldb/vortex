@@ -23,7 +23,7 @@ impl SearchSortedFn for BitPackedArray {
         })
     }
 
-    fn search_sorted_bulk(
+    fn search_sorted_many(
         &self,
         values: &[Scalar],
         sides: &[SearchSortedSide],

@@ -96,7 +96,7 @@ pub trait SearchSortedFn {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult>;
 
     /// Bulk search for many values.
-    fn search_sorted_bulk(
+    fn search_sorted_many(
         &self,
         values: &[Scalar],
         sides: &[SearchSortedSide],
@@ -136,7 +136,7 @@ pub fn search_sorted<T: Into<Scalar>>(
 }
 
 /// Search for many elements in the array.
-pub fn search_sorted_bulk<T: Into<Scalar> + Clone>(
+pub fn search_sorted_many<T: Into<Scalar> + Clone>(
     array: &Array,
     targets: &[T],
     sides: &[SearchSortedSide],
@@ -148,7 +148,7 @@ pub fn search_sorted_bulk<T: Into<Scalar> + Clone>(
                 .map(|t| t.clone().into().cast(array.dtype()))
                 .try_collect()?;
 
-            search_sorted.search_sorted_bulk(&values, sides)
+            search_sorted.search_sorted_many(&values, sides)
         } else {
             // Call in loop and collect
             targets
