@@ -45,7 +45,7 @@ fn vortex_compress_tpch(c: &mut Criterion) {
     let compressor_fsst = SamplingCompressor::default();
 
     // l_comment column only
-    let mut group = c.benchmark_group("l_comment");
+    let mut group = c.benchmark_group("tpch-l_comment");
     let comments = lineitem_vortex.with_dyn(|a| {
         a.as_struct_array_unchecked()
             .field_by_name("l_comment")

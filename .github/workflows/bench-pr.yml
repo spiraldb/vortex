@@ -34,7 +34,7 @@ jobs:
 
       - name: Run benchmark
         shell: bash
-        run: cargo bench --bench tpch_benchmark -- --output-format bencher | tee output.txt
+        run: cargo bench --bench compress_benchmark --bench tpch_benchmark -- --output-format bencher | tee output.txt
 
       - name: Store benchmark result
         if: '!cancelled()'
