@@ -5,6 +5,7 @@ use vortex_scalar::Scalar;
 use crate::array::struct_::StructArray;
 use crate::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use crate::compute::{filter, slice, take, ArrayCompute, FilterFn, SliceFn, TakeFn};
+use crate::stats::ArrayStatistics;
 use crate::variants::StructArrayTrait;
 use crate::{Array, ArrayDType, IntoArray};
 
@@ -85,6 +86,7 @@ impl FilterFn for StructArray {
         let length = fields
             .first()
             .map(|a| a.len())
+            .or_else(|| predicate.statistics().compute_true_count())
             .ok_or_else(|| vortex_err!("Struct arrays should have at least one field"))?;
 
         Self::try_new(
