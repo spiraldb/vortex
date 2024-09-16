@@ -6,6 +6,7 @@ use vortex::{Array, ArrayDType};
 use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
+use vortex_schema::Schema;
 
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::{LayoutMessageCache, RelativeLayoutCache};
@@ -108,10 +109,15 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             Projection::Flat(projection) => footer.projected_dtype(projection)?,
         };
 
+        let filter = self.row_filter.map(|f| {
+            let schema = Schema::new(projected_dtype.clone());
+            f.reorder(&schema)
+        });
+
         let scan = Scan {
             projection: read_projection,
             indices: self.indices,
-            filter: self.row_filter,
+            filter,
             batch_size,
         };
 
