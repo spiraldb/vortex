@@ -1,6 +1,6 @@
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
-use vortex::array::{Primitive, PrimitiveArray, SparseArray};
+use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -161,8 +161,8 @@ impl BitPackedArray {
     }
 
     pub fn encode(array: &Array, bit_width: usize) -> VortexResult<Self> {
-        if array.encoding().id() == Primitive::ID {
-            bitpack_encode(PrimitiveArray::try_from(array)?, bit_width)
+        if let Ok(parray) = PrimitiveArray::try_from(array) {
+            bitpack_encode(parray, bit_width)
         } else {
             vortex_bail!("Bitpacking can only encode primitive arrays");
         }

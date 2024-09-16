@@ -3,7 +3,7 @@ use std::fmt::Debug;
 pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
-use vortex::array::{Primitive, PrimitiveArray};
+use vortex::array::PrimitiveArray;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -59,8 +59,8 @@ impl RoaringIntArray {
     }
 
     pub fn encode(array: Array) -> VortexResult<Array> {
-        if array.encoding().id() == Primitive::ID {
-            Ok(roaring_int_encode(PrimitiveArray::try_from(array)?)?.into_array())
+        if let Ok(parray) = PrimitiveArray::try_from(array) {
+            Ok(roaring_int_encode(parray)?.into_array())
         } else {
             vortex_bail!("RoaringInt can only encode primitive arrays")
         }

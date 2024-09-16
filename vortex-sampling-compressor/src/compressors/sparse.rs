@@ -21,7 +21,7 @@ impl EncodingCompressor for SparseCompressor {
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        (array.encoding().id() == Sparse::ID).then_some(self)
+        array.is_encoding(Sparse::ID).then_some(self)
     }
 
     fn compress<'a>(
