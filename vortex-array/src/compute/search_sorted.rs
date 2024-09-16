@@ -2,6 +2,7 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 use std::fmt::{Debug, Display, Formatter};
 
+use itertools::Itertools;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -93,6 +94,19 @@ impl Display for SearchResult {
 /// For nullable arrays we assume that the nulls are sorted last, i.e. they're the greatest value
 pub trait SearchSortedFn {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult>;
+
+    /// Bulk search for many values.
+    fn search_sorted_bulk(
+        &self,
+        values: &[Scalar],
+        sides: &[SearchSortedSide],
+    ) -> VortexResult<Vec<SearchResult>> {
+        values
+            .iter()
+            .zip(sides.iter())
+            .map(|(value, side)| self.search_sorted(value, *side))
+            .try_collect()
+    }
 }
 
 pub fn search_sorted<T: Into<Scalar>>(
@@ -118,6 +132,31 @@ pub fn search_sorted<T: Into<Scalar>>(
             NotImplemented: "search_sorted",
             array.encoding().id()
         )
+    })
+}
+
+/// Search for many elements in the array.
+pub fn search_sorted_bulk<T: Into<Scalar> + Clone>(
+    array: &Array,
+    targets: &[T],
+    sides: &[SearchSortedSide],
+) -> VortexResult<Vec<SearchResult>> {
+    array.with_dyn(|a| {
+        if let Some(search_sorted) = a.search_sorted() {
+            let values: Vec<Scalar> = targets
+                .iter()
+                .map(|t| t.clone().into().cast(array.dtype()))
+                .try_collect()?;
+
+            search_sorted.search_sorted_bulk(&values, sides)
+        } else {
+            // Call in loop and collect
+            targets
+                .iter()
+                .zip(sides.iter().copied())
+                .map(|(target, side)| search_sorted(array, target.clone(), side))
+                .try_collect()
+        }
     })
 }
 

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::scalar_at;
-use vortex::compute::{search_sorted, SearchSortedSide};
+use vortex::compute::{search_sorted, search_sorted_bulk, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -82,6 +82,23 @@ impl RunEndArray {
     pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
         search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
             .map(|s| s.to_ends_index(self.ends().len()))
+    }
+
+    /// Convert a batch of logical indices into an index for the values.
+    ///
+    /// See: [find_physical_index][Self::find_physical_index].
+    pub fn find_physical_indices(&self, indices: &[usize]) -> VortexResult<Vec<usize>> {
+        search_sorted_bulk(
+            &self.ends(),
+            indices,
+            &vec![SearchSortedSide::Right; indices.len()],
+        )
+        .map(|results| {
+            results
+                .iter()
+                .map(|result| result.to_ends_index(self.ends().len()))
+                .collect()
+        })
     }
 
     /// Run the array through run-end encoding.

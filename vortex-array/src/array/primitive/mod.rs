@@ -1,6 +1,6 @@
 use std::mem::{transmute, MaybeUninit};
-use std::sync::Arc;
 use std::ptr;
+use std::sync::Arc;
 
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
@@ -115,12 +115,7 @@ impl PrimitiveArray {
         let raw_slice = self.buffer().as_slice();
         let typed_len = raw_slice.len() / size_of::<T>();
         // SAFETY: alignment of Buffer is checked on construction
-        unsafe {
-            std::slice::from_raw_parts(raw_slice.as_ptr().cast(), typed_len)
-        }
-        // let (prefix, values, suffix) = unsafe { self.buffer().as_ref().align_to::<T>() };
-        // assert!(prefix.is_empty() && suffix.is_empty());
-        // values
+        unsafe { std::slice::from_raw_parts(raw_slice.as_ptr().cast(), typed_len) }
     }
 
     /// Convert the array into a mutable vec of the given type.

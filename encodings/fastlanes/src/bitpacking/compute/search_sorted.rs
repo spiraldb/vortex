@@ -2,13 +2,14 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::Greater;
 
 use fastlanes::BitPacking;
+use itertools::Itertools;
 use num_traits::AsPrimitive;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{
     search_sorted, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
 };
 use vortex::validity::Validity;
-use vortex::{ArrayDType, IntoArrayVariant};
+use vortex::ArrayDType;
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::{VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
@@ -20,6 +21,27 @@ impl SearchSortedFn for BitPackedArray {
         match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
             search_sorted_typed::<$P>(self, value, side)
         })
+    }
+
+    fn search_sorted_bulk(
+        &self,
+        values: &[Scalar],
+        sides: &[SearchSortedSide],
+    ) -> VortexResult<Vec<SearchResult>> {
+        // Construct searcher once upfront, since it is fairly expensive
+        let searcher = BitPackedSearch::new(self);
+        values
+            .iter()
+            .zip(sides.iter().copied())
+            .map(|(value, side)| {
+                match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
+                    // Unwrap to native value
+                    let value: $P = value.cast(self.dtype())?.try_into()?;
+
+                    Ok(searcher.search_sorted(&value, side))
+                })
+            })
+            .try_collect()
     }
 }
 
@@ -59,10 +81,7 @@ struct BitPackedSearch {
 impl BitPackedSearch {
     pub fn new(array: &BitPackedArray) -> Self {
         Self {
-            packed: array
-                .packed()
-                .into_primitive()
-                .vortex_expect("Failed to get packed bytes as PrimitiveArray"),
+            packed: array.packed().as_primitive(),
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),

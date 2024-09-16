@@ -4,7 +4,7 @@ use vortex::compute::{filter, slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::RunEndArray;
@@ -39,19 +39,25 @@ impl ScalarAtFn for RunEndArray {
 impl TakeFn for RunEndArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let primitive_indices = indices.clone().into_primitive()?;
-        let physical_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
+        let usize_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
             primitive_indices
                 .maybe_null_slice::<$P>()
                 .iter()
                 .map(|idx| *idx as usize)
                 .map(|idx| {
                     if idx >= self.len() {
-                        vortex_bail!(OutOfBounds: idx, 0, self.len())
+                        vortex_error::vortex_bail!(OutOfBounds: idx, 0, self.len());
                     }
-                    self.find_physical_index(idx).map(|loc| loc as u64)
+
+                    Ok(idx)
                 })
-                .collect::<VortexResult<Vec<_>>>()?
+                .collect::<VortexResult<Vec<usize>>>()?
         });
+        let physical_indices: Vec<u64> = self
+            .find_physical_indices(&usize_indices)?
+            .iter()
+            .map(|idx| *idx as u64)
+            .collect();
         let physical_indices_array = PrimitiveArray::from(physical_indices).into_array();
         let dense_values = take(&self.values(), &physical_indices_array)?;
 
