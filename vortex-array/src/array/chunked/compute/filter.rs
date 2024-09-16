@@ -88,7 +88,11 @@ fn filter_slices<'a>(
 
     for (slice_start, slice_end) in set_slices {
         let (start_chunk, start_idx) = find_chunk_idx(slice_start, chunk_ends);
-        let (end_chunk, end_idx) = find_chunk_idx(slice_end, chunk_ends);
+        // NOTE: we adjust slice end back by one, in case it ends on a chunk boundary, we do not
+        // want to index into the unused chunk.
+        let (end_chunk, end_idx) = find_chunk_idx(slice_end - 1, chunk_ends);
+        // Adjust back to an exclusive range
+        let end_idx = end_idx + 1;
 
         if start_chunk == end_chunk {
             // start == end means that the slice lies within a single chunk.
@@ -114,14 +118,12 @@ fn filter_slices<'a>(
                 ChunkFilter::Slices(slices) => slices.push(start_slice),
             }
 
-            if end_idx != 0 {
-                let end_slice = (0, end_idx);
-                match &mut chunk_filters[end_chunk] {
-                    f @ (ChunkFilter::All | ChunkFilter::None) => {
-                        *f = ChunkFilter::Slices(vec![end_slice]);
-                    }
-                    ChunkFilter::Slices(slices) => slices.push(end_slice),
+            let end_slice = (0, end_idx);
+            match &mut chunk_filters[end_chunk] {
+                f @ (ChunkFilter::All | ChunkFilter::None) => {
+                    *f = ChunkFilter::Slices(vec![end_slice]);
                 }
+                ChunkFilter::Slices(slices) => slices.push(end_slice),
             }
 
             for chunk in &mut chunk_filters[start_chunk + 1..end_chunk] {
