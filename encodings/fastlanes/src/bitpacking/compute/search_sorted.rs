@@ -71,16 +71,27 @@ where
 /// This wrapper exists, so that you can't invoke SearchSorted::search_sorted directly on BitPackedArray as it omits searching patches
 #[derive(Debug)]
 struct BitPackedSearch<'a, T> {
+    // NOTE: caching this here is important for performance, as each call to `maybe_null_slice`
+    //  invokes a call to DType <> PType conversion.
     packed_maybe_null_slice: &'a [T],
     offset: usize,
     length: usize,
     bit_width: usize,
     min_patch_offset: Option<usize>,
-    validity: Validity,
+    first_null_idx: usize,
 }
 
 impl<'a, T: NativePType + BitPacking> BitPackedSearch<'a, T> {
     pub fn new(array: &'a BitPackedArray) -> Self {
+        let first_null_idx = match array.validity() {
+            Validity::NonNullable | Validity::AllValid => array.len(),
+            Validity::AllInvalid => 0,
+            Validity::Array(varray) => {
+                // In sorted order, nulls come after all the non-null values.
+                varray.with_dyn(|a| a.as_bool_array_unchecked().true_count())
+            }
+        };
+
         Self {
             packed_maybe_null_slice: array.packed_slice::<T>(),
             offset: array.offset(),
@@ -91,7 +102,7 @@ impl<'a, T: NativePType + BitPacking> BitPackedSearch<'a, T> {
                     .vortex_expect("Only sparse patches are supported")
                     .min_index()
             }),
-            validity: array.validity(),
+            first_null_idx,
         }
     }
 }
@@ -104,7 +115,9 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch<'_, T> {
             }
         }
 
-        if self.validity.is_null(idx) {
+        // Null is always at the end, and the value we're searching for is non-null, thus if we
+        // see a null, always branch to the left.
+        if idx >= self.first_null_idx {
             return Some(Greater);
         }
 
@@ -129,8 +142,10 @@ impl<T> Len for BitPackedSearch<'_, T> {
 #[cfg(test)]
 mod test {
     use vortex::array::PrimitiveArray;
-    use vortex::compute::{search_sorted, slice, SearchResult, SearchSortedSide};
+    use vortex::compute::{search_sorted, slice, SearchResult, SearchSortedFn, SearchSortedSide};
     use vortex::IntoArray;
+    use vortex_dtype::Nullability;
+    use vortex_scalar::Scalar;
 
     use crate::BitPackedArray;
 
@@ -181,5 +196,22 @@ mod test {
             search_sorted(&bitpacked, 4, SearchSortedSide::Left).unwrap(),
             SearchResult::Found(1)
         );
+    }
+
+    #[test]
+    fn test_search_sorted_many_nulls() {
+        let bitpacked = BitPackedArray::encode(
+            PrimitiveArray::from_nullable_vec(vec![Some(1i64), None, None]).array(),
+            2,
+        )
+        .unwrap();
+
+        let found = bitpacked
+            .search_sorted(
+                &Scalar::primitive(1i64, Nullability::Nullable),
+                SearchSortedSide::Left,
+            )
+            .unwrap();
+        assert_eq!(found, SearchResult::Found(0));
     }
 }
