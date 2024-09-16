@@ -11,10 +11,10 @@ use std::ops::Range;
 use libfuzzer_sys::arbitrary::Error::EmptyChoose;
 use libfuzzer_sys::arbitrary::{Arbitrary, Result, Unstructured};
 pub use sort::sort_canonical_array;
-use vortex::array::PrimitiveArray;
+use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{SearchResult, SearchSortedSide};
-use vortex::{Array, ArrayDType};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_scalar::arbitrary::random_scalar;
 use vortex_scalar::Scalar;
@@ -136,10 +136,14 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                     )
                 }
                 4 => {
-                    let mask: Vec<bool> = (0..len)
-                        .map(|_| T::arbitrary(u))
+                    let mask = (0..current_array.len())
+                        .map(|_| bool::arbitrary(u))
                         .collect::<Result<Vec<_>>>()?;
                     let filtered = filter_canonical_array(&current_array, &mask);
+                    (
+                        Action::Filter(BoolArray::from(mask).into_array()),
+                        ExpectedValue::Array(filtered),
+                    )
                 }
                 _ => unreachable!(),
             })
@@ -158,13 +162,4 @@ fn random_vec_in_range(u: &mut Unstructured<'_>, min: usize, max: usize) -> Resu
         }
     })
     .collect::<Result<Vec<_>>>()
-}
-
-fn arbitrary_vec_of_len<'a, T: Arbitrary<'a>>(
-    u: &mut Unstructured<'a>,
-    len: usize,
-) -> Result<Vec<T>> {
-    (0..len)
-        .map(|_| T::arbitrary(u))
-        .collect::<Result<Vec<_>>>()
 }

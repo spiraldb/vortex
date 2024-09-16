@@ -7,7 +7,7 @@ use vortex::array::{
     BoolEncoding, PrimitiveEncoding, StructEncoding, VarBinEncoding, VarBinViewEncoding,
 };
 use vortex::compute::unary::scalar_at;
-use vortex::compute::{search_sorted, slice, take, SearchResult, SearchSortedSide};
+use vortex::compute::{filter, search_sorted, slice, take, SearchResult, SearchSortedSide};
 use vortex::encoding::EncodingRef;
 use vortex::{Array, IntoCanonical};
 use vortex_fuzz::{sort_canonical_array, Action, FuzzArrayAction};
@@ -55,6 +55,10 @@ fuzz_target!(|fuzz_action: FuzzArrayAction| -> Corpus {
                         fuzz_compress(&sorted, &SamplingCompressor::default()).unwrap_or(sorted);
                 }
                 assert_search_sorted(sorted, s, side, expected.search(), i)
+            }
+            Action::Filter(mask) => {
+                current_array = filter(&current_array, &mask).unwrap();
+                assert_array_eq(&expected.array(), &current_array, i);
             }
         }
     }
