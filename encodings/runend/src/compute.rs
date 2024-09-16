@@ -2,12 +2,12 @@ use vortex::array::{ConstantArray, PrimitiveArray, SparseArray};
 use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{filter, slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
-use crate::RunEndArray;
+use crate::{runend, RunEndArray};
 
 impl ArrayCompute for RunEndArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -25,12 +25,14 @@ impl ArrayCompute for RunEndArray {
 
 impl ScalarAtFn for RunEndArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        scalar_at(&self.values(), self.find_physical_index(index)?)
+        scalar_at(
+            &self.values(),
+            runend::find_physical_index(&self.ends(), index, self.offset())?,
+        )
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        let idx = self
-            .find_physical_index(index)
+        let idx = runend::find_physical_index(&self.ends(), index, self.offset())
             .vortex_expect("Search must be implemented for the underlying index array");
         scalar_at_unchecked(&self.values(), idx)
     }
@@ -39,6 +41,7 @@ impl ScalarAtFn for RunEndArray {
 impl TakeFn for RunEndArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let primitive_indices = indices.clone().into_primitive()?;
+        let ends = self.ends().into_canonical()?.into_primitive()?;
         let physical_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
             primitive_indices
                 .maybe_null_slice::<$P>()
@@ -48,7 +51,8 @@ impl TakeFn for RunEndArray {
                     if idx >= self.len() {
                         vortex_bail!(OutOfBounds: idx, 0, self.len())
                     }
-                    self.find_physical_index(idx).map(|loc| loc as u64)
+                    crate::runend::find_physical_index(ends.array(), idx, self.offset())
+                        .map(|loc| loc as u64)
                 })
                 .collect::<VortexResult<Vec<_>>>()?
         });
@@ -89,8 +93,8 @@ impl TakeFn for RunEndArray {
 
 impl SliceFn for RunEndArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        let slice_begin = self.find_physical_index(start)?;
-        let slice_end = self.find_physical_index(stop)?;
+        let slice_begin = runend::find_physical_index(&self.ends(), start, self.offset())?;
+        let slice_end = runend::find_physical_index(&self.ends(), stop, self.offset())?;
 
         Ok(Self::with_offset_and_size(
             slice(&self.ends(), slice_begin, slice_end + 1)?,

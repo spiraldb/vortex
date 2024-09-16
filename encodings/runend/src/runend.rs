@@ -78,12 +78,6 @@ impl RunEndArray {
         Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
-    /// Convert the given logical index to an index into the `values` array
-    pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
-        search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
-            .map(|s| s.to_ends_index(self.ends().len()))
-    }
-
     /// Run the array through run-end encoding.
     pub fn encode(array: Array) -> VortexResult<Self> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
@@ -129,6 +123,16 @@ impl RunEndArray {
             .child(1, self.dtype(), self.metadata().num_runs)
             .vortex_expect("RunEndArray is missing its values")
     }
+}
+
+/// Convert the given logical index to an index into the `values` array
+pub(crate) fn find_physical_index(
+    ends: &Array,
+    index: usize,
+    offset: usize,
+) -> VortexResult<usize> {
+    search_sorted(ends, index + offset, SearchSortedSide::Right)
+        .map(|s| s.to_ends_index(ends.len()))
 }
 
 impl ArrayTrait for RunEndArray {}
