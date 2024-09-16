@@ -1,9 +1,8 @@
-use std::collections::HashSet;
 use std::sync::{Arc, RwLock};
 
 use bytes::BytesMut;
+use vortex::array::BoolArray;
 use vortex::{Array, ArrayDType};
-use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 use vortex_schema::Schema;
@@ -21,10 +20,11 @@ pub struct LayoutReaderBuilder<R> {
     reader: R,
     layout_serde: LayoutDeserializer,
     projection: Option<Projection>,
-    len: Option<u64>,
+    size: Option<u64>,
     indices: Option<Array>,
     row_filter: Option<RowFilter>,
     batch_size: Option<usize>,
+    row_selection: Option<Array>,
 }
 
 impl<R: VortexReadAt> LayoutReaderBuilder<R> {
@@ -34,14 +34,15 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             layout_serde,
             projection: None,
             row_filter: None,
-            len: None,
+            size: None,
             indices: None,
             batch_size: None,
+            row_selection: None,
         }
     }
 
     pub fn with_length(mut self, len: u64) -> Self {
-        self.len = Some(len);
+        self.size = Some(len);
         self
     }
 
@@ -65,6 +66,15 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         self
     }
 
+    pub fn with_row_selection(mut self, selection: Array) -> Self {
+        assert!(
+            selection.dtype().is_boolean(),
+            "Row selection arrays must be a boolean array"
+        );
+        self.row_selection = Some(selection);
+        self
+    }
+
     pub fn with_batch_size(mut self, batch_size: usize) -> Self {
         self.batch_size = Some(batch_size);
         self
@@ -73,38 +83,41 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
     pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
 
-        // TODO(robert): Don't leak filter references into read projection
-        let (read_projection, result_projection) = if let Some(filter_columns) = self
-            .row_filter
-            .as_ref()
-            .map(|f| f.references())
-            .filter(|refs| !refs.is_empty())
-            .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
-            .transpose()?
-        {
-            match self.projection.unwrap_or_default() {
-                Projection::All => (Projection::All, Projection::All),
-                Projection::Flat(mut v) => {
-                    let original_len = v.len();
-                    let existing_fields: HashSet<Field> = v.iter().cloned().collect();
-                    v.extend(
-                        filter_columns
-                            .into_iter()
-                            .filter(|f| !existing_fields.contains(f)),
-                    );
-                    (
-                        Projection::Flat(v),
-                        Projection::Flat((0..original_len).map(Field::from).collect()),
-                    )
-                }
-            }
-        } else {
-            (self.projection.unwrap_or_default(), Projection::All)
-        };
+        // // TODO(robert): Don't leak filter references into read projection
+        // let (read_projection, result_projection) = if let Some(filter_columns) = self
+        //     .row_filter
+        //     .as_ref()
+        //     .map(|f| f.references())
+        //     .filter(|refs| !refs.is_empty())
+        //     .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
+        //     .transpose()?
+        // {
+        //     match self.projection.unwrap_or_default() {
+        //         Projection::All => (Projection::All, Projection::All),
+        //         Projection::Flat(mut v) => {
+        //             let original_len = v.len();
+        //             let existing_fields: HashSet<Field> = v.iter().cloned().collect();
+        //             v.extend(
+        //                 filter_columns
+        //                     .into_iter()
+        //                     .filter(|f| !existing_fields.contains(f)),
+        //             );
+        //             (
+        //                 Projection::Flat(v),
+        //                 Projection::Flat((0..original_len).map(Field::from).collect()),
+        //             )
+        //         }
+        //     }
+        // } else {
+        //     (self.projection.unwrap_or_default(), Projection::All)
+        // };
+
+        let projection = self.projection.unwrap_or_default();
+        let selection = self.row_selection.unwrap_or_else(|| BoolArray::from(vec![]))
 
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
-        let projected_dtype = match &read_projection {
+        let projected_dtype = match &projection {
             Projection::All => footer.dtype()?,
             Projection::Flat(projection) => footer.projected_dtype(projection)?,
         };
@@ -115,7 +128,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         });
 
         let scan = Scan {
-            projection: read_projection,
+            projection: projection.clone(),
             indices: self.indices,
             filter,
             batch_size,
@@ -133,35 +146,35 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             message_cache,
             projected_dtype,
             scan,
-            result_projection,
+            projection,
         )
     }
 
-    async fn len(&self) -> usize {
-        let len = match self.len {
-            Some(l) => l,
+    async fn size(&self) -> usize {
+        let size = match self.size {
+            Some(s) => s,
             None => self.reader.size().await,
         };
 
-        len as usize
+        size as usize
     }
 
     async fn read_footer(&mut self) -> VortexResult<Footer> {
-        let file_length = self.len().await;
+        let file_size = self.size().await;
 
-        if file_length < FILE_POSTSCRIPT_SIZE {
+        if file_size < FILE_POSTSCRIPT_SIZE {
             vortex_bail!(
-                "Malformed vortex file, length {} must be at least {}",
-                file_length,
+                "Malformed vortex file, size {} must be at least {}",
+                file_size,
                 FILE_POSTSCRIPT_SIZE,
             )
         }
 
-        let read_size = INITIAL_READ_SIZE.min(file_length);
+        let read_size = INITIAL_READ_SIZE.min(file_size);
         let mut buf = BytesMut::with_capacity(read_size);
         unsafe { buf.set_len(read_size) }
 
-        let read_offset = (file_length - read_size) as u64;
+        let read_offset = (file_size - read_size) as u64;
         buf = self.reader.read_at_into(read_offset, buf).await?;
 
         let magic_bytes_loc = read_size - MAGIC_BYTES.len();
