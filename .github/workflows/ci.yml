@@ -50,7 +50,7 @@ jobs:
 
       - name: Pytest - PyVortex
         run: |
-          pip install ../target/wheels/vortex_array-*.whl
+          pip install ../target/wheels/vortex-array-*.whl
           rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
 
