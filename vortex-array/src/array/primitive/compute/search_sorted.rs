@@ -15,7 +15,7 @@ impl SearchSortedFn for PrimitiveArray {
             match self.validity() {
                 Validity::NonNullable | Validity::AllValid => {
                     let pvalue: $T = value.try_into()?;
-                    Ok(self.maybe_null_slice::<$T>().search_sorted(&pvalue, side))
+                    Ok(SearchSortedPrimitive::new(self).search_sorted(&pvalue, side))
                 }
                 Validity::AllInvalid => Ok(SearchResult::NotFound(0)),
                 Validity::Array(_) => {
@@ -27,15 +27,40 @@ impl SearchSortedFn for PrimitiveArray {
     }
 }
 
-struct SearchSortedNullsLast<'a, T> {
+struct SearchSortedPrimitive<'a, T> {
     values: &'a [T],
+}
+
+impl<'a, T: NativePType> SearchSortedPrimitive<'a, T> {
+    pub fn new(array: &'a PrimitiveArray) -> Self {
+        Self {
+            values: array.maybe_null_slice(),
+        }
+    }
+}
+
+impl<'a, T: NativePType> IndexOrd<T> for SearchSortedPrimitive<'a, T> {
+    fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
+        // SAFETY: Used in search_sorted_by same as the standard library. The search_sorted ensures idx is in bounds
+        Some(unsafe { self.values.get_unchecked(idx) }.compare(*elem))
+    }
+}
+
+impl<'a, T> Len for SearchSortedPrimitive<'a, T> {
+    fn len(&self) -> usize {
+        self.values.len()
+    }
+}
+
+struct SearchSortedNullsLast<'a, T> {
+    values: SearchSortedPrimitive<'a, T>,
     validity: Validity,
 }
 
 impl<'a, T: NativePType> SearchSortedNullsLast<'a, T> {
     pub fn new(array: &'a PrimitiveArray) -> Self {
         Self {
-            values: array.maybe_null_slice(),
+            values: SearchSortedPrimitive::new(array),
             validity: array.validity(),
         }
     }

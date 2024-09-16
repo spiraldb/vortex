@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::mem::size_of;
 
@@ -189,17 +190,17 @@ impl<T: PStatsType> StatsAccumulator<T> {
             self.nan_count += 1;
         }
 
-        if self.prev == next {
+        if next.is_eq(self.prev) {
             self.is_strict_sorted = false;
         } else {
-            if next < self.prev {
+            if matches!(next.compare(self.prev), Ordering::Less) {
                 self.is_sorted = false;
             }
             self.run_count += 1;
         }
-        if next < self.min {
+        if matches!(next.compare(self.min), Ordering::Less) {
             self.min = next;
-        } else if next > self.max {
+        } else if matches!(next.compare(self.max), Ordering::Greater) {
             self.max = next;
         }
         self.prev = next;
@@ -207,8 +208,7 @@ impl<T: PStatsType> StatsAccumulator<T> {
 
     pub fn finish(self) -> StatsSet {
         let is_constant = (self.min == self.max && self.null_count == 0 && self.nan_count == 0)
-            || self.null_count == self.len
-            || self.nan_count == self.len;
+            || self.null_count == self.len;
 
         StatsSet::from(HashMap::from([
             (Stat::Min, self.min.into()),
