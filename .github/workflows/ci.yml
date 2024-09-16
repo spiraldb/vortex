@@ -40,8 +40,18 @@ jobs:
       - name: Rust Build
         run: cargo build --all-features --all-targets
 
+      - name: Build PyVortex Wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          rust-toolchain: ${{ steps.rust-toolchain.version }}
+          working-directory: pyvortex
+          target: x86_64
+          args: --release --interpreter python${{ steps.setup-python.python-major-version }}
+
       - name: Pytest - PyVortex
-        run: rye run pytest --benchmark-disable test/
+        run: |
+          pip install ../target/wheels/vortex-array-*.whl
+          rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
 
       - name: License Check
