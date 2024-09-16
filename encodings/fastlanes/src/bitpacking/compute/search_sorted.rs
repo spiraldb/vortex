@@ -201,7 +201,7 @@ mod test {
     #[test]
     fn test_search_sorted_many_nulls() {
         let bitpacked = BitPackedArray::encode(
-            PrimitiveArray::from_nullable_vec(vec![Some(1i64), None, None]).array(),
+            PrimitiveArray::from_nullable_vec(vec![Some(1i64), None, None]).as_ref(),
             2,
         )
         .unwrap();
