@@ -233,7 +233,6 @@ pub fn unpack_primitive<T: NativePType + BitPacking>(
 }
 
 pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
-    // println!("UNPACK_SINGLE: {:?}", Backtrace::capture());
     let bit_width = array.bit_width();
     let packed = array.packed().into_primitive()?;
     let index_in_encoded = index + array.offset();

@@ -347,7 +347,6 @@ fn search_sorted_side_idx<F: FnMut(usize) -> Ordering>(
 
 impl IndexOrd<Scalar> for Array {
     fn index_cmp(&self, idx: usize, elem: &Scalar) -> Option<Ordering> {
-        // println!("INDEX_CMP SLOW PATH (encoding={:?})", self.encoding().id());
         let scalar_a = scalar_at(self, idx).ok()?;
         scalar_a.partial_cmp(elem)
     }
