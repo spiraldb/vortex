@@ -72,6 +72,7 @@ vortex-serde = { workspace = true, features = [
 xshell = { workspace = true }
 
 [dev-dependencies]
+codspeed-criterion-compat = { workspace = true, features = ["async"] }
 criterion = { workspace = true, features = ["html_reports", "async_tokio"] }
 
 [[bin]]
