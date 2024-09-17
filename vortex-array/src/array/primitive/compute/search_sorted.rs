@@ -6,6 +6,7 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::ArrayDType;
 use crate::compute::{IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide};
 use crate::validity::Validity;
 
@@ -14,12 +15,12 @@ impl SearchSortedFn for PrimitiveArray {
         match_each_native_ptype!(self.ptype(), |$T| {
             match self.validity() {
                 Validity::NonNullable | Validity::AllValid => {
-                    let pvalue: $T = value.try_into()?;
+                    let pvalue: $T = value.cast(self.dtype())?.try_into()?;
                     Ok(SearchSortedPrimitive::new(self).search_sorted(&pvalue, side))
                 }
                 Validity::AllInvalid => Ok(SearchResult::NotFound(0)),
                 Validity::Array(_) => {
-                    let pvalue: $T = value.try_into()?;
+                    let pvalue: $T = value.cast(self.dtype())?.try_into()?;
                     Ok(SearchSortedNullsLast::new(self).search_sorted(&pvalue, side))
                 }
             }

@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::scalar_at;
-use vortex::compute::{search_sorted, search_sorted_many, SearchSortedSide};
+use vortex::compute::{search_sorted, search_sorted_u64_many, SearchSortedSide};
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -87,8 +87,8 @@ impl RunEndArray {
     /// Convert a batch of logical indices into an index for the values.
     ///
     /// See: [find_physical_index][Self::find_physical_index].
-    pub fn find_physical_indices(&self, indices: &[usize]) -> VortexResult<Vec<usize>> {
-        search_sorted_many(
+    pub fn find_physical_indices(&self, indices: &[u64]) -> VortexResult<Vec<usize>> {
+        search_sorted_u64_many(
             &self.ends(),
             indices,
             &vec![SearchSortedSide::Right; indices.len()],

@@ -39,22 +39,23 @@ impl ScalarAtFn for RunEndArray {
 impl TakeFn for RunEndArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         let primitive_indices = indices.clone().into_primitive()?;
-        let usize_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
+        let u64_indices = match_each_integer_ptype!(primitive_indices.ptype(), |$P| {
             primitive_indices
                 .maybe_null_slice::<$P>()
                 .iter()
-                .map(|idx| *idx as usize)
+                .copied()
                 .map(|idx| {
-                    if idx >= self.len() {
-                        vortex_error::vortex_bail!(OutOfBounds: idx, 0, self.len());
+                    let usize_idx = idx as usize;
+                    if usize_idx >= self.len() {
+                        vortex_error::vortex_bail!(OutOfBounds: usize_idx, 0, self.len());
                     }
 
-                    Ok(idx)
+                    Ok(idx as u64)
                 })
-                .collect::<VortexResult<Vec<usize>>>()?
+                .collect::<VortexResult<Vec<u64>>>()?
         });
         let physical_indices: Vec<u64> = self
-            .find_physical_indices(&usize_indices)?
+            .find_physical_indices(&u64_indices)?
             .iter()
             .map(|idx| *idx as u64)
             .collect();
