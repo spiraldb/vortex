@@ -120,10 +120,12 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                 StreamingState::Decoding(arr) => {
                     let mut batch = arr.clone();
 
-                    if let Some(selection) = self.scan.row_selection.as_mut() {
-                        let t_selection = selection.clone();
-                        let batch_selection = slice(&t_selection, 0, batch.len())?;
-                        *selection = slice(&t_selection, batch.len(), t_selection.len())?;
+                    if let Some(selection) = self.scan.row_selection.take() {
+                        let batch_selection = slice(&selection, 0, batch.len())?;
+                        let batch_selection = null_as_false(batch_selection.into_bool()?)?;
+                        let leftover = slice(&selection, batch.len(), selection.len())?;
+
+                        self.scan.row_selection = Some(leftover);
 
                         batch = filter(&batch, &batch_selection)?;
                     }

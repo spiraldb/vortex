@@ -89,6 +89,14 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
     pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
+        // let _projection = match self.projection.unwrap_or_default() {
+        //     Projection::All => Projection::All,
+        //     Projection::Flat(fields) => {
+        //         let resolved_references = footer.resolve_references(&fields)?;
+        //         Projection::Flat(resolved_references)
+        //     }
+        // };
+
         let projection = self.projection.unwrap_or_default();
 
         let projected_dtype = match &projection {
