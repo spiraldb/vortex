@@ -27,10 +27,13 @@ impl SearchSortedFn for BitPackedArray {
     fn search_sorted_u64(&self, value: u64, side: SearchSortedSide) -> VortexResult<SearchResult> {
         match_each_unsigned_integer_ptype!(self.ptype(), |$P| {
             // NOTE: conversion may truncate silently.
-            let cast_value: $P = value as $P;
-
-            // Create a new scalar from this component.
-            search_sorted_native(self, cast_value, side)
+            if let Some(pvalue) = num_traits::cast::<u64, $P>(value) {
+                search_sorted_native(self, pvalue, side)
+            } else {
+                // provided u64 is too large to fit in the provided PType, value must be off
+                // the right end of the array.
+                Ok(SearchResult::NotFound(self.len()))
+            }
         })
     }
 

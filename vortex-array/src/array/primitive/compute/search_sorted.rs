@@ -26,6 +26,29 @@ impl SearchSortedFn for PrimitiveArray {
             }
         })
     }
+
+    #[allow(clippy::cognitive_complexity)]
+    fn search_sorted_u64(&self, value: u64, side: SearchSortedSide) -> VortexResult<SearchResult> {
+        match_each_native_ptype!(self.ptype(), |$T| {
+            if let Some(pvalue) = num_traits::cast::<u64, $T>(value) {
+                match self.validity() {
+                    Validity::NonNullable | Validity::AllValid => {
+                        // null-free search
+                        Ok(SearchSortedPrimitive::new(self).search_sorted(&pvalue, side))
+                    }
+                    Validity::AllInvalid => Ok(SearchResult::NotFound(0)),
+                    Validity::Array(_) => {
+                        // null-aware search
+                        Ok(SearchSortedNullsLast::new(self).search_sorted(&pvalue, side))
+                    }
+                }
+            } else {
+                // provided u64 is too large to fit in the provided PType, value must be off
+                // the right end of the array.
+                Ok(SearchResult::NotFound(self.len()))
+            }
+        })
+    }
 }
 
 struct SearchSortedPrimitive<'a, T> {
@@ -90,7 +113,7 @@ mod test {
     use crate::IntoArray;
 
     #[test]
-    fn test_searchsorted_primitive() {
+    fn test_search_sorted_primitive() {
         let values = vec![1u16, 2, 3].into_array();
 
         assert_eq!(

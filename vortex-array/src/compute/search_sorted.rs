@@ -27,7 +27,11 @@ impl Display for SearchSortedSide {
 /// Result of performing search_sorted on an Array
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SearchResult {
+    /// Result for a found element was found at the given index in the sorted array
     Found(usize),
+
+    /// Result for an element not found, but that could be inserted at the given position
+    /// in the sorted order.
     NotFound(usize),
 }
 
@@ -160,18 +164,16 @@ pub fn search_sorted_u64(
 ) -> VortexResult<SearchResult> {
     array.with_dyn(|a| {
         if let Some(search_sorted) = a.search_sorted() {
-            return search_sorted.search_sorted_u64(target, side);
+            search_sorted.search_sorted_u64(target, side)
+        } else if a.scalar_at().is_some() {
+            let scalar = Scalar::primitive(target, array.dtype().nullability());
+            Ok(array.search_sorted(&scalar, side))
+        } else {
+            vortex_bail!(
+                NotImplemented: "search_sorted_u64",
+                array.encoding().id()
+            )
         }
-
-        let scalar = Scalar::primitive(target, array.dtype().nullability());
-        if a.scalar_at().is_some() {
-            return Ok(array.search_sorted(&scalar, side));
-        }
-
-        vortex_bail!(
-            NotImplemented: "search_sorted_u64",
-            array.encoding().id()
-        )
     })
 }
 
