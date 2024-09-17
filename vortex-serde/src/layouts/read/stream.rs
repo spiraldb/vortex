@@ -135,20 +135,6 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                         batch = filter(&batch, &filter_array)?;
                     }
 
-                    let filter_mask = self
-                        .scan
-                        .filter
-                        .as_ref()
-                        .map(|f| {
-                            let mask = f.evaluate(&batch)?;
-                            null_as_false(mask.into_bool()?)
-                        })
-                        .transpose()?;
-
-                    if let Some(filter_mask) = filter_mask {
-                        batch = filter(&batch, &filter_mask)?;
-                    }
-
                     batch = match &self.result_projection {
                         Projection::All => batch,
                         Projection::Flat(v) => {

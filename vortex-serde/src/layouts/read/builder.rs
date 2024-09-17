@@ -84,8 +84,8 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
     pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
 
-        // // TODO(robert): Don't leak filter references into read projection
-        let (read_projection, result_projection) = if let Some(filter_columns) = self
+        // TODO(robert): Don't leak filter references into read projection
+        let (read_projection, result_projection) = match self
             .row_filter
             .as_ref()
             .map(|f| f.references())
@@ -93,24 +93,23 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
             .transpose()?
         {
-            match self.projection.unwrap_or_default() {
+            None => (self.projection.unwrap_or_default(), Projection::All),
+            Some(filter_columns) => match self.projection.unwrap_or_default() {
                 Projection::All => (Projection::All, Projection::All),
-                Projection::Flat(mut v) => {
-                    let original_len = v.len();
-                    let existing_fields: HashSet<Field> = v.iter().cloned().collect();
-                    v.extend(
+                Projection::Flat(mut fields) => {
+                    let original_len = fields.len();
+                    let existing_fields: HashSet<Field> = fields.iter().cloned().collect();
+                    fields.extend(
                         filter_columns
                             .into_iter()
                             .filter(|f| !existing_fields.contains(f)),
                     );
                     (
-                        Projection::Flat(v),
+                        Projection::Flat(fields),
                         Projection::Flat((0..original_len).map(Field::from).collect()),
                     )
                 }
-            }
-        } else {
-            (self.projection.unwrap_or_default(), Projection::All)
+            },
         };
 
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);

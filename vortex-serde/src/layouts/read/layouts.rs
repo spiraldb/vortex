@@ -55,7 +55,7 @@ impl Layout for FlatLayout {
                 )])))
             }
             FlatLayoutState::ReadBatch => {
-                let mut buf = self.cache.get(&[]).ok_or_else(|| {
+                let mut buf = self.cache.remove(&[]).ok_or_else(|| {
                     vortex_err!(
                         "Wrong state transition, message {:?} (with range {}) should have been fetched",
                         self.cache.absolute_id(&[]),
