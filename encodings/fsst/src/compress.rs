@@ -98,7 +98,7 @@ where
             None => {
                 builder.push_null();
                 uncompressed_lengths.push(0);
-            },
+            }
             Some(s) => {
                 uncompressed_lengths.push(s.len() as i32);
 
