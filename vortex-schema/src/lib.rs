@@ -42,7 +42,7 @@ impl Schema {
         };
 
         idx.and_then(|idx| s.dtypes().get(idx).cloned())
-            .ok_or_else(|| vortex_err!("Couldn't find field by {field}"))
+            .ok_or_else(|| vortex_err!("Couldn't find field {field}"))
     }
 }
 
