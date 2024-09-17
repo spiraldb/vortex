@@ -28,6 +28,7 @@ mod test {
     use vortex::compute::unary::scalar_at;
     use vortex::validity::Validity;
     use vortex::IntoArray;
+    use vortex_buffer::Buffer;
     use vortex_dtype::{DType, Nullability, PType};
     use vortex_scalar::Scalar;
 
@@ -36,7 +37,8 @@ mod test {
     #[test]
     fn invalid_patches() {
         let packed_array = BitPackedArray::try_new(
-            PrimitiveArray::from(vec![0u32; 32]).into_array(),
+            Buffer::from(vec![0u8; 128]),
+            PType::U32,
             Validity::AllInvalid,
             Some(
                 SparseArray::try_new(
