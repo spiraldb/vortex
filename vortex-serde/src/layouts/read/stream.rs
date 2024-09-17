@@ -35,15 +35,15 @@ pub struct LayoutBatchStream<R> {
 }
 
 impl<R: VortexReadAt> LayoutBatchStream<R> {
-    pub fn try_new(
+    pub fn new(
         reader: R,
         layout: Box<dyn Layout>,
         messages_cache: Arc<RwLock<LayoutMessageCache>>,
         dtype: DType,
         scan: Scan,
         result_projection: Projection,
-    ) -> VortexResult<Self> {
-        Ok(LayoutBatchStream {
+    ) -> Self {
+        LayoutBatchStream {
             reader: Some(reader),
             layout,
             scan,
@@ -52,7 +52,7 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
             dtype,
             current_offset: 0,
             result_projection,
-        })
+        }
     }
 
     pub fn schema(&self) -> Schema {
@@ -116,6 +116,15 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                 }
                 StreamingState::Decoding(arr) => {
                     let mut batch = arr.clone();
+
+                    if let Some(selection) = self.scan.row_selection.as_mut() {
+                        let t_selection = selection.clone();
+                        let batch_selection = slice(&t_selection, 0, batch.len())?;
+                        *selection = slice(&t_selection, batch.len(), t_selection.len())?;
+
+                        batch = filter(&batch, &batch_selection)?;
+                    }
+
                     if self.scan.indices.is_some() {
                         batch = self.take_batch(&batch)?;
                     }
@@ -124,6 +133,20 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                         let mask = row_filter.evaluate(&batch)?;
                         let filter_array = null_as_false(mask.into_bool()?)?;
                         batch = filter(&batch, &filter_array)?;
+                    }
+
+                    let filter_mask = self
+                        .scan
+                        .filter
+                        .as_ref()
+                        .map(|f| {
+                            let mask = f.evaluate(&batch)?;
+                            null_as_false(mask.into_bool()?)
+                        })
+                        .transpose()?;
+
+                    if let Some(filter_mask) = filter_mask {
+                        batch = filter(&batch, &filter_mask)?;
                     }
 
                     batch = match &self.result_projection {

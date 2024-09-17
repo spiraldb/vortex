@@ -1,8 +1,9 @@
 use std::sync::{Arc, RwLock};
 
+use ahash::HashSet;
 use bytes::BytesMut;
-use vortex::array::BoolArray;
 use vortex::{Array, ArrayDType};
+use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 use vortex_schema::Schema;
@@ -84,40 +85,37 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         let footer = self.read_footer().await?;
 
         // // TODO(robert): Don't leak filter references into read projection
-        // let (read_projection, result_projection) = if let Some(filter_columns) = self
-        //     .row_filter
-        //     .as_ref()
-        //     .map(|f| f.references())
-        //     .filter(|refs| !refs.is_empty())
-        //     .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
-        //     .transpose()?
-        // {
-        //     match self.projection.unwrap_or_default() {
-        //         Projection::All => (Projection::All, Projection::All),
-        //         Projection::Flat(mut v) => {
-        //             let original_len = v.len();
-        //             let existing_fields: HashSet<Field> = v.iter().cloned().collect();
-        //             v.extend(
-        //                 filter_columns
-        //                     .into_iter()
-        //                     .filter(|f| !existing_fields.contains(f)),
-        //             );
-        //             (
-        //                 Projection::Flat(v),
-        //                 Projection::Flat((0..original_len).map(Field::from).collect()),
-        //             )
-        //         }
-        //     }
-        // } else {
-        //     (self.projection.unwrap_or_default(), Projection::All)
-        // };
-
-        let projection = self.projection.unwrap_or_default();
-        let selection = self.row_selection.unwrap_or_else(|| BoolArray::from(vec![]))
+        let (read_projection, result_projection) = if let Some(filter_columns) = self
+            .row_filter
+            .as_ref()
+            .map(|f| f.references())
+            .filter(|refs| !refs.is_empty())
+            .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
+            .transpose()?
+        {
+            match self.projection.unwrap_or_default() {
+                Projection::All => (Projection::All, Projection::All),
+                Projection::Flat(mut v) => {
+                    let original_len = v.len();
+                    let existing_fields: HashSet<Field> = v.iter().cloned().collect();
+                    v.extend(
+                        filter_columns
+                            .into_iter()
+                            .filter(|f| !existing_fields.contains(f)),
+                    );
+                    (
+                        Projection::Flat(v),
+                        Projection::Flat((0..original_len).map(Field::from).collect()),
+                    )
+                }
+            }
+        } else {
+            (self.projection.unwrap_or_default(), Projection::All)
+        };
 
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
-        let projected_dtype = match &projection {
+        let projected_dtype = match &read_projection {
             Projection::All => footer.dtype()?,
             Projection::Flat(projection) => footer.projected_dtype(projection)?,
         };
@@ -128,10 +126,11 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         });
 
         let scan = Scan {
-            projection: projection.clone(),
-            indices: self.indices,
             filter,
             batch_size,
+            projection: read_projection,
+            indices: self.indices,
+            row_selection: self.row_selection,
         };
 
         let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
@@ -140,14 +139,14 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
 
         let layout = footer.layout(scan.clone(), layouts_cache)?;
 
-        LayoutBatchStream::try_new(
+        Ok(LayoutBatchStream::new(
             self.reader,
             layout,
             message_cache,
             projected_dtype,
             scan,
-            projection,
-        )
+            result_projection,
+        ))
     }
 
     async fn size(&self) -> usize {
