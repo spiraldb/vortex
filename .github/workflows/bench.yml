@@ -26,17 +26,40 @@ jobs:
 
       - name: Run benchmark
         shell: bash
-        run: cargo bench --bench compress_benchmark --bench tpch_benchmark -- --output-format bencher | tee output.txt
+        run: cargo bench --bench tpch_benchmark -- --output-format bencher | tee tpch_benchmark.txt
 
       - name: Store benchmark result
         if: '!cancelled()'
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: Vortex benchmarks
+          name: Vortex TPC-H Queries
           tool: 'cargo'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: output.txt
+          output-file-path: tpch_benchmark.txt
+          summary-always: true
+          auto-push: true
+          fail-on-alert: false
+        env:
+          # AWS Credentials for R2 storage tests
+          AWS_BUCKET: vortex-test
+          AWS_ENDPOINT: ${{ secrets.AWS_ENDPOINT }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: Run benchmark
+        shell: bash
+        run: cargo bench --bench compress_benchmark -- --output-format bencher | tee compress_benchmark.txt
+
+      - name: Store benchmark result
+        if: '!cancelled()'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Vortex Compress
+          tool: 'cargo'
+          gh-pages-branch: gh-pages-bench
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          output-file-path: compress_benchmark.txt
           summary-always: true
           auto-push: true
           fail-on-alert: false
