@@ -20,10 +20,12 @@ jobs:
         shell: bash
         run: |
           aws s3 cp s3://vortex-fuzz-corpus/array_ops_corpus.tar.zst . --endpoint-url https://01e9655179bbec953276890b183039bc.r2.cloudflarestorage.com
-          tar -xf array_ops_corpus.tar.zst
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_FUZZ_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_FUZZ_SECRET_ACCESS_KEY }}
+      - name: Unpack corpus
+        shell: bash
+        run: tar -xf array_ops_corpus.tar.zst
       - name: Run fuzzing target
         run: RUST_BACKTRACE=1 cargo fuzz run array_ops -- -max_total_time=1800
         continue-on-error: true
