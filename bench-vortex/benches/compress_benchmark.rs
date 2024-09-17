@@ -1,6 +1,6 @@
 use bench_vortex::data_downloads::BenchmarkDataset;
 use bench_vortex::public_bi_data::BenchmarkDatasets;
-use bench_vortex::public_bi_data::PBIDataset::Medicare1;
+use bench_vortex::public_bi_data::PBIDataset::*;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{compress_taxi_data, tpch};
@@ -11,24 +11,36 @@ use vortex_sampling_compressor::SamplingCompressor;
 
 fn vortex_compress_taxi(c: &mut Criterion) {
     taxi_data_parquet();
-    let mut group = c.benchmark_group("end to end - taxi");
+    let mut group = c.benchmark_group("Yellow Taxi Trip Data");
     group.sample_size(10);
     group.bench_function("compress", |b| b.iter(|| black_box(compress_taxi_data())));
     group.finish()
 }
 
 fn vortex_compress_medicare1(c: &mut Criterion) {
-    let dataset = BenchmarkDatasets::PBI(Medicare1);
-    dataset.write_as_parquet();
-    let mut group = c.benchmark_group("end to end - medicare");
+    let mut group = c.benchmark_group("Public BI Benchmark");
     group.sample_size(10);
-    group.bench_function("compress", |b| {
-        b.iter(|| black_box(dataset.compress_to_vortex()))
-    });
+
+    for dataset in [
+        Arade,
+        CityMaxCapita,
+        Euro2016,
+        Food,
+        HashTags,
+        Hatred,
+        TableroSistemaPenal,
+        YaleLanguages,
+    ] {
+        let dataset = BenchmarkDatasets::PBI(dataset);
+        dataset.write_as_parquet();
+        group.bench_function("compress", |b| {
+            b.iter(|| black_box(dataset.compress_to_vortex()))
+        });
+    }
     group.finish()
 }
 
-fn vortex_compress_tpch(c: &mut Criterion) {
+fn vortex_compress_tpch_l_comment(c: &mut Criterion) {
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -45,7 +57,7 @@ fn vortex_compress_tpch(c: &mut Criterion) {
     let compressor_fsst = SamplingCompressor::default();
 
     // l_comment column only
-    let mut group = c.benchmark_group("tpch-l_comment");
+    let mut group = c.benchmark_group("TPCH l_comment Column");
     let comments = lineitem_vortex.with_dyn(|a| {
         a.as_struct_array_unchecked()
             .field_by_name("l_comment")
