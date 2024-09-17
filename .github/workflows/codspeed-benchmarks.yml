@@ -30,6 +30,7 @@ jobs:
         uses: opt-nc/setup-duckdb-action@v1.0.9
         with:
           version: v1.0.0
+
       - name: Build benchmarks
         shell: bash
         run: cargo install cargo-codspeed && cargo codspeed build
