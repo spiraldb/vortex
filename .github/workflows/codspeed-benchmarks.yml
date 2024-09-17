@@ -14,7 +14,6 @@ on:
 jobs:
   benchmarks:
     runs-on: ubuntu-latest
-    steps:
     if: ${{ contains(github.event.head_commit.message, '[benchmark]') || github.event.label.name == 'benchmark' && github.event_name == 'pull_request' }}
     steps:
       # We remove the benchmark label first so that the workflow can be re-triggered.
