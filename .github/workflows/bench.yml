@@ -11,6 +11,21 @@ permissions:
 
 jobs:
   bench:
+    strategy:
+      matrix:
+        version:
+          - id: tpch_benchmark
+            # this was the original name which we must preserve until we change the name of all the
+            # records in the gh-pages-bench branch "Vortex benchmarks"
+            name: Vortex benchmarks
+          - id: compress_benchmark
+            name: Vortex Compression
+          - id: bytes_at
+            name: Vortex bytes_at
+          - id: datafusion_benchmark
+            name: Vortex DataFusion
+          - id: random_access
+            name: Vortex random_access
     runs-on: ubuntu-latest-large
     steps:
       - uses: actions/checkout@v4
@@ -26,40 +41,17 @@ jobs:
 
       - name: Run benchmark
         shell: bash
-        run: cargo bench --bench tpch_benchmark -- --output-format bencher | tee tpch_benchmark.txt
+        run: cargo bench --bench ${{ matrix.id }} -- --output-format bencher | tee ${{ matrix.id }}.txt
 
       - name: Store benchmark result
         if: '!cancelled()'
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: Vortex TPC-H Queries
+          name: ${{ matrix.name }}
           tool: 'cargo'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: tpch_benchmark.txt
-          summary-always: true
-          auto-push: true
-          fail-on-alert: false
-        env:
-          # AWS Credentials for R2 storage tests
-          AWS_BUCKET: vortex-test
-          AWS_ENDPOINT: ${{ secrets.AWS_ENDPOINT }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-      - name: Run benchmark
-        shell: bash
-        run: cargo bench --bench compress_benchmark -- --output-format bencher | tee compress_benchmark.txt
-
-      - name: Store benchmark result
-        if: '!cancelled()'
-        uses: benchmark-action/github-action-benchmark@v1
-        with:
-          name: Vortex Compress
-          tool: 'cargo'
-          gh-pages-branch: gh-pages-bench
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: compress_benchmark.txt
+          output-file-path: ${{ matrix.id }}.txt
           summary-always: true
           auto-push: true
           fail-on-alert: false
