@@ -63,7 +63,7 @@ pandas==2.2.2
 pillow==10.4.0
     # via matplotlib
 pyarrow==17.0.0
-    # via vortex
+    # via vortex-array
 pydata-sphinx-theme==0.15.4
 pygments==2.18.0
     # via accessible-pygments

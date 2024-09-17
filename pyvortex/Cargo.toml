@@ -2,7 +2,7 @@
 name = "pyvortex"
 publish = false
 version = { workspace = true }
-description = "Vortex python bindings"
+description = "Python bindings for Vortex, an Apache Arrow-compatible toolkit for working with compressed array data."
 homepage = { workspace = true }
 repository = { workspace = true }
 authors = { workspace = true }

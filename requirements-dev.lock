@@ -26,8 +26,6 @@ certifi==2024.8.30
     # via requests
 charset-normalizer==3.3.2
     # via requests
-click==8.1.7
-    # via mkdocs
 contourpy==1.3.0
     # via matplotlib
 cycler==0.12.1
@@ -41,42 +39,26 @@ executing==2.0.1
     # via stack-data
 fonttools==4.53.1
     # via matplotlib
-ghp-import==2.1.0
-    # via mkdocs
 idna==3.8
     # via requests
 imagesize==1.4.1
     # via sphinx
-importlib-metadata==7.1.0
-    # via mike
-importlib-resources==6.4.0
-    # via mike
 iniconfig==2.0.0
     # via pytest
 ipython==8.26.0
 jedi==0.19.1
     # via ipython
 jinja2==3.1.3
-    # via mike
-    # via mkdocs
     # via sphinx
 kiwisolver==1.4.7
     # via matplotlib
-markdown==3.6
-    # via mkdocs
 markupsafe==2.1.5
     # via jinja2
-    # via mkdocs
 matplotlib==3.9.2
     # via pyvortex
 matplotlib-inline==0.1.7
     # via ipython
 maturin==1.5.1
-mergedeep==1.3.4
-    # via mkdocs
-mike==2.0.0
-mkdocs==1.5.3
-    # via mike
 numpy==1.26.4
     # via contourpy
     # via matplotlib
@@ -86,7 +68,6 @@ numpy==1.26.4
     # via xarray
 packaging==24.0
     # via matplotlib
-    # via mkdocs
     # via pydata-sphinx-theme
     # via pytest
     # via sphinx
@@ -96,15 +77,11 @@ pandas==2.2.2
     # via xarray
 parso==0.8.4
     # via jedi
-pathspec==0.12.1
-    # via mkdocs
 pexpect==4.9.0
     # via ipython
 pillow==10.4.0
     # via matplotlib
 pip==24.0
-platformdirs==4.2.0
-    # via mkdocs
 pluggy==1.4.0
     # via pytest
 prompt-toolkit==3.0.47
@@ -116,7 +93,7 @@ pure-eval==0.2.3
 py-cpuinfo==9.0.0
     # via pytest-benchmark
 pyarrow==15.0.2
-    # via vortex
+    # via vortex-array
 pydata-sphinx-theme==0.15.4
 pygments==2.17.2
     # via accessible-pygments
@@ -125,23 +102,15 @@ pygments==2.17.2
     # via sphinx
 pyparsing==3.1.2
     # via matplotlib
-    # via mike
 pytest==8.1.1
     # via pytest-benchmark
 pytest-benchmark==4.0.0
 python-dateutil==2.9.0.post0
-    # via ghp-import
     # via matplotlib
     # via pandas
 pytz==2024.1
     # via pandas
 pyvortex==0.2.3
-pyyaml==6.0.1
-    # via mike
-    # via mkdocs
-    # via pyyaml-env-tag
-pyyaml-env-tag==0.1
-    # via mkdocs
 requests==2.32.3
     # via sphinx
 ruff==0.3.5
@@ -178,13 +147,7 @@ tzdata==2024.1
     # via pandas
 urllib3==2.2.2
     # via requests
-verspec==0.1.0
-    # via mike
-watchdog==4.0.0
-    # via mkdocs
 wcwidth==0.2.13
     # via prompt-toolkit
 xarray==2024.7.0
     # via pyvortex
-zipp==3.18.1
-    # via importlib-metadata
