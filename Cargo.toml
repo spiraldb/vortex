@@ -159,14 +159,6 @@ worker = "0.4.0"
 xshell = "0.2.6"
 zigzag = "0.1.0"
 
-[patch.crates-io]
-datafusion = { git = 'https://github.com/apache/datafusion.git', rev = "6034be42808b43e3f48f6e58ec38cc35fa253abb" }
-datafusion-common = { git = 'https://github.com/apache/datafusion.git', rev = "6034be42808b43e3f48f6e58ec38cc35fa253abb" }
-datafusion-execution = { git = 'https://github.com/apache/datafusion.git', rev = "6034be42808b43e3f48f6e58ec38cc35fa253abb" }
-datafusion-expr = { git = 'https://github.com/apache/datafusion.git', rev = "6034be42808b43e3f48f6e58ec38cc35fa253abb" }
-datafusion-physical-expr = { git = 'https://github.com/apache/datafusion.git', rev = "6034be42808b43e3f48f6e58ec38cc35fa253abb" }
-datafusion-physical-plan = { git = 'https://github.com/apache/datafusion.git', rev = "6034be42808b43e3f48f6e58ec38cc35fa253abb" }
-
 [workspace.lints.rust]
 warnings = "deny"
 unsafe_op_in_unsafe_fn = "deny"
