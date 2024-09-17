@@ -22,18 +22,22 @@ fn vortex_compress_medicare1(c: &mut Criterion) {
     group.sample_size(10);
 
     for dataset_name in [
+        AirlineSentiment,
         Arade,
-        // CityMaxCapita, // 11th column has F, M, and U but is inferred as boolean :facepalm:
+        // Bimbo, // 27s per sample
+        // CMSprovider, // >30s per sample
+        // Corporations, // duckdb thinks ' is a quote character but its used as an apostrophe
+        // CityMaxCapita, // 11th column has F, M, and U but is inferred as boolean
         Euro2016,
         Food,
         HashTags,
-        Hatred,
-        TableroSistemaPenal,
-        YaleLanguages,
+        // Hatred, // panic in fsst_compress_iter
+        // TableroSistemaPenal, // 20s per sample
+        // YaleLanguages, // 4th column looks like integer but also contains Y
     ] {
-        let dataset = BenchmarkDatasets::PBI(dataset_name);
-        dataset.write_as_parquet();
         group.bench_function(format!("{:?}", dataset_name), |b| {
+            let dataset = BenchmarkDatasets::PBI(dataset_name);
+            dataset.write_as_parquet();
             b.iter(|| black_box(dataset.compress_to_vortex()))
         });
     }
