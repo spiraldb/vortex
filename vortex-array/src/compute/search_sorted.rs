@@ -1,7 +1,9 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 use std::fmt::{Debug, Display, Formatter};
+use std::hint;
 
+use itertools::Itertools;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -26,7 +28,11 @@ impl Display for SearchSortedSide {
 /// Result of performing search_sorted on an Array
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum SearchResult {
+    /// Result for a found element was found at the given index in the sorted array
     Found(usize),
+
+    /// Result for an element not found, but that could be inserted at the given position
+    /// in the sorted order.
     NotFound(usize),
 }
 
@@ -93,6 +99,37 @@ impl Display for SearchResult {
 /// For nullable arrays we assume that the nulls are sorted last, i.e. they're the greatest value
 pub trait SearchSortedFn {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult>;
+
+    fn search_sorted_u64(&self, value: u64, side: SearchSortedSide) -> VortexResult<SearchResult> {
+        let u64_scalar = Scalar::from(value);
+        self.search_sorted(&u64_scalar, side)
+    }
+
+    /// Bulk search for many values.
+    fn search_sorted_many(
+        &self,
+        values: &[Scalar],
+        sides: &[SearchSortedSide],
+    ) -> VortexResult<Vec<SearchResult>> {
+        values
+            .iter()
+            .zip(sides.iter())
+            .map(|(value, side)| self.search_sorted(value, *side))
+            .try_collect()
+    }
+
+    fn search_sorted_u64_many(
+        &self,
+        values: &[u64],
+        sides: &[SearchSortedSide],
+    ) -> VortexResult<Vec<SearchResult>> {
+        values
+            .iter()
+            .copied()
+            .zip(sides.iter().copied())
+            .map(|(value, side)| self.search_sorted_u64(value, side))
+            .try_collect()
+    }
 }
 
 pub fn search_sorted<T: Into<Scalar>>(
@@ -118,6 +155,72 @@ pub fn search_sorted<T: Into<Scalar>>(
             NotImplemented: "search_sorted",
             array.encoding().id()
         )
+    })
+}
+
+pub fn search_sorted_u64(
+    array: &Array,
+    target: u64,
+    side: SearchSortedSide,
+) -> VortexResult<SearchResult> {
+    array.with_dyn(|a| {
+        if let Some(search_sorted) = a.search_sorted() {
+            search_sorted.search_sorted_u64(target, side)
+        } else if a.scalar_at().is_some() {
+            let scalar = Scalar::primitive(target, array.dtype().nullability());
+            Ok(array.search_sorted(&scalar, side))
+        } else {
+            vortex_bail!(
+                NotImplemented: "search_sorted_u64",
+                array.encoding().id()
+            )
+        }
+    })
+}
+
+/// Search for many elements in the array.
+pub fn search_sorted_many<T: Into<Scalar> + Clone>(
+    array: &Array,
+    targets: &[T],
+    sides: &[SearchSortedSide],
+) -> VortexResult<Vec<SearchResult>> {
+    array.with_dyn(|a| {
+        if let Some(search_sorted) = a.search_sorted() {
+            let values: Vec<Scalar> = targets
+                .iter()
+                .map(|t| t.clone().into().cast(array.dtype()))
+                .try_collect()?;
+
+            search_sorted.search_sorted_many(&values, sides)
+        } else {
+            // Call in loop and collect
+            targets
+                .iter()
+                .zip(sides.iter().copied())
+                .map(|(target, side)| search_sorted(array, target.clone(), side))
+                .try_collect()
+        }
+    })
+}
+
+// Native functions for each of the values, cast up to u64 or down to something lower.
+pub fn search_sorted_u64_many(
+    array: &Array,
+    targets: &[u64],
+    sides: &[SearchSortedSide],
+) -> VortexResult<Vec<SearchResult>> {
+    array.with_dyn(|a| {
+        if let Some(search_sorted) = a.search_sorted() {
+            search_sorted.search_sorted_u64_many(targets, sides)
+        } else {
+            // Call in loop and collect
+            targets
+                .iter()
+                .copied()
+                .zip(sides.iter().copied())
+                .map(|(target, side)| search_sorted_u64(array, target, side))
+                .try_collect()
+        }
     })
 }
 
@@ -177,7 +280,8 @@ pub trait SearchSorted<T> {
         }
     }
 
-    /// find function is used to find the element if it exists, if element exists side_find will be used to find desired index amongst equal values
+    /// find function is used to find the element if it exists, if element exists side_find will be
+    /// used to find desired index amongst equal values
     fn search_sorted_by<F: FnMut(usize) -> Ordering, N: FnMut(usize) -> Ordering>(
         &self,
         find: F,
@@ -186,7 +290,11 @@ pub trait SearchSorted<T> {
     ) -> SearchResult;
 }
 
-impl<S: IndexOrd<T> + Len + ?Sized, T> SearchSorted<T> for S {
+// Default implementation for types that implement IndexOrd.
+impl<S, T> SearchSorted<T> for S
+where
+    S: IndexOrd<T> + Len + ?Sized,
+{
     fn search_sorted_by<F: FnMut(usize) -> Ordering, N: FnMut(usize) -> Ordering>(
         &self,
         find: F,
@@ -217,27 +325,54 @@ fn search_sorted_side_idx<F: FnMut(usize) -> Ordering>(
     from: usize,
     to: usize,
 ) -> SearchResult {
-    // INVARIANTS:
-    // - from <= left <= left + size = right <= to
-    // - f returns Less for everything in self[..left]
-    // - f returns Greater for everything in self[right..]
     let mut size = to - from;
-    let mut left = from;
-    let mut right = to;
-    while left < right {
-        let mid = left + size / 2;
+    if size == 0 {
+        return SearchResult::NotFound(0);
+    }
+    let mut base = from;
+
+    // This loop intentionally doesn't have an early exit if the comparison
+    // returns Equal. We want the number of loop iterations to depend *only*
+    // on the size of the input slice so that the CPU can reliably predict
+    // the loop count.
+    while size > 1 {
+        let half = size / 2;
+        let mid = base + half;
+
+        // SAFETY: the call is made safe by the following inconstants:
+        // - `mid >= 0`: by definition
+        // - `mid < size`: `mid = size / 2 + size / 4 + size / 8 ...`
         let cmp = find(mid);
 
-        left = if cmp == Less { mid + 1 } else { left };
-        right = if cmp == Greater { mid } else { right };
-        if cmp == Equal {
-            return SearchResult::Found(mid);
-        }
+        // Binary search interacts poorly with branch prediction, so force
+        // the compiler to use conditional moves if supported by the target
+        // architecture.
+        base = if cmp == Greater { base } else { mid };
 
-        size = right - left;
+        // This is imprecise in the case where `size` is odd and the
+        // comparison returns Greater: the mid element still gets included
+        // by `size` even though it's known to be larger than the element
+        // being searched for.
+        //
+        // This is fine though: we gain more performance by keeping the
+        // loop iteration count invariant (and thus predictable) than we
+        // lose from considering one additional element.
+        size -= half;
     }
 
-    SearchResult::NotFound(left)
+    // SAFETY: base is always in [0, size) because base <= mid.
+    let cmp = find(base);
+    if cmp == Equal {
+        // SAFETY: same as the call to `find` above.
+        unsafe { hint::assert_unchecked(base < to) };
+        SearchResult::Found(base)
+    } else {
+        let result = base + (cmp == Less) as usize;
+        // SAFETY: same as the call to `find` above.
+        // Note that this is `<=`, unlike the assert in the `Found` path.
+        unsafe { hint::assert_unchecked(result <= to) };
+        SearchResult::NotFound(result)
+    }
 }
 
 impl IndexOrd<Scalar> for Array {

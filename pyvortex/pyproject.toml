@@ -1,15 +1,19 @@
 [project]
-name = "vortex"
-version = "0.1.0"
-description = "Add your description here"
-authors = [
-    { name = "Nicholas Gates", email = "nick@nickgates.com" }
-]
+name = "vortex-array"
+# Maturin copies these, at build time, from Cargo.toml.
+# https://github.com/PyO3/maturin/blob/main/src/metadata.rs#L127-L129
+dyanmic = ["version", "description", "authors"]
+readme = "README.md"
 dependencies = [
     "pyarrow>=15.0.0",
 ]
 requires-python = ">= 3.11"
-classifiers = ["Private :: Do Not Upload"]
+
+[project.urls]
+Documentation = "https://spiraldb.github.io/vortex/docs/"
+Changelog = "https://github.com/spiraldb/vortex/blob/develop/CHANGELOG.md"
+Issues = "https://github.com/spiraldb/vortex/issues"
+Benchmarks = "https://spiraldb.github.io/vortex/dev/bench/"
 
 [build-system]
 requires = ["maturin>=1.2,<2.0"]
@@ -27,4 +31,7 @@ dev-dependencies = [
 python-source = "python"
 module-name = "vortex._lib"
 features = ["pyo3/extension-module"]
-include = [{ path = "rust-toolchain.toml", format = "sdist" }]
+include = [
+    { path = "rust-toolchain.toml", format = "sdist" },
+    { path = "README.md", format = "sdist" },
+]

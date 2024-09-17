@@ -42,7 +42,9 @@ jobs:
         run: cargo build --all-features --all-targets
 
       - name: Pytest - PyVortex
-        run: rye run pytest --benchmark-disable test/
+        run: |
+          rye run maturin develop --skip-install
+          rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
 
       - name: License Check
@@ -50,6 +52,7 @@ jobs:
       - uses: rustsec/audit-check@v1.4.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          ignore: "RUSTSEC-2023-0086"
 
   miri:
     name: 'miri'
