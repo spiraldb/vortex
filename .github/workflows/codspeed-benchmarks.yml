@@ -33,7 +33,7 @@ jobs:
           version: v1.0.0
       - name: Build benchmarks
         shell: bash
-        run: cargo codspeed build
+        run: cargo install cargo-codspeed && cargo codspeed build
 
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v3
