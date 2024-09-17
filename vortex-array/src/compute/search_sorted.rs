@@ -256,13 +256,13 @@ fn search_sorted_side_idx<F: FnMut(usize) -> Ordering>(
     // SAFETY: base is always in [0, size) because base <= mid.
     let cmp = find(base);
     if cmp == Equal {
-        // SAFETY: same as the `get_unchecked` above.
+        // SAFETY: same as the call to `find` above.
         unsafe { hint::assert_unchecked(base < to) };
         SearchResult::Found(base)
     } else {
         let result = base + (cmp == Less) as usize;
-        // SAFETY: same as the `get_unchecked` above.
-        // Note that this is `<=`, unlike the assume in the `Ok` path.
+        // SAFETY: same as the call to `find` above.
+        // Note that this is `<=`, unlike the assert in the `Found` path.
         unsafe { hint::assert_unchecked(result <= to) };
         SearchResult::NotFound(result)
     }
