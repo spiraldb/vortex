@@ -21,9 +21,9 @@ fn vortex_compress_medicare1(c: &mut Criterion) {
     let mut group = c.benchmark_group("Public BI Benchmark");
     group.sample_size(10);
 
-    for dataset in [
+    for dataset_name in [
         Arade,
-        CityMaxCapita,
+        // CityMaxCapita, // 11th column has F, M, and U but is inferred as boolean :facepalm:
         Euro2016,
         Food,
         HashTags,
@@ -31,9 +31,9 @@ fn vortex_compress_medicare1(c: &mut Criterion) {
         TableroSistemaPenal,
         YaleLanguages,
     ] {
-        let dataset = BenchmarkDatasets::PBI(dataset);
+        let dataset = BenchmarkDatasets::PBI(dataset_name);
         dataset.write_as_parquet();
-        group.bench_function("compress", |b| {
+        group.bench_function(format!("{:?}", dataset_name), |b| {
             b.iter(|| black_box(dataset.compress_to_vortex()))
         });
     }
