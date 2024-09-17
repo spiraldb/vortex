@@ -95,7 +95,10 @@ where
     let mut uncompressed_lengths: Vec<i32> = Vec::with_capacity(len);
     for string in iter {
         match string {
-            None => builder.push_null(),
+            None => {
+                builder.push_null();
+                uncompressed_lengths.push(0);
+            },
             Some(s) => {
                 uncompressed_lengths.push(s.len() as i32);
 
