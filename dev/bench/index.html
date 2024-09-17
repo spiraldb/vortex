@@ -124,6 +124,11 @@
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script src="http://cdn.rawgit.com/h2non/jsHashes/master/hashes.js"></script>
+<!-- Chart.js Zoom Plugin -->
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<!-- Chart.js Zoom Plugin -->
+
 <script src="data.js"></script>
 <script id="main-script">
     'use strict';
@@ -131,12 +136,12 @@
         function stringToColor(str) {
             // Random colours are generally pretty disgusting...
             const MAP = {
-                "vortex-file-compressed": '#D4FF8F',
-                "vortex-file-uncompressed": '#3E6A00',
-                "vortex-in-memory-no-pushdown": '#00C8F2',
-                "vortex-in-memory-pushdown": '#00769F',
-                "arrow": '#FFD57A',
-                "parquet": '#FFC086',
+                "vortex-file-uncompressed": '#98da8d',
+                "vortex-file-compressed": '#23d100',
+                "vortex-in-memory-no-pushdown": '#79a6df',
+                "vortex-in-memory-pushdown": '#0c53ae',
+                "arrow": '#58067e',
+                "parquet": '#ef7f1d',
             };
 
             if (MAP[str]) {
@@ -225,6 +230,8 @@
 
         function renderAllChars(dataSets) {
 
+            var charts = [];
+
             function renderGraph(parent, name, dataset) {
                 const canvas = document.createElement('canvas');
                 canvas.className = 'benchmark-chart';
@@ -244,6 +251,12 @@
                 };
                 const options = {
                     spanGaps: true,
+                    pointStyle: 'crossRot',
+                    elements: {
+                        line: {
+                            borderWidth: 1,
+                        },
+                    },
                     scales: {
                         x: {
                             title: {
@@ -251,6 +264,8 @@
                                 text: name,
                                 padding: {bottom: 50},
                             },
+                            // By default, show the last 50 commits
+                            min: Math.max(0, dataset.commits.length - 50),
                         },
                         y: {
                             title: {
@@ -284,6 +299,35 @@
                             }
                         }
                     },
+                    plugins: {
+                        zoom: {
+                            zoom: {
+                                wheel: {enabled: true},
+                                mode: 'x',
+                                drag: {enabled: true}
+                            }
+                        },
+                        legend: {
+                            display: true,
+                            onClick: function (e, legendItem) {
+                                var index = legendItem.datasetIndex;
+
+                                var wasVisible = this.chart.isDatasetVisible(index);
+                                var datasetLabel = this.chart.data.datasets[index].label;
+                                var clickedChart = this.chart;
+
+                                charts.forEach(function(chart) {
+                                    chart.data.datasets.forEach(function(ds, idx) {
+                                        if (ds.label === datasetLabel) {
+                                            chart.getDatasetMeta(idx).hidden = wasVisible;
+                                        }
+                                    });
+
+                                    chart.update();
+                                });
+                            }
+                        }
+                    },
                     onClick: (_mouseEvent, activeElems) => {
                         if (activeElems.length === 0) {
                             return;
@@ -295,7 +339,7 @@
                     },
                 };
 
-                new Chart(canvas, {
+                return new Chart(canvas, {
                     type: 'line',
                     data,
                     options,
@@ -317,7 +361,7 @@
                 setElem.appendChild(graphsElem);
 
                 for (const [benchName, benches] of benchSet.entries()) {
-                    renderGraph(graphsElem, benchName, benches)
+                    charts.push(renderGraph(graphsElem, benchName, benches))
                 }
             }
 

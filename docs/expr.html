@@ -8,7 +8,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>Input and Output &#8212; Vortex  documentation</title>
+    <title>Row Filter Expressions &#8212; Vortex  documentation</title>
   
   
   
@@ -38,11 +38,10 @@
     <script src="_static/documentation_options.js?v=5929fcd5"></script>
     <script src="_static/doctools.js?v=9a2dae69"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'io';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'expr';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Row Filter Expressions" href="expr.html" />
-    <link rel="prev" title="Array Data Types" href="dtype.html" />
+    <link rel="prev" title="Input and Output" href="io.html" />
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <meta name="docsearch:language" content="en"/>
   </head>
@@ -146,15 +145,15 @@
 </li>
 
 
-<li class="nav-item current active">
-  <a class="nav-link nav-internal" href="#">
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="io.html">
     Input and Output
   </a>
 </li>
 
 
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="expr.html">
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
     Row Filter Expressions
   </a>
 </li>
@@ -257,15 +256,15 @@ document.write(`
 </li>
 
 
-<li class="nav-item current active">
-  <a class="nav-link nav-internal" href="#">
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="io.html">
     Input and Output
   </a>
 </li>
 
 
-<li class="nav-item ">
-  <a class="nav-link nav-internal" href="expr.html">
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
     Row Filter Expressions
   </a>
 </li>
@@ -337,7 +336,7 @@ document.write(`
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page">Input and Output</li>
+    <li class="breadcrumb-item active" aria-current="page">Row Filter...</li>
   </ul>
 </nav>
 </div>
@@ -354,22 +353,15 @@ document.write(`
 <div id="searchbox"></div>
                 <article class="bd-article">
                   
-  <section id="module-vortex.io">
-<span id="input-and-output"></span><h1>Input and Output<a class="headerlink" href="#module-vortex.io" title="Link to this heading">#</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="vortex.io.read">
-<span class="sig-prename descclassname"><span class="pre">vortex.io.</span></span><span class="sig-name descname"><span class="pre">read</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">f</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">projection</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row_filter</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.io.read" title="Link to this definition">#</a></dt>
-<dd><p>Read a vortex struct array from the local filesystem.</p>
-<section id="parameters">
-<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h2>
-<dl>
-<dt>f<span class="classifier"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></dt><dd><p>The file path.</p>
-</dd>
-</dl>
-</section>
+  <section id="module-vortex.expr">
+<span id="row-filter-expressions"></span><h1>Row Filter Expressions<a class="headerlink" href="#module-vortex.expr" title="Link to this heading">#</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="vortex.expr.Expr">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.expr.</span></span><span class="sig-name descname"><span class="pre">Expr</span></span><a class="headerlink" href="#vortex.expr.Expr" title="Link to this definition">#</a></dt>
+<dd><p>An expression describes how to filter rows when reading an array from a file.</p>
 <section id="examples">
 <h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
-<p>Read an array with a structured column and nulls at multiple levels and in multiple columns.</p>
+<p>All the examples read the following file.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
@@ -378,59 +370,9 @@ document.write(`
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
 <span class="gp">... </span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="s2">&quot;a.vortex&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StructArray object at ...&gt;</span>
-<span class="go">-- is_valid: all not null</span>
-<span class="go">-- child 0 type: int64</span>
-<span class="go">  [</span>
-<span class="go">    25,</span>
-<span class="go">    31,</span>
-<span class="go">    null,</span>
-<span class="go">    57,</span>
-<span class="go">    null</span>
-<span class="go">  ]</span>
-<span class="go">-- child 1 type: string</span>
-<span class="go">  [</span>
-<span class="go">    &quot;Joseph&quot;,</span>
-<span class="go">    null,</span>
-<span class="go">    &quot;Angela&quot;,</span>
-<span class="go">    &quot;Mikhail&quot;,</span>
-<span class="go">    null</span>
-<span class="go">  ]</span>
 </pre></div>
 </div>
-<p>Read just the age column:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">c</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">,</span> <span class="n">projection</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;age&quot;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">c</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StructArray object at ...&gt;</span>
-<span class="go">-- is_valid: all not null</span>
-<span class="go">-- child 0 type: int64</span>
-<span class="go">  [</span>
-<span class="go">    25,</span>
-<span class="go">    31,</span>
-<span class="go">    null,</span>
-<span class="go">    57,</span>
-<span class="go">    null</span>
-<span class="go">  ]</span>
-</pre></div>
-</div>
-<p>Read just the name column, by its index:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">d</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">,</span> <span class="n">projection</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">d</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StructArray object at ...&gt;</span>
-<span class="go">-- is_valid: all not null</span>
-<span class="go">-- child 0 type: string</span>
-<span class="go">  [</span>
-<span class="go">    &quot;Joseph&quot;,</span>
-<span class="go">    null,</span>
-<span class="go">    &quot;Angela&quot;,</span>
-<span class="go">    &quot;Mikhail&quot;,</span>
-<span class="go">    null</span>
-<span class="go">  ]</span>
-</pre></div>
-</div>
-<p>Keep rows with an age above 35. This will read O(N_KEPT) rows, when the file format allows.</p>
+<p>Read only those rows whose age column is greater than 35:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">,</span> <span class="n">row_filter</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;age&quot;</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">35</span><span class="p">)</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
 <span class="go">&lt;pyarrow.lib.StructArray object at ...&gt;</span>
@@ -445,53 +387,72 @@ document.write(`
 <span class="go">  ]</span>
 </pre></div>
 </div>
-<p>TODO(DK): Repeating a column in a projection does not work</p>
-<p>Read the age column by name, twice, and the name column by index, once:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="c1"># e = vortex.io.read(&quot;a.vortex&quot;, projection = [&quot;age&quot;, 1, &quot;age&quot;])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># e.to_arrow()</span>
+<p>Read only those rows whose age column lies in (21, 33]. Notice that we must use parentheses
+because of the Python precedence rules for <code class="docutils literal notranslate"><span class="pre">&amp;</span></code>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">age</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;age&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">,</span> <span class="n">row_filter</span> <span class="o">=</span> <span class="p">(</span><span class="n">age</span> <span class="o">&gt;</span> <span class="mi">21</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">age</span> <span class="o">&lt;=</span> <span class="mi">33</span><span class="p">))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<span class="go">&lt;pyarrow.lib.StructArray object at ...&gt;</span>
+<span class="go">-- is_valid: all not null</span>
+<span class="go">-- child 0 type: int64</span>
+<span class="go">  [</span>
+<span class="go">    25,</span>
+<span class="go">    31</span>
+<span class="go">  ]</span>
+<span class="go">-- child 1 type: string</span>
+<span class="go">  [</span>
+<span class="go">    &quot;Joseph&quot;,</span>
+<span class="go">    null</span>
+<span class="go">  ]</span>
 </pre></div>
 </div>
-<p>TODO(DK): Top-level nullness does not work.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Angela&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="kc">None</span><span class="p">,</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Mikhail&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">57</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
-<span class="gp">... </span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="s2">&quot;a.vortex&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">b</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">)</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="c1"># b.to_arrow()</span>
+<p>Read only those rows whose name is <cite>Joseph</cite>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">name</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">,</span> <span class="n">row_filter</span> <span class="o">=</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;Joseph&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<span class="go">&lt;pyarrow.lib.StructArray object at ...&gt;</span>
+<span class="go">-- is_valid: all not null</span>
+<span class="go">-- child 0 type: int64</span>
+<span class="go">  [</span>
+<span class="go">    25</span>
+<span class="go">  ]</span>
+<span class="go">-- child 1 type: string</span>
+<span class="go">  [</span>
+<span class="go">    &quot;Joseph&quot;</span>
+<span class="go">  ]</span>
+</pre></div>
+</div>
+<p>Read rows whose name is <cite>Angela</cite> or whose age is between 20 and 30, inclusive. Notice that the
+Angela row is excluded because its age is null. The entire row filtering expression therefore
+evaluates to null which is interpreted as false:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">name</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;a.vortex&quot;</span><span class="p">,</span> <span class="n">row_filter</span> <span class="o">=</span> <span class="p">(</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;Angela&quot;</span><span class="p">)</span> <span class="o">|</span> <span class="p">((</span><span class="n">age</span> <span class="o">&gt;=</span> <span class="mi">20</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">age</span> <span class="o">&lt;=</span> <span class="mi">30</span><span class="p">)))</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">e</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<span class="go">&lt;pyarrow.lib.StructArray object at ...&gt;</span>
+<span class="go">-- is_valid: all not null</span>
+<span class="go">-- child 0 type: int64</span>
+<span class="go">  [</span>
+<span class="go">    25</span>
+<span class="go">  ]</span>
+<span class="go">-- child 1 type: string</span>
+<span class="go">  [</span>
+<span class="go">    &quot;Joseph&quot;</span>
+<span class="go">  ]</span>
 </pre></div>
 </div>
 </section>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="vortex.io.write">
-<span class="sig-prename descclassname"><span class="pre">vortex.io.</span></span><span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.io.write" title="Link to this definition">#</a></dt>
-<dd><p>Write a vortex struct array to the local filesystem.</p>
-<section id="id1">
-<h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">#</a></h2>
-<dl>
-<dt>array<span class="classifier"><a class="reference internal" href="encoding.html#vortex.encoding.Array" title="vortex.encoding.Array"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.encoding.Array</span></code></a></span></dt><dd><p>The array. Must be an array of structures.</p>
-</dd>
-<dt>f<span class="classifier"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.12)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></dt><dd><p>The file path.</p>
-</dd>
-</dl>
-</section>
-<section id="id2">
-<h2>Examples<a class="headerlink" href="#id2" title="Link to this heading">#</a></h2>
-<p>Write the array <cite>a</cite> to the local file <cite>a.vortex</cite>.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">2</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">10</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="mi">11</span><span class="p">},</span>
-<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;x&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">},</span>
-<span class="gp">... </span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">io</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="s2">&quot;a.vortex&quot;</span><span class="p">)</span>
+<dt class="sig sig-object py" id="vortex.expr.column">
+<span class="sig-prename descclassname"><span class="pre">vortex.expr.</span></span><span class="sig-name descname"><span class="pre">column</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.expr.column" title="Link to this definition">#</a></dt>
+<dd><p>A named column.</p>
+<p>See <a class="reference internal" href="#vortex.expr.Expr" title="vortex.expr.Expr"><code class="xref py py-class docutils literal notranslate"><span class="pre">Expr</span></code></a> for more examples.</p>
+<section id="example">
+<h2>Example<a class="headerlink" href="#example" title="Link to this heading">#</a></h2>
+<p>A filter that selects only those rows whose name is <cite>Joseph</cite>:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">name</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">expr</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;name&quot;</span><span class="p">)</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="nb">filter</span> <span class="o">=</span> <span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;Joseph&quot;</span>
 </pre></div>
 </div>
 </section>
@@ -510,22 +471,13 @@ document.write(`
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="dtype.html"
+       href="io.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">Array Data Types</p>
+        <p class="prev-next-title">Input and Output</p>
       </div>
-    </a>
-    <a class="right-next"
-       href="expr.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Row Filter Expressions</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
     </a>
 </div>
                 </footer>
@@ -545,15 +497,15 @@ document.write(`
   </div>
   <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.io.read"><code class="docutils literal notranslate"><span class="pre">read()</span></code></a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.io.write"><code class="docutils literal notranslate"><span class="pre">write()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.expr.Expr"><code class="docutils literal notranslate"><span class="pre">Expr</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.expr.column"><code class="docutils literal notranslate"><span class="pre">column()</span></code></a></li>
 </ul>
   </nav></div>
 
   <div class="sidebar-secondary-item">
 
   <div class="tocsection sourcelink">
-    <a href="_sources/io.rst.txt">
+    <a href="_sources/expr.rst.txt">
       <i class="fa-solid fa-file-lines"></i> Show Source
     </a>
   </div>

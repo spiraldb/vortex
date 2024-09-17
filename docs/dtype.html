@@ -1,64 +1,385 @@
+
 <!DOCTYPE html>
 
-<html lang="en" data-content_root="./">
+
+<html lang="en" data-content_root="./" >
+
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
     <title>Array Data Types &#8212; Vortex  documentation</title>
-    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d1102ebc" />
-    <link rel="stylesheet" type="text/css" href="_static/basic.css?v=c058f7c8" />
-    <link rel="stylesheet" type="text/css" href="_static/alabaster.css?v=27fed22d" />
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=a746c00c" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
     <script src="_static/documentation_options.js?v=5929fcd5"></script>
     <script src="_static/doctools.js?v=9a2dae69"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'dtype';</script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Input and Output" href="io.html" />
-    <link rel="prev" title="Array Encodings" href="encoding.html" />
-   
-  <link rel="stylesheet" href="_static/custom.css" type="text/css" />
+    <link rel="prev" title="Arrays" href="encoding.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  </head>
   
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
 
   
   
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
 
-  </head><body>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
   
 
-    <div class="document">
-      <div class="documentwrapper">
-        <div class="bodywrapper">
+<a class="navbar-brand logo" href="index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Vortex  documentation</p>
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="encoding.html">
+    Arrays
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    Array Data Types
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="io.html">
+    Input and Output
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="expr.html">
+    Row Filter Expressions
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
           
 
-          <div class="body" role="main">
-            
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script>
+    </div>
+  
+
+  
+    <button class="pst-navbar-icon sidebar-toggle secondary-toggle" aria-label="On this page">
+      <span class="fa-solid fa-outdent"></span>
+    </button>
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="encoding.html">
+    Arrays
+  </a>
+</li>
+
+
+<li class="nav-item current active">
+  <a class="nav-link nav-internal" href="#">
+    Array Data Types
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="io.html">
+    Input and Output
+  </a>
+</li>
+
+
+<li class="nav-item ">
+  <a class="nav-link nav-internal" href="expr.html">
+    Row Filter Expressions
+  </a>
+</li>
+
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script></div>
+        
+      </div>
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+<nav class="bd-docs-nav bd-links"
+     aria-label="Section Navigation">
+  <p class="bd-links__title" role="heading" aria-level="1">Section Navigation</p>
+  <div class="bd-toc-item navbar-nav"></div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    <li class="breadcrumb-item active" aria-current="page">Array Data Types</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
   <section id="module-vortex.dtype">
-<span id="array-data-types"></span><h1>Array Data Types<a class="headerlink" href="#module-vortex.dtype" title="Link to this heading">¶</a></h1>
+<span id="array-data-types"></span><h1>Array Data Types<a class="headerlink" href="#module-vortex.dtype" title="Link to this heading">#</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="vortex.dtype.DType">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">DType</span></span><a class="headerlink" href="#vortex.dtype.DType" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">DType</span></span><a class="headerlink" href="#vortex.dtype.DType" title="Link to this definition">#</a></dt>
 <dd><p>A data type describes the set of operations available on a given column. These operations are
 implemented by the column <em>encoding</em>. Each data type is implemented by one or more encodings.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="vortex.dtype.binary">
-<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">binary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.binary" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">binary</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.binary" title="Link to this definition">#</a></dt>
 <dd><p>Construct a data type for binary strings.</p>
 <section id="parameters">
-<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<h2>Parameters<a class="headerlink" href="#parameters" title="Link to this heading">#</a></h2>
+<dl>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="returns">
-<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
+<h2>Returns<a class="headerlink" href="#returns" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
 </section>
 <section id="examples">
-<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">¶</a></h2>
+<h2>Examples<a class="headerlink" href="#examples" title="Link to this heading">#</a></h2>
 <p>A data type permitting any string of bytes but not permitting <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">binary</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
 <span class="go">binary(False)</span>
@@ -69,21 +390,21 @@ implemented by the column <em>encoding</em>. Each data type is implemented by on
 
 <dl class="py function">
 <dt class="sig sig-object py" id="vortex.dtype.bool">
-<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.bool" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">bool</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.bool" title="Link to this definition">#</a></dt>
 <dd><p>Construct a Boolean data type.</p>
 <section id="id1">
-<h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">¶</a></h2>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<h2>Parameters<a class="headerlink" href="#id1" title="Link to this heading">#</a></h2>
+<dl>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id2">
-<h2>Returns<a class="headerlink" href="#id2" title="Link to this heading">¶</a></h2>
+<h2>Returns<a class="headerlink" href="#id2" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
 </section>
 <section id="id3">
-<h2>Examples<a class="headerlink" href="#id3" title="Link to this heading">¶</a></h2>
+<h2>Examples<a class="headerlink" href="#id3" title="Link to this heading">#</a></h2>
 <p>A data type permitting <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, and <a class="reference external" href="https://docs.python.org/3/library/constants.html#False" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">False</span></code></a>.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">bool</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
 <span class="go">bool(True)</span>
@@ -99,26 +420,24 @@ implemented by the column <em>encoding</em>. Each data type is implemented by on
 
 <dl class="py function">
 <dt class="sig sig-object py" id="vortex.dtype.float">
-<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">float</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.float" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">float</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.float" title="Link to this definition">#</a></dt>
 <dd><p>Construct an IEEE 754 binary floating-point data type.</p>
 <section id="id4">
-<h2>Parameters<a class="headerlink" href="#id4" title="Link to this heading">¶</a></h2>
-<p>width : one of 16, 32, and 64.</p>
-<blockquote>
-<div><p>The bit width determines the range and precision of the floating-point values. If
+<h2>Parameters<a class="headerlink" href="#id4" title="Link to this heading">#</a></h2>
+<dl>
+<dt>width<span class="classifier">one of 16, 32, and 64.</span></dt><dd><p>The bit width determines the range and precision of the floating-point values. If
 <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
-</div></blockquote>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+</dd>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id5">
-<h2>Returns<a class="headerlink" href="#id5" title="Link to this heading">¶</a></h2>
+<h2>Returns<a class="headerlink" href="#id5" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
 </section>
 <section id="id6">
-<h2>Examples<a class="headerlink" href="#id6" title="Link to this heading">¶</a></h2>
+<h2>Examples<a class="headerlink" href="#id6" title="Link to this heading">#</a></h2>
 <p>A data type permitting <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> as well as IEEE 754 binary16 floating-point values. Values
 larger than 65,520 or less than -65,520 will respectively round to positive and negative
 infinity.</p>
@@ -131,25 +450,23 @@ infinity.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="vortex.dtype.int">
-<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">int</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.int" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">int</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.int" title="Link to this definition">#</a></dt>
 <dd><p>Construct a signed integral data type.</p>
 <section id="id7">
-<h2>Parameters<a class="headerlink" href="#id7" title="Link to this heading">¶</a></h2>
-<p>width : one of 8, 16, 32, and 64.</p>
-<blockquote>
-<div><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
-</div></blockquote>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<h2>Parameters<a class="headerlink" href="#id7" title="Link to this heading">#</a></h2>
+<dl>
+<dt>width<span class="classifier">one of 8, 16, 32, and 64.</span></dt><dd><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
+</dd>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id8">
-<h2>Returns<a class="headerlink" href="#id8" title="Link to this heading">¶</a></h2>
+<h2>Returns<a class="headerlink" href="#id8" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
 </section>
 <section id="id9">
-<h2>Examples<a class="headerlink" href="#id9" title="Link to this heading">¶</a></h2>
+<h2>Examples<a class="headerlink" href="#id9" title="Link to this heading">#</a></h2>
 <p>A data type permitting <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> and the integers from -128 to 127, inclusive:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">int</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 <span class="go">int(8, True)</span>
@@ -165,14 +482,14 @@ infinity.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="vortex.dtype.null">
-<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">null</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.null" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">null</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.null" title="Link to this definition">#</a></dt>
 <dd><p>Construct the data type for a column containing only the null value.</p>
 <section id="id10">
-<h2>Returns<a class="headerlink" href="#id10" title="Link to this heading">¶</a></h2>
+<h2>Returns<a class="headerlink" href="#id10" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
 </section>
 <section id="id11">
-<h2>Examples<a class="headerlink" href="#id11" title="Link to this heading">¶</a></h2>
+<h2>Examples<a class="headerlink" href="#id11" title="Link to this heading">#</a></h2>
 <p>A data type permitting only <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">null</span><span class="p">()</span>
 <span class="go">null()</span>
@@ -183,25 +500,23 @@ infinity.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="vortex.dtype.uint">
-<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">uint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.uint" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">uint</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">width</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.uint" title="Link to this definition">#</a></dt>
 <dd><p>Construct an unsigned integral data type.</p>
 <section id="id12">
-<h2>Parameters<a class="headerlink" href="#id12" title="Link to this heading">¶</a></h2>
-<p>width : one of 8, 16, 32, and 64.</p>
-<blockquote>
-<div><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
-</div></blockquote>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<h2>Parameters<a class="headerlink" href="#id12" title="Link to this heading">#</a></h2>
+<dl>
+<dt>width<span class="classifier">one of 8, 16, 32, and 64.</span></dt><dd><p>The bit width determines the span of valid values. If <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>, 64 is used.</p>
+</dd>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id13">
-<h2>Returns<a class="headerlink" href="#id13" title="Link to this heading">¶</a></h2>
+<h2>Returns<a class="headerlink" href="#id13" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
 </section>
 <section id="id14">
-<h2>Examples<a class="headerlink" href="#id14" title="Link to this heading">¶</a></h2>
+<h2>Examples<a class="headerlink" href="#id14" title="Link to this heading">#</a></h2>
 <p>A data type permitting <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> and the integers from 0 to 255, inclusive:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">uint</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="kc">True</span><span class="p">)</span>
 <span class="go">uint(8, True)</span>
@@ -217,21 +532,21 @@ infinity.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="vortex.dtype.utf8">
-<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">utf8</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.utf8" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">vortex.dtype.</span></span><span class="sig-name descname"><span class="pre">utf8</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">nullable</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.dtype.utf8" title="Link to this definition">#</a></dt>
 <dd><p>Construct a UTF-8-encoded string data type.</p>
 <section id="id15">
-<h2>Parameters<a class="headerlink" href="#id15" title="Link to this heading">¶</a></h2>
-<p>nullable : <a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></p>
-<blockquote>
-<div><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
-</div></blockquote>
+<h2>Parameters<a class="headerlink" href="#id15" title="Link to this heading">#</a></h2>
+<dl>
+<dt>nullable<span class="classifier"><a class="reference internal" href="#vortex.dtype.bool" title="vortex.dtype.bool"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></dt><dd><p>When <a class="reference external" href="https://docs.python.org/3/library/constants.html#True" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">True</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a> is a permissible value.</p>
+</dd>
+</dl>
 </section>
 <section id="id16">
-<h2>Returns<a class="headerlink" href="#id16" title="Link to this heading">¶</a></h2>
+<h2>Returns<a class="headerlink" href="#id16" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.dtype.DType" title="vortex.dtype.DType"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.dtype.DType</span></code></a></p>
 </section>
 <section id="id17">
-<h2>Examples<a class="headerlink" href="#id17" title="Link to this heading">¶</a></h2>
+<h2>Examples<a class="headerlink" href="#id17" title="Link to this heading">#</a></h2>
 <p>A data type permitting any UTF-8-encoded string, such as <code class="code docutils literal notranslate"><span class="pre">&quot;Hello</span> <span class="pre">World&quot;</span></code>, but not
 permitting <a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.12)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a>.</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">dtype</span><span class="o">.</span><span class="n">utf8</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
@@ -244,83 +559,125 @@ permitting <a class="reference external" href="https://docs.python.org/3/library
 </section>
 
 
-          </div>
-          
-        </div>
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="encoding.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Arrays</p>
       </div>
-      <div class="sphinxsidebar" role="navigation" aria-label="Main">
-        <div class="sphinxsidebarwrapper">
-<h1 class="logo"><a href="index.html">Vortex</a></h1>
+    </a>
+    <a class="right-next"
+       href="io.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Input and Output</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
-
-
-
-
-
-
-
-<search id="searchbox" style="display: none" role="search">
-    <div class="searchformwrapper">
-    <form class="search" action="search.html" method="get">
-      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Search"/>
-      <input type="submit" value="Go" />
-    </form>
-    </div>
-</search>
-<script>document.getElementById('searchbox').style.display = "block"</script><h3>Navigation</h3>
-<p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="encoding.html">Array Encodings</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Array Data Types</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.DType"><code class="docutils literal notranslate"><span class="pre">DType</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.binary"><code class="docutils literal notranslate"><span class="pre">binary()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.bool"><code class="docutils literal notranslate"><span class="pre">bool()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.float"><code class="docutils literal notranslate"><span class="pre">float()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.int"><code class="docutils literal notranslate"><span class="pre">int()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.null"><code class="docutils literal notranslate"><span class="pre">null()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.uint"><code class="docutils literal notranslate"><span class="pre">uint()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="#vortex.dtype.utf8"><code class="docutils literal notranslate"><span class="pre">utf8()</span></code></a></li>
+  <div class="sidebar-secondary-item">
+<div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> On this page
+  </div>
+  <nav class="bd-toc-nav page-toc" aria-labelledby="pst-page-navigation-heading-2">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.DType"><code class="docutils literal notranslate"><span class="pre">DType</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.binary"><code class="docutils literal notranslate"><span class="pre">binary()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.bool"><code class="docutils literal notranslate"><span class="pre">bool()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.float"><code class="docutils literal notranslate"><span class="pre">float()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.int"><code class="docutils literal notranslate"><span class="pre">int()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.null"><code class="docutils literal notranslate"><span class="pre">null()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.uint"><code class="docutils literal notranslate"><span class="pre">uint()</span></code></a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.dtype.utf8"><code class="docutils literal notranslate"><span class="pre">utf8()</span></code></a></li>
 </ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="io.html">Input and Output</a></li>
-</ul>
+  </nav></div>
 
-<div class="relations">
-<h3>Related Topics</h3>
-<ul>
-  <li><a href="index.html">Documentation overview</a><ul>
-      <li>Previous: <a href="encoding.html" title="previous chapter">Array Encodings</a></li>
-      <li>Next: <a href="io.html" title="next chapter">Input and Output</a></li>
-  </ul></li>
-</ul>
+  <div class="sidebar-secondary-item">
+
+  <div class="tocsection sourcelink">
+    <a href="_sources/dtype.rst.txt">
+      <i class="fa-solid fa-file-lines"></i> Show Source
+    </a>
+  </div>
 </div>
 
-
-
-
-
-
-
-
-        </div>
-      </div>
-      <div class="clearer"></div>
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
     </div>
-    <div class="footer">
-      &#169;2024, Spiral.
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
       
-      |
-      Powered by <a href="https://www.sphinx-doc.org/">Sphinx 8.0.2</a>
-      &amp; <a href="https://alabaster.readthedocs.io">Alabaster 1.0.0</a>
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2024, Spiral.
+      <br/>
+    
+  </p>
+</div>
       
-      |
-      <a href="_sources/dtype.rst.txt"
-          rel="nofollow">Page source</a>
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.0.2.
+    <br/>
+  </p>
+</div>
+      
     </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.15.4.
+</p></div>
+      
+    </div>
+  
+</div>
 
-    
-
-    
+  </footer>
   </body>
 </html>
