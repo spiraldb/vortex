@@ -3,8 +3,7 @@ name: Fuzz
 on:
   schedule:
     - cron: '0 0 * * *' # daily
-  workflow_dispatch: { }
-  pull_request: { }
+  workflow_dispatch:
 
 jobs:
   fuzz:
@@ -19,7 +18,7 @@ jobs:
       - name: Restore corpus
         shell: bash
         run: |
-          aws --debug s3 cp s3://vortex-fuzz-corpus/array_ops_corpus.tar.zst . --endpoint-url https://01e9655179bbec953276890b183039bc.r2.cloudflarestorage.com
+          aws s3 cp s3://vortex-fuzz-corpus/array_ops_corpus.tar.zst . --endpoint-url https://01e9655179bbec953276890b183039bc.r2.cloudflarestorage.com
           tar -xf array_ops_corpus.tar.zst
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_FUZZ_ACCESS_KEY_ID }}
