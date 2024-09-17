@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 use std::fmt::{Debug, Display, Formatter};
+use std::hint;
+use std::intrinsics::select_unpredictable;
 
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -217,27 +219,54 @@ fn search_sorted_side_idx<F: FnMut(usize) -> Ordering>(
     from: usize,
     to: usize,
 ) -> SearchResult {
-    // INVARIANTS:
-    // - from <= left <= left + size = right <= to
-    // - f returns Less for everything in self[..left]
-    // - f returns Greater for everything in self[right..]
     let mut size = to - from;
-    let mut left = from;
-    let mut right = to;
-    while left < right {
-        let mid = left + size / 2;
+    if size == 0 {
+        return SearchResult::NotFound(0);
+    }
+    let mut base = from;
+
+    // This loop intentionally doesn't have an early exit if the comparison
+    // returns Equal. We want the number of loop iterations to depend *only*
+    // on the size of the input slice so that the CPU can reliably predict
+    // the loop count.
+    while size > 1 {
+        let half = size / 2;
+        let mid = base + half;
+
+        // SAFETY: the call is made safe by the following inconstants:
+        // - `mid >= 0`: by definition
+        // - `mid < size`: `mid = size / 2 + size / 4 + size / 8 ...`
         let cmp = find(mid);
 
-        left = if cmp == Less { mid + 1 } else { left };
-        right = if cmp == Greater { mid } else { right };
-        if cmp == Equal {
-            return SearchResult::Found(mid);
-        }
+        // Binary search interacts poorly with branch prediction, so force
+        // the compiler to use conditional moves if supported by the target
+        // architecture.
+        base = select_unpredictable(cmp == Greater, base, mid);
 
-        size = right - left;
+        // This is imprecise in the case where `size` is odd and the
+        // comparison returns Greater: the mid element still gets included
+        // by `size` even though it's known to be larger than the element
+        // being searched for.
+        //
+        // This is fine though: we gain more performance by keeping the
+        // loop iteration count invariant (and thus predictable) than we
+        // lose from considering one additional element.
+        size -= half;
     }
 
-    SearchResult::NotFound(left)
+    // SAFETY: base is always in [0, size) because base <= mid.
+    let cmp = find(base);
+    if cmp == Equal {
+        // SAFETY: same as the `get_unchecked` above.
+        unsafe { hint::assert_unchecked(base < to) };
+        SearchResult::Found(base)
+    } else {
+        let result = base + (cmp == Less) as usize;
+        // SAFETY: same as the `get_unchecked` above.
+        // Note that this is `<=`, unlike the assume in the `Ok` path.
+        unsafe { hint::assert_unchecked(result <= to) };
+        SearchResult::NotFound(result)
+    }
 }
 
 impl IndexOrd<Scalar> for Array {

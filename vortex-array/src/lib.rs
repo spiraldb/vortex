@@ -8,6 +8,8 @@
 //! Every data type recognized by Vortex also has a canonical physical encoding format, which
 //! arrays can be [canonicalized](Canonical) into for ease of access in compute functions.
 //!
+#![allow(internal_features)]
+#![feature(core_intrinsics)]
 use std::fmt::{Debug, Display, Formatter};
 use std::future::ready;
 
