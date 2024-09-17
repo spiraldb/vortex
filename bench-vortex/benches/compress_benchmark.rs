@@ -97,6 +97,6 @@ criterion_group!(
     benches,
     vortex_compress_taxi,
     vortex_compress_medicare1,
-    vortex_compress_tpch
+    vortex_compress_tpch_l_comment,
 );
 criterion_main!(benches);
