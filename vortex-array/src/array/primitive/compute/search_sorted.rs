@@ -6,9 +6,9 @@ use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
-use crate::ArrayDType;
 use crate::compute::{IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide};
 use crate::validity::Validity;
+use crate::ArrayDType;
 
 impl SearchSortedFn for PrimitiveArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
