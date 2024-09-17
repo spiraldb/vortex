@@ -1,9 +1,7 @@
 use std::sync::{Arc, RwLock};
 
-use ahash::HashSet;
 use bytes::BytesMut;
 use vortex::{Array, ArrayDType};
-use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 use vortex_schema::Schema;
@@ -26,6 +24,7 @@ pub struct LayoutReaderBuilder<R> {
     row_filter: Option<RowFilter>,
     batch_size: Option<usize>,
     row_selection: Option<Array>,
+    message_cache: Option<Arc<RwLock<LayoutMessageCache>>>,
 }
 
 impl<R: VortexReadAt> LayoutReaderBuilder<R> {
@@ -39,6 +38,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             indices: None,
             batch_size: None,
             row_selection: None,
+            message_cache: None,
         }
     }
 
@@ -81,40 +81,17 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         self
     }
 
+    pub fn with_message_cache(mut self, message_cache: Arc<RwLock<LayoutMessageCache>>) -> Self {
+        self.message_cache = Some(message_cache);
+        self
+    }
+
     pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
-
-        // TODO(robert): Don't leak filter references into read projection
-        let (read_projection, result_projection) = match self
-            .row_filter
-            .as_ref()
-            .map(|f| f.references())
-            .filter(|refs| !refs.is_empty())
-            .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
-            .transpose()?
-        {
-            None => (self.projection.unwrap_or_default(), Projection::All),
-            Some(filter_columns) => match self.projection.unwrap_or_default() {
-                Projection::All => (Projection::All, Projection::All),
-                Projection::Flat(mut fields) => {
-                    let original_len = fields.len();
-                    let existing_fields: HashSet<Field> = fields.iter().cloned().collect();
-                    fields.extend(
-                        filter_columns
-                            .into_iter()
-                            .filter(|f| !existing_fields.contains(f)),
-                    );
-                    (
-                        Projection::Flat(fields),
-                        Projection::Flat((0..original_len).map(Field::from).collect()),
-                    )
-                }
-            },
-        };
-
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
+        let projection = self.projection.unwrap_or_default();
 
-        let projected_dtype = match &read_projection {
+        let projected_dtype = match &projection {
             Projection::All => footer.dtype()?,
             Projection::Flat(projection) => footer.projected_dtype(projection)?,
         };
@@ -127,12 +104,12 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         let scan = Scan {
             filter,
             batch_size,
-            projection: read_projection,
+            projection,
             indices: self.indices,
             row_selection: self.row_selection,
         };
 
-        let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
+        let message_cache = self.message_cache.unwrap_or_default();
         let layouts_cache =
             RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone());
 
@@ -144,7 +121,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             message_cache,
             projected_dtype,
             scan,
-            result_projection,
+            Projection::All,
         ))
     }
 
@@ -157,7 +134,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         size as usize
     }
 
-    async fn read_footer(&mut self) -> VortexResult<Footer> {
+    pub async fn read_footer(&mut self) -> VortexResult<Footer> {
         let file_size = self.size().await;
 
         if file_size < FILE_POSTSCRIPT_SIZE {

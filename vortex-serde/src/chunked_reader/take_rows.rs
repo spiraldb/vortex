@@ -40,7 +40,7 @@ impl<R: VortexReadAt> ChunkedArrayReader<R> {
         //         //  of the result.
         //         // Read the relevant chunks.
         // Reshuffle the result as per the original sort order.
-        unimplemented!()
+        unimplemented!("Unsorted 'take' operation is not supported yet")
     }
 
     /// Take rows from a chunked array given strict sorted indices.

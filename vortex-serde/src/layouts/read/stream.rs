@@ -7,16 +7,16 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
-use vortex::array::{BoolArray, StructArray};
+use vortex::array::StructArray;
 use vortex::compute::unary::subtract_scalar;
 use vortex::compute::{filter, search_sorted, slice, take, SearchSortedSide};
-use vortex::validity::Validity;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_err, vortex_panic, VortexError, VortexResult};
 use vortex_scalar::Scalar;
 use vortex_schema::Schema;
 
+use super::null_as_false;
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::LayoutMessageCache;
 use crate::layouts::read::{Layout, MessageId, ReadResult, Scan};
@@ -111,6 +111,9 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                             ReadResult::Batch(a) => self.state = StreamingState::Decoding(a),
                         }
                     } else {
+                        if let Some(selection) = self.scan.row_selection.as_ref() {
+                            assert!(selection.is_empty());
+                        }
                         return Poll::Ready(None);
                     }
                 }
@@ -169,20 +172,6 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
     }
 }
 
-fn null_as_false(array: BoolArray) -> VortexResult<Array> {
-    match array.validity() {
-        Validity::NonNullable => Ok(array.into_array()),
-        Validity::AllValid => {
-            Ok(BoolArray::try_new(array.boolean_buffer(), Validity::NonNullable)?.into_array())
-        }
-        Validity::AllInvalid => Ok(BoolArray::from(vec![false; array.len()]).into_array()),
-        Validity::Array(v) => {
-            let bool_buffer = &array.boolean_buffer() & &v.into_bool()?.boolean_buffer();
-            Ok(BoolArray::from(bool_buffer).into_array())
-        }
-    }
-}
-
 async fn read_ranges<R: VortexReadAt>(
     reader: R,
     ranges: Vec<(MessageId, ByteRange)>,
@@ -204,26 +193,4 @@ async fn read_ranges<R: VortexReadAt>(
         .try_collect()
         .await
         .map(|b| (reader, b))
-}
-
-#[cfg(test)]
-mod tests {
-    use vortex::array::BoolArray;
-    use vortex::validity::Validity;
-    use vortex::IntoArrayVariant;
-
-    use crate::layouts::read::stream::null_as_false;
-
-    #[test]
-    fn coerces_nulls() {
-        let bool_array = BoolArray::from_vec(
-            vec![true, true, false, false],
-            Validity::Array(BoolArray::from(vec![true, false, true, false]).into()),
-        );
-        let non_null_array = null_as_false(bool_array).unwrap().into_bool().unwrap();
-        assert_eq!(
-            non_null_array.boolean_buffer().iter().collect::<Vec<_>>(),
-            vec![true, false, false, false]
-        );
-    }
 }

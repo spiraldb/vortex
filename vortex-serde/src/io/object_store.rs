@@ -52,6 +52,7 @@ impl ObjectStoreExt for Arc<dyn ObjectStore> {
     }
 }
 
+#[derive(Clone)]
 pub struct ObjectStoreReadAt {
     object_store: Arc<dyn ObjectStore>,
     location: Path,
