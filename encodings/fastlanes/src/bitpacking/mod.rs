@@ -1,12 +1,13 @@
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
+use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
-use vortex_dtype::{Nullability, PType};
+use vortex_dtype::{NativePType, Nullability, PType};
 use vortex_error::{
     vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
 };
@@ -120,6 +121,16 @@ impl BitPackedArray {
                 self.packed_len(),
             )
             .vortex_expect("BitpackedArray is missing packed child bytes array")
+    }
+
+    #[inline]
+    pub fn packed_slice<T: NativePType + BitPacking>(&self) -> &[T] {
+        let packed_primitive = self.packed().as_primitive();
+        let maybe_null_slice = packed_primitive.maybe_null_slice::<T>();
+        // SAFETY: maybe_null_slice points to buffer memory that outlives the lifetime of `self`.
+        //  Unfortunately Rust cannot understand this, so we reconstruct the slice from raw parts
+        //  to get it to reinterpret the lifetime.
+        unsafe { std::slice::from_raw_parts(maybe_null_slice.as_ptr(), maybe_null_slice.len()) }
     }
 
     #[inline]

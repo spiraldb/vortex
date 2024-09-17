@@ -112,9 +112,10 @@ impl PrimitiveArray {
             self.ptype(),
         );
 
-        let (prefix, values, suffix) = unsafe { self.buffer().as_ref().align_to::<T>() };
-        assert!(prefix.is_empty() && suffix.is_empty());
-        values
+        let raw_slice = self.buffer().as_slice();
+        let typed_len = raw_slice.len() / size_of::<T>();
+        // SAFETY: alignment of Buffer is checked on construction
+        unsafe { std::slice::from_raw_parts(raw_slice.as_ptr().cast(), typed_len) }
     }
 
     /// Convert the array into a mutable vec of the given type.
