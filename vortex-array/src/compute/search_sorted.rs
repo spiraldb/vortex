@@ -2,7 +2,6 @@ use std::cmp::Ordering;
 use std::cmp::Ordering::{Equal, Greater, Less};
 use std::fmt::{Debug, Display, Formatter};
 use std::hint;
-use std::intrinsics::select_unpredictable;
 
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
@@ -241,7 +240,7 @@ fn search_sorted_side_idx<F: FnMut(usize) -> Ordering>(
         // Binary search interacts poorly with branch prediction, so force
         // the compiler to use conditional moves if supported by the target
         // architecture.
-        base = select_unpredictable(cmp == Greater, base, mid);
+        base = if cmp == Greater { base } else { mid };
 
         // This is imprecise in the case where `size` is odd and the
         // comparison returns Greater: the mid element still gets included
