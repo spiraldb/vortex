@@ -52,10 +52,11 @@ impl Buffer {
             return Self::from_len_zeroed(0);
         }
 
+        // SAFETY: the ArrowBuffer takes ownership of `input` and will drop it when time to free.
         unsafe {
             ArrowBuffer::from_custom_allocation(
                 NonNull::new_unchecked(input.as_ptr() as *mut u8),
-                input.len() * std::mem::size_of::<T>(),
+                input.len() * size_of::<T>(),
                 Arc::new(input),
             )
         }
