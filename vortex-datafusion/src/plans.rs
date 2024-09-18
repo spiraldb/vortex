@@ -22,7 +22,7 @@ use pin_project::pin_project;
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowArray;
 use vortex::compute::take;
-use vortex::{Array, IntoArray, IntoArrayVariant, IntoCanonical};
+use vortex::{Array, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::field::Field;
 use vortex_error::{vortex_err, vortex_panic, VortexError};
 use vortex_expr::VortexExpr;
@@ -368,7 +368,7 @@ where
         //  We should find a way to avoid decoding the filter columns and only decode the other
         //  columns, then stitch the StructArray back together from those.
         let projected_for_output = chunk.project(this.output_projection)?;
-        let decoded = take(&projected_for_output.into_array(), &row_indices)?
+        let decoded = take(projected_for_output, &row_indices)?
             .into_canonical()?
             .into_arrow()?;
 

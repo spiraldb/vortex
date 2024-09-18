@@ -29,7 +29,6 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::BoolArray;
     use crate::compute::take;
-    use crate::IntoArray;
 
     #[test]
     fn take_nullable() {
@@ -39,17 +38,10 @@ mod test {
             Some(false),
             None,
             Some(false),
-        ])
-        .into_array();
+        ]);
 
-        let b = BoolArray::try_from(
-            take(
-                &reference,
-                &PrimitiveArray::from(vec![0, 3, 4]).into_array(),
-            )
-            .unwrap(),
-        )
-        .unwrap();
+        let b = BoolArray::try_from(take(&reference, PrimitiveArray::from(vec![0, 3, 4])).unwrap())
+            .unwrap();
         assert_eq!(
             b.boolean_buffer(),
             BoolArray::from_iter(vec![Some(false), None, Some(false)]).boolean_buffer()

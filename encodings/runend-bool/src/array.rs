@@ -230,14 +230,13 @@ mod test {
     #[test]
     fn take_bool() {
         let arr = take(
-            &RunEndBoolArray::try_new(
+            RunEndBoolArray::try_new(
                 vec![2u32, 4, 5, 10].into_array(),
                 true,
                 Validity::NonNullable,
             )
-            .unwrap()
-            .to_array(),
-            &vec![0, 0, 6, 4].into_array(),
+            .unwrap(),
+            vec![0, 0, 6, 4].into_array(),
         )
         .unwrap();
 

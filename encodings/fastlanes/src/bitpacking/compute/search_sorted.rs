@@ -227,12 +227,8 @@ mod test {
     #[test]
     fn search_sliced() {
         let bitpacked = slice(
-            &BitPackedArray::encode(
-                &PrimitiveArray::from(vec![1u32, 2, 3, 4, 5]).into_array(),
-                2,
-            )
-            .unwrap()
-            .into_array(),
+            BitPackedArray::encode(PrimitiveArray::from(vec![1u32, 2, 3, 4, 5]).as_ref(), 2)
+                .unwrap(),
             2,
             4,
         )

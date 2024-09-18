@@ -18,7 +18,7 @@ impl SliceFn for BitPackedArray {
         let encoded_start = (block_start / 8) * self.bit_width() / self.ptype().byte_width();
         let encoded_stop = (block_stop / 8) * self.bit_width() / self.ptype().byte_width();
         Self::try_new_from_offset(
-            slice(&self.packed(), encoded_start, encoded_stop)?,
+            slice(self.packed(), encoded_start, encoded_stop)?,
             self.validity().slice(start, stop)?,
             self.patches()
                 .map(|p| slice(&p, start, stop))
@@ -171,7 +171,7 @@ mod test {
         assert_eq!(patch_indices.len(), 1);
 
         // Slicing drops the empty patches array.
-        let sliced = slice(&array.into_array(), 0, 64).unwrap();
+        let sliced = slice(array, 0, 64).unwrap();
         let sliced_bp = BitPackedArray::try_from(sliced).unwrap();
         assert!(sliced_bp.patches().is_none());
     }

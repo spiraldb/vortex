@@ -38,7 +38,7 @@ impl ArrayCompute for FoRArray {
 impl TakeFn for FoRArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Self::try_new(
-            take(&self.encoded(), indices)?,
+            take(self.encoded(), indices)?,
             self.reference().clone(),
             self.shift(),
         )
@@ -49,7 +49,7 @@ impl TakeFn for FoRArray {
 impl FilterFn for FoRArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         Self::try_new(
-            filter(&self.encoded(), predicate)?,
+            filter(self.encoded(), predicate)?,
             self.reference().clone(),
             self.shift(),
         )
@@ -81,7 +81,7 @@ impl ScalarAtFn for FoRArray {
 impl SliceFn for FoRArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Self::try_new(
-            slice(&self.encoded(), start, stop)?,
+            slice(self.encoded(), start, stop)?,
             self.reference().clone(),
             self.shift(),
         )

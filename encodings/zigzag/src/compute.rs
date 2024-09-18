@@ -67,7 +67,7 @@ impl ZigZagEncoded for u64 {
 
 impl SliceFn for ZigZagArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        Ok(Self::try_new(slice(&self.encoded(), start, stop)?)?.into_array())
+        Ok(Self::try_new(slice(self.encoded(), start, stop)?)?.into_array())
     }
 }
 

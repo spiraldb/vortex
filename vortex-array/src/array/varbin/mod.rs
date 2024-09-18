@@ -108,7 +108,7 @@ impl VarBinArray {
         let last_offset: usize = scalar_at(&self.offsets(), self.offsets().len() - 1)?
             .as_ref()
             .try_into()?;
-        slice(&self.bytes(), first_offset, last_offset)
+        slice(self.bytes(), first_offset, last_offset)
     }
 
     pub fn from_vec<T: AsRef<[u8]>>(vec: Vec<T>, dtype: DType) -> Self {
@@ -167,7 +167,7 @@ impl VarBinArray {
     pub fn bytes_at(&self, index: usize) -> VortexResult<Buffer> {
         let start = self.offset_at(index);
         let end = self.offset_at(index + 1);
-        let sliced = slice(&self.bytes(), start, end)?;
+        let sliced = slice(self.bytes(), start, end)?;
         Ok(sliced.into_primitive()?.buffer().clone())
     }
 }

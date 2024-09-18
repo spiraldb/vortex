@@ -7,7 +7,9 @@ pub trait TakeFn {
     fn take(&self, indices: &Array) -> VortexResult<Array>;
 }
 
-pub fn take(array: &Array, indices: &Array) -> VortexResult<Array> {
+pub fn take(array: impl AsRef<Array>, indices: impl AsRef<Array>) -> VortexResult<Array> {
+    let array = array.as_ref();
+    let indices = indices.as_ref();
     array.with_dyn(|a| {
         if let Some(take) = a.take() {
             return take.take(indices);

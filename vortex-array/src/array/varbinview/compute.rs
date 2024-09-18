@@ -32,7 +32,7 @@ impl ScalarAtFn for VarBinViewArray {
 impl SliceFn for VarBinViewArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
-            slice(&self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?,
+            slice(self.views(), start * VIEW_SIZE, stop * VIEW_SIZE)?,
             (0..self.metadata().data_lens.len())
                 .map(|i| self.bytes(i))
                 .collect::<Vec<_>>(),

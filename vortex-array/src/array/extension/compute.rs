@@ -44,11 +44,12 @@ impl MaybeCompareFn for ExtensionArray {
                 Scalar::new(self.storage().dtype().clone(), scalar_ext.value().clone()),
                 const_ext.len(),
             );
-            return Some(compare(&self.storage(), const_storage.as_ref(), operator));
+
+            return Some(compare(self.storage(), const_storage, operator));
         }
 
         if let Ok(rhs_ext) = ExtensionArray::try_from(other) {
-            return Some(compare(&self.storage(), &rhs_ext.storage(), operator));
+            return Some(compare(self.storage(), rhs_ext.storage(), operator));
         }
 
         None
@@ -75,7 +76,7 @@ impl SliceFn for ExtensionArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::new(
             self.ext_dtype().clone(),
-            slice(&self.storage(), start, stop)?,
+            slice(self.storage(), start, stop)?,
         )
         .into_array())
     }
@@ -83,6 +84,6 @@ impl SliceFn for ExtensionArray {
 
 impl TakeFn for ExtensionArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        Ok(Self::new(self.ext_dtype().clone(), take(&self.storage(), indices)?).into_array())
+        Ok(Self::new(self.ext_dtype().clone(), take(self.storage(), indices)?).into_array())
     }
 }

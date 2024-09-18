@@ -75,7 +75,7 @@ impl SliceFn for RunEndBoolArray {
         let slice_end = self.find_physical_index(stop)?;
 
         Ok(Self::with_offset_and_size(
-            slice(&self.ends(), slice_begin, slice_end + 1)?,
+            slice(self.ends(), slice_begin, slice_end + 1)?,
             value_at_index(slice_begin, self.start()),
             self.validity().slice(slice_begin, slice_end + 1)?,
             stop - start,

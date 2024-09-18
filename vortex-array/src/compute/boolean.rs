@@ -10,7 +10,10 @@ pub trait OrFn {
     fn or(&self, array: &Array) -> VortexResult<Array>;
 }
 
-pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+pub fn and(lhs: impl AsRef<Array>, rhs: impl AsRef<Array>) -> VortexResult<Array> {
+    let lhs = lhs.as_ref();
+    let rhs = rhs.as_ref();
+
     if lhs.len() != rhs.len() {
         vortex_bail!("Boolean operations aren't supported on arrays of different lengths")
     }
@@ -33,7 +36,10 @@ pub fn and(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
     lhs.and(rhs)
 }
 
-pub fn or(lhs: &Array, rhs: &Array) -> VortexResult<Array> {
+pub fn or(lhs: impl AsRef<Array>, rhs: impl AsRef<Array>) -> VortexResult<Array> {
+    let lhs = lhs.as_ref();
+    let rhs = rhs.as_ref();
+
     if lhs.len() != rhs.len() {
         vortex_bail!("Boolean operations aren't supported on arrays of different lengths")
     }

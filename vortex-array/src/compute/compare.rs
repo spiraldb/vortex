@@ -78,7 +78,14 @@ pub trait MaybeCompareFn {
     fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>>;
 }
 
-pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<Array> {
+pub fn compare(
+    left: impl AsRef<Array>,
+    right: impl AsRef<Array>,
+    operator: Operator,
+) -> VortexResult<Array> {
+    let left = left.as_ref();
+    let right = right.as_ref();
+
     if left.len() != right.len() {
         vortex_bail!("Compare operations only support arrays of the same length");
     }

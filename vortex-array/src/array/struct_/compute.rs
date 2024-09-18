@@ -104,7 +104,6 @@ mod tests {
     use crate::array::{BoolArray, StructArray};
     use crate::compute::filter;
     use crate::validity::Validity;
-    use crate::IntoArray;
 
     #[test]
     fn filter_empty_struct() {
@@ -113,7 +112,7 @@ mod tests {
         let mask = vec![
             false, true, false, true, false, true, false, true, false, true,
         ];
-        let filtered = filter(struct_arr.as_ref(), &BoolArray::from(mask).into_array()).unwrap();
+        let filtered = filter(struct_arr.as_ref(), BoolArray::from(mask)).unwrap();
         assert_eq!(filtered.len(), 5);
     }
 
@@ -121,7 +120,7 @@ mod tests {
     fn filter_empty_struct_with_empty_filter() {
         let struct_arr =
             StructArray::try_new(vec![].into(), vec![], 0, Validity::NonNullable).unwrap();
-        let filtered = filter(struct_arr.as_ref(), &BoolArray::from(vec![]).into_array()).unwrap();
+        let filtered = filter(struct_arr.as_ref(), BoolArray::from(vec![])).unwrap();
         assert_eq!(filtered.len(), 0);
     }
 }

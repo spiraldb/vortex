@@ -60,7 +60,7 @@ impl TakeFn for RunEndArray {
             .map(|idx| *idx as u64)
             .collect();
         let physical_indices_array = PrimitiveArray::from(physical_indices).into_array();
-        let dense_values = take(&self.values(), &physical_indices_array)?;
+        let dense_values = take(self.values(), &physical_indices_array)?;
 
         Ok(match self.validity() {
             Validity::NonNullable => dense_values,
@@ -100,8 +100,8 @@ impl SliceFn for RunEndArray {
         let slice_end = self.find_physical_index(stop)?;
 
         Ok(Self::with_offset_and_size(
-            slice(&self.ends(), slice_begin, slice_end + 1)?,
-            slice(&self.values(), slice_begin, slice_end + 1)?,
+            slice(self.ends(), slice_begin, slice_end + 1)?,
+            slice(self.values(), slice_begin, slice_end + 1)?,
             self.validity().slice(start, stop)?,
             stop - start,
             start + self.offset(),
