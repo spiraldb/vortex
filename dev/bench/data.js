@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726691137716,
+  "lastUpdate": 1726691402043,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -129981,6 +129981,42 @@ window.BENCHMARK_DATA = {
             "name": "bytes_at/array_data #2",
             "value": 1028,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "a10y@users.noreply.github.com",
+            "name": "Andrew Duffy",
+            "username": "a10y"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f14f45a3574aa7145b895fdb656a9d36f33a39b6",
+          "message": "feat: add back ptype check for BitPackedArray (#872)",
+          "timestamp": "2024-09-18T20:26:15Z",
+          "tree_id": "920f9743aec2becfa4fe4c7ffe92d0e16d9d9cf3",
+          "url": "https://github.com/spiraldb/vortex/commit/f14f45a3574aa7145b895fdb656a9d36f33a39b6"
+        },
+        "date": 1726691400736,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 603,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1021,
+            "range": "± 18",
             "unit": "ns/iter"
           }
         ]
