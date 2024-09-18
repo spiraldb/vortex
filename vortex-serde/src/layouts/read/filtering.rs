@@ -3,11 +3,13 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use vortex::Array;
+use vortex::compute::filter;
+use vortex::{Array, IntoArrayVariant};
 use vortex_dtype::field::{Field, FieldPath};
 use vortex_error::VortexResult;
 use vortex_expr::{split_conjunction, BinaryExpr, VortexExpr};
 
+use super::null_as_false;
 use crate::layouts::Schema;
 
 #[derive(Debug, Clone)]
@@ -27,7 +29,9 @@ impl RowFilter {
     pub fn evaluate(&self, target: &Array) -> VortexResult<Array> {
         let mut target = target.clone();
         for expr in self.conjunction.iter() {
-            target = expr.evaluate(&target)?;
+            let mask = expr.evaluate(&target)?;
+            let mask = null_as_false(mask.into_bool()?)?;
+            target = filter(target, mask)?;
         }
 
         Ok(target)
