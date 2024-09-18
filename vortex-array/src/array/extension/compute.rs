@@ -45,12 +45,12 @@ impl MaybeCompareFn for ExtensionArray {
                     Scalar::new(self.storage().dtype().clone(), scalar_ext.value().clone()),
                     const_ext.len(),
                 );
-                compare(&self.storage(), const_storage.as_ref(), operator)
+                compare(self.storage(), const_storage, operator)
             });
         }
 
         if let Ok(rhs_ext) = ExtensionArray::try_from(array) {
-            return Some(compare(&self.storage(), &rhs_ext.storage(), operator));
+            return Some(compare(self.storage(), rhs_ext.storage(), operator));
         }
 
         None

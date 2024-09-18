@@ -49,7 +49,7 @@ impl TakeFn for FoRArray {
 impl FilterFn for FoRArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         Self::try_new(
-            filter(&self.encoded(), predicate)?,
+            filter(self.encoded(), predicate)?,
             self.reference().clone(),
             self.shift(),
         )

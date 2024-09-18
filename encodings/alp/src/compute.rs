@@ -84,7 +84,7 @@ impl SliceFn for ALPArray {
 impl FilterFn for ALPArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         Ok(Self::try_new(
-            filter(&self.encoded(), predicate)?,
+            filter(self.encoded(), predicate)?,
             self.exponents(),
             self.patches().map(|p| filter(&p, predicate)).transpose()?,
         )?
@@ -134,7 +134,7 @@ where
     match encoded {
         Ok(encoded) => {
             let s = ConstantArray::new(encoded, alp.len());
-            compare(&alp.encoded(), s.as_ref(), operator)
+            compare(alp.encoded(), s.as_ref(), operator)
         }
         Err(exception) => {
             if let Some(patches) = alp.patches().as_ref() {

@@ -141,7 +141,7 @@ fn filter_slices<'a>(
             ChunkFilter::None => {}
             // Slices => turn the slices into a boolean buffer.
             ChunkFilter::Slices(slices) => {
-                result.push(filter(&chunk, &slices_to_predicate(slices, chunk.len()))?);
+                result.push(filter(&chunk, slices_to_predicate(slices, chunk.len()))?);
             }
         }
     }

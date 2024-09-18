@@ -81,8 +81,8 @@ impl FilterFn for FSSTArray {
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            filter(&self.codes(), predicate)?,
-            filter(&self.uncompressed_lengths(), predicate)?,
+            filter(self.codes(), predicate)?,
+            filter(self.uncompressed_lengths(), predicate)?,
         )?
         .into_array())
     }

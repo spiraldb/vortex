@@ -20,7 +20,10 @@ pub trait FilterFn {
 ///
 /// The `predicate` must receive an Array with type non-nullable bool, and will panic if this is
 /// not the case.
-pub fn filter(array: &Array, predicate: &Array) -> VortexResult<Array> {
+pub fn filter(array: impl AsRef<Array>, predicate: impl AsRef<Array>) -> VortexResult<Array> {
+    let array = array.as_ref();
+    let predicate = predicate.as_ref();
+
     if predicate.dtype() != &DType::Bool(Nullability::NonNullable) {
         vortex_bail!(
             "predicate must be non-nullable bool, has dtype {}",
