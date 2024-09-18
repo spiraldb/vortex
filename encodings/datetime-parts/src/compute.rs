@@ -28,9 +28,9 @@ impl TakeFn for DateTimePartsArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(Self::try_new(
             self.dtype().clone(),
-            take(&self.days(), indices)?,
-            take(&self.seconds(), indices)?,
-            take(&self.subsecond(), indices)?,
+            take(self.days(), indices)?,
+            take(self.seconds(), indices)?,
+            take(self.subsecond(), indices)?,
         )?
         .into_array())
     }

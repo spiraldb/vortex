@@ -41,7 +41,7 @@ impl TakeFn for DictArray {
         // Dict
         //   codes: 0 0 1
         //   dict: a b c d e f g h
-        let codes = take(&self.codes(), indices)?;
+        let codes = take(self.codes(), indices)?;
         Self::try_new(codes, self.values()).map(|a| a.into_array())
     }
 }

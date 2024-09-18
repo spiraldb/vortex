@@ -62,7 +62,7 @@ impl TakeFn for ALPArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         // TODO(ngates): wrap up indices in an array that caches decompression?
         Ok(Self::try_new(
-            take(&self.encoded(), indices)?,
+            take(self.encoded(), indices)?,
             self.exponents(),
             self.patches().map(|p| take(&p, indices)).transpose()?,
         )?

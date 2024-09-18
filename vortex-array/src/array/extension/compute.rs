@@ -85,6 +85,6 @@ impl SliceFn for ExtensionArray {
 
 impl TakeFn for ExtensionArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        Ok(Self::new(self.ext_dtype().clone(), take(&self.storage(), indices)?).into_array())
+        Ok(Self::new(self.ext_dtype().clone(), take(self.storage(), indices)?).into_array())
     }
 }

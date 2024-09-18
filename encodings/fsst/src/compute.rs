@@ -48,8 +48,8 @@ impl TakeFn for FSSTArray {
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            take(&self.codes(), indices)?,
-            take(&self.uncompressed_lengths(), indices)?,
+            take(self.codes(), indices)?,
+            take(self.uncompressed_lengths(), indices)?,
         )?
         .into_array())
     }

@@ -38,7 +38,7 @@ impl ArrayCompute for FoRArray {
 impl TakeFn for FoRArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Self::try_new(
-            take(&self.encoded(), indices)?,
+            take(self.encoded(), indices)?,
             self.reference().clone(),
             self.shift(),
         )

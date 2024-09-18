@@ -60,7 +60,7 @@ impl TakeFn for RunEndArray {
             .map(|idx| *idx as u64)
             .collect();
         let physical_indices_array = PrimitiveArray::from(physical_indices).into_array();
-        let dense_values = take(&self.values(), &physical_indices_array)?;
+        let dense_values = take(self.values(), &physical_indices_array)?;
 
         Ok(match self.validity() {
             Validity::NonNullable => dense_values,
