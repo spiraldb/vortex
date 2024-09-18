@@ -114,7 +114,7 @@
         <a id="repository-link" rel="noopener"></a>
     </div>
 </header>
-<main id="main"></main>
+<main id="main"><ul id="toc"><ul></main>
 <footer>
     <button id="dl-button">Download data as JSON</button>
     <div class="spacer"></div>
@@ -180,12 +180,12 @@
                         // Normalize name
                         let [q, seriesName] = name.split("/");
                         let prettyQ = q.replace("_", " ").toUpperCase();
-                        let query_idx = parseInt(prettyQ.split(" ")[1].substring(1), 10);
+                        let sort_position = (q.slice(0, 4) == "tpch") ? parseInt(prettyQ.split(" ")[1].substring(1), 10) : 0;
 
                         let arr = map.get(prettyQ);
                         if (arr === undefined) {
                             map.set(prettyQ, {
-                                query_idx,
+                                sort_position,
                                 commits,
                                 unit: is_nanos ? "ms/iter" : unit,
                                 series: new Map(),
@@ -201,7 +201,15 @@
                         series[entryIdx] = {range, value: is_nanos ? value / 1_000_000 : value};
                     }
                 });
-                return new Map([...map.entries()].sort((a, b) => a[1].query_idx - b[1].query_idx));
+
+                function sortByPositionThenName(a, b) {
+                    let position_compare = a[1].sort_position - b[1].sort_position
+                    if (position_compare !== 0) {
+                        return position_compare
+                    }
+                    return a[0].localeCompare(b[0]);
+                }
+                return new Map([...map.entries()].sort(sortByPositionThenName));
             }
 
             const data = window.BENCHMARK_DATA;
@@ -256,6 +264,7 @@
                         line: {
                             borderWidth: 1,
                         },
+
                     },
                     scales: {
                         x: {
@@ -274,30 +283,6 @@
                             },
                             suggestedMin: 0,
                         },
-                    },
-                    tooltips: {
-                        callbacks: {
-                            afterTitle: items => {
-                                const {index} = items[0];
-                                const commit = dataset.commits[index];
-                                return '\n' + commit.message + '\n\n' + commit.timestamp + ' committed by @' + commit.committer.username + '\n';
-                            },
-                            label: item => {
-                                const seriesName = Array.from(dataset.series.keys())[item.datasetIndex];
-                                let label = item.value;
-                                const {range, unit} = dataset.series.get(seriesName)[item.index];
-                                label += ' ' + unit;
-                                if (range) {
-                                    label += ' (' + range + ')';
-                                }
-                                return label;
-                            },
-                            afterLabel: item => {
-                                const seriesName = Array.from(dataset.series.keys())[item.datasetIndex];
-                                const {extra} = dataset.series.get(seriesName)[item.index];
-                                return extra ? '\n' + extra : '';
-                            }
-                        }
                     },
                     plugins: {
                         zoom: {
@@ -326,6 +311,15 @@
                                     chart.update();
                                 });
                             }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                footer: items => {
+                                    const {dataIndex} = items[0];
+                                    const commit = dataset.commits[dataIndex];
+                                    return commit.message.split("\n")[0] + "\n" + commit.author.username;
+                                }
+                            }
                         }
                     },
                     onClick: (_mouseEvent, activeElems) => {
@@ -333,8 +327,8 @@
                             return;
                         }
                         // XXX: Undocumented. How can we know the index?
-                        const index = activeElems[0]._index;
-                        const url = dataset[index].commit.url;
+                        const index = activeElems[0].index;
+                        const url = dataset.commits[index].url;
                         window.open(url, '_blank');
                     },
                 };
@@ -346,15 +340,24 @@
                 });
             }
 
-            function renderBenchSet(name, benchSet, main) {
+            function renderBenchSet(name, benchSet, main, toc) {
                 const setElem = document.createElement('div');
                 setElem.className = 'benchmark-set';
                 main.appendChild(setElem);
 
+                const h1id = name.replace(" ", "_");
                 const nameElem = document.createElement('h1');
+                nameElem.id = h1id;
                 nameElem.className = 'benchmark-title';
                 nameElem.textContent = name;
                 setElem.appendChild(nameElem);
+
+                const tocLi = document.createElement('li');
+                const tocLink = document.createElement('a');
+                tocLink.href = '#' + h1id;
+                tocLink.innerHTML = name;
+                tocLi.appendChild(tocLink);
+                toc.appendChild(tocLi);
 
                 const graphsElem = document.createElement('div');
                 graphsElem.className = 'benchmark-graphs';
@@ -366,8 +369,9 @@
             }
 
             const main = document.getElementById('main');
+            const toc = document.getElementById('toc');
             for (const {name, dataSet} of dataSets) {
-                renderBenchSet(name, dataSet, main);
+                renderBenchSet(name, dataSet, main, toc);
             }
         }
 
