@@ -41,17 +41,17 @@ jobs:
 
       - name: Run benchmark
         shell: bash
-        run: cargo bench --bench ${{ matrix.id }} -- --output-format bencher | tee ${{ matrix.id }}.txt
+        run: cargo bench --bench ${{ matrix.version.id }} -- --output-format bencher | tee ${{ matrix.version.id }}.txt
 
       - name: Store benchmark result
         if: '!cancelled()'
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: ${{ matrix.name }}
+          name: ${{ matrix.version.name }}
           tool: 'cargo'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: ${{ matrix.id }}.txt
+          output-file-path: ${{ matrix.version.id }}.txt
           summary-always: true
           auto-push: true
           fail-on-alert: false
