@@ -46,9 +46,6 @@ impl Buffer {
     }
 
     /// Create a new buffer from a vector.
-    ///
-    /// # Panics
-    /// This method will panic if the vector is empty.
     #[allow(clippy::as_ptr_cast_mut)]
     pub fn from_vec<T: Sized + Send + Sync + RefUnwindSafe + 'static>(input: Vec<T>) -> Self {
         if input.is_empty() {
