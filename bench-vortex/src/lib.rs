@@ -169,19 +169,7 @@ pub fn setup_logger(level: LevelFilter) {
 pub fn compress_taxi_data() -> (usize, Array) {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
-    let _no_datetime_mask = ProjectionMask::roots(
-        builder.parquet_schema(),
-        [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-    );
-    let reader = builder
-        .with_projection(_mask)
-        //.with_projection(no_datetime_mask)
-        .with_batch_size(BATCH_SIZE)
-        // .with_batch_size(5_000_000)
-        // .with_limit(100_000)
-        .build()
-        .unwrap();
+    let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
     let schema = reader.schema();
     let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
