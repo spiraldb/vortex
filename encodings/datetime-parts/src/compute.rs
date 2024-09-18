@@ -40,9 +40,9 @@ impl SliceFn for DateTimePartsArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
             self.dtype().clone(),
-            slice(&self.days(), start, stop)?,
-            slice(&self.seconds(), start, stop)?,
-            slice(&self.subsecond(), start, stop)?,
+            slice(self.days(), start, stop)?,
+            slice(self.seconds(), start, stop)?,
+            slice(self.subsecond(), start, stop)?,
         )?
         .into_array())
     }

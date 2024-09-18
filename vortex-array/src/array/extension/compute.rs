@@ -77,7 +77,7 @@ impl SliceFn for ExtensionArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::new(
             self.ext_dtype().clone(),
-            slice(&self.storage(), start, stop)?,
+            slice(self.storage(), start, stop)?,
         )
         .into_array())
     }

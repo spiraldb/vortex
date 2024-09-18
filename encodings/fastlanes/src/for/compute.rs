@@ -81,7 +81,7 @@ impl ScalarAtFn for FoRArray {
 impl SliceFn for FoRArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Self::try_new(
-            slice(&self.encoded(), start, stop)?,
+            slice(self.encoded(), start, stop)?,
             self.reference().clone(),
             self.shift(),
         )

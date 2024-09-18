@@ -29,7 +29,6 @@ mod test {
     use crate::array::primitive::PrimitiveArray;
     use crate::array::BoolArray;
     use crate::compute::take;
-    use crate::IntoArray;
 
     #[test]
     fn take_nullable() {

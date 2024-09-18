@@ -265,7 +265,7 @@ mod test {
     pub fn iter_sliced() {
         let p_fill_val = Some(non_nullable_fill().as_ref().try_into().unwrap());
         assert_sparse_array(
-            &slice(&sparse_array(non_nullable_fill()), 2, 7).unwrap(),
+            &slice(sparse_array(non_nullable_fill()), 2, 7).unwrap(),
             &[Some(100), p_fill_val, p_fill_val, Some(200), p_fill_val],
         );
     }
@@ -273,14 +273,14 @@ mod test {
     #[test]
     pub fn iter_sliced_nullable() {
         assert_sparse_array(
-            &slice(&sparse_array(nullable_fill()), 2, 7).unwrap(),
+            &slice(sparse_array(nullable_fill()), 2, 7).unwrap(),
             &[Some(100), None, None, Some(200), None],
         );
     }
 
     #[test]
     pub fn iter_sliced_twice() {
-        let sliced_once = slice(&sparse_array(nullable_fill()), 1, 8).unwrap();
+        let sliced_once = slice(sparse_array(nullable_fill()), 1, 8).unwrap();
         assert_sparse_array(
             &sliced_once,
             &[None, Some(100), None, None, Some(200), None, None],
@@ -316,7 +316,7 @@ mod test {
 
     #[test]
     pub fn scalar_at_sliced() {
-        let sliced = slice(&sparse_array(nullable_fill()), 2, 7).unwrap();
+        let sliced = slice(sparse_array(nullable_fill()), 2, 7).unwrap();
         assert_eq!(
             usize::try_from(&scalar_at(&sliced, 0).unwrap()).unwrap(),
             100
@@ -332,7 +332,7 @@ mod test {
 
     #[test]
     pub fn scalar_at_sliced_twice() {
-        let sliced_once = slice(&sparse_array(nullable_fill()), 1, 8).unwrap();
+        let sliced_once = slice(sparse_array(nullable_fill()), 1, 8).unwrap();
         assert_eq!(
             usize::try_from(&scalar_at(&sliced_once, 1).unwrap()).unwrap(),
             100

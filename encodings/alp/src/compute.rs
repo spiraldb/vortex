@@ -73,7 +73,7 @@ impl TakeFn for ALPArray {
 impl SliceFn for ALPArray {
     fn slice(&self, start: usize, end: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
-            slice(&self.encoded(), start, end)?,
+            slice(self.encoded(), start, end)?,
             self.exponents(),
             self.patches().map(|p| slice(&p, start, end)).transpose()?,
         )?

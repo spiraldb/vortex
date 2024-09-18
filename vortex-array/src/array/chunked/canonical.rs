@@ -215,7 +215,7 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
             offsets_arr.len() - 1,
         ))?;
         let primitive_bytes =
-            slice(&chunk.bytes(), first_offset_value, last_offset_value)?.into_primitive()?;
+            slice(chunk.bytes(), first_offset_value, last_offset_value)?.into_primitive()?;
         data_bytes.extend_from_slice(primitive_bytes.buffer());
 
         let adjustment_from_previous = *offsets

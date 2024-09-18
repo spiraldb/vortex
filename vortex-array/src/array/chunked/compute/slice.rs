@@ -26,13 +26,13 @@ impl SliceFn for ChunkedArray {
             })
             .collect::<VortexResult<Vec<_>>>()?;
         if let Some(c) = chunks.first_mut() {
-            *c = slice(c, offset_in_first_chunk, c.len())?;
+            *c = slice(&*c, offset_in_first_chunk, c.len())?;
         }
 
         if length_in_last_chunk == 0 {
             chunks.pop();
         } else if let Some(c) = chunks.last_mut() {
-            *c = slice(c, 0, length_in_last_chunk)?;
+            *c = slice(&*c, 0, length_in_last_chunk)?;
         }
 
         Self::try_new(chunks, self.dtype().clone()).map(|a| a.into_array())

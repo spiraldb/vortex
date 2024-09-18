@@ -11,8 +11,8 @@ impl SliceFn for SparseArray {
         let index_end_index = self.search_index(stop)?.to_index();
 
         Ok(Self::try_new_with_offset(
-            slice(&self.indices(), index_start_index, index_end_index)?,
-            slice(&self.values(), index_start_index, index_end_index)?,
+            slice(self.indices(), index_start_index, index_end_index)?,
+            slice(self.values(), index_start_index, index_end_index)?,
             stop - start,
             self.indices_offset() + start,
             self.fill_value().clone(),

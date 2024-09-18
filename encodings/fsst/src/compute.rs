@@ -34,8 +34,8 @@ impl SliceFn for FSSTArray {
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            slice(&self.codes(), start, stop)?,
-            slice(&self.uncompressed_lengths(), start, stop)?,
+            slice(self.codes(), start, stop)?,
+            slice(self.uncompressed_lengths(), start, stop)?,
         )?
         .into_array())
     }
