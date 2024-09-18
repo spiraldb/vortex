@@ -4,12 +4,42 @@ use bench_vortex::public_bi_data::PBIDataset::*;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{compress_taxi_data, tpch};
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use vortex::{IntoArray, IntoCanonical};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use vortex::{Array, IntoArray, IntoCanonical};
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
 
-fn vortex_compress_taxi(c: &mut Criterion) {
+fn benchmark_compress<'a, T: criterion::measurement::Measurement, F>(
+    compressor: &SamplingCompressor<'_>,
+    make_uncompressed: F,
+    group_name: &str,
+    group: &mut BenchmarkGroup<'_, T>,
+    bench_name: &str,
+) where
+    F: Fn() -> &'a Array,
+{
+    let mut uncompressed_size = 0;
+    let mut compressed_size = 0;
+
+    group.bench_function(bench_name, |b| {
+        b.iter_with_large_drop(|| {
+            let uncompressed = make_uncompressed();
+            uncompressed_size = uncompressed.nbytes();
+            let compressed_array =
+                std::hint::black_box(compressor.compress(uncompressed, None)).unwrap();
+            compressed_size = compressed_array.nbytes();
+        });
+    });
+
+    println!(
+        "test {} Compression Ratio/{} ... bench:    {} ratio (+/- 0)",
+        group_name,
+        bench_name,
+        (compressed_size as f64) / (uncompressed_size as f64),
+    );
+}
+
+fn yellow_taxi_trip_data(c: &mut Criterion) {
     taxi_data_parquet();
     let mut group = c.benchmark_group("Yellow Taxi Trip Data");
     group.sample_size(10);
@@ -17,9 +47,10 @@ fn vortex_compress_taxi(c: &mut Criterion) {
     group.finish()
 }
 
-fn vortex_compress_medicare1(c: &mut Criterion) {
+fn public_bi_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Public BI Benchmark");
     group.sample_size(10);
+    // group.measurement_time(Duration::new(10, 0));
 
     for dataset_name in [
         AirlineSentiment,
@@ -44,7 +75,7 @@ fn vortex_compress_medicare1(c: &mut Criterion) {
     group.finish()
 }
 
-fn vortex_compress_tpch_l_comment(c: &mut Criterion) {
+fn tpc_h_l_comment(c: &mut Criterion) {
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -57,50 +88,57 @@ fn vortex_compress_tpch_l_comment(c: &mut Criterion) {
     ));
 
     let compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
-
     let compressor_fsst = SamplingCompressor::default();
 
-    // l_comment column only
-    let mut group = c.benchmark_group("TPCH l_comment Column");
+    let group_name = "TPC-H l_comment";
+    let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
+    group.sample_size(10);
+    // group.measurement_time(Duration::new(15, 0));
+
     let comments = lineitem_vortex.with_dyn(|a| {
         a.as_struct_array_unchecked()
             .field_by_name("l_comment")
             .unwrap()
     });
 
-    group.sample_size(10);
-    group.bench_function("compress-default", |b| {
-        b.iter_with_large_drop(|| {
-            std::hint::black_box(compressor.compress(&comments, None)).unwrap()
-        });
-    });
+    benchmark_compress(
+        &compressor,
+        || &comments,
+        group_name,
+        &mut group,
+        "chunked-without-fsst",
+    );
 
-    group.bench_function("compress-fsst-chunked", |b| {
-        b.iter_with_large_drop(|| {
-            std::hint::black_box(compressor_fsst.compress(&comments, None)).unwrap()
-        });
-    });
+    benchmark_compress(
+        &compressor_fsst,
+        || &comments,
+        group_name,
+        &mut group,
+        "chunked-with-fsst",
+    );
 
-    // Compare canonicalizing
     let comments_canonical = comments
         .into_canonical()
         .unwrap()
         .into_varbin()
         .unwrap()
         .into_array();
-    group.bench_function("compress-fsst-canonicalized", |b| {
-        b.iter_with_large_drop(|| {
-            std::hint::black_box(compressor_fsst.compress(&comments_canonical, None)).unwrap()
-        });
-    });
+
+    benchmark_compress(
+        &compressor_fsst,
+        || &comments_canonical,
+        group_name,
+        &mut group,
+        "canonical-with-fsst",
+    );
 
     group.finish();
 }
 
 criterion_group!(
     benches,
-    vortex_compress_taxi,
-    vortex_compress_medicare1,
-    vortex_compress_tpch_l_comment,
+    yellow_taxi_trip_data,
+    public_bi_benchmark,
+    tpc_h_l_comment,
 );
 criterion_main!(benches);
