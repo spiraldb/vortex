@@ -61,15 +61,15 @@ pub struct CompressConfig {
 
 impl Default for CompressConfig {
     fn default() -> Self {
-        let kib = 1 << 10;
-        let mib = 1 << 20;
+        let ki = 1 << 10;
+        let mi = 1 << 20;
         Self {
             // Sample length should always be multiple of 1024
             sample_size: 128,
             sample_count: 8,
             max_depth: 3,
-            target_block_bytesize: 16 * mib,
-            target_block_size: 64 * kib,
+            target_block_bytesize: 16 * mi,
+            target_block_size: 64 * ki,
         }
     }
 }
