@@ -34,5 +34,6 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
   release-to-pypi:
     name: Release to PyPI
-    if: ${{ jobs.release-plz.outputs.releases_created }}
+    needs: release-plz
+    if: ${{ needs.release-plz.outputs.releases_created }}
     uses: ./.github/workflows/publish-vortex.yml
