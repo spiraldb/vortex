@@ -17,6 +17,7 @@ use vortex_expr::VortexExpr;
 use vortex_serde::io::{ObjectStoreReadAt, VortexReadAt};
 use vortex_serde::layouts::{
     LayoutContext, LayoutDeserializer, LayoutMessageCache, LayoutReaderBuilder, Projection,
+    RowFilter, Schema,
 };
 
 pub struct VortexFileOpener {
@@ -51,10 +52,6 @@ impl FileOpener for VortexFileOpener {
             .map(convert_expr_to_vortex)
             .transpose()?;
 
-        // if let Some(expr) = expr.as_ref() {
-        //     builder = builder.with_row_filter(vortex_serde::layouts::RowFilter::new(expr.clone()));
-        // }
-
         if let Some(projection) = self.projection.as_ref() {
             builder = builder.with_projection(Projection::new(projection))
         }
@@ -84,7 +81,9 @@ async fn build_selection<R: VortexReadAt + Unpin + Send + 'static>(
     message_cache: Arc<RwLock<LayoutMessageCache>>,
 ) -> VortexResult<Array> {
     let mut builder = LayoutReaderBuilder::new(reader, deserializer);
-    // let footer = builder.read_footer().await?;
+    let footer = builder.read_footer().await?;
+    let schema = Schema::new(footer.dtype()?);
+    let filter = RowFilter::new(expr).reorder(&schema);
 
     // let referenced_fields = expr.references().into_iter().collect::<Vec<_>>();
     // let fields = footer.resolve_references(referenced_fields.as_ref())?;
@@ -98,9 +97,8 @@ async fn build_selection<R: VortexReadAt + Unpin + Send + 'static>(
 
     while let Some(batch) = stream.next().await {
         let batch = batch?;
-        let bool_array = expr.evaluate(&batch)?.into_bool()?;
-        let bool_buffer = bool_array.boolean_buffer();
-        bool_builder.append_buffer(&bool_buffer);
+        let bool_array = filter.evaluate(&batch)?.into_bool()?;
+        bool_builder.append_buffer(&bool_array.boolean_buffer());
         validity_builder.push(bool_array.logical_validity());
     }
 

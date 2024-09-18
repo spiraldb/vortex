@@ -19,7 +19,7 @@ impl RowFilter {
         Self { filter }
     }
 
-    // Evaluate the underlying filter against a target array, returning a boolean mask
+    /// Evaluate the underlying filter against a target array, returning a boolean mask
     pub fn evaluate(&self, target: &Array) -> VortexResult<Array> {
         self.filter.evaluate(target)
     }

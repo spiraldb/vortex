@@ -7,7 +7,6 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
-use vortex::array::StructArray;
 use vortex::compute::unary::subtract_scalar;
 use vortex::compute::{filter, search_sorted, slice, take, SearchSortedSide};
 use vortex::{Array, IntoArray, IntoArrayVariant};
@@ -20,7 +19,6 @@ use super::null_as_false;
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::LayoutMessageCache;
 use crate::layouts::read::{Layout, MessageId, ReadResult, Scan};
-use crate::layouts::Projection;
 use crate::stream_writer::ByteRange;
 
 pub struct LayoutBatchStream<R> {
@@ -31,7 +29,6 @@ pub struct LayoutBatchStream<R> {
     state: StreamingState<R>,
     dtype: DType,
     current_offset: usize,
-    result_projection: Projection,
 }
 
 impl<R: VortexReadAt> LayoutBatchStream<R> {
@@ -41,7 +38,6 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
         messages_cache: Arc<RwLock<LayoutMessageCache>>,
         dtype: DType,
         scan: Scan,
-        result_projection: Projection,
     ) -> Self {
         LayoutBatchStream {
             reader: Some(reader),
@@ -51,7 +47,6 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
             state: Default::default(),
             dtype,
             current_offset: 0,
-            result_projection,
         }
     }
 
@@ -139,13 +134,6 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                         let filter_array = null_as_false(mask.into_bool()?)?;
                         batch = filter(&batch, &filter_array)?;
                     }
-
-                    batch = match &self.result_projection {
-                        Projection::All => batch,
-                        Projection::Flat(v) => {
-                            StructArray::try_from(batch)?.project(v)?.into_array()
-                        }
-                    };
 
                     self.state = StreamingState::Init;
                     return Poll::Ready(Some(Ok(batch)));
