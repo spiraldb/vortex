@@ -89,7 +89,7 @@ pub fn compare(left: &Array, right: &Array, operator: Operator) -> VortexResult<
     }
 
     if left.is_encoding(Constant::ID) {
-        return compare(right, &left, operator.swap());
+        return compare(right, left, operator.swap());
     }
 
     if let Some(selection) = left.with_dyn(|lhs| lhs.compare(right, operator)) {

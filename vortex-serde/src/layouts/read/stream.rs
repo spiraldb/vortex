@@ -118,9 +118,9 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     if let Some(selection) = self.scan.row_selection.take() {
                         let batch_selection = slice(&selection, 0, batch.len())?;
                         let batch_selection = null_as_false(batch_selection.into_bool()?)?;
-                        let leftover = slice(&selection, batch.len(), selection.len())?;
+                        let reminder = slice(&selection, batch.len(), selection.len())?;
 
-                        self.scan.row_selection = Some(leftover);
+                        self.scan.row_selection = Some(reminder);
 
                         batch = filter(&batch, &batch_selection)?;
                     }
