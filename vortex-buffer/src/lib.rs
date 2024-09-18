@@ -39,7 +39,7 @@ impl Buffer {
     /// Create a new buffer of the provided length with all bytes set to `0u8`.
     /// If len is 0, does not perform any allocations.
     pub fn from_len_zeroed(len: usize) -> Self {
-        ArrowMutableBuffer::from_len_zeroed(len).into()
+        Self::from(ArrowMutableBuffer::from_len_zeroed(len))
     }
 
     /// Length of the buffer in bytes
@@ -85,6 +85,9 @@ impl Buffer {
     ///
     /// # Errors
     /// This method will fail if the underlying buffer is an owned [`bytes::Bytes`].
+    ///
+    /// This method will also fail if we attempt to pass a `T` that is not aligned to the `T` that
+    /// it was originally allocated with.
     pub fn into_vec<T: ArrowNativeType>(self) -> Result<Vec<T>, Self> {
         match self {
             Self::Arrow(buffer) => buffer.into_vec::<T>().map_err(Buffer::Arrow),
@@ -148,7 +151,7 @@ impl From<ArrowBuffer> for Buffer {
 
 impl From<ArrowMutableBuffer> for Buffer {
     fn from(value: ArrowMutableBuffer) -> Self {
-        Self::Arrow(value.into())
+        Self::Arrow(ArrowBuffer::from(value))
     }
 }
 
