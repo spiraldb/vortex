@@ -95,7 +95,8 @@ impl VarBinArray {
     /// # Note
     ///
     /// Bytes child array is never sliced when the array is sliced so this can include values
-    /// that are not logically present in the array
+    /// that are not logically present in the array. Users should prefer [sliced_bytes][Self::sliced_bytes]
+    /// unless they're resolving values via offset child array.
     #[inline]
     pub fn bytes(&self) -> Array {
         self.as_ref()
