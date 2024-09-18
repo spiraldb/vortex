@@ -10,13 +10,15 @@ use itertools::Itertools;
 use log::info;
 use reqwest::Url;
 use tokio::fs::File;
-use vortex::ArrayTrait;
+use vortex::array::ChunkedArray;
+use vortex::{Array, ArrayDType, ArrayTrait, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::data_downloads::{decompress_bz2, download_data, BenchmarkDataset, FileType};
 use crate::public_bi_data::PBIDataset::*;
 use crate::reader::{
-    compress_parquet_to_vortex, open_vortex, rewrite_parquet_as_vortex, write_csv_as_parquet,
+    compress_parquet_to_vortex, open_vortex, read_parquet_to_vortex, rewrite_parquet_as_vortex,
+    write_csv_as_parquet,
 };
 use crate::{idempotent, IdempotentPath};
 
@@ -421,6 +423,23 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 dataset.unzip();
             }
         }
+    }
+
+    fn to_vortex_array(&self) -> VortexResult<Array> {
+        self.write_as_parquet();
+
+        let arrays = self
+            .list_files(FileType::Parquet)
+            .iter()
+            .map(|f| read_parquet_to_vortex(f.as_path()))
+            .collect::<VortexResult<Vec<_>>>()?;
+        assert!(!arrays.is_empty());
+        let dtype = arrays[0].dtype().clone();
+        ChunkedArray::try_new(
+            arrays.iter().flat_map(|x| x.chunks()).collect::<Vec<_>>(),
+            dtype,
+        )
+        .map(|x| x.into_array())
     }
 
     fn compress_to_vortex(&self) -> VortexResult<()> {

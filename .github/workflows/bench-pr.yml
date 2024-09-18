@@ -49,17 +49,36 @@ jobs:
 
       - name: Run benchmark
         shell: bash
-        run: cargo bench --bench ${{ matrix.benchmark.id }} -- --output-format bencher | tee ${{ matrix.benchmark.id }}.txt
+        run: |
+          cargo install cargo-criterion
 
+          cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
+
+          cat out.json
+
+          sudo apt-get update && sudo apt-get install -y jq
+
+          jq --raw-input --compact-output '
+                 fromjson?
+                 | [ (if .mean != null then {name: .id, value: .mean.estimate, unit: .unit, range: ((.mean.upper_bound - .mean.lower_bound) / 2) } else {} end),
+                     (if .throughput != null then {name: (.id + " throughput"), value: .throughput[].per_iteration, unit: .throughput[].unit, range: 0} else {} end),
+                     {name, value, unit, range} ]
+                 | .[]
+                 | select(.value != null)
+              ' \
+              out.json \
+              | jq --slurp --compact-output '.' >${{ matrix.benchmark.id }}.json
+
+          cat ${{ matrix.benchmark.id }}.json
       - name: Store benchmark result
         if: '!cancelled()'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: ${{ matrix.benchmark.name }}
-          tool: 'cargo'
+          tool: 'customSmallerIsBetter'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: ${{ matrix.benchmark.id }}.txt
+          output-file-path: ${{ matrix.benchmark.id }}.json
           summary-always: true
           comment-always: true
           auto-push: false

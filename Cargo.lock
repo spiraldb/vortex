@@ -501,6 +501,7 @@ dependencies = [
  "rayon",
  "reqwest",
  "serde",
+ "serde_json",
  "simplelog",
  "tar",
  "tokio",

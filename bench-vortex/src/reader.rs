@@ -27,7 +27,7 @@ use vortex::array::{ChunkedArray, PrimitiveArray};
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::stream::ArrayStreamExt;
-use vortex::{Array, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
@@ -89,24 +89,30 @@ pub async fn rewrite_parquet_as_vortex<W: VortexWrite>(
     Ok(())
 }
 
-pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedArray> {
+pub fn read_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedArray> {
     let taxi_pq = File::open(parquet_path)?;
     let builder = ParquetRecordBatchReaderBuilder::try_new(taxi_pq)?;
-
     // FIXME(ngates): #157 the compressor should handle batch size.
     let reader = builder.with_batch_size(BATCH_SIZE).build()?;
-
     let dtype = DType::from_arrow(reader.schema());
-
-    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
     let chunks = reader
         .map(|batch_result| batch_result.unwrap())
-        .map(|record_batch| {
-            let vortex_array = Array::try_from(record_batch).unwrap();
-            compressor.compress(&vortex_array).unwrap()
-        })
-        .collect_vec();
+        .map(Array::try_from)
+        .collect::<VortexResult<Vec<_>>>()?;
     ChunkedArray::try_new(chunks, dtype)
+}
+
+pub fn compress_parquet_to_vortex(parquet_path: &Path) -> VortexResult<ChunkedArray> {
+    let chunked = read_parquet_to_vortex(parquet_path)?;
+    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
+    let dtype = chunked.dtype().clone();
+    ChunkedArray::try_new(
+        chunked
+            .chunks()
+            .map(|x| compressor.compress(&x))
+            .collect::<VortexResult<Vec<_>>>()?,
+        dtype,
+    )
 }
 
 pub fn write_csv_as_parquet(csv_path: PathBuf, output_path: &Path) -> VortexResult<()> {
