@@ -34,8 +34,8 @@ impl SliceFn for FSSTArray {
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            slice(&self.codes(), start, stop)?,
-            slice(&self.uncompressed_lengths(), start, stop)?,
+            slice(self.codes(), start, stop)?,
+            slice(self.uncompressed_lengths(), start, stop)?,
         )?
         .into_array())
     }
@@ -48,8 +48,8 @@ impl TakeFn for FSSTArray {
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            take(&self.codes(), indices)?,
-            take(&self.uncompressed_lengths(), indices)?,
+            take(self.codes(), indices)?,
+            take(self.uncompressed_lengths(), indices)?,
         )?
         .into_array())
     }
@@ -81,8 +81,8 @@ impl FilterFn for FSSTArray {
             self.dtype().clone(),
             self.symbols(),
             self.symbol_lengths(),
-            filter(&self.codes(), predicate)?,
-            filter(&self.uncompressed_lengths(), predicate)?,
+            filter(self.codes(), predicate)?,
+            filter(self.uncompressed_lengths(), predicate)?,
         )?
         .into_array())
     }

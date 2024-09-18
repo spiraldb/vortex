@@ -244,7 +244,7 @@ impl VarBinViewArray {
         unsafe {
             if !view.is_inlined() {
                 let data_buf = slice(
-                    &self.bytes(view._ref.buffer_index as usize),
+                    self.bytes(view._ref.buffer_index as usize),
                     view._ref.offset as usize,
                     (view._ref.size + view._ref.offset) as usize,
                 )?
@@ -389,8 +389,7 @@ mod test {
     #[test]
     pub fn slice_array() {
         let binary_arr = slice(
-            &VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"])
-                .into(),
+            VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]),
             1,
             2,
         )

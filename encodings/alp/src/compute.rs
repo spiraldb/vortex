@@ -62,7 +62,7 @@ impl TakeFn for ALPArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         // TODO(ngates): wrap up indices in an array that caches decompression?
         Ok(Self::try_new(
-            take(&self.encoded(), indices)?,
+            take(self.encoded(), indices)?,
             self.exponents(),
             self.patches().map(|p| take(&p, indices)).transpose()?,
         )?
@@ -73,7 +73,7 @@ impl TakeFn for ALPArray {
 impl SliceFn for ALPArray {
     fn slice(&self, start: usize, end: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
-            slice(&self.encoded(), start, end)?,
+            slice(self.encoded(), start, end)?,
             self.exponents(),
             self.patches().map(|p| slice(&p, start, end)).transpose()?,
         )?
@@ -84,7 +84,7 @@ impl SliceFn for ALPArray {
 impl FilterFn for ALPArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         Ok(Self::try_new(
-            filter(&self.encoded(), predicate)?,
+            filter(self.encoded(), predicate)?,
             self.exponents(),
             self.patches().map(|p| filter(&p, predicate)).transpose()?,
         )?
@@ -134,7 +134,7 @@ where
     match encoded {
         Ok(encoded) => {
             let s = ConstantArray::new(encoded, alp.len());
-            compare(&alp.encoded(), s.as_ref(), operator)
+            compare(alp.encoded(), s.as_ref(), operator)
         }
         Err(exception) => {
             if let Some(patches) = alp.patches().as_ref() {

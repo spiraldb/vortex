@@ -79,9 +79,8 @@ mod test {
     #[test]
     fn test_take_nulls() {
         let nulls = NullArray::new(10).into_array();
-        let taken =
-            NullArray::try_from(take(&nulls, &vec![0u64, 2, 4, 6, 8].into_array()).unwrap())
-                .unwrap();
+        let taken = NullArray::try_from(take(&nulls, vec![0u64, 2, 4, 6, 8].into_array()).unwrap())
+            .unwrap();
 
         assert_eq!(taken.len(), 5);
         assert!(matches!(

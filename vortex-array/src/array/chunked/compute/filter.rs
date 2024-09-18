@@ -141,7 +141,7 @@ fn filter_slices<'a>(
             ChunkFilter::None => {}
             // Slices => turn the slices into a boolean buffer.
             ChunkFilter::Slices(slices) => {
-                result.push(filter(&chunk, &slices_to_predicate(slices, chunk.len()))?);
+                result.push(filter(&chunk, slices_to_predicate(slices, chunk.len()))?);
             }
         }
     }
@@ -172,8 +172,8 @@ fn filter_indices<'a>(
                     .chunk(current_chunk_id)
                     .vortex_expect("find_chunk_idx must return valid chunk ID");
                 let filtered_chunk = take(
-                    &chunk,
-                    &PrimitiveArray::from(chunk_indices.clone()).into_array(),
+                    chunk,
+                    PrimitiveArray::from(chunk_indices.clone()).into_array(),
                 )?;
                 result.push(filtered_chunk);
             }
@@ -192,7 +192,7 @@ fn filter_indices<'a>(
             .vortex_expect("find_chunk_idx must return valid chunk ID");
         let filtered_chunk = take(
             &chunk,
-            &PrimitiveArray::from(chunk_indices.clone()).into_array(),
+            PrimitiveArray::from(chunk_indices.clone()).into_array(),
         )?;
         result.push(filtered_chunk);
     }

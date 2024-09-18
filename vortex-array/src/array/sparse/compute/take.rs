@@ -20,7 +20,7 @@ impl TakeFn for SparseArray {
             take_search_sorted(self, &flat_indices)?
         };
 
-        let taken_values = take(&self.values(), &physical_take_indices.into_array())?;
+        let taken_values = take(self.values(), physical_take_indices)?;
 
         Ok(Self::try_new(
             positions.into_array(),
@@ -110,7 +110,7 @@ mod test {
     fn sparse_take() {
         let sparse = sparse_array();
         let taken =
-            SparseArray::try_from(take(&sparse, &vec![0, 47, 47, 0, 99].into_array()).unwrap())
+            SparseArray::try_from(take(sparse, vec![0, 47, 47, 0, 99].into_array()).unwrap())
                 .unwrap();
         assert_eq!(
             taken
@@ -133,7 +133,7 @@ mod test {
     #[test]
     fn nonexistent_take() {
         let sparse = sparse_array();
-        let taken = SparseArray::try_from(take(&sparse, &vec![69].into_array()).unwrap()).unwrap();
+        let taken = SparseArray::try_from(take(sparse, vec![69].into_array()).unwrap()).unwrap();
         assert!(taken
             .indices()
             .into_primitive()
@@ -152,7 +152,7 @@ mod test {
     fn ordered_take() {
         let sparse = sparse_array();
         let taken =
-            SparseArray::try_from(take(&sparse, &vec![69, 37].into_array()).unwrap()).unwrap();
+            SparseArray::try_from(take(&sparse, vec![69, 37].into_array()).unwrap()).unwrap();
         assert_eq!(
             taken
                 .indices()

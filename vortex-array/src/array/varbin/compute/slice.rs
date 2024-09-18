@@ -7,7 +7,7 @@ use crate::{Array, ArrayDType, IntoArray};
 impl SliceFn for VarBinArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Self::try_new(
-            slice(&self.offsets(), start, stop + 1)?,
+            slice(self.offsets(), start, stop + 1)?,
             self.bytes(),
             self.dtype().clone(),
             self.validity().slice(start, stop)?,

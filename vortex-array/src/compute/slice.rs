@@ -19,7 +19,8 @@ pub trait SliceFn {
 ///
 /// Slicing returns an error if the underlying codec's [slice](SliceFn::slice()) implementation
 /// returns an error.
-pub fn slice(array: &Array, start: usize, stop: usize) -> VortexResult<Array> {
+pub fn slice(array: impl AsRef<Array>, start: usize, stop: usize) -> VortexResult<Array> {
+    let array = array.as_ref();
     check_slice_bounds(array, start, stop)?;
 
     array.with_dyn(|c| {
