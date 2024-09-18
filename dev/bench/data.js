@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726690875330,
+  "lastUpdate": 1726690894964,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -129981,6 +129981,50 @@ window.BENCHMARK_DATA = {
             "name": "bytes_at/array_data #2",
             "value": 1028,
             "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      }
+    ],
+    "Vortex random_access": [
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "88adc187931fed2c8c69ff1c3d08c87fe3ccb108",
+          "message": "fix: benchmarks matrix uses nested variables (#871)",
+          "timestamp": "2024-09-18T16:17:08-04:00",
+          "tree_id": "99506793734c0eea882d80021fce5b37b38e8089",
+          "url": "https://github.com/spiraldb/vortex/commit/88adc187931fed2c8c69ff1c3d08c87fe3ccb108"
+        },
+        "date": 1726690893706,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1189053,
+            "range": "± 22366",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1342553,
+            "range": "± 35845",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 179206473,
+            "range": "± 1572254",
             "unit": "ns/iter"
           }
         ]
