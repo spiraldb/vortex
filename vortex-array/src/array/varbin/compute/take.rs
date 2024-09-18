@@ -1,6 +1,6 @@
 use arrow_buffer::NullBuffer;
 use vortex_dtype::{match_each_integer_ptype, DType, NativePType};
-use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexResult};
 
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::array::varbin::VarBinArray;
@@ -10,14 +10,6 @@ use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 
 impl TakeFn for VarBinArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        // TODO(ngates): support i64 indices.
-        if indices.len() >= i32::MAX as usize {
-            vortex_bail!(
-                "indices.len() ({}) must be less than i32::MAX",
-                indices.len()
-            );
-        }
-
         let offsets = self.offsets().into_primitive()?;
         let data = self.bytes().into_primitive()?;
         let indices = indices.clone().into_primitive()?;
