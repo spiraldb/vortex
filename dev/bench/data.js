@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726691402043,
+  "lastUpdate": 1726691466956,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -130061,6 +130061,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 179206473,
             "range": "± 1572254",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "a10y@users.noreply.github.com",
+            "name": "Andrew Duffy",
+            "username": "a10y"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f14f45a3574aa7145b895fdb656a9d36f33a39b6",
+          "message": "feat: add back ptype check for BitPackedArray (#872)",
+          "timestamp": "2024-09-18T20:26:15Z",
+          "tree_id": "920f9743aec2becfa4fe4c7ffe92d0e16d9d9cf3",
+          "url": "https://github.com/spiraldb/vortex/commit/f14f45a3574aa7145b895fdb656a9d36f33a39b6"
+        },
+        "date": 1726691465520,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1204308,
+            "range": "± 40526",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1363453,
+            "range": "± 28062",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 178573668,
+            "range": "± 4407348",
             "unit": "ns/iter"
           }
         ]
