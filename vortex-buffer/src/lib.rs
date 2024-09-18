@@ -9,11 +9,8 @@
 //!
 //! We do not currently enforce any alignment guarantees on the buffer.
 
-use core::panic::RefUnwindSafe;
-use core::ptr::NonNull;
-use std::cmp::Ordering;
-use std::ops::{Deref, Range};
-use std::sync::Arc;
+use core::cmp::Ordering;
+use core::ops::{Deref, Range};
 
 use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer as ArrowMutableBuffer};
 pub use string::*;
@@ -42,25 +39,7 @@ impl Buffer {
     /// Create a new buffer of the provided length with all bytes set to `0u8`.
     /// If len is 0, does not perform any allocations.
     pub fn from_len_zeroed(len: usize) -> Self {
-        Self::Arrow(ArrowBuffer::from(ArrowMutableBuffer::from_len_zeroed(len)))
-    }
-
-    /// Create a new buffer from a vector.
-    #[allow(clippy::as_ptr_cast_mut)]
-    pub fn from_vec<T: Sized + Send + Sync + RefUnwindSafe + 'static>(input: Vec<T>) -> Self {
-        if input.is_empty() {
-            return Self::from_len_zeroed(0);
-        }
-
-        // SAFETY: the ArrowBuffer takes ownership of `input` and will drop it when time to free.
-        unsafe {
-            ArrowBuffer::from_custom_allocation(
-                NonNull::new_unchecked(input.as_ptr() as *mut u8),
-                input.len() * size_of::<T>(),
-                Arc::new(input),
-            )
-        }
-        .into()
+        ArrowMutableBuffer::from_len_zeroed(len).into()
     }
 
     /// Length of the buffer in bytes
@@ -164,6 +143,12 @@ impl From<bytes::Bytes> for Buffer {
 impl From<ArrowBuffer> for Buffer {
     fn from(value: ArrowBuffer) -> Self {
         Self::Arrow(value)
+    }
+}
+
+impl From<ArrowMutableBuffer> for Buffer {
+    fn from(value: ArrowMutableBuffer) -> Self {
+        Self::Arrow(value.into())
     }
 }
 

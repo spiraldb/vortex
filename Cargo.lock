@@ -4503,6 +4503,7 @@ name = "vortex-fastlanes"
 version = "0.9.0"
 dependencies = [
  "arrayref",
+ "arrow-buffer",
  "criterion",
  "fastlanes",
  "itertools 0.13.0",

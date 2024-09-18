@@ -15,6 +15,7 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+arrow-buffer = { workspace = true }
 arrayref = { workspace = true }
 fastlanes = { workspace = true }
 itertools = { workspace = true }

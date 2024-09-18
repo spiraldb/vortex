@@ -1,3 +1,4 @@
+use arrow_buffer::ArrowNativeType;
 use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::stats::ArrayStatistics;
@@ -54,7 +55,10 @@ pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Buffer
 /// Bitpack a slice of primitives down to the given width.
 ///
 /// See `bitpack` for more caller information.
-pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: usize) -> Buffer {
+pub fn bitpack_primitive<T: NativePType + BitPacking + ArrowNativeType>(
+    array: &[T],
+    bit_width: usize,
+) -> Buffer {
     if bit_width == 0 {
         return Buffer::from_len_zeroed(0);
     }
@@ -68,7 +72,7 @@ pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: us
     // then we divide by the size of T to get the number of elements.
 
     // Allocate a result byte array.
-    let mut output = Vec::with_capacity(num_chunks * packed_len);
+    let mut output = Vec::<T>::with_capacity(num_chunks * packed_len);
 
     // Loop over all but the last chunk.
     (0..num_full_chunks).for_each(|i| {
@@ -104,7 +108,7 @@ pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: us
         };
     }
 
-    Buffer::from_vec(output)
+    Buffer::from(output)
 }
 
 pub fn bitpack_patches(
