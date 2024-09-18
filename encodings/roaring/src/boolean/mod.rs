@@ -5,7 +5,7 @@ pub use compress::*;
 pub use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::BoolArray;
-use vortex::stats::{ArrayStatisticsCompute, StatsSet};
+use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -19,6 +19,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 
 mod compress;
 mod compute;
+mod stats;
 
 impl_encoding!("vortex.roaring_bool", 17u16, RoaringBool);
 
@@ -92,8 +93,6 @@ impl AcceptArrayVisitor for RoaringBoolArray {
         visitor.visit_buffer(self.buffer())
     }
 }
-
-impl ArrayStatisticsCompute for RoaringBoolArray {}
 
 impl ArrayValidity for RoaringBoolArray {
     fn is_valid(&self, _index: usize) -> bool {
