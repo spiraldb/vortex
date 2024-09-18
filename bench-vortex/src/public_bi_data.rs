@@ -423,15 +423,20 @@ impl BenchmarkDataset for BenchmarkDatasets {
         }
     }
 
-    fn compress_to_vortex(&self) -> VortexResult<()> {
+    fn compress_to_vortex(&self) -> VortexResult<(usize, usize)> {
         self.write_as_parquet();
+        let mut total_uncompressed_size = 0;
+        let mut total_compressed_size = 0;
         for f in self.list_files(FileType::Parquet) {
             info!(
                 "Compressing and writing {} to vortex",
                 f.to_str().unwrap_or("None")
             );
-            let from_vortex = compress_parquet_to_vortex(f.as_path())?;
+            let (uncompressed_size, from_vortex) = compress_parquet_to_vortex(f.as_path())?;
             let vx_size = from_vortex.nbytes();
+
+            total_uncompressed_size += uncompressed_size;
+            total_compressed_size += vx_size;
 
             info!(
                 "Vortex size: {}, {}B",
@@ -439,7 +444,7 @@ impl BenchmarkDataset for BenchmarkDatasets {
                 vx_size
             );
         }
-        Ok(())
+        Ok((total_uncompressed_size, total_compressed_size))
     }
 
     fn write_as_parquet(&self) {

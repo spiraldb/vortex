@@ -37,18 +37,45 @@ fn benchmark_compress<'a, T: criterion::measurement::Measurement, F>(
         bench_name,
         (compressed_size as f64) / (uncompressed_size as f64),
     );
+
+    println!(
+        "test {} Compressed Size/{} ... bench:    {} bytes (+/- 0)",
+        group_name, bench_name, compressed_size
+    );
 }
 
 fn yellow_taxi_trip_data(c: &mut Criterion) {
     taxi_data_parquet();
-    let mut group = c.benchmark_group("Yellow Taxi Trip Data");
+    let group_name = "Yellow Taxi Trip Data";
+    let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
+    let mut uncompressed_size = 0;
+    let mut compressed_size = 0;
     group.sample_size(10);
-    group.bench_function("compress", |b| b.iter(|| black_box(compress_taxi_data())));
+    group.bench_function("compress", |b| {
+        b.iter(|| {
+            let (size, array) = black_box(compress_taxi_data());
+            uncompressed_size = size;
+            compressed_size = array.nbytes();
+        })
+    });
+
+    println!(
+        "test {} Compression Ratio/compress ... bench:    {} ratio (+/- 0)",
+        group_name,
+        compressed_size as f32 / uncompressed_size as f32
+    );
+
+    println!(
+        "test {} Compressed Size/compress ... bench:    {} bytes (+/- 0)",
+        group_name, compressed_size
+    );
+
     group.finish()
 }
 
 fn public_bi_benchmark(c: &mut Criterion) {
-    let mut group = c.benchmark_group("Public BI Benchmark");
+    let group_name = "Public BI";
+    let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
     group.sample_size(10);
     // group.measurement_time(Duration::new(10, 0));
 
@@ -66,11 +93,29 @@ fn public_bi_benchmark(c: &mut Criterion) {
         // TableroSistemaPenal, // 20s per sample
         // YaleLanguages, // 4th column looks like integer but also contains Y
     ] {
+        let mut uncompressed_size = 0;
+        let mut compressed_size = 0;
+
         group.bench_function(format!("{:?}", dataset_name), |b| {
             let dataset = BenchmarkDatasets::PBI(dataset_name);
             dataset.write_as_parquet();
-            b.iter(|| black_box(dataset.compress_to_vortex()))
+            b.iter(|| {
+                let (uncompressed, compressed) = black_box(dataset.compress_to_vortex()).unwrap();
+                uncompressed_size = uncompressed;
+                compressed_size = compressed;
+            })
         });
+
+        println!(
+            "test {} Compression Ratio/compress ... bench:    {} ratio (+/- 0)",
+            group_name,
+            compressed_size as f32 / uncompressed_size as f32
+        );
+
+        println!(
+            "test {} Compressed Size/compress ... bench:    {} bytes (+/- 0)",
+            group_name, compressed_size
+        );
     }
     group.finish()
 }

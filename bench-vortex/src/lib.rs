@@ -8,10 +8,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow_array::RecordBatchReader;
-use humansize::DECIMAL;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use log::{info, LevelFilter};
+use log::LevelFilter;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
@@ -167,7 +166,7 @@ pub fn setup_logger(level: LevelFilter) {
     .unwrap();
 }
 
-pub fn compress_taxi_data() -> Array {
+pub fn compress_taxi_data() -> (usize, Array) {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
@@ -185,31 +184,43 @@ pub fn compress_taxi_data() -> Array {
         .unwrap();
 
     let schema = reader.schema();
-    let mut uncompressed_size: usize = 0;
     let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
-    let chunks = reader
-        .into_iter()
-        .map(|batch_result| batch_result.unwrap())
-        .map(Array::try_from)
-        .map(Result::unwrap)
-        .map(|array| {
-            uncompressed_size += array.nbytes();
-            compressor.compress(&array).unwrap()
-        })
-        .collect_vec();
+    let uncompressed = ChunkedArray::try_new(
+        reader
+            .into_iter()
+            .map(|batch_result| batch_result.unwrap())
+            .map(Array::try_from)
+            .map(Result::unwrap)
+            .collect_vec(),
+        DType::from_arrow(schema),
+    )
+    .unwrap()
+    .into_array();
+    let uncompressed_size = uncompressed.nbytes();
 
-    let compressed = ChunkedArray::try_new(chunks, DType::from_arrow(schema))
-        .unwrap()
-        .into_array();
+    let compressed = compressor.compress(&uncompressed).unwrap();
 
-    info!(
-        "{}, Bytes: {}, Ratio {}",
-        humansize::format_size(compressed.nbytes(), DECIMAL),
+    println!(
+        "{} {} {} \n{} {} {}",
+        &uncompressed,
+        uncompressed.nbytes(),
+        ChunkedArray::try_from(&uncompressed)
+            .unwrap()
+            .chunks()
+            .map(|x| format!("{} {}", x, x.nbytes()))
+            .collect::<Vec<_>>()
+            .join(", "),
+        &compressed,
         compressed.nbytes(),
-        compressed.nbytes() as f32 / uncompressed_size as f32
+        ChunkedArray::try_from(&compressed)
+            .unwrap()
+            .chunks()
+            .map(|x| format!("{:?} {}", x, x.nbytes()))
+            .collect::<Vec<_>>()
+            .join(", "),
     );
 
-    compressed
+    (uncompressed_size, compressed)
 }
 
 pub struct CompressionRunStats {
