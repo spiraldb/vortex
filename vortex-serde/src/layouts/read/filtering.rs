@@ -17,11 +17,17 @@ pub struct RowFilter {
     conjunction: Vec<Arc<dyn VortexExpr>>,
 }
 
+fn expr_is_filter(expr: &Arc<dyn VortexExpr>) -> bool {
+    expr.as_any().downcast_ref::<BinaryExpr>().is_some()
+}
+
 impl RowFilter {
     pub fn new(filter: Arc<dyn VortexExpr>, schema: Schema) -> Self {
         let mut conjunction = split_conjunction(&filter);
         // Sort in ascending order of cost
         conjunction.sort_by_key(|e| Reverse(e.estimate_cost(&schema)));
+        let conjunction = conjunction.into_iter().filter(expr_is_filter).collect();
+
         Self { conjunction }
     }
 
