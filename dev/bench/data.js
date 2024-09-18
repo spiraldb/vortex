@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726691466956,
+  "lastUpdate": 1726691498659,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -130189,6 +130189,90 @@ window.BENCHMARK_DATA = {
             "name": "vortex-nopushdown-uncompressed/exec",
             "value": 2011833,
             "range": "± 12190",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "a10y@users.noreply.github.com",
+            "name": "Andrew Duffy",
+            "username": "a10y"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f14f45a3574aa7145b895fdb656a9d36f33a39b6",
+          "message": "feat: add back ptype check for BitPackedArray (#872)",
+          "timestamp": "2024-09-18T20:26:15Z",
+          "tree_id": "920f9743aec2becfa4fe4c7ffe92d0e16d9d9cf3",
+          "url": "https://github.com/spiraldb/vortex/commit/f14f45a3574aa7145b895fdb656a9d36f33a39b6"
+        },
+        "date": 1726691497463,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 801394,
+            "range": "± 12474",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1754329,
+            "range": "± 4485",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 507344,
+            "range": "± 1752",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3046599,
+            "range": "± 26784",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 506905,
+            "range": "± 2326",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 2919791,
+            "range": "± 14408",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 707699,
+            "range": "± 1898",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 14350777,
+            "range": "± 266929",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 709099,
+            "range": "± 2558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1990897,
+            "range": "± 5181",
             "unit": "ns/iter"
           }
         ]
