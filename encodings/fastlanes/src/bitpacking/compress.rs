@@ -1,5 +1,3 @@
-use std::mem::size_of;
-
 use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::stats::ArrayStatistics;
@@ -48,29 +46,17 @@ pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Buffer
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
     let packed = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
-        let packed_vec: Vec<$P> = bitpack_primitive(parray.maybe_null_slice::<$P>(), bit_width);
-        let (ptr, len, cap) = packed_vec.into_raw_parts();
-        let ptr_u8: *mut u8 = ptr.cast();
-        let len_u8 = len * std::mem::size_of::<$P>();
-        let cap_u8 = cap * std::mem::size_of::<$P>();
-
-        // SAFETY: we are simply reinterpreting the packed_vec as a Vec<u8>.
-        let packed_u8 = unsafe {
-            Vec::from_raw_parts(ptr_u8, len_u8, cap_u8)
-        };
-
-        Buffer::from(packed_u8)
+        bitpack_primitive(parray.maybe_null_slice::<$P>(), bit_width)
     });
-
     Ok(packed)
 }
 
 /// Bitpack a slice of primitives down to the given width.
 ///
 /// See `bitpack` for more caller information.
-pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: usize) -> Vec<T> {
+pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: usize) -> Buffer {
     if bit_width == 0 {
-        return Vec::new();
+        return Buffer::from_len_zeroed(0);
     }
 
     // How many fastlanes vectors we will process.
@@ -118,7 +104,7 @@ pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: us
         };
     }
 
-    output
+    Buffer::from_vec(output)
 }
 
 pub fn bitpack_patches(

@@ -9,10 +9,13 @@
 //!
 //! We do not currently enforce any alignment guarantees on the buffer.
 
+use core::panic::RefUnwindSafe;
+use core::ptr::NonNull;
 use std::cmp::Ordering;
 use std::ops::{Deref, Range};
+use std::sync::Arc;
 
-use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer};
+use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer as ArrowMutableBuffer};
 pub use string::*;
 
 mod flexbuffers;
@@ -36,6 +39,32 @@ unsafe impl Send for Buffer {}
 unsafe impl Sync for Buffer {}
 
 impl Buffer {
+    /// Create a new buffer of the provided length with all bytes set to `0u8`.
+    /// If len is 0, does not perform any allocations.
+    pub fn from_len_zeroed(len: usize) -> Self {
+        Self::Arrow(ArrowBuffer::from(ArrowMutableBuffer::from_len_zeroed(len)))
+    }
+
+    /// Create a new buffer from a vector.
+    ///
+    /// # Panics
+    /// This method will panic if the vector is empty.
+    #[allow(clippy::as_ptr_cast_mut)]
+    pub fn from_vec<T: Sized + Send + Sync + RefUnwindSafe + 'static>(input: Vec<T>) -> Self {
+        if input.is_empty() {
+            return Self::from_len_zeroed(0);
+        }
+
+        unsafe {
+            ArrowBuffer::from_custom_allocation(
+                NonNull::new_unchecked(input.as_ptr() as *mut u8),
+                input.len() * std::mem::size_of::<T>(),
+                Arc::new(input),
+            )
+        }
+        .into()
+    }
+
     /// Length of the buffer in bytes
     pub fn len(&self) -> usize {
         match self {
@@ -121,8 +150,8 @@ impl From<&[u8]> for Buffer {
     }
 }
 
-impl From<Vec<u8>> for Buffer {
-    fn from(value: Vec<u8>) -> Self {
+impl<T: ArrowNativeType> From<Vec<T>> for Buffer {
+    fn from(value: Vec<T>) -> Self {
         // We prefer Arrow since it retains mutability
         Self::Arrow(ArrowBuffer::from_vec(value))
     }

@@ -44,6 +44,7 @@ pub trait NativePType:
     + FromPrimitive
     + ToBytes
     + TryFromBytes
+    + 'static
 {
     const PTYPE: PType;
 
