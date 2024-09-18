@@ -1,6 +1,5 @@
 use std::sync::{Arc, RwLock};
 
-use arrow_array::builder::BooleanBufferBuilder;
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use datafusion::datasource::physical_plan::{FileMeta, FileOpenFuture, FileOpener};
@@ -8,15 +7,12 @@ use datafusion_common::Result as DFResult;
 use datafusion_physical_expr::PhysicalExpr;
 use futures::{FutureExt as _, StreamExt, TryStreamExt};
 use object_store::ObjectStore;
-use vortex::array::BoolArray;
-use vortex::validity::{ArrayValidity, Validity};
-use vortex::{Array, Context, IntoArray, IntoArrayVariant as _};
-use vortex_error::VortexResult;
+use vortex::Context;
 use vortex_expr::datafusion::convert_expr_to_vortex;
-use vortex_expr::VortexExpr;
-use vortex_serde::io::{ObjectStoreReadAt, VortexReadAt};
+use vortex_serde::io::ObjectStoreReadAt;
 use vortex_serde::layouts::{
-    LayoutContext, LayoutDeserializer, LayoutMessageCache, LayoutReaderBuilder, Projection,
+    build_selection, LayoutContext, LayoutDeserializer, LayoutMessageCache, LayoutReaderBuilder,
+    Projection,
 };
 
 pub struct VortexFileOpener {
@@ -71,28 +67,4 @@ impl FileOpener for VortexFileOpener {
         }
         .boxed())
     }
-}
-
-async fn build_selection<R: VortexReadAt + Unpin + Send + 'static>(
-    reader: R,
-    expr: Arc<dyn VortexExpr>,
-    deserializer: LayoutDeserializer,
-    message_cache: Arc<RwLock<LayoutMessageCache>>,
-) -> VortexResult<Array> {
-    let mut builder = LayoutReaderBuilder::new(reader, deserializer);
-    builder = builder.with_message_cache(message_cache);
-
-    let mut stream = builder.build().await?;
-    let mut bool_builder = BooleanBufferBuilder::new(0);
-    let mut validity_builder = vec![];
-
-    while let Some(batch) = stream.next().await {
-        let batch = batch?;
-        let bool_array = expr.evaluate(&batch)?.into_bool()?;
-        bool_builder.append_buffer(&bool_array.boolean_buffer());
-        validity_builder.push(bool_array.logical_validity());
-    }
-
-    BoolArray::try_new(bool_builder.finish(), Validity::from_iter(validity_builder))
-        .map(|a| a.into_array())
 }
