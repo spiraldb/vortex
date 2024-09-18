@@ -75,6 +75,7 @@ impl EncodingCompressor for BitPackedCompressor {
         Ok(CompressedArray::new(
             BitPackedArray::try_new(
                 packed,
+                parray.ptype(),
                 validity,
                 patches.as_ref().map(|p| p.array.clone()),
                 bit_width,

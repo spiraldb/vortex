@@ -6,8 +6,11 @@ use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
-use vortex_dtype::{NativePType, Nullability, PType};
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray,
+};
+use vortex_buffer::Buffer;
+use vortex_dtype::{DType, NativePType, Nullability, PType};
 use vortex_error::{
     vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
 };
@@ -29,28 +32,30 @@ pub struct BitPackedMetadata {
 
 /// NB: All non-null values in the patches array are considered patches
 impl BitPackedArray {
+    /// Create a new bitpacked array using a buffer of packed data.
+    ///
+    /// The packed data should be interpreted as a sequence of values with size `bit_width`.
     pub fn try_new(
-        packed: Array,
+        packed: Buffer,
+        ptype: PType,
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
         len: usize,
     ) -> VortexResult<Self> {
-        Self::try_new_from_offset(packed, validity, patches, bit_width, len, 0)
+        Self::try_new_from_offset(packed, ptype, validity, patches, bit_width, len, 0)
     }
 
     pub(crate) fn try_new_from_offset(
-        packed: Array,
+        packed: Buffer,
+        ptype: PType,
         validity: Validity,
         patches: Option<Array>,
         bit_width: usize,
         length: usize,
         offset: usize,
     ) -> VortexResult<Self> {
-        let dtype = packed.dtype().with_nullability(validity.nullability());
-        if !dtype.is_unsigned_int() {
-            vortex_bail!(MismatchedTypes: "uint", &dtype);
-        }
+        let dtype = DType::Primitive(ptype, validity.nullability());
         if bit_width > u64::BITS as usize {
             vortex_bail!("Unsupported bit width {}", bit_width);
         }
@@ -61,9 +66,8 @@ impl BitPackedArray {
             );
         }
 
-        let ptype = PType::try_from(&dtype)?;
-        let expected_packed_size =
-            ((length + offset + 1023) / 1024) * (128 * bit_width / ptype.byte_width());
+        // expected packed size is in bytes
+        let expected_packed_size = ((length + offset + 1023) / 1024) * (128 * bit_width);
         if packed.len() != expected_packed_size {
             return Err(vortex_err!(
                 "Expected {} packed bytes, got {}",
@@ -95,8 +99,7 @@ impl BitPackedArray {
             has_patches: patches.is_some(),
         };
 
-        let mut children = Vec::with_capacity(3);
-        children.push(packed);
+        let mut children = Vec::with_capacity(2);
         if let Some(p) = patches {
             children.push(p);
         }
@@ -104,33 +107,37 @@ impl BitPackedArray {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
-    }
-
-    fn packed_len(&self) -> usize {
-        ((self.len() + self.offset() + 1023) / 1024)
-            * (128 * self.bit_width() / self.ptype().byte_width())
+        Ok(Self {
+            typed: TypedArray::try_from_parts(
+                dtype,
+                length,
+                metadata,
+                Some(packed),
+                children.into(),
+                StatsSet::new(),
+            )?,
+        })
     }
 
     #[inline]
-    pub fn packed(&self) -> Array {
+    pub fn packed(&self) -> &Buffer {
         self.as_ref()
-            .child(
-                0,
-                &self.dtype().with_nullability(Nullability::NonNullable),
-                self.packed_len(),
-            )
-            .vortex_expect("BitpackedArray is missing packed child bytes array")
+            .buffer()
+            .vortex_expect("BitPackedArray must contain packed buffer")
     }
 
+    /// Access the slice of packed values as an array of `T`
     #[inline]
     pub fn packed_slice<T: NativePType + BitPacking>(&self) -> &[T] {
-        let packed_primitive = self.packed().as_primitive();
-        let maybe_null_slice = packed_primitive.maybe_null_slice::<T>();
+        let packed_bytes = self.packed();
+        let packed_ptr: *const T = packed_bytes.as_ptr().cast();
+        // Return number of elements of type `T` packed in the buffer
+        let packed_len = packed_bytes.len() / size_of::<T>();
+
         // SAFETY: maybe_null_slice points to buffer memory that outlives the lifetime of `self`.
         //  Unfortunately Rust cannot understand this, so we reconstruct the slice from raw parts
         //  to get it to reinterpret the lifetime.
-        unsafe { std::slice::from_raw_parts(maybe_null_slice.as_ptr(), maybe_null_slice.len()) }
+        unsafe { std::slice::from_raw_parts(packed_ptr, packed_len) }
     }
 
     #[inline]
@@ -148,7 +155,7 @@ impl BitPackedArray {
             .has_patches
             .then(|| {
                 self.as_ref().child(
-                    1,
+                    0,
                     &self.dtype().with_nullability(Nullability::Nullable),
                     self.len(),
                 )
@@ -162,7 +169,7 @@ impl BitPackedArray {
     }
 
     pub fn validity(&self) -> Validity {
-        let validity_child_idx = if self.metadata().has_patches { 2 } else { 1 };
+        let validity_child_idx = if self.metadata().has_patches { 1 } else { 0 };
 
         self.metadata().validity.to_validity(self.as_ref().child(
             validity_child_idx,
@@ -214,7 +221,7 @@ impl ArrayValidity for BitPackedArray {
 
 impl AcceptArrayVisitor for BitPackedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_child("packed", &self.packed())?;
+        visitor.visit_buffer(self.packed())?;
         if let Some(patches) = self.patches().as_ref() {
             visitor.visit_child("patches", patches)?;
         }

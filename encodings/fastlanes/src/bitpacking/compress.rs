@@ -1,10 +1,10 @@
-use std::mem::size_of;
-
+use arrow_buffer::ArrowNativeType;
 use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::stats::ArrayStatistics;
 use vortex::validity::{ArrayValidity, Validity};
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
+use vortex_buffer::Buffer;
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
@@ -22,9 +22,7 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
 
     if bit_width >= array.ptype().bit_width() {
         // Nothing we can do
-        vortex_bail!(
-            "Cannot pack -- specified bit width is greater than or equal to the type's bit width"
-        )
+        vortex_bail!("Cannot pack -- specified bit width is greater than or equal to raw bit width")
     }
 
     let packed = bitpack(&array, bit_width)?;
@@ -32,30 +30,49 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
         .then(|| bitpack_patches(&array, bit_width, num_exceptions))
         .flatten();
 
-    BitPackedArray::try_new(packed, array.validity(), patches, bit_width, array.len())
+    BitPackedArray::try_new(
+        packed,
+        array.ptype().to_unsigned(),
+        array.validity(),
+        patches,
+        bit_width,
+        array.len(),
+    )
 }
 
-pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Array> {
+/// Bitpack a [PrimitiveArray] to the given width.
+///
+/// On success, returns a [Buffer] containing the packed data.
+pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Buffer> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
     let packed = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
-        PrimitiveArray::from(bitpack_primitive(parray.maybe_null_slice::<$P>(), bit_width))
+        bitpack_primitive(parray.maybe_null_slice::<$P>(), bit_width)
     });
-    Ok(packed.into_array())
+    Ok(packed)
 }
 
-pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: usize) -> Vec<T> {
+/// Bitpack a slice of primitives down to the given width.
+///
+/// See `bitpack` for more caller information.
+pub fn bitpack_primitive<T: NativePType + BitPacking + ArrowNativeType>(
+    array: &[T],
+    bit_width: usize,
+) -> Buffer {
     if bit_width == 0 {
-        return Vec::new();
+        return Buffer::from_len_zeroed(0);
     }
 
     // How many fastlanes vectors we will process.
     let num_chunks = (array.len() + 1023) / 1024;
     let num_full_chunks = array.len() / 1024;
     let packed_len = 128 * bit_width / size_of::<T>();
+    // packed_len says how many values of size T we're going to include.
+    // 1024 * bit_width / 8 == the number of bytes we're going to get.
+    // then we divide by the size of T to get the number of elements.
 
     // Allocate a result byte array.
-    let mut output = Vec::with_capacity(num_chunks * packed_len);
+    let mut output = Vec::<T>::with_capacity(num_chunks * packed_len);
 
     // Loop over all but the last chunk.
     (0..num_full_chunks).for_each(|i| {
@@ -91,7 +108,7 @@ pub fn bitpack_primitive<T: NativePType + BitPacking>(array: &[T], bit_width: us
         };
     }
 
-    output
+    Buffer::from(output)
 }
 
 pub fn bitpack_patches(
@@ -126,12 +143,10 @@ pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
     let bit_width = array.bit_width();
     let length = array.len();
     let offset = array.offset();
-    let packed = array.packed().into_primitive()?;
-    let ptype = packed.ptype();
-
-    let mut unpacked = match_each_unsigned_integer_ptype!(ptype, |$P| {
+    let ptype = array.ptype();
+    let mut unpacked = match_each_unsigned_integer_ptype!(array.ptype().to_unsigned(), |$P| {
         PrimitiveArray::from_vec(
-            unpack_primitive::<$P>(packed.maybe_null_slice::<$P>(), bit_width, offset, length),
+            unpack_primitive::<$P>(array.packed_slice::<$P>(), bit_width, offset, length),
             array.validity(),
         )
     });
@@ -234,10 +249,11 @@ pub fn unpack_primitive<T: NativePType + BitPacking>(
 
 pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
     let bit_width = array.bit_width();
-    let packed = array.packed().into_primitive()?;
+    let ptype = array.ptype();
+    // let packed = array.packed().into_primitive()?;
     let index_in_encoded = index + array.offset();
-    let scalar: Scalar = match_each_unsigned_integer_ptype!(packed.ptype(), |$P| unsafe {
-        unpack_single_primitive::<$P>(packed.maybe_null_slice::<$P>(), bit_width, index_in_encoded).into()
+    let scalar: Scalar = match_each_unsigned_integer_ptype!(ptype.to_unsigned(), |$P| unsafe {
+        unpack_single_primitive::<$P>(array.packed_slice::<$P>(), bit_width, index_in_encoded).into()
     });
     // Cast to fix signedness and nullability
     scalar.cast(array.dtype())
