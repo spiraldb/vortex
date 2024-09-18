@@ -84,7 +84,8 @@ impl RunEndArray {
             .map(|s| s.to_ends_index(self.ends().len()))
     }
 
-    /// Convert a batch of logical indices into an index for the values.
+    /// Convert a batch of logical indices into an index for the values. Expects indices to be adjusted by offset unlike
+    /// [Self::find_physical_index]
     ///
     /// See: [find_physical_index][Self::find_physical_index].
     pub fn find_physical_indices(&self, indices: &[u64]) -> VortexResult<Vec<usize>> {

@@ -50,7 +50,7 @@ impl TakeFn for RunEndArray {
                         vortex_error::vortex_bail!(OutOfBounds: usize_idx, 0, self.len());
                     }
 
-                    Ok(idx as u64)
+                    Ok((usize_idx + self.offset()) as u64)
                 })
                 .collect::<VortexResult<Vec<u64>>>()?
         });
@@ -335,5 +335,20 @@ mod test {
                 .collect::<Vec<Option<i32>>>(),
             vec![Some(1), None, None, Some(3),]
         );
+    }
+
+    #[test]
+    fn sliced_take() {
+        let sliced = slice(ree_array().as_ref(), 4, 9).unwrap();
+        let taken = take(
+            sliced.as_ref(),
+            PrimitiveArray::from(vec![1, 3, 4]).as_ref(),
+        )
+        .unwrap();
+
+        assert_eq!(taken.len(), 3);
+        assert_eq!(scalar_at(taken.as_ref(), 0).unwrap(), 4.into());
+        assert_eq!(scalar_at(taken.as_ref(), 1).unwrap(), 2.into());
+        assert_eq!(scalar_at(taken.as_ref(), 2).unwrap(), 5.into());
     }
 }
