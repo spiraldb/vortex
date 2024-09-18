@@ -35,5 +35,7 @@ jobs:
   release-to-pypi:
     name: Release to PyPI
     needs: release-plz
+    permissions:
+      id-token: write  # IMPORTANT: mandatory for trusted publishing
     if: ${{ needs.release-plz.outputs.releases_created }}
     uses: ./.github/workflows/publish-vortex.yml
