@@ -19,8 +19,6 @@ use crate::compressors::constant::ConstantCompressor;
 use crate::compressors::date_time_parts::DateTimePartsCompressor;
 use crate::compressors::dict::DictCompressor;
 use crate::compressors::r#for::FoRCompressor;
-use crate::compressors::roaring_bool::RoaringBoolCompressor;
-use crate::compressors::roaring_int::RoaringIntCompressor;
 use crate::compressors::runend::DEFAULT_RUN_END_COMPRESSOR;
 use crate::compressors::sparse::SparseCompressor;
 use crate::compressors::zigzag::ZigZagCompressor;
@@ -33,7 +31,7 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 11] = [
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 9] = [
         &ALPCompressor as CompressorRef,
         &BitPackedCompressor,
         &DateTimePartsCompressor,
@@ -43,8 +41,8 @@ lazy_static! {
         &DictCompressor,
         &FoRCompressor,
         &FSSTCompressor,
-        &RoaringBoolCompressor,
-        &RoaringIntCompressor,
+        // &RoaringBoolCompressor,
+        // &RoaringIntCompressor,
         &SparseCompressor,
         &ZigZagCompressor,
     ];
