@@ -4,7 +4,7 @@ use std::fmt::{Debug, Display, Formatter};
 use compressors::fsst::FSSTCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
-use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
+use vortex::array::{ChunkedArray, Constant, Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
 use vortex::encoding::EncodingRef;
@@ -32,6 +32,67 @@ pub mod arbitrary;
 pub mod compressors;
 mod sampling;
 
+#[derive(Debug)]
+pub struct ChunkedCompressor<'a> {
+    child: &'a dyn EncodingCompressor,
+    id: String,
+}
+
+impl ChunkedCompressor<'_> {
+    fn new(child: &dyn EncodingCompressor) -> ChunkedCompressor {
+        ChunkedCompressor {
+            child,
+            id: format!("chunked({})", child.id()),
+        }
+    }
+}
+
+impl EncodingCompressor for ChunkedCompressor<'_> {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn can_compress(&self, array: &Array) -> Option<CompressorRef<'_>> {
+        let chunked = match ChunkedArray::try_from(array) {
+            Ok(chunked) => chunked,
+            Err(_) => return None,
+        };
+        let all_compressible = chunked
+            .chunks()
+            .all(|x| self.child.can_compress(&x).is_some());
+
+        all_compressible.then_some(self as &dyn EncodingCompressor)
+    }
+
+    fn compress<'a>(
+        &'a self,
+        array: &Array,
+        like: Option<CompressionTree<'a>>,
+        ctx: SamplingCompressor<'a>,
+    ) -> VortexResult<CompressedArray<'a>> {
+        let chunked = ChunkedArray::try_from(array)?;
+        let less_chunked = chunked.rechunk(
+            ctx.options().target_block_bytesize,
+            ctx.options().target_block_size,
+        )?;
+        let compressed_chunks = less_chunked
+            .chunks()
+            .map(|chunk| {
+                self.child
+                    .compress(&chunk, like.clone(), ctx.clone())
+                    .map(compressors::CompressedArray::into_array)
+            })
+            .collect::<VortexResult<Vec<_>>>()?;
+        Ok(CompressedArray::uncompressed(
+            ChunkedArray::try_new(compressed_chunks, chunked.dtype().clone())?.into_array(),
+        ))
+    }
+
+    fn used_encodings(&self) -> HashSet<EncodingRef> {
+        self.child.used_encodings()
+    }
+}
+
 lazy_static! {
     pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 11] = [
         &ALPCompressor as CompressorRef,
@@ -47,6 +108,24 @@ lazy_static! {
         &RoaringIntCompressor,
         &SparseCompressor,
         &ZigZagCompressor,
+    ];
+}
+
+lazy_static! {
+    pub static ref CHUNKED_COMPRESSORS: [ChunkedCompressor<'static>; 10] = [
+        // ChunkedCompressor { child: &ALPCompressor },
+        ChunkedCompressor::new(&BitPackedCompressor),
+        ChunkedCompressor::new(&DateTimePartsCompressor),
+        ChunkedCompressor::new(&DEFAULT_RUN_END_COMPRESSOR),
+        // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
+        // ChunkedCompressor::new(&DeltaCompressor),
+        ChunkedCompressor::new(&DictCompressor),
+        ChunkedCompressor::new(&FoRCompressor),
+        ChunkedCompressor::new(&FSSTCompressor),
+        ChunkedCompressor::new(&RoaringBoolCompressor),
+        ChunkedCompressor::new(&RoaringIntCompressor),
+        ChunkedCompressor::new(&SparseCompressor),
+        ChunkedCompressor::new(&ZigZagCompressor),
     ];
 }
 
@@ -107,7 +186,9 @@ impl CompressionStrategy for SamplingCompressor<'_> {
 
 impl Default for SamplingCompressor<'_> {
     fn default() -> Self {
-        Self::new(HashSet::from(*ALL_COMPRESSORS))
+        let mut compressors = HashSet::from(*ALL_COMPRESSORS);
+        compressors.extend(CHUNKED_COMPRESSORS.iter().map(|x| x as CompressorRef));
+        Self::new(compressors)
     }
 }
 
@@ -204,23 +285,6 @@ impl<'a> SamplingCompressor<'a> {
 
     fn compress_array(&self, arr: &Array) -> VortexResult<CompressedArray<'a>> {
         match arr.encoding().id() {
-            Chunked::ID => {
-                let chunked = ChunkedArray::try_from(arr)?;
-                let less_chunked = chunked.rechunk(
-                    self.options().target_block_bytesize,
-                    self.options().target_block_size,
-                )?;
-                let compressed_chunks = less_chunked
-                    .chunks()
-                    .map(|chunk| {
-                        self.compress_array(&chunk)
-                            .map(compressors::CompressedArray::into_array)
-                    })
-                    .collect::<VortexResult<Vec<_>>>()?;
-                Ok(CompressedArray::uncompressed(
-                    ChunkedArray::try_new(compressed_chunks, chunked.dtype().clone())?.into_array(),
-                ))
-            }
             Constant::ID => {
                 // Not much better we can do than constant!
                 Ok(CompressedArray::uncompressed(arr.clone()))
@@ -348,10 +412,11 @@ fn find_best_compression<'a>(
     let mut best_ratio = 1.0;
     for compression in candidates {
         debug!(
-            "{} trying candidate {} for {}",
+            "{} trying candidate {} for {}, {}",
             ctx,
             compression.id(),
-            sample
+            sample,
+            compression.can_compress(sample).is_none()
         );
         if compression.can_compress(sample).is_none() {
             continue;

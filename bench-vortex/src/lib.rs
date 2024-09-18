@@ -200,26 +200,6 @@ pub fn compress_taxi_data() -> (usize, Array) {
 
     let compressed = compressor.compress(&uncompressed).unwrap();
 
-    println!(
-        "{} {} {} \n{} {} {}",
-        &uncompressed,
-        uncompressed.nbytes(),
-        ChunkedArray::try_from(&uncompressed)
-            .unwrap()
-            .chunks()
-            .map(|x| format!("{} {}", x, x.nbytes()))
-            .collect::<Vec<_>>()
-            .join(", "),
-        &compressed,
-        compressed.nbytes(),
-        ChunkedArray::try_from(&compressed)
-            .unwrap()
-            .chunks()
-            .map(|x| format!("{:?} {}", x, x.nbytes()))
-            .collect::<Vec<_>>()
-            .join(", "),
-    );
-
     (uncompressed_size, compressed)
 }
 
