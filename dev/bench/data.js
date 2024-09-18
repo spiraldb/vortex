@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726691498659,
+  "lastUpdate": 1726691641668,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -130353,6 +130353,84 @@ window.BENCHMARK_DATA = {
             "name": "TPCH l_comment Column/compress-fsst-canonicalized",
             "value": 700331625,
             "range": "± 9351312",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "a10y@users.noreply.github.com",
+            "name": "Andrew Duffy",
+            "username": "a10y"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f14f45a3574aa7145b895fdb656a9d36f33a39b6",
+          "message": "feat: add back ptype check for BitPackedArray (#872)",
+          "timestamp": "2024-09-18T20:26:15Z",
+          "tree_id": "920f9743aec2becfa4fe4c7ffe92d0e16d9d9cf3",
+          "url": "https://github.com/spiraldb/vortex/commit/f14f45a3574aa7145b895fdb656a9d36f33a39b6"
+        },
+        "date": 1726691639623,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Yellow Taxi Trip Data/compress",
+            "value": 140163042,
+            "range": "± 801888",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/AirlineSentiment",
+            "value": 511415,
+            "range": "± 222",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Arade",
+            "value": 3761025905,
+            "range": "± 5143244",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Euro2016",
+            "value": 2860438858,
+            "range": "± 39993075",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Food",
+            "value": 1369332280,
+            "range": "± 5333366",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/HashTags",
+            "value": 4063545682,
+            "range": "± 24055373",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-default",
+            "value": 240363739,
+            "range": "± 692055",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-chunked",
+            "value": 1098840233,
+            "range": "± 12999438",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-canonicalized",
+            "value": 700600384,
+            "range": "± 6058583",
             "unit": "ns/iter"
           }
         ]
