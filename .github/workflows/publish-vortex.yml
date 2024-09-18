@@ -1,7 +1,6 @@
 name: Publish to PyPI
 on:
   workflow_call:
-  pull_request: {}
 
 jobs:
   macos:
