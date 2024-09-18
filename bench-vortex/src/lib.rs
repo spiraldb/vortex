@@ -165,14 +165,13 @@ pub fn setup_logger(level: LevelFilter) {
     .unwrap();
 }
 
-pub fn compress_taxi_data() -> (usize, Array) {
+pub fn fetch_taxi_data() -> Array {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
     let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
     let schema = reader.schema();
-    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
-    let uncompressed = ChunkedArray::try_new(
+    ChunkedArray::try_new(
         reader
             .into_iter()
             .map(|batch_result| batch_result.unwrap())
@@ -182,9 +181,14 @@ pub fn compress_taxi_data() -> (usize, Array) {
         DType::from_arrow(schema),
     )
     .unwrap()
-    .into_array();
-    let uncompressed_size = uncompressed.nbytes();
+    .into_array()
+}
 
+pub fn compress_taxi_data() -> (usize, Array) {
+    let uncompressed = fetch_taxi_data();
+    let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
+
+    let uncompressed_size = uncompressed.nbytes();
     let compressed = compressor.compress(&uncompressed).unwrap();
 
     (uncompressed_size, compressed)

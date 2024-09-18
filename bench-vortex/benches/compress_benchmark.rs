@@ -3,31 +3,36 @@ use bench_vortex::public_bi_data::BenchmarkDatasets;
 use bench_vortex::public_bi_data::PBIDataset::*;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
-use bench_vortex::{compress_taxi_data, tpch};
+use bench_vortex::{fetch_taxi_data, tpch};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
 use vortex::{Array, IntoArray, IntoCanonical};
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
 
-fn benchmark_compress<'a, T: criterion::measurement::Measurement, F>(
+fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
     compressor: &SamplingCompressor<'_>,
     make_uncompressed: F,
     group_name: &str,
     group: &mut BenchmarkGroup<'_, T>,
     bench_name: &str,
 ) where
-    F: Fn() -> &'a Array,
+    F: Fn() -> U,
+    U: AsRef<Array>,
 {
     let mut uncompressed_size = 0;
+    let mut uncompressed_tree: String = "".to_string();
     let mut compressed_size = 0;
+    let mut compressed_tree: String = "".to_string();
 
     group.bench_function(bench_name, |b| {
         b.iter_with_large_drop(|| {
             let uncompressed = make_uncompressed();
-            uncompressed_size = uncompressed.nbytes();
-            let compressed_array =
-                std::hint::black_box(compressor.compress(uncompressed, None)).unwrap();
-            compressed_size = compressed_array.nbytes();
+            uncompressed_size = uncompressed.as_ref().nbytes();
+            let compressed =
+                std::hint::black_box(compressor.compress(uncompressed.as_ref(), None)).unwrap();
+            compressed_size = compressed.nbytes();
+            uncompressed_tree = format!("{}", uncompressed.as_ref().tree_display());
+            compressed_tree = format!("{}", compressed.as_ref().tree_display());
         });
     });
 
@@ -42,34 +47,39 @@ fn benchmark_compress<'a, T: criterion::measurement::Measurement, F>(
         "test {} Compressed Size/{} ... bench:    {} bytes (+/- 0)",
         group_name, bench_name, compressed_size
     );
+
+    println!("{}{}", uncompressed_tree, compressed_tree);
 }
 
 fn yellow_taxi_trip_data(c: &mut Criterion) {
     taxi_data_parquet();
     let group_name = "Yellow Taxi Trip Data";
     let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
-    let mut uncompressed_size = 0;
-    let mut compressed_size = 0;
+    // let mut uncompressed_size = 0;
+    // let mut compressed_size = 0;
     group.sample_size(10);
-    group.bench_function("compress", |b| {
-        b.iter(|| {
-            let (size, array) = black_box(compress_taxi_data());
-            uncompressed_size = size;
-            compressed_size = array.nbytes();
-        })
-    });
 
-    println!(
-        "test {} Compression Ratio/compress ... bench:    {} ratio (+/- 0)",
+    benchmark_compress(
+        &SamplingCompressor::default(),
+        fetch_taxi_data,
         group_name,
-        compressed_size as f32 / uncompressed_size as f32
+        &mut group,
+        "compress",
     );
 
-    println!(
-        "test {} Compressed Size/compress ... bench:    {} bytes (+/- 0)",
-        group_name, compressed_size
-    );
+    // group.bench_function("compress", |b| {
+    //     b.iter(|| {
+    //         let (size, array) = black_box(compress_taxi_data());
+    //         uncompressed_size = size;
+    //         compressed_size = array.nbytes();
 
+    //         println!(
+    //             "{}{}",
+    //             .tree_display(),
+    //             compressed.as_ref().tree_display()
+    //         );
+    //     })
+    // });
     group.finish()
 }
 
