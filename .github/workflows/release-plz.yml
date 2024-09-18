@@ -37,5 +37,5 @@ jobs:
     needs: release-plz
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
-    if: ${{ needs.release-plz.outputs.releases_created == "true" }}
+    if: ${{ needs.release-plz.outputs.releases_created == 'true' }}
     uses: ./.github/workflows/publish-vortex.yml
