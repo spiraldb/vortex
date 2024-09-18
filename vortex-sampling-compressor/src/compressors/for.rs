@@ -1,11 +1,10 @@
 use std::collections::HashSet;
 
-use simplelog::debug;
 use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::stats::{trailing_zeros, ArrayStatistics};
 use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::VortexResult;
 use vortex_fastlanes::{for_compress, FoR, FoRArray, FoREncoding};
@@ -23,7 +22,6 @@ impl EncodingCompressor for FoRCompressor {
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support primitive arrays
-        debug!("{} {:?}", array, array.dtype());
         let parray = PrimitiveArray::try_from(array).ok()?;
 
         // Only supports integers
