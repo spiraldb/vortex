@@ -12,7 +12,6 @@ use itertools::Itertools;
 use lazy_static::lazy_static;
 use log::LevelFilter;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowType;
