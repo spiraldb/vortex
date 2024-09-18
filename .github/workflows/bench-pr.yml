@@ -13,6 +13,21 @@ permissions:
 
 jobs:
   bench:
+    strategy:
+      matrix:
+        benchmark:
+          - id: tpch_benchmark
+            # this was the original name which we must preserve until we change the name of all the
+            # records in the gh-pages-bench branch "Vortex benchmarks"
+            name: Vortex benchmarks
+          - id: compress_benchmark
+            name: Vortex Compression
+          - id: bytes_at
+            name: Vortex bytes_at
+          - id: datafusion_benchmark
+            name: Vortex DataFusion
+          - id: random_access
+            name: Vortex random_access
     runs-on: ubuntu-latest-large
     if: ${{ contains(github.event.head_commit.message, '[benchmark]') || github.event.label.name == 'benchmark' && github.event_name == 'pull_request' }}
     steps:
@@ -34,17 +49,17 @@ jobs:
 
       - name: Run benchmark
         shell: bash
-        run: cargo bench --bench tpch_benchmark -- --output-format bencher | tee output.txt
+        run: cargo bench --bench ${{ matrix.benchmark.id }} -- --output-format bencher | tee ${{ matrix.benchmark.id }}.txt
 
       - name: Store benchmark result
         if: '!cancelled()'
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: Vortex benchmarks
+          name: ${{ matrix.benchmark.name }}
           tool: 'cargo'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: output.txt
+          output-file-path: ${{ matrix.benchmark.id }}.txt
           summary-always: true
           comment-always: true
           auto-push: false
