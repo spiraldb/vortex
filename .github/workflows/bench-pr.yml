@@ -72,7 +72,7 @@ jobs:
           tool: 'customSmallerIsBetter'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          output-file-path: ${{ matrix.benchmark.id }}.txt
+          output-file-path: ${{ matrix.benchmark.id }}.json
           summary-always: true
           comment-always: true
           auto-push: false
