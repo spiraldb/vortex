@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726783165552,
+  "lastUpdate": 1726783356472,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -134609,6 +134609,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 175131952,
             "range": "± 2151719",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4168d2184a572f91438a45e467a3b8cc3ab02485",
+          "message": "make miri tests fast again (take 2) (#884)\n\nFSST array tests take ~7.5 minutes on recent develop builds (e.g.,\r\nhttps://github.com/spiraldb/vortex/actions/runs/10948157580/job/30398557105)\r\n\r\nThis gets it down to <90s on my laptop\r\n\r\nredo of #883",
+          "timestamp": "2024-09-19T21:57:29Z",
+          "tree_id": "fb86d04af985d84c868058ab14bde09042224b69",
+          "url": "https://github.com/spiraldb/vortex/commit/4168d2184a572f91438a45e467a3b8cc3ab02485"
+        },
+        "date": 1726783355062,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1245137,
+            "range": "± 20075",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1411647,
+            "range": "± 32217",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 183100140,
+            "range": "± 2631086",
             "unit": "ns/iter"
           }
         ]
