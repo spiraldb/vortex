@@ -97,9 +97,10 @@ pub trait ArrayEncodingRef {
 }
 
 #[doc = "Encoding ID constants for all Vortex-provided encodings"]
+#[allow(dead_code)]
 pub mod ids {
     // reserved - 0x0000
-    pub const RESERVED: u16 = 0;
+    pub(crate) const RESERVED: u16 = 0;
 
     // Vortex built-in encodings (1 - 15)
     // built-ins first
@@ -116,12 +117,12 @@ pub mod ids {
 
     // currently unused, saved for future built-ins
     // e.g., List, FixedList, Union, Tensor, etc.
-    pub const RESERVED_11: u16 = 11;
-    pub const RESERVED_12: u16 = 12;
-    pub const RESERVED_13: u16 = 13;
-    pub const RESERVED_14: u16 = 14;
-    pub const RESERVED_15: u16 = 15;
-    pub const RESERVED_16: u16 = 16;
+    pub(crate) const RESERVED_11: u16 = 11;
+    pub(crate) const RESERVED_12: u16 = 12;
+    pub(crate) const RESERVED_13: u16 = 13;
+    pub(crate) const RESERVED_14: u16 = 14;
+    pub(crate) const RESERVED_15: u16 = 15;
+    pub(crate) const RESERVED_16: u16 = 16;
 
     // bundled extensions
     pub const ALP: u16 = 17;
@@ -182,7 +183,10 @@ mod tests {
 
         let mut ids_set = HashSet::with_capacity(all_ids.len());
         ids_set.extend(all_ids);
-        assert_eq!(ids_set.len(), all_ids.len());
-        assert!(ids_set.iter().max().unwrap() <= &0x0400); // 1024
+        assert_eq!(ids_set.len(), all_ids.len()); // no duplicates
+        assert!(ids_set.iter().max().unwrap() <= &0x0400); // no ids are greater than 1024
+        for (i, id) in all_ids.iter().enumerate() { // monotonic with no gaps
+            assert_eq!(i as u16, *id, "id at index {} is not equal to index", i);
+        }
     }
 }
