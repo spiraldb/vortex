@@ -110,6 +110,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.get(stat)
+            .filter(|s| s.is_valid())
             .map(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
@@ -140,6 +141,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.compute(stat)
+            .filter(|s| s.is_valid())
             .map(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
