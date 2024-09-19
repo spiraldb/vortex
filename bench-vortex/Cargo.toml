@@ -21,7 +21,6 @@ all = { level = "deny", priority = -1 }
 or_fun_call = "deny"
 
 [dependencies]
-async-tempfile = { workspace = true }
 anyhow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
