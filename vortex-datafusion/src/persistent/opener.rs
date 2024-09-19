@@ -56,6 +56,7 @@ impl FileOpener for VortexFileOpener {
                 let selection = build_selection(read_at, expr, deserializer, message_cache).await?;
                 builder = builder.with_row_selection(selection);
             }
+
             Ok(Box::pin(
                 builder
                     .build()

@@ -20,6 +20,10 @@ pub fn split_conjunction(expr: &Arc<dyn VortexExpr>) -> Vec<Arc<dyn VortexExpr>>
     }
 }
 
+pub fn expr_is_filter(expr: &Arc<dyn VortexExpr>) -> bool {
+    expr.as_any().downcast_ref::<BinaryExpr>().is_some()
+}
+
 #[cfg(test)]
 mod tests {
     use vortex_dtype::field::Field;
@@ -41,6 +45,6 @@ mod tests {
         let rhs = Arc::new(Literal::new(1.into())) as _;
         let expr = Arc::new(BinaryExpr::new(lhs, Operator::And, rhs)) as _;
         let conjunction = split_conjunction(&expr);
-        assert_eq!(conjunction.len(), 1);
+        assert_eq!(conjunction.len(), 2, "Conjunction is {conjunction:?}");
     }
 }

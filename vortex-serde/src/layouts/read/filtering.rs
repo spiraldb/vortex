@@ -3,11 +3,13 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use vortex::compute::filter;
-use vortex::{Array, IntoArrayVariant};
+use vortex::array::BoolArray;
+use vortex::compute::{and, filter};
+use vortex::validity::Validity;
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::{Field, FieldPath};
 use vortex_error::VortexResult;
-use vortex_expr::{split_conjunction, BinaryExpr, VortexExpr};
+use vortex_expr::{expr_is_filter, split_conjunction, BinaryExpr, VortexExpr};
 
 use super::null_as_false;
 use crate::layouts::Schema;
@@ -15,10 +17,6 @@ use crate::layouts::Schema;
 #[derive(Debug, Clone)]
 pub struct RowFilter {
     conjunction: Vec<Arc<dyn VortexExpr>>,
-}
-
-fn expr_is_filter(expr: &Arc<dyn VortexExpr>) -> bool {
-    expr.as_any().downcast_ref::<BinaryExpr>().is_some()
 }
 
 impl RowFilter {
@@ -32,7 +30,7 @@ impl RowFilter {
     }
 
     /// Evaluate the underlying filter against a target array, returning a boolean mask
-    pub fn evaluate(&self, target: &Array) -> VortexResult<Array> {
+    pub fn apply(&self, target: &Array) -> VortexResult<Array> {
         let mut target = target.clone();
         for expr in self.conjunction.iter() {
             let mask = expr.evaluate(&target)?;
@@ -41,6 +39,18 @@ impl RowFilter {
         }
 
         Ok(target)
+    }
+
+    pub fn evaluate(&self, target: &Array) -> VortexResult<Array> {
+        let mut mask =
+            BoolArray::from_vec(vec![true; target.len()], Validity::AllValid).into_array();
+
+        for expr in self.conjunction.iter() {
+            let expr_result = expr.evaluate(target)?;
+            mask = and(mask, expr_result)?;
+        }
+
+        Ok(mask)
     }
 
     /// Returns a set of all referenced fields in the underlying filter

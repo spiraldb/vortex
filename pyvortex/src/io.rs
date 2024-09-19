@@ -127,11 +127,11 @@ use crate::PyArray;
 /// >>> # b.to_arrow()
 ///
 #[pyfunction]
-#[pyo3(signature = (f, projection = None, row_filter = None))]
+#[pyo3(signature = (f, projection = None, _row_filter = None))]
 pub fn read<'py>(
     f: &Bound<'py, PyString>,
     projection: Option<&Bound<'py, PyAny>>,
-    row_filter: Option<&Bound<'py, PyExpr>>,
+    _row_filter: Option<&Bound<'py, PyExpr>>,
 ) -> PyResult<Bound<'py, PyArray>> {
     async fn run(
         fname: &str,
