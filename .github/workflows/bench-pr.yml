@@ -49,7 +49,20 @@ jobs:
 
       - name: Run benchmark
         shell: bash
-        run: cargo bench --bench ${{ matrix.benchmark.id }} -- --output-format bencher | tee ${{ matrix.benchmark.id }}.txt
+        run: |
+          cargo install cargo-criterion
+
+          cargo criterion --bench ${{ matrix.benchmark.id }} -- --message-format=json 1>out.json
+
+          apt-get install jq
+
+          jq '  [
+                   (if .mean != null then {name: .id, value: .mean.estimate, unit: .unit, range: ((.mean.upper_bound - .mean.lower_bound) / 2) } else {} end),
+                   (if .throughput != null then {name: (.id + " throughput"), value: .throughput[].per_iteration, unit: .throughput[].unit, range: 0} else {} end),
+                   {name, value, unit, range}
+                ] | .[] | select(.value != null)
+             ' \
+             out.json >${{ matrix.benchmark.id }}.json
 
       - name: Store benchmark result
         if: '!cancelled()'

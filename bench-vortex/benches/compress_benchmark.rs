@@ -23,6 +23,14 @@ use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::layouts::LayoutWriter;
 
+#[derive(serde::Serialize)]
+struct GenericBenchmarkResults<'a> {
+    name: &'a str,
+    value: f64,
+    unit: &'a str,
+    range: f64,
+}
+
 fn parquet_written_size(array: &Array, filepath: &str, compression: Compression) -> usize {
     let mut file = std::fs::File::create(Path::new(filepath)).unwrap();
     let chunked = ChunkedArray::try_from(array).unwrap();
@@ -113,30 +121,51 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         Compression::UNCOMPRESSED,
     );
 
-    println!(
-        "test {} Vortex-to-ParquetZstd Ratio/{} ... bench:    {} ratio (+/- 0)",
-        group_name,
-        bench_name,
-        (vortex_nbytes as f64) / (parquet_zstd_nbytes as f64)
+    eprintln!(
+        "{}",
+        serde_json::to_string(&GenericBenchmarkResults {
+            name: &format!("{} Vortex-to-ParquetZstd Ratio/{}", group_name, bench_name),
+            value: (vortex_nbytes as f64) / (parquet_zstd_nbytes as f64),
+            unit: "ratio",
+            range: 0.0,
+        })
+        .unwrap()
     );
 
-    println!(
-        "test {} Vortex-to-ParquetUncompressed Ratio/{} ... bench:    {} ratio (+/- 0)",
-        group_name,
-        bench_name,
-        (vortex_nbytes as f64) / (parquet_uncompressed_nbytes as f64)
+    eprintln!(
+        "{}",
+        serde_json::to_string(&GenericBenchmarkResults {
+            name: &format!(
+                "{} Vortex-to-ParquetUncompressed Ratio/{}",
+                group_name, bench_name
+            ),
+            value: (vortex_nbytes as f64) / (parquet_uncompressed_nbytes as f64),
+            unit: "ratio",
+            range: 0.0,
+        })
+        .unwrap()
     );
 
-    println!(
-        "test {} Compression Ratio/{} ... bench:    {} ratio (+/- 0)",
-        group_name,
-        bench_name,
-        (compressed_size as f64) / (uncompressed_size as f64),
+    eprintln!(
+        "{}",
+        serde_json::to_string(&GenericBenchmarkResults {
+            name: &format!("{} Compression Ratio/{}", group_name, bench_name),
+            value: (compressed_size as f64) / (uncompressed_size as f64),
+            unit: "ratio",
+            range: 0.0,
+        })
+        .unwrap()
     );
 
-    println!(
-        "test {} Compressed Size/{} ... bench:    {} bytes (+/- 0)",
-        group_name, bench_name, compressed_size
+    eprintln!(
+        "{}",
+        serde_json::to_string(&GenericBenchmarkResults {
+            name: &format!("{} Compression Size/{}", group_name, bench_name),
+            value: compressed_size as f64,
+            unit: "ratio",
+            range: 0.0,
+        })
+        .unwrap()
     );
 }
 
