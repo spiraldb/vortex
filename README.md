@@ -60,12 +60,9 @@ to model compressed in-memory arrays, such as run-length or dictionary encoding.
 Analogously, `vortex-serde` is designed to handle the low-level physical details of reading and writing Vortex arrays. Choices
 about which encodings to use or how to logically chunk data are left up to the `Compressor` implementation.
 
-One of the unique attributes of the Vortex file format is that it encodes the physical layout of the data within the
+One of the unique attributes of the (in-progress) Vinyl file format is that it encodes the physical layout of the data within the
 file's footer. This allows the file format to be effectively self-describing and to evolve without breaking changes to
 the file format specification.
-
-This forward-looking extensibility (of encodings, of compressor strategies, and of layouts) led a friend of the project
-to describe the project as "the LLVM of file formats" (albeit with batteries-included defaults).
 
 ## Components
 
