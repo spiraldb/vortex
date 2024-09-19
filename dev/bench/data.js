@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726782592587,
+  "lastUpdate": 1726782647829,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -134531,6 +134531,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 179330659,
             "range": "± 2691742",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "a10y@users.noreply.github.com",
+            "name": "Andrew Duffy",
+            "username": "a10y"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a96ff2ca932ce8a2f8b4a2b8001408b1738034d6",
+          "message": "fix: ID collision between vortex.ext and fastlanes.delta (#878)\n\nBoth were using ID code 16. I left `fastlanes.delta` as 16 to be\r\ncontiguous with the other fastlanes codes, and pushed extension to the\r\nend\r\n\r\n---------\r\n\r\nCo-authored-by: Will Manning <will@willmanning.io>",
+          "timestamp": "2024-09-19T20:54:29Z",
+          "tree_id": "5fe95d97b115726d80c04c9f254091beff1fea9f",
+          "url": "https://github.com/spiraldb/vortex/commit/a96ff2ca932ce8a2f8b4a2b8001408b1738034d6"
+        },
+        "date": 1726782646232,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1248187,
+            "range": "± 25484",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1393344,
+            "range": "± 34914",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 175131952,
+            "range": "± 2151719",
             "unit": "ns/iter"
           }
         ]
