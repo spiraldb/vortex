@@ -1,6 +1,5 @@
 #![cfg(test)]
 
-use rstest::{fixture, rstest};
 use vortex::array::builder::VarBinBuilder;
 use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::compute::unary::scalar_at;
@@ -16,8 +15,8 @@ macro_rules! assert_nth_scalar {
     };
 }
 
-#[fixture]
-fn fsst_array() -> Array {
+// this function is VERY slow on miri, so we only want to run it once
+fn build_fsst_array() -> Array {
     let mut input_array = VarBinBuilder::<i32>::with_capacity(3);
     input_array.push_value(b"The Greeks never said that the limit could not he overstepped");
     input_array.push_value(
@@ -35,8 +34,10 @@ fn fsst_array() -> Array {
         .into_array()
 }
 
-#[rstest]
-fn test_scalar_at(fsst_array: Array) {
+#[test]
+fn test_fsst_array_ops() {
+    // first test the scalar_at values
+    let fsst_array = build_fsst_array();
     assert_nth_scalar!(
         fsst_array,
         0,
@@ -52,10 +53,8 @@ fn test_scalar_at(fsst_array: Array) {
         2,
         "Nothing in present history can contradict them"
     );
-}
 
-#[rstest]
-fn test_slice(fsst_array: Array) {
+    // test slice
     let fsst_sliced = slice(&fsst_array, 1, 3).unwrap();
     assert_eq!(fsst_sliced.encoding().id(), FSST::ENCODING.id());
     assert_eq!(fsst_sliced.len(), 2);
@@ -69,10 +68,8 @@ fn test_slice(fsst_array: Array) {
         1,
         "Nothing in present history can contradict them"
     );
-}
 
-#[rstest]
-fn test_take(fsst_array: Array) {
+    // test take
     let indices = PrimitiveArray::from_vec(vec![0, 2], Validity::NonNullable).into_array();
     let fsst_taken = take(&fsst_array, &indices).unwrap();
     assert_eq!(fsst_taken.len(), 2);
@@ -86,10 +83,8 @@ fn test_take(fsst_array: Array) {
         1,
         "Nothing in present history can contradict them"
     );
-}
 
-#[rstest]
-fn test_filter(fsst_array: Array) {
+    // test filter
     let predicate =
         BoolArray::from_vec(vec![false, true, false], Validity::NonNullable).into_array();
 
@@ -101,11 +96,8 @@ fn test_filter(fsst_array: Array) {
         0,
         "They said it existed and that whoever dared to exceed it was mercilessly struck down"
     );
-}
 
-// Test canonicalizing
-#[rstest]
-fn test_into_canonical(fsst_array: Array) {
+    // test into_canonical
     let canonical_array = fsst_array
         .clone()
         .into_canonical()
