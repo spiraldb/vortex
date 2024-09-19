@@ -14,9 +14,6 @@ rust-version = { workspace = true }
 [lints]
 workspace = true
 
-[dev-dependencies]
-rstest = { workspace = true }
-
 [dependencies]
 arrow-array = { workspace = true }
 fsst-rs = { workspace = true }
