@@ -52,11 +52,11 @@ jobs:
         run: |
           cargo install cargo-criterion
 
-          cargo criterion --bench ${{ matrix.benchmark.id }} -- --message-format=json 1>out.json
+          cargo criterion --bench ${{ matrix.benchmark.id }} -- --message-format=json 2>&1 | tee out.json
 
           apt-get install jq
 
-          jq '  [
+          grep -e '^{' out.json | jq '  [
                    (if .mean != null then {name: .id, value: .mean.estimate, unit: .unit, range: ((.mean.upper_bound - .mean.lower_bound) / 2) } else {} end),
                    (if .throughput != null then {name: (.id + " throughput"), value: .throughput[].per_iteration, unit: .throughput[].unit, range: 0} else {} end),
                    {name, value, unit, range}

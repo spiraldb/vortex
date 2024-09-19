@@ -121,7 +121,7 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         Compression::UNCOMPRESSED,
     );
 
-    eprintln!(
+    println!(
         "{}",
         serde_json::to_string(&GenericBenchmarkResults {
             name: &format!("{} Vortex-to-ParquetZstd Ratio/{}", group_name, bench_name),
@@ -132,7 +132,7 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         .unwrap()
     );
 
-    eprintln!(
+    println!(
         "{}",
         serde_json::to_string(&GenericBenchmarkResults {
             name: &format!(
@@ -146,7 +146,7 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         .unwrap()
     );
 
-    eprintln!(
+    println!(
         "{}",
         serde_json::to_string(&GenericBenchmarkResults {
             name: &format!("{} Compression Ratio/{}", group_name, bench_name),
@@ -157,7 +157,7 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         .unwrap()
     );
 
-    eprintln!(
+    println!(
         "{}",
         serde_json::to_string(&GenericBenchmarkResults {
             name: &format!("{} Compression Size/{}", group_name, bench_name),
