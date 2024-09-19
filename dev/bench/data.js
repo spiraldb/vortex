@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726777634822,
+  "lastUpdate": 1726777662057,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -132961,6 +132961,90 @@ window.BENCHMARK_DATA = {
             "name": "vortex-nopushdown-uncompressed/exec",
             "value": 2103885,
             "range": "± 11713",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e11981ad5d1c6ada1870899cefcf08a742756b7",
+          "message": "fix: teach compute_as_cast and get_as_cast to handle null-only arrays (#881)\n\nFixes a bug that manifests as:\r\n```\r\nFailed to compute stat min as cast i64: Can't cast null scalar to non-nullable type\r\n```",
+          "timestamp": "2024-09-19T16:22:29-04:00",
+          "tree_id": "14169bd213a6585be340fc9e6bceac9b1fe15710",
+          "url": "https://github.com/spiraldb/vortex/commit/4e11981ad5d1c6ada1870899cefcf08a742756b7"
+        },
+        "date": 1726777660475,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 821364,
+            "range": "± 4413",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1780111,
+            "range": "± 5613",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 520927,
+            "range": "± 3110",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3095781,
+            "range": "± 19462",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 521362,
+            "range": "± 2313",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 3344367,
+            "range": "± 21623",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 722046,
+            "range": "± 2990",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 14250995,
+            "range": "± 321205",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 724356,
+            "range": "± 1856",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1999967,
+            "range": "± 7013",
             "unit": "ns/iter"
           }
         ]
