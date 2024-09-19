@@ -101,6 +101,7 @@ impl RoaringBoolStatsAccumulator {
 }
 
 #[cfg(test)]
+
 mod test {
     use vortex::array::BoolArray;
     use vortex::stats::ArrayStatistics;
@@ -109,6 +110,7 @@ mod test {
     use crate::RoaringBoolArray;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn bool_stats() {
         let bool_arr = RoaringBoolArray::encode(
             BoolArray::from(vec![false, false, true, true, false, true, true, false]).into_array(),
@@ -124,6 +126,7 @@ mod test {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn strict_sorted() {
         let bool_arr_1 =
             RoaringBoolArray::encode(BoolArray::from(vec![false, true]).into_array()).unwrap();
