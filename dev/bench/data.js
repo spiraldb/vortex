@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726777520343,
+  "lastUpdate": 1726777634822,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -132665,6 +132665,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 181514689,
             "range": "± 3321836",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e11981ad5d1c6ada1870899cefcf08a742756b7",
+          "message": "fix: teach compute_as_cast and get_as_cast to handle null-only arrays (#881)\n\nFixes a bug that manifests as:\r\n```\r\nFailed to compute stat min as cast i64: Can't cast null scalar to non-nullable type\r\n```",
+          "timestamp": "2024-09-19T16:22:29-04:00",
+          "tree_id": "14169bd213a6585be340fc9e6bceac9b1fe15710",
+          "url": "https://github.com/spiraldb/vortex/commit/4e11981ad5d1c6ada1870899cefcf08a742756b7"
+        },
+        "date": 1726777632479,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1230900,
+            "range": "± 30318",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1402878,
+            "range": "± 29968",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 180939962,
+            "range": "± 2317454",
             "unit": "ns/iter"
           }
         ]
