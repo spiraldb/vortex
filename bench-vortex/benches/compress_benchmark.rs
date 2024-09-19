@@ -218,6 +218,7 @@ fn tpc_h_l_comment(c: &mut Criterion) {
             .field_by_name("l_comment")
             .unwrap()
     });
+    println!("{}", comments.tree_display());
 
     benchmark_compress(
         &compressor,
