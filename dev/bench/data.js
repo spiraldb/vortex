@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726693133949,
+  "lastUpdate": 1726769678540,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -131649,6 +131649,42 @@ window.BENCHMARK_DATA = {
             "name": "bytes_at/array_data #2",
             "value": 1021,
             "range": "± 18",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "129aa2be30933fe5b028bf8f711a6da003261c97",
+          "message": "Compute stats for RoaringBoolArray (#874)",
+          "timestamp": "2024-09-19T12:11:43-06:00",
+          "tree_id": "cf2dcdb3c0d06d95c54867b02d0f24ee26b63657",
+          "url": "https://github.com/spiraldb/vortex/commit/129aa2be30933fe5b028bf8f711a6da003261c97"
+        },
+        "date": 1726769677039,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 604,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1040,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
