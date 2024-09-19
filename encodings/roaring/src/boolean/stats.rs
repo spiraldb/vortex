@@ -25,6 +25,7 @@ impl ArrayStatisticsCompute for RoaringBoolArray {
     }
 }
 
+// Underlying bitset, length in bits, cardinality (true count) of the bitset
 struct BitmapStats(Bitset, usize, u64);
 
 impl ArrayStatisticsCompute for BitmapStats {
@@ -32,6 +33,7 @@ impl ArrayStatisticsCompute for BitmapStats {
         let bitset_slice = self.0.as_slice();
         // This is a weird case where the bitset is full of false values
         // sometimes it will not allocate any underlying storage
+        // TODO(robert): This likely can be simplified after https://github.com/RoaringBitmap/CRoaring/issues/660
         if bitset_slice.is_empty() {
             return Ok(StatsSet::from(HashMap::from([
                 (Stat::IsSorted, true.into()),
@@ -53,7 +55,7 @@ impl ArrayStatisticsCompute for BitmapStats {
 }
 
 struct RoaringBoolStatsAccumulator {
-    last: bool,
+    prev: bool,
     is_sorted: bool,
     run_count: usize,
     len: usize,
@@ -62,7 +64,7 @@ struct RoaringBoolStatsAccumulator {
 impl RoaringBoolStatsAccumulator {
     fn new(first_value: bool) -> Self {
         Self {
-            last: first_value,
+            prev: first_value,
             is_sorted: true,
             run_count: 1,
             len: 0,
@@ -74,12 +76,13 @@ impl RoaringBoolStatsAccumulator {
         self.len += len;
         for i in 0..len {
             let current = ((next >> i) & 1) == 1;
-            if !current & self.last {
+            // Booleans are sorted true > false so we aren't sorted if we switched from true to false value
+            if !current && self.prev {
                 self.is_sorted = false;
             }
-            if current != self.last {
+            if current != self.prev {
                 self.run_count += 1;
-                self.last = current;
+                self.prev = current;
             }
         }
     }
