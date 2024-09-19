@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726782357275,
+  "lastUpdate": 1726782420959,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -134453,6 +134453,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 178158170,
             "range": "± 2466099",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "distinct": true,
+          "id": "b9ec6a04039840e7475c23b02d3b49c00eee8fc0",
+          "message": "no longer need rstest",
+          "timestamp": "2024-09-19T17:36:03-04:00",
+          "tree_id": "fb86d04af985d84c868058ab14bde09042224b69",
+          "url": "https://github.com/spiraldb/vortex/commit/b9ec6a04039840e7475c23b02d3b49c00eee8fc0"
+        },
+        "date": 1726782418944,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1273909,
+            "range": "± 30740",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1410371,
+            "range": "± 27918",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 179330659,
+            "range": "± 2691742",
             "unit": "ns/iter"
           }
         ]
