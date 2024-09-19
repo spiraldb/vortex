@@ -42,10 +42,6 @@ impl ChunkedArray {
             }
         }
 
-        if chunks.len() == 1 {
-            vortex_bail!("wtf chnks length was 1");
-        }
-
         let chunk_offsets = [0u64]
             .into_iter()
             .chain(chunks.iter().map(|c| c.len() as u64))
