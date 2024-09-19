@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726783431779,
+  "lastUpdate": 1726783438965,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -135873,6 +135873,84 @@ window.BENCHMARK_DATA = {
             "name": "TPCH l_comment Column/compress-fsst-canonicalized",
             "value": 713560018,
             "range": "± 6833589",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4168d2184a572f91438a45e467a3b8cc3ab02485",
+          "message": "make miri tests fast again (take 2) (#884)\n\nFSST array tests take ~7.5 minutes on recent develop builds (e.g.,\r\nhttps://github.com/spiraldb/vortex/actions/runs/10948157580/job/30398557105)\r\n\r\nThis gets it down to <90s on my laptop\r\n\r\nredo of #883",
+          "timestamp": "2024-09-19T21:57:29Z",
+          "tree_id": "fb86d04af985d84c868058ab14bde09042224b69",
+          "url": "https://github.com/spiraldb/vortex/commit/4168d2184a572f91438a45e467a3b8cc3ab02485"
+        },
+        "date": 1726783437609,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Yellow Taxi Trip Data/compress",
+            "value": 139521321,
+            "range": "± 509811",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/AirlineSentiment",
+            "value": 517286,
+            "range": "± 1572",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Arade",
+            "value": 3798936968,
+            "range": "± 13508145",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Euro2016",
+            "value": 2858982226,
+            "range": "± 50771956",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Food",
+            "value": 1374683348,
+            "range": "± 5251124",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/HashTags",
+            "value": 4096912388,
+            "range": "± 42027244",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-default",
+            "value": 241283836,
+            "range": "± 601770",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-chunked",
+            "value": 1113955106,
+            "range": "± 5773609",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-canonicalized",
+            "value": 725561677,
+            "range": "± 6710385",
             "unit": "ns/iter"
           }
         ]
