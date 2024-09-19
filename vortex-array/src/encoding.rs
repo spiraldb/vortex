@@ -185,7 +185,8 @@ mod tests {
         ids_set.extend(all_ids);
         assert_eq!(ids_set.len(), all_ids.len()); // no duplicates
         assert!(ids_set.iter().max().unwrap() <= &0x0400); // no ids are greater than 1024
-        for (i, id) in all_ids.iter().enumerate() { // monotonic with no gaps
+        for (i, id) in all_ids.iter().enumerate() {
+            // monotonic with no gaps
             assert_eq!(i as u16, *id, "id at index {} is not equal to index", i);
         }
     }
