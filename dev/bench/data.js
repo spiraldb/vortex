@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726779848924,
+  "lastUpdate": 1726779988823,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -133939,6 +133939,90 @@ window.BENCHMARK_DATA = {
             "name": "vortex-nopushdown-uncompressed/exec",
             "value": 1999967,
             "range": "± 7013",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "a10y@users.noreply.github.com",
+            "name": "Andrew Duffy",
+            "username": "a10y"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a96ff2ca932ce8a2f8b4a2b8001408b1738034d6",
+          "message": "fix: ID collision between vortex.ext and fastlanes.delta (#878)\n\nBoth were using ID code 16. I left `fastlanes.delta` as 16 to be\r\ncontiguous with the other fastlanes codes, and pushed extension to the\r\nend\r\n\r\n---------\r\n\r\nCo-authored-by: Will Manning <will@willmanning.io>",
+          "timestamp": "2024-09-19T20:54:29Z",
+          "tree_id": "5fe95d97b115726d80c04c9f254091beff1fea9f",
+          "url": "https://github.com/spiraldb/vortex/commit/a96ff2ca932ce8a2f8b4a2b8001408b1738034d6"
+        },
+        "date": 1726779987197,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 813880,
+            "range": "± 4517",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1774262,
+            "range": "± 18680",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 516095,
+            "range": "± 1831",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3209669,
+            "range": "± 141970",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 514579,
+            "range": "± 1971",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 3336867,
+            "range": "± 9294",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 710291,
+            "range": "± 5322",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 14988542,
+            "range": "± 251952",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 715546,
+            "range": "± 3807",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 2001661,
+            "range": "± 82038",
             "unit": "ns/iter"
           }
         ]
