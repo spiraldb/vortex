@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726781610490,
+  "lastUpdate": 1726781939589,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -134205,6 +134205,42 @@ window.BENCHMARK_DATA = {
             "name": "bytes_at/array_data #2",
             "value": 1043,
             "range": "± 4",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "distinct": true,
+          "id": "b9ec6a04039840e7475c23b02d3b49c00eee8fc0",
+          "message": "no longer need rstest",
+          "timestamp": "2024-09-19T17:36:03-04:00",
+          "tree_id": "fb86d04af985d84c868058ab14bde09042224b69",
+          "url": "https://github.com/spiraldb/vortex/commit/b9ec6a04039840e7475c23b02d3b49c00eee8fc0"
+        },
+        "date": 1726781937535,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 632,
+            "range": "± 2",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1088,
+            "range": "± 1",
             "unit": "ns/iter"
           }
         ]
