@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726769705413,
+  "lastUpdate": 1726769774875,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -131771,6 +131771,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 178573668,
             "range": "± 4407348",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "129aa2be30933fe5b028bf8f711a6da003261c97",
+          "message": "Compute stats for RoaringBoolArray (#874)",
+          "timestamp": "2024-09-19T12:11:43-06:00",
+          "tree_id": "cf2dcdb3c0d06d95c54867b02d0f24ee26b63657",
+          "url": "https://github.com/spiraldb/vortex/commit/129aa2be30933fe5b028bf8f711a6da003261c97"
+        },
+        "date": 1726769772885,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1224291,
+            "range": "± 36015",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1391417,
+            "range": "± 17002",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 181514689,
+            "range": "± 3321836",
             "unit": "ns/iter"
           }
         ]
