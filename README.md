@@ -96,6 +96,7 @@ canonical representations of each of the logical data types. The canonical encod
 * VarBin (Binary, UTF8)
 * VarBinView (Binary, UTF8)
 * Extension
+* ...with more to come
 
 ### Compressed Encodings
 
