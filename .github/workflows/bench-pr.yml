@@ -69,7 +69,7 @@ jobs:
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: ${{ matrix.benchmark.name }}
-          tool: 'cargo'
+          tool: 'customSmallerIsBetter'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}
           output-file-path: ${{ matrix.benchmark.id }}.txt
