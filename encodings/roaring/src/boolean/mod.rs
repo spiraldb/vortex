@@ -7,6 +7,7 @@ use croaring::Native;
 pub use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::BoolArray;
+use vortex::encoding::ids;
 use vortex::stats::{Stat, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
@@ -23,7 +24,7 @@ mod compress;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.roaring_bool", 17u16, RoaringBool);
+impl_encoding!("vortex.roaring_bool", ids::ROARING_BOOL, RoaringBool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringBoolMetadata {

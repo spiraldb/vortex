@@ -3,6 +3,7 @@ use std::sync::Arc;
 use fsst::{Decompressor, Symbol};
 use serde::{Deserialize, Serialize};
 use vortex::array::VarBinArray;
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
@@ -11,7 +12,7 @@ use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonic
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
-impl_encoding!("vortex.fsst", 24u16, FSST);
+impl_encoding!("vortex.fsst", ids::FSST, FSST);
 
 static SYMBOLS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);
 static SYMBOL_LENS_DTYPE: DType = DType::Primitive(PType::U8, Nullability::NonNullable);

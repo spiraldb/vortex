@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -14,7 +15,7 @@ use vortex_scalar::Scalar;
 mod compress;
 mod compute;
 
-impl_encoding!("fastlanes.for", 15u16, FoR);
+impl_encoding!("fastlanes.for", ids::FL_FOR, FoR);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FoRMetadata {

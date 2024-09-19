@@ -5,6 +5,7 @@ use vortex::accessor::ArrayAccessor;
 use vortex::array::BoolArray;
 use vortex::compute::take;
 use vortex::compute::unary::scalar_at;
+use vortex::encoding::ids;
 use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -15,7 +16,7 @@ use vortex::{
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
-impl_encoding!("vortex.dict", 20u16, Dict);
+impl_encoding!("vortex.dict", ids::DICT, Dict);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictMetadata {

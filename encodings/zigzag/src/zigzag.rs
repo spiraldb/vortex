@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -16,7 +17,7 @@ use vortex_error::{
 use crate::compress::zigzag_encode;
 use crate::zigzag_decode;
 
-impl_encoding!("vortex.zigzag", 21u16, ZigZag);
+impl_encoding!("vortex.zigzag", ids::ZIGZAG, ZigZag);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZigZagMetadata;

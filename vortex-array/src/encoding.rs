@@ -95,3 +95,30 @@ pub trait ArrayEncodingExt {
 pub trait ArrayEncodingRef {
     fn encoding(&self) -> EncodingRef;
 }
+
+#[doc = "Encoding ID constants for all Vortex-provided encodings"]
+pub mod ids {
+    pub const NULL: u16 = 1;
+    pub const BOOL: u16 = 2;
+    pub const PRIMITIVE: u16 = 3;
+    pub const VAR_BIN: u16 = 4;
+    pub const VAR_BIN_VIEW: u16 = 5;
+    pub const EXTENSION: u16 = 6;
+    pub const STRUCT: u16 = 7;
+    pub const SPARSE: u16 = 8;
+    pub const CONSTANT: u16 = 9;
+    pub const CHUNKED: u16 = 10;
+    pub const BYTE_BOOL: u16 = 11;
+    pub const ALP: u16 = 12;
+    pub const FL_BITPACKED: u16 = 13;
+    pub const FL_FOR: u16 = 14;
+    pub const FL_DELTA: u16 = 15;
+    pub const ROARING_BOOL: u16 = 16;
+    pub const ROARING_INT: u16 = 17;
+    pub const RUN_END: u16 = 18;
+    pub const DICT: u16 = 19;
+    pub const ZIGZAG: u16 = 20;
+    pub const DATE_TIME_PARTS: u16 = 21;
+    pub const RUN_END_BOOL: u16 = 22;
+    pub const FSST: u16 = 23;
+}

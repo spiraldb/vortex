@@ -12,6 +12,7 @@ use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::elementwise::{dyn_cast_array_iter, BinaryFn, UnaryFn};
+use crate::encoding::ids;
 use crate::iter::{Accessor, AccessorRef, Batch, ITER_BATCH_SIZE};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
@@ -26,7 +27,7 @@ mod accessor;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.primitive", 3u16, Primitive);
+impl_encoding!("vortex.primitive", ids::PRIMITIVE, Primitive);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct PrimitiveMetadata {

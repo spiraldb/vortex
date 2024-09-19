@@ -23,7 +23,7 @@ pub trait ArrayDef {
 
 #[macro_export]
 macro_rules! impl_encoding {
-    ($id:literal, $code:literal, $Name:ident) => {
+    ($id:literal, $code:expr, $Name:ident) => {
         $crate::vendored::paste::paste! {
             /// The array definition trait
             #[derive(std::fmt::Debug, Clone)]
