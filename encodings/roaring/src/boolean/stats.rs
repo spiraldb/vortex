@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use croaring::Bitmap;
+use croaring::Bitset;
 use vortex::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use vortex_error::{vortex_err, VortexResult};
 
@@ -12,28 +12,31 @@ impl ArrayStatisticsCompute for RoaringBoolArray {
             return Ok(StatsSet::new());
         }
 
-        BitmapStats(self.bitmap(), self.len()).compute_statistics(stat)
+        // Only needs to compute IsSorted, IsStrictSorted and RunCount all other stats have been populated on construction
+        let bitmap = self.bitmap();
+        BitmapStats(
+            bitmap
+                .to_bitset()
+                .ok_or_else(|| vortex_err!("Bitmap to Bitset conversion run out of memory"))?,
+            self.len(),
+            bitmap.statistics().cardinality,
+        )
+        .compute_statistics(stat)
     }
 }
 
-struct BitmapStats(Bitmap, usize);
+struct BitmapStats(Bitset, usize, u64);
 
 impl ArrayStatisticsCompute for BitmapStats {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
-        let bitset = self
-            .0
-            .to_bitset()
-            .ok_or_else(|| vortex_err!("Bitmap to Bitset conversion run out of memory"))?;
-        let bitset_slice = bitset.as_slice();
+        let bitset_slice = self.0.as_slice();
+        // This is a weird case where the bitset is full of false values
+        // sometimes it will not allocate any underlying storage
         if bitset_slice.is_empty() {
             return Ok(StatsSet::from(HashMap::from([
-                (Stat::Min, false.into()),
-                (Stat::Max, false.into()),
-                (Stat::IsConstant, true.into()),
                 (Stat::IsSorted, true.into()),
                 (Stat::IsStrictSorted, (self.1 == 1).into()),
                 (Stat::RunCount, 1.into()),
-                (Stat::TrueCount, 0.into()),
             ])));
         }
 
@@ -44,10 +47,8 @@ impl ArrayStatisticsCompute for BitmapStats {
         for bits64 in bitset_slice[0..whole_chunks].iter() {
             stats.next(*bits64);
         }
-        if !bitset_slice.is_empty() {
-            stats.next_up_to_length(bitset_slice[whole_chunks], last_chunk_len);
-        }
-        Ok(stats.finish())
+        stats.next_up_to_length(bitset_slice[whole_chunks], last_chunk_len);
+        Ok(stats.finish(self.2))
     }
 }
 
@@ -55,7 +56,6 @@ struct RoaringBoolStatsAccumulator {
     last: bool,
     is_sorted: bool,
     run_count: usize,
-    true_count: usize,
     len: usize,
 }
 
@@ -65,7 +65,6 @@ impl RoaringBoolStatsAccumulator {
             last: first_value,
             is_sorted: true,
             run_count: 1,
-            true_count: 0,
             len: 0,
         }
     }
@@ -75,9 +74,6 @@ impl RoaringBoolStatsAccumulator {
         self.len += len;
         for i in 0..len {
             let current = ((next >> i) & 1) == 1;
-            if current {
-                self.true_count += 1;
-            }
             if !current & self.last {
                 self.is_sorted = false;
             }
@@ -92,22 +88,14 @@ impl RoaringBoolStatsAccumulator {
         self.next_up_to_length(next, 64)
     }
 
-    pub fn finish(self) -> StatsSet {
+    pub fn finish(self, cardinality: u64) -> StatsSet {
         StatsSet::from(HashMap::from([
-            (Stat::Min, (self.true_count == self.len).into()),
-            (Stat::Max, (self.true_count > 0).into()),
-            (
-                Stat::IsConstant,
-                (self.true_count == self.len || self.true_count == 0).into(),
-            ),
             (Stat::IsSorted, self.is_sorted.into()),
             (
                 Stat::IsStrictSorted,
-                (self.is_sorted && (self.len < 2 || (self.len == 2 && self.true_count == 1)))
-                    .into(),
+                (self.is_sorted && (self.len < 2 || (self.len == 2 && cardinality == 1))).into(),
             ),
             (Stat::RunCount, self.run_count.into()),
-            (Stat::TrueCount, self.true_count.into()),
         ]))
     }
 }
@@ -142,6 +130,7 @@ mod test {
         assert!(bool_arr_1.statistics().compute_is_strict_sorted().unwrap());
         assert!(bool_arr_1.statistics().compute_is_sorted().unwrap());
 
+        // TODO(robert): Reenable after https://github.com/RoaringBitmap/CRoaring/issues/660 is resolved
         // let bool_arr_2 =
         //     RoaringBoolArray::encode(BoolArray::from(vec![true]).into_array()).unwrap();
         // assert!(bool_arr_2.statistics().compute_is_strict_sorted().unwrap());
@@ -152,11 +141,12 @@ mod test {
         assert!(bool_arr_3.statistics().compute_is_strict_sorted().unwrap());
         assert!(bool_arr_3.statistics().compute_is_sorted().unwrap());
 
+        // TODO(robert): Reenable after https://github.com/RoaringBitmap/CRoaring/issues/660 is resolved
         // let bool_arr_4 =
         //     RoaringBoolArray::encode(BoolArray::from(vec![true, false]).into_array()).unwrap();
         // assert!(!bool_arr_4.statistics().compute_is_strict_sorted().unwrap());
         // assert!(!bool_arr_4.statistics().compute_is_sorted().unwrap());
-        //
+
         let bool_arr_5 =
             RoaringBoolArray::encode(BoolArray::from(vec![false, true, true]).into_array())
                 .unwrap();
