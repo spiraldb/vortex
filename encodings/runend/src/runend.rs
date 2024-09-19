@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, search_sorted_u64_many, SearchSortedSide};
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -17,7 +18,7 @@ use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::{runend_decode, runend_encode};
 
-impl_encoding!("vortex.runend", 19u16, RunEnd);
+impl_encoding!("vortex.runend", ids::RUN_END, RunEnd);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEndMetadata {

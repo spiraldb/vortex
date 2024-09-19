@@ -12,6 +12,7 @@ use vortex_scalar::Scalar;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{scalar_at, subtract_scalar, SubtractScalarFn};
 use crate::compute::{search_sorted, SearchSortedSide};
+use crate::encoding::ids;
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
@@ -25,7 +26,7 @@ mod compute;
 mod stats;
 mod variants;
 
-impl_encoding!("vortex.chunked", 11u16, Chunked);
+impl_encoding!("vortex.chunked", ids::CHUNKED, Chunked);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkedMetadata {

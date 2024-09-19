@@ -3,6 +3,7 @@ use vortex_dtype::field::Field;
 use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 
+use crate::encoding::ids;
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, StructArrayTrait};
@@ -11,7 +12,7 @@ use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, I
 
 mod compute;
 
-impl_encoding!("vortex.struct", 8u16, Struct);
+impl_encoding!("vortex.struct", ids::STRUCT, Struct);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructMetadata {
