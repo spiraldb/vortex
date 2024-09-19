@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726771471383,
+  "lastUpdate": 1726777520343,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -132500,6 +132500,42 @@ window.BENCHMARK_DATA = {
           {
             "name": "bytes_at/array_data #2",
             "value": 1040,
+            "range": "± 1",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e11981ad5d1c6ada1870899cefcf08a742756b7",
+          "message": "fix: teach compute_as_cast and get_as_cast to handle null-only arrays (#881)\n\nFixes a bug that manifests as:\r\n```\r\nFailed to compute stat min as cast i64: Can't cast null scalar to non-nullable type\r\n```",
+          "timestamp": "2024-09-19T16:22:29-04:00",
+          "tree_id": "14169bd213a6585be340fc9e6bceac9b1fe15710",
+          "url": "https://github.com/spiraldb/vortex/commit/4e11981ad5d1c6ada1870899cefcf08a742756b7"
+        },
+        "date": 1726777518824,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 620,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1046,
             "range": "± 1",
             "unit": "ns/iter"
           }
