@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726777662057,
+  "lastUpdate": 1726778057185,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -133281,6 +133281,84 @@ window.BENCHMARK_DATA = {
             "name": "TPCH l_comment Column/compress-fsst-canonicalized",
             "value": 711874146,
             "range": "± 8463395",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e11981ad5d1c6ada1870899cefcf08a742756b7",
+          "message": "fix: teach compute_as_cast and get_as_cast to handle null-only arrays (#881)\n\nFixes a bug that manifests as:\r\n```\r\nFailed to compute stat min as cast i64: Can't cast null scalar to non-nullable type\r\n```",
+          "timestamp": "2024-09-19T16:22:29-04:00",
+          "tree_id": "14169bd213a6585be340fc9e6bceac9b1fe15710",
+          "url": "https://github.com/spiraldb/vortex/commit/4e11981ad5d1c6ada1870899cefcf08a742756b7"
+        },
+        "date": 1726778055597,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Yellow Taxi Trip Data/compress",
+            "value": 141737854,
+            "range": "± 1050217",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/AirlineSentiment",
+            "value": 513762,
+            "range": "± 365",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Arade",
+            "value": 3870027256,
+            "range": "± 2034799",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Euro2016",
+            "value": 2932870083,
+            "range": "± 23611268",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Food",
+            "value": 1399165525,
+            "range": "± 4163212",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/HashTags",
+            "value": 4151069635,
+            "range": "± 28472199",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-default",
+            "value": 241098034,
+            "range": "± 750672",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-chunked",
+            "value": 1116385468,
+            "range": "± 6116073",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-canonicalized",
+            "value": 722084153,
+            "range": "± 9183548",
             "unit": "ns/iter"
           }
         ]
