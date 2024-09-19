@@ -16,8 +16,9 @@ use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
-use vortex::array::ChunkedArray;
+use vortex::array::{ChunkedArray, StructArray};
 use vortex::{Array, IntoArray, IntoCanonical};
+use vortex_dtype::field::Field;
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::layouts::LayoutWriter;
@@ -213,11 +214,11 @@ fn tpc_h_l_comment(c: &mut Criterion) {
     group.sample_size(10);
     group.measurement_time(Duration::new(15, 0));
 
-    let comments = lineitem_vortex.with_dyn(|a| {
-        a.as_struct_array_unchecked()
-            .field_by_name("l_comment")
-            .unwrap()
-    });
+    let comments = StructArray::try_from(lineitem_vortex)
+        .unwrap()
+        .project(&[Field::Name("l_comment".to_string())])
+        .unwrap()
+        .into_array();
     println!("{}", comments.tree_display());
 
     benchmark_compress(
