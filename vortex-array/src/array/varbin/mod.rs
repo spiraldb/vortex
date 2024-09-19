@@ -90,6 +90,13 @@ impl VarBinArray {
             .try_into()
     }
 
+    /// Access the value bytes child array
+    ///
+    /// # Note
+    ///
+    /// Bytes child array is never sliced when the array is sliced so this can include values
+    /// that are not logically present in the array. Users should prefer [sliced_bytes][Self::sliced_bytes]
+    /// unless they're resolving values via offset child array.
     #[inline]
     pub fn bytes(&self) -> Array {
         self.as_ref()
@@ -103,6 +110,8 @@ impl VarBinArray {
             .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
     }
 
+    /// Access value bytes child array limited to values that are logically present in
+    /// the array unlike [bytes][Self::bytes].
     pub fn sliced_bytes(&self) -> VortexResult<Array> {
         let first_offset: usize = scalar_at(&self.offsets(), 0)?.as_ref().try_into()?;
         let last_offset: usize = scalar_at(&self.offsets(), self.offsets().len() - 1)?

@@ -17,7 +17,7 @@ impl flexbuffers::Buffer for Buffer {
     }
 
     fn empty() -> Self {
-        Self::from(vec![])
+        Self::from_len_zeroed(0)
     }
 
     fn buffer_str(&self) -> Result<Self::BufferString, Utf8Error> {

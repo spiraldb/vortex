@@ -9,10 +9,10 @@
 //!
 //! We do not currently enforce any alignment guarantees on the buffer.
 
-use std::cmp::Ordering;
-use std::ops::{Deref, Range};
+use core::cmp::Ordering;
+use core::ops::{Deref, Range};
 
-use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer};
+use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer as ArrowMutableBuffer};
 pub use string::*;
 
 mod flexbuffers;
@@ -36,6 +36,12 @@ unsafe impl Send for Buffer {}
 unsafe impl Sync for Buffer {}
 
 impl Buffer {
+    /// Create a new buffer of the provided length with all bytes set to `0u8`.
+    /// If len is 0, does not perform any allocations.
+    pub fn from_len_zeroed(len: usize) -> Self {
+        Self::from(ArrowMutableBuffer::from_len_zeroed(len))
+    }
+
     /// Length of the buffer in bytes
     pub fn len(&self) -> usize {
         match self {
@@ -79,6 +85,9 @@ impl Buffer {
     ///
     /// # Errors
     /// This method will fail if the underlying buffer is an owned [`bytes::Bytes`].
+    ///
+    /// This method will also fail if we attempt to pass a `T` that is not aligned to the `T` that
+    /// it was originally allocated with.
     pub fn into_vec<T: ArrowNativeType>(self) -> Result<Vec<T>, Self> {
         match self {
             Self::Arrow(buffer) => buffer.into_vec::<T>().map_err(Buffer::Arrow),
@@ -121,8 +130,8 @@ impl From<&[u8]> for Buffer {
     }
 }
 
-impl From<Vec<u8>> for Buffer {
-    fn from(value: Vec<u8>) -> Self {
+impl<T: ArrowNativeType> From<Vec<T>> for Buffer {
+    fn from(value: Vec<T>) -> Self {
         // We prefer Arrow since it retains mutability
         Self::Arrow(ArrowBuffer::from_vec(value))
     }
@@ -137,6 +146,12 @@ impl From<bytes::Bytes> for Buffer {
 impl From<ArrowBuffer> for Buffer {
     fn from(value: ArrowBuffer) -> Self {
         Self::Arrow(value)
+    }
+}
+
+impl From<ArrowMutableBuffer> for Buffer {
+    fn from(value: ArrowMutableBuffer) -> Self {
+        Self::Arrow(ArrowBuffer::from(value))
     }
 }
 

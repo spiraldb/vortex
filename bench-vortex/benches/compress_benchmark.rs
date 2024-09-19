@@ -1,6 +1,6 @@
 use bench_vortex::data_downloads::BenchmarkDataset;
 use bench_vortex::public_bi_data::BenchmarkDatasets;
-use bench_vortex::public_bi_data::PBIDataset::Medicare1;
+use bench_vortex::public_bi_data::PBIDataset::*;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{compress_taxi_data, tpch};
@@ -11,24 +11,40 @@ use vortex_sampling_compressor::SamplingCompressor;
 
 fn vortex_compress_taxi(c: &mut Criterion) {
     taxi_data_parquet();
-    let mut group = c.benchmark_group("end to end - taxi");
+    let mut group = c.benchmark_group("Yellow Taxi Trip Data");
     group.sample_size(10);
     group.bench_function("compress", |b| b.iter(|| black_box(compress_taxi_data())));
     group.finish()
 }
 
 fn vortex_compress_medicare1(c: &mut Criterion) {
-    let dataset = BenchmarkDatasets::PBI(Medicare1);
-    dataset.write_as_parquet();
-    let mut group = c.benchmark_group("end to end - medicare");
+    let mut group = c.benchmark_group("Public BI Benchmark");
     group.sample_size(10);
-    group.bench_function("compress", |b| {
-        b.iter(|| black_box(dataset.compress_to_vortex()))
-    });
+
+    for dataset_name in [
+        AirlineSentiment,
+        Arade,
+        // Bimbo, // 27s per sample
+        // CMSprovider, // >30s per sample
+        // Corporations, // duckdb thinks ' is a quote character but its used as an apostrophe
+        // CityMaxCapita, // 11th column has F, M, and U but is inferred as boolean
+        Euro2016,
+        Food,
+        HashTags,
+        // Hatred, // panic in fsst_compress_iter
+        // TableroSistemaPenal, // 20s per sample
+        // YaleLanguages, // 4th column looks like integer but also contains Y
+    ] {
+        group.bench_function(format!("{:?}", dataset_name), |b| {
+            let dataset = BenchmarkDatasets::PBI(dataset_name);
+            dataset.write_as_parquet();
+            b.iter(|| black_box(dataset.compress_to_vortex()))
+        });
+    }
     group.finish()
 }
 
-fn vortex_compress_tpch(c: &mut Criterion) {
+fn vortex_compress_tpch_l_comment(c: &mut Criterion) {
     let data_dir = DBGen::new(DBGenOptions::default()).generate().unwrap();
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -45,7 +61,7 @@ fn vortex_compress_tpch(c: &mut Criterion) {
     let compressor_fsst = SamplingCompressor::default();
 
     // l_comment column only
-    let mut group = c.benchmark_group("l_comment");
+    let mut group = c.benchmark_group("TPCH l_comment Column");
     let comments = lineitem_vortex.with_dyn(|a| {
         a.as_struct_array_unchecked()
             .field_by_name("l_comment")
@@ -85,6 +101,6 @@ criterion_group!(
     benches,
     vortex_compress_taxi,
     vortex_compress_medicare1,
-    vortex_compress_tpch
+    vortex_compress_tpch_l_comment,
 );
 criterion_main!(benches);

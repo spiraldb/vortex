@@ -25,4 +25,5 @@ body = """
 name = "vortex-array"
 git_tag_enable = true
 git_release_enable = true
+git_release_name = "{{ version }}"
 git_tag_name = "{{ version }}"

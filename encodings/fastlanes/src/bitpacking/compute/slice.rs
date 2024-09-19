@@ -15,10 +15,12 @@ impl SliceFn for BitPackedArray {
         let block_start = max(0, offset_start - offset);
         let block_stop = ((offset_stop + 1023) / 1024) * 1024;
 
-        let encoded_start = (block_start / 8) * self.bit_width() / self.ptype().byte_width();
-        let encoded_stop = (block_stop / 8) * self.bit_width() / self.ptype().byte_width();
+        let encoded_start = (block_start / 8) * self.bit_width();
+        let encoded_stop = (block_stop / 8) * self.bit_width();
+        // slice the buffer using the encoded start/stop values
         Self::try_new_from_offset(
-            slice(self.packed(), encoded_start, encoded_stop)?,
+            self.packed().slice(encoded_start..encoded_stop),
+            self.ptype(),
             self.validity().slice(start, stop)?,
             self.patches()
                 .map(|p| slice(&p, start, stop))
