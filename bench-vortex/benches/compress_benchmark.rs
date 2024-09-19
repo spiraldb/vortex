@@ -1,13 +1,75 @@
+use std::path::Path;
+
+use arrow_array::RecordBatch;
 use bench_vortex::data_downloads::BenchmarkDataset;
 use bench_vortex::public_bi_data::BenchmarkDatasets;
 use bench_vortex::public_bi_data::PBIDataset::*;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
+#[allow(unused_imports)]
 use bench_vortex::{fetch_taxi_data, tpch};
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion};
+use criterion::{
+    black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput,
+};
+use parquet::arrow::ArrowWriter;
+use parquet::basic::{Compression, ZstdLevel};
+use parquet::file::properties::WriterProperties;
+use tokio::fs::File;
+use tokio::io::AsyncSeekExt;
+use vortex::array::ChunkedArray;
+#[allow(unused_imports)]
 use vortex::{Array, IntoArray, IntoCanonical};
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
+use vortex_serde::layouts::LayoutWriter;
+
+fn parquet_written_size(array: &Array, filepath: &str) -> usize {
+    let mut file = std::fs::File::create(Path::new(filepath)).unwrap();
+    let chunked = ChunkedArray::try_from(array).unwrap();
+    let chunks_vec = chunked.chunks().collect::<Vec<_>>();
+
+    if chunks_vec.is_empty() {
+        panic!("empty chunks");
+    }
+
+    let schema = RecordBatch::try_from(chunks_vec[0].clone())
+        .unwrap()
+        .schema();
+
+    let writer_properties = WriterProperties::builder()
+        .set_compression(Compression::ZSTD(ZstdLevel::default()))
+        .build();
+    let mut writer = ArrowWriter::try_new(&mut file, schema, Some(writer_properties)).unwrap();
+    for chunk in chunks_vec {
+        let record_batch = RecordBatch::try_from(chunk).unwrap();
+        writer.write(&record_batch).unwrap();
+    }
+    let n_bytes = writer.bytes_written();
+    writer.close().unwrap();
+    n_bytes
+}
+
+fn vortex_written_size(array: &Array, filepath: &str) -> u64 {
+    async fn run(array: &Array, filepath: &str) -> u64 {
+        let file = File::create(Path::new(filepath)).await.unwrap();
+        let mut writer = LayoutWriter::new(file);
+
+        writer = writer.write_array_columns(array.clone()).await.unwrap();
+        writer
+            .finalize()
+            .await
+            .unwrap()
+            .stream_position()
+            .await
+            .unwrap()
+    }
+
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(run(array, filepath))
+}
 
 fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
     compressor: &SamplingCompressor<'_>,
@@ -19,21 +81,41 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
     F: Fn() -> U,
     U: AsRef<Array>,
 {
-    let mut uncompressed_size = 0;
+    let uncompressed = make_uncompressed();
+    let uncompressed_size = uncompressed.as_ref().nbytes();
     let mut uncompressed_tree: String = "".to_string();
     let mut compressed_size = 0;
     let mut compressed_tree: String = "".to_string();
 
-    group.bench_function(bench_name, |b| {
+    group.throughput(Throughput::Bytes(uncompressed_size as u64));
+    group.bench_function(format!("{} compressed throughput", bench_name), |b| {
         b.iter_with_large_drop(|| {
-            let uncompressed = make_uncompressed();
-            uncompressed_size = uncompressed.as_ref().nbytes();
             let compressed = black_box(compressor.compress(uncompressed.as_ref(), None)).unwrap();
             compressed_size = compressed.nbytes();
             uncompressed_tree = format!("{}", uncompressed.as_ref().tree_display());
             compressed_tree = format!("{}", compressed.as_ref().tree_display());
         });
     });
+
+    let vortex_nbytes = vortex_written_size(
+        &compressor
+            .compress(uncompressed.as_ref(), None)
+            .unwrap()
+            .into_array(),
+        &format!("{}-{}.vortex", group_name, bench_name),
+    );
+
+    let parquet_nbytes = parquet_written_size(
+        uncompressed.as_ref(),
+        &format!("{}-{}.parquet", group_name, bench_name),
+    );
+
+    println!(
+        "test {} Vortex-to-Parquet Ratio/{} ... bench:    {} ratio (+/- 0)",
+        group_name,
+        bench_name,
+        (vortex_nbytes as f64) / (parquet_nbytes as f64)
+    );
 
     println!(
         "test {} Compression Ratio/{} ... bench:    {} ratio (+/- 0)",
@@ -55,13 +137,13 @@ fn yellow_taxi_trip_data(c: &mut Criterion) {
     let group_name = "Yellow Taxi Trip Data";
     let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
     group.sample_size(10);
-    benchmark_compress(
-        &SamplingCompressor::default(),
-        fetch_taxi_data,
-        group_name,
-        &mut group,
-        "compress",
-    );
+    // benchmark_compress(
+    //     &SamplingCompressor::default(),
+    //     fetch_taxi_data,
+    //     group_name,
+    //     &mut group,
+    //     "taxi",
+    // );
     group.finish()
 }
 
@@ -79,8 +161,8 @@ fn public_bi_benchmark(c: &mut Criterion) {
         // Corporations, // duckdb thinks ' is a quote character but its used as an apostrophe
         // CityMaxCapita, // 11th column has F, M, and U but is inferred as boolean
         Euro2016,
-        Food,
-        HashTags,
+        // Food,
+        // HashTags,
         // Hatred, // panic in fsst_compress_iter
         // TableroSistemaPenal, // 20s per sample
         // YaleLanguages, // 4th column looks like integer but also contains Y
@@ -110,50 +192,50 @@ fn tpc_h_l_comment(c: &mut Criterion) {
         &tpch::schema::LINEITEM,
     ));
 
-    let compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
-    let compressor_fsst = SamplingCompressor::default();
+    let _compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
+    let _compressor_fsst = SamplingCompressor::default();
 
     let group_name = "TPC-H l_comment";
     let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
     group.sample_size(10);
     // group.measurement_time(Duration::new(15, 0));
 
-    let comments = lineitem_vortex.with_dyn(|a| {
+    let _comments = lineitem_vortex.with_dyn(|a| {
         a.as_struct_array_unchecked()
             .field_by_name("l_comment")
             .unwrap()
     });
 
-    benchmark_compress(
-        &compressor,
-        || &comments,
-        group_name,
-        &mut group,
-        "chunked-without-fsst",
-    );
+    // benchmark_compress(
+    //     &compressor,
+    //     || &comments,
+    //     group_name,
+    //     &mut group,
+    //     "chunked-without-fsst",
+    // );
 
-    benchmark_compress(
-        &compressor_fsst,
-        || &comments,
-        group_name,
-        &mut group,
-        "chunked-with-fsst",
-    );
+    // benchmark_compress(
+    //     &compressor_fsst,
+    //     || &comments,
+    //     group_name,
+    //     &mut group,
+    //     "chunked-with-fsst",
+    // );
 
-    let comments_canonical = comments
-        .into_canonical()
-        .unwrap()
-        .into_varbin()
-        .unwrap()
-        .into_array();
+    // let comments_canonical = comments
+    //     .into_canonical()
+    //     .unwrap()
+    //     .into_varbin()
+    //     .unwrap()
+    //     .into_array();
 
-    benchmark_compress(
-        &compressor_fsst,
-        || &comments_canonical,
-        group_name,
-        &mut group,
-        "canonical-with-fsst",
-    );
+    // benchmark_compress(
+    //     &compressor_fsst,
+    //     || &comments_canonical,
+    //     group_name,
+    //     &mut group,
+    //     "canonical-with-fsst",
+    // );
 
     group.finish();
 }

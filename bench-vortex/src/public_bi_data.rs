@@ -435,7 +435,11 @@ impl BenchmarkDataset for BenchmarkDatasets {
             .collect::<VortexResult<Vec<_>>>()?;
         assert!(!arrays.is_empty());
         let dtype = arrays[0].dtype().clone();
-        ChunkedArray::try_new(arrays, dtype).map(|x| x.into_array())
+        ChunkedArray::try_new(
+            arrays.iter().flat_map(|x| x.chunks()).collect::<Vec<_>>(),
+            dtype,
+        )
+        .map(|x| x.into_array())
     }
 
     fn compress_to_vortex(&self) -> VortexResult<(usize, usize)> {
