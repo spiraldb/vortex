@@ -17,7 +17,7 @@ use parquet::file::properties::WriterProperties;
 use tokio::fs::File;
 use tokio::io::AsyncSeekExt;
 use vortex::array::{ChunkedArray, StructArray};
-use vortex::{Array, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::field::Field;
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::SamplingCompressor;
@@ -83,17 +83,13 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
 {
     let uncompressed = make_uncompressed();
     let uncompressed_size = uncompressed.as_ref().nbytes();
-    // let mut uncompressed_tree: String = "".to_string();
     let mut compressed_size = 0;
-    // let mut compressed_tree: String = "".to_string();
 
     group.throughput(Throughput::Bytes(uncompressed_size as u64));
     group.bench_function(format!("{} compressed throughput", bench_name), |b| {
         b.iter_with_large_drop(|| {
             let compressed = black_box(compressor.compress(uncompressed.as_ref(), None)).unwrap();
             compressed_size = compressed.nbytes();
-            // uncompressed_tree = format!("{}", uncompressed.as_ref().tree_display());
-            // compressed_tree = format!("{}", compressed.as_ref().tree_display());
         });
     });
 
@@ -142,8 +138,6 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         "test {} Compressed Size/{} ... bench:    {} bytes (+/- 0)",
         group_name, bench_name, compressed_size
     );
-
-    // println!("{}{}", uncompressed_tree, compressed_tree);
 }
 
 fn yellow_taxi_trip_data(c: &mut Criterion) {
@@ -214,12 +208,21 @@ fn tpc_h_l_comment(c: &mut Criterion) {
     group.sample_size(10);
     group.measurement_time(Duration::new(15, 0));
 
-    let comments = StructArray::try_from(lineitem_vortex)
+    let comment_chunks = ChunkedArray::try_from(lineitem_vortex)
         .unwrap()
-        .project(&[Field::Name("l_comment".to_string())])
+        .chunks()
+        .map(|chunk| {
+            StructArray::try_from(chunk)
+                .unwrap()
+                .project(&[Field::Name("l_comment".to_string())])
+                .unwrap()
+                .into_array()
+        })
+        .collect::<Vec<_>>();
+    let comment_dtype = comment_chunks[0].dtype().clone();
+    let comments = ChunkedArray::try_new(comment_chunks, comment_dtype)
         .unwrap()
         .into_array();
-    println!("{}", comments.tree_display());
 
     benchmark_compress(
         &compressor,
@@ -240,13 +243,16 @@ fn tpc_h_l_comment(c: &mut Criterion) {
     let comments_canonical = comments
         .into_canonical()
         .unwrap()
-        .into_varbin()
+        .into_struct()
         .unwrap()
         .into_array();
+    let dtype = comments_canonical.dtype().clone();
+    let comments_canonical_chunked =
+        ChunkedArray::try_new(vec![comments_canonical], dtype).unwrap();
 
     benchmark_compress(
         &compressor_fsst,
-        || &comments_canonical,
+        || &comments_canonical_chunked,
         group_name,
         &mut group,
         "canonical-with-fsst",
