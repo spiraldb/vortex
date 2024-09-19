@@ -183,6 +183,6 @@ mod tests {
         let mut ids_set = HashSet::with_capacity(all_ids.len());
         ids_set.extend(all_ids);
         assert_eq!(ids_set.len(), all_ids.len());
-        assert!(ids_set.iter().max().unwrap() <= &0x0400);
+        assert!(ids_set.iter().max().unwrap() <= &0x0400); // 1024
     }
 }
