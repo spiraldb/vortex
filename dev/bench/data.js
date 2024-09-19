@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726783356472,
+  "lastUpdate": 1726783431779,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -135241,6 +135241,90 @@ window.BENCHMARK_DATA = {
             "name": "vortex-nopushdown-uncompressed/exec",
             "value": 1999160,
             "range": "± 4938",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4168d2184a572f91438a45e467a3b8cc3ab02485",
+          "message": "make miri tests fast again (take 2) (#884)\n\nFSST array tests take ~7.5 minutes on recent develop builds (e.g.,\r\nhttps://github.com/spiraldb/vortex/actions/runs/10948157580/job/30398557105)\r\n\r\nThis gets it down to <90s on my laptop\r\n\r\nredo of #883",
+          "timestamp": "2024-09-19T21:57:29Z",
+          "tree_id": "fb86d04af985d84c868058ab14bde09042224b69",
+          "url": "https://github.com/spiraldb/vortex/commit/4168d2184a572f91438a45e467a3b8cc3ab02485"
+        },
+        "date": 1726783430367,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 814381,
+            "range": "± 16368",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1779260,
+            "range": "± 9795",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 518939,
+            "range": "± 2262",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3072341,
+            "range": "± 16525",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 522846,
+            "range": "± 1566",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 3342603,
+            "range": "± 4361",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 721063,
+            "range": "± 2390",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 13937484,
+            "range": "± 203745",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 716983,
+            "range": "± 1983",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 2015495,
+            "range": "± 10644",
             "unit": "ns/iter"
           }
         ]
