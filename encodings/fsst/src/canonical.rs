@@ -17,7 +17,9 @@ impl IntoCanonical for FSSTArray {
             // call. We then turn our uncompressed_lengths into an offsets buffer
             // necessary for a VarBinViewArray and construct the canonical array.
 
-            let compressed_bytes = VarBinArray::try_from(self.codes())?.bytes().as_primitive();
+            let compressed_bytes = VarBinArray::try_from(self.codes())?
+                .sliced_bytes()?
+                .as_primitive();
 
             // Bulk-decompress the entire array.
             let uncompressed_bytes =

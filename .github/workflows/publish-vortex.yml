@@ -48,7 +48,7 @@ jobs:
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
-        name: wheels
+        name: osx-wheels
         path: target/wheels
   linux:
     runs-on: ubuntu-latest
@@ -85,7 +85,7 @@ jobs:
     - name: Upload wheels
       uses: actions/upload-artifact@v4
       with:
-        name: wheels
+        name: linux-wheels
         path: target/wheels
   release:
     runs-on: ubuntu-latest
@@ -98,8 +98,12 @@ jobs:
     steps:
     - uses: actions/download-artifact@v4
       with:
-        name: wheels
+        # https://github.com/actions/download-artifact?tab=readme-ov-file#download-all-artifacts
+        # "To download them to the same directory:"
         path: dist/
+        merge-multiple: true
+    - name: Display structure of downloaded files
+      run: ls -R dist/
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:

@@ -9,7 +9,6 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::varbin::VarBinArray;
 use crate::array::BoolArray;
-use crate::compute::slice;
 use crate::compute::unary::{scalar_at_unchecked, try_cast};
 use crate::validity::Validity;
 use crate::{
@@ -210,12 +209,7 @@ fn pack_varbin(chunks: &[Array], validity: Validity, dtype: &DType) -> VortexRes
 
         let first_offset_value: usize =
             usize::try_from(&scalar_at_unchecked(offsets_arr.as_ref(), 0))?;
-        let last_offset_value: usize = usize::try_from(&scalar_at_unchecked(
-            offsets_arr.as_ref(),
-            offsets_arr.len() - 1,
-        ))?;
-        let primitive_bytes =
-            slice(chunk.bytes(), first_offset_value, last_offset_value)?.into_primitive()?;
+        let primitive_bytes = chunk.sliced_bytes()?.into_primitive()?;
         data_bytes.extend_from_slice(primitive_bytes.buffer());
 
         let adjustment_from_previous = *offsets

@@ -44,8 +44,7 @@ fn take_primitive<T: NativePType + BitPacking>(
 
     let bit_width = array.bit_width();
 
-    let packed = array.packed().into_primitive()?;
-    let packed = packed.maybe_null_slice::<T>();
+    let packed = array.packed_slice::<T>();
 
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
 
