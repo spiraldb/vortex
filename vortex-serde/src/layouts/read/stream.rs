@@ -130,7 +130,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     }
 
                     if let Some(row_filter) = &self.scan.filter {
-                        batch = row_filter.apply(&batch)?;
+                        batch = row_filter.evaluate(&batch)?;
                     }
 
                     self.state = StreamingState::Init;

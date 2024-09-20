@@ -3,12 +3,12 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use arrow_array::builder::BooleanBufferBuilder;
 use vortex::array::BoolArray;
-use vortex::compute::{and, filter};
-use vortex::validity::Validity;
+use vortex::compute::filter;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::{Field, FieldPath};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect, VortexResult};
 use vortex_expr::{expr_is_filter, split_conjunction, BinaryExpr, VortexExpr};
 
 use super::null_as_false;
@@ -30,27 +30,17 @@ impl RowFilter {
     }
 
     /// Evaluate the underlying filter against a target array, returning a boolean mask
-    pub fn apply(&self, target: &Array) -> VortexResult<Array> {
-        let mut target = target.clone();
-        for expr in self.conjunction.iter() {
-            let mask = expr.evaluate(&target)?;
-            let mask = null_as_false(mask.into_bool()?)?;
-            target = filter(target, mask)?;
-        }
-
-        Ok(target)
-    }
-
     pub fn evaluate(&self, target: &Array) -> VortexResult<Array> {
-        let mut mask =
-            BoolArray::from_vec(vec![true; target.len()], Validity::AllValid).into_array();
-
+        let mut target = target.clone();
+        let mut mask = BoolArray::from(vec![true; target.len()]);
         for expr in self.conjunction.iter() {
-            let expr_result = expr.evaluate(target)?;
-            mask = and(mask, expr_result)?;
+            let new_mask = expr.evaluate(&target)?;
+            let new_mask = null_as_false(new_mask.into_bool()?)?;
+            target = filter(target, &new_mask)?;
+            mask = bool_array_and_then(mask, new_mask.into_bool()?);
         }
 
-        Ok(mask)
+        Ok(mask.into_array())
     }
 
     /// Returns a set of all referenced fields in the underlying filter
@@ -74,6 +64,29 @@ impl RowFilter {
     //     self.filter = expr;
     //     self
     // }
+}
+
+fn bool_array_and_then(current: BoolArray, next: BoolArray) -> BoolArray {
+    assert!(current.len() >= next.len());
+
+    let current = current.boolean_buffer();
+    let next = next.boolean_buffer();
+
+    let mut output = BooleanBufferBuilder::new(current.len());
+    let mut next_iter = next.iter();
+
+    for c in current.iter() {
+        if c {
+            output.append(next_iter.next().vortex_expect("Must have a value here"));
+        } else {
+            output.append(false);
+        }
+    }
+
+    assert!(next_iter.next().is_none());
+    assert_eq!(output.len(), current.len());
+
+    BoolArray::from(output.finish())
 }
 
 #[allow(dead_code)]
