@@ -2,14 +2,11 @@
 //!
 //! Vortex is a chunked array library that's able to
 
-use std::sync::Arc;
-
 use futures_util::stream;
 use itertools::Itertools;
 use packed_struct::derive::PackedStruct;
-use packed_struct::PackedStruct;
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -23,8 +20,8 @@ use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoCanonical,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+    impl_encoding, packed_struct_serialize_metadata, Array, ArrayDType, ArrayDef, ArrayTrait,
+    IntoArray, IntoCanonical,
 };
 
 mod canonical;
@@ -52,20 +49,7 @@ impl ChunkedMetadata {
     }
 }
 
-impl TrySerializeArrayMetadata for ChunkedMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let bytes = self.pack()?;
-        Ok(bytes.into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for ChunkedMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or(vortex_err!("chunked metadata must be present"))?;
-        let x = ChunkedMetadata::unpack(bytes.try_into()?)?;
-        Ok(x)
-    }
-}
+packed_struct_serialize_metadata!(ChunkedMetadata);
 
 impl ChunkedArray {
     const ENDS_DTYPE: DType = DType::Primitive(PType::U64, Nullability::NonNullable);

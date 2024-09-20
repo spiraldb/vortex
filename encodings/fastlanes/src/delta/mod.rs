@@ -1,20 +1,18 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 
 pub use compress::*;
 use packed_struct::derive::PackedStruct;
-use packed_struct::PackedStruct;
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+    impl_encoding, packed_struct_serialize_metadata, Array, ArrayDType, ArrayDef, ArrayTrait,
+    Canonical, IntoCanonical,
 };
 use vortex_dtype::match_each_unsigned_integer_ptype;
-use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 mod compress;
 mod compute;
@@ -42,20 +40,7 @@ impl DeltaMetadata {
     // }
 }
 
-impl TrySerializeArrayMetadata for DeltaMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let bytes = self.pack()?;
-        Ok(bytes.into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for DeltaMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or(vortex_err!("delta metadata must be present"))?;
-        let x = DeltaMetadata::unpack(bytes.try_into()?)?;
-        Ok(x)
-    }
-}
+packed_struct_serialize_metadata!(DeltaMetadata);
 
 impl DeltaArray {
     pub fn try_new(bases: Array, deltas: Array, validity: Validity) -> VortexResult<Self> {

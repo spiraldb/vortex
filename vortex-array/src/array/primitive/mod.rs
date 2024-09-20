@@ -9,9 +9,7 @@ use num_traits::AsPrimitive;
 use packed_struct::derive::PackedStruct;
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
-use vortex_error::{
-    vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
-};
+use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::elementwise::{dyn_cast_array_iter, BinaryFn, UnaryFn};
 use crate::encoding::ids;

@@ -1,21 +1,19 @@
-use std::sync::Arc;
-
-use ::serde::{Deserialize, Serialize};
-use flexbuffers::{FlexbufferSerializer, Reader};
+use serde::{Deserialize, Serialize};
 use vortex_dtype::{match_each_integer_ptype, DType};
-use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::scalar_at;
 use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::encoding::ids;
+use crate::implementation::ArrayDef;
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoArrayVariant,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+    flexbuffer_serialize_metadata, impl_encoding, Array, ArrayDType, ArrayTrait, IntoArray,
+    IntoArrayVariant,
 };
 
 mod compute;
@@ -34,20 +32,7 @@ pub struct SparseMetadata {
     fill_value: Scalar,
 }
 
-impl TrySerializeArrayMetadata for SparseMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let mut ser = FlexbufferSerializer::new();
-        self.serialize(&mut ser)?;
-        Ok(ser.take_buffer().into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for SparseMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
-        Ok(SparseMetadata::deserialize(Reader::get_root(bytes)?)?)
-    }
-}
+flexbuffer_serialize_metadata!(SparseMetadata);
 
 impl SparseArray {
     pub fn try_new(

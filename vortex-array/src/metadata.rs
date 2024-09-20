@@ -39,8 +39,9 @@ macro_rules! packed_struct_serialize_metadata {
 
         impl<'m> $crate::TryDeserializeArrayMetadata<'m> for $id {
             fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-                let bytes =
-                    metadata.ok_or(vortex_err!("fastlanes bit packed metadata must be present"))?;
+                let bytes = metadata.ok_or(vortex_error::vortex_err!(
+                    "fastlanes bit packed metadata must be present"
+                ))?;
                 let x = packed_struct::PackedStruct::unpack(bytes.try_into()?)?;
                 Ok(x)
             }
@@ -61,7 +62,8 @@ macro_rules! flexbuffer_serialize_metadata {
 
         impl<'m> $crate::TryDeserializeArrayMetadata<'m> for $id {
             fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-                let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+                let bytes = metadata
+                    .ok_or_else(|| vortex_error::vortex_err!("Array requires metadata bytes"))?;
                 Ok(Self::deserialize(flexbuffers::Reader::get_root(bytes)?)?)
             }
         }

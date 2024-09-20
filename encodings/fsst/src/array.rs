@@ -13,7 +13,7 @@ use vortex::{
     IntoCanonical,
 };
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
 impl_encoding!("vortex.fsst", ids::FSST, FSST);
 

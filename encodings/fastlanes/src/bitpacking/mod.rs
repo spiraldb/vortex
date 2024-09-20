@@ -1,9 +1,6 @@
-use std::sync::Arc;
-
 pub use compress::*;
 use fastlanes::BitPacking;
 use packed_struct::derive::PackedStruct;
-use packed_struct::PackedStruct;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
@@ -11,8 +8,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadat
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata, TypedArray,
+    impl_encoding, packed_struct_serialize_metadata, Array, ArrayDType, ArrayDef, ArrayTrait,
+    Canonical, IntoCanonical, TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, NativePType, Nullability, PType};
@@ -66,20 +63,7 @@ impl BitPackedMetadata {
     // }
 }
 
-impl TrySerializeArrayMetadata for BitPackedMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let bytes = self.pack()?;
-        Ok(bytes.into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for BitPackedMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or(vortex_err!("fastlanes bit packed metadata must be present"))?;
-        let x = BitPackedMetadata::unpack(bytes.try_into()?)?;
-        Ok(x)
-    }
-}
+packed_struct_serialize_metadata!(BitPackedMetadata);
 
 /// NB: All non-null values in the patches array are considered patches
 impl BitPackedArray {

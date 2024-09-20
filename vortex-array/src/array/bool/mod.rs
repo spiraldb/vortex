@@ -1,13 +1,10 @@
-use std::sync::Arc;
-
 use arrow_buffer::bit_iterator::{BitIndexIterator, BitSliceIterator};
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use packed_struct::derive::PackedStruct;
-use packed_struct::PackedStruct;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexExpect as _, VortexResult};
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::encoding::ids;
 use crate::stats::StatsSet;
@@ -15,8 +12,8 @@ use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata
 use crate::variants::{ArrayVariants, BoolArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TryDeserializeArrayMetadata,
-    TrySerializeArrayMetadata, TypedArray,
+    impl_encoding, packed_struct_serialize_metadata, ArrayDef, ArrayTrait, Canonical,
+    IntoCanonical, TypedArray,
 };
 
 mod accessors;
@@ -52,20 +49,7 @@ impl BoolMetadata {
     }
 }
 
-impl TrySerializeArrayMetadata for BoolMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let bytes = self.pack()?;
-        Ok(bytes.into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for BoolMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or(vortex_err!("bool metadata must be present"))?;
-        let x = BoolMetadata::unpack(bytes.try_into()?)?;
-        Ok(x)
-    }
-}
+packed_struct_serialize_metadata!(BoolMetadata);
 
 impl BoolArray {
     pub fn buffer(&self) -> &Buffer {

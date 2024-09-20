@@ -14,7 +14,7 @@ use vortex::{
     Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
 };
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::{runend_decode, runend_encode};
 

@@ -1,7 +1,4 @@
-use std::sync::Arc;
-
 use packed_struct::derive::PackedStruct;
-use packed_struct::PackedStruct;
 use vortex_dtype::field::Field;
 use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
@@ -12,8 +9,8 @@ use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata
 use crate::variants::{ArrayVariants, StructArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+    impl_encoding, packed_struct_serialize_metadata, Array, ArrayDType, ArrayDef, ArrayTrait,
+    Canonical, IntoCanonical,
 };
 
 mod compute;
@@ -41,20 +38,7 @@ impl StructMetadata {
     // }
 }
 
-impl TrySerializeArrayMetadata for StructMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let bytes = self.pack()?;
-        Ok(bytes.into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for StructMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or(vortex_err!("struct metadata must be present"))?;
-        let x = StructMetadata::unpack(bytes.try_into()?)?;
-        Ok(x)
-    }
-}
+packed_struct_serialize_metadata!(StructMetadata);
 
 impl StructArray {
     pub fn validity(&self) -> Validity {

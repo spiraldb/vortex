@@ -10,9 +10,7 @@ use arrow_buffer::ScalarBuffer;
 use arrow_schema::DataType;
 use itertools::Itertools;
 use vortex_dtype::{DType, PType};
-use vortex_error::{
-    vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
-};
+use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::array::varbin::VarBinArray;
 use crate::arrow::FromArrowArray;

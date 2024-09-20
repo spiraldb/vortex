@@ -15,7 +15,7 @@ use vortex::{
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexExpect as _, VortexResult};
+use vortex_error::{VortexExpect as _, VortexResult};
 
 mod compute;
 mod stats;
