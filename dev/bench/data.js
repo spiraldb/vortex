@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726849144439,
+  "lastUpdate": 1726849209118,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -72,6 +72,42 @@ window.BENCHMARK_DATA = {
             "value": 1020.9895145046926,
             "unit": "ns",
             "range": 0.23391082119565
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "196a776dd8c66416378506aa478eb5d750b6c2a5",
+          "message": "Enable debug logging for pypi publish (#896)\n\nIndentation wasn't quite the same in this file compared to others",
+          "timestamp": "2024-09-20T17:14:54+01:00",
+          "tree_id": "296a3abfee168f1b8bca3de1d54e09b9d69bbd90",
+          "url": "https://github.com/spiraldb/vortex/commit/196a776dd8c66416378506aa478eb5d750b6c2a5"
+        },
+        "date": 1726849206879,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 611.4971973658147,
+            "unit": "ns",
+            "range": 0.4506827327942915
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1025.71666131595,
+            "unit": "ns",
+            "range": 3.4862999083406407
           }
         ]
       }
