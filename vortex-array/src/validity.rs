@@ -27,15 +27,15 @@ pub enum ValidityMetadata {
 }
 
 impl ValidityMetadata {
-    pub fn to_validity(&self, array: Option<Array>) -> Validity {
+    pub fn to_validity<F>(&self, array_fn: F) -> Validity
+    where
+        F: FnOnce() -> Array,
+    {
         match self {
             Self::NonNullable => Validity::NonNullable,
             Self::AllValid => Validity::AllValid,
             Self::AllInvalid => Validity::AllInvalid,
-            Self::Array => match array {
-                None => vortex_panic!("Missing validity array"),
-                Some(a) => Validity::Array(a),
-            },
+            Self::Array => Validity::Array(array_fn()),
         }
     }
 }

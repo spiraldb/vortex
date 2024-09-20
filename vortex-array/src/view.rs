@@ -112,24 +112,26 @@ impl ArrayView {
     }
 
     // TODO(ngates): should we separate self and DType lifetimes? Should DType be cloned?
-    pub fn child(&self, idx: usize, dtype: &DType, len: usize) -> Option<Self> {
-        let child = self.array_child(idx)?;
+    pub fn child(&self, idx: usize, dtype: &DType, len: usize) -> VortexResult<Self> {
+        let child = self
+            .array_child(idx)
+            .ok_or_else(|| vortex_err!("ArrayView: array_child({idx}) not found"))?;
         let flatbuffer_loc = child._tab.loc();
 
-        let encoding = self
-            .ctx
-            .lookup_encoding(child.encoding())
-            .vortex_expect(&format!(
+        let encoding = self.ctx.lookup_encoding(child.encoding()).ok_or_else(|| {
+            vortex_err!(
                 "ArrayView({}) child at index {idx} has unknown encoding {}",
                 self.encoding.id().as_ref(),
                 child.encoding()
-            ));
+            )
+        })?;
 
         // Figure out how many buffers to skip...
         // We store them depth-first.
         let buffer_offset = self
             .flatbuffer()
-            .children()?
+            .children()
+            .ok_or_else(|| vortex_err!("flatbuffer children not found"))?
             .iter()
             .take(idx)
             .map(|child| Self::cumulative_nbuffers(child))
@@ -137,7 +139,7 @@ impl ArrayView {
             + self.has_buffer() as usize;
         let buffer_count = Self::cumulative_nbuffers(child);
 
-        Some(Self {
+        Ok(Self {
             encoding,
             dtype: dtype.clone(),
             len,

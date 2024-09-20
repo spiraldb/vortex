@@ -6,7 +6,7 @@ use futures_util::stream;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -71,9 +71,9 @@ impl ChunkedArray {
     }
 
     #[inline]
-    pub fn chunk(&self, idx: usize) -> Option<Array> {
-        let chunk_start = usize::try_from(&scalar_at(&self.chunk_offsets(), idx).ok()?).ok()?;
-        let chunk_end = usize::try_from(&scalar_at(&self.chunk_offsets(), idx + 1).ok()?).ok()?;
+    pub fn chunk(&self, idx: usize) -> VortexResult<Array> {
+        let chunk_start = usize::try_from(&scalar_at(&self.chunk_offsets(), idx)?)?;
+        let chunk_end = usize::try_from(&scalar_at(&self.chunk_offsets(), idx + 1)?)?;
 
         // Offset the index since chunk_ends is child 0.
         self.as_ref()
@@ -110,13 +110,14 @@ impl ChunkedArray {
 
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| {
-            self.chunk(c).unwrap_or_else(|| {
-                vortex_panic!(
-                    "Chunk should {} exist but doesn't (nchunks: {})",
+            self.chunk(c).vortex_expect(
+                format!(
+                    "ChunkedArray: chunks: chunk should {} exist (nchunks: {})",
                     c,
                     self.nchunks()
                 )
-            })
+                .as_str(),
+            )
         })
     }
 
@@ -200,7 +201,7 @@ impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, index: usize) -> bool {
         let (chunk, offset_in_chunk) = self.find_chunk_idx(index);
         self.chunk(chunk)
-            .unwrap_or_else(|| vortex_panic!(OutOfBounds: chunk, 0, self.nchunks()))
+            .vortex_expect(format!("ChunkedArray: is_valid failed to find chunk {index}").as_str())
             .with_dyn(|a| a.is_valid(offset_in_chunk))
     }
 

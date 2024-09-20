@@ -1,4 +1,4 @@
-use vortex_error::{vortex_err, vortex_panic, VortexResult};
+use vortex_error::{VortexExpect, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::ChunkedArray;
@@ -7,20 +7,18 @@ use crate::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
 impl ScalarAtFn for ChunkedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
-        scalar_at(
-            &self
-                .chunk(chunk_index)
-                .ok_or_else(|| vortex_err!(OutOfBounds: chunk_index, 0, self.nchunks()))?,
-            chunk_offset,
-        )
+        scalar_at(&self.chunk(chunk_index)?, chunk_offset)
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
         scalar_at_unchecked(
-            &self
-                .chunk(chunk_index)
-                .unwrap_or_else(|| vortex_panic!(OutOfBounds: chunk_index, 0, self.nchunks())),
+            &self.chunk(chunk_index).vortex_expect(
+                format!(
+                "ChunkedArray: scalar_at_unchecked: failed to find chunk at index {chunk_index}"
+            )
+                .as_str(),
+            ),
             chunk_offset,
         )
     }

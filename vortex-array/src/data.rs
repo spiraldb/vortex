@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_panic, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::encoding::EncodingRef;
@@ -76,23 +76,28 @@ impl ArrayData {
         self.buffer
     }
 
-    pub fn child(&self, index: usize, dtype: &DType, len: usize) -> Option<&Array> {
+    // We want to allow these panics because they are indicative of implementation error.
+    #[allow(clippy::panic_in_result_fn)]
+    pub fn child(&self, index: usize, dtype: &DType, len: usize) -> VortexResult<&Array> {
         match self.children.get(index) {
-            None => None,
+            None => vortex_bail!(
+                "ArrayData::child({}): child {index} not found",
+                self.encoding.id().as_ref()
+            ),
             Some(child) => {
                 assert_eq!(
                     child.dtype(),
                     dtype,
-                    "Child {index} requested with incorrect dtype for encoding {}",
-                    self.encoding().id()
+                    "child {index} requested with incorrect dtype for encoding {}",
+                    self.encoding().id().as_ref(),
                 );
                 assert_eq!(
                     child.len(),
                     len,
-                    "Child {index} requested with incorrect length for encoding {}",
-                    self.encoding.id()
+                    "child {index} requested with incorrect length for encoding {}",
+                    self.encoding.id().as_ref(),
                 );
-                Some(child)
+                Ok(child)
             }
         }
     }

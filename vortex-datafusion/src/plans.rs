@@ -150,13 +150,7 @@ impl Stream for RowIndicesStream {
             return Poll::Ready(None);
         }
 
-        let next_chunk = this.chunked_array.chunk(this.chunk_idx).ok_or_else(|| {
-            vortex_err!(
-                "Chunk not found for index {}, nchunks: {}",
-                this.chunk_idx,
-                this.chunked_array.nchunks()
-            )
-        })?;
+        let next_chunk = this.chunked_array.chunk(this.chunk_idx)?;
         this.chunk_idx += 1;
 
         // Get the unfiltered record batch.
@@ -350,17 +344,7 @@ where
             .map_err(DataFusionError::from)?)));
         }
 
-        let chunk = this
-            .vortex_array
-            .chunk(*this.chunk_idx)
-            .ok_or_else(|| {
-                vortex_err!(
-                    "Chunk not found for index {}, nchunks: {}",
-                    this.chunk_idx,
-                    this.vortex_array.nchunks()
-                )
-            })?
-            .into_struct()?;
+        let chunk = this.vortex_array.chunk(*this.chunk_idx)?.into_struct()?;
 
         *this.chunk_idx += 1;
 

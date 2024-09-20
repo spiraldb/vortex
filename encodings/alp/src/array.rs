@@ -13,7 +13,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
@@ -95,13 +95,14 @@ impl ALPArray {
 
     pub fn patches(&self) -> Option<Array> {
         self.metadata().patches_dtype.as_ref().map(|dt| {
-            self.as_ref().child(1, dt, self.len()).unwrap_or_else(|| {
-                vortex_panic!(
-                    "Missing patches with present metadata flag; patches dtype: {}, patches_len: {}",
+            self.as_ref().child(1, dt, self.len()).vortex_expect(
+                format!(
+                    "ALPArray: patches child missing: dtype: {}, len: {}",
                     dt,
                     self.len()
                 )
-            })
+                .as_str(),
+            )
         })
     }
 
