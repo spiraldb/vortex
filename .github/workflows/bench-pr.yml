@@ -52,7 +52,7 @@ jobs:
         run: |
           cargo install cargo-criterion
 
-          cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
+          cargo criterion --bench ${{ matrix.version.id }} --message-format=json 2>&1 | tee out.json
 
           cat out.json
 
@@ -67,14 +67,14 @@ jobs:
                  | select(.value != null)
               ' \
               out.json \
-              | jq --slurp --compact-output '.' >${{ matrix.benchmark.id }}.json
+              | jq --slurp --compact-output '.' >${{ matrix.version.id }}.json
 
-          cat ${{ matrix.benchmark.id }}.json
+          cat ${{ matrix.version.id }}.json
       - name: Store benchmark result
         if: '!cancelled()'
         uses: benchmark-action/github-action-benchmark@v1
         with:
-          name: ${{ matrix.benchmark.name }}
+          name: ${{ matrix.version.name }}
           tool: 'customSmallerIsBetter'
           gh-pages-branch: gh-pages-bench
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -13,7 +13,7 @@ jobs:
   bench:
     strategy:
       matrix:
-        version:
+        benchmark:
           - id: tpch_benchmark
             # this was the original name which we must preserve until we change the name of all the
             # records in the gh-pages-bench branch "Vortex benchmarks"
