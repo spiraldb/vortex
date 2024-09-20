@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726829129915,
+  "lastUpdate": 1726829218734,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -137851,6 +137851,90 @@ window.BENCHMARK_DATA = {
             "name": "vortex-nopushdown-uncompressed/exec",
             "value": 2015495,
             "range": "± 10644",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "372ea907316d7d41f6129ebb6f2df3b42e067d29",
+          "message": "Don't validate offset buffers when converting them to arrow (#887)\n\nThis shows up as most expensive part of converting into arrow since\r\nOffsetBuffer::new validates that values are monotonic",
+          "timestamp": "2024-09-20T11:40:58+01:00",
+          "tree_id": "1c424ffccf053ae45af8432394dbc6fdc7b225c6",
+          "url": "https://github.com/spiraldb/vortex/commit/372ea907316d7d41f6129ebb6f2df3b42e067d29"
+        },
+        "date": 1726829216779,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 806553,
+            "range": "± 7315",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1768291,
+            "range": "± 11943",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 512688,
+            "range": "± 4558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3069430,
+            "range": "± 6500",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 513390,
+            "range": "± 5029",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 2943820,
+            "range": "± 20444",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 715875,
+            "range": "± 2625",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 8374883,
+            "range": "± 31640",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 714335,
+            "range": "± 11439",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1667329,
+            "range": "± 5037",
             "unit": "ns/iter"
           }
         ]
