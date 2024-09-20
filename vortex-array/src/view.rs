@@ -9,6 +9,7 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
+use crate::arc_slice::SharedVec;
 use crate::encoding::EncodingRef;
 use crate::opaque::OpaqueEncoding;
 use crate::stats::{Stat, Statistics, StatsSet};
@@ -22,8 +23,7 @@ pub struct ArrayView {
     len: usize,
     flatbuffer: Buffer,
     flatbuffer_loc: usize,
-    // TODO(ngates): create an RC'd vector that can be lazily sliced.
-    buffers: Vec<Buffer>,
+    buffers: SharedVec<Buffer>,
     ctx: Arc<Context>,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
@@ -67,13 +67,14 @@ impl ArrayView {
                 Self::cumulative_nbuffers(array)
             )
         }
+
         let view = Self {
             encoding,
             dtype,
             len,
             flatbuffer,
             flatbuffer_loc,
-            buffers,
+            buffers: SharedVec::from(buffers),
             ctx,
         };
 
@@ -149,7 +150,9 @@ impl ArrayView {
             len,
             flatbuffer: self.flatbuffer.clone(),
             flatbuffer_loc,
-            buffers: self.buffers[buffer_offset..][0..buffer_count].to_vec(),
+            buffers: self
+                .buffers
+                .slice(buffer_offset, buffer_offset + buffer_count),
             ctx: self.ctx.clone(),
         })
     }
