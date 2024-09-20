@@ -13,8 +13,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, packed_struct_serialize_metadata, Array, ArrayTrait, Canonical, IntoArray,
-    IntoCanonical, TypedArray,
+    impl_encoding, packed_struct_serialize_metadata, Array, ArrayDef, ArrayTrait, Canonical,
+    IntoArray, IntoCanonical, TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;

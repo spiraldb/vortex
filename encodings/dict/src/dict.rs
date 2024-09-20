@@ -10,8 +10,8 @@ use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    flexbuffer_serialize_metadata, impl_encoding, Array, ArrayDType, ArrayTrait, Canonical,
-    IntoArrayVariant, IntoCanonical,
+    flexbuffer_serialize_metadata, impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait,
+    Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
 };
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
