@@ -182,4 +182,46 @@ impl PyArray {
             .map_err(PyVortexError::map_err)
             .and_then(|arr| Bound::new(py, PyArray { inner: arr }))
     }
+
+    /// Internal technical details about the encoding of this Array.
+    ///
+    /// Warnings
+    /// --------
+    /// The format of the returned string may change without notice.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`.str`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Uncompressed arrays have straightforward encodings:
+    ///
+    ///     >>> arr = vortex.encoding.array([1, 2, None, 3])
+    ///     >>> print(arr.tree_display())
+    ///     root: vortex.primitive(0x03)(i64?, len=4) nbytes=33 B (100.00%)
+    ///       metadata: PrimitiveMetadata { validity: Array }
+    ///       buffer: 32 B
+    ///       validity: vortex.bool(0x02)(bool, len=4) nbytes=1 B (3.03%)
+    ///         metadata: BoolMetadata { validity: NonNullable, length: 4, bit_offset: 0 }
+    ///         buffer: 1 B
+    ///     <BLANKLINE>
+    ///
+    /// Compressed arrays use more complex encodings:
+    ///
+    ///     >>> print(vortex.encoding.compress(arr).tree_display())
+    ///     root: fastlanes.for(0x17)(i64?, len=4) nbytes=1 B (100.00%)
+    ///       metadata: FoRMetadata { reference: Scalar { dtype: Primitive(I64, Nullable), value: Primitive(I64(1)) }, shift: 0 }
+    ///       encoded: fastlanes.bitpacked(0x15)(u64?, len=4) nbytes=1 B (100.00%)
+    ///         metadata: BitPackedMetadata { validity: Array, bit_width: 2, offset: 0, length: 4, has_patches: false }
+    ///         buffer: 256 B
+    ///         validity: vortex.bool(0x02)(bool, len=4) nbytes=1 B (100.00%)
+    ///           metadata: BoolMetadata { validity: NonNullable, length: 4, bit_offset: 0 }
+    ///           buffer: 1 B
+    ///     <BLANKLINE>
+    ///
+    fn tree_display(&self) -> String {
+        self.inner.tree_display().to_string()
+    }
 }
