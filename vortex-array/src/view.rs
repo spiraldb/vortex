@@ -116,7 +116,14 @@ impl ArrayView {
         let child = self.array_child(idx)?;
         let flatbuffer_loc = child._tab.loc();
 
-        let encoding = self.ctx.lookup_encoding(child.encoding())?;
+        let encoding = self
+            .ctx
+            .lookup_encoding(child.encoding())
+            .vortex_expect(&format!(
+                "ArrayView({}) child at index {idx} has unknown encoding {}",
+                self.encoding.id().as_ref(),
+                child.encoding()
+            ));
 
         // Figure out how many buffers to skip...
         // We store them depth-first.
