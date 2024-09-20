@@ -40,12 +40,12 @@ impl ArrayData {
             stats_map: Arc::new(RwLock::new(statistics)),
         };
 
+        let array = Array::from(data);
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
-        let array = data.to_array();
-        // FIXME(ngates): run some validation function
+        // FIXME(robert): Encoding::with_dyn no longer eagerly validates metadata, come up with a way to validate metadata
         encoding.with_dyn(&array, &mut |_| Ok(()))?;
 
-        Ok(data)
+        Ok(array.into())
     }
 
     pub fn encoding(&self) -> EncodingRef {
@@ -118,8 +118,8 @@ impl ToArray for ArrayData {
 
 impl From<Array> for ArrayData {
     fn from(value: Array) -> ArrayData {
-        match &value {
-            Array::Data(d) => d.clone(),
+        match value {
+            Array::Data(d) => d,
             Array::View(_) => value.with_dyn(|v| v.to_array_data()),
         }
     }
