@@ -10,6 +10,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect as _, Vort
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::encoding::EncodingRef;
+use crate::opaque::OpaqueEncoding;
 use crate::stats::{Stat, Statistics, StatsSet};
 use crate::visitor::ArrayVisitor;
 use crate::{flatbuffers as fb, Array, Context, IntoArray, ToArray};
@@ -118,13 +119,10 @@ impl ArrayView {
             .ok_or_else(|| vortex_err!("ArrayView: array_child({idx}) not found"))?;
         let flatbuffer_loc = child._tab.loc();
 
-        let encoding = self.ctx.lookup_encoding(child.encoding()).ok_or_else(|| {
-            vortex_err!(
-                "ArrayView({}) child at index {idx} has unknown encoding {}",
-                self.encoding.id().as_ref(),
-                child.encoding()
-            )
-        })?;
+        let encoding = self
+            .ctx
+            .lookup_encoding(child.encoding())
+            .unwrap_or(&OpaqueEncoding as _);
 
         // Figure out how many buffers to skip...
         // We store them depth-first.
