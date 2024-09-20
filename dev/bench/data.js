@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726829218734,
+  "lastUpdate": 1726829391892,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -138561,6 +138561,84 @@ window.BENCHMARK_DATA = {
             "name": "TPCH l_comment Column/compress-fsst-canonicalized",
             "value": 725561677,
             "range": "± 6710385",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "372ea907316d7d41f6129ebb6f2df3b42e067d29",
+          "message": "Don't validate offset buffers when converting them to arrow (#887)\n\nThis shows up as most expensive part of converting into arrow since\r\nOffsetBuffer::new validates that values are monotonic",
+          "timestamp": "2024-09-20T11:40:58+01:00",
+          "tree_id": "1c424ffccf053ae45af8432394dbc6fdc7b225c6",
+          "url": "https://github.com/spiraldb/vortex/commit/372ea907316d7d41f6129ebb6f2df3b42e067d29"
+        },
+        "date": 1726829390349,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Yellow Taxi Trip Data/compress",
+            "value": 143087558,
+            "range": "± 889276",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/AirlineSentiment",
+            "value": 515969,
+            "range": "± 1646",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Arade",
+            "value": 3815259468,
+            "range": "± 10894413",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Euro2016",
+            "value": 2893651378,
+            "range": "± 30608936",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Food",
+            "value": 1377609719,
+            "range": "± 6651848",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/HashTags",
+            "value": 4025738633,
+            "range": "± 25129453",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-default",
+            "value": 244982450,
+            "range": "± 725319",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-chunked",
+            "value": 1134747907,
+            "range": "± 6952481",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-canonicalized",
+            "value": 719766623,
+            "range": "± 4914946",
             "unit": "ns/iter"
           }
         ]
