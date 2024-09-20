@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726850588216,
+  "lastUpdate": 1726850988595,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -144,6 +144,42 @@ window.BENCHMARK_DATA = {
             "value": 1040.8157061231611,
             "unit": "ns",
             "range": 1.011598547141034
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4620f2a28b4e31dde326d265c854d0f3cce45a37",
+          "message": "make CI bench tests faster (take 2) (#897)\n\nfor now, we just exclude the compress_benchmark\r\n\r\non my M2 macbook air, `time` for the command with exclusion was `cargo\r\nbench --bench '*[!noci]' -- --test 42.99s user 13.41s system 92% cpu\r\n1:00.74 total`",
+          "timestamp": "2024-09-20T17:47:09+01:00",
+          "tree_id": "e0bb60037950794382188cb82d25fff3d18fb506",
+          "url": "https://github.com/spiraldb/vortex/commit/4620f2a28b4e31dde326d265c854d0f3cce45a37"
+        },
+        "date": 1726850986360,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 613.9415957082181,
+            "unit": "ns",
+            "range": 3.2605384509649866
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1048.7469043346716,
+            "unit": "ns",
+            "range": 2.465502449428982
           }
         ]
       }
