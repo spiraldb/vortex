@@ -895,9 +895,9 @@ dependencies = [
 
 [[package]]
 name = "croaring"
-version = "2.0.3"
+version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d13422e90a628aec4d7a4ba90dcedb83b61df78dc3acbf5c8dc34950f78321ec"
+checksum = "f916e6377da947177a7db813c0a13589fe0ba39d0284d37444b1ce225129c905"
 dependencies = [
  "croaring-sys",
 ]
