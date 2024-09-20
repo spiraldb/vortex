@@ -4,6 +4,7 @@ pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -19,7 +20,7 @@ use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 mod compress;
 mod compute;
 
-impl_encoding!("vortex.roaring_int", 18u16, RoaringInt);
+impl_encoding!("vortex.roaring_int", ids::ROARING_INT, RoaringInt);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringIntMetadata {

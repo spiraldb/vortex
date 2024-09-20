@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -13,7 +14,7 @@ use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 mod compress;
 mod compute;
 
-impl_encoding!("fastlanes.delta", 16u16, Delta);
+impl_encoding!("fastlanes.delta", ids::FL_DELTA, Delta);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaMetadata {
