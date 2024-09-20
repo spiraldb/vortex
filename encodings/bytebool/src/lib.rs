@@ -4,6 +4,7 @@ use std::mem::ManuallyDrop;
 use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex::array::BoolArray;
+use vortex::encoding::ids;
 use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
@@ -16,7 +17,7 @@ use vortex_error::{VortexExpect as _, VortexResult};
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.bytebool", 12u16, ByteBool);
+impl_encoding!("vortex.bytebool", ids::BYTE_BOOL, ByteBool);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ByteBoolMetadata {

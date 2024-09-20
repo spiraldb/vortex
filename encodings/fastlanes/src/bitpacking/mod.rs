@@ -2,6 +2,7 @@ use ::serde::{Deserialize, Serialize};
 pub use compress::*;
 use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, SparseArray};
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -18,7 +19,7 @@ use vortex_error::{
 mod compress;
 mod compute;
 
-impl_encoding!("fastlanes.bitpacked", 14u16, BitPacked);
+impl_encoding!("fastlanes.bitpacked", ids::FL_BITPACKED, BitPacked);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitPackedMetadata {

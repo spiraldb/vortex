@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
+use crate::encoding::ids;
 use crate::stats::{Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -14,7 +15,7 @@ mod compute;
 mod stats;
 mod variants;
 
-impl_encoding!("vortex.constant", 10u16, Constant);
+impl_encoding!("vortex.constant", ids::CONSTANT, Constant);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstantMetadata {

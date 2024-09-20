@@ -6,6 +6,7 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{VortexExpect as _, VortexResult};
 
+use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
@@ -16,7 +17,7 @@ mod accessors;
 mod compute;
 mod stats;
 
-impl_encoding!("vortex.bool", 2u16, Bool);
+impl_encoding!("vortex.bool", ids::BOOL, Bool);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BoolMetadata {

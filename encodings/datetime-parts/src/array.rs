@@ -2,6 +2,7 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 use vortex::array::StructArray;
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, ExtensionArrayTrait};
@@ -14,7 +15,7 @@ use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compute::decode_to_temporal;
 
-impl_encoding!("vortex.datetimeparts", 22u16, DateTimeParts);
+impl_encoding!("vortex.datetimeparts", ids::DATE_TIME_PARTS, DateTimeParts);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DateTimePartsMetadata {
