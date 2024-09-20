@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726839721825,
+  "lastUpdate": 1726839848236,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -138923,6 +138923,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 184904030,
             "range": "± 2233748",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b44daabbd8656ecb7ee7b99d6d821092a42acdd3",
+          "message": "feat: publish to real PyPI (#889)",
+          "timestamp": "2024-09-20T14:40:04+01:00",
+          "tree_id": "dd3a2ca562acb516ef0ec50006124daa596ef627",
+          "url": "https://github.com/spiraldb/vortex/commit/b44daabbd8656ecb7ee7b99d6d821092a42acdd3"
+        },
+        "date": 1726839846700,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1239118,
+            "range": "± 26664",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1412247,
+            "range": "± 22641",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 178126032,
+            "range": "± 1930726",
             "unit": "ns/iter"
           }
         ]
