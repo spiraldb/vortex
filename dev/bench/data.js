@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726849656779,
+  "lastUpdate": 1726850259157,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -1492,6 +1492,426 @@ window.BENCHMARK_DATA = {
           {
             "name": "TPC-H l_comment Compression Size/canonical-with-fsst",
             "value": 81085867,
+            "unit": "bytes",
+            "range": 0
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "196a776dd8c66416378506aa478eb5d750b6c2a5",
+          "message": "Enable debug logging for pypi publish (#896)\n\nIndentation wasn't quite the same in this file compared to others",
+          "timestamp": "2024-09-20T17:14:54+01:00",
+          "tree_id": "296a3abfee168f1b8bca3de1d54e09b9d69bbd90",
+          "url": "https://github.com/spiraldb/vortex/commit/196a776dd8c66416378506aa478eb5d750b6c2a5"
+        },
+        "date": 1726850256721,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Yellow Taxi Trip Data Compression Time/taxi compression",
+            "value": 2466898558.9,
+            "unit": "ns",
+            "range": 4739131.600000143
+          },
+          {
+            "name": "Yellow Taxi Trip Data Compression Time/taxi compression throughput",
+            "value": 470808924,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Yellow Taxi Trip Data Vortex-to-ParquetZstd Ratio/taxi",
+            "value": 0.9534103145884016,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Yellow Taxi Trip Data Vortex-to-ParquetUncompressed Ratio/taxi",
+            "value": 0.6120132215777785,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Yellow Taxi Trip Data Compression Ratio/taxi",
+            "value": 0.10764446342567627,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Yellow Taxi Trip Data Compression Size/taxi",
+            "value": 50679974,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Time/AirlineSentiment compression",
+            "value": 416912.59768464154,
+            "unit": "ns",
+            "range": 1684.7801684469741
+          },
+          {
+            "name": "Public BI Compression Time/AirlineSentiment compression throughput",
+            "value": 2020,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetZstd Ratio/AirlineSentiment",
+            "value": 6.400830737279335,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetUncompressed Ratio/AirlineSentiment",
+            "value": 4.353107344632768,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Ratio/AirlineSentiment",
+            "value": 0.6207920792079208,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Size/AirlineSentiment",
+            "value": 1254,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Time/Arade compression",
+            "value": 3156308553.5,
+            "unit": "ns",
+            "range": 5117949.800000191
+          },
+          {
+            "name": "Public BI Compression Time/Arade compression throughput",
+            "value": 787023760,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetZstd Ratio/Arade",
+            "value": 0.4912240577447887,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetUncompressed Ratio/Arade",
+            "value": 0.43845720318949283,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Ratio/Arade",
+            "value": 0.18576842457716905,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Size/Arade",
+            "value": 146204164,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Time/Bimbo compression",
+            "value": 22208440193.9,
+            "unit": "ns",
+            "range": 24615523.678749084
+          },
+          {
+            "name": "Public BI Compression Time/Bimbo compression throughput",
+            "value": 7121333608,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetZstd Ratio/Bimbo",
+            "value": 1.2943931938169349,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetUncompressed Ratio/Bimbo",
+            "value": 0.8776416222492224,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Ratio/Bimbo",
+            "value": 0.06421885635104205,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Size/Bimbo",
+            "value": 457323900,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Time/CMSprovider compression",
+            "value": 13373220397,
+            "unit": "ns",
+            "range": 13372317.05000019
+          },
+          {
+            "name": "Public BI Compression Time/CMSprovider compression throughput",
+            "value": 5149123964,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetZstd Ratio/CMSprovider",
+            "value": 1.20153958775963,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetUncompressed Ratio/CMSprovider",
+            "value": 0.7758255725522738,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Ratio/CMSprovider",
+            "value": 0.1754443795325181,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Size/CMSprovider",
+            "value": 903384859,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Time/Euro2016 compression",
+            "value": 2220963073.2,
+            "unit": "ns",
+            "range": 20282336.109999895
+          },
+          {
+            "name": "Public BI Compression Time/Euro2016 compression throughput",
+            "value": 393253221,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetZstd Ratio/Euro2016",
+            "value": 1.468924235974869,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetUncompressed Ratio/Euro2016",
+            "value": 0.6232326927155332,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Ratio/Euro2016",
+            "value": 0.4324705709149169,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Size/Euro2016",
+            "value": 170070445,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Time/Food compression",
+            "value": 1096413491.9,
+            "unit": "ns",
+            "range": 3903299.4537500143
+          },
+          {
+            "name": "Public BI Compression Time/Food compression throughput",
+            "value": 332718229,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetZstd Ratio/Food",
+            "value": 1.2298331697417821,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetUncompressed Ratio/Food",
+            "value": 0.6953776396841976,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Ratio/Food",
+            "value": 0.1300203392222312,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Size/Food",
+            "value": 43260137,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Time/HashTags compression",
+            "value": 2866593455.6,
+            "unit": "ns",
+            "range": 12848890.858750105
+          },
+          {
+            "name": "Public BI Compression Time/HashTags compression throughput",
+            "value": 804495592,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetZstd Ratio/HashTags",
+            "value": 1.6481751206927995,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Vortex-to-ParquetUncompressed Ratio/HashTags",
+            "value": 0.4685794410056787,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Ratio/HashTags",
+            "value": 0.2610227788544552,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "Public BI Compression Size/HashTags",
+            "value": 209991675,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Time/chunked-without-fsst compression",
+            "value": 193648387.69212303,
+            "unit": "ns",
+            "range": 274198.4893452227
+          },
+          {
+            "name": "TPC-H l_comment Compression Time/chunked-without-fsst compression throughput",
+            "value": 183010921,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Vortex-to-ParquetZstd Ratio/chunked-without-fsst",
+            "value": 3.215517235019849,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Vortex-to-ParquetUncompressed Ratio/chunked-without-fsst",
+            "value": 0.9983756813355865,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Ratio/chunked-without-fsst",
+            "value": 0.999965750677797,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Size/chunked-without-fsst",
+            "value": 183004653,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Time/chunked-with-fsst compression",
+            "value": 1126224350.1,
+            "unit": "ns",
+            "range": 958980.9143749475
+          },
+          {
+            "name": "TPC-H l_comment Compression Time/chunked-with-fsst compression throughput",
+            "value": 183010921,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Vortex-to-ParquetZstd Ratio/chunked-with-fsst",
+            "value": 1.5033193752770098,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Vortex-to-ParquetUncompressed Ratio/chunked-with-fsst",
+            "value": 0.466760833750564,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Ratio/chunked-with-fsst",
+            "value": 0.443343127047593,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Size/chunked-with-fsst",
+            "value": 81136634,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Time/canonical-with-fsst compression",
+            "value": 1129664782.85,
+            "unit": "ns",
+            "range": 2087202.189999938
+          },
+          {
+            "name": "TPC-H l_comment Compression Time/canonical-with-fsst compression throughput",
+            "value": 183010937,
+            "unit": "bytes",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Vortex-to-ParquetZstd Ratio/canonical-with-fsst",
+            "value": 1.502850422855317,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Vortex-to-ParquetUncompressed Ratio/canonical-with-fsst",
+            "value": 0.4666131976678145,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Ratio/canonical-with-fsst",
+            "value": 0.4432228605004082,
+            "unit": "ratio",
+            "range": 0
+          },
+          {
+            "name": "TPC-H l_comment Compression Size/canonical-with-fsst",
+            "value": 81114631,
             "unit": "bytes",
             "range": 0
           }
