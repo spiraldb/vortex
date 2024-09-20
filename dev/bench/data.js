@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726785382797,
+  "lastUpdate": 1726829043584,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -136761,6 +136761,42 @@ window.BENCHMARK_DATA = {
             "name": "bytes_at/array_data #2",
             "value": 1038,
             "range": "± 2",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "372ea907316d7d41f6129ebb6f2df3b42e067d29",
+          "message": "Don't validate offset buffers when converting them to arrow (#887)\n\nThis shows up as most expensive part of converting into arrow since\r\nOffsetBuffer::new validates that values are monotonic",
+          "timestamp": "2024-09-20T11:40:58+01:00",
+          "tree_id": "1c424ffccf053ae45af8432394dbc6fdc7b225c6",
+          "url": "https://github.com/spiraldb/vortex/commit/372ea907316d7d41f6129ebb6f2df3b42e067d29"
+        },
+        "date": 1726829041483,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 625,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1075,
+            "range": "± 12",
             "unit": "ns/iter"
           }
         ]
