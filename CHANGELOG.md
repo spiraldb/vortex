@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-serde` - [0.10.1](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.10.0...vortex-serde-v0.10.1) - 2024-09-20
+
+### Added
+- track compressed size & compare to parquet(zstd)? & canonical ([#882](https://github.com/spiraldb/vortex/pull/882))
+
 ## `vortex-runend-bool` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.9.0...vortex-runend-bool-v0.10.0) - 2024-09-20
 
 ### Fixed
