@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726848660064,
+  "lastUpdate": 1726849144439,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -328,6 +328,90 @@ window.BENCHMARK_DATA = {
             "value": 1664407.7836145617,
             "unit": "ns",
             "range": 4659.938125462038
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "196a776dd8c66416378506aa478eb5d750b6c2a5",
+          "message": "Enable debug logging for pypi publish (#896)\n\nIndentation wasn't quite the same in this file compared to others",
+          "timestamp": "2024-09-20T17:14:54+01:00",
+          "tree_id": "296a3abfee168f1b8bca3de1d54e09b9d69bbd90",
+          "url": "https://github.com/spiraldb/vortex/commit/196a776dd8c66416378506aa478eb5d750b6c2a5"
+        },
+        "date": 1726849142881,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 814044.9226170917,
+            "unit": "ns",
+            "range": 2262.7579822406988
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1750546.3699743366,
+            "unit": "ns",
+            "range": 1546.535536695621
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 510855.7729778502,
+            "unit": "ns",
+            "range": 721.4592677111796
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3048675.5617647064,
+            "unit": "ns",
+            "range": 2848.3717426464427
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 514433.26726257143,
+            "unit": "ns",
+            "range": 3032.4847315811203
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 2925897.955294118,
+            "unit": "ns",
+            "range": 1636.4291102949064
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 712024.3100031555,
+            "unit": "ns",
+            "range": 1362.5045141414157
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 12656966.8425,
+            "unit": "ns",
+            "range": 85915.28359375056
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 712944.4205963671,
+            "unit": "ns",
+            "range": 888.6260706513422
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1663925.0741969482,
+            "unit": "ns",
+            "range": 2198.9915396295255
           }
         ]
       }
