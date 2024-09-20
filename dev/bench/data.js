@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726856811388,
+  "lastUpdate": 1726857230492,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -216,6 +216,42 @@ window.BENCHMARK_DATA = {
             "value": 1132.282271118987,
             "unit": "ns",
             "range": 0.6577986912932374
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "distinct": true,
+          "id": "2d8e1af38dea4cd9a78e2e596b0f5ff34ed682d3",
+          "message": "rename 'Vortex benchmarks' to 'Vortex TPC-H'",
+          "timestamp": "2024-09-20T14:30:15-04:00",
+          "tree_id": "733db01d5708ffcf3fd6f88f93b2151c7c1239c8",
+          "url": "https://github.com/spiraldb/vortex/commit/2d8e1af38dea4cd9a78e2e596b0f5ff34ed682d3"
+        },
+        "date": 1726857228876,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 613.7229405153387,
+            "unit": "ns",
+            "range": 1.5031758295492068
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1017.04988065106,
+            "unit": "ns",
+            "range": 0.7176436500163277
           }
         ]
       }
