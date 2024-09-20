@@ -3502,7 +3502,7 @@ window.BENCHMARK_DATA = {
         ]
       }
     ],
-    "Vortex benchmarks": [
+    "Vortex TPC-H": [
       {
         "commit": {
           "author": {
