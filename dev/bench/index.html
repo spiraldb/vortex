@@ -176,7 +176,9 @@
 
                     for (const bench of benches) {
                         const {name, range, unit, value} = bench;
-                        const is_nanos = unit === "ns/iter";
+                        const is_nanos = unit === "ns/iter" || unit === "ns";
+                        const is_bytes = unit === "bytes";
+
                         // Normalize name
                         let [q, seriesName] = name.split("/");
                         let prettyQ = q.replace("_", " ").toUpperCase();
@@ -187,7 +189,7 @@
                             map.set(prettyQ, {
                                 sort_position,
                                 commits,
-                                unit: is_nanos ? "ms/iter" : unit,
+                                unit: is_nanos ? "ms/iter" : (is_bytes ? "MB" : unit),
                                 series: new Map(),
                             });
                             arr = map.get(prettyQ);
@@ -198,7 +200,8 @@
                             arr.series.set(seriesName, new Array(entries.length).fill(null));
                             series = arr.series.get(seriesName);
                         }
-                        series[entryIdx] = {range, value: is_nanos ? value / 1_000_000 : value};
+
+                        series[entryIdx] = {range, value: (is_nanos || is_bytes) ? value / 1_000_000 : value};
                     }
                 });
 
@@ -236,11 +239,11 @@
             }));
         }
 
-        function renderAllChars(dataSets) {
+        function renderAllCharts(dataSets) {
 
             var charts = [];
 
-            function renderGraph(parent, name, dataset) {
+            function renderChart(parent, name, dataset) {
                 const canvas = document.createElement('canvas');
                 canvas.className = 'benchmark-chart';
                 parent.appendChild(canvas);
@@ -364,7 +367,7 @@
                 setElem.appendChild(graphsElem);
 
                 for (const [benchName, benches] of benchSet.entries()) {
-                    charts.push(renderGraph(graphsElem, benchName, benches))
+                    charts.push(renderChart(graphsElem, benchName, benches))
                 }
             }
 
@@ -375,7 +378,7 @@
             }
         }
 
-        renderAllChars(init()); // Start
+        renderAllCharts(init()); // Start
     })();
 </script>
 </body>
