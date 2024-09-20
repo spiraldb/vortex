@@ -14,16 +14,16 @@ jobs:
     strategy:
       matrix:
         benchmark:
+          - id: datafusion
+            name: DataFusion
+          - id: random_access
+            name: Random Access
           - id: tpch
-            name: Vortex TPC-H
+            name: TPC-H
           - id: compress_noci
             name: Vortex Compression
           - id: bytes_at
             name: Vortex bytes_at
-          - id: datafusion
-            name: Vortex DataFusion
-          - id: random_access
-            name: Vortex random_access
     runs-on: ubuntu-latest-large
     steps:
       - uses: actions/checkout@v4
