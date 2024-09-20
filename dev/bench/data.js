@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726839848236,
+  "lastUpdate": 1726839927268,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -139807,6 +139807,90 @@ window.BENCHMARK_DATA = {
             "name": "vortex-nopushdown-uncompressed/exec",
             "value": 1673940,
             "range": "± 16463",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b44daabbd8656ecb7ee7b99d6d821092a42acdd3",
+          "message": "feat: publish to real PyPI (#889)",
+          "timestamp": "2024-09-20T14:40:04+01:00",
+          "tree_id": "dd3a2ca562acb516ef0ec50006124daa596ef627",
+          "url": "https://github.com/spiraldb/vortex/commit/b44daabbd8656ecb7ee7b99d6d821092a42acdd3"
+        },
+        "date": 1726839925611,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 815312,
+            "range": "± 10780",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1778018,
+            "range": "± 4262",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 517265,
+            "range": "± 2717",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3085494,
+            "range": "± 12631",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 517178,
+            "range": "± 2742",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 2948134,
+            "range": "± 16200",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 718119,
+            "range": "± 4146",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 11775784,
+            "range": "± 1172798",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 718243,
+            "range": "± 2582",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1670882,
+            "range": "± 5728",
             "unit": "ns/iter"
           }
         ]
