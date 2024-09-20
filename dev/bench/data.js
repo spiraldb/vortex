@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726849319776,
+  "lastUpdate": 1726849506858,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -526,6 +526,90 @@ window.BENCHMARK_DATA = {
             "value": 1663925.0741969482,
             "unit": "ns",
             "range": 2198.9915396295255
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "41898282+github-actions[bot]@users.noreply.github.com",
+            "name": "github-actions[bot]",
+            "username": "github-actions[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a7841c951a57c607e5f2b8384aa5b4700d468a18",
+          "message": "chore: release v0.10.1 (#891)\n\n## 🤖 New release\r\n* `vortex-alp`: 0.10.0 -> 0.10.1\r\n* `vortex-array`: 0.10.0 -> 0.10.1\r\n* `vortex-buffer`: 0.10.0 -> 0.10.1\r\n* `vortex-datetime-dtype`: 0.10.0 -> 0.10.1\r\n* `vortex-dtype`: 0.10.0 -> 0.10.1\r\n* `vortex-error`: 0.10.0 -> 0.10.1\r\n* `vortex-flatbuffers`: 0.10.0 -> 0.10.1\r\n* `vortex-proto`: 0.10.0 -> 0.10.1\r\n* `vortex-scalar`: 0.10.0 -> 0.10.1\r\n* `vortex-datafusion`: 0.10.0 -> 0.10.1\r\n* `vortex-expr`: 0.10.0 -> 0.10.1\r\n* `vortex-schema`: 0.10.0 -> 0.10.1\r\n* `vortex-serde`: 0.10.0 -> 0.10.1 (✓ API compatible changes)\r\n* `vortex-fastlanes`: 0.10.0 -> 0.10.1\r\n* `vortex-sampling-compressor`: 0.10.0 -> 0.10.1\r\n* `vortex-datetime-parts`: 0.10.0 -> 0.10.1\r\n* `vortex-dict`: 0.10.0 -> 0.10.1\r\n* `vortex-fsst`: 0.10.0 -> 0.10.1\r\n* `vortex-roaring`: 0.10.0 -> 0.10.1\r\n* `vortex-runend`: 0.10.0 -> 0.10.1\r\n* `vortex-zigzag`: 0.10.0 -> 0.10.1\r\n* `vortex-bytebool`: 0.10.0 -> 0.10.1\r\n* `vortex-runend-bool`: 0.10.0 -> 0.10.1\r\n\r\n<details><summary><i><b>Changelog</b></i></summary><p>\r\n\r\n\r\n</p></details>\r\n\r\n---\r\nThis PR was generated with\r\n[release-plz](https://github.com/MarcoIeni/release-plz/).\r\n\r\nCo-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
+          "timestamp": "2024-09-20T17:18:28+01:00",
+          "tree_id": "5e103f91b5ad5faa973178a4fe17e4cc6c2c7711",
+          "url": "https://github.com/spiraldb/vortex/commit/a7841c951a57c607e5f2b8384aa5b4700d468a18"
+        },
+        "date": 1726849504535,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 816015.2946382834,
+            "unit": "ns",
+            "range": 2032.7048711586394
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1785762.0690926395,
+            "unit": "ns",
+            "range": 8694.17791970435
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 514967.4268663616,
+            "unit": "ns",
+            "range": 2377.085580855637
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3087594.4088235293,
+            "unit": "ns",
+            "range": 4634.307610293385
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 516491.48461471574,
+            "unit": "ns",
+            "range": 655.52898757605
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 2943102.848235294,
+            "unit": "ns",
+            "range": 1269.1058308833744
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 724797.8459408703,
+            "unit": "ns",
+            "range": 1009.6519026415772
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 7996749.181428568,
+            "unit": "ns",
+            "range": 21541.90728571359
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 724321.2597612849,
+            "unit": "ns",
+            "range": 979.5898327527684
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1687196.1690803962,
+            "unit": "ns",
+            "range": 1880.8436023725662
           }
         ]
       }
