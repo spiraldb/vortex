@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726851218428,
+  "lastUpdate": 1726851221699,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -730,6 +730,90 @@ window.BENCHMARK_DATA = {
             "value": 1687196.1690803962,
             "unit": "ns",
             "range": 1880.8436023725662
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4620f2a28b4e31dde326d265c854d0f3cce45a37",
+          "message": "make CI bench tests faster (take 2) (#897)\n\nfor now, we just exclude the compress_benchmark\r\n\r\non my M2 macbook air, `time` for the command with exclusion was `cargo\r\nbench --bench '*[!noci]' -- --test 42.99s user 13.41s system 92% cpu\r\n1:00.74 total`",
+          "timestamp": "2024-09-20T17:47:09+01:00",
+          "tree_id": "e0bb60037950794382188cb82d25fff3d18fb506",
+          "url": "https://github.com/spiraldb/vortex/commit/4620f2a28b4e31dde326d265c854d0f3cce45a37"
+        },
+        "date": 1726851219464,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 810559.7565428369,
+            "unit": "ns",
+            "range": 3916.952558969788
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1749446.5120951035,
+            "unit": "ns",
+            "range": 1232.6074723873753
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 506195.1816772275,
+            "unit": "ns",
+            "range": 3122.0596308883105
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3055445.2794117634,
+            "unit": "ns",
+            "range": 4669.701566176023
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 503546.50021901145,
+            "unit": "ns",
+            "range": 567.3280310051923
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 2921671.2555555557,
+            "unit": "ns",
+            "range": 1292.681458332343
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 705875.6995281866,
+            "unit": "ns",
+            "range": 772.3039777756785
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 7318457.369999997,
+            "unit": "ns",
+            "range": 13297.733178570867
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 704331.8688261342,
+            "unit": "ns",
+            "range": 912.7519162101089
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1660239.3507862624,
+            "unit": "ns",
+            "range": 1435.5612947433256
           }
         ]
       }
