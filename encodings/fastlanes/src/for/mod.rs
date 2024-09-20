@@ -1,15 +1,20 @@
 use std::fmt::Debug;
+use std::sync::Arc;
 
 pub use compress::*;
+use flexbuffers::{FlexbufferSerializer, Reader};
 use serde::{Deserialize, Serialize};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 mod compress;
@@ -21,6 +26,21 @@ impl_encoding!("fastlanes.for", ids::FL_FOR, FoR);
 pub struct FoRMetadata {
     reference: Scalar,
     shift: u8,
+}
+
+impl TrySerializeArrayMetadata for FoRMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let mut ser = FlexbufferSerializer::new();
+        self.serialize(&mut ser)?;
+        Ok(ser.take_buffer().into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for FoRMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+        Ok(FoRMetadata::deserialize(Reader::get_root(bytes)?)?)
+    }
 }
 
 impl FoRArray {

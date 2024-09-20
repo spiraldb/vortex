@@ -6,10 +6,13 @@ use arrow_buffer::{ArrowNativeType, Buffer as ArrowBuffer, MutableBuffer};
 use bytes::Bytes;
 use itertools::Itertools;
 use num_traits::AsPrimitive;
-use serde::{Deserialize, Serialize};
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{
+    vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
+};
 
 use crate::elementwise::{dyn_cast_array_iter, BinaryFn, UnaryFn};
 use crate::encoding::ids;
@@ -20,7 +23,7 @@ use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
-    TypedArray,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata, TypedArray,
 };
 
 mod accessor;
@@ -29,9 +32,26 @@ mod stats;
 
 impl_encoding!("vortex.primitive", ids::PRIMITIVE, Primitive);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct PrimitiveMetadata {
+    #[packed_field(element_size_bytes = "1", ty = "enum")]
     validity: ValidityMetadata,
+}
+
+impl TrySerializeArrayMetadata for PrimitiveMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for PrimitiveMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("primitive metadata must be present"))?;
+        let x = PrimitiveMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl PrimitiveArray {

@@ -2,11 +2,14 @@
 //!
 //! Vortex is a chunked array library that's able to
 
+use std::sync::Arc;
+
 use futures_util::stream;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
@@ -19,7 +22,10 @@ use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoCanonical};
+use crate::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArray, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 
 mod canonical;
 mod compute;
@@ -28,9 +34,37 @@ mod variants;
 
 impl_encoding!("vortex.chunked", ids::CHUNKED, Chunked);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct ChunkedMetadata {
-    num_chunks: usize,
+    num_chunks: u64,
+}
+
+impl ChunkedMetadata {
+    fn new(num_chunks: usize) -> Self {
+        ChunkedMetadata {
+            num_chunks: num_chunks as u64,
+        }
+    }
+
+    fn num_chunks(&self) -> usize {
+        self.num_chunks as usize
+    }
+}
+
+impl TrySerializeArrayMetadata for ChunkedMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for ChunkedMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("chunked metadata must be present"))?;
+        let x = ChunkedMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl ChunkedArray {
@@ -64,7 +98,7 @@ impl ChunkedArray {
         Self::try_from_parts(
             dtype,
             length,
-            ChunkedMetadata { num_chunks },
+            ChunkedMetadata::new(num_chunks),
             children.into(),
             StatsSet::new(),
         )
@@ -81,7 +115,7 @@ impl ChunkedArray {
     }
 
     pub fn nchunks(&self) -> usize {
-        self.metadata().num_chunks
+        self.metadata().num_chunks()
     }
 
     #[inline]

@@ -12,6 +12,7 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
+packed_struct = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-array = { workspace = true }
 vortex-dtype = { workspace = true }

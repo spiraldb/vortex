@@ -26,6 +26,7 @@ flatbuffers = { workspace = true, optional = true }
 flexbuffers = { workspace = true, optional = true }
 jiff = { workspace = true }
 object_store = { workspace = true, optional = true }
+packed_struct = { workspace = true }
 parquet = { workspace = true, optional = true }
 thiserror = { workspace = true }
 worker = { workspace = true, optional = true }

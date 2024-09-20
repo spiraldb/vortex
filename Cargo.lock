@@ -529,6 +529,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b048fb63fd8b5923fc5aa7b340d8e156aec7ec02f0c78fa8a6ddc2613f6f71de"
 
 [[package]]
+name = "bitvec"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
+dependencies = [
+ "funty",
+ "radium",
+ "tap",
+ "wyz",
+]
+
+[[package]]
 name = "blake2"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1604,6 +1616,12 @@ name = "fsst-rs"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d54b2272e3d3813fbb3306c51eeacebcabb2575f86c67bb7f52ecb1c790f39f6"
+
+[[package]]
+name = "funty"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "futures"
@@ -2692,6 +2710,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "packed_struct"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36b29691432cc9eff8b282278473b63df73bea49bc3ec5e67f31a3ae9c3ec190"
+dependencies = [
+ "bitvec",
+ "packed_struct_codegen",
+ "serde",
+]
+
+[[package]]
+name = "packed_struct_codegen"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9cd6706dfe50d53e0f6aa09e12c034c44faacd23e966ae5a209e8bdb8f179f98"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "paris"
 version = "1.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3194,6 +3234,12 @@ checksum = "b5b9d34b8991d19d98081b46eacdd8eb58c6f2b201139f7c5f643cc155a633af"
 dependencies = [
  "proc-macro2",
 ]
+
+[[package]]
+name = "radium"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
 name = "rand"
@@ -3865,6 +3911,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tap"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
+
+[[package]]
 name = "tar"
 version = "0.4.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4282,6 +4334,7 @@ version = "0.10.1"
 dependencies = [
  "arrow",
  "divan",
+ "flexbuffers",
  "itertools 0.13.0",
  "num-traits",
  "serde",
@@ -4316,6 +4369,7 @@ dependencies = [
  "log",
  "num-traits",
  "num_enum 0.7.3",
+ "packed_struct",
  "paste",
  "pin-project",
  "rand",
@@ -4348,6 +4402,7 @@ dependencies = [
  "divan",
  "itertools 0.13.0",
  "num-traits",
+ "packed_struct",
  "serde",
  "vortex-array",
  "vortex-buffer",
@@ -4406,7 +4461,9 @@ dependencies = [
 name = "vortex-datetime-parts"
 version = "0.10.1"
 dependencies = [
+ "flexbuffers",
  "log",
+ "packed_struct",
  "serde",
  "vortex-array",
  "vortex-datetime-dtype",
@@ -4421,6 +4478,7 @@ version = "0.10.1"
 dependencies = [
  "ahash",
  "criterion",
+ "flexbuffers",
  "hashbrown",
  "log",
  "num-traits",
@@ -4461,6 +4519,7 @@ dependencies = [
  "flexbuffers",
  "jiff",
  "object_store",
+ "packed_struct",
  "parquet",
  "thiserror",
  "worker",
@@ -4492,8 +4551,10 @@ dependencies = [
  "arrow-buffer",
  "criterion",
  "fastlanes",
+ "flexbuffers",
  "itertools 0.13.0",
  "num-traits",
+ "packed_struct",
  "rand",
  "serde",
  "simplelog",
@@ -4516,6 +4577,7 @@ name = "vortex-fsst"
 version = "0.10.1"
 dependencies = [
  "arrow-array",
+ "flexbuffers",
  "fsst-rs",
  "serde",
  "vortex-array",
@@ -4554,8 +4616,10 @@ version = "0.10.1"
 dependencies = [
  "arrow-buffer",
  "croaring",
+ "flexbuffers",
  "log",
  "num-traits",
+ "packed_struct",
  "serde",
  "vortex-array",
  "vortex-buffer",
@@ -4568,6 +4632,7 @@ dependencies = [
 name = "vortex-runend"
 version = "0.10.1"
 dependencies = [
+ "flexbuffers",
  "itertools 0.13.0",
  "num-traits",
  "serde",
@@ -4583,6 +4648,7 @@ version = "0.10.1"
 dependencies = [
  "arrow-buffer",
  "criterion",
+ "flexbuffers",
  "itertools 0.13.0",
  "num-traits",
  "rand",
@@ -4689,6 +4755,7 @@ dependencies = [
 name = "vortex-zigzag"
 version = "0.10.1"
 dependencies = [
+ "packed_struct",
  "serde",
  "vortex-array",
  "vortex-dtype",
@@ -5180,6 +5247,15 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "wyz"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
+dependencies = [
+ "tap",
 ]
 
 [[package]]

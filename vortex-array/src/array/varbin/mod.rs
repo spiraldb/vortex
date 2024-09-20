@@ -1,5 +1,7 @@
 use std::fmt::Debug;
+use std::sync::Arc;
 
+use flexbuffers::{FlexbufferSerializer, Reader};
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 pub use stats::compute_stats;
@@ -18,7 +20,10 @@ use crate::compute::unary::scalar_at;
 use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArrayVariant};
+use crate::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArrayVariant,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 
 mod accessor;
 mod array;
@@ -35,6 +40,21 @@ pub struct VarBinMetadata {
     validity: ValidityMetadata,
     offsets_dtype: DType,
     bytes_len: usize,
+}
+
+impl TrySerializeArrayMetadata for VarBinMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let mut ser = FlexbufferSerializer::new();
+        self.serialize(&mut ser)?;
+        Ok(ser.take_buffer().into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for VarBinMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+        Ok(VarBinMetadata::deserialize(Reader::get_root(bytes)?)?)
+    }
 }
 
 impl VarBinArray {

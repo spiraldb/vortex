@@ -1,6 +1,9 @@
-use ::serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
 pub use compress::*;
 use fastlanes::BitPacking;
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
@@ -8,7 +11,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadat
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray,
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata, TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, NativePType, Nullability, PType};
@@ -21,14 +25,60 @@ mod compute;
 
 impl_encoding!("fastlanes.bitpacked", ids::FL_BITPACKED, BitPacked);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb", size_bytes = "26")]
 pub struct BitPackedMetadata {
-    // TODO(ngates): serialize into compact form
+    bit_width: u64,
+    offset: u64, // Know to be <1024
+    length: u64, // Store end padding instead <1024
+    #[packed_field(element_size_bytes = "1", ty = "enum")]
     validity: ValidityMetadata,
-    bit_width: usize,
-    offset: usize, // Know to be <1024
-    length: usize, // Store end padding instead <1024
     has_patches: bool,
+}
+
+impl BitPackedMetadata {
+    fn new(
+        bit_width: usize,
+        offset: usize,
+        length: usize,
+        validity: ValidityMetadata,
+        has_patches: bool,
+    ) -> Self {
+        BitPackedMetadata {
+            bit_width: bit_width as u64,
+            offset: offset as u64,
+            length: length as u64,
+            validity,
+            has_patches,
+        }
+    }
+
+    fn bit_width(&self) -> usize {
+        self.bit_width as usize
+    }
+
+    fn offset(&self) -> usize {
+        self.offset as usize
+    }
+
+    // fn length(&self) -> usize {
+    //     self.length as usize
+    // }
+}
+
+impl TrySerializeArrayMetadata for BitPackedMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for BitPackedMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("fastlanes bit packed metadata must be present"))?;
+        let x = BitPackedMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 /// NB: All non-null values in the patches array are considered patches
@@ -97,13 +147,13 @@ impl BitPackedArray {
             }
         }
 
-        let metadata = BitPackedMetadata {
-            validity: validity.to_metadata(length)?,
+        let metadata = BitPackedMetadata::new(
+            bit_width,
             offset,
             length,
-            bit_width,
-            has_patches: patches.is_some(),
-        };
+            validity.to_metadata(length)?,
+            patches.is_some(),
+        );
 
         let mut children = Vec::with_capacity(2);
         if let Some(p) = patches {
@@ -148,7 +198,7 @@ impl BitPackedArray {
 
     #[inline]
     pub fn bit_width(&self) -> usize {
-        self.metadata().bit_width
+        self.metadata().bit_width()
     }
 
     /// Access the patches array.
@@ -171,7 +221,7 @@ impl BitPackedArray {
 
     #[inline]
     pub fn offset(&self) -> usize {
-        self.metadata().offset
+        self.metadata().offset()
     }
 
     pub fn validity(&self) -> Validity {

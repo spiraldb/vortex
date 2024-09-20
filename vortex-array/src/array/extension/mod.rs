@@ -1,13 +1,19 @@
+use std::sync::Arc;
+
+use flexbuffers::{FlexbufferSerializer, Reader};
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, ExtDType, ExtID};
-use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_error::{vortex_err, VortexExpect as _, VortexResult};
 
 use crate::encoding::ids;
 use crate::stats::ArrayStatisticsCompute;
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::variants::{ArrayVariants, ExtensionArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use crate::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 
 mod compute;
 
@@ -16,6 +22,21 @@ impl_encoding!("vortex.ext", ids::EXTENSION, Extension);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionMetadata {
     storage_dtype: DType,
+}
+
+impl TrySerializeArrayMetadata for ExtensionMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let mut ser = FlexbufferSerializer::new();
+        self.serialize(&mut ser)?;
+        Ok(ser.take_buffer().into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for ExtensionMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+        Ok(ExtensionMetadata::deserialize(Reader::get_root(bytes)?)?)
+    }
 }
 
 impl ExtensionArray {

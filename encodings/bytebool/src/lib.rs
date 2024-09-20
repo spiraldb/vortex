@@ -1,27 +1,49 @@
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
+use std::sync::Arc;
 
 use arrow_buffer::BooleanBuffer;
-use serde::{Deserialize, Serialize};
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex::array::BoolArray;
 use vortex::encoding::ids;
 use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray};
+use vortex::{
+    impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TryDeserializeArrayMetadata,
+    TrySerializeArrayMetadata, TypedArray,
+};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_error::{vortex_err, VortexExpect as _, VortexResult};
 
 mod compute;
 mod stats;
 
 impl_encoding!("vortex.bytebool", ids::BYTE_BOOL, ByteBool);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct ByteBoolMetadata {
+    #[packed_field(element_size_bytes = "1", ty = "enum")]
     validity: ValidityMetadata,
+}
+
+impl TrySerializeArrayMetadata for ByteBoolMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for ByteBoolMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("struct metadata must be present"))?;
+        let x = ByteBoolMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl ByteBoolArray {

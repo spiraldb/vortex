@@ -154,6 +154,12 @@ pub enum VortexError {
         #[backtrace]
         jiff::Error,
     ),
+    #[error(transparent)]
+    PackedStructError(
+        #[from]
+        #[backtrace]
+        packed_struct::PackingError,
+    ),
 }
 
 impl VortexError {

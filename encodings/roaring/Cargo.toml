@@ -14,8 +14,10 @@ rust-version = { workspace = true }
 [dependencies]
 arrow-buffer = { workspace = true }
 croaring = { workspace = true }
+flexbuffers = { workspace = true }
 log = { workspace = true }
 num-traits = { workspace = true }
+packed_struct = { workspace = true }
 serde = { workspace = true }
 vortex-array = { workspace = true }
 vortex-buffer = { workspace = true }

@@ -1,4 +1,7 @@
-use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex_dtype::field::Field;
 use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
@@ -8,16 +11,49 @@ use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, StructArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use crate::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 
 mod compute;
 
 impl_encoding!("vortex.struct", ids::STRUCT, Struct);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct StructMetadata {
-    length: usize,
+    length: u64,
+    #[packed_field(element_size_bytes = "1", ty = "enum")]
     validity: ValidityMetadata,
+}
+
+impl StructMetadata {
+    fn new(length: usize, validity: ValidityMetadata) -> Self {
+        StructMetadata {
+            length: length as u64,
+            validity,
+        }
+    }
+
+    // fn length(&self) -> usize {
+    //     self.length as usize
+    // }
+}
+
+impl TrySerializeArrayMetadata for StructMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for StructMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("struct metadata must be present"))?;
+        let x = StructMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl StructArray {
@@ -71,10 +107,7 @@ impl StructArray {
         Self::try_from_parts(
             DType::Struct(StructDType::new(names, field_dtypes), nullability),
             length,
-            StructMetadata {
-                length,
-                validity: validity_metadata,
-            },
+            StructMetadata::new(length, validity_metadata),
             children.into(),
             StatsSet::new(),
         )

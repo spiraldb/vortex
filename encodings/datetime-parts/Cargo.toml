@@ -10,6 +10,8 @@ workspace = true
 
 [dependencies]
 log = { workspace = true }
+flexbuffers = { workspace = true }
+packed_struct = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 vortex-array = { workspace = true }
 vortex-datetime-dtype = { workspace = true }

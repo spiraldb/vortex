@@ -1,6 +1,7 @@
 use std::ops::BitAnd;
 
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
+use packed_struct::derive::PrimitiveEnum_u8;
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, Nullability};
 use vortex_error::{
@@ -18,12 +19,12 @@ pub trait ArrayValidity {
     fn logical_validity(&self) -> LogicalValidity;
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PrimitiveEnum_u8, Serialize, Deserialize)]
 pub enum ValidityMetadata {
-    NonNullable,
-    AllValid,
-    AllInvalid,
-    Array,
+    NonNullable = 0,
+    AllValid = 1,
+    AllInvalid = 2,
+    Array = 3,
 }
 
 impl ValidityMetadata {

@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::encoding::ids;
@@ -7,7 +9,7 @@ use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
-    IntoCanonical,
+    IntoCanonical, TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
 };
 use vortex_dtype::{DType, PType};
 use vortex_error::{
@@ -21,6 +23,22 @@ impl_encoding!("vortex.zigzag", ids::ZIGZAG, ZigZag);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZigZagMetadata;
+
+impl TrySerializeArrayMetadata for ZigZagMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        Ok([].into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for ZigZagMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("zigzag metadata must be present"))?;
+        if !bytes.is_empty() {
+            vortex_bail!("expected no bytes for zig zag metadata");
+        }
+        Ok(ZigZagMetadata)
+    }
+}
 
 impl ZigZagArray {
     pub fn try_new(encoded: Array) -> VortexResult<Self> {

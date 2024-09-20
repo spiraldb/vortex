@@ -1,17 +1,23 @@
+use std::sync::Arc;
+
 use arrow_buffer::bit_iterator::{BitIndexIterator, BitSliceIterator};
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_error::{vortex_err, VortexExpect as _, VortexResult};
 
 use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray};
+use crate::{
+    impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TryDeserializeArrayMetadata,
+    TrySerializeArrayMetadata, TypedArray,
+};
 
 mod accessors;
 mod compute;
@@ -19,11 +25,46 @@ mod stats;
 
 impl_encoding!("vortex.bool", ids::BOOL, Bool);
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct BoolMetadata {
+    length: u64,
+    bit_offset: u64,
+    #[packed_field(element_size_bytes = "1", ty = "enum")]
     validity: ValidityMetadata,
-    length: usize,
-    bit_offset: usize,
+}
+
+impl BoolMetadata {
+    fn new(length: usize, bit_offset: usize, validity: ValidityMetadata) -> Self {
+        BoolMetadata {
+            length: length as u64,
+            bit_offset: bit_offset as u64,
+            validity,
+        }
+    }
+
+    // fn length(&self) -> usize {
+    //     self.length as usize
+    // }
+
+    fn bit_offset(&self) -> usize {
+        self.bit_offset as usize
+    }
+}
+
+impl TrySerializeArrayMetadata for BoolMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for BoolMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("bool metadata must be present"))?;
+        let x = BoolMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl BoolArray {
@@ -36,7 +77,7 @@ impl BoolArray {
     pub fn boolean_buffer(&self) -> BooleanBuffer {
         BooleanBuffer::new(
             self.buffer().clone().into_arrow(),
-            self.metadata().bit_offset,
+            self.metadata().bit_offset(),
             self.len(),
         )
     }
@@ -61,11 +102,11 @@ impl BoolArray {
             typed: TypedArray::try_from_parts(
                 DType::Bool(validity.nullability()),
                 buffer_len,
-                BoolMetadata {
-                    validity: validity.to_metadata(buffer_len)?,
-                    length: buffer_len,
-                    bit_offset: last_byte_bit_offset,
-                },
+                BoolMetadata::new(
+                    buffer_len,
+                    last_byte_bit_offset,
+                    validity.to_metadata(buffer_len)?,
+                ),
                 Some(Buffer::from(inner)),
                 validity.into_array().into_iter().collect_vec().into(),
                 StatsSet::new(),

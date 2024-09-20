@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use flexbuffers::{FlexbufferSerializer, Reader};
 use fsst::{Decompressor, Symbol};
 use serde::{Deserialize, Serialize};
 use vortex::array::VarBinArray;
@@ -8,9 +9,12 @@ use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
 use vortex::visitor::AcceptArrayVisitor;
-use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonical};
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 use vortex_dtype::{DType, Nullability, PType};
-use vortex_error::{vortex_bail, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
 
 impl_encoding!("vortex.fsst", ids::FSST, FSST);
 
@@ -22,6 +26,21 @@ pub struct FSSTMetadata {
     symbols_len: usize,
     codes_dtype: DType,
     uncompressed_lengths_dtype: DType,
+}
+
+impl TrySerializeArrayMetadata for FSSTMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let mut ser = FlexbufferSerializer::new();
+        self.serialize(&mut ser)?;
+        Ok(ser.take_buffer().into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for FSSTMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+        Ok(FSSTMetadata::deserialize(Reader::get_root(bytes)?)?)
+    }
 }
 
 impl FSSTArray {

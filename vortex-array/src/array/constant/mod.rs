@@ -1,14 +1,18 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
+use flexbuffers::{FlexbufferSerializer, Reader};
 use serde::{Deserialize, Serialize};
-use vortex_error::{vortex_panic, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::encoding::ids;
 use crate::stats::{Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDef, ArrayTrait};
+use crate::{
+    impl_encoding, ArrayDef, ArrayTrait, TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 
 mod canonical;
 mod compute;
@@ -21,6 +25,21 @@ impl_encoding!("vortex.constant", ids::CONSTANT, Constant);
 pub struct ConstantMetadata {
     scalar: Scalar,
     length: usize,
+}
+
+impl TrySerializeArrayMetadata for ConstantMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let mut ser = FlexbufferSerializer::new();
+        self.serialize(&mut ser)?;
+        Ok(ser.take_buffer().into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for ConstantMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+        Ok(ConstantMetadata::deserialize(Reader::get_root(bytes)?)?)
+    }
 }
 
 impl ConstantArray {

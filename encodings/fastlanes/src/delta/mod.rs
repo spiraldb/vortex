@@ -1,25 +1,60 @@
 use std::fmt::Debug;
+use std::sync::Arc;
 
 pub use compress::*;
-use serde::{Deserialize, Serialize};
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+};
 use vortex_dtype::match_each_unsigned_integer_ptype;
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 
 mod compress;
 mod compute;
 
 impl_encoding!("fastlanes.delta", ids::FL_DELTA, Delta);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct DeltaMetadata {
+    len: u64,
+    #[packed_field(element_size_bytes = "1", ty = "enum")]
     validity: ValidityMetadata,
-    len: usize,
+}
+
+impl DeltaMetadata {
+    fn new(len: usize, validity: ValidityMetadata) -> Self {
+        DeltaMetadata {
+            len: len as u64,
+            validity,
+        }
+    }
+
+    // fn len(&self) -> usize {
+    //     self.len as usize
+    // }
+}
+
+impl TrySerializeArrayMetadata for DeltaMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for DeltaMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("delta metadata must be present"))?;
+        let x = DeltaMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl DeltaArray {
@@ -34,10 +69,7 @@ impl DeltaArray {
 
         let dtype = bases.dtype().clone();
         let len = deltas.len();
-        let metadata = DeltaMetadata {
-            validity: validity.to_metadata(len)?,
-            len,
-        };
+        let metadata = DeltaMetadata::new(len, validity.to_metadata(len)?);
 
         let mut children = vec![bases, deltas];
         if let Some(varray) = validity.into_array() {

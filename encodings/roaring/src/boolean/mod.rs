@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::sync::Arc;
 
 use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
 pub use compress::*;
 use croaring::Native;
 pub use croaring::{Bitmap, Portable};
-use serde::{Deserialize, Serialize};
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex::array::BoolArray;
 use vortex::encoding::ids;
 use vortex::stats::{Stat, StatsSet};
@@ -13,7 +15,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray,
+    impl_encoding, Array, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata, TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
@@ -26,9 +29,37 @@ mod stats;
 
 impl_encoding!("vortex.roaring_bool", ids::ROARING_BOOL, RoaringBool);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct RoaringBoolMetadata {
-    length: usize,
+    length: u64,
+}
+
+impl RoaringBoolMetadata {
+    fn new(length: usize) -> Self {
+        RoaringBoolMetadata {
+            length: length as u64,
+        }
+    }
+
+    // fn length(&self) -> usize {
+    //     self.length as usize
+    // }
+}
+
+impl TrySerializeArrayMetadata for RoaringBoolMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for RoaringBoolMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("roaring bool metadata must be present"))?;
+        let x = RoaringBoolMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl RoaringBoolArray {
@@ -55,7 +86,7 @@ impl RoaringBoolArray {
                 typed: TypedArray::try_from_parts(
                     DType::Bool(NonNullable),
                     length,
-                    RoaringBoolMetadata { length },
+                    RoaringBoolMetadata::new(length),
                     Some(Buffer::from(bitmap.serialize::<Native>())),
                     vec![].into(),
                     stats,
@@ -80,7 +111,7 @@ impl RoaringBoolArray {
     pub fn buffer(&self) -> &Buffer {
         self.as_ref()
             .buffer()
-            .vortex_expect("Missing buffer in PrimitiveArray")
+            .vortex_expect("Missing buffer in RoaringBoolArray")
     }
 }
 

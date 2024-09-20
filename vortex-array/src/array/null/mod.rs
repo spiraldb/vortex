@@ -1,23 +1,53 @@
 use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
+use packed_struct::derive::PackedStruct;
+use packed_struct::PackedStruct;
 use vortex_dtype::DType;
-use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_error::{vortex_err, VortexExpect as _, VortexResult};
 
 use crate::encoding::ids;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::variants::{ArrayVariants, NullArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use crate::{
+    impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TryDeserializeArrayMetadata,
+    TrySerializeArrayMetadata,
+};
 
 mod compute;
 
 impl_encoding!("vortex.null", ids::NULL, Null);
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PackedStruct)]
+#[packed_struct(endian = "lsb")]
 pub struct NullMetadata {
-    len: usize,
+    len: u64,
+}
+
+impl NullMetadata {
+    fn new(len: usize) -> Self {
+        NullMetadata { len: len as u64 }
+    }
+
+    // fn len(&self) -> usize {
+    //     self.len as usize
+    // }
+}
+
+impl TrySerializeArrayMetadata for NullMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let bytes = self.pack()?;
+        Ok(bytes.into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for NullMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or(vortex_err!("null metadata must be present"))?;
+        let x = NullMetadata::unpack(bytes.try_into()?)?;
+        Ok(x)
+    }
 }
 
 impl NullArray {
@@ -25,7 +55,7 @@ impl NullArray {
         Self::try_from_parts(
             DType::Null,
             len,
-            NullMetadata { len },
+            NullMetadata::new(len),
             Arc::new([]),
             StatsSet::nulls(len, &DType::Null),
         )

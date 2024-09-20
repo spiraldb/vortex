@@ -1,5 +1,7 @@
 use std::fmt::Debug;
+use std::sync::Arc;
 
+use flexbuffers::{FlexbufferSerializer, Reader};
 use serde::{Deserialize, Serialize};
 use vortex::array::StructArray;
 use vortex::encoding::ids;
@@ -9,9 +11,10 @@ use vortex::variants::{ArrayVariants, ExtensionArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
 };
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 
 use crate::compute::decode_to_temporal;
 
@@ -24,6 +27,23 @@ pub struct DateTimePartsMetadata {
     days_dtype: DType,
     seconds_dtype: DType,
     subseconds_dtype: DType,
+}
+
+impl TrySerializeArrayMetadata for DateTimePartsMetadata {
+    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
+        let mut ser = FlexbufferSerializer::new();
+        self.serialize(&mut ser)?;
+        Ok(ser.take_buffer().into())
+    }
+}
+
+impl<'m> TryDeserializeArrayMetadata<'m> for DateTimePartsMetadata {
+    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+        Ok(DateTimePartsMetadata::deserialize(Reader::get_root(
+            bytes,
+        )?)?)
+    }
 }
 
 impl DateTimePartsArray {
