@@ -31,17 +31,6 @@ struct BitmapStats(Bitset, usize, u64);
 impl ArrayStatisticsCompute for BitmapStats {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         let bitset_slice = self.0.as_slice();
-        // This is a weird case where the bitset is full of false values
-        // sometimes it will not allocate any underlying storage
-        // TODO(robert): This likely can be simplified after https://github.com/RoaringBitmap/CRoaring/issues/660
-        if bitset_slice.is_empty() {
-            return Ok(StatsSet::from(HashMap::from([
-                (Stat::IsSorted, true.into()),
-                (Stat::IsStrictSorted, (self.1 == 1).into()),
-                (Stat::RunCount, 1.into()),
-            ])));
-        }
-
         let whole_chunks = self.1 / 64;
         let last_chunk_len = self.1 % 64;
         let fist_bool = bitset_slice[0] & 1 == 1;
@@ -104,7 +93,6 @@ impl RoaringBoolStatsAccumulator {
 }
 
 #[cfg(test)]
-
 mod test {
     use vortex::array::BoolArray;
     use vortex::stats::ArrayStatistics;
@@ -136,22 +124,20 @@ mod test {
         assert!(bool_arr_1.statistics().compute_is_strict_sorted().unwrap());
         assert!(bool_arr_1.statistics().compute_is_sorted().unwrap());
 
-        // TODO(robert): Reenable after https://github.com/RoaringBitmap/CRoaring/issues/660 is resolved
-        // let bool_arr_2 =
-        //     RoaringBoolArray::encode(BoolArray::from(vec![true]).into_array()).unwrap();
-        // assert!(bool_arr_2.statistics().compute_is_strict_sorted().unwrap());
-        // assert!(bool_arr_2.statistics().compute_is_sorted().unwrap());
+        let bool_arr_2 =
+            RoaringBoolArray::encode(BoolArray::from(vec![true]).into_array()).unwrap();
+        assert!(bool_arr_2.statistics().compute_is_strict_sorted().unwrap());
+        assert!(bool_arr_2.statistics().compute_is_sorted().unwrap());
 
         let bool_arr_3 =
             RoaringBoolArray::encode(BoolArray::from(vec![false]).into_array()).unwrap();
         assert!(bool_arr_3.statistics().compute_is_strict_sorted().unwrap());
         assert!(bool_arr_3.statistics().compute_is_sorted().unwrap());
 
-        // TODO(robert): Reenable after https://github.com/RoaringBitmap/CRoaring/issues/660 is resolved
-        // let bool_arr_4 =
-        //     RoaringBoolArray::encode(BoolArray::from(vec![true, false]).into_array()).unwrap();
-        // assert!(!bool_arr_4.statistics().compute_is_strict_sorted().unwrap());
-        // assert!(!bool_arr_4.statistics().compute_is_sorted().unwrap());
+        let bool_arr_4 =
+            RoaringBoolArray::encode(BoolArray::from(vec![true, false]).into_array()).unwrap();
+        assert!(!bool_arr_4.statistics().compute_is_strict_sorted().unwrap());
+        assert!(!bool_arr_4.statistics().compute_is_sorted().unwrap());
 
         let bool_arr_5 =
             RoaringBoolArray::encode(BoolArray::from(vec![false, true, true]).into_array())
