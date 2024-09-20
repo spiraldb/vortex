@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726857857687,
+  "lastUpdate": 1726857930907,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -1054,6 +1054,90 @@ window.BENCHMARK_DATA = {
             "value": 1675565.868299177,
             "unit": "ns",
             "range": 1518.9055134196533
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "distinct": true,
+          "id": "2d8e1af38dea4cd9a78e2e596b0f5ff34ed682d3",
+          "message": "rename 'Vortex benchmarks' to 'Vortex TPC-H'",
+          "timestamp": "2024-09-20T14:30:15-04:00",
+          "tree_id": "733db01d5708ffcf3fd6f88f93b2151c7c1239c8",
+          "url": "https://github.com/spiraldb/vortex/commit/2d8e1af38dea4cd9a78e2e596b0f5ff34ed682d3"
+        },
+        "date": 1726857928940,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 821206.0041388411,
+            "unit": "ns",
+            "range": 587.2774742171168
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1776962.6300831393,
+            "unit": "ns",
+            "range": 1163.2578865578398
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 511042.92620797304,
+            "unit": "ns",
+            "range": 861.8775986236578
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3068832.504705881,
+            "unit": "ns",
+            "range": 1373.517602941487
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 516133.6899081791,
+            "unit": "ns",
+            "range": 981.5217146714567
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 3336567.2686666637,
+            "unit": "ns",
+            "range": 3615.9730916668195
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 719201.0613391597,
+            "unit": "ns",
+            "range": 761.9872154493933
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 12244606.253999997,
+            "unit": "ns",
+            "range": 367633.53749999776
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 716502.8674961377,
+            "unit": "ns",
+            "range": 992.1850731564336
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1693096.5223280056,
+            "unit": "ns",
+            "range": 4283.965116907377
           }
         ]
       }
