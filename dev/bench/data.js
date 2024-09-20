@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726830834037,
+  "lastUpdate": 1726837022914,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -137613,6 +137613,42 @@ window.BENCHMARK_DATA = {
             "name": "bytes_at/array_data #2",
             "value": 1075,
             "range": "± 12",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e88441c06767c7697c904134412e6a8b27bb9692",
+          "message": "Remove clone when creating ArrayData to run validation (#888)\n\nThis is pretty minor. Seems awkward that we were cloning where all we\r\nwant is to wrap value in an enum",
+          "timestamp": "2024-09-20T13:54:02+01:00",
+          "tree_id": "a700531bd0327e639244f2563000853100b53eb3",
+          "url": "https://github.com/spiraldb/vortex/commit/e88441c06767c7697c904134412e6a8b27bb9692"
+        },
+        "date": 1726837020775,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 609,
+            "range": "± 0",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1035,
+            "range": "± 3",
             "unit": "ns/iter"
           }
         ]
