@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726849209118,
+  "lastUpdate": 1726849212089,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -194,6 +194,48 @@ window.BENCHMARK_DATA = {
             "value": 188912539.93333334,
             "unit": "ns",
             "range": 2510427.5412499905
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "196a776dd8c66416378506aa478eb5d750b6c2a5",
+          "message": "Enable debug logging for pypi publish (#896)\n\nIndentation wasn't quite the same in this file compared to others",
+          "timestamp": "2024-09-20T17:14:54+01:00",
+          "tree_id": "296a3abfee168f1b8bca3de1d54e09b9d69bbd90",
+          "url": "https://github.com/spiraldb/vortex/commit/196a776dd8c66416378506aa478eb5d750b6c2a5"
+        },
+        "date": 1726849210426,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1279774.2540605823,
+            "unit": "ns",
+            "range": 20598.356549999327
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1437301.2239077913,
+            "unit": "ns",
+            "range": 5238.838247713749
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 193599769.3333333,
+            "unit": "ns",
+            "range": 2799971.207499996
           }
         ]
       }
