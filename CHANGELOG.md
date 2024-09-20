@@ -6,6 +6,119 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.9.0...vortex-runend-bool-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-bytebool` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-bytebool-v0.9.0...vortex-bytebool-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+## `vortex-zigzag` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-zigzag-v0.9.0...vortex-zigzag-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-runend` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-runend-v0.9.0...vortex-runend-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+- Fix take on sliced RunEnd array ([#859](https://github.com/spiraldb/vortex/pull/859))
+
+## `vortex-roaring` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-roaring-v0.9.0...vortex-roaring-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Compute stats for RoaringBoolArray ([#874](https://github.com/spiraldb/vortex/pull/874))
+
+## `vortex-fsst` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-fsst-v0.9.0...vortex-fsst-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- make miri tests fast again (take 2) ([#884](https://github.com/spiraldb/vortex/pull/884))
+- also run the compress benchmarks ([#841](https://github.com/spiraldb/vortex/pull/841))
+- Use sliced_bytes of VarBinArray when iterating over bytes() ([#867](https://github.com/spiraldb/vortex/pull/867))
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-dict` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-dict-v0.9.0...vortex-dict-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-datetime-parts` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-parts-v0.9.0...vortex-datetime-parts-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-sampling-compressor` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-sampling-compressor-v0.9.0...vortex-sampling-compressor-v0.10.0) - 2024-09-20
+
+### Added
+- use Buffer for BitPackedArray ([#862](https://github.com/spiraldb/vortex/pull/862))
+
+## `vortex-fastlanes` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-fastlanes-v0.9.0...vortex-fastlanes-v0.10.0) - 2024-09-20
+
+### Added
+- add back ptype check for BitPackedArray ([#872](https://github.com/spiraldb/vortex/pull/872))
+- use Buffer for BitPackedArray ([#862](https://github.com/spiraldb/vortex/pull/862))
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-datafusion` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-datafusion-v0.9.0...vortex-datafusion-v0.10.0) - 2024-09-20
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-buffer` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-buffer-v0.9.0...vortex-buffer-v0.10.0) - 2024-09-20
+
+### Added
+- use Buffer for BitPackedArray ([#862](https://github.com/spiraldb/vortex/pull/862))
+
+## `vortex-array` - [0.10.0](https://github.com/spiraldb/vortex/compare/0.9.0...0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+- teach compute_as_cast and get_as_cast to handle null-only arrays ([#881](https://github.com/spiraldb/vortex/pull/881))
+
+### Other
+- Remove clone when creating ArrayData to run validation ([#888](https://github.com/spiraldb/vortex/pull/888))
+- Don't validate offset buffers when converting them to arrow ([#887](https://github.com/spiraldb/vortex/pull/887))
+- Add doc to bytes and sliced_bytes methods of VarBinArray ([#869](https://github.com/spiraldb/vortex/pull/869))
+- Use sliced_bytes of VarBinArray when iterating over bytes() ([#867](https://github.com/spiraldb/vortex/pull/867))
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
+## `vortex-alp` - [0.10.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.9.0...vortex-alp-v0.10.0) - 2024-09-20
+
+### Fixed
+- ID collision between vortex.ext and fastlanes.delta ([#878](https://github.com/spiraldb/vortex/pull/878))
+
+### Other
+- Make entry point compute functions accept generic arguments ([#861](https://github.com/spiraldb/vortex/pull/861))
+
 ## `vortex-serde` - [0.9.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.8.0...vortex-serde-v0.9.0) - 2024-09-17
 
 ### Added
