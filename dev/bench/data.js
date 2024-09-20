@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726837331167,
+  "lastUpdate": 1726837371041,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -139617,6 +139617,84 @@ window.BENCHMARK_DATA = {
             "name": "TPCH l_comment Column/compress-fsst-canonicalized",
             "value": 719766623,
             "range": "± 4914946",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e88441c06767c7697c904134412e6a8b27bb9692",
+          "message": "Remove clone when creating ArrayData to run validation (#888)\n\nThis is pretty minor. Seems awkward that we were cloning where all we\r\nwant is to wrap value in an enum",
+          "timestamp": "2024-09-20T13:54:02+01:00",
+          "tree_id": "a700531bd0327e639244f2563000853100b53eb3",
+          "url": "https://github.com/spiraldb/vortex/commit/e88441c06767c7697c904134412e6a8b27bb9692"
+        },
+        "date": 1726837369015,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "Yellow Taxi Trip Data/compress",
+            "value": 139864650,
+            "range": "± 283014",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/AirlineSentiment",
+            "value": 515502,
+            "range": "± 378",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Arade",
+            "value": 3790546353,
+            "range": "± 48840539",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Euro2016",
+            "value": 2919398017,
+            "range": "± 31065254",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/Food",
+            "value": 1378977836,
+            "range": "± 4515492",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "Public BI Benchmark/HashTags",
+            "value": 4109571760,
+            "range": "± 24183558",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-default",
+            "value": 245486260,
+            "range": "± 712313",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-chunked",
+            "value": 1118300519,
+            "range": "± 6091472",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "TPCH l_comment Column/compress-fsst-canonicalized",
+            "value": 723168052,
+            "range": "± 4164869",
             "unit": "ns/iter"
           }
         ]
