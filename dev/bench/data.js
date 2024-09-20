@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726853197032,
+  "lastUpdate": 1726854759551,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -180,6 +180,42 @@ window.BENCHMARK_DATA = {
             "value": 1048.7469043346716,
             "unit": "ns",
             "range": 2.465502449428982
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f55a599be7a210a2ffcf0cc1cd7e69ba28b4f2a3",
+          "message": "Update croaring-sys to 4.1.4 and remove workarounds for croaring/660 (#898)",
+          "timestamp": "2024-09-20T17:38:10Z",
+          "tree_id": "b4f3a85fe25a2a41c136bb21bde980aaf21eb024",
+          "url": "https://github.com/spiraldb/vortex/commit/f55a599be7a210a2ffcf0cc1cd7e69ba28b4f2a3"
+        },
+        "date": 1726854757964,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 638.8689102677301,
+            "unit": "ns",
+            "range": 0.32109342320200085
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1132.282271118987,
+            "unit": "ns",
+            "range": 0.6577986912932374
           }
         ]
       }
