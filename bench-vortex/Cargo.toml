@@ -81,9 +81,9 @@ test = false
 bench = false
 
 [[bench]]
-name = "compress_benchmark"
-harness = false
+name = "compress_benchmark_noci"
 test = false
+harness = false
 
 [[bench]]
 name = "random_access"

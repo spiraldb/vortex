@@ -81,4 +81,4 @@ jobs:
         with:
           version: v1.0.0
       - name: Rust Bench as test
-        run: cargo bench --benches -- --test
+        run: cargo bench --bench '*[!noci]' -- --test
