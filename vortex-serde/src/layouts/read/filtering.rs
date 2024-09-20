@@ -38,6 +38,9 @@ impl RowFilter {
             let new_mask = null_as_false(new_mask.into_bool()?)?;
             target = filter(target, &new_mask)?;
             mask = bool_array_and_then(mask, new_mask.into_bool()?);
+            if target.len() == 0 {
+                break;
+            }
         }
 
         Ok(mask.into_array())
