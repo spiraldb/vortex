@@ -146,7 +146,7 @@ impl StructArrayTrait for StructArray {
         self.dtypes().get(idx).map(|dtype| {
             self.as_ref()
                 .child(idx, dtype, self.len())
-                .vortex_expect(&format!("StructArray: field {idx} not found"))
+                .unwrap_or_else(|e| vortex_panic!(e, "StructArray: field {} not found", idx))
         })
     }
 }
