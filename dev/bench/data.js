@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726849212089,
+  "lastUpdate": 1726849319776,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -108,6 +108,42 @@ window.BENCHMARK_DATA = {
             "value": 1025.71666131595,
             "unit": "ns",
             "range": 3.4862999083406407
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "41898282+github-actions[bot]@users.noreply.github.com",
+            "name": "github-actions[bot]",
+            "username": "github-actions[bot]"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a7841c951a57c607e5f2b8384aa5b4700d468a18",
+          "message": "chore: release v0.10.1 (#891)\n\n## 🤖 New release\r\n* `vortex-alp`: 0.10.0 -> 0.10.1\r\n* `vortex-array`: 0.10.0 -> 0.10.1\r\n* `vortex-buffer`: 0.10.0 -> 0.10.1\r\n* `vortex-datetime-dtype`: 0.10.0 -> 0.10.1\r\n* `vortex-dtype`: 0.10.0 -> 0.10.1\r\n* `vortex-error`: 0.10.0 -> 0.10.1\r\n* `vortex-flatbuffers`: 0.10.0 -> 0.10.1\r\n* `vortex-proto`: 0.10.0 -> 0.10.1\r\n* `vortex-scalar`: 0.10.0 -> 0.10.1\r\n* `vortex-datafusion`: 0.10.0 -> 0.10.1\r\n* `vortex-expr`: 0.10.0 -> 0.10.1\r\n* `vortex-schema`: 0.10.0 -> 0.10.1\r\n* `vortex-serde`: 0.10.0 -> 0.10.1 (✓ API compatible changes)\r\n* `vortex-fastlanes`: 0.10.0 -> 0.10.1\r\n* `vortex-sampling-compressor`: 0.10.0 -> 0.10.1\r\n* `vortex-datetime-parts`: 0.10.0 -> 0.10.1\r\n* `vortex-dict`: 0.10.0 -> 0.10.1\r\n* `vortex-fsst`: 0.10.0 -> 0.10.1\r\n* `vortex-roaring`: 0.10.0 -> 0.10.1\r\n* `vortex-runend`: 0.10.0 -> 0.10.1\r\n* `vortex-zigzag`: 0.10.0 -> 0.10.1\r\n* `vortex-bytebool`: 0.10.0 -> 0.10.1\r\n* `vortex-runend-bool`: 0.10.0 -> 0.10.1\r\n\r\n<details><summary><i><b>Changelog</b></i></summary><p>\r\n\r\n\r\n</p></details>\r\n\r\n---\r\nThis PR was generated with\r\n[release-plz](https://github.com/MarcoIeni/release-plz/).\r\n\r\nCo-authored-by: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>",
+          "timestamp": "2024-09-20T17:18:28+01:00",
+          "tree_id": "5e103f91b5ad5faa973178a4fe17e4cc6c2c7711",
+          "url": "https://github.com/spiraldb/vortex/commit/a7841c951a57c607e5f2b8384aa5b4700d468a18"
+        },
+        "date": 1726849317726,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 612.9820002777994,
+            "unit": "ns",
+            "range": 4.667556093587564
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1040.8157061231611,
+            "unit": "ns",
+            "range": 1.011598547141034
           }
         ]
       }
