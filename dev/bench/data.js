@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726857230492,
+  "lastUpdate": 1726857857687,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -506,6 +506,48 @@ window.BENCHMARK_DATA = {
             "value": 202044565.53333333,
             "unit": "ns",
             "range": 2099417.095416665
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "committer": {
+            "email": "will@willmanning.io",
+            "name": "Will Manning",
+            "username": "lwwmanning"
+          },
+          "distinct": true,
+          "id": "2d8e1af38dea4cd9a78e2e596b0f5ff34ed682d3",
+          "message": "rename 'Vortex benchmarks' to 'Vortex TPC-H'",
+          "timestamp": "2024-09-20T14:30:15-04:00",
+          "tree_id": "733db01d5708ffcf3fd6f88f93b2151c7c1239c8",
+          "url": "https://github.com/spiraldb/vortex/commit/2d8e1af38dea4cd9a78e2e596b0f5ff34ed682d3"
+        },
+        "date": 1726857856114,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1228069.9384348725,
+            "unit": "ns",
+            "range": 4292.384138929308
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1372722.2851109281,
+            "unit": "ns",
+            "range": 2892.6016128787305
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 186650340.86666667,
+            "unit": "ns",
+            "range": 2701803.40291667
           }
         ]
       }
