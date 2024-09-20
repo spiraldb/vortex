@@ -1,7 +1,5 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 
-use flexbuffers::{FlexbufferSerializer, Reader};
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::scalar_at;
@@ -12,8 +10,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadat
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
-    IntoCanonical, TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+    flexbuffer_serialize_metadata, impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait,
+    Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
 };
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
@@ -31,20 +29,7 @@ pub struct RunEndMetadata {
     length: usize,
 }
 
-impl TrySerializeArrayMetadata for RunEndMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let mut ser = FlexbufferSerializer::new();
-        self.serialize(&mut ser)?;
-        Ok(ser.take_buffer().into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for RunEndMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
-        Ok(RunEndMetadata::deserialize(Reader::get_root(bytes)?)?)
-    }
-}
+flexbuffer_serialize_metadata!(RunEndMetadata);
 
 impl RunEndArray {
     pub fn try_new(ends: Array, values: Array, validity: Validity) -> VortexResult<Self> {

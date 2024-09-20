@@ -7,7 +7,6 @@ use bytes::Bytes;
 use itertools::Itertools;
 use num_traits::AsPrimitive;
 use packed_struct::derive::PackedStruct;
-use packed_struct::PackedStruct;
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{
@@ -22,8 +21,8 @@ use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata, TypedArray,
+    impl_encoding, packed_struct_serialize_metadata, Array, ArrayDType, ArrayDef, ArrayTrait,
+    Canonical, IntoArray, IntoCanonical, TypedArray,
 };
 
 mod accessor;
@@ -39,20 +38,7 @@ pub struct PrimitiveMetadata {
     validity: ValidityMetadata,
 }
 
-impl TrySerializeArrayMetadata for PrimitiveMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let bytes = self.pack()?;
-        Ok(bytes.into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for PrimitiveMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or(vortex_err!("primitive metadata must be present"))?;
-        let x = PrimitiveMetadata::unpack(bytes.try_into()?)?;
-        Ok(x)
-    }
-}
+packed_struct_serialize_metadata!(PrimitiveMetadata);
 
 impl PrimitiveArray {
     pub fn new(buffer: Buffer, ptype: PType, validity: Validity) -> Self {

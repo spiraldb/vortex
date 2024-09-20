@@ -26,3 +26,44 @@ pub trait TrySerializeArrayMetadata {
 pub trait TryDeserializeArrayMetadata<'m>: Sized {
     fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self>;
 }
+
+#[macro_export]
+macro_rules! packed_struct_serialize_metadata {
+    ($id:ident) => {
+        impl $crate::TrySerializeArrayMetadata for $id {
+            fn try_serialize_metadata(&self) -> VortexResult<std::sync::Arc<[u8]>> {
+                let bytes = packed_struct::PackedStruct::pack(self)?;
+                Ok(bytes.into())
+            }
+        }
+
+        impl<'m> $crate::TryDeserializeArrayMetadata<'m> for $id {
+            fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+                let bytes =
+                    metadata.ok_or(vortex_err!("fastlanes bit packed metadata must be present"))?;
+                let x = packed_struct::PackedStruct::unpack(bytes.try_into()?)?;
+                Ok(x)
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! flexbuffer_serialize_metadata {
+    ($id:ident) => {
+        impl $crate::TrySerializeArrayMetadata for $id {
+            fn try_serialize_metadata(&self) -> VortexResult<std::sync::Arc<[u8]>> {
+                let mut ser = flexbuffers::FlexbufferSerializer::new();
+                self.serialize(&mut ser)?;
+                Ok(ser.take_buffer().into())
+            }
+        }
+
+        impl<'m> $crate::TryDeserializeArrayMetadata<'m> for $id {
+            fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
+                let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
+                Ok(Self::deserialize(flexbuffers::Reader::get_root(bytes)?)?)
+            }
+        }
+    };
+}

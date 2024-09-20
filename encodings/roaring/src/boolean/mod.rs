@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::sync::Arc;
 
 use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
 pub use compress::*;
 use croaring::Native;
 pub use croaring::{Bitmap, Portable};
 use packed_struct::derive::PackedStruct;
-use packed_struct::PackedStruct;
 use vortex::array::BoolArray;
 use vortex::encoding::ids;
 use vortex::stats::{Stat, StatsSet};
@@ -15,8 +13,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata, TypedArray,
+    impl_encoding, packed_struct_serialize_metadata, Array, ArrayTrait, Canonical, IntoArray,
+    IntoCanonical, TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
@@ -47,20 +45,7 @@ impl RoaringBoolMetadata {
     // }
 }
 
-impl TrySerializeArrayMetadata for RoaringBoolMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let bytes = self.pack()?;
-        Ok(bytes.into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for RoaringBoolMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or(vortex_err!("roaring bool metadata must be present"))?;
-        let x = RoaringBoolMetadata::unpack(bytes.try_into()?)?;
-        Ok(x)
-    }
-}
+packed_struct_serialize_metadata!(RoaringBoolMetadata);
 
 impl RoaringBoolArray {
     pub fn try_new(bitmap: Bitmap, length: usize) -> VortexResult<Self> {

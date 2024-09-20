@@ -8,7 +8,6 @@ use arrow_array::builder::{BinaryViewBuilder, StringViewBuilder};
 use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use arrow_schema::DataType;
-use flexbuffers::{FlexbufferSerializer, Reader};
 use itertools::Itertools;
 use vortex_dtype::{DType, PType};
 use vortex_error::{
@@ -23,8 +22,8 @@ use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArrayVariant,
-    IntoCanonical, TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+    flexbuffer_serialize_metadata, impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait,
+    Canonical, IntoArrayVariant, IntoCanonical,
 };
 
 mod accessor;
@@ -118,20 +117,7 @@ pub struct VarBinViewMetadata {
     data_lens: Vec<usize>,
 }
 
-impl TrySerializeArrayMetadata for VarBinViewMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let mut ser = FlexbufferSerializer::new();
-        self.serialize(&mut ser)?;
-        Ok(ser.take_buffer().into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for VarBinViewMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
-        Ok(VarBinViewMetadata::deserialize(Reader::get_root(bytes)?)?)
-    }
-}
+flexbuffer_serialize_metadata!(VarBinViewMetadata);
 
 impl VarBinViewArray {
     pub fn try_new(

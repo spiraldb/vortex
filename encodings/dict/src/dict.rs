@@ -1,7 +1,5 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 
-use flexbuffers::{FlexbufferSerializer, Reader};
 use serde::{Deserialize, Serialize};
 use vortex::accessor::ArrayAccessor;
 use vortex::array::BoolArray;
@@ -12,8 +10,8 @@ use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
-    IntoCanonical, TryDeserializeArrayMetadata, TrySerializeArrayMetadata,
+    flexbuffer_serialize_metadata, impl_encoding, Array, ArrayDType, ArrayTrait, Canonical,
+    IntoArrayVariant, IntoCanonical,
 };
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
@@ -26,20 +24,7 @@ pub struct DictMetadata {
     values_len: usize,
 }
 
-impl TrySerializeArrayMetadata for DictMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let mut ser = FlexbufferSerializer::new();
-        self.serialize(&mut ser)?;
-        Ok(ser.take_buffer().into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for DictMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
-        Ok(DictMetadata::deserialize(Reader::get_root(bytes)?)?)
-    }
-}
+flexbuffer_serialize_metadata!(DictMetadata);
 
 impl DictArray {
     pub fn try_new(codes: Array, values: Array) -> VortexResult<Self> {

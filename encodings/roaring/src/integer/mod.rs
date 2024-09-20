@@ -1,9 +1,7 @@
 use std::fmt::Debug;
-use std::sync::Arc;
 
 pub use compress::*;
 use croaring::{Bitmap, Portable};
-use flexbuffers::{FlexbufferSerializer, Reader};
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::encoding::ids;
@@ -12,8 +10,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
-    TryDeserializeArrayMetadata, TrySerializeArrayMetadata, TypedArray,
+    flexbuffer_serialize_metadata, impl_encoding, Array, ArrayDef, ArrayTrait, Canonical,
+    IntoArray, IntoCanonical, TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
@@ -30,20 +28,7 @@ pub struct RoaringIntMetadata {
     ptype: PType,
 }
 
-impl TrySerializeArrayMetadata for RoaringIntMetadata {
-    fn try_serialize_metadata(&self) -> VortexResult<Arc<[u8]>> {
-        let mut ser = FlexbufferSerializer::new();
-        self.serialize(&mut ser)?;
-        Ok(ser.take_buffer().into())
-    }
-}
-
-impl<'m> TryDeserializeArrayMetadata<'m> for RoaringIntMetadata {
-    fn try_deserialize_metadata(metadata: Option<&'m [u8]>) -> VortexResult<Self> {
-        let bytes = metadata.ok_or_else(|| vortex_err!("Array requires metadata bytes"))?;
-        Ok(RoaringIntMetadata::deserialize(Reader::get_root(bytes)?)?)
-    }
-}
+flexbuffer_serialize_metadata!(RoaringIntMetadata);
 
 impl RoaringIntArray {
     pub fn try_new(bitmap: Bitmap, ptype: PType) -> VortexResult<Self> {
