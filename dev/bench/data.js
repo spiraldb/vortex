@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726837022914,
+  "lastUpdate": 1726837193237,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -138787,6 +138787,90 @@ window.BENCHMARK_DATA = {
             "name": "vortex-nopushdown-uncompressed/exec",
             "value": 1667329,
             "range": "± 5037",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e88441c06767c7697c904134412e6a8b27bb9692",
+          "message": "Remove clone when creating ArrayData to run validation (#888)\n\nThis is pretty minor. Seems awkward that we were cloning where all we\r\nwant is to wrap value in an enum",
+          "timestamp": "2024-09-20T13:54:02+01:00",
+          "tree_id": "a700531bd0327e639244f2563000853100b53eb3",
+          "url": "https://github.com/spiraldb/vortex/commit/e88441c06767c7697c904134412e6a8b27bb9692"
+        },
+        "date": 1726837191063,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 814009,
+            "range": "± 9122",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1767042,
+            "range": "± 31708",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 511279,
+            "range": "± 4869",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3029423,
+            "range": "± 10075",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 510737,
+            "range": "± 7528",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 2981429,
+            "range": "± 29374",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 720497,
+            "range": "± 1535",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 13828730,
+            "range": "± 197623",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 714309,
+            "range": "± 12547",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1673940,
+            "range": "± 16463",
             "unit": "ns/iter"
           }
         ]
