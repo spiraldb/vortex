@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Cursor;
 use std::path::Path;
 use std::time::Duration;
 
@@ -15,8 +16,6 @@ use criterion::{
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
-use tokio::fs::File;
-use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use vortex::array::{ChunkedArray, StructArray};
 use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::field::Field;
@@ -40,8 +39,8 @@ fn ensure_dir_exists(dir: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn parquet_written_size(array: &Array, filepath: &str, compression: Compression) -> usize {
-    let mut file = std::fs::File::create(Path::new(filepath)).unwrap();
+fn parquet_written_size(array: &Array, compression: Compression) -> usize {
+    let mut buf = Cursor::new(Vec::new());
     let chunked = ChunkedArray::try_from(array).unwrap();
     let chunks_vec = chunked.chunks().collect::<Vec<_>>();
 
@@ -56,7 +55,7 @@ fn parquet_written_size(array: &Array, filepath: &str, compression: Compression)
     let writer_properties = WriterProperties::builder()
         .set_compression(compression)
         .build();
-    let mut writer = ArrowWriter::try_new(&mut file, schema, Some(writer_properties)).unwrap();
+    let mut writer = ArrowWriter::try_new(&mut buf, schema, Some(writer_properties)).unwrap();
     for chunk in chunks_vec {
         let record_batch = RecordBatch::try_from(chunk).unwrap();
         writer.write(&record_batch).unwrap();
@@ -67,22 +66,21 @@ fn parquet_written_size(array: &Array, filepath: &str, compression: Compression)
     n_bytes
 }
 
-fn vortex_written_size(array: &Array, filepath: &str) -> u64 {
-    async fn run(array: &Array, filepath: &str) -> u64 {
-        let file = File::create(Path::new(filepath)).await.unwrap();
-        let mut writer = LayoutWriter::new(file);
+fn vortex_written_size(array: &Array) -> u64 {
+    async fn run(array: &Array) -> u64 {
+        let buf = Cursor::new(Vec::new());
+        let mut writer = LayoutWriter::new(buf);
 
         writer = writer.write_array_columns(array.clone()).await.unwrap();
-        let mut file = writer.finalize().await.unwrap();
-        file.flush().await.unwrap();
-        file.stream_position().await.unwrap()
+        let buf = writer.finalize().await.unwrap();
+        buf.position()
     }
 
     tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap()
-        .block_on(run(array, filepath))
+        .block_on(run(array))
 }
 
 fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
@@ -113,26 +111,15 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
             .compress(uncompressed.as_ref(), None)
             .unwrap()
             .into_array(),
-        &format!("benchmarked-files/{}-{}.vortex", group_name, bench_name),
     );
 
     let parquet_zstd_nbytes = parquet_written_size(
         uncompressed.as_ref(),
-        &format!(
-            "benchmarked-files/{}-{}.zstd.parquet",
-            group_name, bench_name
-        ),
         Compression::ZSTD(ZstdLevel::default()),
     );
 
-    let parquet_uncompressed_nbytes = parquet_written_size(
-        uncompressed.as_ref(),
-        &format!(
-            "benchmarked-files/{}-{}.uncompressed.parquet",
-            group_name, bench_name
-        ),
-        Compression::UNCOMPRESSED,
-    );
+    let parquet_uncompressed_nbytes =
+        parquet_written_size(uncompressed.as_ref(), Compression::UNCOMPRESSED);
 
     println!(
         "{}",
