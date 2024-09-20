@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726837193237,
+  "lastUpdate": 1726837331167,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -138029,6 +138029,48 @@ window.BENCHMARK_DATA = {
             "name": "parquet/tokio local disk",
             "value": 181331508,
             "range": "± 2316577",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e88441c06767c7697c904134412e6a8b27bb9692",
+          "message": "Remove clone when creating ArrayData to run validation (#888)\n\nThis is pretty minor. Seems awkward that we were cloning where all we\r\nwant is to wrap value in an enum",
+          "timestamp": "2024-09-20T13:54:02+01:00",
+          "tree_id": "a700531bd0327e639244f2563000853100b53eb3",
+          "url": "https://github.com/spiraldb/vortex/commit/e88441c06767c7697c904134412e6a8b27bb9692"
+        },
+        "date": 1726837329009,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "vortex/tokio local disk",
+            "value": 1247646,
+            "range": "± 24246",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "vortex/localfs",
+            "value": 1404502,
+            "range": "± 17000",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "parquet/tokio local disk",
+            "value": 184904030,
+            "range": "± 2233748",
             "unit": "ns/iter"
           }
         ]
