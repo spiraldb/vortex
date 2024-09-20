@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726838792987,
+  "lastUpdate": 1726839721825,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex benchmarks": [
@@ -138465,6 +138465,42 @@ window.BENCHMARK_DATA = {
             "name": "bytes_at/array_data #2",
             "value": 1035,
             "range": "± 3",
+            "unit": "ns/iter"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "dan@spiraldb.com",
+            "name": "Dan King",
+            "username": "danking"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b44daabbd8656ecb7ee7b99d6d821092a42acdd3",
+          "message": "feat: publish to real PyPI (#889)",
+          "timestamp": "2024-09-20T14:40:04+01:00",
+          "tree_id": "dd3a2ca562acb516ef0ec50006124daa596ef627",
+          "url": "https://github.com/spiraldb/vortex/commit/b44daabbd8656ecb7ee7b99d6d821092a42acdd3"
+        },
+        "date": 1726839720062,
+        "tool": "cargo",
+        "benches": [
+          {
+            "name": "bytes_at/array_data",
+            "value": 609,
+            "range": "± 1",
+            "unit": "ns/iter"
+          },
+          {
+            "name": "bytes_at/array_data #2",
+            "value": 1049,
+            "range": "± 2",
             "unit": "ns/iter"
           }
         ]
