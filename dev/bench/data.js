@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1726854828880,
+  "lastUpdate": 1726854864461,
   "repoUrl": "https://github.com/spiraldb/vortex",
   "entries": {
     "Vortex bytes_at": [
@@ -892,6 +892,90 @@ window.BENCHMARK_DATA = {
             "value": 1660239.3507862624,
             "unit": "ns",
             "range": 1435.5612947433256
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "github@robertk.io",
+            "name": "Robert Kruszewski",
+            "username": "robert3005"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f55a599be7a210a2ffcf0cc1cd7e69ba28b4f2a3",
+          "message": "Update croaring-sys to 4.1.4 and remove workarounds for croaring/660 (#898)",
+          "timestamp": "2024-09-20T17:38:10Z",
+          "tree_id": "b4f3a85fe25a2a41c136bb21bde980aaf21eb024",
+          "url": "https://github.com/spiraldb/vortex/commit/f55a599be7a210a2ffcf0cc1cd7e69ba28b4f2a3"
+        },
+        "date": 1726854862381,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "arrow/planning",
+            "value": 815613.3453937981,
+            "unit": "ns",
+            "range": 1069.5078270657687
+          },
+          {
+            "name": "arrow/exec",
+            "value": 1761998.9417963095,
+            "unit": "ns",
+            "range": 768.9205324320355
+          },
+          {
+            "name": "vortex-pushdown-compressed/planning",
+            "value": 507313.42923905485,
+            "unit": "ns",
+            "range": 795.1482722707151
+          },
+          {
+            "name": "vortex-pushdown-compressed/exec",
+            "value": 3075129.0147058843,
+            "unit": "ns",
+            "range": 2264.86647058744
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/planning",
+            "value": 508084.22818517184,
+            "unit": "ns",
+            "range": 656.4193288948154
+          },
+          {
+            "name": "vortex-pushdown-uncompressed/exec",
+            "value": 3318460.42375,
+            "unit": "ns",
+            "range": 1266.6340468747076
+          },
+          {
+            "name": "vortex-nopushdown-compressed/planning",
+            "value": 711688.0381452867,
+            "unit": "ns",
+            "range": 682.7934804628603
+          },
+          {
+            "name": "vortex-nopushdown-compressed/exec",
+            "value": 7170097.715714285,
+            "unit": "ns",
+            "range": 10424.934375002049
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/planning",
+            "value": 711590.1406162797,
+            "unit": "ns",
+            "range": 1583.8234949442558
+          },
+          {
+            "name": "vortex-nopushdown-uncompressed/exec",
+            "value": 1675565.868299177,
+            "unit": "ns",
+            "range": 1518.9055134196533
           }
         ]
       }
