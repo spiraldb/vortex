@@ -114,9 +114,11 @@ impl RunEndArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(2, &Validity::DTYPE, self.len())
+                .vortex_expect("RunEndArray: validity child")
+        })
     }
 
     /// The offset that the `ends` is relative to.

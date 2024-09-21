@@ -22,11 +22,11 @@ pub struct StructMetadata {
 
 impl StructArray {
     pub fn validity(&self) -> Validity {
-        self.metadata().validity.to_validity(self.as_ref().child(
-            self.nfields(),
-            &Validity::DTYPE,
-            self.len(),
-        ))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(self.nfields(), &Validity::DTYPE, self.len())
+                .vortex_expect("StructArray: validity child")
+        })
     }
 
     pub fn children(&self) -> impl Iterator<Item = Array> + '_ {
@@ -143,9 +143,11 @@ impl ArrayVariants for StructArray {
 
 impl StructArrayTrait for StructArray {
     fn field(&self, idx: usize) -> Option<Array> {
-        self.dtypes()
-            .get(idx)
-            .and_then(|dtype| self.as_ref().child(idx, dtype, self.len()))
+        self.dtypes().get(idx).map(|dtype| {
+            self.as_ref()
+                .child(idx, dtype, self.len())
+                .unwrap_or_else(|e| vortex_panic!(e, "StructArray: field {} not found", idx))
+        })
     }
 }
 

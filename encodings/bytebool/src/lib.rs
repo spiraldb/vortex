@@ -26,9 +26,11 @@ pub struct ByteBoolMetadata {
 
 impl ByteBoolArray {
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.as_ref().child(0, &Validity::DTYPE, self.len()))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(0, &Validity::DTYPE, self.len())
+                .vortex_expect("ByteBoolArray: accessing validity child")
+        })
     }
 
     pub fn try_new(buffer: Buffer, validity: Validity) -> VortexResult<Self> {

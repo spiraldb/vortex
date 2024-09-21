@@ -177,22 +177,26 @@ impl VarBinViewArray {
     pub fn views(&self) -> Array {
         self.as_ref()
             .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
-            .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its views"))
+            .vortex_expect("VarBinViewArray is missing its views")
     }
 
     #[inline]
     pub fn bytes(&self, idx: usize) -> Array {
         self.as_ref()
             .child(idx + 1, &DType::BYTES, self.metadata().data_lens[idx])
-            .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its data buffer"))
+            .vortex_expect("VarBinViewArray is missing its data buffer")
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata().validity.to_validity(self.as_ref().child(
-            self.metadata().data_lens.len() + 1,
-            &Validity::DTYPE,
-            self.len(),
-        ))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(
+                    self.metadata().data_lens.len() + 1,
+                    &Validity::DTYPE,
+                    self.len(),
+                )
+                .vortex_expect("VarBinViewArray: validity child")
+        })
     }
 
     pub fn from_iter_str<T: AsRef<str>, I: IntoIterator<Item = T>>(iter: I) -> Self {

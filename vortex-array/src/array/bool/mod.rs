@@ -42,9 +42,11 @@ impl BoolArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.as_ref().child(0, &Validity::DTYPE, self.len()))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(0, &Validity::DTYPE, self.len())
+                .vortex_expect("BoolArray: validity child")
+        })
     }
 
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {

@@ -216,10 +216,7 @@ impl Stream for VortexRecordBatchStream {
         }
 
         // Grab next chunk, project and convert to Arrow.
-        let chunk = this
-            .chunks
-            .chunk(this.idx)
-            .ok_or_else(|| vortex_err!("nchunks should match precomputed"))?;
+        let chunk = this.chunks.chunk(this.idx)?;
         this.idx += 1;
 
         let struct_array = chunk

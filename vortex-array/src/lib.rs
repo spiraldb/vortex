@@ -47,6 +47,7 @@ pub mod encoding;
 mod implementation;
 pub mod iter;
 mod metadata;
+pub mod opaque;
 pub mod stats;
 pub mod stream;
 mod tree;
@@ -94,7 +95,7 @@ impl Array {
         self.with_dyn(|a| a.nbytes())
     }
 
-    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType, len: usize) -> Option<Self> {
+    pub fn child<'a>(&'a self, idx: usize, dtype: &'a DType, len: usize) -> VortexResult<Self> {
         match self {
             Self::Data(d) => d.child(idx, dtype, len).cloned(),
             Self::View(v) => v.child(idx, dtype, len).map(Array::View),

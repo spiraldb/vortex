@@ -106,9 +106,11 @@ impl VarBinArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(2, &Validity::DTYPE, self.len())
+                .vortex_expect("VarBinArray: validity child")
+        })
     }
 
     /// Access value bytes child array limited to values that are logically present in

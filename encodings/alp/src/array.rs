@@ -95,9 +95,10 @@ impl ALPArray {
 
     pub fn patches(&self) -> Option<Array> {
         self.metadata().patches_dtype.as_ref().map(|dt| {
-            self.as_ref().child(1, dt, self.len()).unwrap_or_else(|| {
+            self.as_ref().child(1, dt, self.len()).unwrap_or_else(|e| {
                 vortex_panic!(
-                    "Missing patches with present metadata flag; patches dtype: {}, patches_len: {}",
+                    e,
+                    "ALPArray: patches child missing: dtype: {}, len: {}",
                     dt,
                     self.len()
                 )

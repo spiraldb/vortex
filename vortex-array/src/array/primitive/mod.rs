@@ -86,9 +86,11 @@ impl PrimitiveArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.as_ref().child(0, &Validity::DTYPE, self.len()))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(0, &Validity::DTYPE, self.len())
+                .vortex_expect("PrimitiveArray: validity child")
+        })
     }
 
     pub fn ptype(&self) -> PType {
