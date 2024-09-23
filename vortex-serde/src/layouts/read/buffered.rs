@@ -34,12 +34,11 @@ impl BufferedReader {
     fn buffer(&mut self) -> VortexResult<Option<ReadResult>> {
         while self.buffered_row_count() < self.batch_size {
             if let Some(mut layout) = self.layouts.pop_front() {
-                let read = layout.read_next()?;
-                if let Some(rr) = read {
+                if let Some(rr) = layout.read_next()? {
                     self.layouts.push_front(layout);
                     match rr {
-                        g @ ReadResult::ReadMore(..) => {
-                            return Ok(Some(g));
+                        read_more @ ReadResult::ReadMore(..) => {
+                            return Ok(Some(read_more));
                         }
                         ReadResult::Batch(a) => self.arrays.push_back(a),
                     }
@@ -60,17 +59,18 @@ impl BufferedReader {
 
         if let Some(rr) = self.buffer()? {
             match rr {
-                g @ ReadResult::ReadMore(..) => return Ok(Some(g)),
+                read_more @ ReadResult::ReadMore(..) => return Ok(Some(read_more)),
                 ReadResult::Batch(_) => {
                     unreachable!("Batches should be handled inside the buffer call")
                 }
             }
         }
 
-        let mut rows_to_read = self.batch_size;
-        if self.layouts.is_empty() {
-            rows_to_read = usize::min(self.batch_size, self.buffered_row_count());
-        }
+        let mut rows_to_read = if self.layouts.is_empty() {
+            usize::min(self.batch_size, self.buffered_row_count())
+        } else {
+            self.batch_size
+        };
 
         let mut result = Vec::new();
 

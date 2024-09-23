@@ -25,6 +25,7 @@ pub trait VortexReadAt: Send + Sync {
         0
     }
 
+    /// Size of the underlying file in bytes
     fn size(&self) -> impl Future<Output = u64>;
 }
 

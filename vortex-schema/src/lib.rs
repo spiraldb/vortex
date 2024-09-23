@@ -17,11 +17,11 @@ impl Schema {
     pub fn project(&self, projection: Projection) -> VortexResult<Self> {
         match projection {
             Projection::All => Ok(self.clone()),
-            Projection::Flat(indices) => {
+            Projection::Flat(fields) => {
                 let DType::Struct(s, n) = &self.0 else {
                     vortex_bail!("Can't project non struct types")
                 };
-                s.project(indices.as_ref())
+                s.project(fields.as_ref())
                     .map(|p| Self(DType::Struct(p, *n)))
             }
         }
@@ -42,7 +42,7 @@ impl Schema {
         };
 
         idx.and_then(|idx| s.dtypes().get(idx).cloned())
-            .ok_or_else(|| vortex_err!("Couldn't find struct by {field}"))
+            .ok_or_else(|| vortex_err!("Couldn't find field {field}"))
     }
 }
 

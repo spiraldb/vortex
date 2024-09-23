@@ -37,17 +37,19 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_batch_size(batch_size);
         }
 
-        if let Some(predicate) = self
+        let row_filter = self
             .predicate
             .clone()
             .map(convert_expr_to_vortex)
             .transpose()?
-        {
-            builder = builder.with_row_filter(RowFilter::new(predicate));
+            .map(RowFilter::new);
+
+        if let Some(row_filter) = row_filter {
+            builder = builder.with_row_filter(row_filter);
         }
 
         if let Some(projection) = self.projection.as_ref() {
-            builder = builder.with_projection(Projection::new(projection))
+            builder = builder.with_projection(Projection::new(projection));
         }
 
         Ok(async {

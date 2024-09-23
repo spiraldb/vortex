@@ -1,7 +1,9 @@
 use std::fmt::Debug;
 
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
-use vortex::Array;
+use vortex::array::BoolArray;
+use vortex::validity::Validity;
+use vortex::{Array, IntoArray as _, IntoArrayVariant as _};
 use vortex_error::VortexResult;
 
 mod batch;
@@ -15,6 +17,7 @@ mod layouts;
 mod stream;
 
 pub use builder::LayoutReaderBuilder;
+pub use cache::LayoutMessageCache;
 pub use context::*;
 pub use filtering::RowFilter;
 pub use stream::LayoutBatchStream;
@@ -63,4 +66,40 @@ pub trait Layout: Debug + Send {
     //
     // The layout should perform any planning that's cheap and doesn't require reading the data.
     // fn plan(&mut self, scan: Scan) -> VortexResult<Option<PlanResult>>;
+}
+
+pub fn null_as_false(array: BoolArray) -> VortexResult<Array> {
+    match array.validity() {
+        Validity::NonNullable => Ok(array.into_array()),
+        Validity::AllValid => {
+            Ok(BoolArray::try_new(array.boolean_buffer(), Validity::NonNullable)?.into_array())
+        }
+        Validity::AllInvalid => Ok(BoolArray::from(vec![false; array.len()]).into_array()),
+        Validity::Array(v) => {
+            let bool_buffer = &array.boolean_buffer() & &v.into_bool()?.boolean_buffer();
+            Ok(BoolArray::from(bool_buffer).into_array())
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::BoolArray;
+    use vortex::validity::Validity;
+    use vortex::IntoArrayVariant;
+
+    use super::*;
+
+    #[test]
+    fn coerces_nulls() {
+        let bool_array = BoolArray::from_vec(
+            vec![true, true, false, false],
+            Validity::Array(BoolArray::from(vec![true, false, true, false]).into()),
+        );
+        let non_null_array = null_as_false(bool_array).unwrap().into_bool().unwrap();
+        assert_eq!(
+            non_null_array.boolean_buffer().iter().collect::<Vec<_>>(),
+            vec![true, false, false, false]
+        );
+    }
 }

@@ -6,10 +6,9 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::Scalar;
 
-use super::unary::scalar_at;
-use crate::array::ConstantArray;
+use crate::array::Constant;
 use crate::arrow::FromArrowArray;
-use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
+use crate::{Array, ArrayDType, ArrayDef, IntoCanonical};
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd)]
 pub enum Operator {
@@ -96,10 +95,8 @@ pub fn compare(
         vortex_bail!("Compare operations only support arrays of the same type");
     }
 
-    if ConstantArray::try_from(left).is_ok() {
-        let scalar = scalar_at(left, 0)?;
-        let left_const = ConstantArray::new(scalar, left.len()).into_array();
-        return compare(right, &left_const, operator.swap());
+    if left.is_encoding(Constant::ID) {
+        return compare(right, left, operator.swap());
     }
 
     if let Some(selection) = left.with_dyn(|lhs| lhs.compare(right, operator)) {
@@ -150,7 +147,7 @@ mod tests {
     use super::*;
     use crate::array::BoolArray;
     use crate::validity::Validity;
-    use crate::IntoArrayVariant;
+    use crate::{IntoArray, IntoArrayVariant};
 
     fn to_int_indices(indices_bits: BoolArray) -> Vec<u64> {
         let buffer = indices_bits.boolean_buffer();
