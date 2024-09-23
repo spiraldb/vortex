@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
-use vortex_dtype::field::Field;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
@@ -83,34 +82,6 @@ impl<'a> StructScalar<'a> {
         } else {
             Ok(Scalar::null(dtype.clone()))
         }
-    }
-
-    pub fn project(&self, projection: &[Field]) -> VortexResult<Scalar> {
-        let struct_dtype = self
-            .dtype
-            .as_struct()
-            .ok_or_else(|| vortex_err!("Not a struct dtype"))?;
-        let projected_dtype = struct_dtype.project(projection)?;
-        let new_fields = if let Some(fs) = self.fields() {
-            ScalarValue::List(
-                projection
-                    .iter()
-                    .map(|p| match p {
-                        Field::Name(n) => struct_dtype
-                            .find_name(n)
-                            .vortex_expect("DType has been successfully projected already"),
-                        Field::Index(i) => *i,
-                    })
-                    .map(|i| fs[i].clone())
-                    .collect(),
-            )
-        } else {
-            ScalarValue::Null
-        };
-        Ok(Scalar::new(
-            DType::Struct(projected_dtype, self.dtype().nullability()),
-            new_fields,
-        ))
     }
 }
 

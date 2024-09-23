@@ -3,9 +3,8 @@
 //! When callers only want to make assumptions about the DType, and not about any specific
 //! encoding, they can use these traits to write encoding-agnostic code.
 
-use vortex_dtype::field::Field;
 use vortex_dtype::{DType, ExtDType, FieldNames};
-use vortex_error::{vortex_panic, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_panic, VortexExpect as _};
 
 use crate::iter::{AccessorRef, VectorizedArrayIter};
 use crate::{Array, ArrayTrait};
@@ -228,8 +227,6 @@ pub trait StructArrayTrait: ArrayTrait {
 
         field_idx.and_then(|field_idx| self.field(field_idx))
     }
-
-    fn project(&self, projection: &[Field]) -> VortexResult<Array>;
 }
 
 pub trait ListArrayTrait: ArrayTrait {}

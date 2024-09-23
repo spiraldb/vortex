@@ -1,9 +1,8 @@
 use std::iter;
 use std::sync::Arc;
 
-use vortex_dtype::field::Field;
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_panic, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_panic, VortexError, VortexExpect as _};
 use vortex_scalar::{ExtScalar, Scalar, ScalarValue, StructScalar};
 
 use crate::array::constant::ConstantArray;
@@ -190,14 +189,6 @@ impl StructArrayTrait for ConstantArray {
             .ok()?
             .field_by_idx(idx)
             .map(|scalar| ConstantArray::new(scalar, self.len()).into_array())
-    }
-
-    fn project(&self, projection: &[Field]) -> VortexResult<Array> {
-        Ok(ConstantArray::new(
-            StructScalar::try_from(self.scalar())?.project(projection)?,
-            self.len(),
-        )
-        .into_array())
     }
 }
 
