@@ -95,8 +95,8 @@ pub async fn build_selection<R: VortexReadAt + Unpin + Send + 'static>(
     message_cache: Arc<RwLock<LayoutMessageCache>>,
 ) -> VortexResult<Array> {
     let mut builder = LayoutReaderBuilder::new(reader, deserializer);
-    let footer = builder.read_footer().await?;
-    let row_filter = RowFilter::new(expr, footer.schema()?);
+
+    let row_filter = RowFilter::new(expr);
     builder = builder.with_message_cache(message_cache);
 
     let mut stream = builder.build().await?;

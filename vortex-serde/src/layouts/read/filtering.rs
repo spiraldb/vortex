@@ -9,7 +9,7 @@ use vortex::compute::filter;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::{Field, FieldPath};
 use vortex_error::{VortexExpect, VortexResult};
-use vortex_expr::{expr_is_filter, split_conjunction, BinaryExpr, VortexExpr};
+use vortex_expr::{split_conjunction, BinaryExpr, VortexExpr};
 
 use super::null_as_false;
 use crate::layouts::Schema;
@@ -20,12 +20,8 @@ pub struct RowFilter {
 }
 
 impl RowFilter {
-    pub fn new(filter: Arc<dyn VortexExpr>, schema: Schema) -> Self {
-        let mut conjunction = split_conjunction(&filter);
-        // Sort in ascending order of cost
-        conjunction.sort_by_key(|e| Reverse(e.estimate_cost(&schema)));
-        let conjunction = conjunction.into_iter().filter(expr_is_filter).collect();
-
+    pub fn new(filter: Arc<dyn VortexExpr>) -> Self {
+        let conjunction = split_conjunction(&filter);
         Self { conjunction }
     }
 
@@ -38,7 +34,8 @@ impl RowFilter {
             let new_mask = null_as_false(new_mask.into_bool()?)?;
             target = filter(target, &new_mask)?;
             mask = bool_array_and_then(mask, new_mask.into_bool()?);
-            if target.len() == 0 {
+
+            if target.is_empty() {
                 break;
             }
         }
@@ -61,12 +58,14 @@ impl RowFilter {
         todo!()
     }
 
-    // /// Re-order the expression so the sub-expressions estimated to be the "cheapest" are first (to the left of the expression)
-    // pub fn reorder(mut self, schema: &Schema) -> RowFilter {
-    //     let expr = reorder_expr_impl(self.filter.clone(), schema);
-    //     self.filter = expr;
-    //     self
-    // }
+    /// Re-order the expression so the sub-expressions estimated to be the "cheapest" are first (to the left of the expression)
+    pub fn reorder(mut self, schema: &Schema) -> RowFilter {
+        // Sort in ascending order of cost
+        self.conjunction
+            .sort_by_key(|e| Reverse(e.estimate_cost(schema)));
+
+        self
+    }
 }
 
 fn bool_array_and_then(current: BoolArray, next: BoolArray) -> BoolArray {

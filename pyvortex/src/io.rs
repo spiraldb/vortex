@@ -127,11 +127,11 @@ use crate::PyArray;
 /// >>> # b.to_arrow()
 ///
 #[pyfunction]
-#[pyo3(signature = (f, projection = None, _row_filter = None))]
+#[pyo3(signature = (f, projection = None, row_filter = None))]
 pub fn read<'py>(
     f: &Bound<'py, PyString>,
     projection: Option<&Bound<'py, PyAny>>,
-    _row_filter: Option<&Bound<'py, PyExpr>>,
+    row_filter: Option<&Bound<'py, PyExpr>>,
 ) -> PyResult<Bound<'py, PyArray>> {
     async fn run(
         fname: &str,
@@ -194,8 +194,7 @@ pub fn read<'py>(
         }
     };
 
-    // let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone(), schema));
-    let row_filter = None;
+    let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
 
     let inner = tokio::runtime::Builder::new_current_thread()
         .enable_all()
