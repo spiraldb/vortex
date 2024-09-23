@@ -1,9 +1,11 @@
+use rand::rngs::StdRng;
 use rand::Rng;
 
 pub fn stratified_slices(
     length: usize,
     sample_size: u16,
     sample_count: u16,
+    rng: &mut StdRng,
 ) -> Vec<(usize, usize)> {
     let total_num_samples: usize = (sample_count * sample_size) as usize;
     if total_num_samples >= length {
@@ -24,7 +26,7 @@ pub fn stratified_slices(
                 stop - start >= size,
                 "Slices must be bigger than their sampled size"
             );
-            let random_start = rand::thread_rng().gen_range(start..=(stop - size));
+            let random_start = rng.gen_range(start..=(stop - size));
             (random_start, random_start + size)
         })
         .collect()
