@@ -9,7 +9,7 @@ use vortex::compute::filter;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::{Field, FieldPath};
 use vortex_error::{VortexExpect, VortexResult};
-use vortex_expr::{split_conjunction, BinaryExpr, VortexExpr};
+use vortex_expr::{expr_is_filter, split_conjunction, BinaryExpr, VortexExpr};
 
 use super::null_as_false;
 use crate::layouts::Schema;
@@ -21,7 +21,11 @@ pub struct RowFilter {
 
 impl RowFilter {
     pub fn new(filter: Arc<dyn VortexExpr>) -> Self {
-        let conjunction = split_conjunction(&filter);
+        let conjunction = split_conjunction(&filter)
+            .into_iter()
+            .filter(expr_is_filter)
+            .collect();
+
         Self { conjunction }
     }
 

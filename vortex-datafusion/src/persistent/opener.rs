@@ -11,8 +11,8 @@ use vortex::Context;
 use vortex_expr::datafusion::convert_expr_to_vortex;
 use vortex_serde::io::ObjectStoreReadAt;
 use vortex_serde::layouts::{
-    build_selection, LayoutContext, LayoutDeserializer, LayoutMessageCache, LayoutReaderBuilder,
-    Projection,
+    LayoutContext, LayoutDeserializer, LayoutMessageCache, LayoutReaderBuilder, Projection,
+    RowFilter,
 };
 
 pub struct VortexFileOpener {
@@ -41,22 +41,22 @@ impl FileOpener for VortexFileOpener {
             builder = builder.with_batch_size(batch_size);
         }
 
-        let expr = self
+        let row_filter = self
             .predicate
             .clone()
             .map(convert_expr_to_vortex)
-            .transpose()?;
+            .transpose()?
+            .map(RowFilter::new);
+
+        if let Some(row_filter) = row_filter {
+            builder = builder.with_row_filter(row_filter);
+        }
 
         if let Some(projection) = self.projection.as_ref() {
-            builder = builder.with_projection(Projection::new(projection))
+            builder = builder.with_projection(Projection::new(projection));
         }
 
         Ok(async {
-            if let Some(expr) = expr {
-                let selection = build_selection(read_at, expr, deserializer, message_cache).await?;
-                builder = builder.with_row_selection(selection);
-            }
-
             Ok(Box::pin(
                 builder
                     .build()

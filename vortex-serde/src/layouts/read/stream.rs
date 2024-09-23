@@ -7,12 +7,14 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
+use vortex::array::StructArray;
 use vortex::compute::unary::subtract_scalar;
 use vortex::compute::{filter, search_sorted, slice, take, SearchSortedSide};
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_err, vortex_panic, VortexError, VortexResult};
 use vortex_scalar::Scalar;
+use vortex_schema::projection::Projection;
 use vortex_schema::Schema;
 
 use super::null_as_false;
@@ -29,6 +31,7 @@ pub struct LayoutBatchStream<R> {
     state: StreamingState<R>,
     dtype: DType,
     current_offset: usize,
+    result_projection: Projection,
 }
 
 impl<R: VortexReadAt> LayoutBatchStream<R> {
@@ -38,14 +41,17 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
         messages_cache: Arc<RwLock<LayoutMessageCache>>,
         dtype: DType,
         scan: Scan,
+        result_projection: Projection,
     ) -> Self {
         LayoutBatchStream {
             reader: Some(reader),
             layout,
             scan,
             messages_cache,
-            state: Default::default(),
+            result_projection,
+
             dtype,
+            state: Default::default(),
             current_offset: 0,
         }
     }
@@ -132,6 +138,13 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     if let Some(row_filter) = &self.scan.filter {
                         batch = row_filter.evaluate(&batch)?;
                     }
+
+                    batch = match &self.result_projection {
+                        Projection::All => batch,
+                        Projection::Flat(v) => {
+                            StructArray::try_from(batch)?.project(v)?.into_array()
+                        }
+                    };
 
                     self.state = StreamingState::Init;
                     return Poll::Ready(Some(Ok(batch)));
