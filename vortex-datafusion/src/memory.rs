@@ -125,11 +125,11 @@ impl TableProvider for VortexMemTable {
                     ExecutionMode::Bounded,
                 );
 
-                Ok(Arc::new(VortexScanExec {
-                    array: self.array.clone(),
-                    scan_projection: output_projection.clone(),
+                Ok(Arc::new(VortexScanExec::try_new(
+                    self.array.clone(),
+                    output_projection.clone(),
                     plan_properties,
-                }))
+                )?))
             }
         }
     }
