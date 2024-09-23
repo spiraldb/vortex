@@ -8,7 +8,9 @@ use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, StructArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use crate::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+};
 
 mod compute;
 
@@ -99,10 +101,7 @@ impl StructArray {
     /// which specifies the new ordering of columns in the struct. The projection can be used to
     /// perform column re-ordering, deletion, or duplication at a logical level, without any data
     /// copying.
-    ///
-    /// # Panics
-    /// This function will panic an error if the projection references columns not within the
-    /// schema boundaries.
+    #[allow(clippy::same_name_method)]
     pub fn project(&self, projection: &[Field]) -> VortexResult<Self> {
         let mut children = Vec::with_capacity(projection.len());
         let mut names = Vec::with_capacity(projection.len());
@@ -148,6 +147,10 @@ impl StructArrayTrait for StructArray {
                 .child(idx, dtype, self.len())
                 .unwrap_or_else(|e| vortex_panic!(e, "StructArray: field {} not found", idx))
         })
+    }
+
+    fn project(&self, projection: &[Field]) -> VortexResult<Array> {
+        self.project(projection).map(|a| a.into_array())
     }
 }
 
