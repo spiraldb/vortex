@@ -1,4 +1,4 @@
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
@@ -11,8 +11,7 @@ use vortex::Context;
 use vortex_expr::datafusion::convert_expr_to_vortex;
 use vortex_serde::io::ObjectStoreReadAt;
 use vortex_serde::layouts::{
-    LayoutContext, LayoutDeserializer, LayoutMessageCache, LayoutReaderBuilder, Projection,
-    RowFilter,
+    LayoutContext, LayoutDeserializer, LayoutReaderBuilder, Projection, RowFilter,
 };
 
 pub struct VortexFileOpener {
@@ -28,11 +27,6 @@ impl FileOpener for VortexFileOpener {
     fn open(&self, file_meta: FileMeta) -> DFResult<FileOpenFuture> {
         let read_at =
             ObjectStoreReadAt::new(self.object_store.clone(), file_meta.location().clone());
-
-        let deserializer =
-            LayoutDeserializer::new(self.ctx.clone(), Arc::new(LayoutContext::default()));
-
-        let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
 
         let mut builder = LayoutReaderBuilder::new(
             read_at,
