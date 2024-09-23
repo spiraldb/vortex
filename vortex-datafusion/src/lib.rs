@@ -21,14 +21,16 @@ use datafusion_execution::object_store::ObjectStoreUrl;
 use datafusion_expr::{Expr, Operator};
 use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 use futures::Stream;
+use itertools::Itertools;
 use memory::{VortexMemTable, VortexMemTableOptions};
 use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
+use vortex::compute::Len;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDType, IntoArrayVariant};
 use vortex_dtype::field::Field;
-use vortex_error::{vortex_err, VortexExpect};
+use vortex_error::{vortex_err, VortexExpect, VortexResult};
 
 pub mod memory;
 pub mod persistent;
@@ -293,28 +295,20 @@ impl ExecutionPlan for VortexScanExec {
     }
 
     fn statistics(&self) -> DFResult<Statistics> {
-        let projection = self
-            .scan_projection
-            .iter()
-            .copied()
-            .map(Field::from)
-            .collect::<Vec<_>>();
-        let projected = self
-            .array
-            .as_ref()
-            .with_dyn(|a| {
-                a.as_struct_array()
-                    .ok_or_else(|| vortex_err!("Not a struct array"))
-                    .and_then(|s| s.project(&projection))
-            })
-            .map_err(|vortex_err| {
-                exec_datafusion_err!("projection pushdown to Vortex failed: {vortex_err}")
-            })?;
-        let column_statistics = projected.with_dyn(|a| {
-            let struct_arr = a.as_struct_array_unchecked();
-            (0..struct_arr.nfields())
+        let mut nbytes: usize = 0;
+        let column_statistics = self.array.as_ref().with_dyn(|a| {
+            let struct_arr = a
+                .as_struct_array()
+                .ok_or_else(|| vortex_err!("Not a struct array"))?;
+            self.scan_projection
+                .iter()
                 .map(|i| {
-                    let arr = struct_arr.field(i).vortex_expect("iterating over field");
+                    struct_arr
+                        .field(*i)
+                        .ok_or_else(|| vortex_err!("Projection references unknown field {i}"))
+                })
+                .map_ok(|arr| {
+                    nbytes += arr.nbytes();
                     ColumnStatistics {
                         null_count: arr
                             .statistics()
@@ -343,11 +337,11 @@ impl ExecutionPlan for VortexScanExec {
                         distinct_count: Precision::Absent,
                     }
                 })
-                .collect()
-        });
+                .collect::<VortexResult<Vec<_>>>()
+        })?;
         Ok(Statistics {
             num_rows: Precision::Exact(self.array.len()),
-            total_byte_size: Precision::Exact(projected.nbytes()),
+            total_byte_size: Precision::Exact(nbytes),
             column_statistics,
         })
     }
