@@ -12,8 +12,8 @@ edition = { workspace = true }
 rust-version = { workspace = true }
 
 [dependencies]
-arrow-array = { workspace = true }
 ahash = { workspace = true }
+arrow-array = { workspace = true }
 bytes = { workspace = true }
 flatbuffers = { workspace = true }
 futures = { workspace = true }
@@ -34,7 +34,6 @@ vortex-schema = { workspace = true }
 
 [dev-dependencies]
 arrow = { workspace = true, features = ["ipc"] }
-arrow-array = { workspace = true }
 arrow-ipc = { workspace = true, features = ["lz4"] }
 arrow-schema = { workspace = true }
 arrow-select = { workspace = true }
