@@ -8,13 +8,12 @@
 Vortex is a toolkit for working with compressed Apache Arrow arrays in-memory, on-disk, and over-the-wire.
 
 Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines (or, analogously,
-what LLVM + Clang are to compilers): a highly extensible & extremely performant *framework* for building a modern
-columnar file format, with a state-of-the-art, "batteries included" reference implementation that we're tentatively
-calling "Vinyl".[1]
+what LLVM + Clang are to compilers): a highly extensible & extremely fast *framework* for building a modern
+columnar file format, with a state-of-the-art, "batteries included" reference implementation.
 
-Vinyl is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster)
+Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster)
 and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput. It will also support very wide
-tables (at least 10s of thousands of columns) and (in the future) on-device decompression on GPUs.
+tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
 
 > [!CAUTION]
 > This library is still under rapid development and is a work in progress!
@@ -22,7 +21,7 @@ tables (at least 10s of thousands of columns) and (in the future) on-device deco
 > Some key features are not yet implemented, both the API and the serialized format are likely to change in breaking ways,
 > and we cannot yet guarantee correctness in all cases.
 
-The major components of Vortex are:
+The major features of Vortex are:
 
 * **Logical Types** - a schema definition that makes no assertions about physical layout.
 * **Zero-Copy to Arrow** - "canonicalized" (i.e., fully decompressed) Vortex arrays can be zero-copy converted to/from Apache Arrow arrays.
@@ -33,23 +32,18 @@ The major components of Vortex are:
   and (in the future) decompression on GPUs.
 * **Cascading Compression** - data can be recursively compressed with multiple nested encodings.
 * **Pluggable Compression Strategies** - the built-in Compressor is based on BtrBlocks, but other strategies can trivially be used instead.
-* **Compute** - basic compute kernels that can operate over encoded data. Note that Vortex does not intend to become
-  a full-fledged compute engine, but rather to implement lower-level compute operations required for efficient scanning & pushdown.
+* **Compute** - basic compute kernels that can operate over encoded data (e.g., for filter pushdown).
 * **Statistics** - each array carries around lazily computed summary statistics, optionally populated at read-time.
   These are available to compute kernels as well as to the compressor.
-* **Serialization** - Zero-copy serialization, both for IPC and for file formats.
-* **Vinyl Columnar File Format (in progress)** - A modern file format that uses the Vortex serde library to store compressed array data.
+* **Serialization** - Zero-copy serialization of arrays, both for IPC and for file formats.
+* **Columnar File Format (in progress)** - A modern file format that uses the Vortex serde library to store compressed array data.
   Optimized for random access reads and extremely fast scans; an aspiring successor to Apache Parquet.
-
-
-[1]: Because like its predecessor, it's a type of [flooring](https://en.wikipedia.org/wiki/Parquet), but it is much better for
-storing & accessing *records*. 🥁
 
 ## Overview: Logical vs Physical
 
-One of the core principles in Vortex is separation of the logical from the physical.
+One of the core design principles in Vortex is strict separation of logical and physical concerns.
 
-A Vortex array is defined by a logical data type (i.e., the type of scalar elements) as well as a physical encoding
+For example, a Vortex array is defined by a logical data type (i.e., the type of scalar elements) as well as a physical encoding
 (the type of the array itself). Vortex ships with several built-in encodings, as well as several extension encodings.
 
 The built-in encodings are primarily designed to model the Apache Arrow in-memory format, enabling us to construct
@@ -116,6 +110,7 @@ in-memory array implementation, allowing us to defer decompression. Currently, t
 * RoaringBool
 * Sparse
 * ZigZag
+* ...with more to come
 
 ### Compression
 
@@ -214,6 +209,12 @@ rye sync
 ## License
 
 Licensed under the Apache License, Version 2.0 (the "License").
+
+## Governance
+
+Vortex is and will remain an open-source project. Our intent is to model its governance structure after the
+[Substrait project](https://substrait.io/governance/), which in turn is based on the model of the Apache Software Foundation.
+Expect more details on this in Q4 2024.
 
 ## Acknowledgments 🏆
 
