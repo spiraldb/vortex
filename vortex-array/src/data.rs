@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_panic, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::encoding::EncodingRef;
@@ -40,12 +40,12 @@ impl ArrayData {
             stats_map: Arc::new(RwLock::new(statistics)),
         };
 
+        let array = Array::from(data);
         // Validate here that the metadata correctly parses, so that an encoding can infallibly
-        let array = data.to_array();
-        // FIXME(ngates): run some validation function
+        // FIXME(robert): Encoding::with_dyn no longer eagerly validates metadata, come up with a way to validate metadata
         encoding.with_dyn(&array, &mut |_| Ok(()))?;
 
-        Ok(data)
+        Ok(array.into())
     }
 
     pub fn encoding(&self) -> EncodingRef {
@@ -76,23 +76,28 @@ impl ArrayData {
         self.buffer
     }
 
-    pub fn child(&self, index: usize, dtype: &DType, len: usize) -> Option<&Array> {
+    // We want to allow these panics because they are indicative of implementation error.
+    #[allow(clippy::panic_in_result_fn)]
+    pub fn child(&self, index: usize, dtype: &DType, len: usize) -> VortexResult<&Array> {
         match self.children.get(index) {
-            None => None,
+            None => vortex_bail!(
+                "ArrayData::child({}): child {index} not found",
+                self.encoding.id().as_ref()
+            ),
             Some(child) => {
                 assert_eq!(
                     child.dtype(),
                     dtype,
-                    "Child {index} requested with incorrect dtype for encoding {}",
-                    self.encoding().id()
+                    "child {index} requested with incorrect dtype for encoding {}",
+                    self.encoding().id().as_ref(),
                 );
                 assert_eq!(
                     child.len(),
                     len,
-                    "Child {index} requested with incorrect length for encoding {}",
-                    self.encoding.id()
+                    "child {index} requested with incorrect length for encoding {}",
+                    self.encoding.id().as_ref(),
                 );
-                Some(child)
+                Ok(child)
             }
         }
     }
@@ -118,8 +123,8 @@ impl ToArray for ArrayData {
 
 impl From<Array> for ArrayData {
     fn from(value: Array) -> ArrayData {
-        match &value {
-            Array::Data(d) => d.clone(),
+        match value {
+            Array::Data(d) => d,
             Array::View(_) => value.with_dyn(|v| v.to_array_data()),
         }
     }

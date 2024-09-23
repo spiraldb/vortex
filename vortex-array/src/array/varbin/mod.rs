@@ -15,6 +15,7 @@ use crate::array::primitive::PrimitiveArray;
 use crate::array::varbin::builder::VarBinBuilder;
 use crate::compute::slice;
 use crate::compute::unary::scalar_at;
+use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{Validity, ValidityMetadata};
 use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArrayVariant};
@@ -27,7 +28,7 @@ mod flatten;
 mod stats;
 mod variants;
 
-impl_encoding!("vortex.varbin", 4u16, VarBin);
+impl_encoding!("vortex.varbin", ids::VAR_BIN, VarBin);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VarBinMetadata {
@@ -105,9 +106,11 @@ impl VarBinArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(2, &Validity::DTYPE, self.len())
+                .vortex_expect("VarBinArray: validity child")
+        })
     }
 
     /// Access value bytes child array limited to values that are logically present in

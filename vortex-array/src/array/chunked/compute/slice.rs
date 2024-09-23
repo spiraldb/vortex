@@ -1,4 +1,4 @@
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::VortexResult;
 
 use crate::array::chunked::ChunkedArray;
 use crate::compute::{slice, SliceFn};
@@ -10,20 +10,16 @@ impl SliceFn for ChunkedArray {
         let (length_chunk, length_in_last_chunk) = self.find_chunk_idx(stop);
 
         if length_chunk == offset_chunk {
-            if let Some(chunk) = self.chunk(offset_chunk) {
-                return Self::try_new(
-                    vec![slice(&chunk, offset_in_first_chunk, length_in_last_chunk)?],
-                    self.dtype().clone(),
-                )
-                .map(|a| a.into_array());
-            }
+            let chunk = self.chunk(offset_chunk)?;
+            return Ok(Self::try_new(
+                vec![slice(&chunk, offset_in_first_chunk, length_in_last_chunk)?],
+                self.dtype().clone(),
+            )?
+            .into_array());
         }
 
         let mut chunks = (offset_chunk..length_chunk + 1)
-            .map(|i| {
-                self.chunk(i)
-                    .ok_or_else(|| vortex_err!(OutOfBounds: i, 0, self.nchunks()))
-            })
+            .map(|i| self.chunk(i))
             .collect::<VortexResult<Vec<_>>>()?;
         if let Some(c) = chunks.first_mut() {
             *c = slice(&*c, offset_in_first_chunk, c.len())?;

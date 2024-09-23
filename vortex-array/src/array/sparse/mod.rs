@@ -6,6 +6,7 @@ use vortex_scalar::Scalar;
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::scalar_at;
 use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
+use crate::encoding::ids;
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -15,7 +16,7 @@ mod compute;
 mod flatten;
 mod variants;
 
-impl_encoding!("vortex.sparse", 9u16, Sparse);
+impl_encoding!("vortex.sparse", ids::SPARSE, Sparse);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseMetadata {

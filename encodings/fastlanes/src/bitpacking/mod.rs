@@ -2,6 +2,7 @@ use ::serde::{Deserialize, Serialize};
 pub use compress::*;
 use fastlanes::BitPacking;
 use vortex::array::{PrimitiveArray, SparseArray};
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
@@ -18,7 +19,7 @@ use vortex_error::{
 mod compress;
 mod compute;
 
-impl_encoding!("fastlanes.bitpacked", 14u16, BitPacked);
+impl_encoding!("fastlanes.bitpacked", ids::FL_BITPACKED, BitPacked);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitPackedMetadata {
@@ -156,16 +157,15 @@ impl BitPackedArray {
     /// indices indicate the locations of patches. The indices must have non-zero length.
     #[inline]
     pub fn patches(&self) -> Option<Array> {
-        self.metadata()
-            .has_patches
-            .then(|| {
-                self.as_ref().child(
+        self.metadata().has_patches.then(|| {
+            self.as_ref()
+                .child(
                     0,
                     &self.dtype().with_nullability(Nullability::Nullable),
                     self.len(),
                 )
-            })
-            .flatten()
+                .vortex_expect("BitPackedArray: patches child")
+        })
     }
 
     #[inline]
@@ -176,11 +176,11 @@ impl BitPackedArray {
     pub fn validity(&self) -> Validity {
         let validity_child_idx = if self.metadata().has_patches { 1 } else { 0 };
 
-        self.metadata().validity.to_validity(self.as_ref().child(
-            validity_child_idx,
-            &Validity::DTYPE,
-            self.len(),
-        ))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(validity_child_idx, &Validity::DTYPE, self.len())
+                .vortex_expect("BitPackedArray: validity child")
+        })
     }
 
     pub fn encode(array: &Array, bit_width: usize) -> VortexResult<Self> {

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
+use vortex::encoding::ids;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
@@ -14,7 +15,7 @@ use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::runend_bool_decode;
 
-impl_encoding!("vortex.runendbool", 23u16, RunEndBool);
+impl_encoding!("vortex.runendbool", ids::RUN_END_BOOL, RunEndBool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEndBoolMetadata {
@@ -72,9 +73,11 @@ impl RunEndBoolArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(self.as_ref().child(2, &Validity::DTYPE, self.len()))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(2, &Validity::DTYPE, self.len())
+                .vortex_expect("RunEndBoolArray: validity child")
+        })
     }
 
     #[inline]

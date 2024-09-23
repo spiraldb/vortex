@@ -13,5 +13,5 @@ pub fn as_scalar_buffer<T: NativePType + ArrowNativeType>(
 pub fn as_offset_buffer<T: NativePType + ArrowNativeType>(
     array: PrimitiveArray,
 ) -> OffsetBuffer<T> {
-    OffsetBuffer::new(as_scalar_buffer(array))
+    unsafe { OffsetBuffer::new_unchecked(as_scalar_buffer(array)) }
 }

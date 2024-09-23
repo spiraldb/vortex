@@ -8,12 +8,10 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use arrow_array::RecordBatchReader;
-use humansize::DECIMAL;
 use itertools::Itertools;
 use lazy_static::lazy_static;
-use log::{info, LevelFilter};
+use log::LevelFilter;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use parquet::arrow::ProjectionMask;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowType;
@@ -167,49 +165,30 @@ pub fn setup_logger(level: LevelFilter) {
     .unwrap();
 }
 
-pub fn compress_taxi_data() -> Array {
+pub fn fetch_taxi_data() -> Array {
     let file = File::open(taxi_data_parquet()).unwrap();
     let builder = ParquetRecordBatchReaderBuilder::try_new(file).unwrap();
-    let _mask = ProjectionMask::roots(builder.parquet_schema(), [6]);
-    let _no_datetime_mask = ProjectionMask::roots(
-        builder.parquet_schema(),
-        [0, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
-    );
-    let reader = builder
-        .with_projection(_mask)
-        //.with_projection(no_datetime_mask)
-        .with_batch_size(BATCH_SIZE)
-        // .with_batch_size(5_000_000)
-        // .with_limit(100_000)
-        .build()
-        .unwrap();
+    let reader = builder.with_batch_size(BATCH_SIZE).build().unwrap();
 
     let schema = reader.schema();
-    let mut uncompressed_size: usize = 0;
+    ChunkedArray::try_new(
+        reader
+            .into_iter()
+            .map(|batch_result| batch_result.unwrap())
+            .map(Array::try_from)
+            .map(Result::unwrap)
+            .collect_vec(),
+        DType::from_arrow(schema),
+    )
+    .unwrap()
+    .into_array()
+}
+
+pub fn compress_taxi_data() -> Array {
+    let uncompressed = fetch_taxi_data();
     let compressor: &dyn CompressionStrategy = &SamplingCompressor::new(COMPRESSORS.clone());
-    let chunks = reader
-        .into_iter()
-        .map(|batch_result| batch_result.unwrap())
-        .map(Array::try_from)
-        .map(Result::unwrap)
-        .map(|array| {
-            uncompressed_size += array.nbytes();
-            compressor.compress(&array).unwrap()
-        })
-        .collect_vec();
 
-    let compressed = ChunkedArray::try_new(chunks, DType::from_arrow(schema))
-        .unwrap()
-        .into_array();
-
-    info!(
-        "{}, Bytes: {}, Ratio {}",
-        humansize::format_size(compressed.nbytes(), DECIMAL),
-        compressed.nbytes(),
-        compressed.nbytes() as f32 / uncompressed_size as f32
-    );
-
-    compressed
+    compressor.compress(&uncompressed).unwrap()
 }
 
 pub struct CompressionRunStats {

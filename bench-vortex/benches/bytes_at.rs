@@ -56,7 +56,7 @@ fn benchmark(c: &mut Criterion) {
     );
 
     c.bench_with_input(
-        BenchmarkId::new("bytes_at", "array_data"),
+        BenchmarkId::new("bytes_at", "array_view"),
         &array_view_fixture(),
         |b, array| {
             b.iter(|| array.bytes_at(3));

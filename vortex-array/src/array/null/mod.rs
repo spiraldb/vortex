@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use vortex_dtype::DType;
 use vortex_error::{VortexExpect as _, VortexResult};
 
+use crate::encoding::ids;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::variants::{ArrayVariants, NullArrayTrait};
@@ -12,7 +13,7 @@ use crate::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
 
 mod compute;
 
-impl_encoding!("vortex.null", 1u16, Null);
+impl_encoding!("vortex.null", ids::NULL, Null);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NullMetadata {

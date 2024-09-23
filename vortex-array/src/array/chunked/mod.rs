@@ -12,6 +12,7 @@ use vortex_scalar::Scalar;
 use crate::array::primitive::PrimitiveArray;
 use crate::compute::unary::{scalar_at, subtract_scalar, SubtractScalarFn};
 use crate::compute::{search_sorted, SearchSortedSide};
+use crate::encoding::ids;
 use crate::iter::{ArrayIterator, ArrayIteratorAdapter};
 use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
@@ -25,7 +26,7 @@ mod compute;
 mod stats;
 mod variants;
 
-impl_encoding!("vortex.chunked", 11u16, Chunked);
+impl_encoding!("vortex.chunked", ids::CHUNKED, Chunked);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkedMetadata {
@@ -70,9 +71,9 @@ impl ChunkedArray {
     }
 
     #[inline]
-    pub fn chunk(&self, idx: usize) -> Option<Array> {
-        let chunk_start = usize::try_from(&scalar_at(&self.chunk_offsets(), idx).ok()?).ok()?;
-        let chunk_end = usize::try_from(&scalar_at(&self.chunk_offsets(), idx + 1).ok()?).ok()?;
+    pub fn chunk(&self, idx: usize) -> VortexResult<Array> {
+        let chunk_start = usize::try_from(&scalar_at(&self.chunk_offsets(), idx)?)?;
+        let chunk_end = usize::try_from(&scalar_at(&self.chunk_offsets(), idx + 1)?)?;
 
         // Offset the index since chunk_ends is child 0.
         self.as_ref()
@@ -109,9 +110,10 @@ impl ChunkedArray {
 
     pub fn chunks(&self) -> impl Iterator<Item = Array> + '_ {
         (0..self.nchunks()).map(|c| {
-            self.chunk(c).unwrap_or_else(|| {
+            self.chunk(c).unwrap_or_else(|e| {
                 vortex_panic!(
-                    "Chunk should {} exist but doesn't (nchunks: {})",
+                    e,
+                    "ChunkedArray: chunks: chunk {} should exist (nchunks: {})",
                     c,
                     self.nchunks()
                 )
@@ -199,7 +201,9 @@ impl ArrayValidity for ChunkedArray {
     fn is_valid(&self, index: usize) -> bool {
         let (chunk, offset_in_chunk) = self.find_chunk_idx(index);
         self.chunk(chunk)
-            .unwrap_or_else(|| vortex_panic!(OutOfBounds: chunk, 0, self.nchunks()))
+            .unwrap_or_else(|e| {
+                vortex_panic!(e, "ChunkedArray: is_valid failed to find chunk {}", index)
+            })
             .with_dyn(|a| a.is_valid(offset_in_chunk))
     }
 

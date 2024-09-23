@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
+use vortex::encoding::ids;
 use vortex::iter::{Accessor, AccessorRef};
 use vortex::stats::ArrayStatisticsCompute;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
@@ -18,7 +19,7 @@ use crate::alp::Exponents;
 use crate::compress::{alp_encode, decompress};
 use crate::ALPFloat;
 
-impl_encoding!("vortex.alp", 13u16, ALP);
+impl_encoding!("vortex.alp", ids::ALP, ALP);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ALPMetadata {
@@ -94,9 +95,10 @@ impl ALPArray {
 
     pub fn patches(&self) -> Option<Array> {
         self.metadata().patches_dtype.as_ref().map(|dt| {
-            self.as_ref().child(1, dt, self.len()).unwrap_or_else(|| {
+            self.as_ref().child(1, dt, self.len()).unwrap_or_else(|e| {
                 vortex_panic!(
-                    "Missing patches with present metadata flag; patches dtype: {}, patches_len: {}",
+                    e,
+                    "ALPArray: patches child missing: dtype: {}, len: {}",
                     dt,
                     self.len()
                 )

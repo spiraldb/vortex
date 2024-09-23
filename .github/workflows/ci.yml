@@ -47,6 +47,11 @@ jobs:
           rye run pytest --benchmark-disable test/
         working-directory: pyvortex/
 
+      - name: Doctest - PyVortex
+        run: |
+          source ../.venv/bin/activate && make clean && make doctest
+        working-directory: docs/
+
       - name: License Check
         run: cargo install --locked cargo-deny && cargo deny check
       - uses: rustsec/audit-check@v1.4.1
@@ -81,4 +86,4 @@ jobs:
         with:
           version: v1.0.0
       - name: Rust Bench as test
-        run: cargo bench --benches -- --test
+        run: cargo bench --bench '*[!noci]' -- --test

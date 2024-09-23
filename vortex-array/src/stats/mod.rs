@@ -110,6 +110,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.get(stat)
+            .filter(|s| s.is_valid())
             .map(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
@@ -140,6 +141,7 @@ impl dyn Statistics + '_ {
         stat: Stat,
     ) -> Option<U> {
         self.compute(stat)
+            .filter(|s| s.is_valid())
             .map(|s| s.cast(&DType::Primitive(U::PTYPE, NonNullable)))
             .transpose()
             .and_then(|maybe| maybe.as_ref().map(U::try_from).transpose())
@@ -200,4 +202,19 @@ pub fn trailing_zeros(array: &Array) -> u8 {
         .find_or_first(|(_, &v)| v > 0)
         .map(|(i, _)| i)
         .unwrap_or(0) as u8
+}
+
+#[cfg(test)]
+mod test {
+    use crate::array::PrimitiveArray;
+    use crate::stats::{ArrayStatistics, Stat};
+
+    #[test]
+    fn min_of_nulls_is_not_panic() {
+        let min = PrimitiveArray::from_nullable_vec::<i32>(vec![None, None, None, None])
+            .statistics()
+            .compute_as_cast::<i64>(Stat::Min);
+
+        assert_eq!(min, None);
+    }
 }

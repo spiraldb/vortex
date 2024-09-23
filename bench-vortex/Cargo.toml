@@ -47,6 +47,7 @@ rand = { workspace = true }
 rayon = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 simplelog = { workspace = true }
 tar = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
@@ -80,9 +81,9 @@ test = false
 bench = false
 
 [[bench]]
-name = "compress_benchmark"
-harness = false
+name = "compress_noci"
 test = false
+harness = false
 
 [[bench]]
 name = "random_access"
@@ -90,12 +91,12 @@ test = false
 harness = false
 
 [[bench]]
-name = "datafusion_benchmark"
+name = "datafusion"
 test = false
 harness = false
 
 [[bench]]
-name = "tpch_benchmark"
+name = "tpch"
 test = false
 harness = false
 

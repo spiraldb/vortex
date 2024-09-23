@@ -1,6 +1,6 @@
 use itertools::Itertools;
 use vortex_dtype::PType;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
 use crate::array::chunked::ChunkedArray;
@@ -38,12 +38,7 @@ impl TakeFn for ChunkedArray {
             if chunk_idx != prev_chunk_idx {
                 // Start a new chunk
                 let indices_in_chunk_array = indices_in_chunk.clone().into_array();
-                chunks.push(take(
-                    &self.chunk(prev_chunk_idx).ok_or_else(
-                        || vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()),
-                    )?,
-                    &indices_in_chunk_array,
-                )?);
+                chunks.push(take(&self.chunk(prev_chunk_idx)?, &indices_in_chunk_array)?);
                 indices_in_chunk = Vec::new();
             }
 
@@ -53,12 +48,7 @@ impl TakeFn for ChunkedArray {
 
         if !indices_in_chunk.is_empty() {
             let indices_in_chunk_array = indices_in_chunk.into_array();
-            chunks.push(take(
-                &self
-                    .chunk(prev_chunk_idx)
-                    .ok_or_else(|| vortex_err!(OutOfBounds: prev_chunk_idx, 0, self.nchunks()))?,
-                &indices_in_chunk_array,
-            )?);
+            chunks.push(take(&self.chunk(prev_chunk_idx)?, &indices_in_chunk_array)?);
         }
 
         Ok(Self::try_new(chunks, self.dtype().clone())?.into_array())
@@ -109,14 +99,7 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         .into_iter()
         .enumerate()
         .filter_map(|(chunk_idx, indices)| indices.map(|i| (chunk_idx, i)))
-        .map(|(chunk_idx, chunk_indices)| {
-            take(
-                &chunked
-                    .chunk(chunk_idx)
-                    .ok_or_else(|| vortex_err!(OutOfBounds: chunk_idx, 0, chunked.nchunks()))?,
-                &chunk_indices,
-            )
-        })
+        .map(|(chunk_idx, chunk_indices)| take(&chunked.chunk(chunk_idx)?, &chunk_indices))
         .try_collect()?;
 
     Ok(ChunkedArray::try_new(chunks, chunked.dtype().clone())?.into_array())

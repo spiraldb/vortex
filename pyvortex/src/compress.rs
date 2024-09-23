@@ -19,13 +19,13 @@ use crate::error::PyVortexError;
 ///
 /// >>> a = vortex.encoding.array([42 for _ in range(1000)])
 /// >>> str(vortex.encoding.compress(a))
-/// 'vortex.constant(0x0a)(i64, len=1000)'
+/// 'vortex.constant(0x09)(i64, len=1000)'
 ///
 /// Compress an array of increasing integers:
 ///
 /// >>> a = vortex.encoding.array(list(range(1000)))
 /// >>> str(vortex.encoding.compress(a))
-/// 'fastlanes.for(0x0f)(i64, len=1000)'
+/// 'fastlanes.for(0x17)(i64, len=1000)'
 ///
 /// Compress an array of increasing floating-point numbers and a few nulls:
 ///
@@ -34,7 +34,7 @@ use crate::error::PyVortexError;
 /// ...     for x in range(1000)
 /// ... ])
 /// >>> str(vortex.encoding.compress(a))
-/// 'vortex.alp(0x0d)(f64?, len=1000)'
+/// 'vortex.alp(0x11)(f64?, len=1000)'
 pub fn compress<'py>(array: &Bound<'py, PyArray>) -> PyResult<Bound<'py, PyArray>> {
     let compressor = SamplingCompressor::default();
     let inner = compressor

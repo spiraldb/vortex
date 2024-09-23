@@ -15,6 +15,7 @@ use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, Vo
 use crate::array::varbin::VarBinArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
+use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -106,7 +107,7 @@ impl Debug for BinaryView {
 // reminder: views are 16 bytes with 8-byte alignment
 pub(crate) const VIEW_SIZE: usize = mem::size_of::<BinaryView>();
 
-impl_encoding!("vortex.varbinview", 5u16, VarBinView);
+impl_encoding!("vortex.varbinview", ids::VAR_BIN_VIEW, VarBinView);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VarBinViewMetadata {
@@ -176,22 +177,26 @@ impl VarBinViewArray {
     pub fn views(&self) -> Array {
         self.as_ref()
             .child(0, &DType::BYTES, self.len() * VIEW_SIZE)
-            .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its views"))
+            .vortex_expect("VarBinViewArray is missing its views")
     }
 
     #[inline]
     pub fn bytes(&self, idx: usize) -> Array {
         self.as_ref()
             .child(idx + 1, &DType::BYTES, self.metadata().data_lens[idx])
-            .unwrap_or_else(|| vortex_panic!("VarBinViewArray is missing its data buffer"))
+            .vortex_expect("VarBinViewArray is missing its data buffer")
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata().validity.to_validity(self.as_ref().child(
-            self.metadata().data_lens.len() + 1,
-            &Validity::DTYPE,
-            self.len(),
-        ))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(
+                    self.metadata().data_lens.len() + 1,
+                    &Validity::DTYPE,
+                    self.len(),
+                )
+                .vortex_expect("VarBinViewArray: validity child")
+        })
     }
 
     pub fn from_iter_str<T: AsRef<str>, I: IntoIterator<Item = T>>(iter: I) -> Self {
