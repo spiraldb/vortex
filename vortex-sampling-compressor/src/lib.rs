@@ -4,6 +4,8 @@ use std::fmt::{Debug, Display, Formatter};
 use compressors::fsst::FSSTCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
@@ -57,6 +59,7 @@ pub struct CompressConfig {
     max_depth: u8,
     target_block_bytesize: usize,
     target_block_size: usize,
+    rng_seed: u64,
 }
 
 impl Default for CompressConfig {
@@ -70,6 +73,7 @@ impl Default for CompressConfig {
             max_depth: 3,
             target_block_bytesize: 16 * mib,
             target_block_size: 64 * kib,
+            rng_seed: 0,
         }
     }
 }
@@ -248,7 +252,8 @@ impl<'a> SamplingCompressor<'a> {
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
-                let sampled = sampled_compression(arr, self)?;
+                let mut rng = StdRng::seed_from_u64(self.options.rng_seed);
+                let sampled = sampled_compression(arr, self, &mut rng)?;
                 Ok(sampled.unwrap_or_else(|| CompressedArray::uncompressed(arr.clone())))
             }
         }
@@ -258,6 +263,7 @@ impl<'a> SamplingCompressor<'a> {
 fn sampled_compression<'a>(
     array: &Array,
     compressor: &SamplingCompressor<'a>,
+    rng: &mut StdRng,
 ) -> VortexResult<Option<CompressedArray<'a>>> {
     // First, we try constant compression and shortcut any sampling.
     if let Some(cc) = ConstantCompressor.can_compress(array) {
@@ -321,6 +327,7 @@ fn sampled_compression<'a>(
             array.len(),
             compressor.options.sample_size,
             compressor.options.sample_count,
+            rng,
         )
         .into_iter()
         .map(|(start, stop)| slice(array, start, stop))
