@@ -6,6 +6,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.10.1...vortex-runend-bool-v0.11.0) - 2024-09-23
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+## `vortex-bytebool` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-bytebool-v0.10.1...vortex-bytebool-v0.11.0) - 2024-09-23
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+## `vortex-runend` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-runend-v0.10.1...vortex-runend-v0.11.0) - 2024-09-23
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+## `vortex-roaring` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-roaring-v0.10.1...vortex-roaring-v0.11.0) - 2024-09-23
+
+### Other
+- Update croaring-sys to 4.1.4 and remove workarounds for croaring/660 ([#898](https://github.com/spiraldb/vortex/pull/898))
+
+## `vortex-fastlanes` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-fastlanes-v0.10.1...vortex-fastlanes-v0.11.0) - 2024-09-23
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+## `vortex-datafusion` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-datafusion-v0.10.1...vortex-datafusion-v0.11.0) - 2024-09-23
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+### Other
+- VortexScanExec reports statistics to datafusion ([#909](https://github.com/spiraldb/vortex/pull/909))
+
+## `vortex-scalar` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-scalar-v0.10.1...vortex-scalar-v0.11.0) - 2024-09-23
+
+### Other
+- Teach StructTrait how to project fields ([#910](https://github.com/spiraldb/vortex/pull/910))
+
+## `vortex-array` - [0.11.0](https://github.com/spiraldb/vortex/compare/0.10.1...0.11.0) - 2024-09-23
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+### Other
+- Teach StructTrait how to project fields ([#910](https://github.com/spiraldb/vortex/pull/910))
+
+## `vortex-alp` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.10.1...vortex-alp-v0.11.0) - 2024-09-23
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
 ## `vortex-serde` - [0.10.1](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.10.0...vortex-serde-v0.10.1) - 2024-09-20
 
 ### Added
