@@ -3,14 +3,27 @@ use fastlanes::{Delta, Transpose};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::fill_forward;
+use vortex::compute::SliceFn;
+use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
 use vortex::IntoArrayVariant;
-use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType, Nullability};
+use vortex_dtype::{
+    match_each_signed_integer_ptype, match_each_unsigned_integer_ptype, NativePType, Nullability,
+};
 use vortex_error::VortexResult;
 
 use crate::DeltaArray;
 
 pub fn delta_compress(array: &PrimitiveArray) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
+    let array = if array.ptype().is_signed_int() {
+        match_each_signed_integer_ptype!(array.ptype(), |$T| {
+            assert!(array.statistics().compute_min::<$T>().map(|x| x >= 0).unwrap_or(false));
+        });
+        &array.reinterpret_cast(array.ptype().to_unsigned())
+    } else {
+        array
+    };
+
     // Fill forward nulls
     let filled = fill_forward(array.as_ref())?.into_primitive()?;
 
@@ -99,13 +112,25 @@ where
 pub fn delta_decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
     let bases = array.bases().into_primitive()?;
     let deltas = array.deltas().into_primitive()?;
-    let decoded = match_each_unsigned_integer_ptype!(deltas.ptype(), |$T| {
+
+    let unsigned_ptype = if bases.ptype().is_signed_int() {
+        bases.ptype().to_unsigned()
+    } else {
+        bases.ptype()
+    };
+
+    let decoded = match_each_unsigned_integer_ptype!(unsigned_ptype, |$T| {
         PrimitiveArray::from_vec(
-            decompress_primitive::<$T>(bases.maybe_null_slice(), deltas.maybe_null_slice()),
+            decompress_primitive::<$T>(
+                bases.reinterpret_cast(unsigned_ptype).maybe_null_slice(),
+                deltas.reinterpret_cast(unsigned_ptype).maybe_null_slice(),
+            ),
             array.validity()
         )
     });
-    Ok(decoded)
+    decoded
+        .slice(array.offset(), decoded.len() - array.trailing_garbage())?
+        .into_primitive()
 }
 
 fn decompress_primitive<T: NativePType + Delta + Transpose + WrappingAdd>(
@@ -163,8 +188,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use vortex::IntoArray;
-
     use super::*;
 
     #[test]
@@ -182,15 +205,7 @@ mod test {
     }
 
     fn do_roundtrip_test<T: NativePType>(input: Vec<T>) {
-        let (bases, deltas) = delta_compress(&PrimitiveArray::from(input.clone())).unwrap();
-
-        let delta = DeltaArray::try_new(
-            bases.into_array(),
-            deltas.into_array(),
-            Validity::NonNullable,
-        )
-        .unwrap();
-
+        let delta = DeltaArray::try_from_vec(input.clone()).unwrap();
         let decompressed = delta_decompress(delta).unwrap();
         let decompressed_slice = decompressed.maybe_null_slice::<T>();
         assert_eq!(decompressed_slice.len(), input.len());
