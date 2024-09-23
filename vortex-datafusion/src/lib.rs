@@ -26,7 +26,6 @@ use memory::{VortexMemTable, VortexMemTableOptions};
 use persistent::config::VortexTableOptions;
 use persistent::provider::VortexFileTableProvider;
 use vortex::array::ChunkedArray;
-use vortex::compute::Len;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::{Array, ArrayDType, IntoArrayVariant};
 use vortex_dtype::field::Field;
