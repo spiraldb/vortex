@@ -131,28 +131,13 @@ impl ArrayView {
                 Box::leak(Box::new(OpaqueEncoding(child.encoding())))
             });
 
-        // Figure out how many buffers to skip...
-        // We store them depth-first.
-        let buffer_offset = self
-            .flatbuffer()
-            .children()
-            .ok_or_else(|| vortex_err!("flatbuffer children not found"))?
-            .iter()
-            .take(idx)
-            .map(|child| Self::cumulative_nbuffers(child))
-            .sum::<usize>()
-            + self.has_buffer() as usize;
-        let buffer_count = Self::cumulative_nbuffers(child);
-
         Ok(Self {
             encoding,
             dtype: dtype.clone(),
             len,
             flatbuffer: self.flatbuffer.clone(),
             flatbuffer_loc,
-            buffers: self
-                .buffers
-                .slice(buffer_offset, buffer_offset + buffer_count),
+            buffers: self.buffers.clone(),
             ctx: self.ctx.clone(),
         })
     }
@@ -176,12 +161,12 @@ impl ArrayView {
 
     /// Whether the current Array makes use of a buffer
     pub fn has_buffer(&self) -> bool {
-        self.flatbuffer().has_buffer()
+        self.flatbuffer().buffer_index().is_some()
     }
 
     /// The number of buffers used by the current Array and all its children.
     fn cumulative_nbuffers(array: fb::Array) -> usize {
-        let mut nbuffers = if array.has_buffer() { 1 } else { 0 };
+        let mut nbuffers = if array.buffer_index().is_some() { 1 } else { 0 };
         for child in array.children().unwrap_or_default() {
             nbuffers += Self::cumulative_nbuffers(child)
         }
@@ -189,7 +174,9 @@ impl ArrayView {
     }
 
     pub fn buffer(&self) -> Option<&Buffer> {
-        self.has_buffer().then(|| &self.buffers[0])
+        self.flatbuffer()
+            .buffer_index()
+            .map(|idx| &self.buffers[idx as usize])
     }
 
     pub fn statistics(&self) -> &dyn Statistics {

@@ -72,7 +72,9 @@ impl ChunkedArray {
 
     #[inline]
     pub fn chunk(&self, idx: usize) -> VortexResult<Array> {
-        assert!(idx < self.nchunks());
+        if idx >= self.nchunks() {
+            vortex_bail!("chunk index {} > num chunks ({})", idx, self.nchunks());
+        }
 
         let chunk_start = usize::try_from(&scalar_at_unchecked(&self.chunk_offsets(), idx))?;
         let chunk_end = usize::try_from(&scalar_at_unchecked(&self.chunk_offsets(), idx + 1))?;
