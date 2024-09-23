@@ -1,5 +1,6 @@
+use vortex_dtype::field::Field;
 use vortex_dtype::DType;
-use vortex_error::VortexExpect;
+use vortex_error::{vortex_err, VortexExpect, VortexResult};
 use vortex_scalar::StructScalar;
 
 use crate::array::sparse::SparseArray;
@@ -82,6 +83,24 @@ impl StructArrayTrait for SparseArray {
             .ok()?
             .into_array(),
         )
+    }
+
+    fn project(&self, projection: &[Field]) -> VortexResult<Array> {
+        let values = self.values().with_dyn(|s| {
+            s.as_struct_array()
+                .ok_or_else(|| vortex_err!("Chunk was not a StructArray"))?
+                .project(projection)
+        })?;
+        let scalar = StructScalar::try_from(self.fill_value())?.project(projection)?;
+
+        SparseArray::try_new_with_offset(
+            self.indices().clone(),
+            values,
+            self.len(),
+            self.indices_offset(),
+            scalar,
+        )
+        .map(|a| a.into_array())
     }
 }
 
