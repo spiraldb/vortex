@@ -25,7 +25,6 @@ pub struct LayoutReaderBuilder<R> {
     indices: Option<Array>,
     row_filter: Option<RowFilter>,
     batch_size: Option<usize>,
-    row_selection: Option<Array>,
     message_cache: Option<Arc<RwLock<LayoutMessageCache>>>,
 }
 
@@ -39,7 +38,6 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             size: None,
             indices: None,
             batch_size: None,
-            row_selection: None,
             message_cache: None,
         }
     }
@@ -127,7 +125,6 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             batch_size,
             projection: read_projection,
             indices: self.indices,
-            row_selection: self.row_selection,
         };
 
         let message_cache = self.message_cache.unwrap_or_default();

@@ -40,7 +40,6 @@ const FILE_POSTSCRIPT_SIZE: usize = 20;
 #[derive(Debug, Clone)]
 pub struct Scan {
     indices: Option<Array>,
-    row_selection: Option<Array>,
     projection: Projection,
     filter: Option<RowFilter>,
     batch_size: usize,

@@ -112,31 +112,20 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                             ReadResult::Batch(a) => self.state = StreamingState::Decoding(a),
                         }
                     } else {
-                        if let Some(selection) = self.scan.row_selection.as_ref() {
-                            assert!(selection.is_empty());
-                        }
                         return Poll::Ready(None);
                     }
                 }
                 StreamingState::Decoding(arr) => {
                     let mut batch = arr.clone();
 
-                    if let Some(selection) = self.scan.row_selection.take() {
-                        let batch_selection = slice(&selection, 0, batch.len())?;
-                        let batch_selection = null_as_false(batch_selection.into_bool()?)?;
-                        let reminder = slice(&selection, batch.len(), selection.len())?;
-
-                        self.scan.row_selection = Some(reminder);
-
-                        batch = filter(&batch, &batch_selection)?;
-                    }
-
                     if self.scan.indices.is_some() {
                         batch = self.take_batch(&batch)?;
                     }
 
                     if let Some(row_filter) = &self.scan.filter {
-                        batch = row_filter.evaluate(&batch)?;
+                        let mask = row_filter.evaluate(&batch)?;
+                        let mask = null_as_false(mask.into_bool()?)?;
+                        batch = filter(batch, mask)?;
                     }
 
                     batch = match &self.result_projection {
