@@ -5,40 +5,58 @@
 [![Documentation](https://docs.rs/vortex-array/badge.svg)](https://docs.rs/vortex-array)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/vortex-array)](https://pypi.org/project/vortex-array/)
 
-Vortex is an Apache Arrow-compatible toolkit for working with compressed array data. We are using Vortex to develop a
-next-generation columnar file format for multidimensional arrays.
+Vortex is a toolkit for working with compressed Apache Arrow arrays in-memory, on-disk, and over-the-wire.
+
+Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines (or, analogously,
+what LLVM + Clang are to compilers): a highly extensible & extremely fast *framework* for building a modern
+columnar file format, with a state-of-the-art, "batteries included" reference implementation.
+
+Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster)
+and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput. It will also support very wide
+tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
 
 > [!CAUTION]
-> This library is still under rapid development and is very much a work in progress!
+> This library is still under rapid development and is a work in progress!
 >
-> Some key features are not yet implemented, the API will almost certainly change in breaking ways, and we cannot
-> yet guarantee correctness in all cases.
+> Some key features are not yet implemented, both the API and the serialized format are likely to change in breaking ways,
+> and we cannot yet guarantee correctness in all cases.
 
-The major components of Vortex are (will be!):
+The major features of Vortex are:
 
 * **Logical Types** - a schema definition that makes no assertions about physical layout.
-* **Encodings** - a pluggable set of physical layouts. Vortex ships with several state-of-the-art lightweight
-  compression codecs that have the potential to support GPU decompression.
-* **Compression** - recursive compression based on stratified samples of the input.
-* **Compute** - basic compute kernels that can operate over compressed data. Note that Vortex does not intend to become
-  a full-fledged compute engine, but rather to provide the ability to implement basic compute operations as may be
-  required for efficient scanning & pushdown operations.
+* **Zero-Copy to Arrow** - "canonicalized" (i.e., fully decompressed) Vortex arrays can be zero-copy converted to/from Apache Arrow arrays.
+* **Extensible Encodings** - a pluggable set of physical layouts. In addition to the builtin set of Arrow-compatible encodings,
+  the Vortex repository includes a number of state-of-the-art encodings (e.g., FastLanes, ALP, FSST, etc.) that are implemented
+  as extensions. While arbitrary encodings can be implemented as extensions, we have intentionally chosen a small set
+  of encodings that are highly data-parallel, which in turn allows for efficient vectorized decoding, random access reads,
+  and (in the future) decompression on GPUs.
+* **Cascading Compression** - data can be recursively compressed with multiple nested encodings.
+* **Pluggable Compression Strategies** - the built-in Compressor is based on BtrBlocks, but other strategies can trivially be used instead.
+* **Compute** - basic compute kernels that can operate over encoded data (e.g., for filter pushdown).
 * **Statistics** - each array carries around lazily computed summary statistics, optionally populated at read-time.
   These are available to compute kernels as well as to the compressor.
-* **Serde** - zero-copy serialization. Useful as a building block in creating IPC or file formats that contain
-  compressed arrays.
+* **Serialization** - Zero-copy serialization of arrays, both for IPC and for file formats.
+* **Columnar File Format (in progress)** - A modern file format that uses the Vortex serde library to store compressed array data.
+  Optimized for random access reads and extremely fast scans; an aspiring successor to Apache Parquet.
 
 ## Overview: Logical vs Physical
 
-One of the core principles in Vortex is separation of the logical from the physical.
+One of the core design principles in Vortex is strict separation of logical and physical concerns.
 
-A Vortex array is defined by a logical data type (i.e., the type of scalar elements) as well as a physical encoding
+For example, a Vortex array is defined by a logical data type (i.e., the type of scalar elements) as well as a physical encoding
 (the type of the array itself). Vortex ships with several built-in encodings, as well as several extension encodings.
 
 The built-in encodings are primarily designed to model the Apache Arrow in-memory format, enabling us to construct
 Vortex arrays with zero-copy from Arrow arrays. There are also several built-in encodings (e.g., `sparse` and
 `chunked`) that are useful building blocks for other encodings. The included extension encodings are mostly designed
 to model compressed in-memory arrays, such as run-length or dictionary encoding.
+
+Analogously, `vortex-serde` is designed to handle the low-level physical details of reading and writing Vortex arrays. Choices
+about which encodings to use or how to logically chunk data are left up to the `Compressor` implementation.
+
+One of the unique attributes of the (in-progress) Vortex file format is that it encodes the physical layout of the data within the
+file's footer. This allows the file format to be effectively self-describing and to evolve without breaking changes to
+the file format specification.
 
 ## Components
 
@@ -53,10 +71,11 @@ The Vortex type-system is still in flux. The current set of logical types is:
 * Binary
 * UTF8
 * Struct
+* List (partially implemented)
+* Date/Time/DateTime/Duration (implemented as an extension type)
 * Decimal: TODO
-* Date/Time/DateTime/Duration: TODO (in-progress, currently partially supported)
-* List: TODO
 * FixedList: TODO
+* Tensor: TODO
 * Union: TODO
 
 ### Canonical/Flat Encodings
@@ -68,8 +87,9 @@ canonical representations of each of the logical data types. The canonical encod
 * Bool
 * Primitive (Integer, Float)
 * Struct
-* VarBin
-* VarBinView
+* VarBin (Binary, UTF8)
+* VarBinView (Binary, UTF8)
+* Extension
 * ...with more to come
 
 ### Compressed Encodings
@@ -83,16 +103,18 @@ in-memory array implementation, allowing us to defer decompression. Currently, t
 * Chunked
 * Delta (FastLanes)
 * Dictionary
+* Fast Static Symbol Table (FSST)
 * Frame-of-Reference
 * Run-end Encoding
 * RoaringUInt
 * RoaringBool
 * Sparse
 * ZigZag
+* ...with more to come
 
 ### Compression
 
-Vortex's top-level compression strategy is based on the
+Vortex's default compression strategy is based on the
 [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
 Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (
@@ -106,8 +128,8 @@ Vortex provides the ability for each encoding to specialize the implementation o
 decompressing where possible. For example, filtering a dictionary-encoded UTF8 array can be more cheaply performed by
 filtering the dictionary first.
 
-Note that Vortex does not intend to become a full-fledged compute engine, but rather to provide the ability to
-implement basic compute operations as may be required for efficient scanning & operation pushdown.
+Note--as mentioned above--that Vortex does not intend to become a full-fledged compute engine, but rather to implement
+basic compute operations as may be required for efficient scanning & pushdown.
 
 ### Statistics
 
@@ -130,12 +152,15 @@ The current statistics are:
 
 ### Serialization / Deserialization (Serde)
 
-Vortex serde is currently in the design phase. The goals of this implementation are:
+The goals of the `vortex-serde` implementation are:
 
 * Support scanning (column projection + row filter) with zero-copy and zero heap allocation.
-* Support random access in constant time.
+* Support random access in constant or near-constant time.
 * Forward statistical information (such as sortedness) to consumers.
-* To provide a building block for file format authors to store compressed array data.
+* Provide IPC format for sending arrays between processes.
+* Provide an extensible, best-in-class file format for storing columnar data on disk or in object storage.
+
+TODO: insert diagram here
 
 ## Integration with Apache Arrow
 
@@ -185,6 +210,12 @@ rye sync
 
 Licensed under the Apache License, Version 2.0 (the "License").
 
+## Governance
+
+Vortex is and will remain an open-source project. Our intent is to model its governance structure after the
+[Substrait project](https://substrait.io/governance/), which in turn is based on the model of the Apache Software Foundation.
+Expect more details on this in Q4 2024.
+
 ## Acknowledgments 🏆
 
 This project is inspired by and--in some cases--directly based upon the existing, excellent work of many researchers
@@ -209,14 +240,12 @@ In particular, the following academic papers greatly influenced the development:
 
 Additionally, we benefited greatly from:
 
-* the collected OSS work of [Daniel Lemire](https://github.com/lemire), such
-  as [FastPFor](https://github.com/lemire/FastPFor),
-  and [StreamVByte](https://github.com/lemire/streamvbyte).
-* the [parquet2](https://github.com/jorgecarleitao/parquet2) project
-  by [Jorge Leitao](https://github.com/jorgecarleitao).
+* the existence, ideas, & implementation of [Apache Arrow](https://arrow.apache.org).
+* likewise for the excellent [Apache DataFusion](https://github.com/apache/datafusion) project.
+* the [parquet2](https://github.com/jorgecarleitao/parquet2) project by [Jorge Leitao](https://github.com/jorgecarleitao).
 * the public discussions around choices of compression codecs, as well as the C++ implementations thereof,
   from [duckdb](https://github.com/duckdb/duckdb).
-* the existence, ideas, & implementation of the [Apache Arrow](https://arrow.apache.org) project.
-* the [Velox](https://github.com/facebookincubator/velox) project and discussions with its maintainers.
+* the [Velox](https://github.com/facebookincubator/velox) and [Nimble](https://github.com/facebookincubator/nimble) projects,
+  and discussions with their maintainers.
 
 Thanks to all of the aforementioned for sharing their work and knowledge with the world! 🚀
