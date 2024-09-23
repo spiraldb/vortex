@@ -182,14 +182,14 @@ impl VortexExpr for BinaryExpr {
         let rhs = self.rhs.evaluate(batch)?;
 
         let array = match self.operator {
-            Operator::Eq => compare(&lhs, &rhs, ArrayOperator::Eq)?,
-            Operator::NotEq => compare(&lhs, &rhs, ArrayOperator::NotEq)?,
-            Operator::Lt => compare(&lhs, &rhs, ArrayOperator::Lt)?,
-            Operator::Lte => compare(&lhs, &rhs, ArrayOperator::Lte)?,
-            Operator::Gt => compare(&lhs, &rhs, ArrayOperator::Gt)?,
-            Operator::Gte => compare(&lhs, &rhs, ArrayOperator::Gte)?,
-            Operator::And => vortex::compute::and(&lhs, &rhs)?,
-            Operator::Or => vortex::compute::or(&lhs, &rhs)?,
+            Operator::Eq => compare(lhs, rhs, ArrayOperator::Eq)?,
+            Operator::NotEq => compare(lhs, rhs, ArrayOperator::NotEq)?,
+            Operator::Lt => compare(lhs, rhs, ArrayOperator::Lt)?,
+            Operator::Lte => compare(lhs, rhs, ArrayOperator::Lte)?,
+            Operator::Gt => compare(lhs, rhs, ArrayOperator::Gt)?,
+            Operator::Gte => compare(lhs, rhs, ArrayOperator::Gte)?,
+            Operator::And => vortex::compute::and(lhs, rhs)?,
+            Operator::Or => vortex::compute::or(lhs, rhs)?,
         };
 
         Ok(array)

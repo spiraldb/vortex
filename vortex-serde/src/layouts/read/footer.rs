@@ -5,6 +5,7 @@ use vortex_dtype::flatbuffers::{deserialize_and_project, resolve_field_reference
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
+use vortex_schema::Schema;
 
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::read::context::LayoutDeserializer;
@@ -74,6 +75,10 @@ impl Footer {
 
     pub fn dtype(&self) -> VortexResult<DType> {
         Ok(IPCDType::read_flatbuffer(&self.fb_schema()?)?.0)
+    }
+
+    pub fn schema(&self) -> VortexResult<Schema> {
+        self.dtype().map(Schema::new)
     }
 
     pub fn projected_dtype(&self, projection: &[Field]) -> VortexResult<DType> {

@@ -95,6 +95,8 @@ pub async fn build_selection<R: VortexReadAt + Unpin + Send + 'static>(
     message_cache: Arc<RwLock<LayoutMessageCache>>,
 ) -> VortexResult<Array> {
     let mut builder = LayoutReaderBuilder::new(reader, deserializer);
+    let footer = builder.read_footer().await?;
+    let row_filter = RowFilter::new(expr, footer.schema()?);
     builder = builder.with_message_cache(message_cache);
 
     let mut stream = builder.build().await?;
@@ -103,7 +105,7 @@ pub async fn build_selection<R: VortexReadAt + Unpin + Send + 'static>(
 
     while let Some(batch) = stream.next().await {
         let batch = batch?;
-        let bool_array = expr.evaluate(&batch)?.into_bool()?;
+        let bool_array = row_filter.evaluate(&batch)?.into_bool()?;
         bool_builder.append_buffer(&bool_array.boolean_buffer());
         validity_builder.push(bool_array.logical_validity());
     }
