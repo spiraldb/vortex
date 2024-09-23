@@ -22,7 +22,7 @@ use vortex_alp::ALPEncoding;
 use vortex_datetime_parts::DateTimePartsEncoding;
 use vortex_dict::DictEncoding;
 use vortex_dtype::DType;
-use vortex_fastlanes::{BitPackedEncoding, FoREncoding};
+use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
 use vortex_roaring::RoaringBoolEncoding;
 use vortex_runend::RunEndEncoding;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
@@ -56,7 +56,7 @@ lazy_static! {
         &BitPackedEncoding,
         &FoREncoding,
         &DateTimePartsEncoding,
-        // &DeltaEncoding,  Blows up the search space too much.
+        &DeltaEncoding,  // Blows up the search space too much.
         &RunEndEncoding,
         &RoaringBoolEncoding,
         // &RoaringIntEncoding,

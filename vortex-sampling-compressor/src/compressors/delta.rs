@@ -2,6 +2,7 @@ use std::collections::HashSet;
 
 use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
+use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 use vortex_fastlanes::{delta_compress, Delta, DeltaArray, DeltaEncoding};
@@ -12,6 +13,10 @@ use crate::SamplingCompressor;
 #[derive(Debug)]
 pub struct DeltaCompressor;
 
+fn possibly_negative(v: Option<i64>) -> bool {
+    v.map(|x| x < 0).unwrap_or(true)
+}
+
 impl EncodingCompressor for DeltaCompressor {
     fn id(&self) -> &str {
         Delta::ID.as_ref()
@@ -21,9 +26,15 @@ impl EncodingCompressor for DeltaCompressor {
         // Only support primitive arrays
         let parray = PrimitiveArray::try_from(array).ok()?;
 
-        // Only supports ints
-        if !parray.ptype().is_unsigned_int() {
+        if !parray.ptype().is_int() {
             return None;
+        }
+
+        if parray.ptype().is_signed_int() {
+            let min = parray.statistics().compute_min::<i64>();
+            if possibly_negative(min) {
+                return None;
+            }
         }
 
         Some(self)
@@ -42,12 +53,14 @@ impl EncodingCompressor for DeltaCompressor {
         let (bases, deltas) = delta_compress(&parray)?;
 
         // Recursively compress the bases and deltas
-        let bases = ctx
-            .named("bases")
-            .compress(bases.as_ref(), like.as_ref().and_then(|l| l.child(0)))?;
-        let deltas = ctx
-            .named("deltas")
-            .compress(deltas.as_ref(), like.as_ref().and_then(|l| l.child(1)))?;
+        let bases = ctx.named("bases").compress(
+            bases.reinterpret_cast(parray.ptype()).as_ref(), // FIXME(DK): should delta compress preserve ptype?
+            like.as_ref().and_then(|l| l.child(0)),
+        )?;
+        let deltas = ctx.named("deltas").compress(
+            deltas.reinterpret_cast(parray.ptype()).as_ref(),
+            like.as_ref().and_then(|l| l.child(1)),
+        )?;
 
         Ok(CompressedArray::new(
             DeltaArray::try_from_delta_compress_parts(bases.array, deltas.array, validity)?

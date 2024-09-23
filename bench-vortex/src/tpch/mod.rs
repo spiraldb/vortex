@@ -21,6 +21,7 @@ use vortex_datafusion::memory::VortexMemTableOptions;
 use vortex_datafusion::persistent::config::{VortexFile, VortexTableOptions};
 use vortex_datafusion::SessionContextExt;
 use vortex_dtype::DType;
+use vortex_fastlanes::DeltaEncoding;
 use vortex_sampling_compressor::SamplingCompressor;
 use vortex_serde::layouts::LayoutWriter;
 
@@ -307,7 +308,11 @@ async fn register_vortex_file(
     .await?;
 
     let ctx = if enable_compression {
-        Arc::new(Context::default().with_encodings(SamplingCompressor::default().used_encodings()))
+        Arc::new(
+            Context::default()
+                .with_encodings(SamplingCompressor::default().used_encodings())
+                .with_encoding(&DeltaEncoding),
+        )
     } else {
         Arc::new(Context::default())
     };

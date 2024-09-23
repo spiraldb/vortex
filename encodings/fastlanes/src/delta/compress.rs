@@ -133,15 +133,20 @@ pub fn delta_decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
         .into_primitive()
 }
 
-fn decompress_primitive<T: NativePType + Delta + Transpose + WrappingAdd>(
+pub fn decompress_primitive<T: NativePType + Delta + Transpose + WrappingAdd>(
     bases: &[T],
     deltas: &[T],
+    is_jagged: bool,
 ) -> Vec<T>
 where
     [(); T::LANES]:,
 {
     // How many fastlanes vectors we will process.
-    let num_chunks = deltas.len() / 1024;
+    let (num_chunks, remainder_size) = if is_jagged {
+        (deltas.len() / 1024, deltas.len() % 1024)
+    } else {
+        ((deltas.len() + 1023) / 1024, 0)
+    };
 
     // How long each base vector will be.
     let lanes = T::LANES;
@@ -171,7 +176,6 @@ where
     assert_eq!(output.len() % 1024, 0);
 
     // The remainder was encoded with scalar logic, so we need to scalar decode it.
-    let remainder_size = deltas.len() % 1024;
     if remainder_size > 0 {
         let chunk = &deltas[num_chunks * 1024..];
         assert_eq!(bases.len(), num_chunks * lanes + 1);
