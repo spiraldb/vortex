@@ -62,10 +62,6 @@ impl StatsSet {
         Self::from(stats)
     }
 
-    pub fn values(&self) -> impl Iterator<Item = (&Stat, &Scalar)> + '_ {
-        self.values.iter()
-    }
-
     pub fn of(stat: Stat, value: Scalar) -> Self {
         Self::from(HashMap::from([(stat, value)]))
     }
