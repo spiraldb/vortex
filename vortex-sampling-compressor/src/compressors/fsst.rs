@@ -4,13 +4,14 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use fsst::Compressor;
-use vortex::array::{VarBin, VarBinView};
+use vortex::array::{VarBin, VarBinArray, VarBinView};
 use vortex::encoding::EncodingRef;
 use vortex::{ArrayDType, ArrayDef, IntoArray};
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_fsst::{fsst_compress, fsst_train_compressor, FSSTArray, FSSTEncoding, FSST};
 
+use super::delta::DeltaCompressor;
 use super::{CompressedArray, CompressionTree, EncoderMetadata, EncodingCompressor};
 use crate::SamplingCompressor;
 
@@ -91,18 +92,38 @@ impl EncodingCompressor for FSSTCompressor {
                 like.as_ref().and_then(|l| l.child(0)),
             )?;
 
+        let codes_varbin = VarBinArray::try_from(fsst_array.codes())?;
+        let codes_varbin_dtype = codes_varbin.dtype().clone();
+
+        let codes_offsets_compressed = ctx
+            .named("codes_varbin_offsets")
+            .excluding(self)
+            .including(&DeltaCompressor)
+            .compress(
+                &codes_varbin.offsets(),
+                like.as_ref().and_then(|l| l.child(1)),
+            )?;
+
+        let codes = VarBinArray::try_new(
+            codes_offsets_compressed.array,
+            codes_varbin.bytes(),
+            codes_varbin_dtype,
+            codes_varbin.validity(),
+        )?
+        .into_array();
+
         Ok(CompressedArray::new(
             FSSTArray::try_new(
                 fsst_array.dtype().clone(),
                 fsst_array.symbols(),
                 fsst_array.symbol_lengths(),
-                fsst_array.codes(),
+                codes,
                 uncompressed_lengths.array,
             )?
             .into_array(),
             Some(CompressionTree::new_with_metadata(
                 self,
-                vec![uncompressed_lengths.path],
+                vec![uncompressed_lengths.path, codes_offsets_compressed.path],
                 compressor,
             )),
         ))
