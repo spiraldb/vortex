@@ -1,11 +1,8 @@
 use std::fmt::Debug;
-use std::sync::{Arc, RwLock};
 
-use arrow_array::builder::BooleanBufferBuilder;
-use futures::StreamExt as _;
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use vortex::array::BoolArray;
-use vortex::validity::{ArrayValidity, Validity};
+use vortex::validity::Validity;
 use vortex::{Array, IntoArray as _, IntoArrayVariant as _};
 use vortex_error::VortexResult;
 
@@ -24,11 +21,9 @@ pub use cache::LayoutMessageCache;
 pub use context::*;
 pub use filtering::RowFilter;
 pub use stream::LayoutBatchStream;
-use vortex_expr::VortexExpr;
 pub use vortex_schema::projection::Projection;
 pub use vortex_schema::Schema;
 
-use crate::io::VortexReadAt;
 use crate::stream_writer::ByteRange;
 
 // Recommended read-size according to the AWS performance guide
@@ -85,32 +80,6 @@ pub fn null_as_false(array: BoolArray) -> VortexResult<Array> {
             Ok(BoolArray::from(bool_buffer).into_array())
         }
     }
-}
-
-pub async fn build_selection<R: VortexReadAt + Unpin + Send + 'static>(
-    reader: R,
-    expr: Arc<dyn VortexExpr>,
-    deserializer: LayoutDeserializer,
-    message_cache: Arc<RwLock<LayoutMessageCache>>,
-) -> VortexResult<Array> {
-    let mut builder = LayoutReaderBuilder::new(reader, deserializer);
-
-    let row_filter = RowFilter::new(expr);
-    builder = builder.with_message_cache(message_cache);
-
-    let mut stream = builder.build().await?;
-    let mut bool_builder = BooleanBufferBuilder::new(0);
-    let mut validity_builder = vec![];
-
-    while let Some(batch) = stream.next().await {
-        let batch = batch?;
-        let bool_array = row_filter.evaluate(&batch)?.into_bool()?;
-        bool_builder.append_buffer(&bool_array.boolean_buffer());
-        validity_builder.push(bool_array.logical_validity());
-    }
-
-    BoolArray::try_new(bool_builder.finish(), Validity::from_iter(validity_builder))
-        .map(|a| a.into_array())
 }
 
 #[cfg(test)]

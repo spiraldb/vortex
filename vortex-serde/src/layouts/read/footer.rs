@@ -90,7 +90,7 @@ impl Footer {
     }
 
     /// Convert all name based references to index based for sake of augmenting read projection
-    pub fn resolve_references(&self, projection: &[Field]) -> VortexResult<Vec<Field>> {
+    pub(crate) fn resolve_references(&self, projection: &[Field]) -> VortexResult<Vec<Field>> {
         let dtype = self
             .fb_schema()?
             .dtype()

@@ -151,8 +151,7 @@ pub fn read<'py>(
         }
 
         let stream = builder.build().await?;
-        let schema = stream.schema();
-        let dtype = schema.clone().into();
+        let dtype = stream.schema().clone().into();
 
         let vecs: Vec<Array> = stream.try_collect().await?;
 

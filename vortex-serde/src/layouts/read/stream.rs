@@ -1,4 +1,3 @@
-use std::mem;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{ready, Context, Poll};
@@ -49,7 +48,6 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
             scan,
             messages_cache,
             result_projection,
-
             dtype,
             state: Default::default(),
             current_offset: 0,
@@ -61,6 +59,7 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
     }
 
     // TODO(robert): Push this logic down to layouts
+    #[allow(dead_code)]
     fn take_batch(&mut self, batch: &Array) -> VortexResult<Array> {
         let curr_offset = self.current_offset;
         let indices = self
@@ -104,8 +103,9 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     if let Some(read) = self.layout.read_next()? {
                         match read {
                             ReadResult::ReadMore(messages) => {
-                                let reader = mem::take(&mut self.reader)
-                                    .ok_or_else(|| vortex_err!("Invalid state transition"))?;
+                                let reader = self.reader.take().ok_or_else(|| {
+                                    vortex_err!("Invalid state transition - reader dropped")
+                                })?;
                                 let read_future = read_ranges(reader, messages).boxed();
                                 self.state = StreamingState::Reading(read_future);
                             }
@@ -117,10 +117,6 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                 }
                 StreamingState::Decoding(arr) => {
                     let mut batch = arr.clone();
-
-                    if self.scan.indices.is_some() {
-                        batch = self.take_batch(&batch)?;
-                    }
 
                     if let Some(row_filter) = &self.scan.filter {
                         let mask = row_filter.evaluate(&batch)?;
@@ -139,16 +135,16 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     return Poll::Ready(Some(Ok(batch)));
                 }
                 StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
-                    Ok((read, buffers)) => {
-                        let mut write_cache =
+                    Ok((reader, buffers)) => {
+                        let mut write_cache_guard =
                             self.messages_cache.write().unwrap_or_else(|poison| {
                                 vortex_panic!("Failed to write to message cache: {poison}")
                             });
                         for (id, buf) in buffers {
-                            write_cache.set(id, buf)
+                            write_cache_guard.set(id, buf)
                         }
-                        drop(write_cache);
-                        self.reader = Some(read);
+                        drop(write_cache_guard);
+                        self.reader = Some(reader);
                         self.state = StreamingState::Init
                     }
                     Err(e) => {

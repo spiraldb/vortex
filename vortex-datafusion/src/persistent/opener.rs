@@ -34,8 +34,10 @@ impl FileOpener for VortexFileOpener {
 
         let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
 
-        let mut builder = LayoutReaderBuilder::new(read_at.clone(), deserializer.clone())
-            .with_message_cache(message_cache.clone());
+        let mut builder = LayoutReaderBuilder::new(
+            read_at,
+            LayoutDeserializer::new(self.ctx.clone(), Arc::new(LayoutContext::default())),
+        );
 
         if let Some(batch_size) = self.batch_size {
             builder = builder.with_batch_size(batch_size);
