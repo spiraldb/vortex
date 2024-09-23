@@ -61,7 +61,7 @@ impl DateTimePartsArray {
                 seconds_dtype: seconds.dtype().clone(),
                 subseconds_dtype: subsecond.dtype().clone(),
             },
-            [days, seconds, subsecond].into(),
+            vec![days, seconds, subsecond].into(),
             StatsSet::new(),
         )
     }

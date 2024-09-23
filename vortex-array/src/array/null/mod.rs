@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use serde::{Deserialize, Serialize};
 use vortex_dtype::DType;
 use vortex_error::{VortexExpect as _, VortexResult};
@@ -26,7 +24,7 @@ impl NullArray {
             DType::Null,
             len,
             NullMetadata { len },
-            Arc::new([]),
+            vec![].into(),
             StatsSet::nulls(len, &DType::Null),
         )
         .vortex_expect("NullArray::new should never fail!")

@@ -37,7 +37,7 @@ impl FoRArray {
             reference.dtype().clone(),
             child.len(),
             FoRMetadata { reference, shift },
-            [child].into(),
+            vec![child].into(),
             StatsSet::new(),
         )
     }

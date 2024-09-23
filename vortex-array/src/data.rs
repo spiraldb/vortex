@@ -5,6 +5,7 @@ use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_panic, VortexResult};
 use vortex_scalar::Scalar;
 
+use crate::arc_slice::SharedVec;
 use crate::encoding::EncodingRef;
 use crate::stats::{Stat, Statistics, StatsSet};
 use crate::{Array, ArrayDType, ArrayMetadata, ToArray};
@@ -16,7 +17,7 @@ pub struct ArrayData {
     len: usize,
     metadata: Arc<dyn ArrayMetadata>,
     buffer: Option<Buffer>,
-    children: Arc<[Array]>,
+    children: SharedVec<Array>,
     stats_map: Arc<RwLock<StatsSet>>,
 }
 
@@ -27,7 +28,7 @@ impl ArrayData {
         len: usize,
         metadata: Arc<dyn ArrayMetadata>,
         buffer: Option<Buffer>,
-        children: Arc<[Array]>,
+        children: SharedVec<Array>,
         statistics: StatsSet,
     ) -> VortexResult<Self> {
         let data = Self {
