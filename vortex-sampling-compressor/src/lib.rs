@@ -133,6 +133,10 @@ impl<'a> SamplingCompressor<'a> {
         }
     }
 
+    pub fn is_enabled_on(&self, encoding: &dyn EncodingCompressor) -> bool {
+        !self.disabled_compressors.contains(encoding)
+    }
+
     pub fn named(&self, name: &str) -> Self {
         let mut cloned = self.clone();
         cloned.path.push(name.into());
@@ -182,23 +186,18 @@ impl<'a> SamplingCompressor<'a> {
         }
 
         // Attempt to compress using the "like" array, otherwise fall back to sampled compression
-        if let Some(l) = like {
-            if let Some(compressed) = l.compress(arr, self) {
-                let compressed = compressed?;
-
-                check_validity_unchanged(arr, compressed.as_ref());
-                check_dtype_unchanged(arr, compressed.as_ref());
-                return Ok(compressed);
-            } else {
+        let maybe_compressed = like.map(|x| (x, x.compress(arr, self)));
+        let compressed = match maybe_compressed {
+            Some((_, Some(compressed_result))) => compressed_result?,
+            Some((like, None)) => {
                 warn!(
                     "{} cannot find compressor to compress {} like {}",
-                    self, arr, l
+                    self, arr, like
                 );
+                self.compress_array(arr)?
             }
-        }
-
-        // Otherwise, attempt to compress the array
-        let compressed = self.compress_array(arr)?;
+            None => self.compress_array(arr)?,
+        };
 
         check_validity_unchanged(arr, compressed.as_ref());
         check_dtype_unchanged(arr, compressed.as_ref());
@@ -212,7 +211,19 @@ impl<'a> SamplingCompressor<'a> {
         }
     }
 
+    fn compress_all<I>(&self, iter: I) -> VortexResult<Vec<Array>>
+    where
+        I: Iterator<Item = Array>,
+    {
+        iter.map(|chunk| self.compress_array(&chunk).map(|x| x.into_array()))
+            .collect()
+    }
+
     fn compress_array(&self, arr: &Array) -> VortexResult<CompressedArray<'a>> {
+        fn done<'b>(array: Array) -> VortexResult<CompressedArray<'b>> {
+            Ok(CompressedArray::uncompressed(array))
+        }
+
         match arr.encoding().id() {
             Chunked::ID => {
                 let chunked = ChunkedArray::try_from(arr)?;
@@ -220,33 +231,21 @@ impl<'a> SamplingCompressor<'a> {
                     self.options().target_block_bytesize,
                     self.options().target_block_size,
                 )?;
-                let compressed_chunks = less_chunked
-                    .chunks()
-                    .map(|chunk| {
-                        self.compress_array(&chunk)
-                            .map(compressors::CompressedArray::into_array)
-                    })
-                    .collect::<VortexResult<Vec<_>>>()?;
-                Ok(CompressedArray::uncompressed(
+                let compressed_chunks = self.compress_all(less_chunked.chunks())?;
+                done(
                     ChunkedArray::try_new(compressed_chunks, chunked.dtype().clone())?.into_array(),
-                ))
+                )
             }
             Constant::ID => {
                 // Not much better we can do than constant!
-                Ok(CompressedArray::uncompressed(arr.clone()))
+                done(arr.clone())
             }
             Struct::ID => {
                 // For struct arrays, we compress each field individually
                 let strct = StructArray::try_from(arr)?;
-                let compressed_fields = strct
-                    .children()
-                    .map(|field| {
-                        self.compress_array(&field)
-                            .map(compressors::CompressedArray::into_array)
-                    })
-                    .collect::<VortexResult<Vec<_>>>()?;
+                let compressed_fields = self.compress_all(strct.children())?;
                 let validity = self.compress_validity(strct.validity())?;
-                Ok(CompressedArray::uncompressed(
+                done(
                     StructArray::try_new(
                         strct.names().clone(),
                         compressed_fields,
@@ -254,13 +253,17 @@ impl<'a> SamplingCompressor<'a> {
                         validity,
                     )?
                     .into_array(),
-                ))
+                )
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
+
                 let mut rng = StdRng::seed_from_u64(self.options.rng_seed);
                 let sampled = sampled_compression(arr, self, &mut rng)?;
-                Ok(sampled.unwrap_or_else(|| CompressedArray::uncompressed(arr.clone())))
+                match sampled {
+                    Some(compressed) => Ok(compressed),
+                    None => done(arr.clone()),
+                }
             }
         }
     }
@@ -276,10 +279,10 @@ fn sampled_compression<'a>(
         return cc.compress(array, None, compressor.clone()).map(Some);
     }
 
-    let mut candidates: Vec<&dyn EncodingCompressor> = compressor
+    let mut candidates = compressor
         .compressors
         .iter()
-        .filter(|&encoding| !compressor.disabled_compressors.contains(encoding))
+        .filter(|&&x| compressor.is_enabled_on(x))
         .filter(|compression| {
             if compression.can_compress(array).is_some() {
                 if compressor.depth + compression.cost() > compressor.options.max_depth {
@@ -296,7 +299,7 @@ fn sampled_compression<'a>(
             }
         })
         .copied()
-        .collect();
+        .collect::<Vec<_>>();
     debug!("{} candidates for {}: {:?}", compressor, array, candidates);
 
     if candidates.is_empty() {

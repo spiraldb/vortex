@@ -110,6 +110,32 @@ impl ArrayData {
         &self.children
     }
 
+    pub fn map_children<F>(self, f: F) -> VortexResult<ArrayData>
+    where
+        F: FnMut(&Array) -> VortexResult<Array>,
+    {
+        let new_children: Arc<[Array]> = self
+            .children
+            .iter()
+            .map(f)
+            .collect::<VortexResult<Vec<_>>>()?
+            .as_slice()
+            .into();
+        ArrayData::try_new(
+            self.encoding,
+            self.dtype,
+            self.len,
+            self.metadata,
+            self.buffer,
+            new_children,
+            StatsSet::new(),
+        )
+    }
+
+    pub fn modify_children(self) -> Array {
+        todo!()
+    }
+
     pub fn statistics(&self) -> &dyn Statistics {
         self
     }
