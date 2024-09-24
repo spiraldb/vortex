@@ -131,7 +131,7 @@ pub trait ALPFloat: Float + Display + 'static {
 
             // find the first successfully encoded value (i.e., not patched)
             let mut fill_value = Self::ALPInt::zero();
-            for (i, v) in encoded.iter().enumerate() {
+            for i in 0..encoded.len() {
                 if patch_indices[i] != i as u64 {
                     fill_value = encoded[i];
                     break;
