@@ -50,7 +50,7 @@ pub enum ReadResult {
     Batch(Array),
 }
 
-pub trait Layout: Debug + Send {
+pub trait LayoutReader: Debug + Send {
     /// Reads the data from the underlying layout
     ///
     /// The layout can either return a batch data, i.e. an Array or ask for more layout messages to

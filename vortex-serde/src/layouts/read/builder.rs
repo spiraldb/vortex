@@ -1,12 +1,9 @@
 use std::sync::{Arc, RwLock};
 
-use ahash::HashSet;
 use bytes::BytesMut;
 use vortex::{Array, ArrayDType};
-use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
-use vortex_schema::Schema;
 
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::{LayoutMessageCache, RelativeLayoutCache};
@@ -74,65 +71,67 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         let footer = self.read_footer().await?;
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
-        // TODO(robert): Don't leak filter references into read projection
-        let (read_projection, result_projection) = if let Some(filter_columns) = self
+        let filter_projection = self
             .row_filter
             .as_ref()
             .map(|f| f.references())
-            .filter(|refs| !refs.is_empty())
+            // This is necessary to have globally addressed columns in the relative cache,
+            // there is probably a better of doing that, but this works for now and the API isn't very externally-useful.
             .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
             .transpose()?
-        {
-            match self.projection.unwrap_or_default() {
-                Projection::All => (Projection::All, Projection::All),
-                Projection::Flat(mut v) => {
-                    let original_len = v.len();
-                    let existing_fields: HashSet<Field> = v.iter().cloned().collect();
-                    v.extend(
-                        filter_columns
-                            .into_iter()
-                            .filter(|f| !existing_fields.contains(f)),
-                    );
-                    (
-                        Projection::Flat(v),
-                        Projection::Flat((0..original_len).map(Field::from).collect()),
-                    )
-                }
-            }
-        } else {
-            (self.projection.unwrap_or_default(), Projection::All)
-        };
+            .map(Projection::from);
 
-        let projected_dtype = match &read_projection {
+        let read_projection = self.projection.unwrap_or_default();
+
+        let projected_dtype = match read_projection {
             Projection::All => footer.dtype()?,
-            Projection::Flat(projection) => footer.projected_dtype(projection)?,
+            Projection::Flat(ref projection) => footer.projected_dtype(projection)?,
         };
 
-        let filter = self.row_filter.map(|f| {
-            let schema = Schema::new(projected_dtype.clone());
-            f.reorder(&schema)
-        });
+        let filter_dtype = filter_projection
+            .as_ref()
+            .map(|p| match p {
+                Projection::All => footer.dtype(),
+                Projection::Flat(fields) => footer.projected_dtype(fields),
+            })
+            .transpose()?;
 
         let scan = Scan {
-            filter,
+            filter: self.row_filter.clone(),
             batch_size,
             projection: read_projection,
             indices: self.indices,
         };
 
         let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let layouts_cache =
-            RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone());
 
-        let layout = footer.layout(scan.clone(), layouts_cache)?;
+        let data_reader = footer.layout(
+            scan.clone(),
+            RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),
+        )?;
+
+        let filter_reader = filter_dtype
+            .zip(filter_projection)
+            .map(|(dtype, projection)| {
+                footer.layout(
+                    Scan {
+                        filter: self.row_filter,
+                        batch_size,
+                        projection,
+                        indices: None,
+                    },
+                    RelativeLayoutCache::new(message_cache.clone(), dtype),
+                )
+            })
+            .transpose()?;
 
         Ok(LayoutBatchStream::new(
             self.reader,
-            layout,
+            data_reader,
+            filter_reader,
             message_cache,
             projected_dtype,
             scan,
-            result_projection,
         ))
     }
 

@@ -27,8 +27,11 @@ pub fn resolve_field_references<'a, 'b: 'a>(
 }
 
 /// Deserialize flatbuffer schema selecting only columns defined by projection
-pub fn deserialize_and_project(fb: fb::DType<'_>, projection: &[Field]) -> VortexResult<DType> {
-    let fb_struct = fb
+pub fn deserialize_and_project(
+    fb_dtype: fb::DType<'_>,
+    projection: &[Field],
+) -> VortexResult<DType> {
+    let fb_struct = fb_dtype
         .type__as_struct_()
         .ok_or_else(|| vortex_err!("The top-level type should be a struct"))?;
     let nullability = fb_struct.nullable().into();

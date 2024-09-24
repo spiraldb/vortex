@@ -14,7 +14,7 @@ use crate::layouts::read::batch::BatchReader;
 use crate::layouts::read::buffered::BufferedReader;
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::read::context::{LayoutDeserializer, LayoutId, LayoutSpec};
-use crate::layouts::read::{Layout, ReadResult, Scan};
+use crate::layouts::read::{LayoutReader, ReadResult, Scan};
 use crate::stream_writer::ByteRange;
 use crate::ArrayBufferReader;
 
@@ -44,7 +44,7 @@ impl FlatLayout {
     }
 }
 
-impl Layout for FlatLayout {
+impl LayoutReader for FlatLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match self.state {
             FlatLayoutState::Init => {
@@ -97,7 +97,7 @@ impl LayoutSpec for ColumnLayoutSpec {
         scan: Scan,
         layout_serde: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
-    ) -> Box<dyn Layout> {
+    ) -> Box<dyn LayoutReader> {
         Box::new(ColumnLayout::new(
             fb_bytes,
             fb_loc,
@@ -160,7 +160,7 @@ impl ColumnLayout {
         idx: usize,
         children: Vector<ForwardsUOffset<fb::Layout>>,
         dtype: DType,
-    ) -> VortexResult<Box<dyn Layout>> {
+    ) -> VortexResult<Box<dyn LayoutReader>> {
         let layout = children.get(idx);
 
         // TODO: Figure out complex nested schema projections
@@ -176,7 +176,7 @@ impl ColumnLayout {
     }
 }
 
-impl Layout for ColumnLayout {
+impl LayoutReader for ColumnLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ColumnLayoutState::Init => {
@@ -236,7 +236,7 @@ impl LayoutSpec for ChunkedLayoutSpec {
         scan: Scan,
         layout_serde: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
-    ) -> Box<dyn Layout> {
+    ) -> Box<dyn LayoutReader> {
         Box::new(ChunkedLayout::new(
             fb_bytes,
             fb_loc,
@@ -296,7 +296,7 @@ impl ChunkedLayout {
     }
 }
 
-impl Layout for ChunkedLayout {
+impl LayoutReader for ChunkedLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ChunkedLayoutState::Init => {
