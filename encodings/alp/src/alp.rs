@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use itertools::Itertools;
-use num_traits::{CheckedSub, Float, NumCast, PrimInt, ToPrimitive, Zero};
+use num_traits::{Bounded, CheckedSub, Float, NumCast, PrimInt, ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};
 use vortex_error::vortex_panic;
 
@@ -21,7 +21,7 @@ impl Display for Exponents {
 }
 
 pub trait ALPFloat: Float + Display + 'static {
-    type ALPInt: PrimInt + Display + ToPrimitive;
+    type ALPInt: PrimInt + Bounded + Display + ToPrimitive;
 
     const FRACTIONAL_BITS: u8;
     const MAX_EXPONENT: u8;
@@ -103,42 +103,56 @@ pub trait ALPFloat: Float + Display + 'static {
     ) -> (Exponents, Vec<Self::ALPInt>, Vec<u64>, Vec<Self>) {
         let exp = exponents.unwrap_or_else(|| Self::find_best_exponents(values));
 
-        let mut exc_pos = Vec::new();
-        let mut exc_value = Vec::new();
-        let mut prev = Self::ALPInt::zero();
-        let encoded = values
+        // this is intentionally branchless
+        // TODO: batch this into 1024 values at a time to make it more cache friendly
+        let mut patch_count = 0;
+        let mut encoded = values
             .iter()
-            .enumerate()
-            .map(|(i, v)| {
-                match Self::encode_single(*v, exp) {
-                    Ok(fi) => {
-                        prev = fi;
-                        fi
-                    }
-                    Err(exc) => {
-                        exc_pos.push(i as u64);
-                        exc_value.push(exc);
-                        // Emit the last known good value. This helps with run-end encoding.
-                        prev
-                    }
-                }
+            .map(|v| {
+                let encoded = unsafe { Self::encode_single_unchecked(*v, exp) };
+                let decoded = Self::decode_single(encoded, exp);
+                let neq: usize = (decoded != *v) as usize;
+                patch_count += neq;
+                encoded
             })
             .collect_vec();
 
-        (exp, encoded, exc_pos, exc_value)
+        let mut patch_indices = Vec::with_capacity(patch_count);
+        let mut patch_values = Vec::with_capacity(patch_count);
+        if patch_count > 0 {
+            let mut patch_index = 0;
+            for i in 0..encoded.len() {
+                let decoded = Self::decode_single(encoded[i], exp);
+                patch_indices[patch_index] = i as u64;
+                patch_values[patch_index] = values[i];
+                patch_index += (decoded != values[i]) as usize;
+            }
+            assert_eq!(patch_index, patch_count);
+
+            // find the first successfully encoded value (i.e., not patched)
+            let mut fill_value = Self::ALPInt::zero();
+            for (i, v) in encoded.iter().enumerate() {
+                if patch_indices[i] != i as u64 {
+                    fill_value = encoded[i];
+                    break;
+                }
+            }
+
+            for patch_idx in patch_indices.iter() {
+                encoded[*patch_idx as usize] = fill_value;
+            }
+        }
+
+        (exp, encoded, patch_indices, patch_values)
     }
 
     #[inline]
     fn encode_single(value: Self, exponents: Exponents) -> Result<Self::ALPInt, Self> {
-        let encoded = (value * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
-            .fast_round();
-        if let Some(e) = encoded.as_int() {
-            let decoded = Self::decode_single(e, exponents);
-            if decoded == value {
-                return Ok(e);
-            }
+        let encoded = unsafe { Self::encode_single_unchecked(value, exponents) };
+        let decoded = Self::decode_single(encoded, exponents);
+        if decoded == value {
+            return Ok(encoded);
         }
-
         Err(value)
     }
 
@@ -153,6 +167,17 @@ pub trait ALPFloat: Float + Display + 'static {
             )
         });
         encoded_float * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize]
+    }
+
+    /// # Safety
+    ///
+    /// The returned value may not decode back to the original value.
+    #[inline(always)]
+    unsafe fn encode_single_unchecked(value: Self, exponents: Exponents) -> Self::ALPInt {
+        (value * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
+            .fast_round()
+            .as_int()
+            .unwrap_or_else(Self::ALPInt::max_value)
     }
 }
 
