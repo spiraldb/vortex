@@ -14,11 +14,12 @@ macro_rules! match_each_alp_float_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
         use vortex_dtype::PType;
+        use vortex_error::vortex_panic;
         let ptype = $self;
         match ptype {
             PType::F32 => __with__! { f32 },
             PType::F64 => __with__! { f64 },
-            _ => panic!("ALP can only encode f32 and f64"),
+            _ => vortex_panic!("ALP can only encode f32 and f64, got {}", ptype),
         }
     })
 }
@@ -122,7 +123,7 @@ mod tests {
             encoded.encoded().as_primitive().maybe_null_slice::<i32>(),
             vec![1234; 1025]
         );
-        assert_eq!(encoded.exponents(), Exponents { e: 4, f: 1 });
+        assert_eq!(encoded.exponents(), Exponents { e: 9, f: 6 });
 
         let decoded = decompress(encoded).unwrap();
         assert_eq!(
@@ -140,7 +141,7 @@ mod tests {
             encoded.encoded().as_primitive().maybe_null_slice::<i32>(),
             vec![0, 1234, 0]
         );
-        assert_eq!(encoded.exponents(), Exponents { e: 4, f: 1 });
+        assert_eq!(encoded.exponents(), Exponents { e: 9, f: 6 });
 
         let decoded = decompress(encoded).unwrap();
         let expected = vec![0f32, 1.234f32, 0f32];
@@ -158,7 +159,7 @@ mod tests {
             encoded.encoded().as_primitive().maybe_null_slice::<i64>(),
             vec![1234i64, 2718, 2718, 4000] // fill forward
         );
-        assert_eq!(encoded.exponents(), Exponents { e: 3, f: 0 });
+        assert_eq!(encoded.exponents(), Exponents { e: 16, f: 13 });
 
         let decoded = decompress(encoded).unwrap();
         assert_eq!(values, decoded.maybe_null_slice::<f64>());
@@ -178,7 +179,7 @@ mod tests {
         let encoded = alp_encode(&array).unwrap();
         assert!(encoded.patches().is_some());
 
-        assert_eq!(encoded.exponents(), Exponents { e: 3, f: 0 });
+        assert_eq!(encoded.exponents(), Exponents { e: 16, f: 13 });
 
         for idx in 0..3 {
             let s = scalar_at(encoded.as_ref(), idx).unwrap();

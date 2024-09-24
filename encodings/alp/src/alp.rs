@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use itertools::Itertools;
-use num_traits::{Float, NumCast, PrimInt, Zero};
+use num_traits::{CheckedSub, Float, NumCast, PrimInt, ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};
 use vortex_error::vortex_panic;
 
@@ -21,7 +21,7 @@ impl Display for Exponents {
 }
 
 pub trait ALPFloat: Float + Display + 'static {
-    type ALPInt: PrimInt + Display;
+    type ALPInt: PrimInt + Display + ToPrimitive;
 
     const FRACTIONAL_BITS: u8;
     const MAX_EXPONENT: u8;
@@ -30,10 +30,12 @@ pub trait ALPFloat: Float + Display + 'static {
     const IF10: &'static [Self];
 
     /// Round to the nearest floating integer by shifting in and out of the low precision range.
+    #[inline]
     fn fast_round(self) -> Self {
         (self + Self::SWEET) - Self::SWEET
     }
 
+    #[inline]
     fn as_int(self) -> Option<Self::ALPInt> {
         <Self::ALPInt as NumCast>::from(self)
     }
@@ -50,16 +52,14 @@ pub trait ALPFloat: Float + Display + 'static {
                 .collect_vec()
         });
 
-        // TODO(wmanning): idea, start with highest e, then find the best f
-        //  after that, try e's in descending order, with a gap no larger than the original e - f
-        for e in 0..Self::MAX_EXPONENT {
+        for e in (0..Self::MAX_EXPONENT).rev() {
             for f in 0..e {
-                let (_, encoded, exc_pos, exc_patches) = Self::encode(
+                let (_, encoded, _, exc_patches) = Self::encode(
                     sample.as_deref().unwrap_or(values),
                     Some(Exponents { e, f }),
                 );
-                let size =
-                    (encoded.len() + exc_patches.len()) * size_of::<Self>() + (exc_pos.len() * 4);
+
+                let size = Self::estimate_encoded_size(&encoded, &exc_patches);
                 if size < best_nbytes {
                     best_nbytes = size;
                     best_exp = Exponents { e, f };
@@ -70,6 +70,31 @@ pub trait ALPFloat: Float + Display + 'static {
         }
 
         best_exp
+    }
+
+    #[inline(always)]
+    fn estimate_encoded_size(encoded: &[Self::ALPInt], patches: &[Self]) -> usize {
+        let bits_per_encoded = encoded
+            .iter()
+            .minmax()
+            .into_option()
+            // estimating bits per encoded value assuming frame-of-reference + bitpacking-without-patches
+            .and_then(|(min, max)| max.checked_sub(min))
+            .and_then(|range_size: <Self as ALPFloat>::ALPInt| range_size.to_u64())
+            .and_then(|range_size| {
+                range_size
+                    .checked_ilog2()
+                    .map(|bits| (bits + 1) as usize)
+                    .or(Some(0))
+            })
+            .unwrap_or(size_of::<Self::ALPInt>() * 8);
+
+        let encoded_bytes = (encoded.len() * bits_per_encoded + 7) / 8;
+        // each patch is a value + a position
+        // in practice, patch positions are in [0, u16::MAX] because of how we chunk
+        let patch_bytes = patches.len() * (size_of::<Self>() + size_of::<u16>());
+
+        encoded_bytes + patch_bytes
     }
 
     fn encode(
@@ -149,7 +174,7 @@ impl ALPFloat for f32 {
         10000000.0,
         100000000.0,
         1000000000.0,
-        10000000000.0,
+        10000000000.0, // 10^10
     ];
     const IF10: &'static [Self] = &[
         1.0,
@@ -162,7 +187,7 @@ impl ALPFloat for f32 {
         0.0000001,
         0.00000001,
         0.000000001,
-        0.0000000001,
+        0.0000000001, // 10^-10
     ];
 }
 
@@ -196,7 +221,7 @@ impl ALPFloat for f64 {
         100000000000000000000.0,
         1000000000000000000000.0,
         10000000000000000000000.0,
-        100000000000000000000000.0,
+        100000000000000000000000.0, // 10^23
     ];
 
     const IF10: &'static [Self] = &[
@@ -223,6 +248,6 @@ impl ALPFloat for f64 {
         0.00000000000000000001,
         0.000000000000000000001,
         0.0000000000000000000001,
-        0.00000000000000000000001,
+        0.00000000000000000000001, // 10^-23
     ];
 }
