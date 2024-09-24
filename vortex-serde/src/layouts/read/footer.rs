@@ -89,6 +89,20 @@ impl Footer {
         deserialize_and_project(fb_dtype, projection)
     }
 
+    /// Convert all name based references to index based for sake of augmenting read projection
+    pub(crate) fn resolve_references(&self, projection: &[Field]) -> VortexResult<Vec<Field>> {
+        let dtype = self
+            .fb_schema()?
+            .dtype()
+            .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
+        let fb_struct = dtype
+            .type__as_struct_()
+            .ok_or_else(|| vortex_err!("The top-level type should be a struct"))?;
+        vortex_dtype::flatbuffers::resolve_field_references(fb_struct, projection)
+            .map(|idx| idx.map(Field::from))
+            .collect::<VortexResult<Vec<_>>>()
+    }
+
     fn fb_schema(&self) -> VortexResult<fb::Schema> {
         let start_offset = self.leftovers_schema_offset();
         let end_offset = self.leftovers_layout_offset();

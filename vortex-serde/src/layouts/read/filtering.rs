@@ -57,8 +57,7 @@ impl RowFilter {
     pub fn references(&self) -> HashSet<Field> {
         let mut set = HashSet::new();
         for expr in self.conjunction.iter() {
-            let references = expr.references();
-            set.extend(references.iter().cloned());
+            set.extend(expr.references().iter().cloned());
         }
 
         set
