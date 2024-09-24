@@ -47,7 +47,7 @@ vortex-fastlanes = { path = "../encodings/fastlanes" }
 vortex-sampling-compressor = { path = "../vortex-sampling-compressor" }
 
 [lints]
-# workspace = true
+workspace = true
 
 [features]
 default = ["futures", "monoio", "tokio"]
