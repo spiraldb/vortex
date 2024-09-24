@@ -2,7 +2,7 @@ use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::{NativePType, PType};
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail,VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::alp::ALPFloat;
@@ -14,11 +14,12 @@ macro_rules! match_each_alp_float_ptype {
     ($self:expr, | $_:tt $enc:ident | $($body:tt)*) => ({
         macro_rules! __with__ {( $_ $enc:ident ) => ( $($body)* )}
         use vortex_dtype::PType;
+        use vortex_error::vortex_panic;
         let ptype = $self;
         match ptype {
             PType::F32 => __with__! { f32 },
             PType::F64 => __with__! { f64 },
-            _ => panic!("ALP can only encode f32 and f64"),
+            _ => vortex_panic!("ALP can only encode f32 and f64, got {}", ptype),
         }
     })
 }
