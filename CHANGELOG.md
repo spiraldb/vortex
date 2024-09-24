@@ -6,6 +6,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.10.1...vortex-runend-bool-v0.11.0) - 2024-09-24
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+## `vortex-bytebool` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-bytebool-v0.10.1...vortex-bytebool-v0.11.0) - 2024-09-24
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+## `vortex-runend` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-runend-v0.10.1...vortex-runend-v0.11.0) - 2024-09-24
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+## `vortex-roaring` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-roaring-v0.10.1...vortex-roaring-v0.11.0) - 2024-09-24
+
+### Other
+- Update croaring-sys to 4.1.4 and remove workarounds for croaring/660 ([#898](https://github.com/spiraldb/vortex/pull/898))
+
+## `vortex-sampling-compressor` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-sampling-compressor-v0.10.1...vortex-sampling-compressor-v0.11.0) - 2024-09-24
+
+### Added
+- sampling compressor is now seeded ([#917](https://github.com/spiraldb/vortex/pull/917))
+
+## `vortex-fastlanes` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-fastlanes-v0.10.1...vortex-fastlanes-v0.11.0) - 2024-09-24
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+### Other
+- Refactoring some IO-related code ([#846](https://github.com/spiraldb/vortex/pull/846))
+
+## `vortex-serde` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.10.1...vortex-serde-v0.11.0) - 2024-09-24
+
+### Added
+- update IPC format to hold buffer_index ([#903](https://github.com/spiraldb/vortex/pull/903))
+
+### Other
+- Naive interleaved filtering and data reading ([#918](https://github.com/spiraldb/vortex/pull/918))
+- Refactoring some IO-related code ([#846](https://github.com/spiraldb/vortex/pull/846))
+
+## `vortex-schema` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-schema-v0.10.1...vortex-schema-v0.11.0) - 2024-09-24
+
+### Other
+- Refactoring some IO-related code ([#846](https://github.com/spiraldb/vortex/pull/846))
+
+## `vortex-expr` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-expr-v0.10.1...vortex-expr-v0.11.0) - 2024-09-24
+
+### Other
+- Refactoring some IO-related code ([#846](https://github.com/spiraldb/vortex/pull/846))
+
+## `vortex-datafusion` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-datafusion-v0.10.1...vortex-datafusion-v0.11.0) - 2024-09-24
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+### Other
+- VortexScanExec stats are computed only once ([#914](https://github.com/spiraldb/vortex/pull/914))
+- Refactoring some IO-related code ([#846](https://github.com/spiraldb/vortex/pull/846))
+- VortexScanExec reports statistics to datafusion ([#909](https://github.com/spiraldb/vortex/pull/909))
+
+## `vortex-scalar` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-scalar-v0.10.1...vortex-scalar-v0.11.0) - 2024-09-24
+
+### Other
+- Teach StructTrait how to project fields ([#910](https://github.com/spiraldb/vortex/pull/910))
+
+## `vortex-flatbuffers` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-flatbuffers-v0.10.1...vortex-flatbuffers-v0.11.0) - 2024-09-24
+
+### Added
+- update IPC format to hold buffer_index ([#903](https://github.com/spiraldb/vortex/pull/903))
+
+## `vortex-dtype` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-dtype-v0.10.1...vortex-dtype-v0.11.0) - 2024-09-24
+
+### Other
+- Naive interleaved filtering and data reading ([#918](https://github.com/spiraldb/vortex/pull/918))
+- Refactoring some IO-related code ([#846](https://github.com/spiraldb/vortex/pull/846))
+
+## `vortex-array` - [0.11.0](https://github.com/spiraldb/vortex/compare/0.10.1...0.11.0) - 2024-09-24
+
+### Added
+- update IPC format to hold buffer_index ([#903](https://github.com/spiraldb/vortex/pull/903))
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
+### Other
+- Refactoring some IO-related code ([#846](https://github.com/spiraldb/vortex/pull/846))
+- Teach StructTrait how to project fields ([#910](https://github.com/spiraldb/vortex/pull/910))
+
+## `vortex-alp` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.10.1...vortex-alp-v0.11.0) - 2024-09-24
+
+### Added
+- ArrayView::child will throw if encoding not found ([#886](https://github.com/spiraldb/vortex/pull/886))
+
 ## `vortex-serde` - [0.10.1](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.10.0...vortex-serde-v0.10.1) - 2024-09-20
 
 ### Added
