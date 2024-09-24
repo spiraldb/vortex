@@ -6,7 +6,7 @@ use itertools::Itertools;
 use log::warn;
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::encoding::EncodingRef;
@@ -22,8 +22,7 @@ pub struct ArrayView {
     len: usize,
     flatbuffer: Buffer,
     flatbuffer_loc: usize,
-    // TODO(ngates): create an RC'd vector that can be lazily sliced.
-    buffers: Vec<Buffer>,
+    buffers: Arc<[Buffer]>,
     ctx: Arc<Context>,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
@@ -60,20 +59,13 @@ impl ArrayView {
             .lookup_encoding(array.encoding())
             .ok_or_else(|| vortex_err!(InvalidSerde: "Encoding ID out of bounds"))?;
 
-        if buffers.len() != Self::cumulative_nbuffers(array) {
-            vortex_bail!(InvalidSerde:
-                "Incorrect number of buffers {}, expected {}",
-                buffers.len(),
-                Self::cumulative_nbuffers(array)
-            )
-        }
         let view = Self {
             encoding,
             dtype,
             len,
             flatbuffer,
             flatbuffer_loc,
-            buffers,
+            buffers: buffers.into(),
             ctx,
         };
 
@@ -130,26 +122,13 @@ impl ArrayView {
                 Box::leak(Box::new(OpaqueEncoding(child.encoding())))
             });
 
-        // Figure out how many buffers to skip...
-        // We store them depth-first.
-        let buffer_offset = self
-            .flatbuffer()
-            .children()
-            .ok_or_else(|| vortex_err!("flatbuffer children not found"))?
-            .iter()
-            .take(idx)
-            .map(|child| Self::cumulative_nbuffers(child))
-            .sum::<usize>()
-            + self.has_buffer() as usize;
-        let buffer_count = Self::cumulative_nbuffers(child);
-
         Ok(Self {
             encoding,
             dtype: dtype.clone(),
             len,
             flatbuffer: self.flatbuffer.clone(),
             flatbuffer_loc,
-            buffers: self.buffers[buffer_offset..][0..buffer_count].to_vec(),
+            buffers: self.buffers.clone(),
             ctx: self.ctx.clone(),
         })
     }
@@ -173,20 +152,13 @@ impl ArrayView {
 
     /// Whether the current Array makes use of a buffer
     pub fn has_buffer(&self) -> bool {
-        self.flatbuffer().has_buffer()
-    }
-
-    /// The number of buffers used by the current Array and all its children.
-    fn cumulative_nbuffers(array: fb::Array) -> usize {
-        let mut nbuffers = if array.has_buffer() { 1 } else { 0 };
-        for child in array.children().unwrap_or_default() {
-            nbuffers += Self::cumulative_nbuffers(child)
-        }
-        nbuffers
+        self.flatbuffer().buffer_index().is_some()
     }
 
     pub fn buffer(&self) -> Option<&Buffer> {
-        self.has_buffer().then(|| &self.buffers[0])
+        self.flatbuffer()
+            .buffer_index()
+            .map(|idx| &self.buffers[idx as usize])
     }
 
     pub fn statistics(&self) -> &dyn Statistics {

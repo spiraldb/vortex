@@ -6,7 +6,7 @@ enum Version: uint8 {
 
 table Array {
     version: Version = V0;
-    has_buffer: bool;
+    buffer_index: uint64 = null;
     encoding: uint16;
     metadata: [ubyte];
     stats: ArrayStats;
