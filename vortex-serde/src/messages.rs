@@ -148,10 +148,16 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
             ),
         };
 
+        // Assign buffer indices for all child arrays.
+        // The second tuple element holds the buffer_index for this Array subtree. If this array
+        // has a buffer, that is its buffer index. If it does not, that buffer index belongs
+        // to one of the children.
+        let child_buffer_offset = self.1 + if self.0.buffer().is_some() { 1 } else { 0 };
+
         let children = column_data
             .children()
             .iter()
-            .scan(self.1, |buffer_offset, child| {
+            .scan(child_buffer_offset, |buffer_offset, child| {
                 // Update the number of buffers required.
                 let msg = IPCArray(child, *buffer_offset).write_flatbuffer(fbb);
                 *buffer_offset += child.cumulative_nbuffers();
