@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use itertools::Itertools;
-use num_traits::{CheckedSub, Float, NumCast, PrimInt, Saturating, ToPrimitive, Zero};
+use num_traits::{CheckedSub, Float, NumCast, PrimInt, ToPrimitive, Zero};
 use serde::{Deserialize, Serialize};
 use vortex_error::vortex_panic;
 

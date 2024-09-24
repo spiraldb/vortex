@@ -2,7 +2,7 @@ use vortex::array::{PrimitiveArray, Sparse, SparseArray};
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_dtype::{NativePType, PType};
-use vortex_error::{vortex_bail,VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::alp::ALPFloat;
