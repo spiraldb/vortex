@@ -190,7 +190,6 @@ impl StructDType {
                 }
             };
 
-            // TODO: do this without the extra allocations.
             names.push(self.names[idx].clone());
             dtypes.push(self.dtypes[idx].clone());
         }

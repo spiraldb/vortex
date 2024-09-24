@@ -95,7 +95,6 @@ impl<'a> WriteFlatBuffer for IPCBatch<'a> {
         let mut buffers = vec![];
         let mut offset = 0;
 
-        // buffer offset should be saved instead of the has_buffers stuff
         for array_data in array_data.depth_first_traversal() {
             if let Some(buffer) = array_data.buffer() {
                 let aligned_size = (buffer.len() + (ALIGNMENT - 1)) & !(ALIGNMENT - 1);

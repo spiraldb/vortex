@@ -6,7 +6,7 @@ use itertools::Itertools;
 use log::warn;
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_err, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::encoding::EncodingRef;
@@ -58,14 +58,6 @@ impl ArrayView {
         let encoding = ctx
             .lookup_encoding(array.encoding())
             .ok_or_else(|| vortex_err!(InvalidSerde: "Encoding ID out of bounds"))?;
-
-        if buffers.len() != Self::cumulative_nbuffers(array) {
-            vortex_bail!(InvalidSerde:
-                "Incorrect number of buffers {}, expected {}",
-                buffers.len(),
-                Self::cumulative_nbuffers(array)
-            )
-        }
 
         let view = Self {
             encoding,
@@ -161,15 +153,6 @@ impl ArrayView {
     /// Whether the current Array makes use of a buffer
     pub fn has_buffer(&self) -> bool {
         self.flatbuffer().buffer_index().is_some()
-    }
-
-    /// The number of buffers used by the current Array and all its children.
-    fn cumulative_nbuffers(array: fb::Array) -> usize {
-        let mut nbuffers = if array.buffer_index().is_some() { 1 } else { 0 };
-        for child in array.children().unwrap_or_default() {
-            nbuffers += Self::cumulative_nbuffers(child)
-        }
-        nbuffers
     }
 
     pub fn buffer(&self) -> Option<&Buffer> {
