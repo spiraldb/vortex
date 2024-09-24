@@ -67,7 +67,7 @@ impl LayoutDeserializer {
         Self { ctx, layout_ctx }
     }
 
-    pub fn read_layout(
+    pub fn build_layout_reader(
         &self,
         fb_bytes: Bytes,
         fb_loc: usize,

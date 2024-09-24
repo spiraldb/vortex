@@ -108,12 +108,6 @@ impl LayoutSpec for ColumnLayoutSpec {
     }
 }
 
-#[derive(Debug)]
-pub enum ColumnLayoutState {
-    Init,
-    ReadColumns(BatchReader),
-}
-
 /// In memory representation of Columnar NestedLayout.
 ///
 /// Each child represents a column
@@ -124,7 +118,7 @@ pub struct ColumnLayout {
     scan: Scan,
     layout_serde: LayoutDeserializer,
     message_cache: RelativeLayoutCache,
-    state: ColumnLayoutState,
+    batch_reader: Option<BatchReader>,
 }
 
 impl ColumnLayout {
@@ -141,7 +135,7 @@ impl ColumnLayout {
             scan,
             layout_serde,
             message_cache,
-            state: ColumnLayoutState::Init,
+            batch_reader: None,
         }
     }
 
@@ -167,7 +161,7 @@ impl ColumnLayout {
         let mut child_scan = self.scan.clone();
         child_scan.projection = Projection::All;
 
-        self.layout_serde.read_layout(
+        self.layout_serde.build_layout_reader(
             self.fb_bytes.clone(),
             layout._tab.loc(),
             child_scan,
@@ -178,42 +172,42 @@ impl ColumnLayout {
 
 impl LayoutReader for ColumnLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
-        match &mut self.state {
-            ColumnLayoutState::Init => {
-                let DType::Struct(s, ..) = self.message_cache.dtype() else {
-                    vortex_bail!("Column layout must have struct dtype")
-                };
+        if self.batch_reader.is_none() {
+            let DType::Struct(top_dtype, ..) = self.message_cache.dtype() else {
+                vortex_bail!("Column layout must have struct dtype")
+            };
 
-                let fb_children = self
-                    .flatbuffer()
-                    .children()
-                    .ok_or_else(|| vortex_err!("Missing children"))?;
+            let fb_children = self
+                .flatbuffer()
+                .children()
+                .ok_or_else(|| vortex_err!("Missing children"))?;
 
-                let column_layouts = match self.scan.projection {
-                    Projection::All => (0..fb_children.len())
-                        .map(|idx| self.read_child(idx, fb_children, s.dtypes()[idx].clone()))
-                        .collect::<VortexResult<Vec<_>>>()?,
-                    Projection::Flat(ref v) => v
-                        .iter()
-                        .zip(s.dtypes().iter().cloned())
-                        .map(|(projected_field, dtype)| {
-                            let child_idx = match projected_field {
-                                Field::Name(n) => s.find_name(n.as_ref()).ok_or_else(|| {
-                                    vortex_err!("Invalid projection, trying to select  {n}")
-                                })?,
-                                Field::Index(i) => *i,
-                            };
-                            self.read_child(child_idx, fb_children, dtype)
-                        })
-                        .collect::<VortexResult<Vec<_>>>()?,
-                };
+            let column_layouts = match self.scan.projection {
+                Projection::All => (0..fb_children.len())
+                    .map(|idx| self.read_child(idx, fb_children, top_dtype.dtypes()[idx].clone()))
+                    .collect::<VortexResult<Vec<_>>>()?,
+                Projection::Flat(ref v) => v
+                    .iter()
+                    .zip(top_dtype.dtypes().iter().cloned())
+                    .map(|(projected_field, dtype)| {
+                        let child_idx = match projected_field {
+                            Field::Name(n) => top_dtype.find_name(n.as_ref()).ok_or_else(|| {
+                                vortex_err!("Invalid projection, trying to select  {n}")
+                            })?,
+                            Field::Index(i) => *i,
+                        };
+                        self.read_child(child_idx, fb_children, dtype)
+                    })
+                    .collect::<VortexResult<Vec<_>>>()?,
+            };
 
-                let reader = BatchReader::new(s.names().clone(), column_layouts);
-                self.state = ColumnLayoutState::ReadColumns(reader);
-                self.read_next()
-            }
-            ColumnLayoutState::ReadColumns(br) => br.read(),
+            self.batch_reader = Some(BatchReader::new(top_dtype.names().clone(), column_layouts));
         }
+
+        self.batch_reader
+            .as_mut()
+            .vortex_expect("Missing reader")
+            .read()
     }
 }
 
@@ -247,12 +241,6 @@ impl LayoutSpec for ChunkedLayoutSpec {
     }
 }
 
-#[derive(Debug)]
-pub enum ChunkedLayoutState {
-    Init,
-    ReadChunks(BufferedReader),
-}
-
 /// In memory representation of Chunked NestedLayout.
 ///
 /// First child in the list is the metadata table
@@ -264,7 +252,7 @@ pub struct ChunkedLayout {
     scan: Scan,
     layout_builder: LayoutDeserializer,
     message_cache: RelativeLayoutCache,
-    state: ChunkedLayoutState,
+    buffered_reader: Option<BufferedReader>,
 }
 
 impl ChunkedLayout {
@@ -281,7 +269,7 @@ impl ChunkedLayout {
             scan,
             layout_builder: layout_serde,
             message_cache,
-            state: ChunkedLayoutState::Init,
+            buffered_reader: None,
         }
     }
 
@@ -298,31 +286,32 @@ impl ChunkedLayout {
 
 impl LayoutReader for ChunkedLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
-        match &mut self.state {
-            ChunkedLayoutState::Init => {
-                let children = self
-                    .flatbuffer()
-                    .children()
-                    .ok_or_else(|| vortex_err!("Missing children"))?
-                    .iter()
-                    .enumerate()
-                    // Skip over the metadata table of this layout
-                    .skip(1)
-                    .map(|(i, c)| {
-                        self.layout_builder.read_layout(
-                            self.fb_bytes.clone(),
-                            c._tab.loc(),
-                            self.scan.clone(),
-                            self.message_cache
-                                .relative(i as u16, self.message_cache.dtype().clone()),
-                        )
-                    })
-                    .collect::<VortexResult<VecDeque<_>>>()?;
-                let reader = BufferedReader::new(children, self.scan.batch_size);
-                self.state = ChunkedLayoutState::ReadChunks(reader);
-                self.read_next()
-            }
-            ChunkedLayoutState::ReadChunks(cr) => cr.read(),
+        if self.buffered_reader.is_none() {
+            let children = self
+                .flatbuffer()
+                .children()
+                .ok_or_else(|| vortex_err!("Missing children"))?
+                .iter()
+                .enumerate()
+                // Skip over the metadata table of this layout
+                .skip(1)
+                .map(|(i, c)| {
+                    self.layout_builder.build_layout_reader(
+                        self.fb_bytes.clone(),
+                        c._tab.loc(),
+                        self.scan.clone(),
+                        self.message_cache
+                            .relative(i as u16, self.message_cache.dtype().clone()),
+                    )
+                })
+                .collect::<VortexResult<VecDeque<_>>>()?;
+
+            self.buffered_reader = Some(BufferedReader::new(children, self.scan.batch_size));
         }
+
+        self.buffered_reader
+            .as_mut()
+            .vortex_expect("Missing reader")
+            .read()
     }
 }

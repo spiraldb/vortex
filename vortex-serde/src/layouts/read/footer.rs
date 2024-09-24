@@ -70,7 +70,7 @@ impl Footer {
             .ok_or_else(|| vortex_err!("Footer must contain a layout"))?;
         let loc = fb_layout._tab.loc();
         self.layout_serde
-            .read_layout(footer_bytes, loc, scan, message_cache)
+            .build_layout_reader(footer_bytes, loc, scan, message_cache)
     }
 
     pub fn dtype(&self) -> VortexResult<DType> {
