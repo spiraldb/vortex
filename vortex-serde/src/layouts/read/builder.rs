@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use bytes::BytesMut;
 use vortex::{Array, ArrayDType};
-use vortex_error::{vortex_bail, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 
 use crate::io::VortexReadAt;
@@ -88,7 +88,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             Projection::Flat(ref projection) => footer.projected_dtype(projection)?,
         };
 
-        let eval_dtype = filter_projection
+        let filter_dtype = filter_projection
             .as_ref()
             .map(|p| match p {
                 Projection::All => footer.dtype(),
@@ -109,15 +109,15 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             scan.clone(),
             RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),
         )?;
-        let filter_reader = eval_dtype
-            .map(|dtype| {
+
+        let filter_reader = filter_dtype
+            .zip(filter_projection)
+            .map(|(dtype, projection)| {
                 footer.layout(
                     Scan {
                         filter: self.row_filter,
                         batch_size,
-                        projection: filter_projection.vortex_expect(
-                            "If we have eval dtype, we must also have a filter and projection",
-                        ),
+                        projection,
                         indices: None,
                     },
                     RelativeLayoutCache::new(message_cache.clone(), dtype),
