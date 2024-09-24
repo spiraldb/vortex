@@ -36,7 +36,7 @@ impl DictArray {
                 codes_dtype: codes.dtype().clone(),
                 values_len: values.len(),
             },
-            vec![values, codes].into(),
+            [values, codes].into(),
             StatsSet::new(),
         )
     }

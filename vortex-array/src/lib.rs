@@ -35,7 +35,6 @@ use crate::variants::ArrayVariants;
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 pub mod accessor;
-pub mod arc_slice;
 pub mod array;
 pub mod arrow;
 mod canonical;

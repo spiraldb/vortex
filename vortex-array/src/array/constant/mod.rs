@@ -46,7 +46,7 @@ impl ConstantArray {
                 scalar: scalar.clone(),
                 length,
             },
-            vec![].into(),
+            [].into(),
             stats,
         )
         .unwrap_or_else(|err| {

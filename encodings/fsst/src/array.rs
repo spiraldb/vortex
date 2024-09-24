@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use fsst::{Decompressor, Symbol};
 use serde::{Deserialize, Serialize};
 use vortex::array::VarBinArray;
@@ -73,7 +75,7 @@ impl FSSTArray {
         let len = codes.len();
         let strings_dtype = codes.dtype().clone();
         let uncompressed_lengths_dtype = uncompressed_lengths.dtype().clone();
-        let children = vec![symbols, symbol_lengths, codes, uncompressed_lengths];
+        let children = Arc::new([symbols, symbol_lengths, codes, uncompressed_lengths]);
 
         Self::try_from_parts(
             dtype,
@@ -83,7 +85,7 @@ impl FSSTArray {
                 codes_dtype: strings_dtype,
                 uncompressed_lengths_dtype,
             },
-            children.into(),
+            children,
             StatsSet::new(),
         )
     }

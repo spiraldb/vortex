@@ -33,7 +33,7 @@ impl ZigZagArray {
             .with_nullability(encoded_dtype.nullability());
 
         let len = encoded.len();
-        let children = vec![encoded];
+        let children = [encoded];
 
         Self::try_from_parts(dtype, len, ZigZagMetadata, children.into(), StatsSet::new())
     }

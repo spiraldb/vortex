@@ -26,7 +26,7 @@ impl ExtensionArray {
             ExtensionMetadata {
                 storage_dtype: storage.dtype().clone(),
             },
-            vec![storage].into(),
+            [storage].into(),
             Default::default(),
         )
         .vortex_expect("Invalid ExtensionArray")

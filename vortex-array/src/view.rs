@@ -9,7 +9,6 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
-use crate::arc_slice::SharedVec;
 use crate::encoding::EncodingRef;
 use crate::opaque::OpaqueEncoding;
 use crate::stats::{Stat, Statistics, StatsSet};
@@ -23,7 +22,7 @@ pub struct ArrayView {
     len: usize,
     flatbuffer: Buffer,
     flatbuffer_loc: usize,
-    buffers: SharedVec<Buffer>,
+    buffers: Arc<[Buffer]>,
     ctx: Arc<Context>,
     // TODO(ngates): a store a Projection. A projected ArrayView contains the full fb::Array
     //  metadata, but only the buffers from the selected columns. Therefore we need to know
@@ -74,7 +73,7 @@ impl ArrayView {
             len,
             flatbuffer,
             flatbuffer_loc,
-            buffers: SharedVec::from(buffers),
+            buffers: buffers.into(),
             ctx,
         };
 

@@ -4,7 +4,6 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexResult};
 
-use crate::arc_slice::SharedVec;
 use crate::stats::StatsSet;
 use crate::{Array, ArrayData, ArrayDef, IntoArray, ToArray, TryDeserializeArrayMetadata};
 
@@ -20,7 +19,7 @@ impl<D: ArrayDef> TypedArray<D> {
         len: usize,
         metadata: D::Metadata,
         buffer: Option<Buffer>,
-        children: SharedVec<Array>,
+        children: Arc<[Array]>,
         stats: StatsSet,
     ) -> VortexResult<Self> {
         let array = Array::Data(ArrayData::try_new(

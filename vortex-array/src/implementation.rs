@@ -64,7 +64,7 @@ macro_rules! impl_encoding {
                     dtype: vortex_dtype::DType,
                     len: usize,
                     metadata: [<$Name Metadata>],
-                    children: $crate::arc_slice::SharedVec<$crate::Array>,
+                    children: std::sync::Arc<[$crate::Array]>,
                     stats: $crate::stats::StatsSet,
                 ) -> VortexResult<Self> {
                     Ok(Self { typed: $crate::TypedArray::try_from_parts(dtype, len, metadata, None, children, stats)? })
