@@ -6,13 +6,11 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
-use vortex::array::StructArray;
 use vortex::compute::filter;
 use vortex::stats::ArrayStatistics;
-use vortex::{Array, IntoArray, IntoArrayVariant};
+use vortex::{Array, IntoArrayVariant};
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, vortex_panic, VortexError, VortexResult};
-use vortex_schema::projection::Projection;
+use vortex_error::{vortex_err, vortex_panic, VortexError, VortexExpect, VortexResult};
 use vortex_schema::Schema;
 
 use super::null_as_false;
@@ -110,7 +108,12 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     }
                 }
                 StreamingState::FilterInit => {
-                    if let Some(read) = self.filter_reader.as_mut().unwrap().read_next()? {
+                    if let Some(read) = self
+                        .filter_reader
+                        .as_mut()
+                        .vortex_expect("Can't filter without reader")
+                        .read_next()?
+                    {
                         match read {
                             ReadResult::ReadMore(messages) => {
                                 let reader = self.input.take().ok_or_else(|| {
@@ -120,7 +123,12 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                                 self.state = StreamingState::FilterReading(read_future);
                             }
                             ReadResult::Batch(a) => {
-                                let mask = self.scan.filter.as_ref().unwrap().evaluate(&a)?;
+                                let mask = self
+                                    .scan
+                                    .filter
+                                    .as_ref()
+                                    .vortex_expect("Cant filter without filter")
+                                    .evaluate(&a)?;
                                 self.cached_mask = Some(mask);
                                 self.state = StreamingState::Init;
                             }

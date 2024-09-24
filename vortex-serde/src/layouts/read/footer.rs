@@ -1,7 +1,7 @@
 use bytes::Bytes;
 use flatbuffers::root;
 use vortex_dtype::field::Field;
-use vortex_dtype::flatbuffers::{deserialize_and_project, resolve_field_references};
+use vortex_dtype::flatbuffers::deserialize_and_project;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
@@ -87,20 +87,6 @@ impl Footer {
             .dtype()
             .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
         deserialize_and_project(fb_dtype, projection)
-    }
-
-    /// Convert all name based references to index based for sake of augmenting read projection
-    pub(crate) fn resolve_references(&self, projection: &[Field]) -> VortexResult<Vec<Field>> {
-        let dtype = self
-            .fb_schema()?
-            .dtype()
-            .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
-        let fb_struct = dtype
-            .type__as_struct_()
-            .ok_or_else(|| vortex_err!("The top-level type should be a struct"))?;
-        resolve_field_references(fb_struct, projection)
-            .map(|idx| idx.map(Field::from))
-            .collect::<VortexResult<Vec<_>>>()
     }
 
     fn fb_schema(&self) -> VortexResult<fb::Schema> {
