@@ -5,17 +5,17 @@ use vortex::array::StructArray;
 use vortex::{Array, IntoArray};
 use vortex_error::{vortex_err, VortexResult};
 
-use crate::layouts::read::{Layout, ReadResult};
+use crate::layouts::read::{LayoutReader, ReadResult};
 
 #[derive(Debug)]
 pub struct BatchReader {
     names: Arc<[Arc<str>]>,
-    children: Vec<Box<dyn Layout>>,
+    children: Vec<Box<dyn LayoutReader>>,
     arrays: Vec<Option<Array>>,
 }
 
 impl BatchReader {
-    pub fn new(names: Arc<[Arc<str>]>, children: Vec<Box<dyn Layout>>) -> Self {
+    pub fn new(names: Arc<[Arc<str>]>, children: Vec<Box<dyn LayoutReader>>) -> Self {
         let arrays = vec![None; children.len()];
         Self {
             names,

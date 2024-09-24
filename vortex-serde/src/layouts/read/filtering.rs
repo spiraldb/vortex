@@ -5,7 +5,9 @@ use std::sync::Arc;
 
 use vortex::array::BoolArray;
 use vortex::compute::and;
-use vortex::{Array, IntoArray};
+use vortex::stats::ArrayStatistics;
+use vortex::validity::Validity;
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::{Field, FieldPath};
 use vortex_error::VortexResult;
 use vortex_expr::{expr_is_filter, split_conjunction, VortexExpr};
@@ -18,8 +20,8 @@ pub struct RowFilter {
 }
 
 impl RowFilter {
-    pub fn new(filter: Arc<dyn VortexExpr>) -> Self {
-        let conjunction = split_conjunction(&filter)
+    pub fn new(expr: Arc<dyn VortexExpr>) -> Self {
+        let conjunction = split_conjunction(&expr)
             .into_iter()
             .filter(expr_is_filter)
             .collect();
@@ -33,6 +35,19 @@ impl RowFilter {
         for expr in self.conjunction.iter() {
             let new_mask = expr.evaluate(target)?;
             mask = and(new_mask, mask)?;
+
+            if mask
+                .clone()
+                .into_bool()?
+                .statistics()
+                .compute_true_count()
+                .unwrap_or_default()
+                == 0
+            {
+                return Ok(
+                    BoolArray::from_vec(vec![false; target.len()], Validity::AllValid).into_array(),
+                );
+            }
         }
 
         Ok(mask)
