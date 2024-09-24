@@ -109,6 +109,16 @@ impl Array {
         }
     }
 
+    pub fn map_children<F>(self, f: F) -> VortexResult<Array>
+    where
+        F: FnMut(&Array) -> VortexResult<Array>,
+    {
+        match self {
+            Array::Data(d) => Ok(Array::Data(d.map_children(f)?)),
+            Array::View(_) => Ok(Array::Data(self.to_array_data().map_children(f)?)),
+        }
+    }
+
     pub fn nchildren(&self) -> usize {
         match self {
             Self::Data(d) => d.nchildren(),
