@@ -110,24 +110,21 @@ impl ArrayData {
         &self.children
     }
 
-    pub fn map_children<F>(self, f: F) -> VortexResult<ArrayData>
-    where
-        F: FnMut(&Array) -> VortexResult<Array>,
-    {
-        let new_children: Arc<[Array]> = self
-            .children
-            .iter()
-            .map(f)
-            .collect::<VortexResult<Vec<_>>>()?
-            .as_slice()
-            .into();
+    pub fn with_new_children(self, new_children: Vec<Array>) -> VortexResult<ArrayData> {
+        if new_children.len() != self.nchildren() {
+            vortex_bail!(
+                "number of children must not change {} => {}",
+                self.nchildren(),
+                new_children.len()
+            );
+        }
         ArrayData::try_new(
             self.encoding,
             self.dtype,
             self.len,
             self.metadata,
             self.buffer,
-            new_children,
+            new_children.into(),
             StatsSet::new(),
         )
     }

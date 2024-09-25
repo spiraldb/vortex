@@ -15,8 +15,8 @@ use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
 use vortex_error::VortexResult;
 
-use crate::compressors::alp::ALPCompressor;
-use crate::compressors::bitpacked::BitPackedCompressor;
+// use crate::compressors::alp::ALPCompressor;
+// use crate::compressors::bitpacked::BitPackedCompressor;
 use crate::compressors::constant::ConstantCompressor;
 use crate::compressors::date_time_parts::DateTimePartsCompressor;
 use crate::compressors::dict::DictCompressor;
@@ -35,9 +35,9 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 11] = [
-        &ALPCompressor as CompressorRef,
-        &BitPackedCompressor,
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 9] = [
+        // &ALPCompressor as CompressorRef,
+        // &BitPackedCompressor,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR,
         // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
@@ -373,7 +373,7 @@ fn find_best_compression<'a>(
             continue;
         }
         let compressed_sample =
-            compression.compress(sample, None, ctx.for_compressor(compression))?;
+            compression.recursively_compress(sample, None, ctx.for_compressor(compression))?;
         let ratio = compressed_sample.nbytes() as f32 / sample.nbytes() as f32;
         debug!("{} ratio for {}: {}", ctx, compression.id(), ratio);
         if ratio < best_ratio {

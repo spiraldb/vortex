@@ -1,15 +1,15 @@
 use arrow_buffer::ArrowNativeType;
 use fastlanes::BitPacking;
-use vortex::array::{PrimitiveArray, Sparse, SparseArray};
+use vortex::array::PrimitiveArray;
 use vortex::stats::ArrayStatistics;
 use vortex::validity::{ArrayValidity, Validity};
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, ToArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
-use vortex_error::{vortex_bail, vortex_err, VortexResult, VortexUnwrap};
-use vortex_scalar::{Scalar, ScalarValue};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_scalar::Scalar;
 
 use crate::BitPackedArray;
 
@@ -115,7 +115,7 @@ pub fn bitpack_patches(
     parray: &PrimitiveArray,
     bit_width: usize,
     num_exceptions_hint: usize,
-) -> Option<Array> {
+) -> Option<(Array, Array)> {
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
@@ -126,16 +126,12 @@ pub fn bitpack_patches(
             }
         }
 
-        (!indices.is_empty()).then(|| {
-            SparseArray::try_new(
-                indices.into_array(),
-                PrimitiveArray::from_vec(values, Validity::AllValid).into_array(),
-                parray.len(),
-                ScalarValue::Null,
-            )
-            .vortex_unwrap()
-            .into_array()
-        })
+        if !indices.is_empty() {
+            Some((indices.into_array(),
+             PrimitiveArray::from_vec(values, Validity::NonNullable).to_array())) // FIXME(DK): we could store validity here or on bitpacked, why not here?
+        } else {
+            None
+        }
     })
 }
 
@@ -156,29 +152,29 @@ pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
         unpacked = unpacked.reinterpret_cast(ptype);
     }
 
-    if let Some(patches) = array.patches() {
-        patch_unpacked(unpacked, &patches)
+    if let Some((indices, values)) = array._patches() {
+        patch_unpacked(unpacked, indices, values)
     } else {
         Ok(unpacked)
     }
 }
 
-fn patch_unpacked(array: PrimitiveArray, patches: &Array) -> VortexResult<PrimitiveArray> {
-    match patches.encoding().id() {
-        Sparse::ID => {
-            match_each_integer_ptype!(array.ptype(), |$T| {
-                let typed_patches = SparseArray::try_from(patches).unwrap();
-                array.patch(
-                    &typed_patches.resolved_indices(),
-                    typed_patches.values().into_primitive()?.maybe_null_slice::<$T>())
-            })
-        }
-        _ => vortex_bail!(
-            "Can't patch bitpacked array with {}, only {} is supported",
-            patches,
-            Sparse::ID
-        ),
-    }
+fn patch_unpacked(
+    array: PrimitiveArray,
+    indices: Array,
+    values: Array,
+) -> VortexResult<PrimitiveArray> {
+    match_each_integer_ptype!(array.ptype(), |$T| {
+        array.patch(
+            &(indices
+                .into_primitive()?
+                .maybe_null_slice::<u64>()
+                .iter()
+                .map(|v| (*v as usize))
+                .collect::<Vec<_>>()),
+            values.into_primitive()?.maybe_null_slice::<$T>(),
+        )
+    })
 }
 
 pub fn unpack_primitive<T: NativePType + BitPacking>(

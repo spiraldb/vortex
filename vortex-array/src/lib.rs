@@ -109,13 +109,12 @@ impl Array {
         }
     }
 
-    pub fn map_children<F>(self, f: F) -> VortexResult<Array>
-    where
-        F: FnMut(&Array) -> VortexResult<Array>,
-    {
+    pub fn with_new_children(self, new_children: Vec<Array>) -> VortexResult<Array> {
         match self {
-            Array::Data(d) => Ok(Array::Data(d.map_children(f)?)),
-            Array::View(_) => Ok(Array::Data(self.to_array_data().map_children(f)?)),
+            Array::Data(d) => Ok(Array::Data(d.with_new_children(new_children)?)),
+            Array::View(_) => Ok(Array::Data(
+                self.to_array_data().with_new_children(new_children)?,
+            )),
         }
     }
 

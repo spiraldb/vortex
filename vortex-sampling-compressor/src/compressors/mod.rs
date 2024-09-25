@@ -4,11 +4,13 @@ use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use vortex::encoding::EncodingRef;
 use vortex::Array;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
-use crate::SamplingCompressor;
+use crate::{sampled_compression, SamplingCompressor};
 
 pub mod alp;
 pub mod bitpacked;
@@ -39,6 +41,66 @@ pub trait EncodingCompressor: Sync + Send + Debug {
         like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>>;
+
+    fn recursively_compress<'a>(
+        &'a self,
+        array: &Array,
+        like: Option<CompressionTree<'a>>,
+        ctx: SamplingCompressor<'a>,
+    ) -> VortexResult<CompressedArray<'a>> {
+        let dyn_self = self.can_compress(array).ok_or(vortex_err!(
+            "Encoding {} cannot compress {}",
+            self.id(),
+            array
+        ))?;
+        let CompressedArray { array, .. } = dyn_self.compress(array, like.clone(), ctx.clone())?;
+        let child_contexts = (0..array.nchildren())
+            .map(|index| ctx.auxiliary(&format!("child_{}", index)))
+            .collect::<Vec<_>>();
+        match like {
+            Some(CompressionTree { children, .. }) => {
+                let array_children = array.children();
+                let arrays_and_trees = array_children.iter().zip(children).zip(child_contexts);
+                let mut compressed_children = Vec::with_capacity(array.nchildren());
+                let mut compressed_trees = Vec::with_capacity(array.nchildren());
+                for ((array, like), ctx) in arrays_and_trees {
+                    let compressed = dyn_self.compress(array, like, ctx)?;
+                    compressed_children.push(compressed.array);
+                    compressed_trees.push(compressed.path);
+                }
+
+                let with_compressed_children = array.with_new_children(compressed_children)?;
+                Ok(CompressedArray::new(
+                    with_compressed_children,
+                    Some(CompressionTree::new(dyn_self, compressed_trees)),
+                ))
+            }
+            None => {
+                let mut compressed_children = Vec::with_capacity(array.nchildren());
+                let mut compressed_trees = Vec::with_capacity(array.nchildren());
+                for (array, ctx) in array.children().into_iter().zip(child_contexts.into_iter()) {
+                    let maybe_compressed =
+                        sampled_compression(&array, &ctx, &mut StdRng::seed_from_u64(0))?;
+                    match maybe_compressed {
+                        Some(compressed) => {
+                            compressed_children.push(compressed.array);
+                            compressed_trees.push(compressed.path);
+                        }
+                        None => {
+                            compressed_children.push(array);
+                            compressed_trees.push(None);
+                        }
+                    }
+                }
+
+                let with_compressed_children = array.with_new_children(compressed_children)?;
+                Ok(CompressedArray::new(
+                    with_compressed_children,
+                    Some(CompressionTree::new(dyn_self, compressed_trees)),
+                ))
+            }
+        }
+    }
 
     fn used_encodings(&self) -> HashSet<EncodingRef>;
 }

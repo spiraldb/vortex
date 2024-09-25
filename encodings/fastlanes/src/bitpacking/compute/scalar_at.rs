@@ -1,4 +1,5 @@
-use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
+use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
+use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
 use vortex::ArrayDType;
 use vortex_error::{VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
@@ -7,10 +8,13 @@ use crate::{unpack_single, BitPackedArray};
 
 impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if let Some(patches) = self.patches() {
+        if let Some((indices, values)) = self._patches() {
             // NB: All non-null values are considered patches
-            if patches.with_dyn(|a| a.is_valid(index)) {
-                return scalar_at_unchecked(&patches, index).cast(self.dtype());
+            match search_sorted(&indices, index, SearchSortedSide::Left)? {
+                SearchResult::Found(patches_index) => {
+                    return scalar_at(&values, patches_index)?.cast(self.dtype());
+                }
+                SearchResult::NotFound(_) => {}
             }
         }
 
