@@ -117,7 +117,6 @@ impl<W: VortexWrite> LayoutWriter<W> {
 
     async fn write_metadata_arrays(&mut self) -> VortexResult<NestedLayout> {
         let mut column_layouts = VecDeque::with_capacity(self.column_chunks.len());
-
         for mut chunk in mem::take(&mut self.column_chunks) {
             let len = chunk.byte_offsets.len() - 1;
             let mut chunks: VecDeque<Layout> = chunk

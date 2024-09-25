@@ -10,7 +10,7 @@ use vortex_flatbuffers::footer::LayoutVariant;
 
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::read::layouts::{ChunkedLayoutSpec, ColumnLayoutSpec, FlatLayout};
-use crate::layouts::read::{Layout, Scan};
+use crate::layouts::read::{LayoutReader, Scan};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct LayoutId(pub u16);
@@ -25,7 +25,7 @@ pub trait LayoutSpec: Debug + Send + Sync {
         scan: Scan,
         layout_reader: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
-    ) -> Box<dyn Layout>;
+    ) -> Box<dyn LayoutReader>;
 }
 
 pub type LayoutSpecRef = &'static dyn LayoutSpec;
@@ -73,7 +73,7 @@ impl LayoutDeserializer {
         fb_loc: usize,
         scan: Scan,
         message_cache: RelativeLayoutCache,
-    ) -> VortexResult<Box<dyn Layout>> {
+    ) -> VortexResult<Box<dyn LayoutReader>> {
         let fb_layout = unsafe {
             let tab = flatbuffers::Table::new(&fb_bytes, fb_loc);
             fb::Layout::init_from_table(tab)

@@ -9,7 +9,7 @@ use vortex_schema::Schema;
 
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::read::context::LayoutDeserializer;
-use crate::layouts::read::{Layout, Scan, FILE_POSTSCRIPT_SIZE};
+use crate::layouts::read::{LayoutReader, Scan, FILE_POSTSCRIPT_SIZE};
 use crate::messages::IPCDType;
 use crate::FLATBUFFER_SIZE_LENGTH;
 
@@ -57,7 +57,7 @@ impl Footer {
         &self,
         scan: Scan,
         message_cache: RelativeLayoutCache,
-    ) -> VortexResult<Box<dyn Layout>> {
+    ) -> VortexResult<Box<dyn LayoutReader>> {
         let start_offset = self.leftovers_layout_offset();
         let end_offset = self.leftovers.len() - FILE_POSTSCRIPT_SIZE;
         let footer_bytes = self

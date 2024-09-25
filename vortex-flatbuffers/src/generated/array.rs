@@ -93,7 +93,7 @@ impl<'a> flatbuffers::Verifiable for Version {
 
 impl flatbuffers::SimpleToVerifyInSlice for Version {}
 pub enum ArrayOffset {}
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 
 pub struct Array<'a> {
   pub _tab: flatbuffers::Table<'a>,
@@ -109,7 +109,7 @@ impl<'a> flatbuffers::Follow<'a> for Array<'a> {
 
 impl<'a> Array<'a> {
   pub const VT_VERSION: flatbuffers::VOffsetT = 4;
-  pub const VT_HAS_BUFFER: flatbuffers::VOffsetT = 6;
+  pub const VT_BUFFER_INDEX: flatbuffers::VOffsetT = 6;
   pub const VT_ENCODING: flatbuffers::VOffsetT = 8;
   pub const VT_METADATA: flatbuffers::VOffsetT = 10;
   pub const VT_STATS: flatbuffers::VOffsetT = 12;
@@ -125,11 +125,11 @@ impl<'a> Array<'a> {
     args: &'args ArrayArgs<'args>
   ) -> flatbuffers::WIPOffset<Array<'bldr>> {
     let mut builder = ArrayBuilder::new(_fbb);
+    if let Some(x) = args.buffer_index { builder.add_buffer_index(x); }
     if let Some(x) = args.children { builder.add_children(x); }
     if let Some(x) = args.stats { builder.add_stats(x); }
     if let Some(x) = args.metadata { builder.add_metadata(x); }
     builder.add_encoding(args.encoding);
-    builder.add_has_buffer(args.has_buffer);
     builder.add_version(args.version);
     builder.finish()
   }
@@ -143,11 +143,11 @@ impl<'a> Array<'a> {
     unsafe { self._tab.get::<Version>(Array::VT_VERSION, Some(Version::V0)).unwrap()}
   }
   #[inline]
-  pub fn has_buffer(&self) -> bool {
+  pub fn buffer_index(&self) -> Option<u64> {
     // Safety:
     // Created from valid Table for this object
     // which contains a valid value in this slot
-    unsafe { self._tab.get::<bool>(Array::VT_HAS_BUFFER, Some(false)).unwrap()}
+    unsafe { self._tab.get::<u64>(Array::VT_BUFFER_INDEX, None)}
   }
   #[inline]
   pub fn encoding(&self) -> u16 {
@@ -187,7 +187,7 @@ impl flatbuffers::Verifiable for Array<'_> {
     use self::flatbuffers::Verifiable;
     v.visit_table(pos)?
      .visit_field::<Version>("version", Self::VT_VERSION, false)?
-     .visit_field::<bool>("has_buffer", Self::VT_HAS_BUFFER, false)?
+     .visit_field::<u64>("buffer_index", Self::VT_BUFFER_INDEX, false)?
      .visit_field::<u16>("encoding", Self::VT_ENCODING, false)?
      .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, u8>>>("metadata", Self::VT_METADATA, false)?
      .visit_field::<flatbuffers::ForwardsUOffset<ArrayStats>>("stats", Self::VT_STATS, false)?
@@ -198,7 +198,7 @@ impl flatbuffers::Verifiable for Array<'_> {
 }
 pub struct ArrayArgs<'a> {
     pub version: Version,
-    pub has_buffer: bool,
+    pub buffer_index: Option<u64>,
     pub encoding: u16,
     pub metadata: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
     pub stats: Option<flatbuffers::WIPOffset<ArrayStats<'a>>>,
@@ -209,7 +209,7 @@ impl<'a> Default for ArrayArgs<'a> {
   fn default() -> Self {
     ArrayArgs {
       version: Version::V0,
-      has_buffer: false,
+      buffer_index: None,
       encoding: 0,
       metadata: None,
       stats: None,
@@ -228,8 +228,8 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ArrayBuilder<'a, 'b, A> {
     self.fbb_.push_slot::<Version>(Array::VT_VERSION, version, Version::V0);
   }
   #[inline]
-  pub fn add_has_buffer(&mut self, has_buffer: bool) {
-    self.fbb_.push_slot::<bool>(Array::VT_HAS_BUFFER, has_buffer, false);
+  pub fn add_buffer_index(&mut self, buffer_index: u64) {
+    self.fbb_.push_slot_always::<u64>(Array::VT_BUFFER_INDEX, buffer_index);
   }
   #[inline]
   pub fn add_encoding(&mut self, encoding: u16) {
@@ -266,7 +266,7 @@ impl core::fmt::Debug for Array<'_> {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
     let mut ds = f.debug_struct("Array");
       ds.field("version", &self.version());
-      ds.field("has_buffer", &self.has_buffer());
+      ds.field("buffer_index", &self.buffer_index());
       ds.field("encoding", &self.encoding());
       ds.field("metadata", &self.metadata());
       ds.field("stats", &self.stats());
@@ -275,7 +275,7 @@ impl core::fmt::Debug for Array<'_> {
   }
 }
 pub enum ArrayStatsOffset {}
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq)]
 
 pub struct ArrayStats<'a> {
   pub _tab: flatbuffers::Table<'a>,

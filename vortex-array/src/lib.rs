@@ -120,6 +120,15 @@ impl Array {
         ArrayChildrenIterator::new(self.clone())
     }
 
+    /// Count the number of cumulative buffers encoded by self.
+    pub fn cumulative_nbuffers(&self) -> usize {
+        self.children()
+            .iter()
+            .map(|child| child.cumulative_nbuffers())
+            .sum::<usize>()
+            + if self.buffer().is_some() { 1 } else { 0 }
+    }
+
     /// Return the buffer offsets and the total length of all buffers, assuming the given alignment.
     /// This includes all child buffers.
     pub fn all_buffer_offsets(&self, alignment: usize) -> Vec<u64> {

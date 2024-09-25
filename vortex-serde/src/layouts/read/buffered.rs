@@ -5,17 +5,17 @@ use vortex::compute::slice;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
-use crate::layouts::read::{Layout, ReadResult};
+use crate::layouts::read::{LayoutReader, ReadResult};
 
 #[derive(Debug)]
 pub struct BufferedReader {
-    layouts: VecDeque<Box<dyn Layout>>,
+    layouts: VecDeque<Box<dyn LayoutReader>>,
     arrays: VecDeque<Array>,
     batch_size: usize,
 }
 
 impl BufferedReader {
-    pub fn new(layouts: VecDeque<Box<dyn Layout>>, batch_size: usize) -> Self {
+    pub fn new(layouts: VecDeque<Box<dyn LayoutReader>>, batch_size: usize) -> Self {
         Self {
             layouts,
             arrays: Default::default(),
