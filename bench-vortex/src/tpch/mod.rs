@@ -36,6 +36,9 @@ pub const EXPECTED_ROW_COUNTS: [usize; 23] = [
     0, 4, 460, 11620, 5, 5, 1, 4, 2, 175, 37967, 1048, 2, 42, 1, 1, 18314, 1, 57, 1, 186, 411, 7,
 ];
 
+const TARGET_BLOCK_BYTESIZE: usize = 16 * (1 << 20);
+const TARGET_BLOCK_SIZE: usize = 64 * (1 << 10);
+
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub enum Format {
     Csv,
@@ -245,8 +248,7 @@ async fn register_vortex_file(
 
         // Create a ChunkedArray from the set of chunks.
         let sts = record_batches
-            .iter()
-            .cloned()
+            .into_iter()
             .map(Array::try_from)
             .map(|a| a.unwrap().into_struct().unwrap())
             .collect::<Vec<_>>();
@@ -274,11 +276,14 @@ async fn register_vortex_file(
                 let name: Arc<str> = field.name().as_str().into();
                 let dtype = types_map[&name].clone();
                 let chunks = arrays_map.remove(&name).unwrap();
+                let mut chunked_child = ChunkedArray::try_new(chunks, dtype).unwrap();
+                if !enable_compression {
+                    chunked_child = chunked_child
+                        .rechunk(TARGET_BLOCK_BYTESIZE, TARGET_BLOCK_SIZE)
+                        .unwrap()
+                }
 
-                (
-                    name.clone(),
-                    ChunkedArray::try_new(chunks, dtype).unwrap().into_array(),
-                )
+                (name, chunked_child.into_array())
             })
             .collect::<Vec<_>>();
 
@@ -359,8 +364,7 @@ async fn register_vortex(
 
     // Create a ChunkedArray from the set of chunks.
     let chunks: Vec<Array> = record_batches
-        .iter()
-        .cloned()
+        .into_iter()
         .map(ArrowStructArray::from)
         .map(|struct_array| Array::from_arrow(&struct_array, false))
         .collect();
@@ -403,8 +407,7 @@ pub async fn load_table(data_dir: impl AsRef<Path>, name: &str, schema: &Schema)
         .unwrap();
 
     let chunks: Vec<Array> = record_batches
-        .iter()
-        .cloned()
+        .into_iter()
         .map(ArrowStructArray::from)
         .map(|struct_array| Array::from_arrow(&struct_array, false))
         .collect();
