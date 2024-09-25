@@ -1,8 +1,9 @@
+use core::convert::FloatToInt;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use itertools::Itertools;
-use num_traits::{Bounded, CheckedSub, Float, NumCast, PrimInt, ToPrimitive};
+use num_traits::{Bounded, CheckedSub, Float, PrimInt, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use vortex_error::vortex_panic;
 
@@ -20,9 +21,7 @@ impl Display for Exponents {
     }
 }
 
-const ENCODE_CHUNK_SIZE: usize = 1024;
-
-pub trait ALPFloat: Float + Display + 'static {
+pub trait ALPFloat: Float + Display + FloatToInt<Self::ALPInt> + 'static {
     type ALPInt: PrimInt + Bounded + Display + ToPrimitive;
 
     const FRACTIONAL_BITS: u8;
@@ -37,10 +36,11 @@ pub trait ALPFloat: Float + Display + 'static {
         (self + Self::SWEET) - Self::SWEET
     }
 
-    #[inline]
-    fn as_int(self) -> Option<Self::ALPInt> {
-        <Self::ALPInt as NumCast>::from(self)
-    }
+    /// Equivalent to calling `as` to cast the primitive float to the target integer type.
+    fn as_int(self) -> Self::ALPInt;
+
+    /// Convert from the integer type back to the float type using `as`.
+    fn from_int(n: Self::ALPInt) -> Self;
 
     fn find_best_exponents(values: &[Self]) -> Exponents {
         let mut best_exp = Exponents { e: 0, f: 0 };
@@ -74,7 +74,7 @@ pub trait ALPFloat: Float + Display + 'static {
         best_exp
     }
 
-    #[inline(always)]
+    #[inline]
     fn estimate_encoded_size(encoded: &[Self::ALPInt], patches: &[Self]) -> usize {
         let bits_per_encoded = encoded
             .iter()
@@ -104,81 +104,17 @@ pub trait ALPFloat: Float + Display + 'static {
         exponents: Option<Exponents>,
     ) -> (Exponents, Vec<Self::ALPInt>, Vec<u64>, Vec<Self>) {
         let exp = exponents.unwrap_or_else(|| Self::find_best_exponents(values));
- 
+
         let mut encoded_output = Vec::with_capacity(values.len());
         let mut patch_indices = Vec::new();
         let mut patch_values = Vec::new();
         let mut fill_value: Option<Self::ALPInt> = None;
-        let mut has_filled = false;
 
         // this is intentionally branchless
         // TODO: batch this into 1024 values at a time to make it more cache friendly
-        for chunk in values.chunks(ENCODE_CHUNK_SIZE) {
-            let num_prev_encoded = encoded_output.len();
-            let num_prev_patches = patch_indices.len();
-
-            let mut chunk_patch_count = 0;
-            encoded_output.extend(chunk.iter().map(|v| {
-                let encoded = unsafe { Self::encode_single_unchecked(*v, exp) };
-                let decoded = Self::decode_single(encoded, exp);
-                let neq: usize = (decoded != *v) as usize;
-                chunk_patch_count += neq;
-                encoded
-            }));
-            let chunk_patch_count = chunk_patch_count; // immutable hereafter
-
-            if chunk_patch_count == 0 {
-                continue;
-            }
-
-            // reserve space for the patches in this chunk (plus one because our loop may attempt to write one past the end)
-            patch_indices.reserve(chunk_patch_count + 1);
-            patch_values.reserve(chunk_patch_count + 1);
-
-
-            // record the patches in this chunk
-            let patch_indices_mut = patch_indices.spare_capacity_mut();
-            let patch_values_mut = patch_values.spare_capacity_mut();
-            let mut chunk_patch_index = 0;
-            for i in num_prev_encoded..encoded_output.len() {
-                let decoded = Self::decode_single(encoded_output[i], exp);
-                patch_indices_mut[chunk_patch_index].write(i as u64);
-                patch_values_mut[chunk_patch_index].write(values[i]);
-                chunk_patch_index += (decoded != values[i]) as usize;
-            }
-            assert_eq!(chunk_patch_index, chunk_patch_count);
-            unsafe {
-                patch_indices.set_len(num_prev_patches + chunk_patch_count);
-                patch_values.set_len(num_prev_patches + chunk_patch_count);
-            }
-
-            // find the first successfully encoded value (i.e., not patched)
-            // this is our fill value for missing values
-            if fill_value.is_none() {
-                assert_eq!(num_prev_encoded, num_prev_patches);
-                for i in num_prev_encoded..encoded_output.len() {
-                    if i >= patch_indices.len() || patch_indices[i] != i as u64 {
-                        fill_value = Some(encoded_output[i]);
-                        break;
-                    }
-                }
-            }
-
-            // replace the patched values in the encoded array with the fill value
-            // for better downstream compression
-            if let Some(fill_value) = fill_value {
-                // handle the edge case where the first N >= 1 chunks are all patches
-                let patch_indices_to_fill = if !has_filled {
-                    &patch_indices
-                } else {
-                    &patch_indices[num_prev_patches..]
-                };
-
-                for patch_idx in patch_indices_to_fill.iter() {
-                    encoded_output[*patch_idx as usize] = fill_value;
-                }
-                has_filled = true;
-            }
+        let encode_chunk_size: usize = 1024;
+        for chunk in values.chunks(encode_chunk_size) {
+            encode_chunk_unchecked(chunk, exp, &mut encoded_output, &mut patch_indices, &mut patch_values, &mut fill_value);
         }
 
         (exp, encoded_output, patch_indices, patch_values)
@@ -215,11 +151,17 @@ pub trait ALPFloat: Float + Display + 'static {
         (value * Self::F10[exponents.e as usize] * Self::IF10[exponents.f as usize])
             .fast_round()
             .as_int()
-            .unwrap_or_else(Self::ALPInt::max_value)
     }
 }
 
-fn encode_chunk_unchecked<T: ALPFloat>(chunk_idx: usize, chunk: &[T], exp: Exponents, encoded_output: &mut Vec<T::ALPInt>, patch_indices: &mut Vec<u64>, patch_values: &mut Vec<T>, fill_value: &mut Option<T::ALPInt>) {
+fn encode_chunk_unchecked<T: ALPFloat>(
+    chunk: &[T],
+    exp: Exponents,
+    encoded_output: &mut Vec<T::ALPInt>,
+    patch_indices: &mut Vec<u64>,
+    patch_values: &mut Vec<T>,
+    fill_value: &mut Option<T::ALPInt>,
+) {
     let num_prev_encoded = encoded_output.len();
     let num_prev_patches = patch_indices.len();
     assert_eq!(patch_indices.len(), patch_values.len());
@@ -280,16 +222,10 @@ fn encode_chunk_unchecked<T: ALPFloat>(chunk_idx: usize, chunk: &[T], exp: Expon
     // for better downstream compression
     if let Some(fill_value) = fill_value {
         // handle the edge case where the first N >= 1 chunks are all patches
-        let patch_indices_to_fill = if !has_filled {
-            &patch_indices
-        } else {
-            &patch_indices[num_prev_patches..]
-        };
-
-        for patch_idx in patch_indices_to_fill.iter() {
-            encoded_output[*patch_idx as usize] = fill_value;
+        let start_patch = if !has_filled { 0 } else { num_prev_patches };
+        for patch_idx in &patch_indices[start_patch..] {
+            encoded_output[*patch_idx as usize] = *fill_value;
         }
-        has_filled = true;
     }
 }
 
@@ -326,6 +262,16 @@ impl ALPFloat for f32 {
         0.000000001,
         0.0000000001, // 10^-10
     ];
+    
+    #[inline(always)]
+    fn as_int(self) -> Self::ALPInt {
+        self as _
+    }
+
+    #[inline(always)]
+    fn from_int(n: Self::ALPInt) -> Self {
+        n as _
+    }
 }
 
 impl ALPFloat for f64 {
@@ -387,4 +333,14 @@ impl ALPFloat for f64 {
         0.0000000000000000000001,
         0.00000000000000000000001, // 10^-23
     ];
+    
+    #[inline(always)]
+    fn as_int(self) -> Self::ALPInt {
+        self as _
+    }
+
+    #[inline(always)]
+    fn from_int(n: Self::ALPInt) -> Self {
+        n as _
+    }
 }
