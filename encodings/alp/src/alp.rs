@@ -123,49 +123,59 @@ pub trait ALPFloat: Float + Display + 'static {
             }));
             let chunk_patch_count = chunk_patch_count; // immutable hereafter
 
-            if chunk_patch_count > 0 {
-                let num_prev_encoded = chunk_idx * CHUNK_SIZE;
-                let num_prev_patches = patch_indices.len();
+            if chunk_patch_count == 0 {
+                continue;
+            }
 
-                let patch_indices_mut = patch_indices.spare_capacity_mut();
-                let patch_values_mut = patch_values.spare_capacity_mut();
+            // reserve space for the patches in this chunk (plus one because our loop may attempt to write one past the end)
+            patch_indices.reserve(chunk_patch_count + 1);
+            patch_values.reserve(chunk_patch_count + 1);
 
-                let mut chunk_patch_index = 0;
+            let num_prev_encoded = chunk_idx * CHUNK_SIZE;
+            let num_prev_patches = patch_indices.len();
+
+            // record the patches in this chunk
+            let patch_indices_mut = patch_indices.spare_capacity_mut();
+            let patch_values_mut = patch_values.spare_capacity_mut();
+            let mut chunk_patch_index = 0;
+            for i in num_prev_encoded..encoded_output.len() {
+                let decoded = Self::decode_single(encoded_output[i], exp);
+                patch_indices_mut[chunk_patch_index].write(i as u64);
+                patch_values_mut[chunk_patch_index].write(values[i]);
+                chunk_patch_index += (decoded != values[i]) as usize;
+            }
+            assert_eq!(chunk_patch_index, chunk_patch_count);
+            unsafe {
+                patch_indices.set_len(num_prev_patches + chunk_patch_count);
+                patch_values.set_len(num_prev_patches + chunk_patch_count);
+            }
+
+            // find the first successfully encoded value (i.e., not patched)
+            // this is our fill value for missing values
+            if fill_value.is_none() {
+                assert_eq!(num_prev_encoded, num_prev_patches);
                 for i in num_prev_encoded..encoded_output.len() {
-                    let decoded = Self::decode_single(encoded_output[i], exp);
-                    patch_indices_mut[chunk_patch_index].write(i as u64);
-                    patch_values_mut[chunk_patch_index].write(values[i]);
-                    chunk_patch_index += (decoded != values[i]) as usize;
-                }
-                assert_eq!(chunk_patch_index, chunk_patch_count);
-                unsafe {
-                    patch_indices.set_len(num_prev_patches + chunk_patch_count);
-                    patch_values.set_len(num_prev_patches + chunk_patch_count);
-                }
-
-                // find the first successfully encoded value (i.e., not patched)
-                if fill_value.is_none() {
-                    assert_eq!(num_prev_encoded, num_prev_patches);
-                    for i in num_prev_encoded..encoded_output.len() {
-                        if patch_indices[i] != i as u64 {
-                            fill_value = Some(encoded_output[i]);
-                            break;
-                        }
+                    if i >= patch_indices.len() || patch_indices[i] != i as u64 {
+                        fill_value = Some(encoded_output[i]);
+                        break;
                     }
                 }
+            }
 
-                if let Some(fill_value) = fill_value {
-                    let patch_indices_to_fill = if !has_filled {
-                        &patch_indices
-                    } else {
-                        &patch_indices[num_prev_patches..]
-                    };
+            // replace the patched values in the encoded array with the fill value
+            // for better downstream compression
+            if let Some(fill_value) = fill_value {
+                // handle the edge case where the first N >= 1 chunks are all patches
+                let patch_indices_to_fill = if !has_filled {
+                    &patch_indices
+                } else {
+                    &patch_indices[num_prev_patches..]
+                };
 
-                    for patch_idx in patch_indices_to_fill.iter() {
-                        encoded_output[*patch_idx as usize] = fill_value;
-                    }
-                    has_filled = true;
+                for patch_idx in patch_indices_to_fill.iter() {
+                    encoded_output[*patch_idx as usize] = fill_value;
                 }
+                has_filled = true;
             }
         }
 
