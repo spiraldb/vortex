@@ -157,7 +157,7 @@ mod tests {
         assert!(encoded.patches().is_some());
         assert_eq!(
             encoded.encoded().as_primitive().maybe_null_slice::<i64>(),
-            vec![1234i64, 2718, 2718, 4000] // fill forward
+            vec![1234i64, 2718, 1234, 4000] // fill forward
         );
         assert_eq!(encoded.exponents(), Exponents { e: 16, f: 13 });
 
