@@ -1,5 +1,3 @@
-#![feature(convert_float_to_int)]
-
 pub use alp::*;
 pub use array::*;
 pub use compress::*;

@@ -1,9 +1,8 @@
-use core::convert::FloatToInt;
 use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use itertools::Itertools;
-use num_traits::{Bounded, CheckedSub, Float, PrimInt, ToPrimitive};
+use num_traits::{CheckedSub, Float, PrimInt, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use vortex_error::vortex_panic;
 
@@ -21,8 +20,8 @@ impl Display for Exponents {
     }
 }
 
-pub trait ALPFloat: Float + Display + FloatToInt<Self::ALPInt> + 'static {
-    type ALPInt: PrimInt + Bounded + Display + ToPrimitive;
+pub trait ALPFloat: Float + Display + 'static {
+    type ALPInt: PrimInt + Display + ToPrimitive;
 
     const FRACTIONAL_BITS: u8;
     const MAX_EXPONENT: u8;
