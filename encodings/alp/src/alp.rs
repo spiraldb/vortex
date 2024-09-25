@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::mem::size_of;
 
 use itertools::Itertools;
-use num_traits::{Bounded, CheckedSub, Float, NumCast, PrimInt, ToPrimitive, Zero};
+use num_traits::{Bounded, CheckedSub, Float, NumCast, PrimInt, ToPrimitive};
 use serde::{Deserialize, Serialize};
 use vortex_error::vortex_panic;
 
@@ -114,29 +114,27 @@ pub trait ALPFloat: Float + Display + 'static {
         const CHUNK_SIZE: usize = 1024;
         for (chunk_idx, chunk) in values.chunks(CHUNK_SIZE).enumerate() {
             let mut chunk_patch_count = 0;
-            encoded_output.extend(chunk
-                .iter()
-                .map(|v| {
-                    let encoded = unsafe { Self::encode_single_unchecked(*v, exp) };
-                    let decoded = Self::decode_single(encoded, exp);
-                    let neq: usize = (decoded != *v) as usize;
-                    chunk_patch_count += neq;
-                    encoded
-                }));
+            encoded_output.extend(chunk.iter().map(|v| {
+                let encoded = unsafe { Self::encode_single_unchecked(*v, exp) };
+                let decoded = Self::decode_single(encoded, exp);
+                let neq: usize = (decoded != *v) as usize;
+                chunk_patch_count += neq;
+                encoded
+            }));
             let chunk_patch_count = chunk_patch_count; // immutable hereafter
 
             if chunk_patch_count > 0 {
                 let num_prev_encoded = chunk_idx * CHUNK_SIZE;
                 let num_prev_patches = patch_indices.len();
 
-                let mut patch_indices_mut = patch_indices.spare_capacity_mut();
-                let mut patch_values_mut = patch_values.spare_capacity_mut();
+                let patch_indices_mut = patch_indices.spare_capacity_mut();
+                let patch_values_mut = patch_values.spare_capacity_mut();
 
                 let mut chunk_patch_index = 0;
                 for i in num_prev_encoded..encoded_output.len() {
                     let decoded = Self::decode_single(encoded_output[i], exp);
-                    patch_indices_mut[chunk_patch_index] = i as u64;
-                    patch_values_mut[chunk_patch_index] = values[i];
+                    patch_indices_mut[chunk_patch_index].write(i as u64);
+                    patch_values_mut[chunk_patch_index].write(values[i]);
                     chunk_patch_index += (decoded != values[i]) as usize;
                 }
                 assert_eq!(chunk_patch_index, chunk_patch_count);
@@ -158,7 +156,7 @@ pub trait ALPFloat: Float + Display + 'static {
 
                 if let Some(fill_value) = fill_value {
                     let patch_indices_to_fill = if !has_filled {
-                        &patch_indices 
+                        &patch_indices
                     } else {
                         &patch_indices[num_prev_patches..]
                     };
