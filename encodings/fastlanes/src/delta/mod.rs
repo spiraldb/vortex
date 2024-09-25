@@ -42,16 +42,16 @@ pub struct DeltaMetadata {
 ///
 /// # Details
 ///
-/// To facilitate slicing, this array has an [`offset`] and [`limit`]. Both values must be strictly
-/// less than 1,024. The offset is physical offset into the first chunk of deltas. The limit is a
+/// To facilitate slicing, this array has an `offset` and `limit`. Both values must be strictly less
+/// than 1,024. The `offset` is physical offset into the first chunk of deltas. The `limit` is a
 /// physical limit of the last chunk. These values permit logical slicing while preserving all
 /// values in any chunk containing a kept value. Logical slicing permits preservation of values
 /// necessary to decompress the delta-encoding, which is described in detail below. While later
 /// values in a chunk are not necsesary to decode earlier ones, a logical limit preserves full
 /// chunks which permits the decompression function go assume all chunks are exactly 1,024 values.
 ///
-/// A [`limit`] of `None` is a convenient alternative to computing the length of the last
-/// block. Internally, this array does not store the [`limit`]; instead it stores the number of
+/// A `limit` of `None` is a convenient alternative to computing the length of the last
+/// block. Internally, this array does not store the `limit`; instead it stores the number of
 /// trailing logically-excluded values: `trailing_garbage`.
 ///
 /// Each chunk is stored as a vector of bases and a vector of deltas. There are as many bases as there
@@ -188,13 +188,13 @@ impl DeltaArray {
     }
 
     #[inline]
-    /// The logical offset into the first chunk of [`deltas`].
+    /// The logical offset into the first chunk of [`Self::deltas`].
     pub fn offset(&self) -> usize {
         self.metadata().offset
     }
 
     #[inline]
-    /// The logical "right-offset" of the last chunk of [`deltas`].
+    /// The logical "right-offset" of the last chunk of [`Self::deltas`].
     pub fn trailing_garbage(&self) -> usize {
         self.metadata().trailing_garbage
     }
