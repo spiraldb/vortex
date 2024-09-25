@@ -111,10 +111,17 @@ pub trait ALPFloat: Float + Display + FloatToInt<Self::ALPInt> + 'static {
         let mut fill_value: Option<Self::ALPInt> = None;
 
         // this is intentionally branchless
-        // TODO: batch this into 1024 values at a time to make it more cache friendly
-        let encode_chunk_size: usize = 1024;
+        // we batch this into 16KB of values at a time to make it more L1 cache friendly
+        let encode_chunk_size: usize = (16 << 10) / size_of::<Self::ALPInt>();
         for chunk in values.chunks(encode_chunk_size) {
-            encode_chunk_unchecked(chunk, exp, &mut encoded_output, &mut patch_indices, &mut patch_values, &mut fill_value);
+            encode_chunk_unchecked(
+                chunk,
+                exp,
+                &mut encoded_output,
+                &mut patch_indices,
+                &mut patch_values,
+                &mut fill_value,
+            );
         }
 
         (exp, encoded_output, patch_indices, patch_values)
@@ -262,7 +269,7 @@ impl ALPFloat for f32 {
         0.000000001,
         0.0000000001, // 10^-10
     ];
-    
+
     #[inline(always)]
     fn as_int(self) -> Self::ALPInt {
         self as _
@@ -333,7 +340,7 @@ impl ALPFloat for f64 {
         0.0000000000000000000001,
         0.00000000000000000000001, // 10^-23
     ];
-    
+
     #[inline(always)]
     fn as_int(self) -> Self::ALPInt {
         self as _
