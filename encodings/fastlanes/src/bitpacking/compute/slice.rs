@@ -1,9 +1,8 @@
 use std::cmp::max;
 
-use vortex::array::SparseArray;
 use vortex::compute::{slice, SliceFn};
 use vortex::{Array, IntoArray};
-use vortex_error::{VortexExpect, VortexResult};
+use vortex_error::VortexResult;
 
 use crate::BitPackedArray;
 
@@ -17,22 +16,30 @@ impl SliceFn for BitPackedArray {
 
         let encoded_start = (block_start / 8) * self.bit_width();
         let encoded_stop = (block_stop / 8) * self.bit_width();
+        let new_packed = self.packed().slice(encoded_start..encoded_stop);
+
+        let patch_start = offset_start - self.packed_len();
+        let patch_stop = offset_stop - self.packed_len();
+        let new_patches = self
+            ._patches()
+            .map(|(indices, values)| -> VortexResult<_> {
+                Ok((
+                    slice(&indices, patch_start, patch_stop)?,
+                    slice(&values, patch_start, patch_stop)?,
+                ))
+            })
+            .transpose()?
+            .filter(|(indices, _)| {
+                // No need to keep an empty set of patches
+                !indices.is_empty()
+            });
+
         // slice the buffer using the encoded start/stop values
         Self::try_new_from_offset(
-            self.packed().slice(encoded_start..encoded_stop),
+            new_packed,
             self.ptype(),
             self.validity().slice(start, stop)?,
-            self.patches()
-                .map(|p| slice(&p, start, stop))
-                .transpose()?
-                .filter(|a| {
-                    // If the sliced patch_indices is empty, we should not propagate the patches.
-                    // There may be other logic that depends on Some(patches) indicating non-empty.
-                    !SparseArray::try_from(a)
-                        .vortex_expect("BitPackedArray must encode patches as SparseArray")
-                        .indices()
-                        .is_empty()
-                }),
+            new_patches,
             self.bit_width(),
             stop - start,
             offset,

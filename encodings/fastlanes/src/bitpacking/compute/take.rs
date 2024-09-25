@@ -1,9 +1,10 @@
-use std::cmp::min;
+use std::collections::HashMap;
 
 use fastlanes::BitPacking;
 use itertools::Itertools;
-use vortex::array::{PrimitiveArray, SparseArray};
-use vortex::compute::{slice, take, TakeFn};
+use vortex::array::PrimitiveArray;
+use vortex::compute::{search_sorted, take, SearchSortedSide, TakeFn};
+use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
@@ -46,12 +47,14 @@ fn take_primitive<T: NativePType + BitPacking>(
 
     let packed = array.packed_slice::<T>();
 
-    let patches = array.patches().map(SparseArray::try_from).transpose()?;
+    let patches = array._patches();
 
     // if we have a small number of relatively large batches, we gain by slicing and then patching inside the loop
     // if we have a large number of relatively small batches, the overhead isn't worth it, and we're better off with a bulk patch
     // roughly, if we have an average of less than 64 elements per batch, we prefer bulk patching
-    let prefer_bulk_patch = relative_indices.len() * 64 > indices.len();
+
+    // FIXME(DK): restore this
+    // let prefer_bulk_patch = relative_indices.len() * 64 > indices.len();
 
     // assuming the buffer is already allocated (which will happen at most once)
     // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
@@ -80,57 +83,126 @@ fn take_primitive<T: NativePType + BitPacking>(
             }
         }
 
-        if !prefer_bulk_patch {
-            if let Some(ref patches) = patches {
-                // NOTE: we need to subtract the array offset before slicing into the patches.
-                // This is because BitPackedArray is rounded to block boundaries, but patches
-                // is sliced exactly.
-                let patches_start = if chunk == 0 {
-                    0
-                } else {
-                    (chunk * 1024) - array.offset()
-                };
-                let patches_end = min((chunk + 1) * 1024 - array.offset(), patches.len());
-                let patches_slice = slice(patches.as_ref(), patches_start, patches_end)?;
-                let patches_slice = SparseArray::try_from(patches_slice)?;
-                let offsets = PrimitiveArray::from(offsets);
-                do_patch_for_take_primitive(&patches_slice, &offsets, &mut output)?;
-            }
-        }
+        // if !prefer_bulk_patch {
+        //     if let Some(ref patches) = patches {
+        //         // NOTE: we need to subtract the array offset before slicing into the patches.
+        //         // This is because BitPackedArray is rounded to block boundaries, but patches
+        //         // is sliced exactly.
+        //         let patches_start = if chunk == 0 {
+        //             0
+        //         } else {
+        //             (chunk * 1024) - array.offset() - self.packed_len()
+        //         };
+        //         let patches_end = min(
+        //             (chunk + 1) * 1024 - array.offset() - self.packed_len(),
+        //             patches.len(),
+        //         );
+        //         let patches_slice = slice(patches.as_ref(), patches_start, patches_end)?;
+        //         let patches_slice = SparseArray::try_from(patches_slice)?;
+        //         let offsets = PrimitiveArray::from(offsets);
+        //         do_patch_for_take_primitive(&patches_slice, &offsets, &mut output)?;
+        //     }
+        // }
     }
 
-    if prefer_bulk_patch {
-        if let Some(ref patches) = patches {
-            do_patch_for_take_primitive(patches, indices, &mut output)?;
-        }
+    // if prefer_bulk_patch {
+    if let Some((patch_indices, patch_values)) = patches {
+        do_patch_for_take_primitive(
+            patch_indices,
+            patch_values,
+            indices.clone().into_array(),
+            &mut output,
+        )?;
     }
+    // }
 
     Ok(output)
 }
 
 fn do_patch_for_take_primitive<T: NativePType>(
-    patches: &SparseArray,
-    indices: &PrimitiveArray,
+    patch_indices: Array,
+    patch_values: Array,
+    indices: Array,
     output: &mut [T],
 ) -> VortexResult<()> {
-    let taken_patches = take(patches.as_ref(), indices.as_ref())?;
-    let taken_patches = SparseArray::try_from(taken_patches)?;
+    let indices_of_kept_patches = kept_indices_u64(patch_indices.clone(), indices)?;
+    let kept_patch_indices =
+        take(patch_indices, indices_of_kept_patches.clone())?.into_primitive()?;
+    let kept_patch_values = take(patch_values, indices_of_kept_patches)?.into_primitive()?;
 
-    let base_index = output.len() - indices.len();
-    let output_patches = taken_patches
-        .values()
-        .into_primitive()?
-        .reinterpret_cast(T::PTYPE);
-    taken_patches
-        .resolved_indices()
-        .iter()
-        .map(|idx| base_index + *idx)
-        .zip_eq(output_patches.maybe_null_slice::<T>())
-        .for_each(|(idx, val)| {
-            output[idx] = *val;
-        });
+    let kept_patch_indices = kept_patch_indices.maybe_null_slice::<u64>();
+    let kept_patch_values = kept_patch_values.maybe_null_slice::<T>();
+    for (index, value) in kept_patch_indices.iter().zip(kept_patch_values) {
+        output[*index as usize] = *value;
+    }
 
     Ok(())
+}
+
+fn kept_indices_u64(values: Array, filter_values: Array) -> VortexResult<Array> {
+    let filter_values = filter_values.into_primitive()?;
+    if filter_values.len() > 128 {
+        let values = values.into_primitive()?;
+        kept_indices_by_map_u64(values, filter_values)
+    } else {
+        kept_indices_by_search_sorted_u64(values, filter_values)
+    }
+}
+
+fn kept_indices_by_map_u64(
+    values: PrimitiveArray,
+    filter_values: PrimitiveArray,
+) -> VortexResult<Array> {
+    let values_to_index: HashMap<u64, u64> = values
+        .maybe_null_slice::<u64>()
+        .iter()
+        .enumerate()
+        .map(|(index, r)| (*r, index as u64))
+        .collect();
+    let maybe_invalid_kept_indices = PrimitiveArray::from_vec::<u64>(
+        filter_values
+            .maybe_null_slice::<u64>()
+            .iter()
+            .flat_map(|i| values_to_index.get(i).cloned())
+            .collect::<Vec<_>>(),
+        Validity::NonNullable,
+    );
+    Ok(PrimitiveArray::new(
+        maybe_invalid_kept_indices.buffer().clone(),
+        maybe_invalid_kept_indices.ptype(),
+        values
+            .validity()
+            .take(&maybe_invalid_kept_indices.into_array())?,
+    )
+    .into_array())
+}
+
+fn kept_indices_by_search_sorted_u64(
+    values: Array,
+    filter_values: PrimitiveArray,
+) -> VortexResult<Array> {
+    let kept_indices_vec = filter_values
+        .maybe_null_slice::<u64>()
+        .iter()
+        .filter_map(|value| {
+            search_sorted(&values, *value, SearchSortedSide::Left)
+                .map(|x| x.to_found().map(|x| x as u64))
+                .transpose()
+        })
+        .collect::<VortexResult<Vec<u64>>>()?;
+
+    let maybe_invalid_kept_indices =
+        PrimitiveArray::from_vec::<u64>(kept_indices_vec, Validity::NonNullable);
+
+    let values = values.into_primitive()?;
+    Ok(PrimitiveArray::new(
+        maybe_invalid_kept_indices.buffer().clone(),
+        maybe_invalid_kept_indices.ptype(),
+        values
+            .validity()
+            .take(&maybe_invalid_kept_indices.into_array())?,
+    )
+    .into_array())
 }
 
 #[cfg(test)]

@@ -64,10 +64,16 @@ impl EncodingCompressor for BitPackedCompressor {
         let packed = bitpack(&parray, bit_width)?;
         let patches = (num_exceptions > 0)
             .then(|| {
-                bitpack_patches(&parray, bit_width, num_exceptions).map(|p| {
-                    ctx.auxiliary("patches")
-                        .compress(&p, like.as_ref().and_then(|l| l.child(0)))
-                })
+                bitpack_patches(&parray, bit_width, num_exceptions).map(
+                    |(patch_indices, patch_values)| -> VortexResult<_> {
+                        Ok((
+                            ctx.auxiliary("patch_indices")
+                                .compress(&patch_indices, like.as_ref().and_then(|l| l.child(0)))?,
+                            ctx.auxiliary("patch_values")
+                                .compress(&patch_values, like.as_ref().and_then(|l| l.child(1)))?,
+                        ))
+                    },
+                )
             })
             .flatten()
             .transpose()?;
@@ -77,14 +83,21 @@ impl EncodingCompressor for BitPackedCompressor {
                 packed,
                 parray.ptype(),
                 validity,
-                patches.as_ref().map(|p| p.array.clone()),
+                patches.as_ref().map(|(patch_indices, patch_values)| {
+                    (patch_indices.array.clone(), patch_values.array.clone())
+                }),
                 bit_width,
                 parray.len(),
             )?
             .into_array(),
             Some(CompressionTree::new(
                 self,
-                vec![patches.and_then(|p| p.path)],
+                match patches {
+                    None => vec![],
+                    Some((patch_indices, patch_values)) => {
+                        vec![patch_indices.path, patch_values.path]
+                    }
+                },
             )),
         ))
     }

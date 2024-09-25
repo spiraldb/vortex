@@ -5,14 +5,14 @@ use std::cmp::Ordering::Greater;
 use fastlanes::BitPacking;
 use itertools::Itertools;
 use num_traits::AsPrimitive;
-use vortex::array::SparseArray;
 use vortex::compute::{
     search_sorted_u64, IndexOrd, Len, SearchResult, SearchSorted, SearchSortedFn, SearchSortedSide,
 };
+use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
 use vortex::ArrayDType;
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
-use vortex_error::{VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{VortexError, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::{unpack_single_primitive, BitPackedArray};
@@ -105,12 +105,16 @@ fn search_sorted_native<T>(
 where
     T: NativePType + BitPacking + AsPrimitive<usize> + AsPrimitive<u64>,
 {
-    if let Some(patches_array) = array.patches() {
+    if let Some((_, values)) = array._patches() {
         // If patches exist they must be the last elements in the array, if the value we're looking for is greater than
         // max packed value just search the patches
         let usize_value: usize = value.as_();
         if usize_value > array.max_packed_value() {
-            search_sorted_u64(&patches_array, value.as_(), side)
+            match search_sorted_u64(&values, value.as_(), side)? {
+                // FIXME(DK): the nulls are included in `array`, right? Otherwise the following sum is probably wrong.
+                SearchResult::Found(index) => Ok(SearchResult::Found(array.packed_len() + index)),
+                otherwise => Ok(otherwise),
+            }
         } else {
             Ok(BitPackedSearch::<'_, T>::new(array).search_sorted(&value, side))
         }
@@ -133,14 +137,8 @@ struct BitPackedSearch<'a, T> {
 
 impl<'a, T: BitPacking + NativePType> BitPackedSearch<'a, T> {
     pub fn new(array: &'a BitPackedArray) -> Self {
-        let min_patch_offset = array
-            .patches()
-            .and_then(|p| {
-                SparseArray::try_from(p)
-                    .vortex_expect("Only sparse patches are supported")
-                    .min_index()
-            })
-            .unwrap_or_else(|| array.len());
+        let (indices, _) = array._patches().unwrap();
+        let min_patch_offset = indices.statistics().compute_min().unwrap_or(array.len()); // FIXME(DK): indices are always sorted, right? We could just take the zeroth element
         let first_null_idx = match array.validity() {
             Validity::NonNullable | Validity::AllValid => array.len(),
             Validity::AllInvalid => 0,
