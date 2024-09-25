@@ -4,7 +4,6 @@ use std::mem::size_of;
 use itertools::Itertools;
 use num_traits::{CheckedSub, Float, PrimInt, ToPrimitive};
 use serde::{Deserialize, Serialize};
-use vortex_error::vortex_panic;
 
 const SAMPLE_SIZE: usize = 32;
 
@@ -138,15 +137,7 @@ pub trait ALPFloat: Float + Display + 'static {
 
     #[inline]
     fn decode_single(encoded: Self::ALPInt, exponents: Exponents) -> Self {
-        let encoded_float: Self = Self::from(encoded).unwrap_or_else(|| {
-            vortex_panic!(
-                "Failed to convert encoded value {} from {} to {} in ALPFloat::decode_single",
-                encoded,
-                std::any::type_name::<Self::ALPInt>(),
-                std::any::type_name::<Self>()
-            )
-        });
-        encoded_float * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize]
+        Self::from_int(encoded) * Self::F10[exponents.f as usize] * Self::IF10[exponents.e as usize]
     }
 
     /// # Safety
