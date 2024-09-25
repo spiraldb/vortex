@@ -110,8 +110,8 @@ pub trait ALPFloat: Float + Display + 'static {
         let mut fill_value: Option<Self::ALPInt> = None;
 
         // this is intentionally branchless
-        // we batch this into 16KB of values at a time to make it more L1 cache friendly
-        let encode_chunk_size: usize = (16 << 10) / size_of::<Self::ALPInt>();
+        // we batch this into 32KB of values at a time to make it more L1 cache friendly
+        let encode_chunk_size: usize = (32 << 10) / size_of::<Self::ALPInt>();
         for chunk in values.chunks(encode_chunk_size) {
             encode_chunk_unchecked(
                 chunk,
@@ -178,7 +178,7 @@ fn encode_chunk_unchecked<T: ALPFloat>(
     encoded_output.extend(chunk.iter().map(|v| {
         let encoded = unsafe { T::encode_single_unchecked(*v, exp) };
         let decoded = T::decode_single(encoded, exp);
-        let neq: usize = (decoded != *v) as usize;
+        let neq = (decoded != *v) as usize;
         chunk_patch_count += neq;
         encoded
     }));
