@@ -1,10 +1,18 @@
 [package]
 name = "vortex-fuzz"
-version = "0.0.0"
 publish = false
-edition = { workspace = true }
+description = "Fuzzer for vortex arrays"
+version = { workspace = true }
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
 license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
 readme = "README.md"
+
 
 [package.metadata]
 cargo-fuzz = true
