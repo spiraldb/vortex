@@ -246,14 +246,14 @@ mod test {
     #[test]
     fn test_search_sorted_nulls() {
         let bitpacked = BitPackedArray::encode(
-            PrimitiveArray::from_nullable_vec(vec![Some(1i64), None, None]).as_ref(),
+            PrimitiveArray::from_nullable_vec(vec![Some(1u64), None, None]).as_ref(),
             2,
         )
         .unwrap();
 
         let found = bitpacked
             .search_sorted(
-                &Scalar::primitive(1i64, Nullability::Nullable),
+                &Scalar::primitive(1u64, Nullability::Nullable),
                 SearchSortedSide::Left,
             )
             .unwrap();
@@ -265,9 +265,9 @@ mod test {
         // Test search_sorted_many with an array that contains several null values.
         let bitpacked = BitPackedArray::encode(
             PrimitiveArray::from_nullable_vec(vec![
-                Some(1i64),
-                Some(2i64),
-                Some(3i64),
+                Some(1u64),
+                Some(2u64),
+                Some(3u64),
                 None,
                 None,
                 None,
@@ -280,7 +280,7 @@ mod test {
 
         let results = search_sorted_many(
             bitpacked.as_ref(),
-            &[3i64, 2i64, 1i64],
+            &[3u64, 2u64, 1u64],
             &[
                 SearchSortedSide::Left,
                 SearchSortedSide::Left,

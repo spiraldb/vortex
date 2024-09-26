@@ -348,7 +348,8 @@ mod test {
     fn null_patches() {
         let valid_values = (0..24).map(|v| v < 1 << 4).collect::<Vec<_>>();
         let values =
-            PrimitiveArray::from_vec((0..24).collect::<Vec<_>>(), Validity::from(valid_values));
+            PrimitiveArray::from_vec((0u32..24).collect::<Vec<_>>(), Validity::from(valid_values));
+        assert!(values.ptype().is_unsigned_int());
         let compressed = BitPackedArray::encode(values.as_ref(), 4).unwrap();
         assert!(compressed.patches().is_none());
         assert_eq!(
