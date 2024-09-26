@@ -29,6 +29,10 @@ impl RowFilter {
         Self { conjunction }
     }
 
+    pub fn from_conjunction(conjunction: Vec<Arc<dyn VortexExpr>>) -> Self {
+        Self { conjunction }
+    }
+
     /// Evaluate the underlying filter against a target array, returning a boolean mask
     pub fn evaluate(&self, target: &Array) -> VortexResult<Array> {
         let mut mask = BoolArray::from(vec![true; target.len()]).into_array();
@@ -67,5 +71,9 @@ impl RowFilter {
             .sort_by_key(|e| Reverse(e.estimate_cost(schema)));
 
         self
+    }
+
+    pub fn expressions(&self) -> &[Arc<dyn VortexExpr>] {
+        &self.conjunction
     }
 }

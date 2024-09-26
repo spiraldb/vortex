@@ -1,9 +1,11 @@
 use std::fmt::Debug;
 
+use cache::RelativeLayoutCache;
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use vortex::array::BoolArray;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray as _, IntoArrayVariant as _};
+use vortex_dtype::DType;
 use vortex_error::VortexResult;
 
 mod batch;
@@ -38,6 +40,15 @@ pub struct Scan {
     projection: Projection,
     filter: Option<RowFilter>,
     batch_size: usize,
+    filter_scan: Option<FilterScan>,
+}
+
+#[derive(Debug, Clone)]
+pub struct FilterScan {
+    row_filter: RowFilter,
+    projection: Projection,
+    dtype: DType,
+    message_cache: RelativeLayoutCache,
 }
 
 /// Unique identifier for a message within a layout
@@ -48,6 +59,7 @@ pub type MessageId = Vec<LayoutPartId>;
 pub enum ReadResult {
     ReadMore(Vec<(MessageId, ByteRange)>),
     Batch(Array),
+    Selection(BoolArray),
 }
 
 pub trait LayoutReader: Debug + Send {
@@ -59,6 +71,11 @@ pub trait LayoutReader: Debug + Send {
     ///
     /// The layout is finished reading when it returns None
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>>;
+
+    fn eval_selection(
+        &mut self,
+        base_selection: Option<BoolArray>,
+    ) -> VortexResult<Option<ReadResult>>;
 
     // TODO(robert): Support stats pruning via planning. Requires propagating all the metadata
     //  to top level and then pushing down the result of it

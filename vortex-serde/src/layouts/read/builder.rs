@@ -5,6 +5,7 @@ use vortex::{Array, ArrayDType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 
+use super::FilterScan;
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::{LayoutMessageCache, RelativeLayoutCache};
 use crate::layouts::read::context::LayoutDeserializer;
@@ -96,39 +97,37 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             })
             .transpose()?;
 
+        let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
+
+        let filter_scan = filter_dtype
+            .zip(filter_projection)
+            .zip(self.row_filter.clone())
+            .map(|((dtype, projection), row_filter)| {
+                let message_cache = RelativeLayoutCache::new(message_cache.clone(), dtype.clone());
+                FilterScan {
+                    dtype,
+                    projection,
+                    row_filter,
+                    message_cache,
+                }
+            });
+
         let scan = Scan {
-            filter: self.row_filter.clone(),
+            filter_scan,
             batch_size,
             projection: read_projection,
             indices: self.indices,
+            filter: self.row_filter,
         };
 
-        let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-
-        let data_reader = footer.layout(
+        let data_reader = footer.build_layout_reader(
             scan.clone(),
             RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),
         )?;
 
-        let filter_reader = filter_dtype
-            .zip(filter_projection)
-            .map(|(dtype, projection)| {
-                footer.layout(
-                    Scan {
-                        filter: self.row_filter,
-                        batch_size,
-                        projection,
-                        indices: None,
-                    },
-                    RelativeLayoutCache::new(message_cache.clone(), dtype),
-                )
-            })
-            .transpose()?;
-
         Ok(LayoutBatchStream::new(
             self.reader,
             data_reader,
-            filter_reader,
             message_cache,
             projected_dtype,
             scan,

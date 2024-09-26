@@ -143,6 +143,10 @@ impl Literal {
     pub fn new(value: Scalar) -> Self {
         Self { value }
     }
+
+    pub fn into_array(&self, len: usize) -> Array {
+        ConstantArray::new(self.value.clone(), len).into_array()
+    }
 }
 
 impl VortexExpr for Literal {
@@ -151,7 +155,7 @@ impl VortexExpr for Literal {
     }
 
     fn evaluate(&self, batch: &Array) -> VortexResult<Array> {
-        Ok(ConstantArray::new(self.value.clone(), batch.len()).into_array())
+        Ok(self.into_array(batch.len()))
     }
 
     fn references(&self) -> HashSet<Field> {
@@ -181,18 +185,7 @@ impl VortexExpr for BinaryExpr {
         let lhs = self.lhs.evaluate(batch)?;
         let rhs = self.rhs.evaluate(batch)?;
 
-        let array = match self.operator {
-            Operator::Eq => compare(lhs, rhs, ArrayOperator::Eq)?,
-            Operator::NotEq => compare(lhs, rhs, ArrayOperator::NotEq)?,
-            Operator::Lt => compare(lhs, rhs, ArrayOperator::Lt)?,
-            Operator::Lte => compare(lhs, rhs, ArrayOperator::Lte)?,
-            Operator::Gt => compare(lhs, rhs, ArrayOperator::Gt)?,
-            Operator::Gte => compare(lhs, rhs, ArrayOperator::Gte)?,
-            Operator::And => vortex::compute::and(lhs, rhs)?,
-            Operator::Or => vortex::compute::or(lhs, rhs)?,
-        };
-
-        Ok(array)
+        eval_binary_expr(lhs, rhs, self.operator)
     }
 
     fn references(&self) -> HashSet<Field> {
@@ -204,6 +197,25 @@ impl VortexExpr for BinaryExpr {
     fn estimate_cost(&self, schema: &Schema) -> usize {
         self.lhs.estimate_cost(schema) + self.rhs.estimate_cost(schema)
     }
+}
+
+pub fn eval_binary_expr(
+    lhs: impl AsRef<Array>,
+    rhs: impl AsRef<Array>,
+    operator: Operator,
+) -> VortexResult<Array> {
+    let array = match operator {
+        Operator::Eq => compare(lhs, rhs, ArrayOperator::Eq)?,
+        Operator::NotEq => compare(lhs, rhs, ArrayOperator::NotEq)?,
+        Operator::Lt => compare(lhs, rhs, ArrayOperator::Lt)?,
+        Operator::Lte => compare(lhs, rhs, ArrayOperator::Lte)?,
+        Operator::Gt => compare(lhs, rhs, ArrayOperator::Gt)?,
+        Operator::Gte => compare(lhs, rhs, ArrayOperator::Gte)?,
+        Operator::And => vortex::compute::and(lhs, rhs)?,
+        Operator::Or => vortex::compute::or(lhs, rhs)?,
+    };
+
+    Ok(array)
 }
 
 impl PartialEq<dyn Any> for BinaryExpr {

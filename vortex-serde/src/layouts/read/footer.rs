@@ -53,7 +53,7 @@ impl Footer {
         (self.schema_offset - self.leftovers_offset) as usize
     }
 
-    pub fn layout(
+    pub fn build_layout_reader(
         &self,
         scan: Scan,
         message_cache: RelativeLayoutCache,

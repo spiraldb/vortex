@@ -3,15 +3,21 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use flatbuffers::{ForwardsUOffset, Vector};
-use vortex::Context;
+use vortex::array::BoolArray;
+use vortex::compute::and;
+use vortex::stats::ArrayStatistics;
+use vortex::validity::Validity;
+use vortex::{Context, IntoArrayVariant};
 use vortex_dtype::field::Field;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
+use vortex_expr::{eval_binary_expr, BinaryExpr, Literal};
 use vortex_flatbuffers::footer as fb;
 use vortex_schema::projection::Projection;
 
-use crate::layouts::read::batch::BatchReader;
-use crate::layouts::read::buffered::BufferedReader;
+use super::RowFilter;
+use crate::layouts::read::batch::ColumnsReader;
+use crate::layouts::read::buffered::ChunkedReader;
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::read::context::{LayoutDeserializer, LayoutId, LayoutSpec};
 use crate::layouts::read::{LayoutReader, ReadResult, Scan};
@@ -19,50 +25,46 @@ use crate::stream_writer::ByteRange;
 use crate::ArrayBufferReader;
 
 #[derive(Debug)]
-enum FlatLayoutState {
-    Init,
-    ReadBatch,
-    Finished,
-}
-
-#[derive(Debug)]
 pub struct FlatLayout {
     range: ByteRange,
     ctx: Arc<Context>,
     cache: RelativeLayoutCache,
-    state: FlatLayoutState,
+    scan: Scan,
+    selection_read: bool,
+    array_read: bool,
 }
 
 impl FlatLayout {
-    pub fn new(begin: u64, end: u64, ctx: Arc<Context>, cache: RelativeLayoutCache) -> Self {
+    pub fn new(
+        begin: u64,
+        end: u64,
+        ctx: Arc<Context>,
+        scan: Scan,
+        cache: RelativeLayoutCache,
+    ) -> Self {
         Self {
             range: ByteRange { begin, end },
             ctx,
             cache,
-            state: FlatLayoutState::Init,
+            scan,
+            selection_read: false,
+            array_read: false,
         }
     }
 }
 
 impl LayoutReader for FlatLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
-        match self.state {
-            FlatLayoutState::Init => {
-                self.state = FlatLayoutState::ReadBatch;
-                Ok(Some(ReadResult::ReadMore(vec![(
-                    self.cache.absolute_id(&[]),
-                    self.range,
-                )])))
-            }
-            FlatLayoutState::ReadBatch => {
-                let mut buf = self.cache.get(&[]).ok_or_else(|| {
-                    vortex_err!(
-                        "Wrong state transition, message {:?} (with range {}) should have been fetched",
-                        self.cache.absolute_id(&[]),
-                        self.range
-                    )
-                })?;
+        if self.array_read {
+            return Ok(None);
+        }
 
+        match self.cache.get(&[]) {
+            None => Ok(Some(ReadResult::ReadMore(vec![(
+                self.cache.absolute_id(&[]),
+                self.range,
+            )]))),
+            Some(mut buf) => {
                 let mut array_reader = ArrayBufferReader::new();
                 let mut read_buf = Bytes::new();
                 while let Some(u) = array_reader.read(read_buf)? {
@@ -70,10 +72,68 @@ impl LayoutReader for FlatLayout {
                 }
 
                 let array = array_reader.into_array(self.ctx.clone(), self.cache.dtype())?;
-                self.state = FlatLayoutState::Finished;
+
+                self.array_read = true;
                 Ok(Some(ReadResult::Batch(array)))
             }
-            FlatLayoutState::Finished => Ok(None),
+        }
+    }
+
+    fn eval_selection(
+        &mut self,
+        base_selection: Option<BoolArray>,
+    ) -> VortexResult<Option<ReadResult>> {
+        if self.selection_read {
+            return Ok(None);
+        }
+        match self.cache.get(&[]) {
+            None => Ok(Some(ReadResult::ReadMore(vec![(
+                self.cache.absolute_id(&[]),
+                self.range,
+            )]))),
+            Some(mut buf) => {
+                let mut array_reader = ArrayBufferReader::new();
+                let mut read_buf = Bytes::new();
+                while let Some(u) = array_reader.read(read_buf)? {
+                    read_buf = buf.split_to(u);
+                }
+
+                let data = array_reader.into_array(self.ctx.clone(), self.cache.dtype())?;
+
+                let mut selection = base_selection.unwrap_or_else(|| {
+                    BoolArray::from_vec(vec![true; data.len()], Validity::AllValid)
+                });
+
+                if let Some(row_filter) = self.scan.filter.as_ref() {
+                    for expr in row_filter.expressions() {
+                        if let Some(expr) = expr.as_any().downcast_ref::<BinaryExpr>().cloned() {
+                            if let Some(lit) = expr.lhs().as_any().downcast_ref::<Literal>() {
+                                let expr_selection =
+                                    eval_binary_expr(lit.into_array(data.len()), &data, expr.op())?;
+                                selection = and(&selection, expr_selection)?.into_bool()?;
+                            }
+
+                            if let Some(lit) = expr.rhs().as_any().downcast_ref::<Literal>() {
+                                let expr_selection =
+                                    eval_binary_expr(&data, lit.into_array(data.len()), expr.op())?;
+                                selection = and(&selection, expr_selection)?.into_bool()?;
+                            }
+                        }
+
+                        if selection
+                            .statistics()
+                            .compute_true_count()
+                            .unwrap_or_default()
+                            == 0
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                self.selection_read = true;
+                Ok(Some(ReadResult::Selection(selection)))
+            }
         }
     }
 }
@@ -90,7 +150,7 @@ impl LayoutSpec for ColumnLayoutSpec {
         Self::ID
     }
 
-    fn layout(
+    fn build_layout_reader(
         &self,
         fb_bytes: Bytes,
         fb_loc: usize,
@@ -118,7 +178,8 @@ pub struct ColumnLayout {
     scan: Scan,
     layout_serde: LayoutDeserializer,
     message_cache: RelativeLayoutCache,
-    batch_reader: Option<BatchReader>,
+    array_reader: Option<ColumnsReader>,
+    selection_reader: Option<ColumnsReader>,
 }
 
 impl ColumnLayout {
@@ -135,7 +196,8 @@ impl ColumnLayout {
             scan,
             layout_serde,
             message_cache,
-            batch_reader: None,
+            array_reader: None,
+            selection_reader: None,
         }
     }
 
@@ -149,30 +211,47 @@ impl ColumnLayout {
             .vortex_expect("ColumnLayout: Failed to read nested layout from flatbuffer")
     }
 
-    fn read_child(
+    fn child_filter(field: &Field, row_filter: Option<RowFilter>) -> Option<RowFilter> {
+        row_filter
+            .as_ref()
+            .map(|f| {
+                f.expressions()
+                    .iter()
+                    .filter(|e| e.references().contains(field))
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+            .filter(|f| f.is_empty())
+            .map(|exprs| RowFilter::from_conjunction(exprs))
+    }
+
+    fn child_reader(
         &self,
         idx: usize,
         children: Vector<ForwardsUOffset<fb::Layout>>,
         dtype: DType,
+        child_filter: Option<RowFilter>,
+        message_cache: RelativeLayoutCache,
     ) -> VortexResult<Box<dyn LayoutReader>> {
         let layout = children.get(idx);
 
         // TODO: Figure out complex nested schema projections
         let mut child_scan = self.scan.clone();
         child_scan.projection = Projection::All;
+        child_scan.filter = child_filter;
 
         self.layout_serde.build_layout_reader(
             self.fb_bytes.clone(),
             layout._tab.loc(),
             child_scan,
-            self.message_cache.relative(idx as u16, dtype),
+            message_cache.relative(idx as u16, dtype),
         )
     }
 }
 
 impl LayoutReader for ColumnLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
-        if self.batch_reader.is_none() {
+        if self.array_reader.is_none() {
             let DType::Struct(top_dtype, ..) = self.message_cache.dtype() else {
                 vortex_bail!("Column layout must have struct dtype")
             };
@@ -184,30 +263,124 @@ impl LayoutReader for ColumnLayout {
 
             let column_layouts = match self.scan.projection {
                 Projection::All => (0..fb_children.len())
-                    .map(|idx| self.read_child(idx, fb_children, top_dtype.dtypes()[idx].clone()))
+                    .map(|idx| {
+                        // let child_filter = Self::child_filter(&Field::Index(idx));
+                        self.child_reader(
+                            idx,
+                            fb_children,
+                            top_dtype.dtypes()[idx].clone(),
+                            None,
+                            self.message_cache.clone(),
+                        )
+                    })
                     .collect::<VortexResult<Vec<_>>>()?,
                 Projection::Flat(ref v) => v
                     .iter()
                     .zip(top_dtype.dtypes().iter().cloned())
                     .map(|(projected_field, dtype)| {
+                        // let child_filter = self.child_filter(projected_field);
+
                         let child_idx = match projected_field {
                             Field::Name(n) => top_dtype.find_name(n.as_ref()).ok_or_else(|| {
                                 vortex_err!("Invalid projection, trying to select  {n}")
                             })?,
                             Field::Index(i) => *i,
                         };
-                        self.read_child(child_idx, fb_children, dtype)
+                        self.child_reader(
+                            child_idx,
+                            fb_children,
+                            dtype,
+                            None,
+                            self.message_cache.clone(),
+                        )
                     })
                     .collect::<VortexResult<Vec<_>>>()?,
             };
 
-            self.batch_reader = Some(BatchReader::new(top_dtype.names().clone(), column_layouts));
+            self.array_reader = Some(ColumnsReader::new(
+                top_dtype.names().clone(),
+                column_layouts,
+            ));
         }
 
-        self.batch_reader
+        self.array_reader
             .as_mut()
             .vortex_expect("Missing reader")
             .read()
+    }
+
+    fn eval_selection(
+        &mut self,
+        _base_selection: Option<BoolArray>,
+    ) -> VortexResult<Option<ReadResult>> {
+        match self.scan.filter_scan.as_ref() {
+            None => return Ok(None),
+            Some(filter_scan) if self.selection_reader.is_none() => {
+                let DType::Struct(ref top_dtype, ..) = filter_scan.dtype else {
+                    vortex_bail!("Column layout must have struct dtype")
+                };
+
+                let fb_children = self
+                    .flatbuffer()
+                    .children()
+                    .ok_or_else(|| vortex_err!("Missing children"))?;
+
+                let column_layouts = match filter_scan.projection {
+                    Projection::All => (0..fb_children.len())
+                        .map(|idx| {
+                            let child_filter = Self::child_filter(
+                                &Field::Index(idx),
+                                Some(filter_scan.row_filter.clone()),
+                            );
+                            self.child_reader(
+                                idx,
+                                fb_children,
+                                top_dtype.dtypes()[idx].clone(),
+                                child_filter,
+                                filter_scan.message_cache.clone(),
+                            )
+                        })
+                        .collect::<VortexResult<Vec<_>>>()?,
+                    Projection::Flat(ref v) => v
+                        .iter()
+                        .zip(top_dtype.dtypes().iter().cloned())
+                        .map(|(projected_field, dtype)| {
+                            let child_filter = Self::child_filter(
+                                projected_field,
+                                Some(filter_scan.row_filter.clone()),
+                            );
+
+                            let child_idx = match projected_field {
+                                Field::Name(n) => {
+                                    top_dtype.find_name(n.as_ref()).ok_or_else(|| {
+                                        vortex_err!("Invalid projection, trying to select  {n}")
+                                    })?
+                                }
+                                Field::Index(i) => *i,
+                            };
+                            self.child_reader(
+                                child_idx,
+                                fb_children,
+                                dtype,
+                                child_filter,
+                                filter_scan.message_cache.clone(),
+                            )
+                        })
+                        .collect::<VortexResult<Vec<_>>>()?,
+                };
+
+                self.selection_reader = Some(ColumnsReader::new(
+                    top_dtype.names().clone(),
+                    column_layouts,
+                ));
+            }
+            Some(_) => {}
+        }
+
+        self.selection_reader
+            .as_mut()
+            .vortex_expect("Missing reader")
+            .eval_selection()
     }
 }
 
@@ -223,7 +396,7 @@ impl LayoutSpec for ChunkedLayoutSpec {
         Self::ID
     }
 
-    fn layout(
+    fn build_layout_reader(
         &self,
         fb_bytes: Bytes,
         fb_loc: usize,
@@ -252,7 +425,8 @@ pub struct ChunkedLayout {
     scan: Scan,
     layout_builder: LayoutDeserializer,
     message_cache: RelativeLayoutCache,
-    buffered_reader: Option<BufferedReader>,
+    buffered_reader: Option<ChunkedReader>,
+    selection_reader: Option<ChunkedReader>,
 }
 
 impl ChunkedLayout {
@@ -270,6 +444,7 @@ impl ChunkedLayout {
             layout_builder: layout_serde,
             message_cache,
             buffered_reader: None,
+            selection_reader: None,
         }
     }
 
@@ -306,12 +481,19 @@ impl LayoutReader for ChunkedLayout {
                 })
                 .collect::<VortexResult<VecDeque<_>>>()?;
 
-            self.buffered_reader = Some(BufferedReader::new(children, self.scan.batch_size));
+            self.buffered_reader = Some(ChunkedReader::new(children, self.scan.batch_size));
         }
 
         self.buffered_reader
             .as_mut()
             .vortex_expect("Missing reader")
-            .read()
+            .read_next()
+    }
+
+    fn eval_selection(
+        &mut self,
+        _base_selection: Option<BoolArray>,
+    ) -> VortexResult<Option<ReadResult>> {
+        self.
     }
 }

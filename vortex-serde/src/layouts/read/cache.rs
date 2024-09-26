@@ -26,7 +26,7 @@ impl LayoutMessageCache {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RelativeLayoutCache {
     root: Arc<RwLock<LayoutMessageCache>>,
     dtype: DType,

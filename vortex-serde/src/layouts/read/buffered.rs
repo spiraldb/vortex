@@ -8,13 +8,13 @@ use vortex_error::VortexResult;
 use crate::layouts::read::{LayoutReader, ReadResult};
 
 #[derive(Debug)]
-pub struct BufferedReader {
+pub struct ChunkedReader {
     layouts: VecDeque<Box<dyn LayoutReader>>,
     arrays: VecDeque<Array>,
     batch_size: usize,
 }
 
-impl BufferedReader {
+impl ChunkedReader {
     pub fn new(layouts: VecDeque<Box<dyn LayoutReader>>, batch_size: usize) -> Self {
         Self {
             layouts,
@@ -41,6 +41,9 @@ impl BufferedReader {
                             return Ok(Some(read_more));
                         }
                         ReadResult::Batch(a) => self.arrays.push_back(a),
+                        ReadResult::Selection(_) => {
+                            unreachable!("Shouldn't happen on this code path")
+                        }
                     }
                 } else {
                     continue;
@@ -52,7 +55,7 @@ impl BufferedReader {
         Ok(None)
     }
 
-    pub fn read(&mut self) -> VortexResult<Option<ReadResult>> {
+    pub fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         if self.is_empty() {
             return Ok(None);
         }
@@ -63,6 +66,7 @@ impl BufferedReader {
                 ReadResult::Batch(_) => {
                     unreachable!("Batches should be handled inside the buffer call")
                 }
+                ReadResult::Selection(_) => unreachable!("Shouldn't happen on this code path"),
             }
         }
 

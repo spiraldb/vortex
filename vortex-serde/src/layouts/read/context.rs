@@ -18,7 +18,7 @@ pub struct LayoutId(pub u16);
 pub trait LayoutSpec: Debug + Send + Sync {
     fn id(&self) -> LayoutId;
 
-    fn layout(
+    fn build_layout_reader(
         &self,
         fb_bytes: Bytes,
         fb_loc: usize,
@@ -88,6 +88,7 @@ impl LayoutDeserializer {
                     flat_layout.begin(),
                     flat_layout.end(),
                     self.ctx.clone(),
+                    scan,
                     message_cache,
                 )))
             }
@@ -101,7 +102,7 @@ impl LayoutDeserializer {
                     .ok_or_else(|| {
                         vortex_err!("Unknown layout definition {}", nested_layout.encoding())
                     })?
-                    .layout(fb_bytes, fb_loc, scan, self.clone(), message_cache))
+                    .build_layout_reader(fb_bytes, fb_loc, scan, self.clone(), message_cache))
             }
             _ => unreachable!("Unknown flatbuffer layout"),
         }
