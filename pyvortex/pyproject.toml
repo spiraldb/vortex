@@ -2,7 +2,7 @@
 name = "vortex-array"
 # Maturin copies these, at build time, from Cargo.toml.
 # https://github.com/PyO3/maturin/blob/main/src/metadata.rs#L127-L129
-dyanmic = ["version", "description", "authors"]
+dynamic = ["version", "description", "authors"]
 readme = "README.md"
 dependencies = [
     "pyarrow>=15.0.0",
