@@ -32,7 +32,7 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
 
     BitPackedArray::try_new(
         packed,
-        array.ptype().to_unsigned(),
+        array.ptype(),
         array.validity(),
         patches,
         bit_width,
@@ -348,7 +348,8 @@ mod test {
     fn null_patches() {
         let valid_values = (0..24).map(|v| v < 1 << 4).collect::<Vec<_>>();
         let values =
-            PrimitiveArray::from_vec((0..24).collect::<Vec<_>>(), Validity::from(valid_values));
+            PrimitiveArray::from_vec((0u32..24).collect::<Vec<_>>(), Validity::from(valid_values));
+        assert!(values.ptype().is_unsigned_int());
         let compressed = BitPackedArray::encode(values.as_ref(), 4).unwrap();
         assert!(compressed.patches().is_none());
         assert_eq!(
@@ -394,5 +395,15 @@ mod test {
                 let scalar: u16 = unpack_single(&compressed, i).unwrap().try_into().unwrap();
                 assert_eq!(scalar, *v);
             });
+    }
+
+    #[test]
+    #[should_panic(expected = "expected type: uint but instead got i64")]
+    fn gh_issue_929() {
+        let values: Vec<i64> = (-500..500).collect();
+        let array = PrimitiveArray::from_vec(values, Validity::AllValid);
+        assert!(array.ptype().is_signed_int());
+
+        BitPackedArray::encode(array.as_ref(), 1024u32.ilog2() as usize).unwrap();
     }
 }
