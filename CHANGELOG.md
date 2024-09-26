@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-array` - [0.12.0](https://github.com/spiraldb/vortex/compare/0.11.0...0.12.0) - 2024-09-26
+
+### Other
+- Include README.md files in crates and link top level readme into vortex-array crate ([#934](https://github.com/spiraldb/vortex/pull/934))
+- Converting Arrow to Vortex should create Array and not ArrayData ([#931](https://github.com/spiraldb/vortex/pull/931))
+
 ## `vortex-runend-bool` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.10.1...vortex-runend-bool-v0.11.0) - 2024-09-26
 
 ### Added
