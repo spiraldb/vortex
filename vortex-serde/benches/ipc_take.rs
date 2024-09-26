@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use std::sync::Arc;
+use std::time::Duration;
 
 use arrow::ipc::reader::StreamReader as ArrowStreamReader;
 use arrow_array::{Array, Int32Array, RecordBatch};
@@ -85,5 +86,8 @@ fn ipc_take(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, ipc_take);
+criterion_group!(
+    name = benches;
+    config = Criterion::default().measurement_time(Duration::from_secs(10));
+    targets = ipc_take);
 criterion_main!(benches);
