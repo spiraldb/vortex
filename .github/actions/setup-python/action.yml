@@ -4,7 +4,7 @@ inputs:
   rye-version:
     description: 'Rye version to use'
     required: true
-    default: '0.36.0'
+    default: '0.40.0'
 runs:
   using: "composite"
   steps:
