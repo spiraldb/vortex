@@ -11,7 +11,7 @@ keywords = { workspace = true }
 include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
-readme = { workspace = true }
+readme = "README.md"
 
 [lints.rust]
 warnings = "deny"
