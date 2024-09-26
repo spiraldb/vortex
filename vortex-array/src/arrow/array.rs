@@ -25,48 +25,48 @@ use crate::array::{
     BoolArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray, VarBinViewArray,
 };
 use crate::arrow::FromArrowArray;
-use crate::stats::{Stat, Statistics};
+use crate::stats::{ArrayStatistics, Stat};
 use crate::validity::Validity;
-use crate::{Array, ArrayData, ToArrayData};
+use crate::{Array, IntoArray};
 
-impl From<Buffer> for ArrayData {
+impl From<Buffer> for Array {
     fn from(value: Buffer) -> Self {
-        PrimitiveArray::new(value.into(), PType::U8, Validity::NonNullable).to_array_data()
+        PrimitiveArray::new(value.into(), PType::U8, Validity::NonNullable).into_array()
     }
 }
 
-impl From<NullBuffer> for ArrayData {
+impl From<NullBuffer> for Array {
     fn from(value: NullBuffer) -> Self {
         BoolArray::try_new(value.into_inner(), Validity::NonNullable)
             .vortex_expect("Failed to convert null buffer to BoolArray")
-            .to_array_data()
+            .into_array()
     }
 }
 
-impl<T> From<ScalarBuffer<T>> for ArrayData
+impl<T> From<ScalarBuffer<T>> for Array
 where
     T: ArrowNativeType + NativePType,
 {
     fn from(value: ScalarBuffer<T>) -> Self {
-        PrimitiveArray::new(value.into_inner().into(), T::PTYPE, Validity::NonNullable)
-            .to_array_data()
+        PrimitiveArray::new(value.into_inner().into(), T::PTYPE, Validity::NonNullable).into_array()
     }
 }
 
-impl<O> From<OffsetBuffer<O>> for ArrayData
+impl<O> From<OffsetBuffer<O>> for Array
 where
     O: NativePType + OffsetSizeTrait,
 {
     fn from(value: OffsetBuffer<O>) -> Self {
-        let array_data: ArrayData = PrimitiveArray::new(
+        let primitive = PrimitiveArray::new(
             value.into_inner().into_inner().into(),
             O::PTYPE,
             Validity::NonNullable,
-        )
-        .to_array_data();
-        array_data.set(Stat::IsSorted, true.into());
-        array_data.set(Stat::IsStrictSorted, true.into());
-        array_data
+        );
+        primitive.statistics().set(Stat::IsSorted, true.into());
+        primitive
+            .statistics()
+            .set(Stat::IsStrictSorted, true.into());
+        primitive.into_array()
     }
 }
 
@@ -116,8 +116,8 @@ where
             _ => vortex_panic!("Invalid data type for ByteArray: {}", T::DATA_TYPE),
         };
         VarBinArray::try_new(
-            ArrayData::from(value.offsets().clone()).into(),
-            ArrayData::from(value.values().clone()).into(),
+            value.offsets().clone().into(),
+            value.values().clone().into(),
             dtype,
             nulls(value.nulls(), nullable),
         )
@@ -134,11 +134,11 @@ impl<T: ByteViewType> FromArrowArray<&GenericByteViewArray<T>> for Array {
             _ => vortex_panic!("Invalid data type for ByteViewArray: {}", T::DATA_TYPE),
         };
         VarBinViewArray::try_new(
-            ArrayData::from(value.views().inner().clone()).into(),
+            value.views().inner().clone().into(),
             value
                 .data_buffers()
                 .iter()
-                .map(|b| ArrayData::from(b.clone()).into())
+                .map(|b| b.clone().into())
                 .collect::<Vec<_>>(),
             dtype,
             nulls(value.nulls(), nullable),

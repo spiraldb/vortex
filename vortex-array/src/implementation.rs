@@ -202,14 +202,10 @@ where
     D: IntoArray + ArrayEncodingRef + ArrayStatistics + GetArrayMetadata + Clone,
 {
     fn to_array_data(&self) -> ArrayData {
-        // TODO: move metadata call `Array::View` match
-        let metadata = self.metadata();
         let array = self.clone().into_array();
         match array {
             Array::Data(d) => d,
             Array::View(ref view) => {
-                let encoding = view.encoding();
-                let stats = view.statistics().to_set();
                 struct Visitor {
                     buffer: Option<Buffer>,
                     children: Vec<Array>,
@@ -237,13 +233,13 @@ where
                         .vortex_expect("Error while visiting Array View children")
                 });
                 ArrayData::try_new(
-                    encoding,
+                    view.encoding(),
                     array.dtype().clone(),
                     array.len(),
-                    metadata,
+                    self.metadata(),
                     visitor.buffer,
                     visitor.children.into(),
-                    stats,
+                    view.statistics().to_set(),
                 )
                 .vortex_expect("Failed to create ArrayData from Array View")
             }
