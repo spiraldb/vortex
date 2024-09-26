@@ -32,6 +32,6 @@ python-source = "python"
 module-name = "vortex._lib"
 features = ["pyo3/extension-module"]
 include = [
-    { path = "../rust-toolchain.toml", format = "sdist" },
-    { path = "../README.md", format = "sdist" },
+    { path = "rust-toolchain.toml", format = "sdist" },
+    { path = "README.md", format = "sdist" },
 ]
