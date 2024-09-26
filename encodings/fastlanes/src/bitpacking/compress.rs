@@ -32,7 +32,7 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
 
     BitPackedArray::try_new(
         packed,
-        array.ptype().to_unsigned(),
+        array.ptype(),
         array.validity(),
         patches,
         bit_width,
@@ -330,6 +330,7 @@ pub fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
 #[cfg(test)]
 mod test {
     use vortex::{IntoArrayVariant, ToArray};
+    use vortex_error::VortexError;
 
     use super::*;
 
@@ -394,5 +395,15 @@ mod test {
                 let scalar: u16 = unpack_single(&compressed, i).unwrap().try_into().unwrap();
                 assert_eq!(scalar, *v);
             });
+    }
+
+    #[test]
+    fn gh_issue_929() {
+        let values: Vec<i64> = (-500..500).collect();
+        let array = PrimitiveArray::from_vec(values, Validity::AllValid);
+        assert!(array.ptype().is_signed_int());
+
+        let result = BitPackedArray::encode(array.as_ref(), 1024u32.ilog2() as usize);
+        assert!(matches!(result, Err(VortexError::MismatchedTypes(_, _, _))));
     }
 }
