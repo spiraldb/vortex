@@ -176,6 +176,30 @@ fn encode_chunk_unchecked<T: ALPFloat>(
     let chunk_patch_count = chunk_patch_count; // immutable hereafter
     assert_eq!(encoded_output.len(), num_prev_encoded + chunk.len());
 
+    if chunk_patch_count > 0 {
+        // we need to gather the patches for this chunk
+        // preallocate space for the patches (plus one because our loop may attempt to write one past the end)
+        patch_indices.reserve(chunk_patch_count + 1);
+        patch_values.reserve(chunk_patch_count + 1);
+
+        // record the patches in this chunk
+        let patch_indices_mut = patch_indices.spare_capacity_mut();
+        let patch_values_mut = patch_values.spare_capacity_mut();
+        let mut chunk_patch_index = 0;
+        for i in num_prev_encoded..encoded_output.len() {
+            let decoded = T::decode_single(encoded_output[i], exp);
+            // write() is only safe to call more than once because the values are primitive (i.e., Drop is a no-op)
+            patch_indices_mut[chunk_patch_index].write(i as u64);
+            patch_values_mut[chunk_patch_index].write(chunk[i - num_prev_encoded]);
+            chunk_patch_index += (decoded != chunk[i - num_prev_encoded]) as usize;
+        }
+        assert_eq!(chunk_patch_index, chunk_patch_count);
+        unsafe {
+            patch_indices.set_len(num_prev_patches + chunk_patch_count);
+            patch_values.set_len(num_prev_patches + chunk_patch_count);
+        }
+    }
+
     // find the first successfully encoded value (i.e., not patched)
     // this is our fill value for missing values
     if fill_value.is_none() && (num_prev_encoded + chunk_patch_count < encoded_output.len()) {
@@ -186,33 +210,6 @@ fn encode_chunk_unchecked<T: ALPFloat>(
                 break;
             }
         }
-    }
-
-    // if there are no patches, we are done
-    if chunk_patch_count == 0 {
-        return;
-    }
-
-    // we need to gather the patches for this chunk
-    // preallocate space for the patches (plus one because our loop may attempt to write one past the end)
-    patch_indices.reserve(chunk_patch_count + 1);
-    patch_values.reserve(chunk_patch_count + 1);
-
-    // record the patches in this chunk
-    let patch_indices_mut = patch_indices.spare_capacity_mut();
-    let patch_values_mut = patch_values.spare_capacity_mut();
-    let mut chunk_patch_index = 0;
-    for i in num_prev_encoded..encoded_output.len() {
-        let decoded = T::decode_single(encoded_output[i], exp);
-        // write() is only safe to call more than once because the values are primitive (i.e., Drop is a no-op)
-        patch_indices_mut[chunk_patch_index].write(i as u64);
-        patch_values_mut[chunk_patch_index].write(chunk[i - num_prev_encoded]);
-        chunk_patch_index += (decoded != chunk[i - num_prev_encoded]) as usize;
-    }
-    assert_eq!(chunk_patch_index, chunk_patch_count);
-    unsafe {
-        patch_indices.set_len(num_prev_patches + chunk_patch_count);
-        patch_values.set_len(num_prev_patches + chunk_patch_count);
     }
 
     // replace the patched values in the encoded array with the fill value
