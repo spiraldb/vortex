@@ -35,6 +35,7 @@ include = [
     "Cargo.toml",
     "proto/**/*.proto",
     "flatbuffers/*.fbs",
+    "README.md",
 ]
 edition = "2021"
 rust-version = "1.81"
