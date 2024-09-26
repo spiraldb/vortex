@@ -2,8 +2,15 @@
 name = "vortex-datetime-parts"
 description = "Vortex physical encoding that compresses temporal components individually"
 version = { workspace = true }
-edition = "2021"
+homepage = { workspace = true }
+repository = { workspace = true }
+authors = { workspace = true }
 license = { workspace = true }
+keywords = { workspace = true }
+include = { workspace = true }
+edition = { workspace = true }
+rust-version = { workspace = true }
+readme = { workspace = true }
 
 [lints]
 workspace = true

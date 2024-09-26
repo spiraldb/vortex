@@ -2,6 +2,7 @@
 name = "xtask"
 # This is an internal crate for project developers
 publish = false
+description = "Tasks for repo management"
 version = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
@@ -11,6 +12,7 @@ keywords = { workspace = true }
 include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
+readme = "README.md"
 
 [dependencies]
 anyhow = { workspace = true }
