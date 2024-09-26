@@ -165,31 +165,32 @@ unsafe_op_in_unsafe_fn = "deny"
 
 [workspace.lints.clippy]
 all = { level = "deny", priority = -1 }
-as_ptr_cast_mut = { level = "deny" }
-borrow_as_ptr = { level = "deny" }
-collection_is_never_read = { level = "deny" }
-cognitive_complexity = { level = "deny" }
-debug_assert_with_mut_call = { level = "deny" }
-derive_partial_eq_without_eq = { level = "deny" }
-exit = { level = "deny" }
-expect_fun_call = { level = "deny" }
-expect_used = { level = "deny" }
-equatable_if_let = { level = "deny" }
-fallible_impl_from = { level = "deny" }
-get_unwrap = { level = "deny" }
-host_endian_bytes = { level = "deny" }
-if_then_some_else_none = { level = "deny" }
-inconsistent_struct_constructor = { level = "deny" }
-manual_assert = { level = "deny" }
-manual_is_variant_and = { level = "deny" }
-mem_forget = { level = "deny" }
+as_ptr_cast_mut = "deny"
+borrow_as_ptr = "deny"
+cargo = "deny"
+collection_is_never_read = "deny"
+cognitive_complexity = "deny"
+debug_assert_with_mut_call = "deny"
+derive_partial_eq_without_eq = "deny"
+exit = "deny"
+expect_fun_call = "deny"
+expect_used = "deny"
+equatable_if_let = "deny"
+fallible_impl_from = "deny"
+get_unwrap = "deny"
+host_endian_bytes = "deny"
+if_then_some_else_none = "deny"
+inconsistent_struct_constructor = "deny"
+manual_assert = "deny"
+manual_is_variant_and = "deny"
+mem_forget = "deny"
 or_fun_call = "deny"
-panic_in_result_fn = { level = "deny" }
-panic = { level = "deny" }
-same_name_method = { level = "deny" }
-tests_outside_test_module = { level = "deny" }
-# todo = { level = "deny" }
-# unimplemented = { level = "deny" }
-unwrap_in_result = { level = "deny" }
-unwrap_used = { level = "deny" }
-use_debug = { level = "deny" }
+panic_in_result_fn = "deny"
+panic = "deny"
+same_name_method = "deny"
+tests_outside_test_module = "deny"
+# todo = "deny"
+# unimplemented = "deny"
+unwrap_in_result = "deny"
+unwrap_used = "deny"
+use_debug = "deny"
