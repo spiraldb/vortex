@@ -58,24 +58,6 @@ pub trait Statistics {
     fn compute(&self, stat: Stat) -> Option<Scalar>;
 }
 
-pub struct EmptyStatistics;
-
-impl Statistics for EmptyStatistics {
-    fn get(&self, _stat: Stat) -> Option<Scalar> {
-        None
-    }
-
-    fn to_set(&self) -> StatsSet {
-        StatsSet::new()
-    }
-
-    fn set(&self, _stat: Stat, _value: Scalar) {}
-
-    fn compute(&self, _stat: Stat) -> Option<Scalar> {
-        None
-    }
-}
-
 pub trait ArrayStatistics {
     fn statistics(&self) -> &dyn Statistics;
 }
