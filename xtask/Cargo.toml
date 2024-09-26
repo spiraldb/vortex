@@ -12,6 +12,7 @@ keywords = { workspace = true }
 include = { workspace = true }
 edition = { workspace = true }
 rust-version = { workspace = true }
+categories = { workspace = true }
 readme = "README.md"
 
 [dependencies]
