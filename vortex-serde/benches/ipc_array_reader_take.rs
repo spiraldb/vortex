@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used)]
 use std::sync::Arc;
+use std::time::Duration;
 
 use criterion::async_executor::FuturesExecutor;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
@@ -62,5 +63,9 @@ fn ipc_array_reader_take(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, ipc_array_reader_take);
+criterion_group!(
+    name = benches;
+    config = Criterion::default().measurement_time(Duration::from_secs(10));
+    targets = ipc_array_reader_take
+);
 criterion_main!(benches);
