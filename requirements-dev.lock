@@ -34,7 +34,7 @@ kiwisolver==1.4.7
 markupsafe==2.1.5
 matplotlib==3.9.2
 matplotlib-inline==0.1.7
-maturin==1.5.1
+maturin==1.7.4
 numpy==1.26.4
 packaging==24.0
 pandas==2.2.2
