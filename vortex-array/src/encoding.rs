@@ -138,6 +138,7 @@ pub mod ids {
     pub const RUN_END: u16 = 27;
     pub const RUN_END_BOOL: u16 = 28;
     pub const ZIGZAG: u16 = 29;
+    pub const ALP_RD: u16 = 30;
 }
 
 #[cfg(test)]
