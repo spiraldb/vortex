@@ -40,24 +40,25 @@ pub struct DeltaMetadata {
 ///
 /// # Details
 ///
-/// To facilitate slicing, this array accepts an `offset` and `limit`. Both values must be strictly
-/// less than 1,024. The `offset` is physical offset into the first chunk of deltas. The `limit` is
-/// a physical limit of the last chunk. These values permit logical slicing while preserving all
-/// values in any chunk containing a kept value. Logical slicing permits preservation of values
-/// necessary to decompress the delta-encoding, which is described in detail below. While later
-/// values in a chunk are not necsesary to decode earlier ones, a logical limit preserves full
-/// chunks which permits the decompression function go assume all chunks are exactly 1,024 values.
+/// To facilitate slicing, this array accepts an `offset` and `limit`. The offset must be strictly
+/// less than 1,024 and the limit must be less than or equal to 1,024. These values permit logical
+/// slicing while preserving all values in any chunk containing a kept value. Logical slicing allows
+/// deferment of decompresison until the array is canonicalized or indexed. The `offset` is a
+/// physical offset into the first chunk, which necessarily contains 1,024 values. The `limit` is
+/// likewise a physical limit of the last chunk after which values are not logically part of the
+/// array. If the last chunk has fewer than 1,024 values, then the limit must be less than the
+/// physical length of the last chunk.
 ///
-/// A `limit` of `None` is a convenient alternative to computing the length of the last
-/// block. Internally, this array only stores the logical length.
-///
-/// Each chunk is stored as a vector of bases and a vector of deltas. There are as many bases as there
-/// are _lanes_ of this type in a 1024-bit register. For example, for 64-bit values, there are 16
-/// bases because there are 16 _lanes_. Each lane is a
-/// [delta-encoding](https://en.wikipedia.org/wiki/Delta_encoding) `1024 / bit_width` long vector of
-/// avlues. The deltas are stored in the
+/// Each chunk is stored as a vector of bases and a vector of deltas. If the chunk physically
+/// contains 1,024 vlaues, then there are as many bases as there are _lanes_ of this type in a
+/// 1024-bit register. For example, for 64-bit values, there are 16 bases because there are 16
+/// _lanes_. Each lane is a [delta-encoding](https://en.wikipedia.org/wiki/Delta_encoding) `1024 /
+/// bit_width` long vector of values. The deltas are stored in the
 /// [FastLanes](https://www.vldb.org/pvldb/vol16/p2132-afroozeh.pdf) order which splits the 1,024
 /// values into one contiguous sub-sequence per-lane, thus permitting delta encoding.
+///
+/// If the chunk physically has fewer than 1,024 values, then it is stored as a traditional,
+/// non-SIMD-amenable, delta-encoded vector.
 impl DeltaArray {
     pub fn try_from_vec<T: NativePType>(vec: Vec<T>) -> VortexResult<Self> {
         Self::try_from_primitive_array(&PrimitiveArray::from(vec))
@@ -78,7 +79,11 @@ impl DeltaArray {
         deltas: Array,
         validity: Validity,
     ) -> VortexResult<Self> {
-        Self::try_new(bases, deltas, validity, 0, None)
+        let limit = match deltas.len() % 1024 {
+            0 => 1024,
+            n => n,
+        };
+        Self::try_new(bases, deltas, validity, 0, limit)
     }
 
     pub fn try_new(
@@ -86,17 +91,26 @@ impl DeltaArray {
         deltas: Array,
         validity: Validity,
         offset: usize,
-        limit: Option<usize>,
+        limit: usize,
     ) -> VortexResult<Self> {
         if offset >= 1024 {
             vortex_bail!("offset must be less than 1024: {}", offset);
         }
 
-        if let Some(l) = limit {
-            if l >= 1024 {
-                vortex_bail!("limit must be less than 1024: {}", l);
-            }
+        let last_chunk_size = match deltas.len() % 1024 {
+            0 => 1024,
+            n => n,
+        };
+
+        if limit > last_chunk_size {
+            vortex_bail!(
+                "limit, {}, must be less than or equal to the size of the last chunk: {}",
+                limit,
+                last_chunk_size
+            )
         }
+
+        let trailing_garbage = last_chunk_size - limit;
 
         if bases.dtype() != deltas.dtype() {
             vortex_bail!(
@@ -107,11 +121,6 @@ impl DeltaArray {
         }
 
         let dtype = bases.dtype().clone();
-        let trailing_garbage = match (limit, deltas.len() % 1024) {
-            (None, _) => 0,
-            (Some(l), 0) => 1024 - l,
-            (Some(l), remainder) => remainder - l,
-        };
         let logical_len = deltas.len() - offset - trailing_garbage;
         let metadata = DeltaMetadata {
             validity: validity.to_metadata(logical_len)?,

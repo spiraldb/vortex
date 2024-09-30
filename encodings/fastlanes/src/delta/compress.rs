@@ -128,7 +128,10 @@ pub fn delta_decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
             array.validity()
         )
     });
-    decoded.slice(array.offset(), array.len())?.into_primitive()
+
+    decoded
+        .slice(array.offset(), array.offset() + array.len())?
+        .into_primitive()
 }
 
 fn decompress_primitive<T: NativePType + Delta + Transpose + WrappingAdd>(
@@ -204,6 +207,7 @@ mod test {
 
     fn do_roundtrip_test<T: NativePType>(input: Vec<T>) {
         let delta = DeltaArray::try_from_vec(input.clone()).unwrap();
+        assert_eq!(delta.len(), input.len());
         let decompressed = delta_decompress(delta).unwrap();
         let decompressed_slice = decompressed.maybe_null_slice::<T>();
         assert_eq!(decompressed_slice.len(), input.len());

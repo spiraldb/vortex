@@ -3,7 +3,7 @@ use std::cmp::min;
 use vortex::compute::unary::ScalarAtFn;
 use vortex::compute::{slice, ArrayCompute, SliceFn};
 use vortex::{Array, IntoArray, IntoArrayVariant};
-use vortex_error::{vortex_bail, VortexExpect, VortexResult};
+use vortex_error::{VortexExpect, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::DeltaArray;
@@ -60,10 +60,9 @@ impl SliceFn for DeltaArray {
 
         let new_validity = validity.slice(start, stop)?;
 
-        let limit = if physical_stop % 1024 == 0 {
-            None
-        } else {
-            Some(physical_stop % 1024)
+        let limit = match physical_stop % 1024 {
+            0 => 1024,
+            n => n,
         };
 
         let arr = DeltaArray::try_new(
@@ -73,6 +72,7 @@ impl SliceFn for DeltaArray {
             physical_start % 1024,
             limit,
         )?;
+
         if arr.len() != stop - start {
             vortex_bail!(
                 "slice produced wrong length: {} != {} - {}",
