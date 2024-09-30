@@ -128,9 +128,7 @@ pub fn delta_decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
             array.validity()
         )
     });
-    decoded
-        .slice(array.offset(), decoded.len() - array.trailing_garbage())?
-        .into_primitive()
+    decoded.slice(array.offset(), array.len())?.into_primitive()
 }
 
 fn decompress_primitive<T: NativePType + Delta + Transpose + WrappingAdd>(

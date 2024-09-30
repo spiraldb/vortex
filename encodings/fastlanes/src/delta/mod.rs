@@ -23,9 +23,7 @@ impl_encoding!("fastlanes.delta", ids::FL_DELTA, Delta);
 pub struct DeltaMetadata {
     validity: ValidityMetadata,
     deltas_len: usize,
-    logical_len: usize,
-    offset: usize,           // must be <1024
-    trailing_garbage: usize, // must be <1024
+    offset: usize, // must be <1024
 }
 
 /// A FastLanes-style delta-encoded array of primitive values.
@@ -42,17 +40,16 @@ pub struct DeltaMetadata {
 ///
 /// # Details
 ///
-/// To facilitate slicing, this array has an `offset` and `limit`. Both values must be strictly less
-/// than 1,024. The `offset` is physical offset into the first chunk of deltas. The `limit` is a
-/// physical limit of the last chunk. These values permit logical slicing while preserving all
+/// To facilitate slicing, this array accepts an `offset` and `limit`. Both values must be strictly
+/// less than 1,024. The `offset` is physical offset into the first chunk of deltas. The `limit` is
+/// a physical limit of the last chunk. These values permit logical slicing while preserving all
 /// values in any chunk containing a kept value. Logical slicing permits preservation of values
 /// necessary to decompress the delta-encoding, which is described in detail below. While later
 /// values in a chunk are not necsesary to decode earlier ones, a logical limit preserves full
 /// chunks which permits the decompression function go assume all chunks are exactly 1,024 values.
 ///
 /// A `limit` of `None` is a convenient alternative to computing the length of the last
-/// block. Internally, this array does not store the `limit`; instead it stores the number of
-/// trailing logically-excluded values: `trailing_garbage`.
+/// block. Internally, this array only stores the logical length.
 ///
 /// Each chunk is stored as a vector of bases and a vector of deltas. There are as many bases as there
 /// are _lanes_ of this type in a 1024-bit register. For example, for 64-bit values, there are 16
@@ -119,9 +116,7 @@ impl DeltaArray {
         let metadata = DeltaMetadata {
             validity: validity.to_metadata(logical_len)?,
             deltas_len: deltas.len(),
-            logical_len,
             offset,
-            trailing_garbage,
         };
 
         let mut children = vec![bases, deltas];
@@ -191,12 +186,6 @@ impl DeltaArray {
     /// The logical offset into the first chunk of [`Self::deltas`].
     pub fn offset(&self) -> usize {
         self.metadata().offset
-    }
-
-    #[inline]
-    /// The logical "right-offset" of the last chunk of [`Self::deltas`].
-    pub fn trailing_garbage(&self) -> usize {
-        self.metadata().trailing_garbage
     }
 
     pub fn validity(&self) -> Validity {
