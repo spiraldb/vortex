@@ -12,85 +12,180 @@
 //!
 //! Even in the ideal case, this gets about ~24% compression.
 
-// mod array;
+pub use array::*;
+
+mod array;
+mod compute;
 
 use std::collections::HashMap;
 
 use itertools::Itertools;
-use vortex::array::PrimitiveArray;
-use vortex::{Array, IntoArray};
+use vortex::array::{PrimitiveArray, SparseArray};
+use vortex::{ArrayDType, IntoArray};
+use vortex_dtype::{DType, PType};
+use vortex_error::{VortexExpect, VortexUnwrap};
+use vortex_fastlanes::BitPackedArray;
 
 /// Max number of bits to cut from the MSB section of each float.
 const CUT_LIMIT: usize = 16;
 
-const SAMPLE_SIZE: usize = 32;
+const MAX_DICT_SIZE: u8 = 8;
 
-/// Encode an array.
+/// Encoder for ALP-RD (real doubles) values.
 ///
-/// # Returns
-///
-/// Returns a tuple containing the left-parts array, the right-parts, and the exceptions.
-pub fn alp_rd_encode_f64(values: &[f64]) -> (Array, Array, Array, Array) {
-    let sample = (values.len() > SAMPLE_SIZE).then(|| {
-        values
-            .iter()
-            .step_by(values.len() / SAMPLE_SIZE)
-            .cloned()
-            .collect_vec()
-    });
+/// The encoder builds a sample of values from there.
+pub struct Encoder {
+    right_bit_width: u8,
+    dictionary: HashMap<u16, u16>,
+    codes: Vec<u16>,
+}
 
-    // We want a set of left and right parts here as well.
-    let dictionary = find_best_dictionary(sample.as_deref().unwrap_or(values));
-    println!("BEST_DICT: {dictionary:?}");
-    let mut left_parts: Vec<u16> = Vec::with_capacity(values.len());
-    let mut right_parts: Vec<u64> = Vec::with_capacity(values.len());
-    let mut exceptions_pos: Vec<u32> = Vec::with_capacity(values.len() / 4);
-    let mut exceptions: Vec<u16> = Vec::with_capacity(values.len() / 4);
-
-    let right_mask = (1u64 << dictionary.right_bit_width) - 1;
-    for v in values.iter().copied() {
-        // Left contains the last valid left-value, else a code indicating the highest unused code
-        // position.
-        right_parts.push(v.to_bits() & right_mask);
-        left_parts.push((v.to_bits() >> dictionary.right_bit_width) as u16);
-    }
-
-    // dict-encode the left-parts, keeping track of exceptions
-    for (idx, left) in left_parts.iter_mut().enumerate() {
-        // TODO: revisit if we need to change the branch order for perf.
-        if let Some(code) = dictionary.dictionary.get(left) {
-            *left = *code;
-        } else {
-            exceptions.push(*left);
-            exceptions_pos.push(idx as u32);
-
-            *left = dictionary.dictionary.len() as u16;
+impl Encoder {
+    /// Build a new encoder from a sample of doubles.
+    pub fn new(sample: &[f64]) -> Self {
+        let dictionary = find_best_dictionary(sample);
+        Self {
+            right_bit_width: dictionary.right_bit_width,
+            dictionary: dictionary.dictionary,
+            codes: dictionary.codes,
         }
     }
 
-    // we need to return the left-parts (codes), the right-parts (infallibly bit-packed values),
-    // the exception positions, and the exceptions. We can encode the exceptions as a Sparse
-    // array of u16.
+    /// Encode a set of floating point values with ALP-RD.
+    ///
+    /// Each value will be split into a left and right component, which are compressed individually.
+    pub fn encode(&self, array: &PrimitiveArray) -> ALPRDArray {
+        let doubles = array.maybe_null_slice::<f64>();
 
-    (
-        PrimitiveArray::from(left_parts).into_array(),
-        PrimitiveArray::from(right_parts).into_array(),
-        PrimitiveArray::from(exceptions_pos).into_array(),
-        PrimitiveArray::from(exceptions).into_array(),
-    )
+        let mut left_parts: Vec<u16> = Vec::with_capacity(doubles.len());
+        let mut right_parts: Vec<u64> = Vec::with_capacity(doubles.len());
+        let mut exceptions_pos: Vec<u64> = Vec::with_capacity(doubles.len() / 4);
+        let mut exceptions: Vec<u16> = Vec::with_capacity(doubles.len() / 4);
+
+        // mask for right-parts
+        let right_mask = (1u64 << self.right_bit_width) - 1;
+        let left_bit_width = self.dictionary.len().next_power_of_two().ilog2().max(1) as u8;
+
+        for v in doubles.iter().copied() {
+            right_parts.push(v.to_bits() & right_mask);
+            left_parts.push((v.to_bits() >> self.right_bit_width) as u16);
+        }
+
+        // dict-encode the left-parts, keeping track of exceptions
+        for (idx, left) in left_parts.iter_mut().enumerate() {
+            // TODO: revisit if we need to change the branch order for perf.
+            if let Some(code) = self.dictionary.get(left) {
+                *left = *code;
+            } else {
+                exceptions.push(*left);
+                exceptions_pos.push(idx as _);
+
+                *left = self.dictionary.len() as u16;
+            }
+        }
+
+        // Bit-pack down the encoded left-parts array that have been dictionary encoded.
+        let primitive_left = PrimitiveArray::from_vec(left_parts, array.validity());
+        let packed_left = BitPackedArray::encode(primitive_left.as_ref(), left_bit_width as _)
+            .vortex_unwrap()
+            .into_array();
+
+        let primitive_right = PrimitiveArray::from_vec(right_parts, array.validity());
+        let packed_right =
+            BitPackedArray::encode(primitive_right.as_ref(), self.right_bit_width as _)
+                .vortex_unwrap()
+                .into_array();
+
+        // Bit-pack the dict-encoded left-parts
+        // Bit-pack the right-parts
+        // SparseArray for exceptions.
+        let exceptions = (!exceptions_pos.is_empty()).then(|| {
+            let max_exc_pos = exceptions_pos.last().copied().unwrap_or_default();
+            // Add one to get next power of two as well here.
+            // If we're going to be doing more of this, it just works.
+            let bw = (max_exc_pos + 1).next_power_of_two().ilog2() as usize;
+
+            let exc_pos_array = PrimitiveArray::from(exceptions_pos);
+            let packed_pos = BitPackedArray::encode(exc_pos_array.as_ref(), bw)
+                .vortex_unwrap()
+                .into_array();
+
+            let exc_array = PrimitiveArray::from(exceptions).into_array();
+            SparseArray::try_new(packed_pos, exc_array, doubles.len(), 0u16.into())
+                .vortex_expect("ALP-RD: construction of exceptions SparseArray")
+                .into_array()
+        });
+
+        ALPRDArray::try_new(
+            DType::Primitive(PType::F64, packed_left.dtype().nullability()),
+            packed_left,
+            &self.codes,
+            packed_right,
+            self.right_bit_width,
+            exceptions,
+        )
+        .vortex_expect("ALPRDArray construction in encode")
+    }
+}
+
+// Only applies for F64.
+pub fn alp_rd_decode(
+    left_parts: &[u16],
+    left_parts_dict: &[u16],
+    right_bit_width: u8,
+    right_parts: &[u64],
+    exc_pos: &[u64],
+    exceptions: &[u16],
+) -> Vec<f64> {
+    assert_eq!(
+        left_parts.len(),
+        right_parts.len(),
+        "alp_rd_decode: left_parts.len != right_parts.len"
+    );
+
+    assert_eq!(
+        exc_pos.len(),
+        exceptions.len(),
+        "alp_rd_decode: exc_pos.len != exceptions.len"
+    );
+
+    // Prepare the dictionary for decoding by adding the extra value for lookups to match.
+    let mut dict = Vec::with_capacity(left_parts_dict.len() + 1);
+    dict.extend_from_slice(left_parts_dict);
+    // Add an extra code for out-of-dict values. These will be overwritten with exceptions later.
+    const EXCEPTION_SENTINEL: u16 = 0xDEAD;
+    dict.push(EXCEPTION_SENTINEL);
+
+    let mut left_parts_decoded = Vec::with_capacity(left_parts.len());
+
+    // Decode with bit-packing and dict unpacking.
+    for code in left_parts {
+        left_parts_decoded.push(dict[*code as usize] as u64);
+    }
+
+    // Apply the exception patches. Only applies for the left-parts
+    for (pos, val) in exc_pos.iter().zip(exceptions.iter()) {
+        left_parts_decoded[*pos as usize] = *val as u64;
+    }
+
+    // recombine the left-and-right parts, adjusting by the right_bit_width.
+    left_parts_decoded
+        .into_iter()
+        .zip(right_parts.iter().copied())
+        .map(|(left, right)| f64::from_bits((left << right_bit_width) | right))
+        .collect()
 }
 
 /// Find the best "cut point" for a set of floating point values such that we can
 /// cast them all to the relevant value instead.
 fn find_best_dictionary(samples: &[f64]) -> ALPRDDictionary {
     let mut best_est_size = f64::MAX;
-    let mut best_dict: Option<ALPRDDictionary> = None;
+    let mut best_dict = ALPRDDictionary::default();
 
     for p in 1u8..=16 {
         let candidate_right_bw = 64 - p;
-        println!("trying candidated_right_bw {candidate_right_bw}");
         let (dictionary, exception_count) =
-            build_left_parts_dictionary(samples, candidate_right_bw, 8);
+            build_left_parts_dictionary(samples, candidate_right_bw, MAX_DICT_SIZE);
         let estimated_size = estimate_compression_size(
             dictionary.right_bit_width,
             dictionary.left_bit_width,
@@ -98,20 +193,19 @@ fn find_best_dictionary(samples: &[f64]) -> ALPRDDictionary {
             samples.len(),
         );
         if estimated_size < best_est_size {
-            println!("new best: right_bw={candidate_right_bw}");
             best_est_size = estimated_size;
-            best_dict = Some(dictionary);
+            best_dict = dictionary;
         }
     }
 
-    best_dict.expect("ALP-RD should find at least one dictionary")
+    best_dict
 }
 
-/// Build dictionary of the left-side of the floats.
+/// Build dictionary of the leftmost bits.
 fn build_left_parts_dictionary(
     samples: &[f64],
     right_bw: u8,
-    dict_size: u8,
+    max_dict_size: u8,
 ) -> (ALPRDDictionary, usize) {
     assert!(
         right_bw >= (64 - CUT_LIMIT) as _,
@@ -130,9 +224,9 @@ fn build_left_parts_dictionary(
     sorted_bit_counts.sort_by_key(|(_, count)| count.wrapping_neg());
 
     // Assign the most-frequently occurring left-bits as dictionary codes, up to `dict_size`...
-    let mut dictionary = HashMap::with_capacity(dict_size as _);
+    let mut dictionary = HashMap::with_capacity(max_dict_size as _);
     let mut code = 0u16;
-    while code < (dict_size as _) && (code as usize) < sorted_bit_counts.len() {
+    while code < (max_dict_size as _) && (code as usize) < sorted_bit_counts.len() {
         let (bits, _) = sorted_bit_counts[code as usize];
         dictionary.insert(bits, code);
         code += 1;
@@ -146,16 +240,17 @@ fn build_left_parts_dictionary(
         .sum();
 
     // Left bit-width is determined based on the actual dictionary size.
-    let left_bw = dictionary.len().next_power_of_two().ilog2() as u8;
-    println!(
-        "FOUND: dict.len() = {} => left_bw of {}",
-        dictionary.len(),
-        left_bw
-    );
+    let left_bw = dictionary.len().next_power_of_two().ilog2().max(1) as u8;
+
+    let mut codes = vec![0; dictionary.len()];
+    for (bits, code) in dictionary.iter() {
+        codes[*code as usize] = *bits;
+    }
 
     (
         ALPRDDictionary {
             dictionary,
+            codes,
             right_bit_width: right_bw,
             left_bit_width: left_bw,
         },
@@ -163,7 +258,7 @@ fn build_left_parts_dictionary(
     )
 }
 
-// Estimate the bits-per-value that the given encoding collects
+/// Estimate the bits-per-value when using these compression settings.
 fn estimate_compression_size(
     right_bw: u8,
     left_bw: u8,
@@ -178,64 +273,15 @@ fn estimate_compression_size(
 }
 
 /// The ALP-RD dictionary, encoding the "left parts" and their dictionary encoding.
-#[derive(Debug)]
-pub(crate) struct ALPRDDictionary {
+#[derive(Debug, Default)]
+struct ALPRDDictionary {
     /// Items in the dictionary are bit patterns, along with their 16-bit encoding.
     dictionary: HashMap<u16, u16>,
+    /// codes[i] = the left-bits pattern of the i-th code.
+    codes: Vec<u16>,
     /// Recreate the dictionary by encoding the hash instead.
     /// The (compressed) left bit width. This is after bit-packing the dictionary codes.
     left_bit_width: u8,
     /// The right bit width. This is the bit-packed width of each of the "real double" values.
     right_bit_width: u8,
-}
-
-#[cfg(test)]
-mod test {
-    use vortex::array::PrimitiveArray;
-
-    use crate::alp_rd::alp_rd_encode_f64;
-
-    #[test]
-    fn test_encode() {
-        // get the left and right parts from here
-        let (left, right, exc_pos, exc) = alp_rd_encode_f64(&[
-            1.12384859111099191f64,
-            2.12384859111099191f64,
-            3.12384859111099191f64,
-            3.12384859111099191f64,
-            4.12384859111099191f64,
-            5.12384859111099191f64,
-            6.12384859111099191f64,
-            7.12384859111099191f64,
-            8.12384859111099191f64,
-            9.12384859111099191f64,
-            10.12384859111099191f64,
-        ]);
-
-        println!(
-            "left: {:?}",
-            PrimitiveArray::try_from(left)
-                .unwrap()
-                .maybe_null_slice::<u16>()
-        );
-        println!(
-            "right: {:?}",
-            PrimitiveArray::try_from(right)
-                .unwrap()
-                .maybe_null_slice::<u64>()
-        );
-        println!(
-            "exc_pos: {:?}",
-            PrimitiveArray::try_from(exc_pos)
-                .unwrap()
-                .maybe_null_slice::<u32>()
-        );
-        println!(
-            "excs: {:?}",
-            PrimitiveArray::try_from(exc)
-                .unwrap()
-                .maybe_null_slice::<u16>()
-        );
-        panic!("print");
-    }
 }

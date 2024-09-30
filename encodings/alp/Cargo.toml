@@ -18,6 +18,7 @@ workspace = true
 
 [dependencies]
 fastlanes = { workspace = true }
+vortex-fastlanes = { workspace = true }
 itertools = { workspace = true }
 num-traits = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
