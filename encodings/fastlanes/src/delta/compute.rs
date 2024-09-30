@@ -1,9 +1,9 @@
 use std::cmp::min;
 
 use vortex::compute::unary::ScalarAtFn;
-use vortex::compute::{ArrayCompute, SliceFn};
+use vortex::compute::{slice, ArrayCompute, SliceFn};
 use vortex::{Array, IntoArray, IntoArrayVariant};
-use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::DeltaArray;
@@ -20,12 +20,12 @@ impl ArrayCompute for DeltaArray {
 
 impl ScalarAtFn for DeltaArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let decompressed = SliceFn::slice(self, index, index + 1)?.into_primitive()?;
+        let decompressed = slice(self, index, index + 1)?.into_primitive()?;
         ScalarAtFn::scalar_at(&decompressed, 0)
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        let decompressed = SliceFn::slice(self, index, index + 1)
+        let decompressed = slice(self, index, index + 1)
             .vortex_expect("DeltaArray slice for one value should work")
             .into_primitive()
             .vortex_expect("Converting slice into primitive should work");
@@ -46,23 +46,17 @@ impl SliceFn for DeltaArray {
         let validity = self.validity();
         let lanes = self.lanes();
 
-        let new_bases = bases.with_dyn(|a| {
-            a.slice()
-                .ok_or(vortex_err!("bases must be slice-able"))?
-                .slice(
-                    min(start_chunk * lanes, self.bases_len()),
-                    min(stop_chunk * lanes, self.bases_len()),
-                )
-        })?;
+        let new_bases = slice(
+            bases,
+            min(start_chunk * lanes, self.bases_len()),
+            min(stop_chunk * lanes, self.bases_len()),
+        )?;
 
-        let new_deltas = deltas.with_dyn(|a| {
-            a.slice()
-                .ok_or(vortex_err!("deltas must be slice-able"))?
-                .slice(
-                    min(start_chunk * 1024, self.deltas_len()),
-                    min(stop_chunk * 1024, self.deltas_len()),
-                )
-        })?;
+        let new_deltas = slice(
+            deltas,
+            min(start_chunk * 1024, self.deltas_len()),
+            min(stop_chunk * 1024, self.deltas_len()),
+        )?;
 
         let new_validity = validity.slice(start, stop)?;
 
