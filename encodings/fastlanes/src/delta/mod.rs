@@ -40,14 +40,13 @@ pub struct DeltaMetadata {
 ///
 /// # Details
 ///
-/// To facilitate slicing, this array accepts an `offset` and `limit`. The offset must be strictly
-/// less than 1,024 and the limit must be less than or equal to 1,024. These values permit logical
-/// slicing while preserving all values in any chunk containing a kept value. Logical slicing allows
-/// deferment of decompresison until the array is canonicalized or indexed. The `offset` is a
-/// physical offset into the first chunk, which necessarily contains 1,024 values. The `limit` is
-/// likewise a physical limit of the last chunk after which values are not logically part of the
-/// array. If the last chunk has fewer than 1,024 values, then the limit must be less than the
-/// physical length of the last chunk.
+/// To facilitate slicing, this array accepts an `offset` and `logical_len`. The offset must be
+/// strictly less than 1,024 and the sum of `offset` and `logical_len` must not exceed the length of
+/// the `deltas` array. These values permit logical slicing without modifying any chunk containing a
+/// kept value. In particular, we may defer decompresison until the array is canonicalized or
+/// indexed. The `offset` is a physical offset into the first chunk, which necessarily contains
+/// 1,024 values. The `logical_len` is the number of logical values following the `offset`, which
+/// may be less than the number of physically stored values.
 ///
 /// Each chunk is stored as a vector of bases and a vector of deltas. If the chunk physically
 /// contains 1,024 vlaues, then there are as many bases as there are _lanes_ of this type in a
