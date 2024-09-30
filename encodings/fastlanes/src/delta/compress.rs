@@ -101,12 +101,11 @@ pub fn delta_decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
     let bases = array.bases().into_primitive()?;
     let deltas = array.deltas().into_primitive()?;
 
-    let ptype = bases.ptype();
-    let decoded = match_each_unsigned_integer_ptype!(ptype, |$T| {
+    let decoded = match_each_unsigned_integer_ptype!(deltas.ptype(), |$T| {
         PrimitiveArray::from_vec(
             decompress_primitive::<$T>(
-                bases.reinterpret_cast(ptype).maybe_null_slice(),
-                deltas.reinterpret_cast(ptype).maybe_null_slice(),
+                bases.reinterpret_cast(deltas.ptype()).maybe_null_slice(),
+                deltas.reinterpret_cast(deltas.ptype()).maybe_null_slice(),
             ),
             array.validity()
         )
