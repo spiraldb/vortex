@@ -2,13 +2,16 @@ use std::fmt::Debug;
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
+use vortex::array::PrimitiveArray;
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
-use vortex_dtype::match_each_unsigned_integer_ptype;
+use vortex::{
+    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+};
+use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 mod compress;
@@ -19,11 +22,86 @@ impl_encoding!("fastlanes.delta", ids::FL_DELTA, Delta);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaMetadata {
     validity: ValidityMetadata,
-    len: usize,
+    deltas_len: usize,
+    offset: usize, // must be <1024
 }
 
+/// A FastLanes-style delta-encoded array of primitive values.
+///
+/// A [`DeltaArray`] comprises a sequence of _chunks_ each representing 1,024 delta-encoded values,
+/// except the last chunk which may represent from one to 1,024 values.
+///
+/// # Examples
+///
+/// ```
+/// use vortex_fastlanes::DeltaArray;
+/// let array = DeltaArray::try_from_vec(vec![1_u32, 2, 3, 5, 10, 11]).unwrap();
+/// ```
+///
+/// # Details
+///
+/// To facilitate slicing, this array accepts an `offset` and `logical_len`. The offset must be
+/// strictly less than 1,024 and the sum of `offset` and `logical_len` must not exceed the length of
+/// the `deltas` array. These values permit logical slicing without modifying any chunk containing a
+/// kept value. In particular, we may defer decompresison until the array is canonicalized or
+/// indexed. The `offset` is a physical offset into the first chunk, which necessarily contains
+/// 1,024 values. The `logical_len` is the number of logical values following the `offset`, which
+/// may be less than the number of physically stored values.
+///
+/// Each chunk is stored as a vector of bases and a vector of deltas. If the chunk physically
+/// contains 1,024 vlaues, then there are as many bases as there are _lanes_ of this type in a
+/// 1024-bit register. For example, for 64-bit values, there are 16 bases because there are 16
+/// _lanes_. Each lane is a [delta-encoding](https://en.wikipedia.org/wiki/Delta_encoding) `1024 /
+/// bit_width` long vector of values. The deltas are stored in the
+/// [FastLanes](https://www.vldb.org/pvldb/vol16/p2132-afroozeh.pdf) order which splits the 1,024
+/// values into one contiguous sub-sequence per-lane, thus permitting delta encoding.
+///
+/// If the chunk physically has fewer than 1,024 values, then it is stored as a traditional,
+/// non-SIMD-amenable, delta-encoded vector.
 impl DeltaArray {
-    pub fn try_new(bases: Array, deltas: Array, validity: Validity) -> VortexResult<Self> {
+    pub fn try_from_vec<T: NativePType>(vec: Vec<T>) -> VortexResult<Self> {
+        Self::try_from_primitive_array(&PrimitiveArray::from(vec))
+    }
+
+    pub fn try_from_primitive_array(array: &PrimitiveArray) -> VortexResult<Self> {
+        let (bases, deltas) = delta_compress(array)?;
+
+        Self::try_from_delta_compress_parts(
+            bases.into_array(),
+            deltas.into_array(),
+            Validity::NonNullable,
+        )
+    }
+
+    pub fn try_from_delta_compress_parts(
+        bases: Array,
+        deltas: Array,
+        validity: Validity,
+    ) -> VortexResult<Self> {
+        let logical_len = deltas.len();
+        Self::try_new(bases, deltas, validity, 0, logical_len)
+    }
+
+    pub fn try_new(
+        bases: Array,
+        deltas: Array,
+        validity: Validity,
+        offset: usize,
+        logical_len: usize,
+    ) -> VortexResult<Self> {
+        if offset >= 1024 {
+            vortex_bail!("offset must be less than 1024: {}", offset);
+        }
+
+        if offset + logical_len > deltas.len() {
+            vortex_bail!(
+                "offset + logical_len, {} + {}, must be less than or equal to the size of deltas: {}",
+                offset,
+                logical_len,
+                deltas.len()
+            )
+        }
+
         if bases.dtype() != deltas.dtype() {
             vortex_bail!(
                 "DeltaArray: bases and deltas must have the same dtype, got {:?} and {:?}",
@@ -33,10 +111,10 @@ impl DeltaArray {
         }
 
         let dtype = bases.dtype().clone();
-        let len = deltas.len();
         let metadata = DeltaMetadata {
-            validity: validity.to_metadata(len)?,
-            len,
+            validity: validity.to_metadata(logical_len)?,
+            deltas_len: deltas.len(),
+            offset,
         };
 
         let mut children = vec![bases, deltas];
@@ -44,14 +122,30 @@ impl DeltaArray {
             children.push(varray)
         }
 
-        let delta = Self::try_from_parts(dtype, len, metadata, children.into(), StatsSet::new())?;
+        let delta = Self::try_from_parts(
+            dtype,
+            logical_len,
+            metadata,
+            children.into(),
+            StatsSet::new(),
+        )?;
+
         if delta.bases().len() != delta.bases_len() {
             vortex_bail!(
                 "DeltaArray: bases.len() ({}) != expected_bases_len ({}), based on len ({}) and lane count ({})",
                 delta.bases().len(),
                 delta.bases_len(),
-                len,
+                logical_len,
                 delta.lanes()
+            );
+        }
+
+        if (delta.deltas_len() % 1024 == 0) != (delta.bases_len() % delta.lanes() == 0) {
+            vortex_bail!(
+                "deltas length ({}) is a multiple of 1024 iff bases length ({}) is a multiple of LANES ({})",
+                delta.deltas_len(),
+                delta.bases_len(),
+                delta.lanes(),
             );
         }
 
@@ -68,7 +162,7 @@ impl DeltaArray {
     #[inline]
     pub fn deltas(&self) -> Array {
         self.as_ref()
-            .child(1, self.dtype(), self.len())
+            .child(1, self.dtype(), self.deltas_len())
             .vortex_expect("DeltaArray is missing deltas child array")
     }
 
@@ -86,6 +180,12 @@ impl DeltaArray {
         })
     }
 
+    #[inline]
+    /// The logical offset into the first chunk of [`Self::deltas`].
+    pub fn offset(&self) -> usize {
+        self.metadata().offset
+    }
+
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(|| {
             self.as_ref()
@@ -95,9 +195,13 @@ impl DeltaArray {
     }
 
     fn bases_len(&self) -> usize {
-        let num_chunks = self.len() / 1024;
-        let remainder_base_size = if self.len() % 1024 > 0 { 1 } else { 0 };
+        let num_chunks = self.deltas().len() / 1024;
+        let remainder_base_size = if self.deltas().len() % 1024 > 0 { 1 } else { 0 };
         num_chunks * self.lanes() + remainder_base_size
+    }
+
+    fn deltas_len(&self) -> usize {
+        self.metadata().deltas_len
     }
 }
 

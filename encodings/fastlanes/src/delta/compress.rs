@@ -3,6 +3,7 @@ use fastlanes::{Delta, Transpose};
 use num_traits::{WrappingAdd, WrappingSub};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::fill_forward;
+use vortex::compute::SliceFn;
 use vortex::validity::Validity;
 use vortex::IntoArrayVariant;
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType, Nullability};
@@ -105,7 +106,10 @@ pub fn delta_decompress(array: DeltaArray) -> VortexResult<PrimitiveArray> {
             array.validity()
         )
     });
-    Ok(decoded)
+
+    decoded
+        .slice(array.offset(), array.offset() + array.len())?
+        .into_primitive()
 }
 
 fn decompress_primitive<T: NativePType + Delta + Transpose + WrappingAdd>(
@@ -163,8 +167,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use vortex::IntoArray;
-
     use super::*;
 
     #[test]
@@ -182,15 +184,8 @@ mod test {
     }
 
     fn do_roundtrip_test<T: NativePType>(input: Vec<T>) {
-        let (bases, deltas) = delta_compress(&PrimitiveArray::from(input.clone())).unwrap();
-
-        let delta = DeltaArray::try_new(
-            bases.into_array(),
-            deltas.into_array(),
-            Validity::NonNullable,
-        )
-        .unwrap();
-
+        let delta = DeltaArray::try_from_vec(input.clone()).unwrap();
+        assert_eq!(delta.len(), input.len());
         let decompressed = delta_decompress(delta).unwrap();
         let decompressed_slice = decompressed.maybe_null_slice::<T>();
         assert_eq!(decompressed_slice.len(), input.len());
