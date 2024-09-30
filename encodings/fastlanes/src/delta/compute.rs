@@ -73,14 +73,6 @@ impl SliceFn for DeltaArray {
             limit,
         )?;
 
-        if arr.len() != stop - start {
-            vortex_bail!(
-                "slice produced wrong length: {} != {} - {}",
-                arr.len(),
-                stop,
-                start,
-            )
-        }
         Ok(arr.into_array())
     }
 }
