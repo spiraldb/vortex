@@ -30,7 +30,7 @@ impl_encoding!("vortex.chunked", ids::CHUNKED, Chunked);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ChunkedMetadata {
-    num_chunks: usize,
+    nchunks: usize,
 }
 
 impl ChunkedArray {
@@ -52,7 +52,7 @@ impl ChunkedArray {
             })
             .collect_vec();
 
-        let num_chunks = chunk_offsets.len() - 1;
+        let nchunks = chunk_offsets.len() - 1;
         let length = *chunk_offsets.last().unwrap_or_else(|| {
             unreachable!("Chunk ends is guaranteed to have at least one element")
         }) as usize;
@@ -64,7 +64,7 @@ impl ChunkedArray {
         Self::try_from_parts(
             dtype,
             length,
-            ChunkedMetadata { num_chunks },
+            ChunkedMetadata { nchunks },
             children.into(),
             StatsSet::new(),
         )
@@ -85,7 +85,7 @@ impl ChunkedArray {
     }
 
     pub fn nchunks(&self) -> usize {
-        self.metadata().num_chunks
+        self.metadata().nchunks
     }
 
     #[inline]

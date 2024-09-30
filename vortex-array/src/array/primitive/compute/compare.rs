@@ -7,7 +7,7 @@ use vortex_scalar::PrimitiveScalar;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::{BoolArray, ConstantArray};
 use crate::compute::{MaybeCompareFn, Operator};
-use crate::{Array, IntoArray};
+use crate::{Array, ArrayDType, IntoArray};
 
 impl MaybeCompareFn for PrimitiveArray {
     fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
@@ -41,8 +41,8 @@ fn primitive_const_compare(
     other: ConstantArray,
     operator: Operator,
 ) -> VortexResult<Array> {
-    let primitive_scalar =
-        PrimitiveScalar::try_from(other.scalar()).vortex_expect("Expected a primitive scalar");
+    let primitive_scalar = PrimitiveScalar::try_new(other.dtype(), other.scalar_value())
+        .vortex_expect("Expected a primitive scalar");
 
     let buffer = match_each_native_ptype!(this.ptype(), |$T| {
         let typed_value = primitive_scalar.typed_value::<$T>().unwrap();

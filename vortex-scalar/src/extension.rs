@@ -12,6 +12,14 @@ pub struct ExtScalar<'a> {
 }
 
 impl<'a> ExtScalar<'a> {
+    pub fn try_new(dtype: &'a DType, value: &'a ScalarValue) -> VortexResult<Self> {
+        if !matches!(dtype, DType::Extension(..)) {
+            vortex_bail!("Expected extension scalar, found {}", dtype)
+        }
+
+        Ok(Self { dtype, value })
+    }
+
     #[inline]
     pub fn dtype(&self) -> &'a DType {
         self.dtype
@@ -31,14 +39,7 @@ impl<'a> TryFrom<&'a Scalar> for ExtScalar<'a> {
     type Error = VortexError;
 
     fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
-        if !matches!(value.dtype(), DType::Extension(..)) {
-            vortex_bail!("Expected extension scalar, found {}", value.dtype())
-        }
-
-        Ok(Self {
-            dtype: value.dtype(),
-            value: &value.value,
-        })
+        ExtScalar::try_new(value.dtype(), &value.value)
     }
 }
 

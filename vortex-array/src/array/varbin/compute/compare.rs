@@ -28,7 +28,7 @@ fn compare_constant(
     operator: Operator,
 ) -> VortexResult<Array> {
     let arrow_lhs = lhs.clone().into_canonical()?.into_arrow()?;
-    let constant = Arc::<dyn Datum>::try_from(rhs.scalar())?;
+    let constant = Arc::<dyn Datum>::try_from(&rhs.owned_scalar())?;
 
     match arrow_lhs.data_type() {
         DataType::Binary => {

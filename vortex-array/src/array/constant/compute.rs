@@ -49,26 +49,26 @@ impl ScalarAtFn for ConstantArray {
     }
 
     fn scalar_at_unchecked(&self, _index: usize) -> Scalar {
-        self.scalar().clone()
+        self.owned_scalar()
     }
 }
 
 impl TakeFn for ConstantArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        Ok(Self::new(self.scalar().clone(), indices.len()).into_array())
+        Ok(Self::new(self.owned_scalar(), indices.len()).into_array())
     }
 }
 
 impl SliceFn for ConstantArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        Ok(Self::new(self.scalar().clone(), stop - start).into_array())
+        Ok(Self::new(self.owned_scalar(), stop - start).into_array())
     }
 }
 
 impl FilterFn for ConstantArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         Ok(Self::new(
-            self.scalar().clone(),
+            self.owned_scalar(),
             predicate.with_dyn(|p| {
                 p.as_bool_array()
                     .ok_or(vortex_err!(
@@ -84,7 +84,11 @@ impl FilterFn for ConstantArray {
 
 impl SearchSortedFn for ConstantArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
-        match self.scalar().partial_cmp(value).unwrap_or(Ordering::Less) {
+        match self
+            .scalar_value()
+            .partial_cmp(value.value())
+            .unwrap_or(Ordering::Less)
+        {
             Ordering::Greater => Ok(SearchResult::NotFound(0)),
             Ordering::Less => Ok(SearchResult::NotFound(self.len())),
             Ordering::Equal => match side {
@@ -103,9 +107,9 @@ impl MaybeCompareFn for ConstantArray {
                 .get_as::<bool>(Stat::IsConstant)
                 .unwrap_or_default())
         .then(|| {
-            let lhs = self.scalar();
+            let lhs = self.owned_scalar();
             let rhs = scalar_at(other, 0).vortex_expect("Expected scalar");
-            let scalar = scalar_cmp(lhs, &rhs, operator);
+            let scalar = scalar_cmp(&lhs, &rhs, operator);
             Ok(ConstantArray::new(scalar, self.len()).into_array())
         })
     }
@@ -141,7 +145,7 @@ fn constant_array_bool_impl(
 ) -> VortexResult<Array> {
     // If the right side is constant
     if other.statistics().get_as::<bool>(Stat::IsConstant) == Some(true) {
-        let lhs = constant_array.scalar().value().as_bool()?;
+        let lhs = constant_array.scalar_value().as_bool()?;
         let rhs = scalar_at(other, 0)?.value().as_bool()?;
 
         let scalar = match lhs.zip(rhs).map(bool_op) {

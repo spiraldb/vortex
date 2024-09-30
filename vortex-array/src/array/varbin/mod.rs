@@ -4,7 +4,7 @@ use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
 pub use stats::compute_stats;
 use vortex_buffer::Buffer;
-use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability};
+use vortex_dtype::{match_each_native_ptype, DType, NativePType, Nullability, PType};
 use vortex_error::{
     vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
     VortexUnwrap as _,
@@ -33,7 +33,7 @@ impl_encoding!("vortex.varbin", ids::VAR_BIN, VarBin);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VarBinMetadata {
     validity: ValidityMetadata,
-    offsets_dtype: DType,
+    offsets_ptype: PType,
     bytes_len: usize,
 }
 
@@ -44,9 +44,22 @@ impl VarBinArray {
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !offsets.dtype().is_int() || offsets.dtype().is_nullable() {
-            vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
-        }
+        let offsets_ptype = match offsets.dtype() {
+            DType::Primitive(
+                ptype @ (PType::U8
+                | PType::U16
+                | PType::U32
+                | PType::U64
+                | PType::I8
+                | PType::I16
+                | PType::I32
+                | PType::I64),
+                Nullability::NonNullable,
+            ) => ptype,
+            _ => {
+                vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype())
+            }
+        };
         if !matches!(bytes.dtype(), &DType::BYTES) {
             vortex_bail!(MismatchedTypes: "u8", bytes.dtype());
         }
@@ -61,7 +74,7 @@ impl VarBinArray {
 
         let metadata = VarBinMetadata {
             validity: validity.to_metadata(offsets.len() - 1)?,
-            offsets_dtype: offsets.dtype().clone(),
+            offsets_ptype: *offsets_ptype,
             bytes_len: bytes.len(),
         };
 
@@ -78,7 +91,11 @@ impl VarBinArray {
     #[inline]
     pub fn offsets(&self) -> Array {
         self.as_ref()
-            .child(0, &self.metadata().offsets_dtype, self.len() + 1)
+            .child(
+                0,
+                &DType::Primitive(self.metadata().offsets_ptype, Nullability::NonNullable),
+                self.len() + 1,
+            )
             .vortex_expect("Missing offsets in VarBinArray")
     }
 
@@ -153,6 +170,18 @@ impl VarBinArray {
         let mut builder = VarBinBuilder::<u32>::with_capacity(iter.size_hint().0);
         for v in iter {
             builder.push(v.as_ref().map(|o| o.as_ref()));
+        }
+        builder.finish(dtype)
+    }
+
+    pub fn from_iter_nonnull<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(
+        iter: I,
+        dtype: DType,
+    ) -> Self {
+        let iter = iter.into_iter();
+        let mut builder = VarBinBuilder::<u32>::with_capacity(iter.size_hint().0);
+        for v in iter {
+            builder.push_value(v);
         }
         builder.finish(dtype)
     }

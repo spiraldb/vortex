@@ -1,5 +1,5 @@
 use ::serde::{Deserialize, Serialize};
-use vortex_dtype::{match_each_integer_ptype, DType};
+use vortex_dtype::{match_each_integer_ptype, DType, Nullability, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -20,11 +20,10 @@ impl_encoding!("vortex.sparse", ids::SPARSE, Sparse);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseMetadata {
-    indices_dtype: DType,
+    indices_ptype: PType,
     // Offset value for patch indices as a result of slicing
     indices_offset: usize,
     indices_len: usize,
-    len: usize,
     fill_value: Scalar,
 }
 
@@ -45,9 +44,15 @@ impl SparseArray {
         indices_offset: usize,
         fill_value: Scalar,
     ) -> VortexResult<Self> {
-        if !matches!(indices.dtype(), &DType::IDX) {
-            vortex_bail!("Cannot use {} as indices", indices.dtype());
-        }
+        let indices_dtype = indices.dtype();
+        let indices_ptype = if !matches!(indices_dtype, &DType::IDX) {
+            vortex_bail!("Cannot use {} as indices", indices_dtype);
+        } else {
+            match indices_dtype {
+                DType::Primitive(ptype, _) => ptype,
+                ptype => vortex_bail!("programmer error {}", ptype),
+            }
+        };
         if values.dtype() != fill_value.dtype() {
             vortex_bail!(
                 "Mismatched fill value dtype {} and values dtype {}",
@@ -75,10 +80,9 @@ impl SparseArray {
             values.dtype().clone(),
             len,
             SparseMetadata {
-                indices_dtype: indices.dtype().clone(),
+                indices_ptype: *indices_ptype,
                 indices_offset,
                 indices_len: indices.len(),
-                len,
                 fill_value,
             },
             [indices, values].into(),
@@ -103,7 +107,7 @@ impl SparseArray {
         self.as_ref()
             .child(
                 0,
-                &self.metadata().indices_dtype,
+                &DType::Primitive(self.metadata().indices_ptype, Nullability::NonNullable),
                 self.metadata().indices_len,
             )
             .vortex_expect("Missing indices array in SparseArray")

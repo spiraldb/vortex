@@ -22,7 +22,6 @@ impl_encoding!("vortex.bool", ids::BOOL, Bool);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BoolMetadata {
     validity: ValidityMetadata,
-    length: usize,
     bit_offset: usize,
 }
 
@@ -65,7 +64,6 @@ impl BoolArray {
                 buffer_len,
                 BoolMetadata {
                     validity: validity.to_metadata(buffer_len)?,
-                    length: buffer_len,
                     bit_offset: last_byte_bit_offset,
                 },
                 Some(Buffer::from(inner)),

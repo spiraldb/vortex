@@ -18,7 +18,6 @@ impl_encoding!("vortex.struct", ids::STRUCT, Struct);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructMetadata {
-    length: usize,
     validity: ValidityMetadata,
 }
 
@@ -74,7 +73,6 @@ impl StructArray {
             DType::Struct(StructDType::new(names, field_dtypes), nullability),
             length,
             StructMetadata {
-                length,
                 validity: validity_metadata,
             },
             children.into(),

@@ -38,8 +38,8 @@ impl ArrayCompute for ExtensionArray {
 impl MaybeCompareFn for ExtensionArray {
     fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
         if let Ok(const_ext) = ConstantArray::try_from(other) {
-            let scalar_ext =
-                ExtScalar::try_from(const_ext.scalar()).vortex_expect("Expected ExtScalar");
+            let scalar_ext = ExtScalar::try_new(const_ext.dtype(), const_ext.scalar_value())
+                .vortex_expect("Expected ExtScalar");
             let const_storage = ConstantArray::new(
                 Scalar::new(self.storage().dtype().clone(), scalar_ext.value().clone()),
                 const_ext.len(),

@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_panic, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, ScalarValue};
 
 use crate::encoding::ids;
 use crate::stats::{Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDef, ArrayTrait};
+use crate::{impl_encoding, ArrayDType, ArrayDef, ArrayTrait};
 
 mod canonical;
 mod compute;
@@ -19,8 +19,7 @@ impl_encoding!("vortex.constant", ids::CONSTANT, Constant);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstantMetadata {
-    scalar: Scalar,
-    length: usize,
+    scalar_value: ScalarValue,
 }
 
 impl ConstantArray {
@@ -43,8 +42,7 @@ impl ConstantArray {
             scalar.dtype().clone(),
             length,
             ConstantMetadata {
-                scalar: scalar.clone(),
-                length,
+                scalar_value: scalar.value().clone(),
             },
             [].into(),
             stats,
@@ -59,8 +57,13 @@ impl ConstantArray {
         })
     }
 
-    pub fn scalar(&self) -> &Scalar {
-        &self.metadata().scalar
+    pub fn scalar_value(&self) -> &ScalarValue {
+        &self.metadata().scalar_value
+    }
+
+    /// Construct an owned [`vortex_scalar::Scalar`] with a value equal to [`Self::scalar_value()`].
+    pub fn owned_scalar(&self) -> Scalar {
+        Scalar::new(self.dtype().clone(), self.scalar_value().clone())
     }
 }
 
@@ -68,14 +71,11 @@ impl ArrayTrait for ConstantArray {}
 
 impl ArrayValidity for ConstantArray {
     fn is_valid(&self, _index: usize) -> bool {
-        match self.metadata().scalar.dtype().is_nullable() {
-            true => self.scalar().is_valid(),
-            false => true,
-        }
+        !self.scalar_value().is_null()
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        match self.scalar().is_null() {
+        match self.scalar_value().is_null() {
             true => LogicalValidity::AllInvalid(self.len()),
             false => LogicalValidity::AllValid(self.len()),
         }
