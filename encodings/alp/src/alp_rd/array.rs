@@ -3,10 +3,9 @@ use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
-use vortex::variants::ArrayVariants;
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
-use vortex_dtype::{DType, Nullability, PType};
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
 use crate::alp_rd::alp_rd_decode;
@@ -87,7 +86,7 @@ impl ALPRDArray {
     ///
     /// These are bit-packed and dictionary encoded, and cannot directly be interpreted without
     /// the metadata of this array.
-    fn left_parts(&self) -> Array {
+    pub fn left_parts(&self) -> Array {
         self.as_ref()
             .child(0, &self.metadata().left_parts_dtype, self.len())
             .vortex_expect("ALPRDArray: left_parts child")
@@ -110,18 +109,24 @@ impl ALPRDArray {
             self.as_ref()
                 .child(
                     2,
-                    &self
-                        .metadata()
-                        .left_parts_dtype
-                        .with_nullability(Nullability::NonNullable),
+                    &self.metadata().left_parts_dtype.as_nullable(),
                     self.len(),
                 )
                 .vortex_expect("ALPRDArray: left_parts_exceptions child")
         })
     }
-}
 
-impl ArrayVariants for ALPRDArray {}
+    /// The dictionary that maps the codes in `left_parts` into bit patterns.
+    #[inline]
+    pub fn left_parts_dict(&self) -> &[u16] {
+        &self.metadata().dict[0..self.metadata().dict_len as usize]
+    }
+
+    #[inline]
+    pub(crate) fn right_bit_width(&self) -> u8 {
+        self.metadata().right_bit_width
+    }
+}
 
 impl IntoCanonical for ALPRDArray {
     fn into_canonical(self) -> VortexResult<Canonical> {

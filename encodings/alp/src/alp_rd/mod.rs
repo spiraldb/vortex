@@ -10,21 +10,27 @@
 //! up to 8 elements. Each double can then be broken into the front/left `L` bits, which neatly
 //! bit-packs down to 3 bits per element. The remaining `R` bits are bit-packed as well.
 //!
-//! Even in the ideal case, this gets about ~24% compression.
+//! In the ideal case, this gets about ~24% compression.
+//!
+//! The code in this module draws on the MIT-licensed [C++ implementation].
+//!
+//! [C++ implementation]: https://github.com/cwida/ALP/blob/main/include/alp/rd.hpp
 
 pub use array::*;
 
 mod array;
 mod compute;
+mod variants;
 
 use std::collections::HashMap;
 
 use itertools::Itertools;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::{ArrayDType, IntoArray};
-use vortex_dtype::{DType, PType};
+use vortex_dtype::{DType, Nullability, PType};
 use vortex_error::{VortexExpect, VortexUnwrap};
 use vortex_fastlanes::BitPackedArray;
+use vortex_scalar::Scalar;
 
 /// Max number of bits to cut from the MSB section of each float.
 const CUT_LIMIT: usize = 16;
@@ -110,10 +116,17 @@ impl Encoder {
                 .vortex_unwrap()
                 .into_array();
 
-            let exc_array = PrimitiveArray::from(exceptions).into_array();
-            SparseArray::try_new(packed_pos, exc_array, doubles.len(), 0u16.into())
-                .vortex_expect("ALP-RD: construction of exceptions SparseArray")
-                .into_array()
+            let exc_array =
+                PrimitiveArray::from_nullable_vec(exceptions.into_iter().map(Some).collect())
+                    .into_array();
+            SparseArray::try_new(
+                packed_pos,
+                exc_array,
+                doubles.len(),
+                Scalar::null(DType::Primitive(PType::U16, Nullability::Nullable)),
+            )
+            .vortex_expect("ALP-RD: construction of exceptions SparseArray")
+            .into_array()
         });
 
         ALPRDArray::try_new(
