@@ -162,7 +162,7 @@ impl DeltaArray {
     #[inline]
     pub fn deltas(&self) -> Array {
         self.as_ref()
-            .child(1, self.dtype(), self.metadata().deltas_len)
+            .child(1, self.dtype(), self.deltas_len())
             .vortex_expect("DeltaArray is missing deltas child array")
     }
 
