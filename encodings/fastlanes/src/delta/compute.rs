@@ -60,17 +60,14 @@ impl SliceFn for DeltaArray {
 
         let new_validity = validity.slice(start, stop)?;
 
-        let limit = match physical_stop % 1024 {
-            0 => 1024,
-            n => n,
-        };
+        let logical_len = stop - start;
 
         let arr = DeltaArray::try_new(
             new_bases,
             new_deltas,
             new_validity,
             physical_start % 1024,
-            limit,
+            logical_len,
         )?;
 
         Ok(arr.into_array())

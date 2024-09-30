@@ -11,7 +11,7 @@ use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
 };
-use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType, PType};
+use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 mod compress;
@@ -79,11 +79,8 @@ impl DeltaArray {
         deltas: Array,
         validity: Validity,
     ) -> VortexResult<Self> {
-        let limit = match deltas.len() % 1024 {
-            0 => 1024,
-            n => n,
-        };
-        Self::try_new(bases, deltas, validity, 0, limit)
+        let logical_len = deltas.len();
+        Self::try_new(bases, deltas, validity, 0, logical_len)
     }
 
     pub fn try_new(
@@ -91,26 +88,20 @@ impl DeltaArray {
         deltas: Array,
         validity: Validity,
         offset: usize,
-        limit: usize,
+        logical_len: usize,
     ) -> VortexResult<Self> {
         if offset >= 1024 {
             vortex_bail!("offset must be less than 1024: {}", offset);
         }
 
-        let last_chunk_size = match deltas.len() % 1024 {
-            0 => 1024,
-            n => n,
-        };
-
-        if limit > last_chunk_size {
+        if offset + logical_len > deltas.len() {
             vortex_bail!(
-                "limit, {}, must be less than or equal to the size of the last chunk: {}",
-                limit,
-                last_chunk_size
+                "offset + logical_len, {} + {}, must be less than or equal to the size of deltas: {}",
+                offset,
+                logical_len,
+                deltas.len()
             )
         }
-
-        let trailing_garbage = last_chunk_size - limit;
 
         if bases.dtype() != deltas.dtype() {
             vortex_bail!(
@@ -121,7 +112,6 @@ impl DeltaArray {
         }
 
         let dtype = bases.dtype().clone();
-        let logical_len = deltas.len() - offset - trailing_garbage;
         let metadata = DeltaMetadata {
             validity: validity.to_metadata(logical_len)?,
             deltas_len: deltas.len(),
