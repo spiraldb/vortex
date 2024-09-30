@@ -21,7 +21,7 @@ dev-dependencies = [
     "pytest-benchmark>=4.0.0",
     "ruff>=0.1.11",
     "pip>=23.3.2",
-    "maturin>=1.4.0",
+    "maturin>=1.7.2",
 ]
 
 [tool.rye.workspace]
