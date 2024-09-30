@@ -10,7 +10,9 @@ license = { workspace = true }
 keywords = { workspace = true }
 include = { workspace = true }
 edition = { workspace = true }
+categories = { workspace = true }
 rust-version = { workspace = true }
+readme = { workspace = true }
 
 [lints]
 workspace = true
