@@ -1,5 +1,5 @@
 use ::serde::{Deserialize, Serialize};
-use vortex_dtype::{match_each_integer_ptype, DType, PType};
+use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -20,7 +20,6 @@ impl_encoding!("vortex.sparse", ids::SPARSE, Sparse);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseMetadata {
-    indices_ptype: PType,
     // Offset value for patch indices as a result of slicing
     indices_offset: usize,
     indices_len: usize,
@@ -47,7 +46,6 @@ impl SparseArray {
         if !matches!(indices.dtype(), &DType::IDX) {
             vortex_bail!("Cannot use {} as indices", indices.dtype());
         }
-        let indices_ptype = PType::try_from(&DType::IDX)?;
         if values.dtype() != fill_value.dtype() {
             vortex_bail!(
                 "Mismatched fill value dtype {} and values dtype {}",
@@ -75,7 +73,6 @@ impl SparseArray {
             values.dtype().clone(),
             len,
             SparseMetadata {
-                indices_ptype,
                 indices_offset,
                 indices_len: indices.len(),
                 fill_value,
