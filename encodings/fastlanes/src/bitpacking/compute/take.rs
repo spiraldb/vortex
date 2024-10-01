@@ -102,16 +102,16 @@ fn take_primitive<T: NativePType + BitPacking>(
         }
     }
 
-    // if prefer_bulk_patch {
-    if let Some((patch_indices, patch_values, _)) = patches {
-        do_patch_for_take_primitive(
-            patch_indices,
-            patch_values,
-            indices.clone().into_array(),
-            &mut output,
-        )?;
+    if prefer_bulk_patch {
+        if let Some((patch_indices, patch_values, _)) = patches {
+            do_patch_for_take_primitive(
+                patch_indices,
+                patch_values,
+                indices.clone().into_array(),
+                &mut output,
+            )?;
+        }
     }
-    // }
 
     Ok(output)
 }
