@@ -246,12 +246,8 @@ pub fn alp_rd_decode<T: ALPRDFloat>(
         "alp_rd_decode: exc_pos.len != exceptions.len"
     );
 
-    // Prepare the dictionary for decoding by adding the extra value for lookups to match.
     let mut dict = Vec::with_capacity(left_parts_dict.len());
     dict.extend_from_slice(left_parts_dict);
-    // // Add an extra code for out-of-dict values. These will be overwritten with exceptions later.
-    // const EXCEPTION_SENTINEL: u16 = 0xDEAD;
-    // dict.push(EXCEPTION_SENTINEL);
 
     let mut left_parts_decoded: Vec<T::UINT> = Vec::with_capacity(left_parts.len());
 
