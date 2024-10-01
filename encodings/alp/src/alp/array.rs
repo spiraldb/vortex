@@ -15,8 +15,7 @@ use vortex::{
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
-use crate::alp::Exponents;
-use crate::compress::{alp_encode, decompress};
+use crate::alp::{alp_encode, decompress, Exponents};
 use crate::ALPFloat;
 
 impl_encoding!("vortex.alp", ids::ALP, ALP);
