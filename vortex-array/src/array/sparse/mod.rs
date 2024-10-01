@@ -1,7 +1,7 @@
 use ::serde::{Deserialize, Serialize};
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, ScalarValue};
 
 use crate::array::constant::ConstantArray;
 use crate::compute::unary::scalar_at;
@@ -23,7 +23,7 @@ pub struct SparseMetadata {
     // Offset value for patch indices as a result of slicing
     indices_offset: usize,
     indices_len: usize,
-    fill_value: Scalar,
+    fill_value: ScalarValue,
 }
 
 impl SparseArray {
@@ -31,7 +31,7 @@ impl SparseArray {
         indices: Array,
         values: Array,
         len: usize,
-        fill_value: Scalar,
+        fill_value: ScalarValue,
     ) -> VortexResult<Self> {
         Self::try_new_with_offset(indices, values, len, 0, fill_value)
     }
@@ -41,17 +41,10 @@ impl SparseArray {
         values: Array,
         len: usize,
         indices_offset: usize,
-        fill_value: Scalar,
+        fill_value: ScalarValue,
     ) -> VortexResult<Self> {
         if !matches!(indices.dtype(), &DType::IDX) {
             vortex_bail!("Cannot use {} as indices", indices.dtype());
-        }
-        if values.dtype() != fill_value.dtype() {
-            vortex_bail!(
-                "Mismatched fill value dtype {} and values dtype {}",
-                fill_value.dtype(),
-                values.dtype(),
-            );
         }
         if indices.len() != values.len() {
             vortex_bail!(
@@ -102,8 +95,13 @@ impl SparseArray {
     }
 
     #[inline]
-    pub fn fill_value(&self) -> &Scalar {
+    pub fn fill_value(&self) -> &ScalarValue {
         &self.metadata().fill_value
+    }
+
+    #[inline]
+    pub fn fill_owned_scalar(&self) -> Scalar {
+        Scalar::new(self.dtype().clone(), self.fill_value().clone())
     }
 
     /// Returns the position or the insertion point of a given index in the indices array.
@@ -196,7 +194,7 @@ impl ArrayValidity for SparseArray {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::Nullability::{self, Nullable};
+    use vortex_dtype::Nullability::Nullable;
     use vortex_dtype::{DType, PType};
     use vortex_error::VortexError;
     use vortex_scalar::Scalar;
@@ -221,9 +219,14 @@ mod test {
         let mut values = vec![100i32, 200, 300].into_array();
         values = try_cast(&values, fill_value.dtype()).unwrap();
 
-        SparseArray::try_new(vec![2u64, 5, 8].into_array(), values, 10, fill_value)
-            .unwrap()
-            .into_array()
+        SparseArray::try_new(
+            vec![2u64, 5, 8].into_array(),
+            values,
+            10,
+            fill_value.value().clone(),
+        )
+        .unwrap()
+        .into_array()
     }
 
     fn assert_sparse_array(sparse: &Array, values: &[Option<i32>]) {
@@ -372,13 +375,7 @@ mod test {
         let values = vec![15_u32, 135, 13531, 42].into_array();
         let indices = vec![10_u64, 11, 50, 100].into_array();
 
-        SparseArray::try_new(
-            indices.clone(),
-            values,
-            100,
-            Scalar::primitive(0_u32, Nullability::NonNullable),
-        )
-        .unwrap();
+        SparseArray::try_new(indices.clone(), values, 100, 0_u32.try_into().unwrap()).unwrap();
     }
 
     #[test]
@@ -386,12 +383,6 @@ mod test {
         let values = vec![15_u32, 135, 13531, 42].into_array();
         let indices = vec![10_u64, 11, 50, 100].into_array();
 
-        SparseArray::try_new(
-            indices.clone(),
-            values,
-            101,
-            Scalar::primitive(0_u32, Nullability::NonNullable),
-        )
-        .unwrap();
+        SparseArray::try_new(indices.clone(), values, 101, 0_u32.try_into().unwrap()).unwrap();
     }
 }

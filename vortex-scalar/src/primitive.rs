@@ -133,7 +133,7 @@ macro_rules! primitive_scalar {
             fn from(value: $T) -> Self {
                 Scalar {
                     dtype: DType::Primitive(<$T>::PTYPE, Nullability::NonNullable),
-                    value: ScalarValue::Primitive(value.into()),
+                    value: value.into(),
                 }
             }
         }
@@ -142,9 +142,7 @@ macro_rules! primitive_scalar {
             fn from(value: Option<$T>) -> Self {
                 Scalar {
                     dtype: DType::Primitive(<$T>::PTYPE, Nullability::Nullable),
-                    value: value
-                        .map(|v| ScalarValue::Primitive(v.into()))
-                        .unwrap_or_else(|| ScalarValue::Null),
+                    value: value.into(),
                 }
             }
         }
@@ -164,6 +162,20 @@ macro_rules! primitive_scalar {
 
             fn try_from(value: Scalar) -> Result<Self, Self::Error> {
                 <$T>::try_from(&value)
+            }
+        }
+
+        impl From<$T> for ScalarValue {
+            fn from(value: $T) -> Self {
+                ScalarValue::Primitive(value.into())
+            }
+        }
+
+        impl From<Option<$T>> for ScalarValue {
+            fn from(value: Option<$T>) -> Self {
+                value
+                    .map(|v| ScalarValue::Primitive(v.into()))
+                    .unwrap_or_else(|| ScalarValue::Null)
             }
         }
 
@@ -211,11 +223,21 @@ impl TryFrom<&Scalar> for usize {
     type Error = VortexError;
 
     fn try_from(value: &Scalar) -> Result<Self, Self::Error> {
-        u64::try_from(
-            value
-                .cast(&DType::Primitive(PType::U64, Nullability::NonNullable))?
-                .as_ref(),
-        )
-        .map(|v| v as Self)
+        value.value().try_into()
+    }
+}
+
+impl From<usize> for ScalarValue {
+    fn from(value: usize) -> Self {
+        ScalarValue::Primitive(PValue::U64(value as u64))
+    }
+}
+
+/// Read a scalar as usize. For usize only, we implicitly cast for better ergonomics.
+impl TryFrom<&ScalarValue> for usize {
+    type Error = VortexError;
+
+    fn try_from(value: &ScalarValue) -> Result<Self, Self::Error> {
+        u64::try_from(value).map(|v| v as Self)
     }
 }

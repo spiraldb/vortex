@@ -84,8 +84,7 @@ fn take_search_sorted(
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex_dtype::{DType, Nullability, PType};
-    use vortex_scalar::Scalar;
+    use vortex_scalar::ScalarValue;
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::compute::take::take_map;
@@ -100,7 +99,7 @@ mod test {
             PrimitiveArray::from_vec(vec![1.23f64, 0.47, 9.99, 3.5], Validity::AllValid)
                 .into_array(),
             100,
-            Scalar::null(DType::Primitive(PType::F64, Nullability::Nullable)),
+            ScalarValue::Null,
         )
         .unwrap()
         .into_array()
