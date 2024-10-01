@@ -126,14 +126,6 @@ fn do_patch_for_take_primitive<T: NativePType>(
     indices: Array,
     output: &mut [T],
 ) -> VortexResult<()> {
-    // println!(
-    //     "do_patch {:?}",
-    //     (
-    //         patch_indices.as_primitive().maybe_null_slice::<u64>(),
-    //         patch_values.as_primitive().maybe_null_slice::<u32>(),
-    //         indices.as_primitive().maybe_null_slice::<u32>()
-    //     )
-    // );
     let (indices_of_kept_patches, indices_of_kept_indices) =
         kept_indices(patch_indices.clone(), indices)?;
     let kept_patch_indices =
