@@ -29,10 +29,10 @@ use itertools::Itertools;
 use num_traits::{Float, One, PrimInt};
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::{ArrayDType, IntoArray};
-use vortex_dtype::{DType, NativePType, Nullability, PType};
+use vortex_dtype::{DType, NativePType};
 use vortex_error::{VortexExpect, VortexUnwrap};
 use vortex_fastlanes::{bitpack_encode_unchecked, BitPackedArray};
-use vortex_scalar::Scalar;
+use vortex_scalar::ScalarValue;
 
 use crate::match_each_alp_float_ptype;
 
@@ -208,14 +208,9 @@ impl Encoder {
             let exc_array =
                 PrimitiveArray::from_nullable_vec(exceptions.into_iter().map(Some).collect())
                     .into_array();
-            SparseArray::try_new(
-                packed_pos,
-                exc_array,
-                doubles.len(),
-                Scalar::null(DType::Primitive(PType::U16, Nullability::Nullable)),
-            )
-            .vortex_expect("ALP-RD: construction of exceptions SparseArray")
-            .into_array()
+            SparseArray::try_new(packed_pos, exc_array, doubles.len(), ScalarValue::Null)
+                .vortex_expect("ALP-RD: construction of exceptions SparseArray")
+                .into_array()
         });
 
         ALPRDArray::try_new(
