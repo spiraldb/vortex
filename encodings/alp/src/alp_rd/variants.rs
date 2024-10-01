@@ -1,4 +1,5 @@
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
+
 use crate::ALPRDArray;
 
 impl ArrayVariants for ALPRDArray {
@@ -11,5 +12,4 @@ impl ArrayVariants for ALPRDArray {
     }
 }
 
-impl PrimitiveArrayTrait for ALPRDArray {
-}
+impl PrimitiveArrayTrait for ALPRDArray {}

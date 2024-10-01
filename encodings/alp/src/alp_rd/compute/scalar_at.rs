@@ -34,7 +34,7 @@ mod test {
     use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
 
-    use crate::Encoder;
+    use crate::{Encoder, RealDouble};
 
     #[test]
     fn test_scalar_at() {
@@ -43,7 +43,7 @@ mod test {
         let outlier = 3e100f64.next_up();
 
         let array = PrimitiveArray::from(vec![a, b, outlier]);
-        let encoded = Encoder::new(&[a, b]).encode(&array);
+        let encoded = Encoder::<RealDouble>::new(&[a, b]).encode(&array);
 
         // Make sure that we're testing the exception pathway.
         assert!(encoded.left_parts_exceptions().is_some());

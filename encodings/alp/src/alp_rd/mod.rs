@@ -23,11 +23,14 @@ mod compute;
 mod variants;
 
 use std::collections::HashMap;
+use std::marker::PhantomData;
+use std::ops::{Shl, Shr};
 
 use itertools::Itertools;
+use num_traits::{One, PrimInt};
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::{ArrayDType, IntoArray};
-use vortex_dtype::{DType, Nullability, PType};
+use vortex_dtype::{DType, NativePType, Nullability, PType};
 use vortex_error::{VortexExpect, VortexUnwrap};
 use vortex_fastlanes::BitPackedArray;
 use vortex_scalar::Scalar;
@@ -37,23 +40,101 @@ const CUT_LIMIT: usize = 16;
 
 const MAX_DICT_SIZE: u8 = 8;
 
+mod private {
+    pub trait Sealed {}
+
+    impl Sealed for super::RealDouble {}
+    impl Sealed for super::RealFloat {}
+}
+
+pub trait ALPRD: private::Sealed {
+    type FLOAT: Copy;
+    type UINT: PrimInt + One + Copy;
+
+    const BITS: usize = size_of::<Self::FLOAT>() * 8;
+
+    const PTYPE: PType;
+
+    fn from_bits(bits: Self::UINT) -> Self::FLOAT;
+    fn to_bits(value: Self::FLOAT) -> Self::UINT;
+
+    fn to_u16(bits: Self::UINT) -> u16;
+    fn from_u16(value: u16) -> Self::UINT;
+}
+
+pub struct RealFloat;
+pub struct RealDouble;
+
+impl ALPRD for RealDouble {
+    type FLOAT = f64;
+    type UINT = u64;
+
+    const PTYPE: PType = PType::F64;
+
+    fn from_bits(bits: Self::UINT) -> Self::FLOAT {
+        f64::from_bits(bits)
+    }
+
+    fn to_bits(value: Self::FLOAT) -> Self::UINT {
+        value.to_bits()
+    }
+
+    fn to_u16(bits: Self::UINT) -> u16 {
+        bits as u16
+    }
+
+    fn from_u16(value: u16) -> Self::UINT {
+        value as u64
+    }
+}
+
+impl ALPRD for RealFloat {
+    type FLOAT = f32;
+    type UINT = u32;
+
+    const PTYPE: PType = PType::F32;
+
+    fn from_bits(bits: Self::UINT) -> Self::FLOAT {
+        f32::from_bits(bits)
+    }
+
+    fn to_bits(value: Self::FLOAT) -> Self::UINT {
+        value.to_bits()
+    }
+
+    fn to_u16(bits: Self::UINT) -> u16 {
+        bits as u16
+    }
+
+    fn from_u16(value: u16) -> Self::UINT {
+        value as u32
+    }
+}
+
 /// Encoder for ALP-RD (real doubles) values.
 ///
 /// The encoder builds a sample of values from there.
-pub struct Encoder {
+pub struct Encoder<T> {
     right_bit_width: u8,
     dictionary: HashMap<u16, u16>,
     codes: Vec<u16>,
+    _phantom_data: PhantomData<T>,
 }
 
-impl Encoder {
+impl<T> Encoder<T>
+where
+    T: ALPRD,
+    T::FLOAT: NativePType,
+    T::UINT: NativePType,
+{
     /// Build a new encoder from a sample of doubles.
-    pub fn new(sample: &[f64]) -> Self {
-        let dictionary = find_best_dictionary(sample);
+    pub fn new(sample: &[T::FLOAT]) -> Self {
+        let dictionary = find_best_dictionary::<T>(sample);
         Self {
             right_bit_width: dictionary.right_bit_width,
             dictionary: dictionary.dictionary,
             codes: dictionary.codes,
+            _phantom_data: PhantomData,
         }
     }
 
@@ -61,20 +142,20 @@ impl Encoder {
     ///
     /// Each value will be split into a left and right component, which are compressed individually.
     pub fn encode(&self, array: &PrimitiveArray) -> ALPRDArray {
-        let doubles = array.maybe_null_slice::<f64>();
+        let doubles = array.maybe_null_slice::<T::FLOAT>();
 
         let mut left_parts: Vec<u16> = Vec::with_capacity(doubles.len());
-        let mut right_parts: Vec<u64> = Vec::with_capacity(doubles.len());
+        let mut right_parts: Vec<T::UINT> = Vec::with_capacity(doubles.len());
         let mut exceptions_pos: Vec<u64> = Vec::with_capacity(doubles.len() / 4);
         let mut exceptions: Vec<u16> = Vec::with_capacity(doubles.len() / 4);
 
         // mask for right-parts
-        let right_mask = (1u64 << self.right_bit_width) - 1;
+        let right_mask = T::UINT::one().shl(self.right_bit_width as _) - T::UINT::one();
         let left_bit_width = self.dictionary.len().next_power_of_two().ilog2().max(1) as u8;
 
         for v in doubles.iter().copied() {
-            right_parts.push(v.to_bits() & right_mask);
-            left_parts.push((v.to_bits() >> self.right_bit_width) as u16);
+            right_parts.push(T::to_bits(v) & right_mask);
+            left_parts.push(T::to_u16(T::to_bits(v).shr(self.right_bit_width as _)));
         }
 
         // dict-encode the left-parts, keeping track of exceptions
@@ -130,7 +211,7 @@ impl Encoder {
         });
 
         ALPRDArray::try_new(
-            DType::Primitive(PType::F64, packed_left.dtype().nullability()),
+            DType::Primitive(T::PTYPE, packed_left.dtype().nullability()),
             packed_left,
             &self.codes,
             packed_right,
@@ -142,14 +223,14 @@ impl Encoder {
 }
 
 // Only applies for F64.
-pub fn alp_rd_decode(
+pub fn alp_rd_decode<T: ALPRD>(
     left_parts: &[u16],
     left_parts_dict: &[u16],
     right_bit_width: u8,
-    right_parts: &[u64],
+    right_parts: &[T::UINT],
     exc_pos: &[u64],
     exceptions: &[u16],
-) -> Vec<f64> {
+) -> Vec<T::FLOAT> {
     assert_eq!(
         left_parts.len(),
         right_parts.len(),
@@ -169,36 +250,36 @@ pub fn alp_rd_decode(
     const EXCEPTION_SENTINEL: u16 = 0xDEAD;
     dict.push(EXCEPTION_SENTINEL);
 
-    let mut left_parts_decoded = Vec::with_capacity(left_parts.len());
+    let mut left_parts_decoded: Vec<T::UINT> = Vec::with_capacity(left_parts.len());
 
     // Decode with bit-packing and dict unpacking.
     for code in left_parts {
-        left_parts_decoded.push(dict[*code as usize] as u64);
+        left_parts_decoded.push(T::from_u16(dict[*code as usize]));
     }
 
     // Apply the exception patches. Only applies for the left-parts
     for (pos, val) in exc_pos.iter().zip(exceptions.iter()) {
-        left_parts_decoded[*pos as usize] = *val as u64;
+        left_parts_decoded[*pos as usize] = T::from_u16(*val);
     }
 
     // recombine the left-and-right parts, adjusting by the right_bit_width.
     left_parts_decoded
         .into_iter()
         .zip(right_parts.iter().copied())
-        .map(|(left, right)| f64::from_bits((left << right_bit_width) | right))
+        .map(|(left, right)| T::from_bits((left << (right_bit_width as usize)) | right))
         .collect()
 }
 
 /// Find the best "cut point" for a set of floating point values such that we can
 /// cast them all to the relevant value instead.
-fn find_best_dictionary(samples: &[f64]) -> ALPRDDictionary {
+fn find_best_dictionary<T: ALPRD>(samples: &[T::FLOAT]) -> ALPRDDictionary {
     let mut best_est_size = f64::MAX;
     let mut best_dict = ALPRDDictionary::default();
 
-    for p in 1u8..=16 {
-        let candidate_right_bw = 64 - p;
+    for p in 1..=16 {
+        let candidate_right_bw = (T::BITS - p) as u8;
         let (dictionary, exception_count) =
-            build_left_parts_dictionary(samples, candidate_right_bw, MAX_DICT_SIZE);
+            build_left_parts_dictionary::<T>(samples, candidate_right_bw, MAX_DICT_SIZE);
         let estimated_size = estimate_compression_size(
             dictionary.right_bit_width,
             dictionary.left_bit_width,
@@ -215,13 +296,13 @@ fn find_best_dictionary(samples: &[f64]) -> ALPRDDictionary {
 }
 
 /// Build dictionary of the leftmost bits.
-fn build_left_parts_dictionary(
-    samples: &[f64],
+fn build_left_parts_dictionary<T: ALPRD>(
+    samples: &[T::FLOAT],
     right_bw: u8,
     max_dict_size: u8,
 ) -> (ALPRDDictionary, usize) {
     assert!(
-        right_bw >= (64 - CUT_LIMIT) as _,
+        right_bw >= (T::BITS - CUT_LIMIT) as _,
         "left-parts must be <= 16 bits"
     );
 
@@ -229,7 +310,7 @@ fn build_left_parts_dictionary(
     let counts = samples
         .iter()
         .copied()
-        .map(|v| (v.to_bits() >> right_bw) as u16)
+        .map(|v| T::to_u16(T::to_bits(v).shr(right_bw as _)))
         .counts();
 
     // Sorted counts: sort by negative count so that heavy hitters sort first.
