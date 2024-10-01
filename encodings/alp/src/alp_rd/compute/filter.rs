@@ -22,3 +22,39 @@ impl FilterFn for ALPRDArray {
         .into_array())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use vortex::array::{BoolArray, PrimitiveArray};
+    use vortex::compute::filter;
+    use vortex::IntoArrayVariant;
+
+    use crate::{Encoder, RealDouble, RealFloat};
+
+    macro_rules! test_filter_generic {
+        ($typ:ty, $rd:ty) => {
+            let a: $typ = (0.1 as $typ).next_up();
+            let b: $typ = (0.2 as $typ).next_up();
+            let outlier: $typ = (3e25 as $typ).next_up();
+
+            let array = PrimitiveArray::from(vec![a, b, outlier]);
+            let encoded = Encoder::<$rd>::new(&[a, b]).encode(&array);
+
+            // Make sure that we're testing the exception pathway.
+            assert!(encoded.left_parts_exceptions().is_some());
+
+            // The first two values need no patching
+            let filtered = filter(encoded.as_ref(), BoolArray::from(vec![true, false, true]))
+                .unwrap()
+                .into_primitive()
+                .unwrap();
+            assert_eq!(filtered.maybe_null_slice::<$typ>(), &[a, outlier]);
+        };
+    }
+
+    #[test]
+    fn test_filter() {
+        test_filter_generic!(f32, RealFloat);
+        test_filter_generic!(f64, RealDouble);
+    }
+}

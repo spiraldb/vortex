@@ -29,24 +29,31 @@ mod test {
     use vortex::compute::slice;
     use vortex::IntoArrayVariant;
 
-    use crate::{Encoder, RealDouble};
+    use crate::{Encoder, RealDouble, RealFloat};
+
+    macro_rules! test_slice_generic {
+        ($typ:ty, $rd:ty) => {
+            let a: $typ = (0.1 as $typ).next_up();
+            let b: $typ = (0.2 as $typ).next_up();
+            let outlier: $typ = (3e30 as $typ).next_up();
+
+            let array = PrimitiveArray::from(vec![a, b, outlier]);
+            let encoded = Encoder::<$rd>::new(&[a, b]).encode(&array);
+
+            assert!(encoded.left_parts_exceptions().is_some());
+
+            let decoded = slice(encoded.as_ref(), 1, 3)
+                .unwrap()
+                .into_primitive()
+                .unwrap();
+
+            assert_eq!(decoded.maybe_null_slice::<$typ>(), &[b, outlier]);
+        };
+    }
 
     #[test]
     fn test_slice() {
-        let a = 0.1f64.next_up();
-        let b = 0.2f64.next_up();
-        let outlier = 3e100f64.next_up();
-
-        let array = PrimitiveArray::from(vec![a, b, outlier]);
-        let encoded = Encoder::<RealDouble>::new(&[a, b]).encode(&array);
-
-        assert!(encoded.left_parts_exceptions().is_some());
-
-        let decoded = slice(encoded.as_ref(), 1, 3)
-            .unwrap()
-            .into_primitive()
-            .unwrap();
-
-        assert_eq!(decoded.maybe_null_slice::<f64>(), &[b, outlier]);
+        test_slice_generic!(f32, RealFloat);
+        test_slice_generic!(f64, RealDouble);
     }
 }

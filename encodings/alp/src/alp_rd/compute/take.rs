@@ -29,24 +29,31 @@ mod test {
     use vortex::compute::take;
     use vortex::IntoArrayVariant;
 
-    use crate::{Encoder, RealDouble};
+    use crate::{Encoder, RealDouble, RealFloat};
+
+    macro_rules! test_take_generic {
+        ($typ:ty, $rd:ty) => {
+            let a: $typ = (0.1 as $typ).next_up();
+            let b: $typ = (0.2 as $typ).next_up();
+            let outlier: $typ = (3e30 as $typ).next_up();
+
+            let array = PrimitiveArray::from(vec![a, b, outlier]);
+            let encoded = Encoder::<$rd>::new(&[a, b]).encode(&array);
+
+            assert!(encoded.left_parts_exceptions().is_some());
+
+            let taken = take(encoded.as_ref(), PrimitiveArray::from(vec![0, 2]).as_ref())
+                .unwrap()
+                .into_primitive()
+                .unwrap();
+
+            assert_eq!(taken.maybe_null_slice::<$typ>(), &[a, outlier]);
+        };
+    }
 
     #[test]
     fn test_take() {
-        let a = 0.1f64.next_up();
-        let b = 0.2f64.next_up();
-        let outlier = 3e100f64.next_up();
-
-        let array = PrimitiveArray::from(vec![a, b, outlier]);
-        let encoded = Encoder::<RealDouble>::new(&[a, b]).encode(&array);
-
-        assert!(encoded.left_parts_exceptions().is_some());
-
-        let taken = take(encoded.as_ref(), PrimitiveArray::from(vec![0, 2]).as_ref())
-            .unwrap()
-            .into_primitive()
-            .unwrap();
-
-        assert_eq!(taken.maybe_null_slice::<f64>(), &[a, outlier]);
+        test_take_generic!(f32, RealFloat);
+        test_take_generic!(f64, RealDouble);
     }
 }
