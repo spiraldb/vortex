@@ -96,7 +96,7 @@ impl EncodingCompressor for FSSTCompressor {
         let codes_varbin_dtype = codes_varbin.dtype().clone();
 
         let codes_offsets_compressed = ctx
-            .named("codes_varbin_offsets")
+            .named("fsst_codes_offsets")
             .excluding(self)
             .including(&DeltaCompressor)
             .compress(
