@@ -12,9 +12,7 @@ use vortex::stats::{Stat, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{
-    impl_encoding, Array, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray,
-};
+use vortex::{impl_encoding, Array, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;

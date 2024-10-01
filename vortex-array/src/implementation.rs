@@ -120,7 +120,7 @@ macro_rules! impl_encoding {
             impl $crate::encoding::ArrayEncoding for [<$Name Encoding>] {
                 #[inline]
                 fn id(&self) -> $crate::encoding::EncodingId {
-                    $Name::ID
+                    <$Name as $crate::ArrayDef>::ID
                 }
 
                 #[inline]
