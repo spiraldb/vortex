@@ -204,7 +204,7 @@ impl PyArray {
     ///       metadata: PrimitiveMetadata { validity: Array }
     ///       buffer: 32 B
     ///       validity: vortex.bool(0x02)(bool, len=4) nbytes=1 B (3.03%)
-    ///         metadata: BoolMetadata { validity: NonNullable, bit_offset: 0 }
+    ///         metadata: BoolMetadata { validity: NonNullable, first_byte_bit_offset: 0 }
     ///         buffer: 1 B
     ///     <BLANKLINE>
     ///
@@ -217,7 +217,7 @@ impl PyArray {
     ///         metadata: BitPackedMetadata { validity: Array, bit_width: 2, offset: 0, length: 4, has_patches: false }
     ///         buffer: 256 B
     ///         validity: vortex.bool(0x02)(bool, len=4) nbytes=1 B (100.00%)
-    ///           metadata: BoolMetadata { validity: NonNullable, bit_offset: 0 }
+    ///           metadata: BoolMetadata { validity: NonNullable, first_byte_bit_offset: 0 }
     ///           buffer: 1 B
     ///     <BLANKLINE>
     ///
