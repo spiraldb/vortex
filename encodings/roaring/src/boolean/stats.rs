@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Write;
 
 use croaring::Bitset;
 use vortex::stats::{ArrayStatisticsCompute, Stat, StatsSet};
@@ -15,37 +14,32 @@ impl ArrayStatisticsCompute for RoaringBoolArray {
 
         // Only needs to compute IsSorted, IsStrictSorted and RunCount all other stats have been populated on construction
         let bitmap = self.bitmap();
-        std::io::stdout().flush()?;
-        std::io::stderr().flush()?;
         BitmapStats(
             bitmap
                 .to_bitset()
                 .ok_or_else(|| vortex_err!("Bitmap to Bitset conversion run out of memory"))?,
             self.len(),
-            bitmap.statistics().cardinality as usize,
+            bitmap.statistics().cardinality,
         )
         .compute_statistics(stat)
     }
 }
 
 // Underlying bitset, length in bits, cardinality (true count) of the bitset
-struct BitmapStats(Bitset, usize, usize);
+struct BitmapStats(Bitset, usize, u64);
 
 impl ArrayStatisticsCompute for BitmapStats {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         let bitset_slice = self.0.as_slice();
-        let whole_chunks = self.2 / 64;
+        let whole_chunks = self.1 / 64;
+        let last_chunk_len = self.1 % 64;
         let fist_bool = bitset_slice[0] & 1 == 1;
         let mut stats = RoaringBoolStatsAccumulator::new(fist_bool);
         for bits64 in bitset_slice[0..whole_chunks].iter() {
             stats.next(*bits64);
         }
-
-        let remainder = self.2 % 64;
-        if remainder != 0 {
-            stats.next_up_to_length(bitset_slice[whole_chunks], remainder);
-        }
-        Ok(stats.finish(self.1))
+        stats.next_up_to_length(bitset_slice[whole_chunks], last_chunk_len);
+        Ok(stats.finish(self.2))
     }
 }
 
@@ -86,7 +80,7 @@ impl RoaringBoolStatsAccumulator {
         self.next_up_to_length(next, 64)
     }
 
-    pub fn finish(self, cardinality: usize) -> StatsSet {
+    pub fn finish(self, cardinality: u64) -> StatsSet {
         StatsSet::from(HashMap::from([
             (Stat::IsSorted, self.is_sorted.into()),
             (
