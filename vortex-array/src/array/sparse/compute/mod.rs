@@ -39,14 +39,14 @@ impl ArrayCompute for SparseArray {
 impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         Ok(match self.search_index(index)?.to_found() {
-            None => self.fill_owned_scalar(),
+            None => self.fill_scalar(),
             Some(idx) => scalar_at_unchecked(&self.values(), idx),
         })
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         match self.search_index(index).vortex_unwrap().to_found() {
-            None => self.fill_owned_scalar(),
+            None => self.fill_scalar(),
             Some(idx) => scalar_at_unchecked(&self.values(), idx),
         }
     }
