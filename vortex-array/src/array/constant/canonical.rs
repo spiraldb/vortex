@@ -13,7 +13,7 @@ use crate::{ArrayDType, Canonical, IntoCanonical};
 
 impl IntoCanonical for ConstantArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        let scalar = self.owned_scalar();
+        let scalar = &self.owned_scalar();
 
         let validity = match self.dtype().nullability() {
             Nullability::NonNullable => Validity::NonNullable,

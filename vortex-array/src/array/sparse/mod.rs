@@ -1,5 +1,5 @@
 use ::serde::{Deserialize, Serialize};
-use vortex_dtype::{match_each_integer_ptype, DType, Nullability, PType};
+use vortex_dtype::{match_each_integer_ptype, DType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
@@ -75,7 +75,7 @@ impl SparseArray {
             values.dtype().clone(),
             len,
             SparseMetadata {
-                indices_ptype: *indices_ptype,
+                indices_ptype,
                 indices_offset,
                 indices_len: indices.len(),
                 fill_value,

@@ -62,7 +62,7 @@ impl VarBinArray {
 
         let metadata = VarBinMetadata {
             validity: validity.to_metadata(offsets.len() - 1)?,
-            offsets_ptype: *offsets_ptype,
+            offsets_ptype,
             bytes_len: bytes.len(),
         };
 
