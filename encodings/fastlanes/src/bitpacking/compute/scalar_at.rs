@@ -34,7 +34,7 @@ mod test {
     use vortex::IntoArray;
     use vortex_buffer::Buffer;
     use vortex_dtype::{DType, Nullability, PType};
-    use vortex_scalar::{Scalar, ScalarValue};
+    use vortex_scalar::Scalar;
 
     use crate::BitPackedArray;
 
