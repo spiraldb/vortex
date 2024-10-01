@@ -163,7 +163,9 @@ impl FSSTArray {
 impl AcceptArrayVisitor for FSSTArray {
     fn accept(&self, visitor: &mut dyn vortex::visitor::ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("symbols", &self.symbols())?;
-        visitor.visit_child("codes", &self.codes())
+        visitor.visit_child("symbol_lengths", &self.symbol_lengths())?;
+        visitor.visit_child("codes", &self.codes())?;
+        visitor.visit_child("uncompressed_lengths", &self.uncompressed_lengths())
     }
 }
 

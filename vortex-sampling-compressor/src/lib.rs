@@ -165,6 +165,12 @@ impl<'a> SamplingCompressor<'a> {
         cloned
     }
 
+    pub fn including(&self, compressor: CompressorRef<'a>) -> Self {
+        let mut cloned = self.clone();
+        cloned.compressors.insert(compressor);
+        cloned
+    }
+
     #[allow(clippy::same_name_method)]
     pub fn compress(
         &self,
