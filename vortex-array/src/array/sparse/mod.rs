@@ -20,11 +20,9 @@ impl_encoding!("vortex.sparse", ids::SPARSE, Sparse);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SparseMetadata {
-    indices_dtype: DType,
     // Offset value for patch indices as a result of slicing
     indices_offset: usize,
     indices_len: usize,
-    len: usize,
     fill_value: Scalar,
 }
 
@@ -75,10 +73,8 @@ impl SparseArray {
             values.dtype().clone(),
             len,
             SparseMetadata {
-                indices_dtype: indices.dtype().clone(),
                 indices_offset,
                 indices_len: indices.len(),
-                len,
                 fill_value,
             },
             [indices, values].into(),
@@ -101,11 +97,7 @@ impl SparseArray {
     #[inline]
     pub fn indices(&self) -> Array {
         self.as_ref()
-            .child(
-                0,
-                &self.metadata().indices_dtype,
-                self.metadata().indices_len,
-            )
+            .child(0, &DType::IDX, self.metadata().indices_len)
             .vortex_expect("Missing indices array in SparseArray")
     }
 

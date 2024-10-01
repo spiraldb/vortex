@@ -13,6 +13,16 @@ pub struct StructScalar<'a> {
 }
 
 impl<'a> StructScalar<'a> {
+    pub fn try_new(dtype: &'a DType, value: &'a ScalarValue) -> VortexResult<Self> {
+        if !matches!(dtype, DType::Struct(..)) {
+            vortex_bail!("Expected struct scalar, found {}", dtype)
+        }
+        Ok(Self {
+            dtype,
+            fields: value.as_list()?.cloned(),
+        })
+    }
+
     #[inline]
     pub fn dtype(&self) -> &'a DType {
         self.dtype
@@ -127,12 +137,6 @@ impl<'a> TryFrom<&'a Scalar> for StructScalar<'a> {
     type Error = VortexError;
 
     fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
-        if !matches!(value.dtype(), DType::Struct(..)) {
-            vortex_bail!("Expected struct scalar, found {}", value.dtype())
-        }
-        Ok(Self {
-            dtype: value.dtype(),
-            fields: value.value.as_list()?.cloned(),
-        })
+        Self::try_new(value.dtype(), &value.value)
     }
 }

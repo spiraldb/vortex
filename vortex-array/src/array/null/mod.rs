@@ -14,16 +14,14 @@ mod compute;
 impl_encoding!("vortex.null", ids::NULL, Null);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NullMetadata {
-    len: usize,
-}
+pub struct NullMetadata;
 
 impl NullArray {
     pub fn new(len: usize) -> Self {
         Self::try_from_parts(
             DType::Null,
             len,
-            NullMetadata { len },
+            NullMetadata,
             [].into(),
             StatsSet::nulls(len, &DType::Null),
         )

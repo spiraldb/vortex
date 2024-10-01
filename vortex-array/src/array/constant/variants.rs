@@ -55,8 +55,7 @@ impl NullArrayTrait for ConstantArray {}
 impl BoolArrayTrait for ConstantArray {
     fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
         let value = self
-            .scalar()
-            .value()
+            .scalar_value()
             .as_bool()
             .vortex_expect("Failed to get bool value from constant array");
         if value.unwrap_or(false) {
@@ -69,8 +68,7 @@ impl BoolArrayTrait for ConstantArray {
     fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         // Must be a boolean scalar
         let value = self
-            .scalar()
-            .value()
+            .scalar_value()
             .as_bool()
             .vortex_expect("Failed to get bool value from constant array");
 
@@ -85,7 +83,7 @@ impl BoolArrayTrait for ConstantArray {
 impl<T> Accessor<T> for ConstantArray
 where
     T: Clone,
-    T: TryFrom<Scalar, Error = VortexError>,
+    T: TryFrom<ScalarValue, Error = VortexError>,
 {
     fn array_len(&self) -> usize {
         self.len()
@@ -96,84 +94,84 @@ where
     }
 
     fn value_unchecked(&self, _index: usize) -> T {
-        T::try_from(self.scalar().clone()).vortex_expect("Failed to convert scalar to value")
+        T::try_from(self.scalar_value().clone()).vortex_expect("Failed to convert scalar to value")
     }
 
     fn array_validity(&self) -> Validity {
-        if self.scalar().is_valid() {
-            Validity::AllValid
-        } else {
+        if self.scalar_value().is_null() {
             Validity::AllInvalid
+        } else {
+            Validity::AllValid
         }
     }
 }
 
 impl PrimitiveArrayTrait for ConstantArray {
     fn f32_accessor(&self) -> Option<AccessorRef<f32>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::F32, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn f64_accessor(&self) -> Option<AccessorRef<f64>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::F64, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn u8_accessor(&self) -> Option<AccessorRef<u8>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::U8, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn u16_accessor(&self) -> Option<AccessorRef<u16>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::U16, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn u32_accessor(&self) -> Option<AccessorRef<u32>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::U32, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn u64_accessor(&self) -> Option<AccessorRef<u64>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::U64, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn i8_accessor(&self) -> Option<AccessorRef<i8>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::I8, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn i16_accessor(&self) -> Option<AccessorRef<i16>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::I16, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn i32_accessor(&self) -> Option<AccessorRef<i32>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::I32, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
     }
 
     fn i64_accessor(&self) -> Option<AccessorRef<i64>> {
-        match self.scalar().dtype() {
+        match self.dtype() {
             DType::Primitive(PType::I64, _) => Some(Arc::new(self.clone())),
             _ => None,
         }
@@ -186,7 +184,7 @@ impl BinaryArrayTrait for ConstantArray {}
 
 impl StructArrayTrait for ConstantArray {
     fn field(&self, idx: usize) -> Option<Array> {
-        StructScalar::try_from(self.scalar())
+        StructScalar::try_new(self.dtype(), self.scalar_value())
             .ok()?
             .field_by_idx(idx)
             .map(|scalar| ConstantArray::new(scalar, self.len()).into_array())
@@ -194,7 +192,7 @@ impl StructArrayTrait for ConstantArray {
 
     fn project(&self, projection: &[Field]) -> VortexResult<Array> {
         Ok(ConstantArray::new(
-            StructScalar::try_from(self.scalar())?.project(projection)?,
+            StructScalar::try_new(self.dtype(), self.scalar_value())?.project(projection)?,
             self.len(),
         )
         .into_array())
@@ -205,8 +203,8 @@ impl ListArrayTrait for ConstantArray {}
 
 impl ExtensionArrayTrait for ConstantArray {
     fn storage_array(&self) -> Array {
-        let scalar_ext =
-            ExtScalar::try_from(self.scalar()).vortex_expect("Expected an extension scalar");
+        let scalar_ext = ExtScalar::try_new(self.dtype(), self.scalar_value())
+            .vortex_expect("Expected an extension scalar");
 
         // FIXME(ngates): there's not enough information to get the storage array.
         let n = self.dtype().nullability();
