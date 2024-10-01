@@ -44,22 +44,10 @@ impl VarBinArray {
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        let offsets_ptype = match offsets.dtype() {
-            DType::Primitive(
-                ptype @ (PType::U8
-                | PType::U16
-                | PType::U32
-                | PType::U64
-                | PType::I8
-                | PType::I16
-                | PType::I32
-                | PType::I64),
-                Nullability::NonNullable,
-            ) => ptype,
-            _ => {
-                vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype())
-            }
-        };
+        if !offsets.dtype().is_int() || offsets.dtype().is_nullable() {
+            vortex_bail!(MismatchedTypes: "non nullable int", offsets.dtype());
+        }
+        let offsets_ptype = PType::try_from(offsets.dtype()).vortex_unwrap();
         if !matches!(bytes.dtype(), &DType::BYTES) {
             vortex_bail!(MismatchedTypes: "u8", bytes.dtype());
         }

@@ -44,15 +44,10 @@ impl SparseArray {
         indices_offset: usize,
         fill_value: Scalar,
     ) -> VortexResult<Self> {
-        let indices_dtype = indices.dtype();
-        let indices_ptype = if !matches!(indices_dtype, &DType::IDX) {
-            vortex_bail!("Cannot use {} as indices", indices_dtype);
-        } else {
-            match indices_dtype {
-                DType::Primitive(ptype, _) => ptype,
-                ptype => vortex_bail!("programmer error {}", ptype),
-            }
-        };
+        if !matches!(indices.dtype(), &DType::IDX) {
+            vortex_bail!("Cannot use {} as indices", indices.dtype());
+        }
+        let indices_ptype = PType::try_from(&DType::IDX)?;
         if values.dtype() != fill_value.dtype() {
             vortex_bail!(
                 "Mismatched fill value dtype {} and values dtype {}",
@@ -105,11 +100,7 @@ impl SparseArray {
     #[inline]
     pub fn indices(&self) -> Array {
         self.as_ref()
-            .child(
-                0,
-                &DType::Primitive(self.metadata().indices_ptype, Nullability::NonNullable),
-                self.metadata().indices_len,
-            )
+            .child(0, &DType::IDX, self.metadata().indices_len)
             .vortex_expect("Missing indices array in SparseArray")
     }
 
