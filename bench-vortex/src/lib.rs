@@ -20,6 +20,7 @@ use vortex::{Array, Context, IntoArray};
 use vortex_dtype::DType;
 use vortex_fastlanes::DeltaEncoding;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
+use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
 use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
 use vortex_sampling_compressor::compressors::date_time_parts::DateTimePartsCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
@@ -54,6 +55,7 @@ lazy_static! {
 lazy_static! {
     pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
         &ALPCompressor as CompressorRef<'static>,
+        &ALPRDCompressor as CompressorRef<'static>,
         &DictCompressor,
         &BitPackedCompressor,
         &FoRCompressor,

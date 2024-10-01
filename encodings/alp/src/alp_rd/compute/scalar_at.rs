@@ -41,16 +41,16 @@ mod test {
     use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
 
-    use crate::{Encoder, RealDouble, RealFloat};
+    use crate::Encoder;
 
     macro_rules! test_scalar_at_generic {
-        ($typ:ty, $rd:ty) => {
+        ($typ:ty) => {
             let a: $typ = (0.1 as $typ).next_up();
             let b: $typ = (0.2 as $typ).next_up();
             let outlier: $typ = (3e30 as $typ).next_up();
 
             let array = PrimitiveArray::from(vec![a, b, outlier]);
-            let encoded = Encoder::<$rd>::new(&[a, b]).encode(&array);
+            let encoded = Encoder::new(&[a, b]).encode(&array);
 
             // Make sure that we're testing the exception pathway.
             assert!(encoded.left_parts_exceptions().is_some());
@@ -66,7 +66,7 @@ mod test {
 
     #[test]
     fn test_scalar_at() {
-        test_scalar_at_generic!(f32, RealFloat);
-        test_scalar_at_generic!(f64, RealDouble);
+        test_scalar_at_generic!(f32);
+        test_scalar_at_generic!(f64);
     }
 }

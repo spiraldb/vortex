@@ -23,7 +23,6 @@ mod compute;
 mod variants;
 
 use std::collections::HashMap;
-use std::marker::PhantomData;
 use std::ops::{Shl, Shr};
 
 use itertools::Itertools;
@@ -35,6 +34,8 @@ use vortex_error::{VortexExpect, VortexUnwrap};
 use vortex_fastlanes::{bitpack_encode_unchecked, BitPackedArray};
 use vortex_scalar::Scalar;
 
+use crate::match_each_alp_float_ptype;
+
 /// Max number of bits to cut from the MSB section of each float.
 const CUT_LIMIT: usize = 16;
 
@@ -43,39 +44,30 @@ const MAX_DICT_SIZE: u8 = 8;
 mod private {
     pub trait Sealed {}
 
-    impl Sealed for super::RealDouble {}
-    impl Sealed for super::RealFloat {}
+    impl Sealed for f32 {}
+    impl Sealed for f64 {}
 }
 
-pub trait ALPRD: private::Sealed {
-    type FLOAT: Float + Copy;
-    type UINT: PrimInt + One + Copy;
+pub trait ALPRDFloat: private::Sealed + Float + Copy + NativePType {
+    type UINT: NativePType + PrimInt + One + Copy;
 
-    const BITS: usize = size_of::<Self::FLOAT>() * 8;
+    const BITS: usize = size_of::<Self>() * 8;
 
-    const PTYPE: PType;
-
-    fn from_bits(bits: Self::UINT) -> Self::FLOAT;
-    fn to_bits(value: Self::FLOAT) -> Self::UINT;
+    fn from_bits(bits: Self::UINT) -> Self;
+    fn to_bits(value: Self) -> Self::UINT;
 
     fn to_u16(bits: Self::UINT) -> u16;
     fn from_u16(value: u16) -> Self::UINT;
 }
 
-pub struct RealFloat;
-pub struct RealDouble;
-
-impl ALPRD for RealDouble {
-    type FLOAT = f64;
+impl ALPRDFloat for f64 {
     type UINT = u64;
 
-    const PTYPE: PType = PType::F64;
-
-    fn from_bits(bits: Self::UINT) -> Self::FLOAT {
+    fn from_bits(bits: Self::UINT) -> Self {
         f64::from_bits(bits)
     }
 
-    fn to_bits(value: Self::FLOAT) -> Self::UINT {
+    fn to_bits(value: Self) -> Self::UINT {
         value.to_bits()
     }
 
@@ -88,17 +80,14 @@ impl ALPRD for RealDouble {
     }
 }
 
-impl ALPRD for RealFloat {
-    type FLOAT = f32;
+impl ALPRDFloat for f32 {
     type UINT = u32;
 
-    const PTYPE: PType = PType::F32;
-
-    fn from_bits(bits: Self::UINT) -> Self::FLOAT {
+    fn from_bits(bits: Self::UINT) -> Self {
         f32::from_bits(bits)
     }
 
-    fn to_bits(value: Self::FLOAT) -> Self::UINT {
+    fn to_bits(value: Self) -> Self::UINT {
         value.to_bits()
     }
 
@@ -114,20 +103,18 @@ impl ALPRD for RealFloat {
 /// Encoder for ALP-RD (real doubles) values.
 ///
 /// The encoder builds a sample of values from there.
-pub struct Encoder<T> {
+pub struct Encoder {
     right_bit_width: u8,
     codes: Vec<u16>,
-    _phantom_data: PhantomData<T>,
 }
 
-impl<T> Encoder<T>
-where
-    T: ALPRD,
-    T::FLOAT: NativePType,
-    T::UINT: NativePType,
-{
+impl Encoder {
     /// Build a new encoder from a sample of doubles.
-    pub fn new(sample: &[T::FLOAT]) -> Self {
+    pub fn new<T>(sample: &[T]) -> Self
+    where
+        T: ALPRDFloat + NativePType,
+        T::UINT: NativePType,
+    {
         let dictionary = find_best_dictionary::<T>(sample);
 
         let mut codes = vec![0; dictionary.dictionary.len()];
@@ -139,7 +126,6 @@ where
         Self {
             right_bit_width: dictionary.right_bit_width,
             codes,
-            _phantom_data: PhantomData,
         }
     }
 
@@ -147,7 +133,17 @@ where
     ///
     /// Each value will be split into a left and right component, which are compressed individually.
     pub fn encode(&self, array: &PrimitiveArray) -> ALPRDArray {
-        let doubles = array.maybe_null_slice::<T::FLOAT>();
+        match_each_alp_float_ptype!(array.ptype(), |$P| {
+            self.encode_generic::<$P>(array)
+        })
+    }
+
+    fn encode_generic<T>(&self, array: &PrimitiveArray) -> ALPRDArray
+    where
+        T: ALPRDFloat + NativePType,
+        T::UINT: NativePType,
+    {
+        let doubles = array.maybe_null_slice::<T>();
 
         let mut left_parts: Vec<u16> = Vec::with_capacity(doubles.len());
         let mut right_parts: Vec<T::UINT> = Vec::with_capacity(doubles.len());
@@ -160,7 +156,9 @@ where
 
         for v in doubles.iter().copied() {
             right_parts.push(T::to_bits(v) & right_mask);
-            left_parts.push(T::to_u16(T::to_bits(v).shr(self.right_bit_width as _)));
+            left_parts.push(<T as ALPRDFloat>::to_u16(
+                T::to_bits(v).shr(self.right_bit_width as _),
+            ));
         }
 
         // dict-encode the left-parts, keeping track of exceptions
@@ -233,14 +231,14 @@ where
 }
 
 // Only applies for F64.
-pub fn alp_rd_decode<T: ALPRD>(
+pub fn alp_rd_decode<T: ALPRDFloat>(
     left_parts: &[u16],
     left_parts_dict: &[u16],
     right_bit_width: u8,
     right_parts: &[T::UINT],
     exc_pos: &[u64],
     exceptions: &[u16],
-) -> Vec<T::FLOAT> {
+) -> Vec<T> {
     assert_eq!(
         left_parts.len(),
         right_parts.len(),
@@ -264,12 +262,12 @@ pub fn alp_rd_decode<T: ALPRD>(
 
     // Decode with bit-packing and dict unpacking.
     for code in left_parts {
-        left_parts_decoded.push(T::from_u16(dict[*code as usize]));
+        left_parts_decoded.push(<T as ALPRDFloat>::from_u16(dict[*code as usize]));
     }
 
     // Apply the exception patches. Only applies for the left-parts
     for (pos, val) in exc_pos.iter().zip(exceptions.iter()) {
-        left_parts_decoded[*pos as usize] = T::from_u16(*val);
+        left_parts_decoded[*pos as usize] = <T as ALPRDFloat>::from_u16(*val);
     }
 
     // recombine the left-and-right parts, adjusting by the right_bit_width.
@@ -282,7 +280,7 @@ pub fn alp_rd_decode<T: ALPRD>(
 
 /// Find the best "cut point" for a set of floating point values such that we can
 /// cast them all to the relevant value instead.
-fn find_best_dictionary<T: ALPRD>(samples: &[T::FLOAT]) -> ALPRDDictionary {
+fn find_best_dictionary<T: ALPRDFloat>(samples: &[T]) -> ALPRDDictionary {
     let mut best_est_size = f64::MAX;
     let mut best_dict = ALPRDDictionary::default();
 
@@ -306,8 +304,8 @@ fn find_best_dictionary<T: ALPRD>(samples: &[T::FLOAT]) -> ALPRDDictionary {
 }
 
 /// Build dictionary of the leftmost bits.
-fn build_left_parts_dictionary<T: ALPRD>(
-    samples: &[T::FLOAT],
+fn build_left_parts_dictionary<T: ALPRDFloat>(
+    samples: &[T],
     right_bw: u8,
     max_dict_size: u8,
 ) -> (ALPRDDictionary, usize) {
@@ -320,7 +318,7 @@ fn build_left_parts_dictionary<T: ALPRD>(
     let counts = samples
         .iter()
         .copied()
-        .map(|v| T::to_u16(T::to_bits(v).shr(right_bw as _)))
+        .map(|v| <T as ALPRDFloat>::to_u16(T::to_bits(v).shr(right_bw as _)))
         .counts();
 
     // Sorted counts: sort by negative count so that heavy hitters sort first.

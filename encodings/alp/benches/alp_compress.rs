@@ -7,9 +7,7 @@ use vortex::array::PrimitiveArray;
 use vortex::validity::Validity;
 use vortex::variants::PrimitiveArrayTrait;
 use vortex::IntoCanonical;
-use vortex_alp::{
-    alp_encode_components, ALPArray, ALPFloat, Encoder, Exponents, RealDouble, RealFloat,
-};
+use vortex_alp::{alp_encode_components, ALPArray, ALPFloat, ALPRDFloat, Encoder, Exponents};
 use vortex_dtype::NativePType;
 
 fn main() {
@@ -22,22 +20,11 @@ fn alp_compress<T: ALPFloat>(n: usize) -> (Exponents, Vec<T::ALPInt>, Vec<u64>, 
     T::encode(values.as_slice(), None)
 }
 
-#[divan::bench(args = [100_000, 10_000_000])]
-fn rd_compress_f32(bencher: Bencher, n: usize) {
-    let values: Vec<f32> = vec![1.23; n];
+#[divan::bench(types = [f32, f64], args = [100_000, 10_000_000])]
+fn rd_compress<T: ALPRDFloat>(bencher: Bencher, n: usize) {
+    let values: Vec<T> = vec![T::from(1.23).unwrap(); n];
     let primitive = PrimitiveArray::from(values);
-    let encoder = Encoder::<RealFloat>::new(&[1.23]);
-
-    bencher.bench_local(|| encoder.encode(&primitive));
-}
-
-#[divan::bench(args = [100_000, 10_000_000])]
-fn rd_compress_f64(bencher: Bencher, n: usize) {
-    let values: Vec<f64> = vec![1.23; n];
-    let primitive = PrimitiveArray::from(values);
-    let encoder = Encoder::<RealDouble>::new(&[1.23]);
-
-    assert!(encoder.encode(&primitive).left_parts_exceptions().is_none());
+    let encoder = Encoder::new(&[T::from(1.23).unwrap()]);
 
     bencher.bench_local(|| encoder.encode(&primitive));
 }

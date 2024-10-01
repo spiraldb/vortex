@@ -9,7 +9,6 @@ use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
 use crate::alp_rd::alp_rd_decode;
-use crate::{RealDouble, RealFloat};
 
 impl_encoding!("vortex.alprd", ids::ALP_RD, ALPRD);
 
@@ -169,7 +168,7 @@ impl IntoCanonical for ALPRDArray {
 
         let decoded_array = if self.metadata().is_f32 {
             PrimitiveArray::from_vec(
-                alp_rd_decode::<RealFloat>(
+                alp_rd_decode::<f32>(
                     left_parts.maybe_null_slice::<u16>(),
                     left_parts_dict,
                     self.metadata().right_bit_width,
@@ -181,7 +180,7 @@ impl IntoCanonical for ALPRDArray {
             )
         } else {
             PrimitiveArray::from_vec(
-                alp_rd_decode::<RealDouble>(
+                alp_rd_decode::<f64>(
                     left_parts.maybe_null_slice::<u16>(),
                     left_parts_dict,
                     self.metadata().right_bit_width,
@@ -229,7 +228,7 @@ mod test {
     use vortex::array::PrimitiveArray;
     use vortex::{IntoArray, IntoCanonical};
 
-    use crate::{alp_rd, RealDouble, RealFloat};
+    use crate::alp_rd;
 
     macro_rules! n_reals {
         ($seed:expr, $n:expr) => {
@@ -243,26 +242,8 @@ mod test {
         };
     }
 
-    #[test]
-    fn test_array_encode_f32() {
-        const SEED: f32 = 0.1f32.next_up();
-        let reals = n_reals!(SEED, 1024);
-
-        let real_floats = PrimitiveArray::from(reals.clone());
-        let encoder = alp_rd::Encoder::<RealFloat>::new(&[SEED]);
-        let rd_array = encoder.encode(&real_floats);
-        let decoded = rd_array
-            .into_array()
-            .into_canonical()
-            .unwrap()
-            .into_primitive()
-            .unwrap();
-
-        assert_eq!(decoded.maybe_null_slice::<f32>(), &reals);
-    }
-
     macro_rules! test_encode_nulls_excs_generic {
-        ($typ:ty, $rd:ty, $seed:expr) => {{
+        ($typ:ty, $seed:expr) => {{
             // Create a vector of 1024 "real" doubles
             let reals = n_reals!($seed, 1024);
             // Null out some of the values.
@@ -275,7 +256,7 @@ mod test {
             let real_array = PrimitiveArray::from_nullable_vec(reals.clone());
 
             // Pick a seed that we know will trigger lots of exceptions.
-            let encoder: alp_rd::Encoder<$rd> = alp_rd::Encoder::new(&[$seed / 100.0]);
+            let encoder: alp_rd::Encoder = alp_rd::Encoder::new(&[$seed / 100.0]);
 
             let rd_array = encoder.encode(&real_array);
 
@@ -294,7 +275,7 @@ mod test {
 
     #[test]
     fn test_array_encode_with_nulls_and_exceptions() {
-        test_encode_nulls_excs_generic!(f32, RealFloat, 1.123_848_f32);
-        test_encode_nulls_excs_generic!(f64, RealDouble, 1.123_848_591_110_992_f64);
+        test_encode_nulls_excs_generic!(f32, 1.123_848_f32);
+        test_encode_nulls_excs_generic!(f64, 1.123_848_591_110_992_f64);
     }
 }

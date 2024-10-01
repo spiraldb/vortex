@@ -29,7 +29,7 @@ mod test {
     use vortex::compute::filter;
     use vortex::IntoArrayVariant;
 
-    use crate::{Encoder, RealDouble, RealFloat};
+    use crate::Encoder;
 
     macro_rules! test_filter_generic {
         ($typ:ty, $rd:ty) => {
@@ -38,7 +38,7 @@ mod test {
             let outlier: $typ = (3e25 as $typ).next_up();
 
             let array = PrimitiveArray::from(vec![a, b, outlier]);
-            let encoded = Encoder::<$rd>::new(&[a, b]).encode(&array);
+            let encoded = Encoder::new(&[a, b]).encode(&array);
 
             // Make sure that we're testing the exception pathway.
             assert!(encoded.left_parts_exceptions().is_some());

@@ -29,16 +29,16 @@ mod test {
     use vortex::compute::slice;
     use vortex::IntoArrayVariant;
 
-    use crate::{Encoder, RealDouble, RealFloat};
+    use crate::Encoder;
 
     macro_rules! test_slice_generic {
-        ($typ:ty, $rd:ty) => {
+        ($typ:ty) => {
             let a: $typ = (0.1 as $typ).next_up();
             let b: $typ = (0.2 as $typ).next_up();
             let outlier: $typ = (3e30 as $typ).next_up();
 
             let array = PrimitiveArray::from(vec![a, b, outlier]);
-            let encoded = Encoder::<$rd>::new(&[a, b]).encode(&array);
+            let encoded = Encoder::new(&[a, b]).encode(&array);
 
             assert!(encoded.left_parts_exceptions().is_some());
 
@@ -53,7 +53,7 @@ mod test {
 
     #[test]
     fn test_slice() {
-        test_slice_generic!(f32, RealFloat);
-        test_slice_generic!(f64, RealDouble);
+        test_slice_generic!(f32);
+        test_slice_generic!(f64);
     }
 }
