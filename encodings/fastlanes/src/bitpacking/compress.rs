@@ -40,6 +40,30 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
     )
 }
 
+/// Bitpack an array into the specified bit-width without checking statistics.
+///
+/// # Safety
+///
+/// It is the caller's responsibility to ensure that all values in the array can lossless pack
+/// into the specified bit-width.
+///
+/// Failure to do so will result in data loss.
+pub unsafe fn bitpack_encode_unchecked(
+    array: PrimitiveArray,
+    bit_width: usize,
+) -> VortexResult<BitPackedArray> {
+    let packed = bitpack(&array, bit_width)?;
+
+    BitPackedArray::try_new(
+        packed,
+        array.ptype(),
+        array.validity(),
+        None,
+        bit_width,
+        array.len(),
+    )
+}
+
 /// Bitpack a [PrimitiveArray] to the given width.
 ///
 /// On success, returns a [Buffer] containing the packed data.

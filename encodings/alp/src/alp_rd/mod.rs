@@ -27,12 +27,12 @@ use std::marker::PhantomData;
 use std::ops::{Shl, Shr};
 
 use itertools::Itertools;
-use num_traits::{One, PrimInt};
+use num_traits::{Float, One, PrimInt};
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::{ArrayDType, IntoArray};
 use vortex_dtype::{DType, NativePType, Nullability, PType};
 use vortex_error::{VortexExpect, VortexUnwrap};
-use vortex_fastlanes::BitPackedArray;
+use vortex_fastlanes::{bitpack_encode_unchecked, BitPackedArray};
 use vortex_scalar::Scalar;
 
 /// Max number of bits to cut from the MSB section of each float.
@@ -48,7 +48,7 @@ mod private {
 }
 
 pub trait ALPRD: private::Sealed {
-    type FLOAT: Copy;
+    type FLOAT: Float + Copy;
     type UINT: PrimInt + One + Copy;
 
     const BITS: usize = size_of::<Self::FLOAT>() * 8;
@@ -116,7 +116,6 @@ impl ALPRD for RealFloat {
 /// The encoder builds a sample of values from there.
 pub struct Encoder<T> {
     right_bit_width: u8,
-    dictionary: HashMap<u16, u16>,
     codes: Vec<u16>,
     _phantom_data: PhantomData<T>,
 }
@@ -130,10 +129,16 @@ where
     /// Build a new encoder from a sample of doubles.
     pub fn new(sample: &[T::FLOAT]) -> Self {
         let dictionary = find_best_dictionary::<T>(sample);
+
+        let mut codes = vec![0; dictionary.dictionary.len()];
+        dictionary.dictionary.into_iter().for_each(|(bits, code)| {
+            // write the reverse mapping into the codes vector.
+            codes[code as usize] = bits
+        });
+
         Self {
             right_bit_width: dictionary.right_bit_width,
-            dictionary: dictionary.dictionary,
-            codes: dictionary.codes,
+            codes,
             _phantom_data: PhantomData,
         }
     }
@@ -151,7 +156,7 @@ where
 
         // mask for right-parts
         let right_mask = T::UINT::one().shl(self.right_bit_width as _) - T::UINT::one();
-        let left_bit_width = self.dictionary.len().next_power_of_two().ilog2().max(1) as u8;
+        let left_bit_width = self.codes.len().next_power_of_two().ilog2().max(1) as u8;
 
         for v in doubles.iter().copied() {
             right_parts.push(T::to_bits(v) & right_mask);
@@ -161,27 +166,32 @@ where
         // dict-encode the left-parts, keeping track of exceptions
         for (idx, left) in left_parts.iter_mut().enumerate() {
             // TODO: revisit if we need to change the branch order for perf.
-            if let Some(code) = self.dictionary.get(left) {
-                *left = *code;
+            if let Some(code) = self.codes.iter().position(|v| *v == *left) {
+                *left = code as u16;
             } else {
                 exceptions.push(*left);
                 exceptions_pos.push(idx as _);
 
-                *left = self.dictionary.len() as u16;
+                *left = 0u16;
             }
         }
 
         // Bit-pack down the encoded left-parts array that have been dictionary encoded.
         let primitive_left = PrimitiveArray::from_vec(left_parts, array.validity());
-        let packed_left = BitPackedArray::encode(primitive_left.as_ref(), left_bit_width as _)
-            .vortex_unwrap()
-            .into_array();
+        // SAFETY: by construction, all values in left_parts can be packed to left_bit_width.
+        let packed_left = unsafe {
+            bitpack_encode_unchecked(primitive_left, left_bit_width as _)
+                .vortex_unwrap()
+                .into_array()
+        };
 
         let primitive_right = PrimitiveArray::from_vec(right_parts, array.validity());
-        let packed_right =
-            BitPackedArray::encode(primitive_right.as_ref(), self.right_bit_width as _)
+        // SAFETY: by construction, all values in right_parts are right_bit_width + leading zeros.
+        let packed_right = unsafe {
+            bitpack_encode_unchecked(primitive_right, self.right_bit_width as _)
                 .vortex_unwrap()
-                .into_array();
+                .into_array()
+        };
 
         // Bit-pack the dict-encoded left-parts
         // Bit-pack the right-parts
@@ -244,11 +254,11 @@ pub fn alp_rd_decode<T: ALPRD>(
     );
 
     // Prepare the dictionary for decoding by adding the extra value for lookups to match.
-    let mut dict = Vec::with_capacity(left_parts_dict.len() + 1);
+    let mut dict = Vec::with_capacity(left_parts_dict.len());
     dict.extend_from_slice(left_parts_dict);
-    // Add an extra code for out-of-dict values. These will be overwritten with exceptions later.
-    const EXCEPTION_SENTINEL: u16 = 0xDEAD;
-    dict.push(EXCEPTION_SENTINEL);
+    // // Add an extra code for out-of-dict values. These will be overwritten with exceptions later.
+    // const EXCEPTION_SENTINEL: u16 = 0xDEAD;
+    // dict.push(EXCEPTION_SENTINEL);
 
     let mut left_parts_decoded: Vec<T::UINT> = Vec::with_capacity(left_parts.len());
 
@@ -336,15 +346,9 @@ fn build_left_parts_dictionary<T: ALPRD>(
     // Left bit-width is determined based on the actual dictionary size.
     let left_bw = dictionary.len().next_power_of_two().ilog2().max(1) as u8;
 
-    let mut codes = vec![0; dictionary.len()];
-    for (bits, code) in dictionary.iter() {
-        codes[*code as usize] = *bits;
-    }
-
     (
         ALPRDDictionary {
             dictionary,
-            codes,
             right_bit_width: right_bw,
             left_bit_width: left_bw,
         },
@@ -371,8 +375,6 @@ fn estimate_compression_size(
 struct ALPRDDictionary {
     /// Items in the dictionary are bit patterns, along with their 16-bit encoding.
     dictionary: HashMap<u16, u16>,
-    /// codes[i] = the left-bits pattern of the i-th code.
-    codes: Vec<u16>,
     /// Recreate the dictionary by encoding the hash instead.
     /// The (compressed) left bit width. This is after bit-packing the dictionary codes.
     left_bit_width: u8,
