@@ -2,7 +2,7 @@ use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, MutableBuffer};
 use itertools::Itertools;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType};
 use vortex_error::{VortexError, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_scalar::ScalarValue;
 
 use crate::array::primitive::PrimitiveArray;
 use crate::array::sparse::SparseArray;
@@ -46,7 +46,7 @@ fn canonicalize_sparse_bools(
     values: BooleanBuffer,
     indices: &[usize],
     len: usize,
-    fill_value: &Scalar,
+    fill_value: &ScalarValue,
     mut validity_buffer: BooleanBufferBuilder,
 ) -> VortexResult<Canonical> {
     let fill_bool: bool = if fill_value.is_null() {
@@ -67,12 +67,12 @@ fn canonicalize_sparse_bools(
 }
 
 fn canonicalize_sparse_primitives<
-    T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>,
+    T: NativePType + for<'a> TryFrom<&'a ScalarValue, Error = VortexError>,
 >(
     values: &[T],
     indices: &[usize],
     len: usize,
-    fill_value: &Scalar,
+    fill_value: &ScalarValue,
     mut validity: BooleanBufferBuilder,
 ) -> VortexResult<Canonical> {
     let primitive_fill = if fill_value.is_null() {

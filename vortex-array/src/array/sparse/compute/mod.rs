@@ -9,7 +9,7 @@ use crate::compute::{
     search_sorted, take, ArrayCompute, FilterFn, SearchResult, SearchSortedFn, SearchSortedSide,
     SliceFn, TakeFn,
 };
-use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use crate::{Array, IntoArray, IntoArrayVariant};
 
 mod slice;
 mod take;
@@ -38,18 +38,16 @@ impl ArrayCompute for SparseArray {
 
 impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        match self.search_index(index)?.to_found() {
-            None => self.fill_value().clone().cast(self.dtype()),
-            Some(idx) => scalar_at_unchecked(&self.values(), idx).cast(self.dtype()),
-        }
+        Ok(match self.search_index(index)?.to_found() {
+            None => self.fill_scalar(),
+            Some(idx) => scalar_at_unchecked(&self.values(), idx),
+        })
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         match self.search_index(index).vortex_unwrap().to_found() {
-            None => self.fill_value().clone().cast(self.dtype()).vortex_unwrap(),
-            Some(idx) => scalar_at_unchecked(&self.values(), idx)
-                .cast(self.dtype())
-                .vortex_unwrap(),
+            None => self.fill_scalar(),
+            Some(idx) => scalar_at_unchecked(&self.values(), idx),
         }
     }
 }
@@ -115,8 +113,7 @@ impl FilterFn for SparseArray {
 #[cfg(test)]
 mod test {
     use rstest::{fixture, rstest};
-    use vortex_dtype::{DType, Nullability, PType};
-    use vortex_scalar::Scalar;
+    use vortex_scalar::ScalarValue;
 
     use crate::array::primitive::PrimitiveArray;
     use crate::array::sparse::SparseArray;
@@ -131,7 +128,7 @@ mod test {
             PrimitiveArray::from(vec![2u64, 9, 15]).into_array(),
             PrimitiveArray::from_vec(vec![33_i32, 44, 55], Validity::AllValid).into_array(),
             20,
-            Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable)),
+            ScalarValue::Null,
         )
         .unwrap()
         .into_array()
@@ -176,7 +173,7 @@ mod test {
             PrimitiveArray::from(vec![0u64]).into_array(),
             PrimitiveArray::from_vec(vec![0u8], Validity::AllValid).into_array(),
             2,
-            Scalar::null(DType::Primitive(PType::U8, Nullability::Nullable)),
+            ScalarValue::Null,
         )
         .unwrap()
         .into_array();
@@ -216,7 +213,7 @@ mod test {
             PrimitiveArray::from(vec![0_u64, 3, 6]).into_array(),
             PrimitiveArray::from_vec(vec![33_i32, 44, 55], Validity::AllValid).into_array(),
             7,
-            Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable)),
+            ScalarValue::Null,
         )
         .unwrap()
         .into_array();

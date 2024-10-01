@@ -455,8 +455,6 @@ mod test {
     };
     use arrow_buffer::NullBufferBuilder;
     use arrow_schema::{DataType, Field};
-    use vortex_dtype::Nullability;
-    use vortex_scalar::Scalar;
 
     use crate::array::{PrimitiveArray, SparseArray, StructArray};
     use crate::arrow::FromArrowArray;
@@ -483,7 +481,7 @@ mod test {
                         PrimitiveArray::from_vec(vec![0u64; 1], Validity::NonNullable).into_array(),
                         PrimitiveArray::from_vec(vec![100i64], Validity::NonNullable).into_array(),
                         1,
-                        Scalar::primitive(0i64, Nullability::NonNullable),
+                        0i64.into(),
                     )
                     .unwrap()
                     .into_array(),

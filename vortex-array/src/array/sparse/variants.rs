@@ -68,7 +68,7 @@ impl StructArrayTrait for SparseArray {
         let values = self
             .values()
             .with_dyn(|s| s.as_struct_array().and_then(|s| s.field(idx)))?;
-        let scalar = StructScalar::try_from(self.fill_value())
+        let scalar = StructScalar::try_new(self.dtype(), self.fill_value())
             .ok()?
             .field_by_idx(idx)?;
 
@@ -78,7 +78,7 @@ impl StructArrayTrait for SparseArray {
                 values,
                 self.len(),
                 self.indices_offset(),
-                scalar,
+                scalar.value().clone(),
             )
             .ok()?
             .into_array(),
@@ -91,14 +91,14 @@ impl StructArrayTrait for SparseArray {
                 .ok_or_else(|| vortex_err!("Chunk was not a StructArray"))?
                 .project(projection)
         })?;
-        let scalar = StructScalar::try_from(self.fill_value())?.project(projection)?;
+        let scalar = StructScalar::try_new(self.dtype(), self.fill_value())?.project(projection)?;
 
         SparseArray::try_new_with_offset(
             self.indices().clone(),
             values,
             self.len(),
             self.indices_offset(),
-            scalar,
+            scalar.value().clone(),
         )
         .map(|a| a.into_array())
     }

@@ -23,9 +23,6 @@ impl SliceFn for SparseArray {
 
 #[cfg(test)]
 mod tests {
-    use vortex_dtype::Nullability;
-    use vortex_scalar::Scalar;
-
     use super::*;
     use crate::IntoArrayVariant;
 
@@ -34,14 +31,9 @@ mod tests {
         let values = vec![15_u32, 135, 13531, 42].into_array();
         let indices = vec![10_u64, 11, 50, 100].into_array();
 
-        let sparse = SparseArray::try_new(
-            indices.clone(),
-            values,
-            101,
-            Scalar::primitive(0_u32, Nullability::NonNullable),
-        )
-        .unwrap()
-        .into_array();
+        let sparse = SparseArray::try_new(indices.clone(), values, 101, 0_u32.into())
+            .unwrap()
+            .into_array();
 
         let sliced = slice(&sparse, 15, 100).unwrap();
         assert_eq!(sliced.len(), 100 - 15);
@@ -59,14 +51,9 @@ mod tests {
         let values = vec![15_u32, 135, 13531, 42].into_array();
         let indices = vec![10_u64, 11, 50, 100].into_array();
 
-        let sparse = SparseArray::try_new(
-            indices.clone(),
-            values,
-            101,
-            Scalar::primitive(0_u32, Nullability::NonNullable),
-        )
-        .unwrap()
-        .into_array();
+        let sparse = SparseArray::try_new(indices.clone(), values, 101, 0_u32.into())
+            .unwrap()
+            .into_array();
 
         let sliced = slice(&sparse, 15, 100).unwrap();
         assert_eq!(sliced.len(), 100 - 15);

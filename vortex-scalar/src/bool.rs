@@ -68,8 +68,24 @@ impl From<bool> for Scalar {
     fn from(value: bool) -> Self {
         Self {
             dtype: DType::Bool(NonNullable),
-            value: ScalarValue::Bool(value),
+            value: value.into(),
         }
+    }
+}
+
+impl TryFrom<&ScalarValue> for bool {
+    type Error = VortexError;
+
+    fn try_from(value: &ScalarValue) -> VortexResult<Self> {
+        value
+            .as_bool()?
+            .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
+    }
+}
+
+impl From<bool> for ScalarValue {
+    fn from(value: bool) -> Self {
+        ScalarValue::Bool(value)
     }
 }
 

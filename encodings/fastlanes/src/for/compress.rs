@@ -6,7 +6,7 @@ use vortex::validity::LogicalValidity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
 use vortex_error::{vortex_err, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, ScalarValue};
 
 use crate::FoRArray;
 
@@ -41,7 +41,7 @@ pub fn for_compress(array: &PrimitiveArray) -> VortexResult<Array> {
                         ConstantArray::new(Scalar::zero::<$T>(array.dtype().nullability()), valid_len)
                             .into_array(),
                         array.len(),
-                        Scalar::null(array.dtype().clone()),
+                        ScalarValue::Null,
                     )?
                     .into_array()
                 }

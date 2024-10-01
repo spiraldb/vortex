@@ -5,7 +5,7 @@ use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::match_each_integer_ptype;
 use vortex_error::{VortexExpect as _, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, ScalarValue};
 
 use crate::RunEndArray;
 
@@ -86,7 +86,7 @@ impl TakeFn for RunEndArray {
                     dense_nonnull_indices,
                     filtered_values,
                     length,
-                    Scalar::null(self.dtype().clone()),
+                    ScalarValue::Null,
                 )?
                 .into_array()
             }
