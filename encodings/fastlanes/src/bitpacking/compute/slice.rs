@@ -18,19 +18,6 @@ impl SliceFn for BitPackedArray {
         let encoded_stop = (block_stop / 8) * self.bit_width();
         let new_packed = self.packed().slice(encoded_start..encoded_stop);
 
-        println!(
-            "slice {:?}",
-            (
-                start,
-                stop,
-                self.offset(),
-                offset,
-                self.packed_len(),
-                self.len(),
-                encoded_start,
-                encoded_stop,
-            )
-        );
         let patch_start = offset_start.saturating_sub(self.packed_len());
         let patch_stop = offset_stop.saturating_sub(self.packed_len());
         let new_patches = if patch_start == patch_stop {
@@ -50,8 +37,6 @@ impl SliceFn for BitPackedArray {
                     !indices.is_empty()
                 })
         }; // FIXME(DK): Do I need to apply the offset to the indices eagerly?
-        println!("slice {:?}", (patch_start, patch_stop, new_patches.clone()));
-        println!("slice {:?}", new_packed.clone());
 
         // slice the buffer using the encoded start/stop values
         Self::try_new_from_offset(

@@ -178,7 +178,6 @@ impl BitPackedArray {
     /// this array.
     #[inline]
     pub fn patches_len(&self) -> usize {
-        println!("{} {} {}", self.len(), self.packed().len(), self.offset(),);
         self.metadata().patches_len
     }
 
