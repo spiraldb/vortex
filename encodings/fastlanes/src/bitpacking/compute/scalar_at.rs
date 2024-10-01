@@ -8,7 +8,7 @@ use crate::{unpack_single, BitPackedArray};
 
 impl ScalarAtFn for BitPackedArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        if let Some((indices, values)) = self._patches() {
+        if let Some((indices, values, _)) = self._patches() {
             // NB: All non-null values are considered patches
             match search_sorted(&indices, index, SearchSortedSide::Left)? {
                 SearchResult::Found(patches_index) => {
@@ -46,7 +46,8 @@ mod test {
             Validity::AllInvalid,
             Some((
                 PrimitiveArray::from(vec![1u64]).into_array(),
-                PrimitiveArray::from_vec(vec![999u32], Validity::AllValid).into_array(),
+                PrimitiveArray::from_vec(vec![999u32], Validity::NonNullable).into_array(),
+                0,
             )),
             1,
             8,
