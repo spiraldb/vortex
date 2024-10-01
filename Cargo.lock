@@ -4599,6 +4599,7 @@ dependencies = [
  "lazy_static",
  "log",
  "rand",
+ "simplelog",
  "vortex-alp",
  "vortex-array",
  "vortex-datetime-dtype",

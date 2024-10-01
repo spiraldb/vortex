@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use std::ops::Add;
 
 use chrono::TimeDelta;
+use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
 use vortex::array::builder::VarBinBuilder;
 use vortex::array::{BoolArray, PrimitiveArray, StructArray, TemporalArray};
 use vortex::validity::Validity;
@@ -22,6 +23,7 @@ use vortex_sampling_compressor::{CompressConfig, SamplingCompressor};
 
 #[cfg(test)]
 mod tests {
+    use log::LevelFilter;
     use vortex::array::{Bool, ChunkedArray, VarBin};
     use vortex::variants::{ArrayVariants, StructArrayTrait};
     use vortex::ArrayDef;
@@ -88,6 +90,13 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)] // roaring bit maps uses an unsupported FFI
     pub fn smoketest_compressor_on_chunked_array() {
+        TermLogger::init(
+            LevelFilter::Debug,
+            Config::default(),
+            TerminalMode::Mixed,
+            ColorChoice::Auto,
+        )
+        .unwrap();
         let compressor = SamplingCompressor::default();
 
         let chunk_size = 1 << 14;

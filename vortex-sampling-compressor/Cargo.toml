@@ -19,6 +19,7 @@ fsst-rs = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
+simplelog = { workspace = true }
 vortex-alp = { workspace = true }
 vortex-array = { workspace = true }
 vortex-datetime-dtype = { workspace = true }
