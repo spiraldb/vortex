@@ -18,6 +18,19 @@ impl SliceFn for BitPackedArray {
         let encoded_stop = (block_stop / 8) * self.bit_width();
         let new_packed = self.packed().slice(encoded_start..encoded_stop);
 
+        println!(
+            "slice {:?}",
+            (
+                start,
+                stop,
+                self.offset(),
+                offset,
+                self.packed_len(),
+                self.len(),
+                encoded_start,
+                encoded_stop,
+            )
+        );
         let patch_start = offset_start - self.packed_len();
         let patch_stop = offset_stop - self.packed_len();
         let new_patches = self
@@ -51,7 +64,7 @@ impl SliceFn for BitPackedArray {
 #[cfg(test)]
 mod test {
     use itertools::Itertools;
-    use vortex::array::{PrimitiveArray, SparseArray};
+    use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
     use vortex::compute::{slice, take};
     use vortex::IntoArray;
@@ -172,17 +185,15 @@ mod test {
             BitPackedArray::encode(PrimitiveArray::from((0u32..=64).collect_vec()).as_ref(), 6)
                 .unwrap();
 
-        assert!(array.patches().is_some());
+        assert!(array._patches().is_some());
 
-        let patch_indices = SparseArray::try_from(array.patches().unwrap())
-            .unwrap()
-            .indices();
+        let patch_indices = array._patches().unwrap().0;
         assert_eq!(patch_indices.len(), 1);
 
         // Slicing drops the empty patches array.
         let sliced = slice(array, 0, 64).unwrap();
         let sliced_bp = BitPackedArray::try_from(sliced).unwrap();
-        assert!(sliced_bp.patches().is_none());
+        assert!(sliced_bp._patches().is_none());
     }
 
     #[test]

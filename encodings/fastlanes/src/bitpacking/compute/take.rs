@@ -210,7 +210,7 @@ mod test {
     use itertools::Itertools;
     use rand::distributions::Uniform;
     use rand::{thread_rng, Rng};
-    use vortex::array::{PrimitiveArray, SparseArray};
+    use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
     use vortex::compute::{slice, take};
     use vortex::{IntoArray, IntoArrayVariant};
@@ -250,16 +250,16 @@ mod test {
     #[test]
     #[cfg_attr(miri, ignore)] // This test is too slow on miri
     fn take_random_indices() {
-        let num_patches: usize = 128;
+        let num_patches = 128;
         let values = (0..u16::MAX as u32 + num_patches as u32).collect::<Vec<_>>();
         let uncompressed = PrimitiveArray::from(values.clone());
         let packed = BitPackedArray::encode(uncompressed.as_ref(), 16).unwrap();
-        assert!(packed.patches().is_some());
+        assert!(packed._patches().is_some());
 
-        let patches = SparseArray::try_from(packed.patches().unwrap()).unwrap();
+        let patches_indices = packed._patches().unwrap().0;
         assert_eq!(
-            patches.resolved_indices(),
-            ((values.len() + 1 - num_patches)..values.len()).collect_vec()
+            patches_indices.as_primitive().maybe_null_slice::<u64>(),
+            ((values.len() as u64 + 1 - num_patches)..(values.len() as u64)).collect_vec()
         );
 
         let rng = thread_rng();
@@ -295,10 +295,13 @@ mod test {
         let values = (0u32..257).collect_vec();
         let uncompressed = PrimitiveArray::from(values.clone()).into_array();
         let packed = BitPackedArray::encode(&uncompressed, 8).unwrap();
-        assert!(packed.patches().is_some());
+        assert!(packed._patches().is_some());
 
-        let patches = SparseArray::try_from(packed.patches().unwrap()).unwrap();
-        assert_eq!(patches.resolved_indices(), vec![256]);
+        let patches_indices = packed._patches().unwrap().0;
+        assert_eq!(
+            patches_indices.as_primitive().maybe_null_slice::<u64>(),
+            vec![256]
+        );
 
         values.iter().enumerate().for_each(|(i, v)| {
             assert_eq!(
