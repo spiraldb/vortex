@@ -1,4 +1,4 @@
-use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
+use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{search_sorted, SearchResult, SearchSortedSide};
 use vortex::ArrayDType;
 use vortex_error::{VortexResult, VortexUnwrap as _};
@@ -28,7 +28,7 @@ impl ScalarAtFn for BitPackedArray {
 
 #[cfg(test)]
 mod test {
-    use vortex::array::{PrimitiveArray, SparseArray};
+    use vortex::array::PrimitiveArray;
     use vortex::compute::unary::scalar_at;
     use vortex::validity::Validity;
     use vortex::IntoArray;
@@ -44,16 +44,10 @@ mod test {
             Buffer::from(vec![0u8; 128]),
             PType::U32,
             Validity::AllInvalid,
-            Some(
-                SparseArray::try_new(
-                    PrimitiveArray::from(vec![1u64]).into_array(),
-                    PrimitiveArray::from_vec(vec![999u32], Validity::AllValid).into_array(),
-                    8,
-                    ScalarValue::Null,
-                )
-                .unwrap()
-                .into_array(),
-            ),
+            Some((
+                PrimitiveArray::from(vec![1u64]).into_array(),
+                PrimitiveArray::from_vec(vec![999u32], Validity::AllValid).into_array(),
+            )),
             1,
             8,
         )

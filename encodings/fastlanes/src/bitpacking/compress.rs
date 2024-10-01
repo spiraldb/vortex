@@ -347,7 +347,7 @@ mod test {
             PrimitiveArray::from_vec((0u32..24).collect::<Vec<_>>(), Validity::from(valid_values));
         assert!(values.ptype().is_unsigned_int());
         let compressed = BitPackedArray::encode(values.as_ref(), 4).unwrap();
-        assert!(compressed.patches().is_none());
+        assert!(compressed._patches().is_none());
         assert_eq!(
             (0..(1 << 4)).collect::<Vec<_>>(),
             compressed
