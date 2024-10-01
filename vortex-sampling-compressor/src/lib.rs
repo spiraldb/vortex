@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
+use compressors::bitpacked::BitPackedCompressor;
 use compressors::fsst::FSSTCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
@@ -35,9 +36,9 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 9] = [
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 10] = [
         // &ALPCompressor as CompressorRef,
-        // &BitPackedCompressor,
+        &BitPackedCompressor,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR,
         // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
@@ -260,6 +261,7 @@ impl<'a> SamplingCompressor<'a> {
 
                 let mut rng = StdRng::seed_from_u64(self.options.rng_seed);
                 let sampled = sampled_compression(arr, self, &mut rng)?;
+                // println!("sampled {:?}", sampled);
                 match sampled {
                     Some(compressed) => Ok(compressed),
                     None => done(arr.clone()),
@@ -381,5 +383,9 @@ fn find_best_compression<'a>(
             best = Some(compressed_sample)
         }
     }
+    info!(
+        "{} all compressors were worse than no compression for {}",
+        ctx, sample
+    );
     Ok(best.unwrap_or_else(|| CompressedArray::uncompressed(sample.clone())))
 }
