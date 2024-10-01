@@ -22,7 +22,7 @@ impl_encoding!("vortex.bool", ids::BOOL, Bool);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BoolMetadata {
     validity: ValidityMetadata,
-    bit_offset: usize,
+    first_byte_bit_offset: u8,
 }
 
 impl BoolArray {
@@ -35,7 +35,7 @@ impl BoolArray {
     pub fn boolean_buffer(&self) -> BooleanBuffer {
         BooleanBuffer::new(
             self.buffer().clone().into_arrow(),
-            self.metadata().bit_offset,
+            self.metadata().first_byte_bit_offset as usize,
             self.len(),
         )
     }
@@ -51,8 +51,8 @@ impl BoolArray {
     pub fn try_new(buffer: BooleanBuffer, validity: Validity) -> VortexResult<Self> {
         let buffer_len = buffer.len();
         let buffer_offset = buffer.offset();
-        let last_byte_bit_offset = buffer_offset % 8;
-        let buffer_byte_offset = buffer_offset - last_byte_bit_offset;
+        let first_byte_bit_offset = (buffer_offset % 8) as u8;
+        let buffer_byte_offset = buffer_offset - (first_byte_bit_offset as usize);
 
         let inner = buffer
             .into_inner()
@@ -64,7 +64,7 @@ impl BoolArray {
                 buffer_len,
                 BoolMetadata {
                     validity: validity.to_metadata(buffer_len)?,
-                    bit_offset: last_byte_bit_offset,
+                    first_byte_bit_offset,
                 },
                 Some(Buffer::from(inner)),
                 validity.into_array().into_iter().collect_vec().into(),
