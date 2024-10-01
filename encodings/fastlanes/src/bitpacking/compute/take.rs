@@ -98,30 +98,6 @@ fn take_primitive<T: NativePType + BitPacking>(
                     PrimitiveArray::from(absolute_indices).into_array(),
                     &mut output,
                 )?;
-                // let absolute_indices = offests.map(|o| o + chunk * 1024);
-                // let (indices_of_kept_patches, indices_of_kept_indices) = kept_indices(
-                //     patch_indices.clone(),
-                //     PrimitiveArray::from(absolute_indices),
-                // )?;
-                // let kept_patch_indices =
-                //     take(patch_indices, indices_of_kept_patches.clone())?.into_primitive()?;
-                // let kept_patch_values =
-                //     take(patch_values, indices_of_kept_patches)?.into_primitive()?;
-                // let kept_patch_values = kept_patch_values.maybe_null_slice::<T>();
-                // for (index, value) in indices_of_kept_indices.iter().zip(kept_patch_values) {
-                //     output[*index] = *value;
-                // }
-
-                // let patches_start = if chunk == 0 {
-                //     0
-                // } else {
-                //     (chunk * 1024) - array.offset()
-                // };
-                // let patches_end = min((chunk + 1) * 1024 - array.offset(), patches_indices.len());
-                // let patches_slice = slice(patches.as_ref(), patches_start, patches_end)?;
-                // let patches_slice = SparseArray::try_from(patches_slice)?;
-                // let offsets = PrimitiveArray::from(offsets);
-                // do_patch_for_take_primitive(&patches_slice, &offsets, &mut output)?;
             }
         }
     }
