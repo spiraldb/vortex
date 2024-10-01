@@ -481,7 +481,7 @@ mod test {
                         PrimitiveArray::from_vec(vec![0u64; 1], Validity::NonNullable).into_array(),
                         PrimitiveArray::from_vec(vec![100i64], Validity::NonNullable).into_array(),
                         1,
-                        0i64.try_into().unwrap(),
+                        0i64.into(),
                     )
                     .unwrap()
                     .into_array(),
