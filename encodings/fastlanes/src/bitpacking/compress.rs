@@ -115,7 +115,7 @@ pub fn bitpack_patches(
     parray: &PrimitiveArray,
     bit_width: usize,
     num_exceptions_hint: usize,
-) -> Option<(Array, Array)> {
+) -> Option<(Array, Array, usize)> {
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
@@ -127,8 +127,11 @@ pub fn bitpack_patches(
         }
 
         if !indices.is_empty() {
-            Some((indices.into_array(),
-             PrimitiveArray::from_vec(values, Validity::NonNullable).to_array())) // FIXME(DK): we could store validity here or on bitpacked, why not here?
+            Some((
+                indices.into_array(),
+                PrimitiveArray::from_vec(values, Validity::NonNullable).to_array(),
+                0
+            )) // FIXME(DK): we could store validity here or on bitpacked, why not here?
         } else {
             None
         }
@@ -152,7 +155,7 @@ pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
         unpacked = unpacked.reinterpret_cast(ptype);
     }
 
-    if let Some((indices, values)) = array._patches() {
+    if let Some((indices, values, _)) = array._patches() {
         patch_unpacked(unpacked, indices, values)
     } else {
         Ok(unpacked)

@@ -11,7 +11,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical, TypedArray,
 };
 use vortex_buffer::Buffer;
-use vortex_dtype::{DType, NativePType, PType};
+use vortex_dtype::{DType, NativePType, Nullability, PType};
 use vortex_error::{
     vortex_bail, vortex_err, vortex_panic, VortexError, VortexExpect as _, VortexResult,
 };
@@ -29,6 +29,7 @@ pub struct BitPackedMetadata {
     offset: usize, // Know to be <1024
     length: usize, // Store end padding instead <1024
     patches_len: usize,
+    patches_indices_offset: usize,
 }
 
 /// NB: All non-null values in the patches array are considered patches
@@ -40,7 +41,7 @@ impl BitPackedArray {
         packed: Buffer,
         ptype: PType,
         validity: Validity,
-        patches: Option<(Array, Array)>,
+        patches: Option<(Array, Array, usize)>,
         bit_width: usize,
         len: usize,
     ) -> VortexResult<Self> {
@@ -51,7 +52,7 @@ impl BitPackedArray {
         packed: Buffer,
         ptype: PType,
         validity: Validity,
-        patches: Option<(Array, Array)>,
+        patches: Option<(Array, Array, usize)>,
         bit_width: usize,
         length: usize,
         offset: usize,
@@ -82,6 +83,19 @@ impl BitPackedArray {
             ));
         }
 
+        if let Some((indices, values, _)) = patches.as_ref() {
+            if !matches!(indices.dtype(), &DType::IDX) {
+                vortex_bail!("Cannot use {} as indices", indices.dtype());
+            }
+            if values.dtype() != &dtype.with_nullability(Nullability::NonNullable) {
+                vortex_bail!(
+                    "patches values dtype, {}, must be non-nullable version of values dtype, {}",
+                    values.dtype(),
+                    dtype
+                );
+            }
+        }
+
         // if let Some((indices, values)) = patches.as_ref() {
         //     // if parray.len() != length {
         //     //     vortex_bail!(
@@ -104,7 +118,7 @@ impl BitPackedArray {
             bit_width,
             patches_len: patches
                 .clone()
-                .map(|(x, y)| -> VortexResult<_> {
+                .map(|(x, y, _)| -> VortexResult<_> {
                     if x.len() != y.len() {
                         vortex_bail!(
                             "expected patches arrays to have same length {} {}",
@@ -116,10 +130,14 @@ impl BitPackedArray {
                 })
                 .transpose()?
                 .unwrap_or(0),
+            patches_indices_offset: patches
+                .clone()
+                .map(|(_, _, indices_offset)| indices_offset)
+                .unwrap_or(0),
         };
 
         let mut children = Vec::with_capacity(2);
-        if let Some((indices, values)) = patches {
+        if let Some((indices, values, _)) = patches {
             children.push(indices);
             children.push(values);
         }
@@ -193,23 +211,24 @@ impl BitPackedArray {
     // /// If present, patches MUST be a `SparseArray` with equal-length to this array, and whose
     // /// indices indicate the locations of patches. The indices must have non-zero length.
     #[inline]
-    pub fn _patches(&self) -> Option<(Array, Array)> {
+    pub fn _patches(&self) -> Option<(Array, Array, usize)> {
         self.has_patches().then(|| {
             (
                 self.as_ref()
                     .child(
                         0,
-                        &self.dtype(), // .with_nullability(Nullability::Nullable) // FIXME(DK): why was this here?
+                        &DType::IDX, // .with_nullability(Nullability::Nullable) // FIXME(DK): why was this here?
                         self.patches_len(),
                     )
                     .vortex_expect("BitPackedArray: patches child 0"),
                 self.as_ref()
                     .child(
                         1,
-                        &self.dtype(), // .with_nullability(Nullability::Nullable) // FIXME(DK): why was this here?
+                        &self.dtype().with_nullability(Nullability::NonNullable),
                         self.patches_len(),
                     )
                     .vortex_expect("BitPackedArray: patches child 1"),
+                self.metadata().patches_indices_offset,
             )
         })
     }
@@ -273,7 +292,7 @@ impl ArrayValidity for BitPackedArray {
 impl AcceptArrayVisitor for BitPackedArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_buffer(self.packed())?;
-        if let Some((indices, values)) = self._patches().as_ref() {
+        if let Some((indices, values, _)) = self._patches().as_ref() {
             // visitor.visit_child("patches", patches)?;
             visitor.visit_child("indices", indices)?;
             visitor.visit_child("values", values)?;
@@ -291,7 +310,7 @@ impl ArrayTrait for BitPackedArray {
         packed_size
             + self
                 ._patches()
-                .map(|(indices, values)| indices.nbytes() + values.nbytes())
+                .map(|(indices, values, _)| indices.nbytes() + values.nbytes())
                 .unwrap_or(0)
     }
 }

@@ -105,15 +105,36 @@ fn search_sorted_native<T>(
 where
     T: NativePType + BitPacking + AsPrimitive<usize> + AsPrimitive<u64>,
 {
-    if let Some((_, values)) = array._patches() {
+    if let Some((_indices, values, _indices_offset)) = array._patches() {
         // If patches exist they must be the last elements in the array, if the value we're looking for is greater than
         // max packed value just search the patches
         let usize_value: usize = value.as_();
+        println!(
+            "search_sorted_native {:?}",
+            (usize_value, array.max_packed_value())
+        );
         if usize_value > array.max_packed_value() {
             match search_sorted_u64(&values, value.as_(), side)? {
-                // FIXME(DK): the nulls are included in `array`, right? Otherwise the following sum is probably wrong.
-                SearchResult::Found(index) => Ok(SearchResult::Found(array.packed_len() + index)),
-                otherwise => Ok(otherwise),
+                SearchResult::Found(patches_index) => {
+                    Ok(SearchResult::Found(array.packed_len() + patches_index))
+                    // let original_physical_index =
+                    //     u64::try_from(scalar_at(&indices, patches_index)?.value())? as usize;
+                    // let logical_found_index = original_physical_index - indices_offset;
+                    // println!(
+                    //     "{} {} {}",
+                    //     array.packed_len(),
+                    //     original_physical_index,
+                    //     logical_found_index
+                    // );
+                    // Ok(SearchResult::Found(logical_found_index))
+                }
+                SearchResult::NotFound(patches_index) => {
+                    Ok(SearchResult::NotFound(array.packed_len() + patches_index))
+                    // let original_physical_index =
+                    //     u64::try_from(scalar_at(&indices, patches_index)?.value())? as usize;
+                    // let logical_not_found_index = original_physical_index - indices_offset;
+                    // Ok(SearchResult::NotFound(logical_not_found_index))
+                }
             }
         } else {
             Ok(BitPackedSearch::<'_, T>::new(array).search_sorted(&value, side))
@@ -137,8 +158,6 @@ struct BitPackedSearch<'a, T> {
 
 impl<'a, T: BitPacking + NativePType> BitPackedSearch<'a, T> {
     pub fn new(array: &'a BitPackedArray) -> Self {
-        let (indices, _) = array._patches().unwrap();
-        let min_patch_offset = indices.statistics().compute_min().unwrap_or(array.len()); // FIXME(DK): indices are always sorted, right? We could just take the zeroth element
         let first_null_idx = match array.validity() {
             Validity::NonNullable | Validity::AllValid => array.len(),
             Validity::AllInvalid => 0,
@@ -148,20 +167,35 @@ impl<'a, T: BitPacking + NativePType> BitPackedSearch<'a, T> {
             }
         };
 
-        let first_invalid_idx = cmp::min(min_patch_offset, first_null_idx);
+        let first_invalid_idx = match array._patches() {
+            None => first_null_idx,
+            Some((indices, _, indices_offset)) => {
+                let min_patch_offset =
+                    indices.statistics().compute_min().unwrap_or(array.len()) - indices_offset; // FIXME(DK): indices are always sorted, right? We could just take the zeroth element
+                cmp::min(min_patch_offset, first_null_idx)
+            }
+        };
+        println!(
+            "bitpackedsearch {:?}",
+            (first_invalid_idx, first_null_idx, array.validity())
+        );
 
-        Self {
+        let x = Self {
             packed_maybe_null_slice: array.packed_slice::<T>(),
             offset: array.offset(),
             length: array.len(),
             bit_width: array.bit_width(),
             first_invalid_idx,
-        }
+        };
+
+        println!("{:?}", x);
+        x
     }
 }
 
 impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch<'_, T> {
     fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
+        println!("index_cmp {} {}", idx, elem);
         if idx >= self.first_invalid_idx {
             return Some(Greater);
         }
@@ -174,7 +208,9 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch<'_, T> {
                 idx + self.offset,
             )
         };
-        Some(val.compare(*elem))
+        let x = Some(val.compare(*elem));
+        println!("index_cmp {} {} {} = {:?}", idx, val, elem, x);
+        x
     }
 }
 

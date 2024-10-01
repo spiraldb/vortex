@@ -31,21 +31,27 @@ impl SliceFn for BitPackedArray {
                 encoded_stop,
             )
         );
-        let patch_start = offset_start - self.packed_len();
-        let patch_stop = offset_stop - self.packed_len();
-        let new_patches = self
-            ._patches()
-            .map(|(indices, values)| -> VortexResult<_> {
-                Ok((
-                    slice(&indices, patch_start, patch_stop)?,
-                    slice(&values, patch_start, patch_stop)?,
-                ))
-            })
-            .transpose()?
-            .filter(|(indices, _)| {
-                // No need to keep an empty set of patches
-                !indices.is_empty()
-            });
+        let patch_start = offset_start.saturating_sub(self.packed_len());
+        let patch_stop = offset_stop.saturating_sub(self.packed_len());
+        let new_patches = if patch_start == patch_stop {
+            None
+        } else {
+            self._patches()
+                .map(|(indices, values, indices_offset)| -> VortexResult<_> {
+                    Ok((
+                        slice(&indices, patch_start, patch_stop)?,
+                        slice(&values, patch_start, patch_stop)?,
+                        indices_offset + start,
+                    ))
+                })
+                .transpose()?
+                .filter(|(indices, ..)| {
+                    // No need to keep an empty set of patches
+                    !indices.is_empty()
+                })
+        }; // FIXME(DK): Do I need to apply the offset to the indices eagerly?
+        println!("slice {:?}", (patch_start, patch_stop, new_patches.clone()));
+        println!("slice {:?}", new_packed.clone());
 
         // slice the buffer using the encoded start/stop values
         Self::try_new_from_offset(

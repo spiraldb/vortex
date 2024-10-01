@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use fastlanes::BitPacking;
 use itertools::Itertools;
+use num_traits::PrimInt;
 use vortex::array::PrimitiveArray;
 use vortex::compute::{search_sorted, take, SearchSortedSide, TakeFn};
 use vortex::validity::Validity;
@@ -9,7 +10,7 @@ use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
-use vortex_error::VortexResult;
+use vortex_error::{vortex_err, VortexResult};
 
 use crate::{unpack_single_primitive, BitPackedArray};
 
@@ -106,7 +107,7 @@ fn take_primitive<T: NativePType + BitPacking>(
     }
 
     // if prefer_bulk_patch {
-    if let Some((patch_indices, patch_values)) = patches {
+    if let Some((patch_indices, patch_values, _)) = patches {
         do_patch_for_take_primitive(
             patch_indices,
             patch_values,
@@ -125,84 +126,121 @@ fn do_patch_for_take_primitive<T: NativePType>(
     indices: Array,
     output: &mut [T],
 ) -> VortexResult<()> {
-    let indices_of_kept_patches = kept_indices_u64(patch_indices.clone(), indices)?;
+    // println!(
+    //     "do_patch {:?}",
+    //     (
+    //         patch_indices.as_primitive().maybe_null_slice::<u64>(),
+    //         patch_values.as_primitive().maybe_null_slice::<u32>(),
+    //         indices.as_primitive().maybe_null_slice::<u32>()
+    //     )
+    // );
+    let (indices_of_kept_patches, indices_of_kept_indices) =
+        kept_indices(patch_indices.clone(), indices)?;
     let kept_patch_indices =
         take(patch_indices, indices_of_kept_patches.clone())?.into_primitive()?;
     let kept_patch_values = take(patch_values, indices_of_kept_patches)?.into_primitive()?;
 
-    let kept_patch_indices = kept_patch_indices.maybe_null_slice::<u64>();
+    let _kept_patch_indices = kept_patch_indices.maybe_null_slice::<u64>();
     let kept_patch_values = kept_patch_values.maybe_null_slice::<T>();
-    for (index, value) in kept_patch_indices.iter().zip(kept_patch_values) {
-        output[*index as usize] = *value;
+    for (index, value) in indices_of_kept_indices.iter().zip(kept_patch_values) {
+        output[*index] = *value;
     }
 
     Ok(())
 }
 
-fn kept_indices_u64(values: Array, filter_values: Array) -> VortexResult<Array> {
+fn kept_indices(values: Array, filter_values: Array) -> VortexResult<(Array, Vec<usize>)> {
     let filter_values = filter_values.into_primitive()?;
     if filter_values.len() > 128 {
         let values = values.into_primitive()?;
-        kept_indices_by_map_u64(values, filter_values)
+        match_each_integer_ptype!(filter_values.ptype(), |$P| {
+            kept_indices_by_map::<$P>(values, filter_values)
+        })
     } else {
-        kept_indices_by_search_sorted_u64(values, filter_values)
+        match_each_integer_ptype!(filter_values.ptype(), |$P| {
+            kept_indices_by_search_sorted::<$P>(values, filter_values)
+        })
     }
 }
 
-fn kept_indices_by_map_u64(
+fn kept_indices_by_map<T: PrimInt + NativePType>(
     values: PrimitiveArray,
     filter_values: PrimitiveArray,
-) -> VortexResult<Array> {
+) -> VortexResult<(Array, Vec<usize>)> {
     let values_to_index: HashMap<u64, u64> = values
         .maybe_null_slice::<u64>()
         .iter()
         .enumerate()
         .map(|(index, r)| (*r, index as u64))
         .collect();
-    let maybe_invalid_kept_indices = PrimitiveArray::from_vec::<u64>(
-        filter_values
-            .maybe_null_slice::<u64>()
-            .iter()
-            .flat_map(|i| values_to_index.get(i).cloned())
-            .collect::<Vec<_>>(),
-        Validity::NonNullable,
-    );
-    Ok(PrimitiveArray::new(
-        maybe_invalid_kept_indices.buffer().clone(),
-        maybe_invalid_kept_indices.ptype(),
-        values
-            .validity()
-            .take(&maybe_invalid_kept_indices.into_array())?,
-    )
-    .into_array())
+    let mut kept_values_indices = Vec::new();
+    let mut kept_filter_values_indices = Vec::new();
+    for (filter_values_index, filter_value) in
+        filter_values.maybe_null_slice::<T>().iter().enumerate()
+    {
+        let filter_value_u64 = filter_value
+            .to_u64()
+            .ok_or(vortex_err!("could not convert {} to u64", filter_value))?;
+        match values_to_index.get(&filter_value_u64) {
+            None => {}
+            Some(values_index) => {
+                kept_values_indices.push(*values_index);
+                kept_filter_values_indices.push(filter_values_index);
+            }
+        }
+    }
+    let maybe_invalid_kept_indices =
+        PrimitiveArray::from_vec::<u64>(kept_values_indices, Validity::NonNullable);
+    Ok((
+        PrimitiveArray::new(
+            maybe_invalid_kept_indices.buffer().clone(),
+            maybe_invalid_kept_indices.ptype(),
+            values
+                .validity()
+                .take(&maybe_invalid_kept_indices.into_array())?,
+        )
+        .into_array(),
+        kept_filter_values_indices,
+    ))
 }
 
-fn kept_indices_by_search_sorted_u64(
+fn kept_indices_by_search_sorted<T: PrimInt + NativePType>(
     values: Array,
     filter_values: PrimitiveArray,
-) -> VortexResult<Array> {
-    let kept_indices_vec = filter_values
-        .maybe_null_slice::<u64>()
-        .iter()
-        .filter_map(|value| {
-            search_sorted(&values, *value, SearchSortedSide::Left)
-                .map(|x| x.to_found().map(|x| x as u64))
-                .transpose()
-        })
-        .collect::<VortexResult<Vec<u64>>>()?;
+) -> VortexResult<(Array, Vec<usize>)> {
+    let mut kept_values_indices_vec = Vec::new();
+    let mut kept_indices_indices_vec = Vec::new();
+    for (filter_values_index, filter_value) in
+        filter_values.maybe_null_slice::<T>().iter().enumerate()
+    {
+        let filter_value_u64 = filter_value
+            .to_u64()
+            .ok_or(vortex_err!("could not convert {} to u64", filter_value))?;
+        let results = search_sorted(&values, filter_value_u64, SearchSortedSide::Left)?;
+        match results.to_found() {
+            None => {}
+            Some(values_index) => {
+                kept_values_indices_vec.push(values_index as u64);
+                kept_indices_indices_vec.push(filter_values_index);
+            }
+        }
+    }
 
     let maybe_invalid_kept_indices =
-        PrimitiveArray::from_vec::<u64>(kept_indices_vec, Validity::NonNullable);
+        PrimitiveArray::from_vec::<u64>(kept_values_indices_vec, Validity::NonNullable);
 
     let values = values.into_primitive()?;
-    Ok(PrimitiveArray::new(
-        maybe_invalid_kept_indices.buffer().clone(),
-        maybe_invalid_kept_indices.ptype(),
-        values
-            .validity()
-            .take(&maybe_invalid_kept_indices.into_array())?,
-    )
-    .into_array())
+    Ok((
+        PrimitiveArray::new(
+            maybe_invalid_kept_indices.buffer().clone(),
+            maybe_invalid_kept_indices.ptype(),
+            values
+                .validity()
+                .take(&maybe_invalid_kept_indices.into_array())?,
+        )
+        .into_array(),
+        kept_indices_indices_vec,
+    ))
 }
 
 #[cfg(test)]
