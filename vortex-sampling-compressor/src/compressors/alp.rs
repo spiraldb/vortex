@@ -51,9 +51,11 @@ impl EncodingCompressor for ALPCompressor {
 
         let compressed_patches = patches
             .map(|p| {
-                ctx.auxiliary("patches")
-                    .excluding(self)
-                    .compress(&p, like.as_ref().and_then(|l| l.child(1)))
+                ctx.auxiliary("patches").excluding(self).compress(
+                    &p,
+                    like.as_ref()
+                        .and_then(|l| if l.nchildren() >= 2 { l.child(1) } else { None }),
+                )
             })
             .transpose()?;
 
