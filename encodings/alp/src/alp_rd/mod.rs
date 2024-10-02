@@ -31,10 +31,20 @@ use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::{ArrayDType, IntoArray};
 use vortex_dtype::{DType, NativePType};
 use vortex_error::{VortexExpect, VortexUnwrap};
-use vortex_fastlanes::{bitpack_encode_unchecked, BitPackedArray};
+use vortex_fastlanes::bitpack_encode_unchecked;
 use vortex_scalar::ScalarValue;
 
 use crate::match_each_alp_float_ptype;
+
+macro_rules! bit_width {
+    ($value:expr) => {
+        if $value == 0 {
+            1
+        } else {
+            $value.ilog2().wrapping_add(1) as usize
+        }
+    };
+}
 
 /// Max number of bits to cut from the MSB section of each float.
 const CUT_LIMIT: usize = 16;
@@ -143,6 +153,11 @@ impl Encoder {
         T: ALPRDFloat + NativePType,
         T::UINT: NativePType,
     {
+        assert!(
+            !self.codes.is_empty(),
+            "codes lookup table must be populated before RD encoding"
+        );
+
         let doubles = array.maybe_null_slice::<T>();
 
         let mut left_parts: Vec<u16> = Vec::with_capacity(doubles.len());
@@ -152,7 +167,8 @@ impl Encoder {
 
         // mask for right-parts
         let right_mask = T::UINT::one().shl(self.right_bit_width as _) - T::UINT::one();
-        let left_bit_width = self.codes.len().next_power_of_two().ilog2().max(1) as u8;
+        let max_code = self.codes.len() - 1;
+        let left_bit_width = bit_width!(max_code);
 
         for v in doubles.iter().copied() {
             right_parts.push(T::to_bits(v) & right_mask);
@@ -196,12 +212,16 @@ impl Encoder {
         // SparseArray for exceptions.
         let exceptions = (!exceptions_pos.is_empty()).then(|| {
             let max_exc_pos = exceptions_pos.last().copied().unwrap_or_default();
-            let bw = (max_exc_pos + 1).next_power_of_two().ilog2() as usize;
+            let bw = bit_width!(max_exc_pos);
 
             let exc_pos_array = PrimitiveArray::from(exceptions_pos);
-            let packed_pos = BitPackedArray::encode(exc_pos_array.as_ref(), bw)
-                .vortex_unwrap()
-                .into_array();
+            // SAFETY: the positions array is sorted, we calculate bw such that it is wide enough
+            //  to hold the largest position index.
+            let packed_pos = unsafe {
+                bitpack_encode_unchecked(exc_pos_array, bw)
+                    .vortex_unwrap()
+                    .into_array()
+            };
 
             let exc_array =
                 PrimitiveArray::from_nullable_vec(exceptions.into_iter().map(Some).collect())
@@ -331,7 +351,8 @@ fn build_left_parts_dictionary<T: ALPRDFloat>(
         .sum();
 
     // Left bit-width is determined based on the actual dictionary size.
-    let left_bw = dictionary.len().next_power_of_two().ilog2().max(1) as u8;
+    let max_code = dictionary.len() - 1;
+    let left_bw = bit_width!(max_code) as u8;
 
     (
         ALPRDDictionary {
