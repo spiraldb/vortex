@@ -112,13 +112,6 @@ impl DType {
             _ => None,
         }
     }
-
-    pub fn ptype(&self) -> Option<PType> {
-        match self {
-            Primitive(ptype, _) => Some(*ptype),
-            _ => None,
-        }
-    }
 }
 
 impl Display for DType {

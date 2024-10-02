@@ -8,6 +8,7 @@ use vortex::{Array, ArrayDef, IntoArray, IntoArrayVariant};
 use vortex_alp::{match_each_alp_float_ptype, ALPRDEncoding, Encoder as ALPRDEncoder, ALPRD};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
+use vortex_fastlanes::BitPackedEncoding;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncoderMetadata, EncodingCompressor};
 use crate::SamplingCompressor;
@@ -65,10 +66,11 @@ impl EncodingCompressor for ALPRDCompressor {
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
-        HashSet::from([&ALPRDEncoding as EncodingRef])
+        HashSet::from([&ALPRDEncoding as EncodingRef, &BitPackedEncoding])
     }
 }
 
+/// Create a new `ALPRDEncoder` from the given array of samples.
 fn alp_rd_new_encoder(array: &PrimitiveArray) -> ALPRDEncoder {
     match_each_alp_float_ptype!(array.ptype(), |$P| {
         ALPRDEncoder::new(array.maybe_null_slice::<$P>())

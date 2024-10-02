@@ -9,6 +9,7 @@ use crate::alp_rd::array::ALPRDArray;
 impl ScalarAtFn for ALPRDArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         // The left value can either be a direct value, or an exception.
+        // The exceptions array represents exception positions with non-null values.
         let left: u16 = match self.left_parts_exceptions() {
             Some(exceptions) if exceptions.with_dyn(|a| a.is_valid(index)) => {
                 scalar_at(&exceptions, index)?.try_into()?
@@ -20,7 +21,7 @@ impl ScalarAtFn for ALPRDArray {
         };
 
         // combine left and right values
-        if self.dtype().ptype() == Some(PType::F64) {
+        if self.ptype() == Some(PType::F64) {
             let right: u64 = scalar_at(&self.right_parts(), index)?.try_into()?;
             let packed = f64::from_bits(((left as u64) << self.right_bit_width()) | right);
             Ok(packed.into())

@@ -14,7 +14,6 @@ impl_encoding!("vortex.alprd", ids::ALP_RD, ALPRD);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ALPRDMetadata {
-    is_f32: bool,
     right_bit_width: u8,
     // left_bit_width is implicit from the dict_len.
     dict_len: u8,
@@ -68,13 +67,10 @@ impl ALPRDArray {
             dict[idx] = *v;
         }
 
-        let is_f32 = dtype.ptype() == Some(PType::F32);
-
         Self::try_from_parts(
             dtype,
             len,
             ALPRDMetadata {
-                is_f32,
                 right_bit_width,
                 dict_len: left_parts_dict.as_ref().len() as u8,
                 dict,
@@ -84,6 +80,15 @@ impl ALPRDArray {
             children.into(),
             StatsSet::new(),
         )
+    }
+
+    /// Returns true if logical type of the array values is f32.
+    ///
+    /// Returns false if the logical type of the array values is f64.
+    #[inline]
+    pub fn is_f32(&self) -> bool {
+        PType::try_from(self.dtype()).vortex_expect("ALPRDArray must have primitive type")
+            == PType::F32
     }
 
     /// The leftmost (most significant) bits of the floating point values stored in the array.
@@ -166,7 +171,7 @@ impl IntoCanonical for ALPRDArray {
             exc_u16 = PrimitiveArray::from(Vec::<u16>::new());
         }
 
-        let decoded_array = if self.metadata().is_f32 {
+        let decoded_array = if self.is_f32() {
             PrimitiveArray::from_vec(
                 alp_rd_decode::<f32>(
                     left_parts.maybe_null_slice::<u16>(),

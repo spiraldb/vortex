@@ -6,10 +6,10 @@ use crate::ALPRDArray;
 
 impl FilterFn for ALPRDArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
-        let left_parts_exceptions = match self.left_parts_exceptions() {
-            None => None,
-            Some(exc) => Some(filter(&exc, predicate)?),
-        };
+        let left_parts_exceptions = self
+            .left_parts_exceptions()
+            .map(|array| filter(&array, predicate))
+            .transpose()?;
 
         Ok(ALPRDArray::try_new(
             self.dtype().clone(),

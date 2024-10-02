@@ -55,7 +55,7 @@ lazy_static! {
 lazy_static! {
     pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
         &ALPCompressor as CompressorRef<'static>,
-        &ALPRDCompressor as CompressorRef<'static>,
+        &ALPRDCompressor,
         &DictCompressor,
         &BitPackedCompressor,
         &FoRCompressor,

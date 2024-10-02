@@ -6,10 +6,10 @@ use crate::ALPRDArray;
 
 impl TakeFn for ALPRDArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let left_parts_exceptions = match self.left_parts_exceptions() {
-            None => None,
-            Some(exc) => Some(take(&exc, indices)?),
-        };
+        let left_parts_exceptions = self
+            .left_parts_exceptions()
+            .map(|array| take(&array, indices))
+            .transpose()?;
 
         Ok(ALPRDArray::try_new(
             self.dtype().clone(),

@@ -6,10 +6,10 @@ use crate::ALPRDArray;
 
 impl SliceFn for ALPRDArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        let left_parts_exceptions = match self.left_parts_exceptions() {
-            None => None,
-            Some(exc) => Some(slice(&exc, start, stop)?),
-        };
+        let left_parts_exceptions = self
+            .left_parts_exceptions()
+            .map(|array| slice(&array, start, stop))
+            .transpose()?;
 
         Ok(ALPRDArray::try_new(
             self.dtype().clone(),
