@@ -1,3 +1,4 @@
+use itertools::Itertools as _;
 use vortex::array::{PrimitiveArray, TemporalArray};
 use vortex::compute::unary::{scalar_at, ScalarAtFn};
 use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
@@ -112,13 +113,13 @@ pub fn decode_to_temporal(array: &DateTimePartsArray) -> VortexResult<TemporalAr
     let values = days_buf
         .maybe_null_slice::<i64>()
         .iter()
-        .zip(seconds_buf.maybe_null_slice::<i64>().iter())
-        .zip(subsecond_buf.maybe_null_slice::<i64>().iter())
+        .zip_eq(seconds_buf.maybe_null_slice::<i64>().iter())
+        .zip_eq(subsecond_buf.maybe_null_slice::<i64>().iter())
         .map(|((d, s), ss)| d * 86_400 * divisor + s * divisor + ss)
         .collect::<Vec<_>>();
 
     Ok(TemporalArray::new_timestamp(
-        PrimitiveArray::from_vec(values, array.logical_validity().into_validity()).into_array(),
+        PrimitiveArray::from_vec(values, array.validity().clone()).into_array(),
         temporal_metadata.time_unit(),
         temporal_metadata.time_zone().map(ToString::to_string),
     ))
@@ -133,7 +134,7 @@ mod test {
     use vortex_dtype::{DType, Nullability};
 
     use crate::compute::decode_to_temporal;
-    use crate::{compress_temporal, DateTimePartsArray};
+    use crate::{split_temporal, DateTimePartsArray, TemporalParts};
 
     #[test]
     fn test_roundtrip_datetimeparts() {
@@ -143,21 +144,35 @@ mod test {
             86_400i64 + 1000 + 1, // element with day + second + sub-second components
         ];
 
-        let raw_millis = PrimitiveArray::from(raw_values.clone()).into_array();
+        do_roundtrip_test(&raw_values, Validity::NonNullable);
+        do_roundtrip_test(&raw_values, Validity::AllValid);
+        do_roundtrip_test(&raw_values, Validity::AllInvalid);
+        do_roundtrip_test(&raw_values, Validity::from(vec![true, false, true]));
+    }
+
+    fn do_roundtrip_test(raw_values: &[i64], validity: Validity) {
+        let raw_millis = PrimitiveArray::from_vec(raw_values.to_vec(), validity.clone());
+        assert_eq!(raw_millis.validity(), validity);
 
         let temporal_array =
-            TemporalArray::new_timestamp(raw_millis, TimeUnit::Ms, Some("UTC".to_string()));
+            TemporalArray::new_timestamp(raw_millis.clone().into_array(), TimeUnit::Ms, Some("UTC".to_string()));
+        assert_eq!(temporal_array.temporal_values().into_primitive().unwrap().validity(), validity);
 
-        let (days, seconds, subseconds) = compress_temporal(temporal_array.clone()).unwrap();
+        let TemporalParts { days, seconds, subseconds, validity } = split_temporal(temporal_array.clone()).unwrap();
+        assert_eq!(days.as_primitive().validity(), Validity::NonNullable);
+        assert_eq!(seconds.as_primitive().validity(), Validity::NonNullable);
+        assert_eq!(subseconds.as_primitive().validity(), Validity::NonNullable);
+        assert_eq!(validity, raw_millis.validity());
 
         let date_times = DateTimePartsArray::try_new(
             DType::Extension(temporal_array.ext_dtype().clone(), Nullability::NonNullable),
-            Validity::NonNullable,
+            validity.clone(),
             days,
             seconds,
             subseconds,
         )
         .unwrap();
+        assert_eq!(date_times.validity(), validity);
 
         let primitive_values = decode_to_temporal(&date_times)
             .unwrap()
@@ -167,7 +182,8 @@ mod test {
 
         assert_eq!(
             primitive_values.maybe_null_slice::<i64>(),
-            raw_values.as_slice()
+            raw_values
         );
+        assert_eq!(primitive_values.validity(), validity);
     }
 }
