@@ -11,7 +11,8 @@ pub trait FillForwardFn {
     fn fill_forward(&self) -> VortexResult<Array>;
 }
 
-pub fn fill_forward(array: &Array) -> VortexResult<Array> {
+pub fn fill_forward(array: impl AsRef<Array>) -> VortexResult<Array> {
+    let array = array.as_ref();
     if !array.dtype().is_nullable() {
         return Ok(array.clone());
     }
