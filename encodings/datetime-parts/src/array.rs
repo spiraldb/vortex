@@ -65,13 +65,7 @@ impl DateTimePartsArray {
             children.push(a);
         }
 
-        Self::try_from_parts(
-            dtype,
-            length,
-            metadata,
-            children.into(),
-            StatsSet::new(),
-        )
+        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
     pub fn days(&self) -> Array {
@@ -93,9 +87,11 @@ impl DateTimePartsArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata()
-            .validity
-            .to_validity(|| self.as_ref().child(3, &Validity::DTYPE, self.len()).vortex_expect("DatetimePartsArray missing validity array"))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(3, &Validity::DTYPE, self.len())
+                .vortex_expect("DatetimePartsArray missing validity array")
+        })
     }
 }
 

@@ -38,7 +38,12 @@ impl EncodingCompressor for DateTimePartsCompressor {
         like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
-        let TemporalParts { days, seconds, subseconds, validity } = split_temporal(TemporalArray::try_from(array)?)?;
+        let TemporalParts {
+            days,
+            seconds,
+            subseconds,
+            validity,
+        } = split_temporal(TemporalArray::try_from(array)?)?;
 
         let days = ctx
             .named("days")

@@ -78,7 +78,10 @@ impl ScalarAtFn for DateTimePartsArray {
 
         let scalar = days * 86_400 * divisor + seconds * divisor + subseconds;
 
-        Ok(Scalar::extension(ext, Scalar::primitive(scalar, nullability)))
+        Ok(Scalar::extension(
+            ext,
+            Scalar::primitive(scalar, nullability),
+        ))
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
@@ -154,11 +157,26 @@ mod test {
         let raw_millis = PrimitiveArray::from_vec(raw_values.to_vec(), validity.clone());
         assert_eq!(raw_millis.validity(), validity);
 
-        let temporal_array =
-            TemporalArray::new_timestamp(raw_millis.clone().into_array(), TimeUnit::Ms, Some("UTC".to_string()));
-        assert_eq!(temporal_array.temporal_values().into_primitive().unwrap().validity(), validity);
+        let temporal_array = TemporalArray::new_timestamp(
+            raw_millis.clone().into_array(),
+            TimeUnit::Ms,
+            Some("UTC".to_string()),
+        );
+        assert_eq!(
+            temporal_array
+                .temporal_values()
+                .into_primitive()
+                .unwrap()
+                .validity(),
+            validity
+        );
 
-        let TemporalParts { days, seconds, subseconds, validity } = split_temporal(temporal_array.clone()).unwrap();
+        let TemporalParts {
+            days,
+            seconds,
+            subseconds,
+            validity,
+        } = split_temporal(temporal_array.clone()).unwrap();
         assert_eq!(days.as_primitive().validity(), Validity::NonNullable);
         assert_eq!(seconds.as_primitive().validity(), Validity::NonNullable);
         assert_eq!(subseconds.as_primitive().validity(), Validity::NonNullable);
@@ -180,10 +198,7 @@ mod test {
             .into_primitive()
             .unwrap();
 
-        assert_eq!(
-            primitive_values.maybe_null_slice::<i64>(),
-            raw_values
-        );
+        assert_eq!(primitive_values.maybe_null_slice::<i64>(), raw_values);
         assert_eq!(primitive_values.validity(), validity);
     }
 }

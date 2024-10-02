@@ -33,7 +33,8 @@ impl DictArray {
             values.dtype().clone(),
             codes.len(),
             DictMetadata {
-                codes_ptype: PType::try_from(codes.dtype()).vortex_expect("codes dtype must be uint"),
+                codes_ptype: PType::try_from(codes.dtype())
+                    .vortex_expect("codes dtype must be uint"),
                 values_len: values.len(),
             },
             [values, codes].into(),

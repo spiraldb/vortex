@@ -36,7 +36,11 @@ impl ALPRDArray {
 
         let len = left_parts.len();
         if right_parts.len() != len {
-            vortex_bail!("left_parts (len {}) and right_parts (len {}) must be of same length", len, right_parts.len());
+            vortex_bail!(
+                "left_parts (len {}) and right_parts (len {}) must be of same length",
+                len,
+                right_parts.len()
+            );
         }
 
         // we delegate array validity to the left_parts child
@@ -44,9 +48,14 @@ impl ALPRDArray {
             vortex_bail!("left_parts dtype must be uint");
         }
         if dtype.is_nullable() != left_parts.dtype().is_nullable() {
-            vortex_bail!("ALPRDArray dtype nullability ({}) must match left_parts dtype nullability ({})", dtype, left_parts.dtype());
+            vortex_bail!(
+                "ALPRDArray dtype nullability ({}) must match left_parts dtype nullability ({})",
+                dtype,
+                left_parts.dtype()
+            );
         }
-        let left_parts_ptype = PType::try_from(left_parts.dtype()).vortex_expect("left_parts dtype must be uint");
+        let left_parts_ptype =
+            PType::try_from(left_parts.dtype()).vortex_expect("left_parts dtype must be uint");
 
         // we enforce right_parts to be non-nullable uint
         if right_parts.dtype().is_nullable() {
@@ -96,7 +105,6 @@ impl ALPRDArray {
             == PType::F32
     }
 
-
     /// The dtype of the left parts of the array.
     #[inline]
     fn left_parts_dtype(&self) -> DType {
@@ -106,7 +114,14 @@ impl ALPRDArray {
     /// The dtype of the right parts of the array.
     #[inline]
     fn right_parts_dtype(&self) -> DType {
-        DType::Primitive(if self.is_f32() { PType::U32 } else { PType::U64 }, Nullability::NonNullable)
+        DType::Primitive(
+            if self.is_f32() {
+                PType::U32
+            } else {
+                PType::U64
+            },
+            Nullability::NonNullable,
+        )
     }
 
     /// The dtype of the exceptions of the left parts of the array.
@@ -128,11 +143,7 @@ impl ALPRDArray {
     /// The rightmost (least significant) bits of the floating point values stored in the array.
     pub fn right_parts(&self) -> Array {
         self.as_ref()
-            .child(
-                1,
-                &self.right_parts_dtype(),
-                self.len(),
-            )
+            .child(1, &self.right_parts_dtype(), self.len())
             .vortex_expect("ALPRDArray: right_parts child")
     }
 
@@ -140,11 +151,7 @@ impl ALPRDArray {
     pub fn left_parts_exceptions(&self) -> Option<Array> {
         self.metadata().has_exceptions.then(|| {
             self.as_ref()
-                .child(
-                    2,
-                    &self.left_parts_exceptions_dtype(),
-                    self.len(),
-                )
+                .child(2, &self.left_parts_exceptions_dtype(), self.len())
                 .vortex_expect("ALPRDArray: left_parts_exceptions child")
         })
     }

@@ -8,9 +8,7 @@ use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoCanonical,
-};
+use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoCanonical};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 

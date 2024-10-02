@@ -232,8 +232,7 @@ impl RDEncoder {
                     .into_array()
             };
 
-            let exc_array =
-                PrimitiveArray::from_vec(exceptions, Validity::AllValid).into_array();
+            let exc_array = PrimitiveArray::from_vec(exceptions, Validity::AllValid).into_array();
             SparseArray::try_new(packed_pos, exc_array, doubles.len(), ScalarValue::Null)
                 .vortex_expect("ALP-RD: construction of exceptions SparseArray")
                 .into_array()

@@ -22,10 +22,7 @@ pub fn split_temporal(array: TemporalArray) -> VortexResult<TemporalParts> {
     let validity = temporal_values.validity().clone();
 
     // After this operation, timestamps will be non-nullable PrimitiveArray<i64>
-    let timestamps = try_cast(
-        &temporal_values.into_array(),
-        PType::I64.into(),
-    )?.as_primitive();
+    let timestamps = try_cast(&temporal_values.into_array(), PType::I64.into())?.as_primitive();
 
     let divisor = match array.temporal_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,
