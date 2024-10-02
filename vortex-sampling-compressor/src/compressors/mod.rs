@@ -70,10 +70,9 @@ pub trait EncodingCompressor: Sync + Send + Debug {
                 }
 
                 let with_compressed_children = array.with_new_children(compressed_children)?;
-                Ok(CompressedArray::new(
-                    with_compressed_children,
-                    Some(CompressionTree::new(dyn_self, compressed_trees)),
-                ))
+                let x = Some(CompressionTree::new(dyn_self, compressed_trees));
+                println!("recursively_compress {:?}", x);
+                Ok(CompressedArray::new(with_compressed_children, x))
             }
             None => {
                 let mut compressed_children = Vec::with_capacity(array.nchildren());
@@ -176,6 +175,10 @@ impl<'a> CompressionTree<'a> {
             children,
             metadata: Some(metadata),
         }
+    }
+
+    pub fn nchildren(&self) -> usize {
+        self.children.len()
     }
 
     pub fn child(&self, idx: usize) -> Option<&CompressionTree<'a>> {

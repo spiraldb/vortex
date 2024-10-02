@@ -198,3 +198,9 @@ tests_outside_test_module = "deny"
 unwrap_in_result = "deny"
 unwrap_used = "deny"
 use_debug = "deny"
+
+[profile.release]
+debug = true
+
+[profile.bench]
+debug = true
