@@ -1,4 +1,5 @@
 pub use array::*;
+use vortex::validity::Validity;
 
 mod array;
 mod compute;
@@ -208,7 +209,7 @@ impl RDEncoder {
                 .into_array()
         };
 
-        let primitive_right = PrimitiveArray::from_vec(right_parts, array.validity());
+        let primitive_right = PrimitiveArray::from(right_parts);
         // SAFETY: by construction, all values in right_parts are right_bit_width + leading zeros.
         let packed_right = unsafe {
             bitpack_encode_unchecked(primitive_right, self.right_bit_width as _)
@@ -232,8 +233,7 @@ impl RDEncoder {
             };
 
             let exc_array =
-                PrimitiveArray::from_nullable_vec(exceptions.into_iter().map(Some).collect())
-                    .into_array();
+                PrimitiveArray::from_vec(exceptions, Validity::AllValid).into_array();
             SparseArray::try_new(packed_pos, exc_array, doubles.len(), ScalarValue::Null)
                 .vortex_expect("ALP-RD: construction of exceptions SparseArray")
                 .into_array()
