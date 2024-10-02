@@ -5,6 +5,13 @@ use itertools::Itertools;
 use num_traits::{CheckedSub, Float, PrimInt, ToPrimitive};
 use serde::{Deserialize, Serialize};
 
+mod array;
+mod compress;
+mod compute;
+
+pub use array::*;
+pub use compress::*;
+
 const SAMPLE_SIZE: usize = 32;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -19,7 +26,14 @@ impl Display for Exponents {
     }
 }
 
-pub trait ALPFloat: Float + Display + 'static {
+mod private {
+    pub trait Sealed {}
+
+    impl Sealed for f32 {}
+    impl Sealed for f64 {}
+}
+
+pub trait ALPFloat: private::Sealed + Float + Display + 'static {
     type ALPInt: PrimInt + Display + ToPrimitive;
 
     const FRACTIONAL_BITS: u8;

@@ -5,8 +5,7 @@ use vortex_dtype::{NativePType, PType};
 use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 use vortex_scalar::ScalarValue;
 
-use crate::alp::ALPFloat;
-use crate::array::ALPArray;
+use crate::alp::{ALPArray, ALPFloat};
 use crate::Exponents;
 
 #[macro_export]
