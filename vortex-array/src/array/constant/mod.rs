@@ -8,7 +8,7 @@ use crate::encoding::ids;
 use crate::stats::{Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDType, ArrayDef, ArrayTrait};
+use crate::{impl_encoding, ArrayDType, ArrayTrait};
 
 mod canonical;
 mod compute;

@@ -28,6 +28,7 @@ impl TakeFn for DateTimePartsArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(Self::try_new(
             self.dtype().clone(),
+            self.logical_validity().into_validity().take(indices)?,
             take(self.days(), indices)?,
             take(self.seconds(), indices)?,
             take(self.subsecond(), indices)?,
@@ -40,6 +41,7 @@ impl SliceFn for DateTimePartsArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
             self.dtype().clone(),
+            self.validity().slice(start, stop)?,
             slice(self.days(), start, stop)?,
             slice(self.seconds(), start, stop)?,
             slice(self.subsecond(), start, stop)?,
@@ -75,7 +77,7 @@ impl ScalarAtFn for DateTimePartsArray {
 
         let scalar = days * 86_400 * divisor + seconds * divisor + subseconds;
 
-        Ok(Scalar::primitive(scalar, nullability))
+        Ok(Scalar::extension(ext, Scalar::primitive(scalar, nullability)))
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
@@ -125,6 +127,7 @@ pub fn decode_to_temporal(array: &DateTimePartsArray) -> VortexResult<TemporalAr
 #[cfg(test)]
 mod test {
     use vortex::array::{PrimitiveArray, TemporalArray};
+    use vortex::validity::Validity;
     use vortex::{IntoArray, IntoArrayVariant};
     use vortex_datetime_dtype::TimeUnit;
     use vortex_dtype::{DType, Nullability};
@@ -149,6 +152,7 @@ mod test {
 
         let date_times = DateTimePartsArray::try_new(
             DType::Extension(temporal_array.ext_dtype().clone(), Nullability::NonNullable),
+            Validity::NonNullable,
             days,
             seconds,
             subseconds,
