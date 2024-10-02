@@ -46,7 +46,7 @@ impl ScalarAtFn for ALPArray {
             }
         }
 
-        let encoded_val = scalar_at_unchecked(&self.encoded(), index);
+        let encoded_val = scalar_at_unchecked(self.encoded(), index);
 
         match_each_alp_float_ptype!(self.ptype(), |$T| {
             let encoded_val: <$T as ALPFloat>::ALPInt = encoded_val.as_ref().try_into().unwrap();

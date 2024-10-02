@@ -69,9 +69,9 @@ impl ScalarAtFn for DateTimePartsArray {
             TimeUnit::D => vortex_bail!("Invalid time unit D"),
         };
 
-        let days: i64 = scalar_at(&self.days(), index)?.try_into()?;
-        let seconds: i64 = scalar_at(&self.seconds(), index)?.try_into()?;
-        let subseconds: i64 = scalar_at(&self.subsecond(), index)?.try_into()?;
+        let days: i64 = scalar_at(self.days(), index)?.try_into()?;
+        let seconds: i64 = scalar_at(self.seconds(), index)?.try_into()?;
+        let subseconds: i64 = scalar_at(self.subsecond(), index)?.try_into()?;
 
         let scalar = days * 86_400 * divisor + seconds * divisor + subseconds;
 

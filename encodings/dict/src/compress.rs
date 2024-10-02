@@ -177,7 +177,6 @@ mod test {
     use vortex::accessor::ArrayAccessor;
     use vortex::array::{PrimitiveArray, VarBinArray};
     use vortex::compute::unary::scalar_at;
-    use vortex::ToArray;
     use vortex_dtype::Nullability::Nullable;
     use vortex_dtype::{DType, PType};
     use vortex_scalar::Scalar;
@@ -207,15 +206,15 @@ mod test {
         let (codes, values) = dict_encode_typed_primitive::<i32>(&arr);
         assert_eq!(codes.maybe_null_slice::<u64>(), &[1, 1, 0, 2, 2, 0, 2, 0]);
         assert_eq!(
-            scalar_at(&values.to_array(), 0).unwrap(),
+            scalar_at(&values, 0).unwrap(),
             Scalar::null(DType::Primitive(PType::I32, Nullable))
         );
         assert_eq!(
-            scalar_at(&values.to_array(), 1).unwrap(),
+            scalar_at(&values, 1).unwrap(),
             Scalar::primitive(1, Nullable)
         );
         assert_eq!(
-            scalar_at(&values.to_array(), 2).unwrap(),
+            scalar_at(&values, 2).unwrap(),
             Scalar::primitive(3, Nullable)
         );
     }

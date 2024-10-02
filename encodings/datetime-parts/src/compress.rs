@@ -12,7 +12,7 @@ use vortex_error::{vortex_bail, VortexResult};
 pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Array)> {
     // After this operation, timestamps will be PrimitiveArray<i64>
     let timestamps = try_cast(
-        &array.temporal_values().into_primitive()?.into_array(),
+        array.temporal_values().into_primitive()?.into_array(),
         PType::I64.into(),
     )?;
     let divisor = match array.temporal_metadata().time_unit() {

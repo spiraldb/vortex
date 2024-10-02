@@ -141,7 +141,7 @@ impl SparseArray {
     /// then it returns None.
     pub fn min_index(&self) -> Option<usize> {
         (!self.indices().is_empty()).then(|| {
-            let min_index: usize = scalar_at(&self.indices(), 0)
+            let min_index: usize = scalar_at(self.indices(), 0)
                 .and_then(|s| s.as_ref().try_into())
                 .vortex_expect("SparseArray indices is non-empty");
 
@@ -305,10 +305,10 @@ mod test {
     #[test]
     pub fn test_scalar_at() {
         assert_eq!(
-            usize::try_from(&scalar_at(&sparse_array(nullable_fill()), 2).unwrap()).unwrap(),
+            usize::try_from(&scalar_at(sparse_array(nullable_fill()), 2).unwrap()).unwrap(),
             100
         );
-        let error = scalar_at(&sparse_array(nullable_fill()), 10).err().unwrap();
+        let error = scalar_at(sparse_array(nullable_fill()), 10).err().unwrap();
         let VortexError::OutOfBounds(i, start, stop, _) = error else {
             unreachable!()
         };

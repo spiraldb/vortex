@@ -57,7 +57,7 @@ impl TakeFn for FSSTArray {
 
 impl ScalarAtFn for FSSTArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let compressed = scalar_at_unchecked(&self.codes(), index);
+        let compressed = scalar_at_unchecked(self.codes(), index);
         let binary_datum = compressed
             .value()
             .as_buffer()?

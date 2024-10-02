@@ -76,8 +76,8 @@ impl ChunkedArray {
             vortex_bail!("chunk index {} > num chunks ({})", idx, self.nchunks());
         }
 
-        let chunk_start = usize::try_from(&scalar_at_unchecked(&self.chunk_offsets(), idx))?;
-        let chunk_end = usize::try_from(&scalar_at_unchecked(&self.chunk_offsets(), idx + 1))?;
+        let chunk_start = usize::try_from(&scalar_at_unchecked(self.chunk_offsets(), idx))?;
+        let chunk_end = usize::try_from(&scalar_at_unchecked(self.chunk_offsets(), idx + 1))?;
 
         // Offset the index since chunk_ends is child 0.
         self.as_ref()
@@ -104,7 +104,7 @@ impl ChunkedArray {
             .vortex_expect("Search sorted failed in find_chunk_idx")
             .to_ends_index(self.nchunks() + 1)
             .saturating_sub(1);
-        let chunk_start = scalar_at(&self.chunk_offsets(), index_chunk)
+        let chunk_start = scalar_at(self.chunk_offsets(), index_chunk)
             .and_then(|s| usize::try_from(&s))
             .vortex_expect("Failed to find chunk start in find_chunk_idx");
 
@@ -237,7 +237,7 @@ mod test {
 
     use crate::array::chunked::ChunkedArray;
     use crate::compute::unary::{scalar_at, subtract_scalar};
-    use crate::{assert_arrays_eq, Array, ArrayDType, IntoArray, IntoArrayVariant, ToArray};
+    use crate::{assert_arrays_eq, Array, ArrayDType, IntoArray, IntoArrayVariant};
 
     fn chunked_array() -> ChunkedArray {
         ChunkedArray::try_new(
@@ -255,7 +255,7 @@ mod test {
     fn test_scalar_subtract() {
         let chunked = chunked_array();
         let to_subtract = 1u64;
-        let array = subtract_scalar(&chunked.to_array(), &to_subtract.into()).unwrap();
+        let array = subtract_scalar(&chunked, &to_subtract.into()).unwrap();
 
         let chunked = ChunkedArray::try_from(array).unwrap();
         let mut chunks_out = chunked.chunks();

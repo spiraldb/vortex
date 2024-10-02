@@ -64,7 +64,7 @@ impl ScalarAtFn for FoRArray {
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let encoded_scalar =
-            scalar_at_unchecked(&self.encoded(), index).reinterpret_cast(self.ptype());
+            scalar_at_unchecked(self.encoded(), index).reinterpret_cast(self.ptype());
         let encoded =
             PrimitiveScalar::try_from(&encoded_scalar).vortex_expect("Invalid encoded scalar");
         let reference =
