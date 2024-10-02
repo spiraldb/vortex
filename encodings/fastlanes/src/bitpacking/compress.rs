@@ -155,8 +155,8 @@ pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
         unpacked = unpacked.reinterpret_cast(ptype);
     }
 
-    if let Some((indices, values, _)) = array._patches() {
-        patch_unpacked(unpacked, indices, values)
+    if let Some((indices, values, patches_indices_offset)) = array._patches() {
+        patch_unpacked(unpacked, indices, values, patches_indices_offset)
     } else {
         Ok(unpacked)
     }
@@ -166,6 +166,7 @@ fn patch_unpacked(
     array: PrimitiveArray,
     indices: Array,
     values: Array,
+    patches_indices_offset: usize,
 ) -> VortexResult<PrimitiveArray> {
     match_each_integer_ptype!(array.ptype(), |$T| {
         array.patch(
@@ -173,7 +174,7 @@ fn patch_unpacked(
                 .into_primitive()?
                 .maybe_null_slice::<u64>()
                 .iter()
-                .map(|v| (*v as usize))
+                .map(|v| (*v as usize) - patches_indices_offset)
                 .collect::<Vec<_>>()),
             values.into_primitive()?.maybe_null_slice::<$T>(),
         )
