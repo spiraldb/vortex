@@ -67,10 +67,26 @@ impl EncodingCompressor for BitPackedCompressor {
                 bitpack_patches(&parray, bit_width, num_exceptions).map(
                     |(patch_indices, patch_values, index_offset)| -> VortexResult<_> {
                         Ok((
-                            ctx.auxiliary("patch_indices")
-                                .compress(&patch_indices, like.as_ref().and_then(|l| l.child(0)))?,
-                            ctx.auxiliary("patch_values")
-                                .compress(&patch_values, like.as_ref().and_then(|l| l.child(1)))?,
+                            ctx.auxiliary("patch_indices").compress(
+                                &patch_indices,
+                                like.as_ref().and_then(|l| {
+                                    if l.nchildren() >= 2 {
+                                        l.child(0)
+                                    } else {
+                                        None
+                                    }
+                                }),
+                            )?,
+                            ctx.auxiliary("patch_values").compress(
+                                &patch_values,
+                                like.as_ref().and_then(|l| {
+                                    if l.nchildren() >= 2 {
+                                        l.child(1)
+                                    } else {
+                                        None
+                                    }
+                                }),
+                            )?,
                             index_offset,
                         ))
                     },

@@ -137,6 +137,7 @@ fn do_patch_for_take_primitive<T: NativePType>(
     Ok(())
 }
 
+// FIXME(DK): This is all too complex and I should not need the first element of the tuple.
 fn kept_indices(values: Array, filter_values: Array) -> VortexResult<(Array, Vec<usize>)> {
     let filter_values = filter_values.into_primitive()?;
     if filter_values.len() > 128 {
