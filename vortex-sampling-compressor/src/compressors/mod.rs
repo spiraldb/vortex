@@ -64,7 +64,7 @@ pub trait EncodingCompressor: Sync + Send + Debug {
                 let mut compressed_children = Vec::with_capacity(array.nchildren());
                 let mut compressed_trees = Vec::with_capacity(array.nchildren());
                 for ((array, like), ctx) in arrays_and_trees {
-                    let compressed = dyn_self.compress(array, like, ctx)?;
+                    let compressed = dyn_self.recursively_compress(array, like, ctx)?;
                     compressed_children.push(compressed.array);
                     compressed_trees.push(compressed.path);
                 }
