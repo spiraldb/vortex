@@ -4278,9 +4278,9 @@ version = "0.11.0"
 dependencies = [
  "arrow",
  "divan",
- "fastlanes",
  "itertools 0.13.0",
  "num-traits",
+ "rstest",
  "serde",
  "vortex-array",
  "vortex-dtype",

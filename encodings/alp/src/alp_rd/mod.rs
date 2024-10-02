@@ -196,8 +196,6 @@ impl Encoder {
         // SparseArray for exceptions.
         let exceptions = (!exceptions_pos.is_empty()).then(|| {
             let max_exc_pos = exceptions_pos.last().copied().unwrap_or_default();
-            // Add one to get next power of two as well here.
-            // If we're going to be doing more of this, it just works.
             let bw = (max_exc_pos + 1).next_power_of_two().ilog2() as usize;
 
             let exc_pos_array = PrimitiveArray::from(exceptions_pos);
@@ -256,7 +254,7 @@ pub fn alp_rd_decode<T: ALPRDFloat>(
         left_parts_decoded.push(<T as ALPRDFloat>::from_u16(dict[*code as usize]));
     }
 
-    // Apply the exception patches. Only applies for the left-parts
+    // Apply the exception patches to left_parts
     for (pos, val) in exc_pos.iter().zip(exceptions.iter()) {
         left_parts_decoded[*pos as usize] = <T as ALPRDFloat>::from_u16(*val);
     }
@@ -364,7 +362,6 @@ fn estimate_compression_size(
 struct ALPRDDictionary {
     /// Items in the dictionary are bit patterns, along with their 16-bit encoding.
     dictionary: HashMap<u16, u16>,
-    /// Recreate the dictionary by encoding the hash instead.
     /// The (compressed) left bit width. This is after bit-packing the dictionary codes.
     left_bit_width: u8,
     /// The right bit width. This is the bit-packed width of each of the "real double" values.

@@ -25,35 +25,27 @@ impl SliceFn for ALPRDArray {
 
 #[cfg(test)]
 mod test {
+    use rstest::rstest;
     use vortex::array::PrimitiveArray;
     use vortex::compute::slice;
     use vortex::IntoArrayVariant;
 
-    use crate::Encoder;
+    use crate::{ALPRDFloat, Encoder};
 
-    macro_rules! test_slice_generic {
-        ($typ:ty) => {
-            let a: $typ = (0.1 as $typ).next_up();
-            let b: $typ = (0.2 as $typ).next_up();
-            let outlier: $typ = (3e30 as $typ).next_up();
+    #[rstest]
+    #[case(0.1f32, 0.2f32, 3e25f32)]
+    #[case(0.1f64, 0.2f64, 3e100f64)]
+    fn test_slice<T: ALPRDFloat>(#[case] a: T, #[case] b: T, #[case] outlier: T) {
+        let array = PrimitiveArray::from(vec![a, b, outlier]);
+        let encoded = Encoder::new(&[a, b]).encode(&array);
 
-            let array = PrimitiveArray::from(vec![a, b, outlier]);
-            let encoded = Encoder::new(&[a, b]).encode(&array);
+        assert!(encoded.left_parts_exceptions().is_some());
 
-            assert!(encoded.left_parts_exceptions().is_some());
+        let decoded = slice(encoded.as_ref(), 1, 3)
+            .unwrap()
+            .into_primitive()
+            .unwrap();
 
-            let decoded = slice(encoded.as_ref(), 1, 3)
-                .unwrap()
-                .into_primitive()
-                .unwrap();
-
-            assert_eq!(decoded.maybe_null_slice::<$typ>(), &[b, outlier]);
-        };
-    }
-
-    #[test]
-    fn test_slice() {
-        test_slice_generic!(f32);
-        test_slice_generic!(f64);
+        assert_eq!(decoded.maybe_null_slice::<T>(), &[b, outlier]);
     }
 }

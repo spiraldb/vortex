@@ -15,13 +15,13 @@ fn main() {
 }
 
 #[divan::bench(types = [f32, f64], args = [100_000, 10_000_000])]
-fn alp_compress<T: ALPFloat>(n: usize) -> (Exponents, Vec<T::ALPInt>, Vec<u64>, Vec<T>) {
+fn compress_alp<T: ALPFloat>(n: usize) -> (Exponents, Vec<T::ALPInt>, Vec<u64>, Vec<T>) {
     let values: Vec<T> = vec![T::from(1.234).unwrap(); n];
     T::encode(values.as_slice(), None)
 }
 
 #[divan::bench(types = [f32, f64], args = [100_000, 10_000_000])]
-fn rd_compress<T: ALPRDFloat>(bencher: Bencher, n: usize) {
+fn compress_rd<T: ALPRDFloat>(bencher: Bencher, n: usize) {
     let values: Vec<T> = vec![T::from(1.23).unwrap(); n];
     let primitive = PrimitiveArray::from(values);
     let encoder = Encoder::new(&[T::from(1.23).unwrap()]);

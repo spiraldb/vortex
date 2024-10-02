@@ -225,57 +225,42 @@ impl ArrayTrait for ALPRDArray {}
 
 #[cfg(test)]
 mod test {
+    use rstest::rstest;
     use vortex::array::PrimitiveArray;
     use vortex::{IntoArray, IntoCanonical};
 
-    use crate::alp_rd;
+    use crate::{alp_rd, ALPRDFloat};
 
-    macro_rules! n_reals {
-        ($seed:expr, $n:expr) => {
-            (0..$n)
-                .scan($seed, |state, _| {
-                    let prev = *state;
-                    *state = state.next_up();
-                    Some(prev)
-                })
-                .collect::<Vec<_>>()
-        };
-    }
+    #[rstest]
+    #[case(vec![0.1f32.next_up(); 1024], 1.123_848_f32)]
+    #[case(vec![0.1f64.next_up(); 1024], 1.123_848_591_110_992_f64)]
+    fn test_array_encode_with_nulls_and_exceptions<T: ALPRDFloat>(
+        #[case] reals: Vec<T>,
+        #[case] seed: T,
+    ) {
+        assert_eq!(reals.len(), 1024, "test expects 1024-length fixture");
+        // Null out some of the values.
+        let mut reals: Vec<Option<T>> = reals.into_iter().map(Some).collect();
+        reals[1] = None;
+        reals[5] = None;
+        reals[900] = None;
 
-    macro_rules! test_encode_nulls_excs_generic {
-        ($typ:ty, $seed:expr) => {{
-            // Create a vector of 1024 "real" doubles
-            let reals = n_reals!($seed, 1024);
-            // Null out some of the values.
-            let mut reals: Vec<Option<$typ>> = reals.into_iter().map(Some).collect();
-            reals[1] = None;
-            reals[5] = None;
-            reals[90] = None;
+        // Create a new array from this.
+        let real_array = PrimitiveArray::from_nullable_vec(reals.clone());
 
-            // Create a new array from this.
-            let real_array = PrimitiveArray::from_nullable_vec(reals.clone());
+        // Pick a seed that we know will trigger lots of exceptions.
+        let encoder: alp_rd::Encoder = alp_rd::Encoder::new(&[seed.powi(-2)]);
 
-            // Pick a seed that we know will trigger lots of exceptions.
-            let encoder: alp_rd::Encoder = alp_rd::Encoder::new(&[$seed / 100.0]);
+        let rd_array = encoder.encode(&real_array);
 
-            let rd_array = encoder.encode(&real_array);
+        let decoded = rd_array
+            .into_array()
+            .into_canonical()
+            .unwrap()
+            .into_primitive()
+            .unwrap();
 
-            let decoded = rd_array
-                .into_array()
-                .into_canonical()
-                .unwrap()
-                .into_primitive()
-                .unwrap();
-
-            let maybe_null_reals: Vec<$typ> =
-                reals.into_iter().map(|v| v.unwrap_or_default()).collect();
-            assert_eq!(decoded.maybe_null_slice::<$typ>(), &maybe_null_reals);
-        }};
-    }
-
-    #[test]
-    fn test_array_encode_with_nulls_and_exceptions() {
-        test_encode_nulls_excs_generic!(f32, 1.123_848_f32);
-        test_encode_nulls_excs_generic!(f64, 1.123_848_591_110_992_f64);
+        let maybe_null_reals: Vec<T> = reals.into_iter().map(|v| v.unwrap_or_default()).collect();
+        assert_eq!(decoded.maybe_null_slice::<T>(), &maybe_null_reals);
     }
 }
