@@ -1,6 +1,5 @@
 use vortex::array::{PrimitiveArray, TemporalArray};
 use vortex::compute::unary::try_cast;
-use vortex::validity::Validity;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_datetime_dtype::TimeUnit;
 use vortex_dtype::PType;
@@ -10,7 +9,6 @@ pub struct TemporalParts {
     pub days: Array,
     pub seconds: Array,
     pub subseconds: Array,
-    pub validity: Validity,
 }
 
 /// Compress a `TemporalArray` into day, second, and subsecond components.
@@ -44,9 +42,8 @@ pub fn split_temporal(array: TemporalArray) -> VortexResult<TemporalParts> {
     }
 
     Ok(TemporalParts {
-        days: PrimitiveArray::from(days).into_array(),
+        days: PrimitiveArray::from_vec(days, validity).into_array(),
         seconds: PrimitiveArray::from(seconds).into_array(),
         subseconds: PrimitiveArray::from(subsecond).into_array(),
-        validity,
     })
 }

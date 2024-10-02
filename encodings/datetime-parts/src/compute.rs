@@ -5,7 +5,7 @@ use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
 use vortex::validity::ArrayValidity;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_datetime_dtype::{TemporalMetadata, TimeUnit};
-use vortex_dtype::DType;
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult, VortexUnwrap as _};
 use vortex_scalar::Scalar;
 
@@ -29,7 +29,6 @@ impl TakeFn for DateTimePartsArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Ok(Self::try_new(
             self.dtype().clone(),
-            self.logical_validity().into_validity().take(indices)?,
             take(self.days(), indices)?,
             take(self.seconds(), indices)?,
             take(self.subsecond(), indices)?,
@@ -42,7 +41,6 @@ impl SliceFn for DateTimePartsArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
             self.dtype().clone(),
-            self.validity().slice(start, stop)?,
             slice(self.days(), start, stop)?,
             slice(self.seconds(), start, stop)?,
             slice(self.subsecond(), start, stop)?,
@@ -63,6 +61,13 @@ impl ScalarAtFn for DateTimePartsArray {
         let TemporalMetadata::Timestamp(time_unit, _) = TemporalMetadata::try_from(&ext)? else {
             vortex_bail!("Metadata must be Timestamp, found {}", ext.id());
         };
+
+        if !self.is_valid(index) {
+            return Ok(Scalar::extension(
+                ext,
+                Scalar::null(DType::Primitive(PType::I64, nullability)),
+            ));
+        }
 
         let divisor = match time_unit {
             TimeUnit::Ns => 1_000_000_000,
@@ -134,7 +139,7 @@ mod test {
     use vortex::validity::Validity;
     use vortex::{IntoArray, IntoArrayVariant};
     use vortex_datetime_dtype::TimeUnit;
-    use vortex_dtype::{DType, Nullability};
+    use vortex_dtype::DType;
 
     use crate::compute::decode_to_temporal;
     use crate::{split_temporal, DateTimePartsArray, TemporalParts};
@@ -175,16 +180,14 @@ mod test {
             days,
             seconds,
             subseconds,
-            validity,
         } = split_temporal(temporal_array.clone()).unwrap();
-        assert_eq!(days.as_primitive().validity(), Validity::NonNullable);
+        assert_eq!(days.as_primitive().validity(), validity);
         assert_eq!(seconds.as_primitive().validity(), Validity::NonNullable);
         assert_eq!(subseconds.as_primitive().validity(), Validity::NonNullable);
         assert_eq!(validity, raw_millis.validity());
 
         let date_times = DateTimePartsArray::try_new(
-            DType::Extension(temporal_array.ext_dtype().clone(), Nullability::NonNullable),
-            validity.clone(),
+            DType::Extension(temporal_array.ext_dtype().clone(), validity.nullability()),
             days,
             seconds,
             subseconds,

@@ -42,7 +42,6 @@ impl EncodingCompressor for DateTimePartsCompressor {
             days,
             seconds,
             subseconds,
-            validity,
         } = split_temporal(TemporalArray::try_from(array)?)?;
 
         let days = ctx
@@ -57,7 +56,6 @@ impl EncodingCompressor for DateTimePartsCompressor {
         Ok(CompressedArray::new(
             DateTimePartsArray::try_new(
                 array.dtype().clone(),
-                validity,
                 days.array,
                 seconds.array,
                 subsecond.array,
