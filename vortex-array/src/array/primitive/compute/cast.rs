@@ -79,42 +79,30 @@ mod test {
         assert_eq!(p.validity(), Validity::NonNullable);
 
         // to nullable
-        let p = try_cast(
-            &p,
-            &DType::Primitive(PType::U8, Nullability::Nullable),
-        )
-        .unwrap()
-        .as_primitive();
+        let p = try_cast(&p, &DType::Primitive(PType::U8, Nullability::Nullable))
+            .unwrap()
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![0u8, 10, 200]);
         assert_eq!(p.validity(), Validity::AllValid);
 
         // back to non-nullable
-        let p = try_cast(
-            &p,
-            &DType::Primitive(PType::U8, Nullability::NonNullable),
-        )
-        .unwrap()
-        .as_primitive();
+        let p = try_cast(&p, &DType::Primitive(PType::U8, Nullability::NonNullable))
+            .unwrap()
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![0u8, 10, 200]);
         assert_eq!(p.validity(), Validity::NonNullable);
 
         // to nullable u32
-        let p = try_cast(
-            &p,
-            &DType::Primitive(PType::U32, Nullability::Nullable),
-        )
-        .unwrap()
-        .as_primitive();
+        let p = try_cast(&p, &DType::Primitive(PType::U32, Nullability::Nullable))
+            .unwrap()
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u32>(), vec![0u32, 10, 200]);
         assert_eq!(p.validity(), Validity::AllValid);
 
         // to non-nullable u8
-        let p = try_cast(
-            &p,
-            &DType::Primitive(PType::U8, Nullability::NonNullable),
-        )
-        .unwrap()
-        .as_primitive();
+        let p = try_cast(&p, &DType::Primitive(PType::U8, Nullability::NonNullable))
+            .unwrap()
+            .as_primitive();
         assert_eq!(p.maybe_null_slice::<u8>(), vec![0u8, 10, 200]);
         assert_eq!(p.validity(), Validity::NonNullable);
     }
