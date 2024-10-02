@@ -13,18 +13,18 @@ impl ScalarAtFn for ALPRDArray {
                 scalar_at(&exceptions, index)?.try_into()?
             }
             _ => {
-                let left_code: u16 = scalar_at(&self.left_parts(), index)?.try_into()?;
+                let left_code: u16 = scalar_at(self.left_parts(), index)?.try_into()?;
                 self.left_parts_dict()[left_code as usize]
             }
         };
 
         // combine left and right values
         if self.is_f32() {
-            let right: u32 = scalar_at(&self.right_parts(), index)?.try_into()?;
+            let right: u32 = scalar_at(self.right_parts(), index)?.try_into()?;
             let packed = f32::from_bits((left as u32) << self.right_bit_width() | right);
             Ok(packed.into())
         } else {
-            let right: u64 = scalar_at(&self.right_parts(), index)?.try_into()?;
+            let right: u64 = scalar_at(self.right_parts(), index)?.try_into()?;
             let packed = f64::from_bits(((left as u64) << self.right_bit_width()) | right);
             Ok(packed.into())
         }

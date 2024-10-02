@@ -22,17 +22,17 @@ impl ArrayCompute for DictArray {
 
 impl ScalarAtFn for DictArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let dict_index: usize = scalar_at(&self.codes(), index)?.as_ref().try_into()?;
-        Ok(scalar_at_unchecked(&self.values(), dict_index))
+        let dict_index: usize = scalar_at(self.codes(), index)?.as_ref().try_into()?;
+        Ok(scalar_at_unchecked(self.values(), dict_index))
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        let dict_index: usize = scalar_at_unchecked(&self.codes(), index)
+        let dict_index: usize = scalar_at_unchecked(self.codes(), index)
             .as_ref()
             .try_into()
             .vortex_expect("Invalid dict index");
 
-        scalar_at_unchecked(&self.values(), dict_index)
+        scalar_at_unchecked(self.values(), dict_index)
     }
 }
 

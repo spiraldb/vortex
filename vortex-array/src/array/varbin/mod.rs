@@ -90,7 +90,7 @@ impl VarBinArray {
     pub fn first_offset<T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>>(
         &self,
     ) -> VortexResult<T> {
-        scalar_at(&self.offsets(), 0)?
+        scalar_at(self.offsets(), 0)?
             .cast(&DType::from(T::PTYPE))?
             .as_ref()
             .try_into()
@@ -121,8 +121,8 @@ impl VarBinArray {
     /// Access value bytes child array limited to values that are logically present in
     /// the array unlike [bytes][Self::bytes].
     pub fn sliced_bytes(&self) -> VortexResult<Array> {
-        let first_offset: usize = scalar_at(&self.offsets(), 0)?.as_ref().try_into()?;
-        let last_offset: usize = scalar_at(&self.offsets(), self.offsets().len() - 1)?
+        let first_offset: usize = scalar_at(self.offsets(), 0)?.as_ref().try_into()?;
+        let last_offset: usize = scalar_at(self.offsets(), self.offsets().len() - 1)?
             .as_ref()
             .try_into()?;
         slice(self.bytes(), first_offset, last_offset)
@@ -183,7 +183,7 @@ impl VarBinArray {
                 })
             })
             .unwrap_or_else(|| {
-                scalar_at(&self.offsets(), index)
+                scalar_at(self.offsets(), index)
                     .unwrap_or_else(|err| {
                         vortex_panic!(err, "Failed to get offset at index: {}", index)
                     })

@@ -20,7 +20,7 @@ impl ArrayCompute for ZigZagArray {
 
 impl ScalarAtFn for ZigZagArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        let scalar = scalar_at_unchecked(&self.encoded(), index);
+        let scalar = scalar_at_unchecked(self.encoded(), index);
         if scalar.is_null() {
             return Ok(scalar.reinterpret_cast(self.ptype()));
         }

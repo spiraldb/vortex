@@ -80,7 +80,7 @@ mod test {
 
         // to nullable
         let p = try_cast(
-            &p.into_array(),
+            &p,
             &DType::Primitive(PType::U8, Nullability::Nullable),
         )
         .unwrap()
@@ -90,7 +90,7 @@ mod test {
 
         // back to non-nullable
         let p = try_cast(
-            &p.into_array(),
+            &p,
             &DType::Primitive(PType::U8, Nullability::NonNullable),
         )
         .unwrap()
@@ -100,7 +100,7 @@ mod test {
 
         // to nullable u32
         let p = try_cast(
-            &p.into_array(),
+            &p,
             &DType::Primitive(PType::U32, Nullability::Nullable),
         )
         .unwrap()
@@ -110,7 +110,7 @@ mod test {
 
         // to non-nullable u8
         let p = try_cast(
-            &p.into_array(),
+            &p,
             &DType::Primitive(PType::U8, Nullability::NonNullable),
         )
         .unwrap()

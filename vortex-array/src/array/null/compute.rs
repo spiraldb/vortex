@@ -93,7 +93,7 @@ mod test {
     fn test_scalar_at_nulls() {
         let nulls = NullArray::new(10);
 
-        let scalar = scalar_at(&nulls.into_array(), 0).unwrap();
+        let scalar = scalar_at(&nulls, 0).unwrap();
         assert!(scalar.is_null());
         assert_eq!(scalar.dtype().clone(), DType::Null);
     }

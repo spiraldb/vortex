@@ -222,7 +222,7 @@ fn varbin_to_arrow(varbin_array: VarBinArray) -> VortexResult<ArrayRef> {
         PType::U64 => offsets.reinterpret_cast(PType::I64),
         PType::U32 => offsets.reinterpret_cast(PType::I32),
         // Unless it's u64, everything else can be converted into an i32.
-        _ => try_cast(&offsets.to_array(), PType::I32.into())
+        _ => try_cast(offsets.to_array(), PType::I32.into())
             .and_then(|a| a.into_primitive())
             .map_err(|err| err.with_context("Failed to cast offsets to PrimitiveArray of i32"))?,
     };

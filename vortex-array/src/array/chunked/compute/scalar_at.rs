@@ -13,7 +13,7 @@ impl ScalarAtFn for ChunkedArray {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let (chunk_index, chunk_offset) = self.find_chunk_idx(index);
         scalar_at_unchecked(
-            &self.chunk(chunk_index).unwrap_or_else(|e| {
+            self.chunk(chunk_index).unwrap_or_else(|e| {
                 vortex_panic!(
                     e,
                     "ChunkedArray: scalar_at_unchecked: failed to find chunk {}",

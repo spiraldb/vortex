@@ -67,8 +67,8 @@ fn take_strict_sorted(chunked: &ChunkedArray, indices: &Array) -> VortexResult<A
         let (chunk_idx, _idx_in_chunk) = chunked.find_chunk_idx(idx);
 
         // Find the end of this chunk, and locate that position in the indices array.
-        let chunk_begin = usize::try_from(&scalar_at(&chunked.chunk_offsets(), chunk_idx)?)?;
-        let chunk_end = usize::try_from(&scalar_at(&chunked.chunk_offsets(), chunk_idx + 1)?)?;
+        let chunk_begin = usize::try_from(&scalar_at(chunked.chunk_offsets(), chunk_idx)?)?;
+        let chunk_end = usize::try_from(&scalar_at(chunked.chunk_offsets(), chunk_idx + 1)?)?;
         let chunk_end_pos = search_sorted(indices, chunk_end, SearchSortedSide::Left)?.to_index();
 
         // Now we can say the slice of indices belonging to this chunk is [pos, chunk_end_pos)
