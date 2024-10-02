@@ -1,21 +1,3 @@
-//! Encoding for "real doubles", i.e. doubles that don't compress easily via the typical ALP
-//! algorithm.
-//!
-//! ALP-RD uses the algorithm outlined in Section 3.4 of the paper, as well as relevant MIT-licensed
-//! C++ code from CWI.
-//!
-//! The crux of it is that the front (most significant) bits of many double vectors tend to be
-//! the same, i.e. most doubles in a vector often use the same exponent and front bits. Compression
-//! proceeds by finding the best prefix of up to 16 bits that can be collapsed into a dictionary of
-//! up to 8 elements. Each double can then be broken into the front/left `L` bits, which neatly
-//! bit-packs down to 3 bits per element. The remaining `R` bits are bit-packed as well.
-//!
-//! In the ideal case, this gets about ~24% compression.
-//!
-//! The code in this module draws on the MIT-licensed [C++ implementation].
-//!
-//! [C++ implementation]: https://github.com/cwida/ALP/blob/main/include/alp/rd.hpp
-
 pub use array::*;
 
 mod array;
@@ -58,15 +40,27 @@ mod private {
     impl Sealed for f64 {}
 }
 
+/// Main trait for ALP-RD encodable floating point numbers.
+///
+/// Like the paper, we limit this to the IEEE7 754 single-precision (`f32`) and double-precision
+/// (`f64`) floating point types.
 pub trait ALPRDFloat: private::Sealed + Float + Copy + NativePType {
+    /// The unsigned integer type with the same bit-width as the floating-point type.
     type UINT: NativePType + PrimInt + One + Copy;
 
+    /// Number of bits the value occupies in registers.
     const BITS: usize = size_of::<Self>() * 8;
 
+    /// Bit-wise transmute from the unsigned integer type to the floating-point type.
     fn from_bits(bits: Self::UINT) -> Self;
+
+    /// Bit-wise transmute into the unsigned integer type.
     fn to_bits(value: Self) -> Self::UINT;
 
+    /// Truncating conversion from the unsigned integer type to `u16`.
     fn to_u16(bits: Self::UINT) -> u16;
+
+    /// Type-widening conversion from `u16` to the unsigned integer type.
     fn from_u16(value: u16) -> Self::UINT;
 }
 
@@ -110,15 +104,30 @@ impl ALPRDFloat for f32 {
     }
 }
 
-/// Encoder for ALP-RD (real doubles) values.
+/// Encoder for ALP-RD ("real doubles") values.
 ///
-/// The encoder builds a sample of values from there.
-pub struct Encoder {
+/// The encoder calculates its parameters from a single sample of floating-point values,
+/// and then can be applied to many vectors.
+///
+/// ALP-RD uses the algorithm outlined in Section 3.4 of the paper. The crux of it is that the front
+/// (most significant) bits of many double vectors tend to be  the same, i.e. most doubles in a
+/// vector often use the same exponent and front bits. Compression proceeds by finding the best
+/// prefix of up to 16 bits that can be collapsed into a dictionary of
+/// up to 8 elements. Each double can then be broken into the front/left `L` bits, which neatly
+/// bit-packs down to 1-3 bits per element (depending on the actual dictionary size).
+/// The remaining `R` bits naturally bit-pack.
+///
+/// In the ideal case, this scheme allows us to store a sequence of doubles in 49 bits-per-value.
+///
+/// Our implementation draws on the MIT-licensed [C++ implementation] provided by the original authors.
+///
+/// [C++ implementation]: https://github.com/cwida/ALP/blob/main/include/alp/rd.hpp
+pub struct RDEncoder {
     right_bit_width: u8,
     codes: Vec<u16>,
 }
 
-impl Encoder {
+impl RDEncoder {
     /// Build a new encoder from a sample of doubles.
     pub fn new<T>(sample: &[T]) -> Self
     where
@@ -215,8 +224,7 @@ impl Encoder {
             let bw = bit_width!(max_exc_pos);
 
             let exc_pos_array = PrimitiveArray::from(exceptions_pos);
-            // SAFETY: the positions array is sorted, we calculate bw such that it is wide enough
-            //  to hold the largest position index.
+            // SAFETY: We calculate bw such that it is wide enough to hold the largest position index.
             let packed_pos = unsafe {
                 bitpack_encode_unchecked(exc_pos_array, bw)
                     .vortex_unwrap()
@@ -243,7 +251,13 @@ impl Encoder {
     }
 }
 
-// Only applies for F64.
+/// Decode a vector of ALP-RD encoded values back into their original floating point format.
+///
+/// # Panics
+///
+/// The function panics if the provided `left_parts` and `right_parts` differ in length.
+///
+/// The function panics if the provided `exc_pos` and `exceptions` differ in length.
 pub fn alp_rd_decode<T: ALPRDFloat>(
     left_parts: &[u16],
     left_parts_dict: &[u16],

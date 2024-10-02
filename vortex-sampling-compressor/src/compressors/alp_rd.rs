@@ -5,7 +5,7 @@ use std::sync::Arc;
 use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDef, IntoArray, IntoArrayVariant};
-use vortex_alp::{match_each_alp_float_ptype, ALPRDEncoding, Encoder as ALPRDEncoder, ALPRD};
+use vortex_alp::{match_each_alp_float_ptype, ALPRDEncoding, RDEncoder as ALPRDEncoder, ALPRD};
 use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_fastlanes::BitPackedEncoding;

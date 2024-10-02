@@ -1,6 +1,4 @@
 use vortex::compute::unary::{scalar_at, ScalarAtFn};
-use vortex::ArrayDType;
-use vortex_dtype::PType;
 use vortex_error::{VortexResult, VortexUnwrap};
 use vortex_scalar::Scalar;
 
@@ -21,13 +19,13 @@ impl ScalarAtFn for ALPRDArray {
         };
 
         // combine left and right values
-        if self.ptype() == Some(PType::F64) {
-            let right: u64 = scalar_at(&self.right_parts(), index)?.try_into()?;
-            let packed = f64::from_bits(((left as u64) << self.right_bit_width()) | right);
-            Ok(packed.into())
-        } else {
+        if self.is_f32() {
             let right: u32 = scalar_at(&self.right_parts(), index)?.try_into()?;
             let packed = f32::from_bits((left as u32) << self.right_bit_width() | right);
+            Ok(packed.into())
+        } else {
+            let right: u64 = scalar_at(&self.right_parts(), index)?.try_into()?;
+            let packed = f64::from_bits(((left as u64) << self.right_bit_width()) | right);
             Ok(packed.into())
         }
     }
@@ -44,7 +42,7 @@ mod test {
     use vortex::compute::unary::scalar_at;
     use vortex_scalar::Scalar;
 
-    use crate::{ALPRDFloat, Encoder};
+    use crate::{ALPRDFloat, RDEncoder};
 
     #[rstest]
     #[case(0.1f32, 0.2f32, 3e25f32)]
@@ -55,7 +53,7 @@ mod test {
         #[case] outlier: T,
     ) {
         let array = PrimitiveArray::from(vec![a, b, outlier]);
-        let encoded = Encoder::new(&[a, b]).encode(&array);
+        let encoded = RDEncoder::new(&[a, b]).encode(&array);
 
         // Make sure that we're testing the exception pathway.
         assert!(encoded.left_parts_exceptions().is_some());

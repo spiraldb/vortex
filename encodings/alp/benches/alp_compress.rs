@@ -7,7 +7,7 @@ use vortex::array::PrimitiveArray;
 use vortex::validity::Validity;
 use vortex::variants::PrimitiveArrayTrait;
 use vortex::IntoCanonical;
-use vortex_alp::{alp_encode_components, ALPArray, ALPFloat, ALPRDFloat, Encoder, Exponents};
+use vortex_alp::{alp_encode_components, ALPArray, ALPFloat, ALPRDFloat, Exponents, RDEncoder};
 use vortex_dtype::NativePType;
 
 fn main() {
@@ -24,7 +24,7 @@ fn compress_alp<T: ALPFloat>(n: usize) -> (Exponents, Vec<T::ALPInt>, Vec<u64>, 
 fn compress_rd<T: ALPRDFloat>(bencher: Bencher, n: usize) {
     let values: Vec<T> = vec![T::from(1.23).unwrap(); n];
     let primitive = PrimitiveArray::from(values);
-    let encoder = Encoder::new(&[T::from(1.23).unwrap()]);
+    let encoder = RDEncoder::new(&[T::from(1.23).unwrap()]);
 
     bencher.bench_local(|| encoder.encode(&primitive));
 }

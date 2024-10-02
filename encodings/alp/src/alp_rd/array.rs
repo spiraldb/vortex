@@ -15,7 +15,6 @@ impl_encoding!("vortex.alprd", ids::ALP_RD, ALPRD);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ALPRDMetadata {
     right_bit_width: u8,
-    // left_bit_width is implicit from the dict_len.
     dict_len: u8,
     dict: [u16; 8],
     left_parts_dtype: DType,
@@ -103,7 +102,7 @@ impl ALPRDArray {
 
     /// The rightmost (least significant) bits of the floating point values stored in the array.
     pub fn right_parts(&self) -> Array {
-        let uint_ptype = if self.metadata().is_f32 {
+        let uint_ptype = if self.is_f32() {
             PType::U32
         } else {
             PType::U64
@@ -254,7 +253,7 @@ mod test {
         let real_array = PrimitiveArray::from_nullable_vec(reals.clone());
 
         // Pick a seed that we know will trigger lots of exceptions.
-        let encoder: alp_rd::Encoder = alp_rd::Encoder::new(&[seed.powi(-2)]);
+        let encoder: alp_rd::RDEncoder = alp_rd::RDEncoder::new(&[seed.powi(-2)]);
 
         let rd_array = encoder.encode(&real_array);
 

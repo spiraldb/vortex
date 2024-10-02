@@ -30,14 +30,14 @@ mod test {
     use vortex::compute::take;
     use vortex::IntoArrayVariant;
 
-    use crate::{ALPRDFloat, Encoder};
+    use crate::{ALPRDFloat, RDEncoder};
 
     #[rstest]
     #[case(0.1f32, 0.2f32, 3e25f32)]
     #[case(0.1f64, 0.2f64, 3e100f64)]
     fn test_take<T: ALPRDFloat>(#[case] a: T, #[case] b: T, #[case] outlier: T) {
         let array = PrimitiveArray::from(vec![a, b, outlier]);
-        let encoded = Encoder::new(&[a, b]).encode(&array);
+        let encoded = RDEncoder::new(&[a, b]).encode(&array);
 
         assert!(encoded.left_parts_exceptions().is_some());
 
