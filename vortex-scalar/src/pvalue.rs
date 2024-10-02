@@ -74,6 +74,10 @@ impl PValue {
         }
     }
 
+    pub fn is_instance_of(&self, ptype: &PType) -> bool {
+        &self.ptype() == ptype
+    }
+
     #[allow(clippy::transmute_int_to_float, clippy::transmute_float_to_int)]
     pub fn reinterpret_cast(&self, ptype: PType) -> Self {
         if ptype == self.ptype() {
@@ -262,3 +266,29 @@ impl_pvalue!(i64, I64);
 impl_pvalue!(f16, F16);
 impl_pvalue!(f32, F32);
 impl_pvalue!(f64, F64);
+
+#[cfg(test)]
+mod test {
+    use vortex_dtype::half::f16;
+    use vortex_dtype::PType;
+
+    use crate::PValue;
+
+    #[test]
+    pub fn test_is_instance_of() {
+        assert!(PValue::U8(10).is_instance_of(&PType::U8));
+        assert!(!PValue::U8(10).is_instance_of(&PType::U16));
+        assert!(!PValue::U8(10).is_instance_of(&PType::I8));
+        assert!(!PValue::U8(10).is_instance_of(&PType::F16));
+
+        assert!(PValue::I8(10).is_instance_of(&PType::I8));
+        assert!(!PValue::I8(10).is_instance_of(&PType::I16));
+        assert!(!PValue::I8(10).is_instance_of(&PType::U8));
+        assert!(!PValue::I8(10).is_instance_of(&PType::F16));
+
+        assert!(PValue::F16(f16::from_f32(10.0)).is_instance_of(&PType::F16));
+        assert!(!PValue::F16(f16::from_f32(10.0)).is_instance_of(&PType::F32));
+        assert!(!PValue::F16(f16::from_f32(10.0)).is_instance_of(&PType::U16));
+        assert!(!PValue::F16(f16::from_f32(10.0)).is_instance_of(&PType::I16));
+    }
+}

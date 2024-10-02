@@ -46,6 +46,13 @@ impl SparseArray {
         if !matches!(indices.dtype(), &DType::IDX) {
             vortex_bail!("Cannot use {} as indices", indices.dtype());
         }
+        if !fill_value.is_instance_of(values.dtype()) {
+            vortex_bail!(
+                "fill value, {:?}, should be instance of values dtype, {}",
+                fill_value,
+                values.dtype(),
+            );
+        }
         if indices.len() != values.len() {
             vortex_bail!(
                 "Mismatched indices {} and values {} length",
