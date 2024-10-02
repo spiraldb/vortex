@@ -4280,10 +4280,12 @@ dependencies = [
  "divan",
  "itertools 0.13.0",
  "num-traits",
+ "rstest",
  "serde",
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
+ "vortex-fastlanes",
  "vortex-scalar",
 ]
 

@@ -16,6 +16,7 @@ use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
 use vortex_error::VortexResult;
 
 use crate::compressors::alp::ALPCompressor;
+use crate::compressors::alp_rd::ALPRDCompressor;
 use crate::compressors::bitpacked::BitPackedCompressor;
 use crate::compressors::constant::ConstantCompressor;
 use crate::compressors::date_time_parts::DateTimePartsCompressor;
@@ -35,8 +36,9 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 11] = [
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 12] = [
         &ALPCompressor as CompressorRef,
+        &ALPRDCompressor,
         &BitPackedCompressor,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR,

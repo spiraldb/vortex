@@ -29,6 +29,7 @@ mod tests {
     use vortex_datetime_parts::DateTimeParts;
     use vortex_dict::Dict;
     use vortex_fastlanes::FoR;
+    use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
     use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 
     use super::*;
@@ -39,6 +40,7 @@ mod tests {
         let compressor = SamplingCompressor::new_with_options(
             HashSet::from([
                 &ALPCompressor as CompressorRef,
+                &ALPRDCompressor as CompressorRef,
                 &BitPackedCompressor,
                 // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
                 // &DeltaCompressor,
