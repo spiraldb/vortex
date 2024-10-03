@@ -8,9 +8,10 @@ use crate::{Array, ArrayDType, IntoArray};
 
 impl CastFn for PrimitiveArray {
     fn cast(&self, dtype: &DType) -> VortexResult<Array> {
-        let DType::Primitive(new_ptype, new_nullability) = dtype.clone() else {
+        let DType::Primitive(new_ptype, new_nullability) = dtype else {
             vortex_bail!(MismatchedTypes: "primitive type", dtype);
         };
+        let (new_ptype, new_nullability) = (*new_ptype, *new_nullability);
 
         // First, check that the cast is compatible with the source array's validity
         let new_validity = if self.dtype().nullability() == new_nullability {
