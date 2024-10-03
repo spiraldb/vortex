@@ -43,10 +43,10 @@ impl ALPRDArray {
             );
         }
 
-        // we delegate array validity to the left_parts child
         if !left_parts.dtype().is_unsigned_int() {
             vortex_bail!("left_parts dtype must be uint");
         }
+        // we delegate array validity to the left_parts child
         if dtype.is_nullable() != left_parts.dtype().is_nullable() {
             vortex_bail!(
                 "ALPRDArray dtype nullability ({}) must match left_parts dtype nullability ({})",
