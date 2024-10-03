@@ -1,8 +1,8 @@
 use vortex::array::{PrimitiveArray, TemporalArray};
 use vortex::compute::unary::try_cast;
-use vortex::{Array, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType as _, IntoArray, IntoArrayVariant};
 use vortex_datetime_dtype::TimeUnit;
-use vortex_dtype::PType;
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 pub struct TemporalParts {
@@ -20,7 +20,11 @@ pub fn split_temporal(array: TemporalArray) -> VortexResult<TemporalParts> {
     let validity = temporal_values.validity().clone();
 
     // After this operation, timestamps will be non-nullable PrimitiveArray<i64>
-    let timestamps = try_cast(&temporal_values, DType::Primitive(PType::I64, array.dtype().nullability()))?.as_primitive();
+    let timestamps = try_cast(
+        &temporal_values,
+        &DType::Primitive(PType::I64, temporal_values.dtype().nullability()),
+    )?
+    .as_primitive();
 
     let divisor = match array.temporal_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,

@@ -116,7 +116,7 @@ impl ExtensionArrayTrait for DateTimePartsArray {
     fn storage_array(&self) -> Array {
         // FIXME(ngates): this needs to be a tuple array so we can implement Compare
         // we don't want to write validity twice, so we pull it up to the top
-        let days = try_cast(&self.days(), &self.days().dtype().as_nonnullable()).vortex_unwrap();
+        let days = try_cast(self.days(), &self.days().dtype().as_nonnullable()).vortex_unwrap();
         StructArray::try_new(
             vec!["days".into(), "seconds".into(), "subseconds".into()].into(),
             [days, self.seconds(), self.subsecond()].into(),
