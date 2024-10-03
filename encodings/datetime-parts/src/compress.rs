@@ -1,8 +1,8 @@
 use vortex::array::{PrimitiveArray, TemporalArray};
 use vortex::compute::unary::try_cast;
-use vortex::{Array, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType as _, IntoArray, IntoArrayVariant};
 use vortex_datetime_dtype::TimeUnit;
-use vortex_dtype::PType;
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 /// Compress a `TemporalArray` into day, second, and subsecond components.
@@ -11,9 +11,10 @@ use vortex_error::{vortex_bail, VortexResult};
 /// cascading compression.
 pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Array)> {
     // After this operation, timestamps will be PrimitiveArray<i64>
+    let timestamps = array.temporal_values().into_primitive()?;
     let timestamps = try_cast(
-        array.temporal_values().into_primitive()?.into_array(),
-        PType::I64.into(),
+        &timestamps,
+        &DType::Primitive(PType::I64, timestamps.dtype().nullability()),
     )?;
     let divisor = match array.temporal_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,
