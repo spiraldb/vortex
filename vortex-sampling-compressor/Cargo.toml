@@ -16,6 +16,7 @@ readme = { workspace = true }
 [dependencies]
 arbitrary = { workspace = true, optional = true }
 fsst-rs = { workspace = true }
+itertools = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }

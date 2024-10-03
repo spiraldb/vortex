@@ -23,6 +23,7 @@ pub mod roaring_bool;
 pub mod roaring_int;
 pub mod runend;
 pub mod sparse;
+pub mod struct_;
 pub mod zigzag;
 
 pub trait EncodingCompressor: Sync + Send + Debug {
@@ -168,6 +169,11 @@ impl<'a> CompressedArray<'a> {
 
     pub fn new(array: Array, path: Option<CompressionTree<'a>>) -> Self {
         Self { array, path }
+    }
+
+    #[inline]
+    pub fn into_parts(self) -> (Array, Option<CompressionTree<'a>>) {
+        (self.array, self.path)
     }
 
     #[inline]

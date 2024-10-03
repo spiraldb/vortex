@@ -2,16 +2,16 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use compressors::fsst::FSSTCompressor;
+use compressors::struct_::StructCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use vortex::array::{Chunked, ChunkedArray, Constant, Struct, StructArray};
+use vortex::array::{Chunked, ChunkedArray, Constant};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
 use vortex::encoding::EncodingRef;
 use vortex::validity::Validity;
-use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
 use vortex_error::VortexResult;
 
@@ -36,7 +36,7 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 12] = [
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 13] = [
         &ALPCompressor as CompressorRef,
         &ALPRDCompressor,
         &BitPackedCompressor,
@@ -51,6 +51,7 @@ lazy_static! {
         &RoaringIntCompressor,
         &SparseCompressor,
         &ZigZagCompressor,
+        &StructCompressor,
     ];
 }
 
@@ -222,13 +223,22 @@ impl<'a> SamplingCompressor<'a> {
                     self.options().target_block_bytesize,
                     self.options().target_block_size,
                 )?;
-                let compressed_chunks = less_chunked
-                    .chunks()
-                    .map(|chunk| {
-                        self.compress_array(&chunk)
-                            .map(compressors::CompressedArray::into_array)
-                    })
-                    .collect::<VortexResult<Vec<_>>>()?;
+                let mut compressed_chunks = Vec::with_capacity(less_chunked.nchunks());
+                let mut previous: Option<CompressionTree> = None;
+                for (index, chunk) in less_chunked.chunks().enumerate() {
+                    if let Some(previous) = &previous {
+                        debug!(
+                            "using previous compression to save time: {} {}",
+                            previous, chunk
+                        );
+                    }
+                    let (compressed_chunk, tree) = self
+                        .named(&format!("chunk-{}", index))
+                        .compress(&chunk, previous.as_ref())?
+                        .into_parts();
+                    previous = tree;
+                    compressed_chunks.push(compressed_chunk);
+                }
                 Ok(CompressedArray::uncompressed(
                     ChunkedArray::try_new(compressed_chunks, chunked.dtype().clone())?.into_array(),
                 ))
@@ -236,27 +246,6 @@ impl<'a> SamplingCompressor<'a> {
             Constant::ID => {
                 // Not much better we can do than constant!
                 Ok(CompressedArray::uncompressed(arr.clone()))
-            }
-            Struct::ID => {
-                // For struct arrays, we compress each field individually
-                let strct = StructArray::try_from(arr)?;
-                let compressed_fields = strct
-                    .children()
-                    .map(|field| {
-                        self.compress_array(&field)
-                            .map(compressors::CompressedArray::into_array)
-                    })
-                    .collect::<VortexResult<Vec<_>>>()?;
-                let validity = self.compress_validity(strct.validity())?;
-                Ok(CompressedArray::uncompressed(
-                    StructArray::try_new(
-                        strct.names().clone(),
-                        compressed_fields,
-                        strct.len(),
-                        validity,
-                    )?
-                    .into_array(),
-                ))
             }
             _ => {
                 // Otherwise, we run sampled compression over pluggable encodings
