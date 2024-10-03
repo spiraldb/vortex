@@ -1,18 +1,19 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
+use compressors::chunked::ChunkedCompressor;
 use compressors::fsst::FSSTCompressor;
 use compressors::struct_::StructCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use vortex::array::{Chunked, ChunkedArray, Constant};
+use vortex::array::{ChunkedArray, Constant};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
 use vortex::encoding::EncodingRef;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
+use vortex::{Array, ArrayDType, ArrayDef, IntoCanonical};
 use vortex_error::VortexResult;
 
 use crate::compressors::alp::ALPCompressor;
@@ -36,7 +37,7 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 13] = [
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 14] = [
         &ALPCompressor as CompressorRef,
         &ALPRDCompressor,
         &BitPackedCompressor,
@@ -52,6 +53,7 @@ lazy_static! {
         &SparseCompressor,
         &ZigZagCompressor,
         &StructCompressor,
+        &ChunkedCompressor,
     ];
 }
 
@@ -217,32 +219,6 @@ impl<'a> SamplingCompressor<'a> {
 
     fn compress_array(&self, arr: &Array) -> VortexResult<CompressedArray<'a>> {
         match arr.encoding().id() {
-            Chunked::ID => {
-                let chunked = ChunkedArray::try_from(arr)?;
-                let less_chunked = chunked.rechunk(
-                    self.options().target_block_bytesize,
-                    self.options().target_block_size,
-                )?;
-                let mut compressed_chunks = Vec::with_capacity(less_chunked.nchunks());
-                let mut previous: Option<CompressionTree> = None;
-                for (index, chunk) in less_chunked.chunks().enumerate() {
-                    if let Some(previous) = &previous {
-                        debug!(
-                            "using previous compression to save time: {} {}",
-                            previous, chunk
-                        );
-                    }
-                    let (compressed_chunk, tree) = self
-                        .named(&format!("chunk-{}", index))
-                        .compress(&chunk, previous.as_ref())?
-                        .into_parts();
-                    previous = tree;
-                    compressed_chunks.push(compressed_chunk);
-                }
-                Ok(CompressedArray::uncompressed(
-                    ChunkedArray::try_new(compressed_chunks, chunked.dtype().clone())?.into_array(),
-                ))
-            }
             Constant::ID => {
                 // Not much better we can do than constant!
                 Ok(CompressedArray::uncompressed(arr.clone()))
