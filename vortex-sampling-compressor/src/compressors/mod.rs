@@ -13,6 +13,7 @@ use crate::SamplingCompressor;
 pub mod alp;
 pub mod alp_rd;
 pub mod bitpacked;
+pub mod chunked;
 pub mod constant;
 pub mod date_time_parts;
 pub mod delta;
