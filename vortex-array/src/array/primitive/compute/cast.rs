@@ -11,15 +11,15 @@ impl CastFn for PrimitiveArray {
         let DType::Primitive(new_ptype, new_nullability) = dtype else {
             vortex_bail!(MismatchedTypes: "primitive type", dtype);
         };
-        let owned_n = *new_nullability;
+        let (new_ptype, new_nullability) = (*new_ptype, *new_nullability);
 
         // First, check that the cast is compatible with the source array's validity
-        let new_validity = if self.dtype().nullability() == owned_n {
+        let new_validity = if self.dtype().nullability() == new_nullability {
             self.validity().clone()
-        } else if owned_n == Nullability::Nullable {
+        } else if new_nullability == Nullability::Nullable {
             // from non-nullable to nullable
             self.validity().into_nullable()
-        } else if owned_n == Nullability::NonNullable
+        } else if new_nullability == Nullability::NonNullable
             && self.validity().to_logical(self.len()).all_valid()
         {
             // from nullable but all valid, to non-nullable
@@ -29,9 +29,9 @@ impl CastFn for PrimitiveArray {
         };
 
         // If the bit width is the same, we can short-circuit and simply update the validity
-        if self.ptype() == *new_ptype {
+        if self.ptype() == new_ptype {
             return Ok(
-                PrimitiveArray::new(self.buffer().clone(), self.ptype(), new_validity).into_array(),
+                PrimitiveArray::new(self.buffer().clone(), new_ptype, new_validity).into_array(),
             );
         }
 
