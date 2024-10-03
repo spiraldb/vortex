@@ -49,7 +49,7 @@ impl StatsSet {
                 ptype.byte_width();
                 stats.insert(
                     Stat::BitWidthFreq,
-                    vec![0; ptype.byte_width() * 8 + 1].into(),
+                    vec![0_u64; ptype.byte_width() * 8 + 1].into(),
                 );
                 stats.insert(
                     Stat::TrailingZeroFreq,
