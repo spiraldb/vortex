@@ -60,9 +60,6 @@ impl EncodingCompressor for ChunkedCompressor {
 
     fn can_compress(&self, _array: &Array) -> Option<&dyn EncodingCompressor> {
         Some(self)
-        // ChunkedArray::try_from(array)
-        //     .ok()
-        //     .map(|_| self as &dyn EncodingCompressor)
     }
 
     fn compress<'a>(

@@ -371,7 +371,6 @@ fn find_best_compression<'a>(
             sample
         );
         if compression.can_compress(sample).is_none() {
-            debug!("ignoring {} for {}", compression.id(), sample);
             continue;
         }
         let compressed_sample =
