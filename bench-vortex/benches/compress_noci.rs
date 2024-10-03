@@ -1,7 +1,7 @@
-use std::fs;
 use std::io::Cursor;
 use std::path::Path;
 use std::time::Duration;
+use std::{env, fs};
 
 use arrow_array::RecordBatch;
 use bench_vortex::data_downloads::BenchmarkDataset;
@@ -16,6 +16,7 @@ use criterion::{
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
+use regex::Regex;
 use vortex::array::{ChunkedArray, StructArray};
 use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::field::Field;
@@ -106,67 +107,73 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         });
     });
 
-    let vortex_nbytes = vortex_written_size(
-        &compressor
-            .compress(uncompressed.as_ref(), None)
+    if env::var("BENCH_VORTEX_RATIOS")
+        .ok()
+        .map(|x| Regex::new(&x).unwrap().is_match(bench_name))
+        .unwrap_or(false)
+    {
+        let vortex_nbytes = vortex_written_size(
+            &compressor
+                .compress(uncompressed.as_ref(), None)
+                .unwrap()
+                .into_array(),
+        );
+
+        let parquet_zstd_nbytes = parquet_written_size(
+            uncompressed.as_ref(),
+            Compression::ZSTD(ZstdLevel::default()),
+        );
+
+        let parquet_uncompressed_nbytes =
+            parquet_written_size(uncompressed.as_ref(), Compression::UNCOMPRESSED);
+
+        println!(
+            "{}",
+            serde_json::to_string(&GenericBenchmarkResults {
+                name: &format!("{} Vortex-to-ParquetZstd Ratio/{}", group_name, bench_name),
+                value: (vortex_nbytes as f64) / (parquet_zstd_nbytes as f64),
+                unit: "ratio",
+                range: 0.0,
+            })
             .unwrap()
-            .into_array(),
-    );
+        );
 
-    let parquet_zstd_nbytes = parquet_written_size(
-        uncompressed.as_ref(),
-        Compression::ZSTD(ZstdLevel::default()),
-    );
+        println!(
+            "{}",
+            serde_json::to_string(&GenericBenchmarkResults {
+                name: &format!(
+                    "{} Vortex-to-ParquetUncompressed Ratio/{}",
+                    group_name, bench_name
+                ),
+                value: (vortex_nbytes as f64) / (parquet_uncompressed_nbytes as f64),
+                unit: "ratio",
+                range: 0.0,
+            })
+            .unwrap()
+        );
 
-    let parquet_uncompressed_nbytes =
-        parquet_written_size(uncompressed.as_ref(), Compression::UNCOMPRESSED);
+        println!(
+            "{}",
+            serde_json::to_string(&GenericBenchmarkResults {
+                name: &format!("{} Compression Ratio/{}", group_name, bench_name),
+                value: (compressed_size as f64) / (uncompressed_size as f64),
+                unit: "ratio",
+                range: 0.0,
+            })
+            .unwrap()
+        );
 
-    println!(
-        "{}",
-        serde_json::to_string(&GenericBenchmarkResults {
-            name: &format!("{} Vortex-to-ParquetZstd Ratio/{}", group_name, bench_name),
-            value: (vortex_nbytes as f64) / (parquet_zstd_nbytes as f64),
-            unit: "ratio",
-            range: 0.0,
-        })
-        .unwrap()
-    );
-
-    println!(
-        "{}",
-        serde_json::to_string(&GenericBenchmarkResults {
-            name: &format!(
-                "{} Vortex-to-ParquetUncompressed Ratio/{}",
-                group_name, bench_name
-            ),
-            value: (vortex_nbytes as f64) / (parquet_uncompressed_nbytes as f64),
-            unit: "ratio",
-            range: 0.0,
-        })
-        .unwrap()
-    );
-
-    println!(
-        "{}",
-        serde_json::to_string(&GenericBenchmarkResults {
-            name: &format!("{} Compression Ratio/{}", group_name, bench_name),
-            value: (compressed_size as f64) / (uncompressed_size as f64),
-            unit: "ratio",
-            range: 0.0,
-        })
-        .unwrap()
-    );
-
-    println!(
-        "{}",
-        serde_json::to_string(&GenericBenchmarkResults {
-            name: &format!("{} Compression Size/{}", group_name, bench_name),
-            value: compressed_size as f64,
-            unit: "bytes",
-            range: 0.0,
-        })
-        .unwrap()
-    );
+        println!(
+            "{}",
+            serde_json::to_string(&GenericBenchmarkResults {
+                name: &format!("{} Compression Size/{}", group_name, bench_name),
+                value: compressed_size as f64,
+                unit: "bytes",
+                range: 0.0,
+            })
+            .unwrap()
+        );
+    }
 }
 
 fn yellow_taxi_trip_data(c: &mut Criterion) {

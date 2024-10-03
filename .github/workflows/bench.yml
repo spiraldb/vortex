@@ -42,7 +42,7 @@ jobs:
         run: |
           cargo install cargo-criterion
 
-          cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
+          BENCH_VORTEX_RATIOS='.*' cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
 
           cat out.json
 
