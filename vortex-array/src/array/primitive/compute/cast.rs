@@ -31,7 +31,7 @@ impl CastFn for PrimitiveArray {
         // If the bit width is the same, we can short-circuit and simply update the validity
         if self.ptype() == new_ptype {
             return Ok(
-                PrimitiveArray::new(self.buffer().clone(), new_ptype, new_validity).into_array(),
+                PrimitiveArray::new(self.buffer().clone(), self.ptype(), new_validity).into_array(),
             );
         }
 
