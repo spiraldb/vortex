@@ -20,6 +20,10 @@ impl EncodingCompressor for FoRCompressor {
         FoR::ID.as_ref()
     }
 
+    fn cost(&self) -> u8 {
+        0
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support primitive arrays
         let parray = PrimitiveArray::try_from(array).ok()?;

@@ -25,14 +25,14 @@ impl ArrayCompute for RunEndArray {
 
 impl ScalarAtFn for RunEndArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
-        scalar_at(&self.values(), self.find_physical_index(index)?)
+        scalar_at(self.values(), self.find_physical_index(index)?)
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         let idx = self
             .find_physical_index(index)
             .vortex_expect("Search must be implemented for the underlying index array");
-        scalar_at_unchecked(&self.values(), idx)
+        scalar_at_unchecked(self.values(), idx)
     }
 }
 
@@ -176,7 +176,7 @@ mod test {
         let array = ree_array();
         let null_ree = RunEndArray::try_new(
             array.ends().clone(),
-            try_cast(&array.values(), &array.values().dtype().as_nullable()).unwrap(),
+            try_cast(array.values(), &array.values().dtype().as_nullable()).unwrap(),
             Validity::AllInvalid,
         )
         .unwrap();

@@ -9,7 +9,8 @@ pub trait ScalarAtFn {
     fn scalar_at_unchecked(&self, index: usize) -> Scalar;
 }
 
-pub fn scalar_at(array: &Array, index: usize) -> VortexResult<Scalar> {
+pub fn scalar_at(array: impl AsRef<Array>, index: usize) -> VortexResult<Scalar> {
+    let array = array.as_ref();
     if index >= array.len() {
         vortex_bail!(OutOfBounds: index, 0, array.len());
     }
@@ -26,7 +27,8 @@ pub fn scalar_at(array: &Array, index: usize) -> VortexResult<Scalar> {
 }
 
 /// Returns a [`Scalar`] value without checking for validity or array bounds. Might panic *OR* return an invalid value if used incorrectly.
-pub fn scalar_at_unchecked(array: &Array, index: usize) -> Scalar {
+pub fn scalar_at_unchecked(array: impl AsRef<Array>, index: usize) -> Scalar {
+    let array = array.as_ref();
     array
         .with_dyn(|a| a.scalar_at().map(|s| s.scalar_at_unchecked(index)))
         .unwrap_or_else(|| vortex_panic!(NotImplemented: "scalar_at", array.encoding().id()))

@@ -15,6 +15,7 @@ pub struct TemporalParts {
 ///
 /// Splitting the components by granularity creates more small values, which enables better
 /// cascading compression.
+<<<<<<< HEAD
 pub fn split_temporal(array: TemporalArray) -> VortexResult<TemporalParts> {
     let temporal_values = array.temporal_values().into_primitive()?;
     let validity = temporal_values.validity().clone();
@@ -22,6 +23,14 @@ pub fn split_temporal(array: TemporalArray) -> VortexResult<TemporalParts> {
     // After this operation, timestamps will be non-nullable PrimitiveArray<i64>
     let timestamps = try_cast(&temporal_values.into_array(), PType::I64.into())?.as_primitive();
 
+=======
+pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Array)> {
+    // After this operation, timestamps will be PrimitiveArray<i64>
+    let timestamps = try_cast(
+        array.temporal_values().into_primitive()?.into_array(),
+        PType::I64.into(),
+    )?;
+>>>>>>> origin/develop
     let divisor = match array.temporal_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,
         TimeUnit::Us => 1_000_000,

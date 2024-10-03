@@ -67,7 +67,7 @@ impl IntoCanonical for DictArray {
 
 impl ArrayValidity for DictArray {
     fn is_valid(&self, index: usize) -> bool {
-        let values_index = scalar_at(&self.codes(), index)
+        let values_index = scalar_at(self.codes(), index)
             .unwrap_or_else(|err| {
                 vortex_panic!(err, "Failed to get index {} from DictArray codes", index)
             })

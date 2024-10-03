@@ -40,14 +40,14 @@ impl ScalarAtFn for SparseArray {
     fn scalar_at(&self, index: usize) -> VortexResult<Scalar> {
         Ok(match self.search_index(index)?.to_found() {
             None => self.fill_scalar(),
-            Some(idx) => scalar_at_unchecked(&self.values(), idx),
+            Some(idx) => scalar_at_unchecked(self.values(), idx),
         })
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
         match self.search_index(index).vortex_unwrap().to_found() {
             None => self.fill_scalar(),
-            Some(idx) => scalar_at_unchecked(&self.values(), idx),
+            Some(idx) => scalar_at_unchecked(self.values(), idx),
         }
     }
 }
@@ -56,7 +56,7 @@ impl SearchSortedFn for SparseArray {
     fn search_sorted(&self, value: &Scalar, side: SearchSortedSide) -> VortexResult<SearchResult> {
         search_sorted(&self.values(), value.clone(), side).and_then(|sr| {
             let sidx = sr.to_offsets_index(self.metadata().indices_len);
-            let index: usize = scalar_at(&self.indices(), sidx)?.as_ref().try_into()?;
+            let index: usize = scalar_at(self.indices(), sidx)?.as_ref().try_into()?;
             Ok(match sr {
                 SearchResult::Found(i) => SearchResult::Found(
                     if i == self.metadata().indices_len {

@@ -373,7 +373,7 @@ mod test {
     use crate::array::varbinview::{BinaryView, Inlined, Ref, VarBinViewArray, VIEW_SIZE};
     use crate::compute::slice;
     use crate::compute::unary::scalar_at;
-    use crate::{Canonical, IntoCanonical};
+    use crate::{Array, Canonical, IntoCanonical};
 
     #[test]
     pub fn varbin_view() {
@@ -411,7 +411,7 @@ mod test {
         let flattened = binary_arr.into_canonical().unwrap();
         assert!(matches!(flattened, Canonical::VarBin(_)));
 
-        let var_bin = flattened.into();
+        let var_bin: Array = flattened.into();
         assert_eq!(scalar_at(&var_bin, 0).unwrap(), Scalar::from("string1"));
         assert_eq!(scalar_at(&var_bin, 1).unwrap(), Scalar::from("string2"));
     }
