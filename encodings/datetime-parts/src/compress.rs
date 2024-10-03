@@ -12,8 +12,8 @@ use vortex_error::{vortex_bail, VortexResult};
 pub fn compress_temporal(array: TemporalArray) -> VortexResult<(Array, Array, Array)> {
     // After this operation, timestamps will be PrimitiveArray<i64>
     let timestamps = try_cast(
-        array.temporal_values().into_primitive()?.into_array(),
-        PType::I64.into(),
+        array.temporal_values().into_primitive()?,
+        DType::Primitive(PType::I64, array.dtype().nullability()),
     )?;
     let divisor = match array.temporal_metadata().time_unit() {
         TimeUnit::Ns => 1_000_000_000,
