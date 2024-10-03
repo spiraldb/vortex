@@ -287,7 +287,7 @@ fn temporal_to_arrow(temporal_array: TemporalArray) -> VortexResult<ArrayRef> {
     macro_rules! extract_temporal_values {
         ($values:expr, $prim:ty) => {{
             let temporal_values =
-                try_cast($values, <$prim as NativePType>::PTYPE.into())?.into_primitive()?;
+                try_cast($values, &DType::Primitive(<$prim as NativePType>::PTYPE, $values.dtype().nullability()))?.into_primitive()?;
             let len = temporal_values.len();
             let nulls = temporal_values.logical_validity().to_null_buffer()?;
             let scalars =
