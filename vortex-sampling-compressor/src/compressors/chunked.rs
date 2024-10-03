@@ -11,34 +11,13 @@ use crate::SamplingCompressor;
 #[derive(Debug)]
 pub struct ChunkedCompressor;
 
-impl EncodingCompressor for ChunkedCompressor {
-    fn id(&self) -> &str {
-        Chunked::ID.as_ref()
-    }
-
-    fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        ChunkedArray::try_from(array)
-            .ok()
-            .map(|_| self as &dyn EncodingCompressor)
-    }
-
-    fn compress<'a>(
+impl ChunkedCompressor {
+    fn compress_chunked<'a>(
         &'a self,
-        array: &Array,
-        like: Option<CompressionTree<'a>>,
+        array: &ChunkedArray,
+        compress_child_like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
-        let array = ChunkedArray::try_from(array)?;
-
-        let mut previous = match like {
-            None => None,
-            Some(tree) => {
-                if tree.children.len() != 1 {
-                    vortex_bail!("chunked array compression tree should have exactly one child");
-                }
-                tree.children[0].clone()
-            }
-        };
         let mut target_ratio: Option<f32> = None;
 
         let less_chunked = array.rechunk(
@@ -46,6 +25,7 @@ impl EncodingCompressor for ChunkedCompressor {
             ctx.options().target_block_size,
         )?;
         let mut compressed_chunks = Vec::with_capacity(less_chunked.nchunks());
+        let mut previous = compress_child_like;
         for (index, chunk) in less_chunked.chunks().enumerate() {
             let compressed_chunk = ctx
                 .named(&format!("chunk-{}", index))
@@ -66,6 +46,52 @@ impl EncodingCompressor for ChunkedCompressor {
             ChunkedArray::try_new(compressed_chunks, array.dtype().clone())?.into_array(),
             previous,
         ))
+    }
+}
+
+impl EncodingCompressor for ChunkedCompressor {
+    fn id(&self) -> &str {
+        Chunked::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        0
+    }
+
+    fn can_compress(&self, _array: &Array) -> Option<&dyn EncodingCompressor> {
+        Some(self)
+        // ChunkedArray::try_from(array)
+        //     .ok()
+        //     .map(|_| self as &dyn EncodingCompressor)
+    }
+
+    fn compress<'a>(
+        &'a self,
+        array: &Array,
+        like: Option<CompressionTree<'a>>,
+        ctx: SamplingCompressor<'a>,
+    ) -> VortexResult<CompressedArray<'a>> {
+        let compress_child_like = match like {
+            None => None,
+            Some(tree) => {
+                if tree.children.len() != 1 {
+                    vortex_bail!("chunked array compression tree should have exactly one child");
+                }
+                tree.children[0].clone()
+            }
+        };
+
+        if let Ok(chunked_array) = ChunkedArray::try_from(array) {
+            self.compress_chunked(&chunked_array, compress_child_like, ctx)
+        } else {
+            let (array, like) = ctx
+                .compress(array, compress_child_like.as_ref())?
+                .into_parts();
+            Ok(CompressedArray::new(
+                array,
+                Some(CompressionTree::new(self, vec![like])),
+            ))
+        }
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {

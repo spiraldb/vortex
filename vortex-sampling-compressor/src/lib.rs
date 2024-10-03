@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use vortex::array::{ChunkedArray, Constant};
+use vortex::array::{Chunked, ChunkedArray, Constant};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
 use vortex::encoding::EncodingRef;
@@ -264,6 +264,11 @@ fn sampled_compression<'a>(
         })
         .copied()
         .collect();
+
+    if ChunkedArray::try_from(array).is_err() {
+        candidates.retain(|&compression| compression.id() != Chunked::ID.as_ref())
+    }
+
     debug!("{} candidates for {}: {:?}", compressor, array, candidates);
 
     if candidates.is_empty() {
@@ -334,6 +339,7 @@ fn find_best_compression<'a>(
             sample
         );
         if compression.can_compress(sample).is_none() {
+            debug!("ignoring {} for {}", compression.id(), sample);
             continue;
         }
         let compressed_sample =
