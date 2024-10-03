@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::sync::Arc;
 
 use fsst::{Decompressor, Symbol};
@@ -22,6 +23,12 @@ pub struct FSSTMetadata {
     symbols_len: usize,
     codes_dtype: DType,
     uncompressed_lengths_dtype: DType,
+}
+
+impl Display for FSSTMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl FSSTArray {

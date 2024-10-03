@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -35,6 +35,12 @@ pub struct VarBinMetadata {
     validity: ValidityMetadata,
     offsets_ptype: PType,
     bytes_len: usize,
+}
+
+impl Display for VarBinMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl VarBinArray {

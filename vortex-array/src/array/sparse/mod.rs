@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use ::serde::{Deserialize, Serialize};
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
@@ -24,6 +26,12 @@ pub struct SparseMetadata {
     indices_offset: usize,
     indices_len: usize,
     fill_value: ScalarValue,
+}
+
+impl Display for SparseMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl SparseArray {

@@ -1,3 +1,4 @@
+use std::fmt::{Display, Write};
 use std::sync::Arc;
 
 use vortex_buffer::{Buffer, BufferString};
@@ -22,6 +23,49 @@ pub enum ScalarValue {
     // It's significant that Null is last in this list. As a result generated PartialOrd sorts Scalar
     // values such that Nulls are last (greatest)
     Null,
+}
+
+fn to_hex(slice: &[u8]) -> Result<String, std::fmt::Error> {
+    let mut output = String::new();
+    for byte in slice {
+        write!(output, "{:02x}", byte)?;
+    }
+    Ok(output)
+}
+
+impl Display for ScalarValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ScalarValue::Bool(b) => write!(f, "{}", b),
+            ScalarValue::Primitive(pvalue) => write!(f, "{}", pvalue),
+            ScalarValue::Buffer(buf) => {
+                if buf.len() > 10 {
+                    write!(
+                        f,
+                        "{}..{}",
+                        to_hex(&buf[0..5])?,
+                        to_hex(&buf[buf.len() - 5..buf.len()])?,
+                    )
+                } else {
+                    write!(f, "{}", to_hex(buf.as_slice())?)
+                }
+            }
+            ScalarValue::BufferString(bufstr) => {
+                if bufstr.len() > 10 {
+                    write!(
+                        f,
+                        "{}..{}",
+                        &bufstr.as_str()[0..5],
+                        &bufstr.as_str()[bufstr.len() - 5..bufstr.len()],
+                    )
+                } else {
+                    write!(f, "{}", bufstr.as_str())
+                }
+            }
+            ScalarValue::List(_) => todo!(),
+            ScalarValue::Null => write!(f, "null"),
+        }
+    }
 }
 
 impl ScalarValue {

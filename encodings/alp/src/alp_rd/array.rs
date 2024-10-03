@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::encoding::ids;
@@ -19,6 +21,12 @@ pub struct ALPRDMetadata {
     dict: [u16; 8],
     left_parts_ptype: PType,
     has_exceptions: bool,
+}
+
+impl Display for ALPRDMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl ALPRDArray {

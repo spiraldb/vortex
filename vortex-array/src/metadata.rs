@@ -1,5 +1,5 @@
 use std::any::Any;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
 use flexbuffers::{FlexbufferSerializer, Reader};
@@ -12,7 +12,9 @@ use vortex_error::{vortex_err, VortexResult};
 /// metadata trait, and not the entire array trait. We require 'static so that we can downcast
 /// use the Any trait.
 /// TODO(ngates): add Display
-pub trait ArrayMetadata: 'static + Send + Sync + Debug + TrySerializeArrayMetadata {
+pub trait ArrayMetadata:
+    'static + Send + Sync + Debug + TrySerializeArrayMetadata + Display
+{
     fn as_any(&self) -> &dyn Any;
     fn as_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
 }

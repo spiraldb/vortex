@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use vortex_dtype::field::Field;
 use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
@@ -17,6 +19,12 @@ impl_encoding!("vortex.struct", ids::STRUCT, Struct);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StructMetadata {
     validity: ValidityMetadata,
+}
+
+impl Display for StructMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl StructArray {

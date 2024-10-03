@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use serde::{Deserialize, Serialize};
 use vortex::array::StructArray;
@@ -23,6 +23,12 @@ pub struct DateTimePartsMetadata {
     days_ptype: PType,
     seconds_ptype: PType,
     subseconds_ptype: PType,
+}
+
+impl Display for DateTimePartsMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl DateTimePartsArray {

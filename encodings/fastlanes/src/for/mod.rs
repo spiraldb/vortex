@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,12 @@ impl_encoding!("fastlanes.for", ids::FL_FOR, FoR);
 pub struct FoRMetadata {
     reference: Scalar,
     shift: u8,
+}
+
+impl Display for FoRMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl FoRArray {

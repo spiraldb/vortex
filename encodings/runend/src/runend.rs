@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
@@ -27,6 +27,12 @@ pub struct RunEndMetadata {
     num_runs: usize,
     offset: usize,
     length: usize,
+}
+
+impl Display for RunEndMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl RunEndArray {

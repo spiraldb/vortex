@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,12 @@ impl_encoding!("vortex.alp", ids::ALP, ALP);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ALPMetadata {
     exponents: Exponents,
+}
+
+impl Display for ALPMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl ALPArray {

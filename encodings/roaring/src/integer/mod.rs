@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 pub use compress::*;
 use croaring::{Bitmap, Portable};
@@ -23,6 +23,12 @@ impl_encoding!("vortex.roaring_int", ids::ROARING_INT, RoaringInt);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringIntMetadata {
     ptype: PType,
+}
+
+impl Display for RoaringIntMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl RoaringIntArray {

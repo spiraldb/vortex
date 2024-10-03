@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_panic, VortexResult};
@@ -20,6 +21,16 @@ impl_encoding!("vortex.constant", ids::CONSTANT, Constant);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConstantMetadata {
     scalar_value: ScalarValue,
+}
+
+impl Display for ConstantMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ConstantMetadata {{ scalar_value: {} }}",
+            self.scalar_value
+        )
+    }
 }
 
 impl ConstantArray {

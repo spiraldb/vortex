@@ -60,7 +60,7 @@ impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
                 writeln!(
                     i.fmt,
                     // TODO(ngates): use Display for metadata
-                    "{}metadata: {:?}",
+                    "{}metadata: {}",
                     i.indent,
                     array_data.metadata()
                 )

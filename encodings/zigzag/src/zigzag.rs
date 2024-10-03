@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
 use vortex::encoding::ids;
@@ -21,6 +23,12 @@ impl_encoding!("vortex.zigzag", ids::ZIGZAG, ZigZag);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZigZagMetadata;
+
+impl Display for ZigZagMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "ZigZagMetadata")
+    }
+}
 
 impl ZigZagArray {
     pub fn try_new(encoded: Array) -> VortexResult<Self> {

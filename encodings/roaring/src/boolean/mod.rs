@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
 pub use compress::*;
@@ -27,6 +27,12 @@ impl_encoding!("vortex.roaring_bool", ids::ROARING_BOOL, RoaringBool);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoaringBoolMetadata {
     length: usize,
+}
+
+impl Display for RoaringBoolMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl RoaringBoolArray {
