@@ -53,9 +53,9 @@ impl ALPArray {
         if let Some(patch) = patches {
             if !patch.dtype().eq_ignore_nullability(&dtype) || !patch.dtype().is_nullable() {
                 vortex_bail!(
-                    "ALP patches for array with dtype {} must be nullable, got {}",
+                    "ALP patches dtype, {}, must be nullable version of array dtype, {}",
+                    patch.dtype(),
                     dtype,
-                    patch.dtype()
                 );
             }
             children.push(patch);
