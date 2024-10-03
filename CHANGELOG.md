@@ -6,6 +6,260 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.11.0...vortex-runend-bool-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-bytebool` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-bytebool-v0.11.0...vortex-bytebool-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-zigzag` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-zigzag-v0.11.0...vortex-zigzag-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-runend` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-runend-v0.11.0...vortex-runend-v0.12.0) - 2024-10-03
+
+### Added
+- SparseArray uses ScalarValue instead of Scalar ([#955](https://github.com/spiraldb/vortex/pull/955))
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-roaring` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-roaring-v0.11.0...vortex-roaring-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-fsst` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-fsst-v0.11.0...vortex-fsst-v0.12.0) - 2024-10-03
+
+### Added
+- teach FSSTArray to compress the offsets of its codes ([#952](https://github.com/spiraldb/vortex/pull/952))
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-dict` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-dict-v0.11.0...vortex-dict-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-datetime-parts` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-parts-v0.11.0...vortex-datetime-parts-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- cast error in compress_noci benchmark ([#971](https://github.com/spiraldb/vortex/pull/971))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-sampling-compressor` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-sampling-compressor-v0.11.0...vortex-sampling-compressor-v0.12.0) - 2024-10-03
+
+### Added
+- cost of for is ~0 ([#967](https://github.com/spiraldb/vortex/pull/967))
+- implement ALP-RD compression ([#947](https://github.com/spiraldb/vortex/pull/947))
+- teach FSSTArray to compress the offsets of its codes ([#952](https://github.com/spiraldb/vortex/pull/952))
+- teach DeltaArray slice and scalar_at ([#927](https://github.com/spiraldb/vortex/pull/927))
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-serde` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.11.0...vortex-serde-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- increase the measurement_time of benches of serde ([#941](https://github.com/spiraldb/vortex/pull/941))
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-schema` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-schema-v0.11.0...vortex-schema-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-expr` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-expr-v0.11.0...vortex-expr-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-datafusion` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-datafusion-v0.11.0...vortex-datafusion-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-fastlanes` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-fastlanes-v0.11.0...vortex-fastlanes-v0.12.0) - 2024-10-03
+
+### Added
+- implement ALP-RD compression ([#947](https://github.com/spiraldb/vortex/pull/947))
+- SparseArray uses ScalarValue instead of Scalar ([#955](https://github.com/spiraldb/vortex/pull/955))
+- teach DeltaArray slice and scalar_at ([#927](https://github.com/spiraldb/vortex/pull/927))
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-scalar` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-scalar-v0.11.0...vortex-scalar-v0.12.0) - 2024-10-03
+
+### Added
+- teach ScalarValue and PValue is_instance_of ([#958](https://github.com/spiraldb/vortex/pull/958))
+- SparseArray uses ScalarValue instead of Scalar ([#955](https://github.com/spiraldb/vortex/pull/955))
+- slim down vortex-array metadata  ([#951](https://github.com/spiraldb/vortex/pull/951))
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-proto` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-proto-v0.11.0...vortex-proto-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-flatbuffers` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-flatbuffers-v0.11.0...vortex-flatbuffers-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-error` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-error-v0.11.0...vortex-error-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-dtype` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-dtype-v0.11.0...vortex-dtype-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-datetime-dtype` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-dtype-v0.11.0...vortex-datetime-dtype-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-buffer` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-buffer-v0.11.0...vortex-buffer-v0.12.0) - 2024-10-03
+
+### Added
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
+## `vortex-array` - [0.12.0](https://github.com/spiraldb/vortex/compare/0.11.0...0.12.0) - 2024-10-03
+
+### Added
+- implement ALP-RD compression ([#947](https://github.com/spiraldb/vortex/pull/947))
+- teach ScalarValue and PValue is_instance_of ([#958](https://github.com/spiraldb/vortex/pull/958))
+- SparseArray uses ScalarValue instead of Scalar ([#955](https://github.com/spiraldb/vortex/pull/955))
+- BoolMetadata stores bit offset in 8 bits instead of 64 ([#956](https://github.com/spiraldb/vortex/pull/956))
+- slim down vortex-array metadata  ([#951](https://github.com/spiraldb/vortex/pull/951))
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- cast error in compress_noci benchmark ([#971](https://github.com/spiraldb/vortex/pull/971))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+- Update README.md in vortex-array
+- Include README.md files in crates and link top level readme into vortex-array crate ([#934](https://github.com/spiraldb/vortex/pull/934))
+- Converting Arrow to Vortex should create Array and not ArrayData ([#931](https://github.com/spiraldb/vortex/pull/931))
+
+## `vortex-alp` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.11.0...vortex-alp-v0.12.0) - 2024-10-03
+
+### Added
+- implement ALP-RD compression ([#947](https://github.com/spiraldb/vortex/pull/947))
+- SparseArray uses ScalarValue instead of Scalar ([#955](https://github.com/spiraldb/vortex/pull/955))
+- enable cargo lints ([#948](https://github.com/spiraldb/vortex/pull/948))
+
+### Fixed
+- trim array metadatas + fix validity handling (part 1) ([#966](https://github.com/spiraldb/vortex/pull/966))
+- make PrimitiveArray cast properly handle validity/nullability ([#968](https://github.com/spiraldb/vortex/pull/968))
+- edge case in filling ALP encoded child on patches ([#939](https://github.com/spiraldb/vortex/pull/939))
+
+### Other
+- Include README in Cargo.toml ([#936](https://github.com/spiraldb/vortex/pull/936))
+
 ## `vortex-runend-bool` - [0.11.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.10.1...vortex-runend-bool-v0.11.0) - 2024-09-26
 
 ### Added
