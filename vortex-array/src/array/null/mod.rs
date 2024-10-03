@@ -7,7 +7,7 @@ use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::variants::{ArrayVariants, NullArrayTrait};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::{impl_encoding, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
+use crate::{impl_encoding, ArrayTrait, Canonical, IntoCanonical};
 
 mod compute;
 

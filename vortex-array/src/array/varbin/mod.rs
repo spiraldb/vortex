@@ -18,7 +18,7 @@ use crate::compute::unary::scalar_at;
 use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{Validity, ValidityMetadata};
-use crate::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoArrayVariant};
+use crate::{impl_encoding, Array, ArrayDType, ArrayTrait, IntoArrayVariant};
 
 mod accessor;
 mod array;

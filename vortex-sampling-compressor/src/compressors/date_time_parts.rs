@@ -5,7 +5,7 @@ use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
 use vortex_datetime_dtype::TemporalMetadata;
 use vortex_datetime_parts::{
-    compress_temporal, DateTimeParts, DateTimePartsArray, DateTimePartsEncoding,
+    split_temporal, DateTimeParts, DateTimePartsArray, DateTimePartsEncoding, TemporalParts,
 };
 use vortex_error::VortexResult;
 
@@ -38,7 +38,11 @@ impl EncodingCompressor for DateTimePartsCompressor {
         like: Option<CompressionTree<'a>>,
         ctx: SamplingCompressor<'a>,
     ) -> VortexResult<CompressedArray<'a>> {
-        let (days, seconds, subseconds) = compress_temporal(TemporalArray::try_from(array)?)?;
+        let TemporalParts {
+            days,
+            seconds,
+            subseconds,
+        } = split_temporal(TemporalArray::try_from(array)?)?;
 
         let days = ctx
             .named("days")

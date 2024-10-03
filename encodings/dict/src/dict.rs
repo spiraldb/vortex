@@ -10,30 +10,31 @@ use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
 };
-use vortex_dtype::{match_each_integer_ptype, DType};
+use vortex_dtype::{match_each_integer_ptype, DType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 impl_encoding!("vortex.dict", ids::DICT, Dict);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictMetadata {
-    codes_dtype: DType,
+    codes_ptype: PType,
     values_len: usize,
 }
 
 impl DictArray {
     pub fn try_new(codes: Array, values: Array) -> VortexResult<Self> {
-        if !codes.dtype().is_unsigned_int() {
-            vortex_bail!(MismatchedTypes: "unsigned int", codes.dtype());
+        if !codes.dtype().is_unsigned_int() || codes.dtype().is_nullable() {
+            vortex_bail!(MismatchedTypes: "non-nullable unsigned int", codes.dtype());
         }
         Self::try_from_parts(
             values.dtype().clone(),
             codes.len(),
             DictMetadata {
-                codes_dtype: codes.dtype().clone(),
+                codes_ptype: PType::try_from(codes.dtype())
+                    .vortex_expect("codes dtype must be uint"),
                 values_len: values.len(),
             },
             [values, codes].into(),
@@ -51,7 +52,7 @@ impl DictArray {
     #[inline]
     pub fn codes(&self) -> Array {
         self.as_ref()
-            .child(1, &self.metadata().codes_dtype, self.len())
+            .child(1, &DType::from(self.metadata().codes_ptype), self.len())
             .vortex_expect("DictArray is missing its codes child array")
     }
 }

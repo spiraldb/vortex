@@ -2,16 +2,15 @@ use std::fmt::Debug;
 
 use serde::{Deserialize, Serialize};
 use vortex::array::StructArray;
+use vortex::compute::unary::try_cast;
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, ExtensionArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoArray, IntoCanonical,
-};
-use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoCanonical};
+use vortex_dtype::{DType, PType};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult, VortexUnwrap};
 
 use crate::compute::decode_to_temporal;
 
@@ -21,9 +20,9 @@ impl_encoding!("vortex.datetimeparts", ids::DATE_TIME_PARTS, DateTimeParts);
 pub struct DateTimePartsMetadata {
     // Validity lives in the days array
     // TODO(ngates): we should actually model this with a Tuple array when we have one.
-    days_dtype: DType,
-    seconds_dtype: DType,
-    subseconds_dtype: DType,
+    days_ptype: PType,
+    seconds_ptype: PType,
+    subseconds_ptype: PType,
 }
 
 impl DateTimePartsArray {
@@ -33,14 +32,18 @@ impl DateTimePartsArray {
         seconds: Array,
         subsecond: Array,
     ) -> VortexResult<Self> {
-        if !days.dtype().is_int() {
-            vortex_bail!(MismatchedTypes: "any integer", days.dtype());
+        if !days.dtype().is_int() || (dtype.is_nullable() != days.dtype().is_nullable()) {
+            vortex_bail!(
+                "Expected integer with nullability {}, got {}",
+                dtype.is_nullable(),
+                days.dtype()
+            );
         }
-        if !seconds.dtype().is_int() {
-            vortex_bail!(MismatchedTypes: "any integer", seconds.dtype());
+        if !seconds.dtype().is_int() || seconds.dtype().is_nullable() {
+            vortex_bail!(MismatchedTypes: "non-nullable integer", seconds.dtype());
         }
-        if !subsecond.dtype().is_int() {
-            vortex_bail!(MismatchedTypes: "any integer", subsecond.dtype());
+        if !subsecond.dtype().is_int() || subsecond.dtype().is_nullable() {
+            vortex_bail!(MismatchedTypes: "non-nullable integer", subsecond.dtype());
         }
 
         let length = days.len();
@@ -53,14 +56,16 @@ impl DateTimePartsArray {
             );
         }
 
+        let metadata = DateTimePartsMetadata {
+            days_ptype: days.dtype().try_into()?,
+            seconds_ptype: seconds.dtype().try_into()?,
+            subseconds_ptype: subsecond.dtype().try_into()?,
+        };
+
         Self::try_from_parts(
             dtype,
             length,
-            DateTimePartsMetadata {
-                days_dtype: days.dtype().clone(),
-                seconds_dtype: seconds.dtype().clone(),
-                subseconds_dtype: subsecond.dtype().clone(),
-            },
+            metadata,
             [days, seconds, subsecond].into(),
             StatsSet::new(),
         )
@@ -68,20 +73,34 @@ impl DateTimePartsArray {
 
     pub fn days(&self) -> Array {
         self.as_ref()
-            .child(0, &self.metadata().days_dtype, self.len())
+            .child(
+                0,
+                &DType::Primitive(self.metadata().days_ptype, self.dtype().nullability()),
+                self.len(),
+            )
             .vortex_expect("DatetimePartsArray missing days array")
     }
 
     pub fn seconds(&self) -> Array {
         self.as_ref()
-            .child(1, &self.metadata().seconds_dtype, self.len())
+            .child(1, &self.metadata().seconds_ptype.into(), self.len())
             .vortex_expect("DatetimePartsArray missing seconds array")
     }
 
     pub fn subsecond(&self) -> Array {
         self.as_ref()
-            .child(2, &self.metadata().subseconds_dtype, self.len())
+            .child(2, &self.metadata().subseconds_ptype.into(), self.len())
             .vortex_expect("DatetimePartsArray missing subsecond array")
+    }
+
+    pub fn validity(&self) -> Validity {
+        if self.dtype().is_nullable() {
+            self.days()
+                .with_dyn(|a| a.logical_validity())
+                .into_validity()
+        } else {
+            Validity::NonNullable
+        }
     }
 }
 
@@ -96,11 +115,13 @@ impl ArrayVariants for DateTimePartsArray {
 impl ExtensionArrayTrait for DateTimePartsArray {
     fn storage_array(&self) -> Array {
         // FIXME(ngates): this needs to be a tuple array so we can implement Compare
+        // we don't want to write validity twice, so we pull it up to the top
+        let days = try_cast(self.days(), &self.days().dtype().as_nonnullable()).vortex_unwrap();
         StructArray::try_new(
             vec!["days".into(), "seconds".into(), "subseconds".into()].into(),
-            [self.days(), self.seconds(), self.subsecond()].into(),
+            [days, self.seconds(), self.subsecond()].into(),
             self.len(),
-            self.logical_validity().into_validity(),
+            self.validity(),
         )
         .vortex_expect("Failed to create struct array")
         .into_array()
@@ -115,11 +136,11 @@ impl IntoCanonical for DateTimePartsArray {
 
 impl ArrayValidity for DateTimePartsArray {
     fn is_valid(&self, index: usize) -> bool {
-        self.days().with_dyn(|a| a.is_valid(index))
+        self.validity().is_valid(index)
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        self.days().with_dyn(|a| a.logical_validity())
+        self.validity().to_logical(self.len())
     }
 }
 

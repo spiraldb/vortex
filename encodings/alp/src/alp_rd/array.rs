@@ -4,8 +4,8 @@ use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, Canonical, IntoCanonical};
-use vortex_dtype::{DType, PType};
+use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoCanonical};
+use vortex_dtype::{DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
 use crate::alp_rd::alp_rd_decode;
@@ -17,7 +17,7 @@ pub struct ALPRDMetadata {
     right_bit_width: u8,
     dict_len: u8,
     dict: [u16; 8],
-    left_parts_dtype: DType,
+    left_parts_ptype: PType,
     has_exceptions: bool,
 }
 
@@ -34,20 +34,35 @@ impl ALPRDArray {
             vortex_bail!("ALPRDArray given invalid DType ({dtype})");
         }
 
-        if left_parts.len() != right_parts.len() {
-            vortex_bail!("left_parts and right_parts must be of same length");
-        }
-
         let len = left_parts.len();
+        if right_parts.len() != len {
+            vortex_bail!(
+                "left_parts (len {}) and right_parts (len {}) must be of same length",
+                len,
+                right_parts.len()
+            );
+        }
 
         if !left_parts.dtype().is_unsigned_int() {
             vortex_bail!("left_parts dtype must be uint");
         }
+        // we delegate array validity to the left_parts child
+        if dtype.is_nullable() != left_parts.dtype().is_nullable() {
+            vortex_bail!(
+                "ALPRDArray dtype nullability ({}) must match left_parts dtype nullability ({})",
+                dtype,
+                left_parts.dtype()
+            );
+        }
+        let left_parts_ptype =
+            PType::try_from(left_parts.dtype()).vortex_expect("left_parts dtype must be uint");
 
-        let left_parts_dtype = left_parts.dtype().clone();
-
-        if !right_parts.dtype().is_unsigned_int() {
-            vortex_bail!("right_parts dtype must be uint");
+        // we enforce right_parts to be non-nullable uint
+        if right_parts.dtype().is_nullable() {
+            vortex_bail!("right_parts dtype must be non-nullable");
+        }
+        if !right_parts.dtype().is_unsigned_int() || right_parts.dtype().is_nullable() {
+            vortex_bail!(MismatchedTypes: "non-nullable uint", right_parts.dtype());
         }
 
         let mut children = vec![left_parts, right_parts];
@@ -73,7 +88,7 @@ impl ALPRDArray {
                 right_bit_width,
                 dict_len: left_parts_dict.as_ref().len() as u8,
                 dict,
-                left_parts_dtype,
+                left_parts_ptype,
                 has_exceptions,
             },
             children.into(),
@@ -90,30 +105,45 @@ impl ALPRDArray {
             == PType::F32
     }
 
+    /// The dtype of the left parts of the array.
+    #[inline]
+    fn left_parts_dtype(&self) -> DType {
+        DType::Primitive(self.metadata().left_parts_ptype, self.dtype().nullability())
+    }
+
+    /// The dtype of the right parts of the array.
+    #[inline]
+    fn right_parts_dtype(&self) -> DType {
+        DType::Primitive(
+            if self.is_f32() {
+                PType::U32
+            } else {
+                PType::U64
+            },
+            Nullability::NonNullable,
+        )
+    }
+
+    /// The dtype of the exceptions of the left parts of the array.
+    #[inline]
+    fn left_parts_exceptions_dtype(&self) -> DType {
+        DType::Primitive(self.metadata().left_parts_ptype, Nullability::Nullable)
+    }
+
     /// The leftmost (most significant) bits of the floating point values stored in the array.
     ///
     /// These are bit-packed and dictionary encoded, and cannot directly be interpreted without
     /// the metadata of this array.
     pub fn left_parts(&self) -> Array {
         self.as_ref()
-            .child(0, &self.metadata().left_parts_dtype, self.len())
+            .child(0, &self.left_parts_dtype(), self.len())
             .vortex_expect("ALPRDArray: left_parts child")
     }
 
     /// The rightmost (least significant) bits of the floating point values stored in the array.
     pub fn right_parts(&self) -> Array {
-        let uint_ptype = if self.is_f32() {
-            PType::U32
-        } else {
-            PType::U64
-        };
-
         self.as_ref()
-            .child(
-                1,
-                &DType::Primitive(uint_ptype, self.metadata().left_parts_dtype.nullability()),
-                self.len(),
-            )
+            .child(1, &self.right_parts_dtype(), self.len())
             .vortex_expect("ALPRDArray: right_parts child")
     }
 
@@ -121,11 +151,7 @@ impl ALPRDArray {
     pub fn left_parts_exceptions(&self) -> Option<Array> {
         self.metadata().has_exceptions.then(|| {
             self.as_ref()
-                .child(
-                    2,
-                    &self.metadata().left_parts_dtype.as_nullable(),
-                    self.len(),
-                )
+                .child(2, &self.left_parts_exceptions_dtype(), self.len())
                 .vortex_expect("ALPRDArray: left_parts_exceptions child")
         })
     }
