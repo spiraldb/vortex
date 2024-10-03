@@ -8,17 +8,18 @@ use crate::{Array, ArrayDType, IntoArray};
 
 impl CastFn for PrimitiveArray {
     fn cast(&self, dtype: &DType) -> VortexResult<Array> {
-        let DType::Primitive(new_ptype, new_nullability) = dtype.clone() else {
+        let DType::Primitive(new_ptype, new_nullability) = dtype else {
             vortex_bail!(MismatchedTypes: "primitive type", dtype);
         };
+        let owned_n = *new_nullability;
 
         // First, check that the cast is compatible with the source array's validity
-        let new_validity = if self.dtype().nullability() == new_nullability {
+        let new_validity = if self.dtype().nullability() == owned_n {
             self.validity().clone()
-        } else if new_nullability == Nullability::Nullable {
+        } else if owned_n == Nullability::Nullable {
             // from non-nullable to nullable
             self.validity().into_nullable()
-        } else if new_nullability == Nullability::NonNullable
+        } else if owned_n == Nullability::NonNullable
             && self.validity().to_logical(self.len()).all_valid()
         {
             // from nullable but all valid, to non-nullable
@@ -28,7 +29,7 @@ impl CastFn for PrimitiveArray {
         };
 
         // If the bit width is the same, we can short-circuit and simply update the validity
-        if self.ptype() == new_ptype {
+        if self.ptype() == *new_ptype {
             return Ok(
                 PrimitiveArray::new(self.buffer().clone(), self.ptype(), new_validity).into_array(),
             );
