@@ -1,5 +1,7 @@
 use std::collections::HashSet;
 
+#[allow(unused_imports)]
+use log::warn;
 use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::stats::{trailing_zeros, ArrayStatistics};
@@ -30,11 +32,13 @@ impl EncodingCompressor for FoRCompressor {
 
         // Only supports integers
         if !parray.ptype().is_int() {
+            // warn!("not int {}", parray.ptype());
             return None;
         }
 
         // For all-null, cannot encode.
         if parray.logical_validity().all_invalid() {
+            // warn!("all invalid");
             return None;
         }
 
@@ -43,6 +47,7 @@ impl EncodingCompressor for FoRCompressor {
         match_each_integer_ptype!(parray.ptype(), |$P| {
             let min: $P = parray.statistics().compute_min()?;
             if min == 0 && shift == 0 && parray.ptype().is_unsigned_int() {
+                // warn!("min {} or shift {}", min, shift);
                 return None;
             }
         });

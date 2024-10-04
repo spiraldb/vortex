@@ -1,6 +1,6 @@
 use std::any::Any;
 use std::collections::HashSet;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display, Formatter, Write};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
@@ -83,7 +83,18 @@ pub trait EncoderMetadata {
 
 impl Display for CompressionTree<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        Display::fmt(self.compressor.id(), f)
+        let mut children = String::new();
+        for (index, child) in self.children.iter().enumerate() {
+            if index != 0 {
+                write!(children, ", ")?;
+            }
+            match child {
+                None => write!(children, "x")?,
+                Some(child) => write!(children, "{}", child)?,
+            }
+        }
+        write!(f, "{}({})", self.compressor.id(), children)
+        // Display::fmt(self.compressor.id(), f)
     }
 }
 
