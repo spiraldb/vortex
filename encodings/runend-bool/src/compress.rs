@@ -1,6 +1,7 @@
 use std::cmp::min;
 
 use arrow_buffer::buffer::BooleanBuffer;
+use arrow_buffer::BooleanBufferBuilder;
 use num_traits::{AsPrimitive, FromPrimitive};
 use vortex::array::{BoolArray, PrimitiveArray};
 use vortex::validity::Validity;
@@ -14,11 +15,11 @@ pub fn runend_bool_encode(elements: &BoolArray) -> (PrimitiveArray, bool) {
 
 pub fn runend_bool_encode_slice(elements: &BooleanBuffer) -> (Vec<u64>, bool) {
     let mut iter = elements.set_slices();
-    let mut ends = Vec::new();
     let Some((start, end)) = iter.next() else {
         return (vec![elements.len() as u64], false);
     };
 
+    let mut ends = Vec::new();
     let first_bool = start == 0;
     if !first_bool {
         ends.push(start as u64)
@@ -77,10 +78,9 @@ pub fn runend_bool_decode_slice<E: NativePType + AsPrimitive<usize> + FromPrimit
         .map(|v| *v - offset_e)
         .map(|v| min(v, length_e));
 
-    let mut decoded = Vec::with_capacity(length);
+    let mut decoded = BooleanBufferBuilder::new(length);
     for (idx, end) in trimmed_ends.enumerate() {
-        decoded
-            .extend(std::iter::repeat(value_at_index(idx, start)).take(end.as_() - decoded.len()));
+        decoded.append_n(end.as_() - decoded.len(), value_at_index(idx, start));
     }
     BooleanBuffer::from(decoded)
 }
