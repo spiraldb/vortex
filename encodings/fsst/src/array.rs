@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::sync::Arc;
 
 use fsst::{Decompressor, Symbol};

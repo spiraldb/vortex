@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use serde::{Deserialize, Serialize};
 use vortex::array::{PrimitiveArray, SparseArray};
