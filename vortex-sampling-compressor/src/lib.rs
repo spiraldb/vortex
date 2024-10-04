@@ -8,7 +8,7 @@ use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
-use vortex::array::{Chunked, ChunkedArray, Constant};
+use vortex::array::{ChunkedArray, Constant};
 use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, CompressionStrategy};
 use vortex::compute::slice;
 use vortex::encoding::EncodingRef;
@@ -182,6 +182,9 @@ impl<'a> SamplingCompressor<'a> {
         arr: &Array,
         like: Option<&CompressionTree<'a>>,
     ) -> VortexResult<CompressedArray<'a>> {
+        // if arr.dtype().is_struct() {
+        //     warn!("like is {:?} {}", like, arr);
+        // }
         if arr.is_empty() {
             return Ok(CompressedArray::uncompressed(arr.clone()));
         }
@@ -207,6 +210,9 @@ impl<'a> SamplingCompressor<'a> {
 
         check_validity_unchanged(arr, compressed.as_ref());
         check_dtype_unchanged(arr, compressed.as_ref());
+        // if arr.dtype().is_struct() {
+        //     warn!("found compression {:?} {}", compressed.path(), arr);
+        // }
         Ok(compressed)
     }
 
@@ -238,6 +244,10 @@ fn sampled_compression<'a>(
     compressor: &SamplingCompressor<'a>,
     rng: &mut StdRng,
 ) -> VortexResult<Option<CompressedArray<'a>>> {
+    if let Some(cc) = ChunkedCompressor.can_compress(array) {
+        return cc.compress(array, None, compressor.clone()).map(Some);
+    }
+
     // First, we try constant compression and shortcut any sampling.
     if let Some(cc) = ConstantCompressor.can_compress(array) {
         return cc.compress(array, None, compressor.clone()).map(Some);
@@ -264,10 +274,6 @@ fn sampled_compression<'a>(
         })
         .copied()
         .collect();
-
-    if ChunkedArray::try_from(array).is_err() {
-        candidates.retain(|&compression| compression.id() != Chunked::ID.as_ref())
-    }
 
     debug!("{} candidates for {}: {:?}", compressor, array, candidates);
 
