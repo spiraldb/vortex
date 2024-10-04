@@ -2,12 +2,10 @@ use std::fmt::{Display, Formatter};
 
 use itertools::Itertools;
 use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata};
-use vortex_dtype::{match_each_native_ptype, DType};
+use vortex_dtype::DType;
 
 use crate::binary::BinaryScalar;
-use crate::bool::BoolScalar;
 use crate::extension::ExtScalar;
-use crate::primitive::PrimitiveScalar;
 use crate::struct_::StructScalar;
 use crate::utf8::Utf8Scalar;
 use crate::{PValue, Scalar, ScalarValue};
@@ -15,20 +13,7 @@ use crate::{PValue, Scalar, ScalarValue};
 impl Display for Scalar {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self.dtype() {
-            DType::Null => write!(f, "null"),
-            DType::Bool(_) => match BoolScalar::try_from(self)
-                .map_err(|_| std::fmt::Error)?
-                .value()
-            {
-                None => write!(f, "null"),
-                Some(b) => write!(f, "{}", b),
-            },
-            DType::Primitive(ptype, _) => match_each_native_ptype!(ptype, |$T| {
-                match PrimitiveScalar::try_from(self).expect("primitive").typed_value::<$T>() {
-                    None => write!(f, "null"),
-                    Some(v) => write!(f, "{}", v),
-                }
-            }),
+            DType::Null | DType::Bool(_) | DType::Primitive(..) => Display::fmt(&self.value, f),
             DType::Utf8(_) => {
                 match Utf8Scalar::try_from(self)
                     .map_err(|_| std::fmt::Error)?
