@@ -40,20 +40,15 @@ runs:
         path: .venv
         key: "venv-${{ runner.os }}-${{ hashFiles('requirements**.lock') }}"
 
-    - name: Export PYO3 Path
-      shell: bash
-      # Figure out a way to dynamically get python version
-      run: |
-        echo "PYO3_PYTHON=/home/runner/work/vortex/vortex/.venv/bin/python" >> $GITHUB_ENV
-        echo "PYO3_ENVIRONMENT_SIGNATURE=cpython-3.11-64bit" >> $GITHUB_ENV
-
     - name: Rye Sync
       shell: bash
       # --no-lock prevents resolution of the lock file. The locks are still respected.
       # We always run `rye sync` even if the cache fetch was successful since it builds our Rust extensions for us.
       run: rye sync --no-lock
       env:
+        MATURIN_PEP517_USE_BASE_PYTHON: "true"
         MATURIN_PEP517_ARGS: "--profile dev"
+        PYO3_ENVIRONMENT_SIGNATURE: cpython-3.11-64bit
 
     - name: Export Path
       shell: bash
