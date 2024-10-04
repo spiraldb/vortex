@@ -48,7 +48,7 @@ pub fn runend_bool_decode(
 ) -> VortexResult<BoolArray> {
     match_each_integer_ptype!(run_ends.ptype(), |$E| {
         let bools = runend_bool_decode_slice::<$E>(run_ends.maybe_null_slice(), start, offset, length);
-        BoolArray::try_new(BooleanBuffer::from(bools), validity)
+        BoolArray::try_new(bools, validity)
     })
 }
 
@@ -57,7 +57,7 @@ pub fn runend_bool_decode_slice<E: NativePType + AsPrimitive<usize> + FromPrimit
     start: bool,
     offset: usize,
     length: usize,
-) -> Vec<bool> {
+) -> BooleanBuffer {
     let offset_e = E::from_usize(offset).unwrap_or_else(|| {
         vortex_panic!(
             "offset {} cannot be converted to {}",
@@ -82,7 +82,7 @@ pub fn runend_bool_decode_slice<E: NativePType + AsPrimitive<usize> + FromPrimit
         decoded
             .extend(std::iter::repeat(value_at_index(idx, start)).take(end.as_() - decoded.len()));
     }
-    decoded
+    BooleanBuffer::from(decoded)
 }
 
 pub fn value_at_index(idx: usize, start: bool) -> bool {
@@ -136,7 +136,7 @@ mod test {
         let (ends, start) = runend_bool_encode_slice(&BooleanBuffer::from(input.as_slice()));
 
         let decoded = runend_bool_decode_slice(ends.as_slice(), start, 0, input.len());
-        assert_eq!(decoded, input)
+        assert_eq!(decoded, BooleanBuffer::from(input.as_slice()))
     }
 
     #[test]
@@ -145,7 +145,7 @@ mod test {
         let (ends, start) = runend_bool_encode_slice(&BooleanBuffer::from(input.as_slice()));
 
         let decoded = runend_bool_decode_slice(ends.as_slice(), start, 0, input.len());
-        assert_eq!(decoded, input)
+        assert_eq!(decoded, BooleanBuffer::from(input.as_slice()))
     }
 
     #[test]
@@ -155,7 +155,7 @@ mod test {
         let (ends, start) = runend_bool_encode_slice(&BooleanBuffer::from(input.as_slice()));
 
         let decoded = runend_bool_decode_slice(ends.as_slice(), start, 0, input.len());
-        assert_eq!(decoded, input)
+        assert_eq!(decoded, BooleanBuffer::from(input.as_slice()))
     }
 
     #[test]
@@ -165,7 +165,7 @@ mod test {
         let (ends, start) = runend_bool_encode_slice(&BooleanBuffer::from(input.as_slice()));
 
         let decoded = runend_bool_decode_slice(ends.as_slice(), start, 0, input.len());
-        assert_eq!(decoded, input)
+        assert_eq!(decoded, BooleanBuffer::from(input.as_slice()))
     }
 
     #[test]
