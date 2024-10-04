@@ -195,7 +195,7 @@ mod test {
         let arr = slice(
             // [t, t, f, f, f, t, f, t, t, t]
             RunEndBoolArray::try_new(
-                vec![2i32, 5, 6, 7, 10].into_array(),
+                vec![2u32, 5, 6, 7, 10].into_array(),
                 true,
                 Validity::NonNullable,
             )
