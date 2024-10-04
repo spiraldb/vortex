@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::mem::{transmute, MaybeUninit};
 use std::ptr;
 use std::sync::Arc;
@@ -36,7 +36,7 @@ pub struct PrimitiveMetadata {
 
 impl Display for PrimitiveMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 

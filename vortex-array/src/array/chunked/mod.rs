@@ -2,7 +2,7 @@
 //!
 //! Vortex is a chunked array library that's able to
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use futures_util::stream;
 use itertools::Itertools;
@@ -37,7 +37,7 @@ pub struct ChunkedMetadata {
 
 impl Display for ChunkedMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 

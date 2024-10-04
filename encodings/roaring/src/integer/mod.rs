@@ -27,7 +27,7 @@ pub struct RoaringIntMetadata {
 
 impl Display for RoaringIntMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 

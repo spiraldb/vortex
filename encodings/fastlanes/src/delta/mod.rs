@@ -26,7 +26,7 @@ pub struct DeltaMetadata {
 
 impl Display for DeltaMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 

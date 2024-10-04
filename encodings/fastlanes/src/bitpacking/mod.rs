@@ -33,7 +33,7 @@ pub struct BitPackedMetadata {
 
 impl Display for BitPackedMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 

@@ -25,7 +25,7 @@ pub struct FoRMetadata {
 
 impl Display for FoRMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 

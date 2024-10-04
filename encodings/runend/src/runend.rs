@@ -31,7 +31,7 @@ pub struct RunEndMetadata {
 
 impl Display for RunEndMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 
