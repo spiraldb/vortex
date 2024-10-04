@@ -50,7 +50,10 @@ impl RunEndBoolArray {
             vortex_bail!("Ends array must be strictly sorted",);
         }
         if !ends.dtype().is_unsigned_int() || ends.dtype().is_nullable() {
-            vortex_bail!("Ends array must be an unsigned integer type, got {}", ends.dtype());
+            vortex_bail!(
+                "Ends array must be an unsigned integer type, got {}",
+                ends.dtype()
+            );
         }
         if ends.is_empty() {
             vortex_bail!("Ends array must have at least one element");
@@ -73,13 +76,7 @@ impl RunEndBoolArray {
             children.push(a)
         }
 
-        Self::try_from_parts(
-            dtype,
-            length,
-            metadata,
-            children.into(),
-            StatsSet::new(),
-        )
+        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
     pub(crate) fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
@@ -100,7 +97,11 @@ impl RunEndBoolArray {
     #[inline]
     pub(crate) fn ends(&self) -> Array {
         self.as_ref()
-            .child(0, &self.metadata().ends_ptype.into(), self.metadata().num_runs)
+            .child(
+                0,
+                &self.metadata().ends_ptype.into(),
+                self.metadata().num_runs,
+            )
             .vortex_expect("RunEndBoolArray is missing its run ends")
     }
 
