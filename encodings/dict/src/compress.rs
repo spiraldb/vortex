@@ -10,7 +10,6 @@ use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArray};
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, ToBytes};
 use vortex_error::VortexExpect as _;
-use vortex_runend_bool::RunEndBoolArray;
 
 #[derive(Debug)]
 struct Value<T>(T);
@@ -150,14 +149,11 @@ where
     }
 
     let values_validity = if dtype.is_nullable() {
-        let ends = [1u64, offsets.len() as u64 - 1];
-        let validity_array = RunEndBoolArray::try_new(
-            PrimitiveArray::from_vec(ends.into(), Validity::NonNullable).into_array(),
-            false,
-            Validity::NonNullable,
-        )
-        .vortex_expect("Failed to create RunEndBoolArray");
-        Validity::Array(validity_array.into_array())
+        let mut validity = Vec::with_capacity(offsets.len() - 1);
+        validity.push(false);
+        validity.extend(vec![true; offsets.len() - 2]);
+
+        validity.into()
     } else {
         Validity::NonNullable
     };

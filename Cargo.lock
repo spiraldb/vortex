@@ -4427,7 +4427,6 @@ dependencies = [
  "vortex-array",
  "vortex-dtype",
  "vortex-error",
- "vortex-runend-bool",
  "vortex-scalar",
 ]
 
