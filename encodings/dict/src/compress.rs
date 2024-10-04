@@ -1,8 +1,7 @@
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasher, Hash, Hasher};
 
-use ahash::RandomState;
 use hashbrown::hash_map::{Entry, RawEntryMut};
-use hashbrown::HashMap;
+use hashbrown::{DefaultHashBuilder, HashMap};
 use num_traits::AsPrimitive;
 use vortex::accessor::ArrayAccessor;
 use vortex::array::{PrimitiveArray, VarBinArray};
@@ -106,7 +105,7 @@ where
     U: AsRef<[u8]>,
 {
     let (lower, _) = values.size_hint();
-    let hasher = RandomState::new();
+    let hasher = DefaultHashBuilder::default();
     let mut lookup_dict: HashMap<u64, (), ()> = HashMap::with_hasher(());
     let mut codes: Vec<u64> = Vec::with_capacity(lower);
     let mut bytes: Vec<u8> = Vec::new();

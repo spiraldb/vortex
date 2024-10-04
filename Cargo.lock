@@ -4416,7 +4416,6 @@ dependencies = [
 name = "vortex-dict"
 version = "0.12.0"
 dependencies = [
- "ahash",
  "criterion",
  "hashbrown 0.15.0",
  "log",
