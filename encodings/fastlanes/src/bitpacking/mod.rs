@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
 use fastlanes::BitPacking;
@@ -27,6 +29,12 @@ pub struct BitPackedMetadata {
     offset: usize, // Know to be <1024
     length: usize, // Store end padding instead <1024
     has_patches: bool,
+}
+
+impl Display for BitPackedMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 /// NB: All non-null values in the patches array are considered patches

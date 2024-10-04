@@ -1,4 +1,4 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::ops::Deref;
 use std::sync::Arc;
 use std::{mem, slice};
@@ -112,6 +112,12 @@ impl_encoding!("vortex.varbinview", ids::VAR_BIN_VIEW, VarBinView);
 pub struct VarBinViewMetadata {
     validity: ValidityMetadata,
     data_lens: Vec<usize>,
+}
+
+impl Display for VarBinViewMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 impl VarBinViewArray {

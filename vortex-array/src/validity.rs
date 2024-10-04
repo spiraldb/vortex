@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Display};
 use std::ops::BitAnd;
 
 use arrow_buffer::{BooleanBuffer, BooleanBufferBuilder, NullBuffer};
@@ -24,6 +25,12 @@ pub enum ValidityMetadata {
     AllValid,
     AllInvalid,
     Array,
+}
+
+impl Display for ValidityMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 impl ValidityMetadata {

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Serialize};
 use vortex_dtype::DType;
 use vortex_error::{VortexExpect as _, VortexResult};
@@ -15,6 +17,12 @@ impl_encoding!("vortex.null", ids::NULL, Null);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NullMetadata;
+
+impl Display for NullMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "NullMetadata")
+    }
+}
 
 impl NullArray {
     pub fn new(len: usize) -> Self {

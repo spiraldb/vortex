@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use serde::{Deserialize, Serialize};
 use vortex_dtype::{DType, ExtDType, ExtID};
 use vortex_error::{VortexExpect as _, VortexResult};
@@ -16,6 +18,12 @@ impl_encoding!("vortex.ext", ids::EXTENSION, Extension);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExtensionMetadata {
     storage_dtype: DType,
+}
+
+impl Display for ExtensionMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 impl ExtensionArray {

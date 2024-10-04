@@ -74,14 +74,13 @@ impl Debug for RowSelectorExec {
     }
 }
 
-#[allow(clippy::use_debug)]
 impl DisplayAs for RowSelectorExec {
     fn fmt_as(
         &self,
         _display_format_type: DisplayFormatType,
         f: &mut Formatter,
     ) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 
@@ -237,10 +236,9 @@ impl Debug for TakeRowsExec {
     }
 }
 
-#[allow(clippy::use_debug)]
 impl DisplayAs for TakeRowsExec {
     fn fmt_as(&self, _display_type: DisplayFormatType, f: &mut Formatter) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        Debug::fmt(self, f)
     }
 }
 

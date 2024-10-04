@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use serde::{Deserialize, Serialize};
 use vortex::compute::unary::scalar_at;
 use vortex::compute::{search_sorted, SearchSortedSide};
@@ -24,6 +26,12 @@ pub struct RunEndBoolMetadata {
     num_runs: usize,
     offset: usize,
     length: usize,
+}
+
+impl Display for RunEndBoolMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 impl RunEndBoolArray {

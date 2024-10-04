@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 use serde::{Deserialize, Serialize};
 use vortex::accessor::ArrayAccessor;
@@ -22,6 +22,12 @@ impl_encoding!("vortex.dict", ids::DICT, Dict);
 pub struct DictMetadata {
     codes_ptype: PType,
     values_len: usize,
+}
+
+impl Display for DictMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 impl DictArray {

@@ -1,3 +1,5 @@
+use std::fmt::{Debug, Display};
+
 use arrow_buffer::bit_iterator::{BitIndexIterator, BitSliceIterator};
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
@@ -23,6 +25,12 @@ impl_encoding!("vortex.bool", ids::BOOL, Bool);
 pub struct BoolMetadata {
     validity: ValidityMetadata,
     first_byte_bit_offset: u8,
+}
+
+impl Display for BoolMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 impl BoolArray {

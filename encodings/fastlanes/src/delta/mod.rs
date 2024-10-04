@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,12 @@ pub struct DeltaMetadata {
     validity: ValidityMetadata,
     deltas_len: usize,
     offset: usize, // must be <1024
+}
+
+impl Display for DeltaMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 /// A FastLanes-style delta-encoded array of primitive values.

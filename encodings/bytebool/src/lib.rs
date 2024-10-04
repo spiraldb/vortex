@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display};
 use std::mem::ManuallyDrop;
 
 use arrow_buffer::BooleanBuffer;
@@ -22,6 +22,12 @@ impl_encoding!("vortex.bytebool", ids::BYTE_BOOL, ByteBool);
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ByteBoolMetadata {
     validity: ValidityMetadata,
+}
+
+impl Display for ByteBoolMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Debug::fmt(self, f)
+    }
 }
 
 impl ByteBoolArray {

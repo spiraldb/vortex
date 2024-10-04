@@ -41,7 +41,6 @@ pub struct TreeFormatter<'a, 'b: 'a> {
 /// TODO(ngates): I think we want to go back to the old explicit style. It gives arrays more
 ///  control over how their metadata etc is displayed.
 impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
-    #[allow(clippy::use_debug)]
     fn visit_child(&mut self, name: &str, array: &Array) -> VortexResult<()> {
         array.with_dyn(|a| {
             let nbytes = a.nbytes();
@@ -57,13 +56,7 @@ impl<'a, 'b: 'a> ArrayVisitor for TreeFormatter<'a, 'b> {
             )?;
             self.indent(|i| {
                 let array_data = ArrayData::from(array.clone());
-                writeln!(
-                    i.fmt,
-                    // TODO(ngates): use Display for metadata
-                    "{}metadata: {:?}",
-                    i.indent,
-                    array_data.metadata()
-                )
+                writeln!(i.fmt, "{}metadata: {}", i.indent, array_data.metadata())
             })?;
 
             let old_total_size = self.total_size;
