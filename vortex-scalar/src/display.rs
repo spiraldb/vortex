@@ -108,17 +108,20 @@ mod tests {
 
     #[test]
     fn display_primitive() {
-        assert_eq!(format!("{}", Scalar::from(0_u8)), "0");
-        assert_eq!(format!("{}", Scalar::from(255_u8)), "255");
+        assert_eq!(format!("{}", Scalar::from(0_u8)), "0_u8");
+        assert_eq!(format!("{}", Scalar::from(255_u8)), "255_u8");
 
-        assert_eq!(format!("{}", Scalar::from(0_u16)), "0");
-        assert_eq!(format!("{}", Scalar::from(!0_u16)), "65535");
+        assert_eq!(format!("{}", Scalar::from(0_u16)), "0_u16");
+        assert_eq!(format!("{}", Scalar::from(!0_u16)), "65535_u16");
 
-        assert_eq!(format!("{}", Scalar::from(0_u32)), "0");
-        assert_eq!(format!("{}", Scalar::from(!0_u32)), "4294967295");
+        assert_eq!(format!("{}", Scalar::from(0_u32)), "0_u32");
+        assert_eq!(format!("{}", Scalar::from(!0_u32)), "4294967295_u32");
 
-        assert_eq!(format!("{}", Scalar::from(0_u64)), "0");
-        assert_eq!(format!("{}", Scalar::from(!0_u64)), "18446744073709551615");
+        assert_eq!(format!("{}", Scalar::from(0_u64)), "0_u64");
+        assert_eq!(
+            format!("{}", Scalar::from(!0_u64)),
+            "18446744073709551615_u64"
+        );
 
         assert_eq!(
             format!("{}", Scalar::null(DType::Primitive(PType::U8, Nullable))),
@@ -179,7 +182,7 @@ mod tests {
                 "{}",
                 Scalar::r#struct(dtype(), vec![ScalarValue::Primitive(PValue::U32(32))])
             ),
-            "{foo:32}"
+            "{foo:32_u32}"
         );
     }
 
@@ -224,7 +227,7 @@ mod tests {
                     ]
                 )
             ),
-            "{foo:true,bar:32}"
+            "{foo:true,bar:32_u32}"
         );
     }
 
