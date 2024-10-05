@@ -11,7 +11,7 @@ use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArrayVariant, IntoCanonical,
 };
-use vortex_dtype::{DType, Nullability};
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::runend_bool_decode;
@@ -22,10 +22,9 @@ impl_encoding!("vortex.runendbool", ids::RUN_END_BOOL, RunEndBool);
 pub struct RunEndBoolMetadata {
     start: bool,
     validity: ValidityMetadata,
-    ends_dtype: DType,
+    ends_ptype: PType,
     num_runs: usize,
     offset: usize,
-    length: usize,
 }
 
 impl Display for RunEndBoolMetadata {
@@ -50,13 +49,25 @@ impl RunEndBoolArray {
         if !ends.statistics().compute_is_strict_sorted().unwrap_or(true) {
             vortex_bail!("Ends array must be strictly sorted",);
         }
+        if !ends.dtype().is_unsigned_int() || ends.dtype().is_nullable() {
+            vortex_bail!(
+                "Ends array must be an unsigned integer type, got {}",
+                ends.dtype()
+            );
+        }
+        if ends.is_empty() {
+            vortex_bail!("Ends array must have at least one element");
+        }
+
+        let dtype = DType::Bool(validity.nullability());
+
+        let ends_ptype = ends.dtype().try_into()?;
         let metadata = RunEndBoolMetadata {
             start,
             validity: validity.to_metadata(length)?,
-            ends_dtype: ends.dtype().clone(),
+            ends_ptype,
             num_runs: ends.len(),
             offset,
-            length,
         };
 
         let mut children = Vec::with_capacity(2);
@@ -65,43 +76,41 @@ impl RunEndBoolArray {
             children.push(a)
         }
 
-        Self::try_from_parts(
-            DType::Bool(Nullability::NonNullable),
-            length,
-            metadata,
-            children.into(),
-            StatsSet::new(),
-        )
+        Self::try_from_parts(dtype, length, metadata, children.into(), StatsSet::new())
     }
 
-    pub fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
+    pub(crate) fn find_physical_index(&self, index: usize) -> VortexResult<usize> {
         search_sorted(&self.ends(), index + self.offset(), SearchSortedSide::Right)
             .map(|s| s.to_ends_index(self.ends().len()))
+    }
+
+    #[inline]
+    pub(crate) fn offset(&self) -> usize {
+        self.metadata().offset
+    }
+
+    #[inline]
+    pub(crate) fn start(&self) -> bool {
+        self.metadata().start
+    }
+
+    #[inline]
+    pub(crate) fn ends(&self) -> Array {
+        self.as_ref()
+            .child(
+                0,
+                &self.metadata().ends_ptype.into(),
+                self.metadata().num_runs,
+            )
+            .vortex_expect("RunEndBoolArray is missing its run ends")
     }
 
     pub fn validity(&self) -> Validity {
         self.metadata().validity.to_validity(|| {
             self.as_ref()
-                .child(2, &Validity::DTYPE, self.len())
+                .child(1, &Validity::DTYPE, self.len())
                 .vortex_expect("RunEndBoolArray: validity child")
         })
-    }
-
-    #[inline]
-    pub fn offset(&self) -> usize {
-        self.metadata().offset
-    }
-
-    #[inline]
-    pub fn start(&self) -> bool {
-        self.metadata().start
-    }
-
-    #[inline]
-    pub fn ends(&self) -> Array {
-        self.as_ref()
-            .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
-            .vortex_expect("RunEndBoolArray is missing its run ends")
     }
 }
 
@@ -186,7 +195,7 @@ mod test {
         let arr = slice(
             // [t, t, f, f, f, t, f, t, t, t]
             RunEndBoolArray::try_new(
-                vec![2i32, 5, 6, 7, 10].into_array(),
+                vec![2u32, 5, 6, 7, 10].into_array(),
                 true,
                 Validity::NonNullable,
             )

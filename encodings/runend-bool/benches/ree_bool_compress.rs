@@ -8,7 +8,7 @@ use itertools::Itertools;
 use rand::distributions::Open01;
 use rand::prelude::StdRng;
 use rand::{Rng, SeedableRng};
-use vortex_runend_bool::compress::runend_bool_encode_slice;
+use vortex_runend_bool::compress::{runend_bool_decode_slice, runend_bool_encode_slice};
 
 fn compress_compare(c: &mut Criterion) {
     compress_compare_param(c, 0.);
@@ -33,10 +33,14 @@ fn compress_compare_param(c: &mut Criterion, sel_fac: f32) {
 
     let mut group = c.benchmark_group(format!("sel: {sel_fac}"));
 
-    group.bench_function("ree bool", |b| {
+    group.bench_function("ree bool compress", |b| {
         b.iter(|| black_box(runend_bool_encode_slice(&boolbuf)));
     });
 
+    let (ends, start) = runend_bool_encode_slice(&boolbuf);
+    group.bench_function("ree bool decompress", |b| {
+        b.iter(|| black_box(runend_bool_decode_slice(&ends, start, 0, ends.len())));
+    });
     group.finish()
 }
 
