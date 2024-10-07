@@ -4618,6 +4618,7 @@ dependencies = [
  "datafusion-common",
  "flatbuffers",
  "flexbuffers",
+ "half",
  "itertools 0.13.0",
  "jiff",
  "num-traits",
