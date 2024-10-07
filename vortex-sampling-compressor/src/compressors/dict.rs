@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use vortex::array::{Primitive, PrimitiveArray, VarBin, VarBinArray};
 use vortex::encoding::EncodingRef;
-use vortex::stats::ArrayStatistics;
+// use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray, DictEncoding};
 use vortex_error::VortexResult;
@@ -24,16 +24,16 @@ impl EncodingCompressor for DictCompressor {
             return None;
         };
 
-        // No point dictionary coding if the array is unique.
-        // We don't have a unique stat yet, but strict-sorted implies unique.
-        if array
-            .statistics()
-            .compute_is_strict_sorted()
-            .unwrap_or(false)
-        {
-            // FIXME(DK): this check is fairly expensive...
-            return None;
-        }
+        // // No point dictionary coding if the array is unique.
+        // // We don't have a unique stat yet, but strict-sorted implies unique.
+        // if array
+        //     .statistics()
+        //     .compute_is_strict_sorted()
+        //     .unwrap_or(false)
+        // {
+        //     // FIXME(DK): this check is fairly expensive...
+        //     return None;
+        // }
 
         Some(self)
     }
