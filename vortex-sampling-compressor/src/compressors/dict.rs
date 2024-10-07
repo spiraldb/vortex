@@ -35,6 +35,7 @@ impl EncodingCompressor for DictCompressor {
             .compute_is_strict_sorted()
             .unwrap_or(false)
         {
+            // FIXME(DK): this check is fairly expensive...
             return None;
         }
 
