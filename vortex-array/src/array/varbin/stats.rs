@@ -15,8 +15,30 @@ impl ArrayStatisticsCompute for VarBinArray {
         if self.is_empty() {
             return Ok(StatsSet::new());
         }
+        if _stat == Stat::IsConstant {
+            return self.with_iterator(|iter| compute_is_constant(iter));
+        }
         self.with_iterator(|iter| compute_stats(iter, self.dtype()))
     }
+}
+
+pub fn compute_is_constant(iter: &mut dyn Iterator<Item = Option<&[u8]>>) -> StatsSet {
+    fn is_constant_stats_set(is_constant: bool) -> StatsSet {
+        StatsSet::from(HashMap::from([(Stat::IsConstant, is_constant.into())]))
+    }
+
+    match iter.next() {
+        None => {}
+        Some(first) => {
+            for v in iter {
+                if v != first {
+                    return is_constant_stats_set(false);
+                }
+            }
+        }
+    };
+
+    is_constant_stats_set(true)
 }
 
 pub fn compute_stats(iter: &mut dyn Iterator<Item = Option<&[u8]>>, dtype: &DType) -> StatsSet {
