@@ -1,5 +1,7 @@
+#![allow(dead_code)]
 use std::fmt::Debug;
 
+use arrow_buffer::BooleanBuffer;
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use vortex::array::BoolArray;
 use vortex::validity::Validity;
@@ -14,6 +16,7 @@ mod context;
 mod filtering;
 mod footer;
 mod layouts;
+mod selection;
 mod stream;
 
 pub use builder::LayoutReaderBuilder;
@@ -24,6 +27,7 @@ pub use stream::LayoutBatchStream;
 pub use vortex_schema::projection::Projection;
 pub use vortex_schema::Schema;
 
+use crate::layouts::read::selection::RowSelector;
 use crate::stream_writer::ByteRange;
 
 // Recommended read-size according to the AWS performance guide
@@ -31,23 +35,35 @@ const INITIAL_READ_SIZE: usize = 8 * 1024 * 1024;
 const DEFAULT_BATCH_SIZE: usize = 65536;
 const FILE_POSTSCRIPT_SIZE: usize = 20;
 
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct Scan {
-    indices: Option<Array>,
-    projection: Projection,
-    filter: Option<RowFilter>,
+    expr: ScanExpr,
     batch_size: usize,
+}
+
+#[derive(Debug, Clone)]
+// TODO(robert): Generalize this once we have projection expressions
+pub enum ScanExpr {
+    Projection(Projection),
+    Filter(RowFilter),
 }
 
 /// Unique identifier for a message within a layout
 pub type LayoutPartId = u16;
 pub type MessageId = Vec<LayoutPartId>;
 
+pub type Messages = Vec<(MessageId, ByteRange)>;
+
 #[derive(Debug)]
 pub enum ReadResult {
-    ReadMore(Vec<(MessageId, ByteRange)>),
+    ReadMore(Messages),
     Batch(Array),
+}
+
+#[derive(Debug)]
+pub enum RangeResult {
+    ReadMore(Messages),
+    Range(RowSelector),
 }
 
 pub trait LayoutReader: Debug + Send {
@@ -58,7 +74,15 @@ pub trait LayoutReader: Debug + Send {
     /// and then call back into this function.
     ///
     /// The layout is finished reading when it returns None
-    fn read_next(&mut self) -> VortexResult<Option<ReadResult>>;
+    fn read_next(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>>;
+
+    /// Produce sets of row ranges to read from underlying layouts.
+    ///
+    /// Range terminating at end of the layout indicates that layout is done producing ranges.
+    fn read_range(&mut self) -> VortexResult<Option<RangeResult>>;
+
+    /// Skip over next n_rows as we know they will not be part of result set
+    fn advance(&mut self, up_to_row: usize) -> VortexResult<Messages>;
 
     // TODO(robert): Support stats pruning via planning. Requires propagating all the metadata
     //  to top level and then pushing down the result of it
@@ -69,17 +93,17 @@ pub trait LayoutReader: Debug + Send {
 }
 
 pub fn null_as_false(array: BoolArray) -> VortexResult<Array> {
-    match array.validity() {
-        Validity::NonNullable => Ok(array.into_array()),
+    Ok(match array.validity() {
+        Validity::NonNullable => array.into_array(),
         Validity::AllValid => {
-            Ok(BoolArray::try_new(array.boolean_buffer(), Validity::NonNullable)?.into_array())
+            BoolArray::try_new(array.boolean_buffer(), Validity::NonNullable)?.into_array()
         }
-        Validity::AllInvalid => Ok(BoolArray::from(vec![false; array.len()]).into_array()),
+        Validity::AllInvalid => BoolArray::from(BooleanBuffer::new_unset(array.len())).into_array(),
         Validity::Array(v) => {
             let bool_buffer = &array.boolean_buffer() & &v.into_bool()?.boolean_buffer();
-            Ok(BoolArray::from(bool_buffer).into_array())
+            BoolArray::from(bool_buffer).into_array()
         }
-    }
+    })
 }
 
 #[cfg(test)]

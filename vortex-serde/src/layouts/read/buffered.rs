@@ -5,7 +5,9 @@ use vortex::compute::slice;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
+use crate::layouts::read::selection::RowSelector;
 use crate::layouts::read::{LayoutReader, ReadResult};
+use crate::layouts::{Messages, RangeResult};
 
 #[derive(Debug)]
 pub struct BufferedReader {
@@ -31,10 +33,10 @@ impl BufferedReader {
         self.arrays.iter().map(Array::len).sum()
     }
 
-    fn buffer(&mut self) -> VortexResult<Option<ReadResult>> {
+    fn buffer(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>> {
         while self.buffered_row_count() < self.batch_size {
             if let Some(mut layout) = self.layouts.pop_front() {
-                if let Some(rr) = layout.read_next()? {
+                if let Some(rr) = layout.read_next(selection.clone())? {
                     self.layouts.push_front(layout);
                     match rr {
                         read_more @ ReadResult::ReadMore(..) => {
@@ -52,12 +54,12 @@ impl BufferedReader {
         Ok(None)
     }
 
-    pub fn read(&mut self) -> VortexResult<Option<ReadResult>> {
+    pub fn read_next_batch(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>> {
         if self.is_empty() {
             return Ok(None);
         }
 
-        if let Some(rr) = self.buffer()? {
+        if let Some(rr) = self.buffer(selection)? {
             match rr {
                 read_more @ ReadResult::ReadMore(..) => return Ok(Some(read_more)),
                 ReadResult::Batch(_) => {
@@ -101,5 +103,19 @@ impl BufferedReader {
                 )))
             }
         }
+    }
+}
+
+impl LayoutReader for BufferedReader {
+    fn read_next(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>> {
+        self.read_next_batch(selection)
+    }
+
+    fn read_range(&mut self) -> VortexResult<Option<RangeResult>> {
+        todo!()
+    }
+
+    fn advance(&mut self, _up_to_row: usize) -> VortexResult<Messages> {
+        todo!()
     }
 }

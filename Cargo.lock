@@ -4661,8 +4661,8 @@ name = "vortex-serde"
 version = "0.12.0"
 dependencies = [
  "ahash",
- "arrow",
  "arrow-array",
+ "arrow-buffer",
  "arrow-ipc",
  "arrow-schema",
  "arrow-select",
@@ -4675,8 +4675,10 @@ dependencies = [
  "itertools 0.13.0",
  "monoio",
  "object_store",
+ "once_cell",
  "pin-project",
  "rand",
+ "rstest",
  "simplelog",
  "tokio",
  "vortex-alp",

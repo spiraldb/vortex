@@ -19,6 +19,7 @@ use crate::MessageWriter;
 pub struct LayoutWriter<W> {
     msgs: MessageWriter<W>,
 
+    row_count: u64,
     dtype: Option<DType>,
     column_chunks: Vec<BatchOffsets>,
 }
@@ -29,6 +30,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
             msgs: MessageWriter::new(write),
             dtype: None,
             column_chunks: Vec::new(),
+            row_count: 0,
         }
     }
 
@@ -60,6 +62,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
         }
 
         while let Some(columns) = array_stream.try_next().await? {
+            self.row_count += columns.len() as u64;
             let st = StructArray::try_from(&columns)?;
             for (i, field) in st.children().enumerate() {
                 if let Ok(chunked_array) = ChunkedArray::try_from(field.clone()) {
@@ -170,7 +173,10 @@ impl<W: VortexWrite> LayoutWriter<W> {
     pub async fn finalize(mut self) -> VortexResult<W> {
         let top_level_layout = self.write_metadata_arrays().await?;
         let (dtype_offset, footer_offset) = self
-            .write_footer(Footer::new(Layout::Nested(top_level_layout)))
+            .write_footer(Footer::new(
+                Layout::Nested(top_level_layout),
+                self.row_count,
+            ))
             .await?;
         let mut w = self.msgs.into_inner();
 

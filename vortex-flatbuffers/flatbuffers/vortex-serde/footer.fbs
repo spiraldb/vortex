@@ -19,6 +19,7 @@ table Layout {
 
 table Footer {
     layout: Layout;
+    row_count: uint64;
 }
 
 root_type Footer;
