@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display};
 
-use arrow_buffer::{BooleanBuffer, Buffer as ArrowBuffer};
+use arrow_buffer::{BooleanBuffer, MutableBuffer};
 pub use compress::*;
 use croaring::Native;
 pub use croaring::{Bitmap, Portable};
@@ -25,9 +25,7 @@ mod stats;
 impl_encoding!("vortex.roaring_bool", ids::ROARING_BOOL, RoaringBool);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct RoaringBoolMetadata {
-    length: usize,
-}
+pub struct RoaringBoolMetadata;
 
 impl Display for RoaringBoolMetadata {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -59,7 +57,7 @@ impl RoaringBoolArray {
                 typed: TypedArray::try_from_parts(
                     DType::Bool(NonNullable),
                     length,
-                    RoaringBoolMetadata { length },
+                    RoaringBoolMetadata,
                     Some(Buffer::from(bitmap.serialize::<Native>())),
                     vec![].into(),
                     stats,
@@ -135,9 +133,14 @@ impl IntoCanonical for RoaringBoolArray {
             .to_bitset()
             .ok_or_else(|| vortex_err!("Failed to convert RoaringBitmap to Bitset"))?;
 
-        let buffer = ArrowBuffer::from_slice_ref(bitset.as_slice());
+        let byte_length = (self.len() + 7) / 8;
+        let mut buffer = MutableBuffer::with_capacity(byte_length);
+        buffer.extend_from_slice(bitset.as_slice());
+        if byte_length > bitset.size_in_bytes() {
+            buffer.extend_zeros(byte_length - bitset.size_in_bytes());
+        }
         BoolArray::try_new(
-            BooleanBuffer::new(buffer, 0, self.len()),
+            BooleanBuffer::new(buffer.into(), 0, self.len()),
             Validity::NonNullable,
         )
         .map(Canonical::Bool)
@@ -146,8 +149,10 @@ impl IntoCanonical for RoaringBoolArray {
 
 #[cfg(test)]
 mod test {
+    use std::iter;
+
     use vortex::array::BoolArray;
-    use vortex::IntoArray;
+    use vortex::{IntoArray, IntoArrayVariant};
 
     use crate::RoaringBoolArray;
 
@@ -159,5 +164,20 @@ mod test {
         let round_trip = RoaringBoolArray::try_from(array).unwrap();
         let values = round_trip.bitmap().to_vec();
         assert_eq!(values, vec![0, 2, 3]);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    pub fn trailing_false() {
+        let bool: BoolArray = BoolArray::from(
+            vec![true, true]
+                .into_iter()
+                .chain(iter::repeat(false).take(100))
+                .collect::<Vec<_>>(),
+        );
+        let array = RoaringBoolArray::encode(bool.into_array()).unwrap();
+        let round_trip = RoaringBoolArray::try_from(array).unwrap();
+        let bool_arr = round_trip.into_bool().unwrap();
+        assert_eq!(bool_arr.len(), 102);
     }
 }
