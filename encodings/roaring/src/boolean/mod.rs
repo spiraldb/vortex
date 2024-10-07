@@ -136,7 +136,7 @@ impl IntoCanonical for RoaringBoolArray {
         let byte_length = (self.len() + 7) / 8;
         let mut buffer = MutableBuffer::with_capacity(byte_length);
         buffer.extend_from_slice(bitset.as_slice());
-        buffer.extend_zeros(byte_length - bitset.as_slice().len());
+        buffer.extend_zeros(byte_length - bitset.size_in_bytes());
         BoolArray::try_new(
             BooleanBuffer::new(buffer.into(), 0, self.len()),
             Validity::NonNullable,
