@@ -153,6 +153,13 @@ impl<'a> CompressionTree<'a> {
     pub fn metadata(&mut self) -> Option<Arc<dyn EncoderMetadata>> {
         std::mem::take(&mut self.metadata)
     }
+
+    pub fn child_count_recursive(&self) -> usize {
+        self.children
+            .iter()
+            .filter_map(|child| child.as_ref().map(|c| c.child_count_recursive() + 1))
+            .sum::<usize>()
+    }
 }
 
 #[derive(Debug, Clone)]

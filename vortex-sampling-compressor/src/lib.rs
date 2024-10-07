@@ -55,10 +55,60 @@ lazy_static! {
 }
 
 #[derive(Debug, Clone)]
+pub struct ScanPerfConfig {
+    /// bytes per second of throughput
+    bytes_per_ms: f64,
+    /// Latency in milliseconds
+    latency_ms: f64,
+    /// Penalty (in milliseconds) per compression level
+    /// Intuitively, the penalty is roughly the cost of allocating a buffer and copying data
+    ms_penalty_per_child: f64,
+}
+
+impl ScanPerfConfig {
+    pub fn download_time(&self, nbytes: u64) -> f64 {
+        let throughput_ms = (nbytes as f64) / self.bytes_per_ms;
+        self.latency_ms + throughput_ms
+    }
+}
+
+impl Default for ScanPerfConfig {
+    fn default() -> Self {
+        Self {
+            bytes_per_ms: 524_288.0,   // 500 MiB/s
+            latency_ms: 50.0,          // 50 milliseconds for object storage
+            ms_penalty_per_child: 0.1, // 100 micros for allocation plus memcopy
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MinSizeConfig {
+    /// Penalty in bytes per compression level
+    bytes_penalty_per_child: u64,
+}
+
+impl Default for MinSizeConfig {
+    fn default() -> Self {
+        Self {
+            // one array child is ~40 bytes of overhead, we round up to next power of 2
+            bytes_penalty_per_child: 64,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ObjectiveConfig {
+    MinSize(MinSizeConfig),
+    ScanPerf(ScanPerfConfig),
+}
+
+#[derive(Debug, Clone)]
 pub struct CompressConfig {
     sample_size: u16,
     sample_count: u16,
-    max_depth: u8,
+    max_cost: u8,
+    objective: ObjectiveConfig,
     target_block_bytesize: usize,
     target_block_size: usize,
     rng_seed: u64,
@@ -72,7 +122,8 @@ impl Default for CompressConfig {
             // Sample length should always be multiple of 1024
             sample_size: 128,
             sample_count: 8,
-            max_depth: 3,
+            max_cost: 3,
+            objective: ObjectiveConfig::MinSize(MinSizeConfig::default()),
             target_block_bytesize: 16 * mib,
             target_block_size: 64 * kib,
             rng_seed: 0,
@@ -284,7 +335,7 @@ fn sampled_compression<'a>(
         .filter(|&encoding| !compressor.disabled_compressors.contains(encoding))
         .filter(|compression| {
             if compression.can_compress(array).is_some() {
-                if compressor.depth + compression.cost() > compressor.options.max_depth {
+                if compressor.depth + compression.cost() > compressor.options.max_cost {
                     debug!(
                         "{} skipping encoding {} due to depth",
                         compressor,
@@ -360,7 +411,7 @@ fn find_best_compression<'a>(
     ctx: &SamplingCompressor<'a>,
 ) -> VortexResult<CompressedArray<'a>> {
     let mut best = None;
-    let mut best_ratio = 1.0;
+    let mut best_objective = 1.0;
     for compression in candidates {
         debug!(
             "{} trying candidate {} for {}",
@@ -373,12 +424,43 @@ fn find_best_compression<'a>(
         }
         let compressed_sample =
             compression.compress(sample, None, ctx.for_compressor(compression))?;
-        let ratio = compressed_sample.nbytes() as f32 / sample.nbytes() as f32;
-        debug!("{} ratio for {}: {}", ctx, compression.id(), ratio);
-        if ratio < best_ratio {
-            best_ratio = ratio;
+
+        let objective = objective_function(
+            &compressed_sample,
+            sample.nbytes(),
+            &ctx.options().objective,
+        );
+
+        let ratio = (compressed_sample.nbytes() as f64) / (sample.nbytes() as f64);
+        debug!("{} ratio for {}: {}, objective fn value: {}", ctx, compression.id(), ratio, objective);
+        if objective < best_objective {
+            best_objective = objective;
             best = Some(compressed_sample)
         }
     }
     Ok(best.unwrap_or_else(|| CompressedArray::uncompressed(sample.clone())))
+}
+
+fn objective_function(
+    array: &CompressedArray,
+    base_size_bytes: usize,
+    config: &ObjectiveConfig,
+) -> f64 {
+    let size_in_bytes = array.nbytes() as u64;
+    let child_count_recursive = array
+        .path()
+        .as_ref()
+        .map(CompressionTree::child_count_recursive)
+        .unwrap_or(0) as u64;
+
+    match config {
+        ObjectiveConfig::MinSize(config) => {
+            (size_in_bytes + child_count_recursive * config.bytes_penalty_per_child) as f64
+                / (base_size_bytes as f64)
+        }
+        ObjectiveConfig::ScanPerf(config) => {
+            config.download_time(size_in_bytes)
+                + config.ms_penalty_per_child * (child_count_recursive as f64)
+        }
+    }
 }
