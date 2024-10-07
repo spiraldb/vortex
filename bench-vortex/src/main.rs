@@ -20,11 +20,11 @@ fn main() {
     let dataset = BenchmarkDatasets::PBI(CMSprovider);
 
     let start = Instant::now();
-    let compressed = compressor
-        .compress(&dataset.to_vortex_array().unwrap(), None)
-        .unwrap();
+    let uncompressed = dataset.to_vortex_array().unwrap();
+    let compressed = compressor.compress(&uncompressed, None).unwrap();
     let duration = start.elapsed();
 
     warn!("Time elapsed: {:?}", duration);
-    warn!("{}", compressed.nbytes());
+    warn!("Uncompressed size: {}", uncompressed.nbytes());
+    warn!("Compressed size: {}", compressed.nbytes());
 }
