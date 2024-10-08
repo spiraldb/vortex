@@ -36,10 +36,9 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 13] = [
+    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 12] = [
         &ALPCompressor as CompressorRef,
         &BITPACK_WITH_PATCHES,
-        &ConstantCompressor,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR,
         &DeltaCompressor,
@@ -52,9 +51,8 @@ lazy_static! {
         &ZigZagCompressor,
     ];
 
-    pub static ref FASTEST_COMPRESSORS: [CompressorRef<'static>; 8] = [
+    pub static ref FASTEST_COMPRESSORS: [CompressorRef<'static>; 7] = [
         &BITPACK_WITH_PATCHES,
-        &ConstantCompressor,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR, // replace with FastLanes RLE
         &DictCompressor, // replace with FastLanes Dictionary
