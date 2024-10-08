@@ -1,7 +1,5 @@
 use std::collections::HashSet;
 
-#[allow(unused_imports)]
-use log::warn;
 use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
@@ -29,7 +27,6 @@ impl EncodingCompressor for BitPackedCompressor {
 
         // Only supports unsigned ints
         if !parray.ptype().is_unsigned_int() {
-            // warn!("not unsigned {}", parray.ptype());
             return None;
         }
 
@@ -37,7 +34,6 @@ impl EncodingCompressor for BitPackedCompressor {
 
         // Check that the bit width is less than the type's bit width
         if bit_width == parray.ptype().bit_width() {
-            // warn!("bit width too big {} {}", bit_width, parray.ptype());
             return None;
         }
 
