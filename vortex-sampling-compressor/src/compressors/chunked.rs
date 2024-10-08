@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use log::warn;
 use vortex::array::{Chunked, ChunkedArray};
 use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray};
@@ -27,18 +28,25 @@ impl ChunkedCompressor {
         let mut compressed_chunks = Vec::with_capacity(less_chunked.nchunks());
         let mut previous = compress_child_like;
         for (index, chunk) in less_chunked.chunks().enumerate() {
-            let compressed_chunk = ctx
+            let (compressed_chunk, tree) = ctx
                 .named(&format!("chunk-{}", index))
                 .compress(&chunk, previous.as_ref())?
-                .into_array();
+                .into_parts();
 
             let ratio = (compressed_chunk.nbytes() as f32) / (chunk.nbytes() as f32);
             if ratio > 1.0 || target_ratio.map(|r| ratio > r * 1.2).unwrap_or(false) {
+                warn!(
+                    "unsatisfactory ratio {} {:?} {:?}",
+                    ratio, target_ratio, previous
+                );
                 let (compressed_chunk, tree) = ctx.compress_array(&chunk)?.into_parts();
                 previous = tree;
                 target_ratio = Some((compressed_chunk.nbytes() as f32) / (chunk.nbytes() as f32));
                 compressed_chunks.push(compressed_chunk);
             } else {
+                if previous.is_none() {
+                    previous = tree;
+                }
                 compressed_chunks.push(compressed_chunk);
             }
         }
