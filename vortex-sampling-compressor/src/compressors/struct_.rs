@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use itertools::Itertools;
+use log::warn;
 use vortex::array::{Struct, StructArray};
 use vortex::encoding::EncodingRef;
 use vortex::variants::StructArrayTrait;
@@ -41,7 +42,15 @@ impl EncodingCompressor for StructCompressor {
         let (arrays, trees) = array
             .children()
             .zip(children_trees)
-            .map(|(array, like)| ctx.compress(&array, like.as_ref()))
+            .zip(array.names().iter())
+            .map(|((array, like), name)| {
+                let ctx = ctx.named(name);
+                match &like {
+                    None => warn!("{} compressing {} like None", ctx, array),
+                    Some(like) => warn!("{} compressing {} like Some({})", ctx, array, like),
+                }
+                ctx.compress(&array, like.as_ref())
+            })
             .process_results(|iter| iter.map(|x| (x.array, x.path)).unzip())?;
 
         Ok(CompressedArray::new(

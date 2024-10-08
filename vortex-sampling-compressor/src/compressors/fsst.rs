@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use fsst::Compressor;
+use log::warn;
 use vortex::array::{VarBin, VarBinArray, VarBinView};
 use vortex::encoding::EncodingRef;
 use vortex::{ArrayDType, ArrayDef, IntoArray};
@@ -60,6 +61,7 @@ impl EncodingCompressor for FSSTCompressor {
         //
         // It's not worth running a full compression step unless the array is large enough.
         if array.nbytes() < 10 * FSST_SYMTAB_MAX_SIZE {
+            warn!("array {} {} too small for fsst", array, array.nbytes());
             return Ok(CompressedArray::uncompressed(array.clone()));
         }
 

@@ -74,7 +74,7 @@ impl Default for CompressConfig {
         Self {
             // Sample length should always be multiple of 1024
             sample_size: 128,
-            sample_count: 8,
+            sample_count: 64,
             max_depth: 3,
             target_block_bytesize: 16 * mib,
             target_block_size: 64 * kib,
@@ -260,7 +260,7 @@ fn sampled_compression<'a>(
         .filter(|compression| {
             if compression.can_compress(array).is_some() {
                 if compressor.depth + compression.cost() > compressor.options.max_depth {
-                    debug!(
+                    warn!(
                         "{} skipping encoding {} due to depth",
                         compressor,
                         compression.id()
@@ -275,7 +275,7 @@ fn sampled_compression<'a>(
         .copied()
         .collect();
 
-    debug!("{} candidates for {}: {:?}", compressor, array, candidates);
+    warn!("{} candidates for {}: {:?}", compressor, array, candidates);
 
     if candidates.is_empty() {
         debug!(
@@ -350,7 +350,7 @@ fn find_best_compression<'a>(
         let compressed_sample =
             compression.compress(sample, None, ctx.for_compressor(compression))?;
         let ratio = compressed_sample.nbytes() as f32 / sample.nbytes() as f32;
-        debug!("{} ratio for {}: {}", ctx, compression.id(), ratio);
+        warn!("{} ratio for {}: {}", ctx, compression.id(), ratio);
         if ratio < best_ratio {
             best_ratio = ratio;
             best = Some(compressed_sample)
