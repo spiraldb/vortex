@@ -4,21 +4,35 @@ use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexResult};
 use vortex_fastlanes::{
-    bitpack, bitpack_patches, count_exceptions, find_best_bit_width, BitPacked, BitPackedArray,
-    BitPackedEncoding,
+    bitpack, gather_patches, count_exceptions, find_best_bit_width, find_min_patchless_bit_width, BitPacked, BitPackedArray, BitPackedEncoding
 };
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
 
+pub const BITPACK_WITH_PATCHES: BitPackedCompressor = BitPackedCompressor{ allow_patches: true };
+pub const BITPACK_NO_PATCHES: BitPackedCompressor = BitPackedCompressor{ allow_patches: false };
+
 #[derive(Debug)]
-pub struct BitPackedCompressor;
+pub struct BitPackedCompressor {
+    allow_patches: bool,
+}
+
+impl BitPackedCompressor {
+    fn find_bit_width(&self, array: &PrimitiveArray) -> VortexResult<usize> {
+        if self.allow_patches { find_best_bit_width(array) } else { find_min_patchless_bit_width(array) }
+    }
+}
 
 impl EncodingCompressor for BitPackedCompressor {
     fn id(&self) -> &str {
         BitPacked::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        0
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
@@ -30,7 +44,7 @@ impl EncodingCompressor for BitPackedCompressor {
             return None;
         }
 
-        let bit_width = find_best_bit_width(&parray).ok()?;
+        let bit_width = self.find_bit_width(&parray).ok()?;
 
         // Check that the bit width is less than the type's bit width
         if bit_width == parray.ptype().bit_width() {
@@ -52,8 +66,11 @@ impl EncodingCompressor for BitPackedCompressor {
             .compute_bit_width_freq()
             .ok_or_else(|| vortex_err!(ComputeError: "missing bit width frequency"))?;
 
-        let bit_width = find_best_bit_width(&parray)?;
+        let bit_width = self.find_bit_width(&parray)?;
         let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
+        if !self.allow_patches && num_exceptions > 0 {
+            vortex_panic!("Found {} exceptions with patchless bit width {}", num_exceptions, bit_width)
+        }
 
         if bit_width == parray.ptype().bit_width() {
             // Nothing we can do
@@ -64,8 +81,10 @@ impl EncodingCompressor for BitPackedCompressor {
         let packed = bitpack(&parray, bit_width)?;
         let patches = (num_exceptions > 0)
             .then(|| {
-                bitpack_patches(&parray, bit_width, num_exceptions).map(|p| {
+                gather_patches(&parray, bit_width, num_exceptions).map(|p| {
                     ctx.auxiliary("patches")
+                        .excluding(&BITPACK_WITH_PATCHES)
+                        .including(&BITPACK_NO_PATCHES)
                         .compress(&p, like.as_ref().and_then(|l| l.child(0)))
                 })
             })
