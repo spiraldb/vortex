@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use vortex::array::{Constant, ConstantArray, ConstantEncoding};
+use vortex::array::{Constant, ConstantArray, ConstantEncoding, SparseEncoding};
 use vortex::compute::unary::scalar_at;
 use vortex::encoding::EncodingRef;
 use vortex::stats::ArrayStatistics;
@@ -36,6 +36,16 @@ impl EncodingCompressor for ConstantCompressor {
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
-        HashSet::from([&ConstantEncoding as EncodingRef])
+        HashSet::from([&ConstantEncoding as EncodingRef, &SparseEncoding])
+    }
+}
+
+pub struct ConstantEncoder {
+    value: ScalarValue,
+}
+
+impl EncoderMetadata for ConstantEncoder {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

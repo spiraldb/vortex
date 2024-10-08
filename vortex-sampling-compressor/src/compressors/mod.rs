@@ -19,6 +19,7 @@ pub mod delta;
 pub mod dict;
 pub mod r#for;
 pub mod fsst;
+pub mod mostly_constant;
 pub mod roaring_bool;
 pub mod roaring_int;
 pub mod runend;
