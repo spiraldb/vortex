@@ -44,10 +44,6 @@ impl ChunkedCompressor {
                 target_ratio = Some((compressed_chunk.nbytes() as f32) / (chunk.nbytes() as f32));
                 compressed_chunks.push(compressed_chunk);
             } else {
-                // warn!(
-                //     "satisfactory ratio {} {} {:?} {:?} {:?}",
-                //     compressed_chunk, ratio, target_ratio, previous, tree
-                // );
                 if previous.is_none() {
                     previous = tree;
                 }
