@@ -18,6 +18,10 @@ impl EncodingCompressor for StructCompressor {
         Struct::ID.as_ref()
     }
 
+    fn cost(&self) -> u8 {
+        0
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         StructArray::try_from(array)
             .ok()
