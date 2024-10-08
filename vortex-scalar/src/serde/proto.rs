@@ -75,7 +75,7 @@ impl From<&PValue> for pb::ScalarValue {
                 kind: Some(Kind::Uint64Value(*v)),
             },
             PValue::F16(v) => pb::ScalarValue {
-                kind: Some(Kind::FloatValue(v.to_f32())),
+                kind: Some(Kind::Uint32Value(v.to_bits() as u32)),
             },
             PValue::F32(v) => pb::ScalarValue {
                 kind: Some(Kind::FloatValue(*v)),
@@ -121,15 +121,22 @@ fn deserialize_scalar_value(dtype: &DType, value: &pb::ScalarValue) -> VortexRes
         Kind::BoolValue(v) => Ok(ScalarValue::Bool(*v)),
         Kind::Int32Value(v) => Ok(ScalarValue::Primitive(PValue::I32(*v))),
         Kind::Int64Value(v) => Ok(ScalarValue::Primitive(PValue::I64(*v))),
-        Kind::Uint32Value(v) => Ok(ScalarValue::Primitive(PValue::U32(*v))),
-        Kind::Uint64Value(v) => Ok(ScalarValue::Primitive(PValue::U64(*v))),
-        Kind::FloatValue(v) => match dtype {
+        Kind::Uint32Value(v) => match dtype {
             DType::Primitive(PType::F16, _) => {
-                Ok(ScalarValue::Primitive(PValue::F16(f16::from_f32(*v))))
+                let f16_value = f16::from_bits(u16::try_from(*v).map_err(|_| {
+                    vortex_err!(
+                        "expected f16 encoded as u16 inside u32 but found too large value {:#x}",
+                        v
+                    )
+                })?);
+
+                Ok(ScalarValue::Primitive(PValue::F16(f16_value)))
             }
-            DType::Primitive(PType::F32, _) => Ok(ScalarValue::Primitive(PValue::F32(*v))),
+            DType::Primitive(PType::U32, _) => Ok(ScalarValue::Primitive(PValue::U32(*v))),
             _ => vortex_bail!("invalid dtype for f32 value {}", dtype),
         },
+        Kind::Uint64Value(v) => Ok(ScalarValue::Primitive(PValue::U64(*v))),
+        Kind::FloatValue(v) => Ok(ScalarValue::Primitive(PValue::F32(*v))),
         Kind::DoubleValue(v) => Ok(ScalarValue::Primitive(PValue::F64(*v))),
         Kind::StringValue(v) => Ok(ScalarValue::BufferString(BufferString::from(v.clone()))),
         Kind::BytesValue(v) => Ok(ScalarValue::Buffer(Buffer::from(v.as_slice()))),
@@ -167,8 +174,8 @@ mod test {
 
     fn round_trip(scalar: Scalar) {
         assert_eq!(
+            scalar,
             Scalar::try_from(&pb::Scalar::from(&scalar)).unwrap(),
-            scalar
         );
     }
 
