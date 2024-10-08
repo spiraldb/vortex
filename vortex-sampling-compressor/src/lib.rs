@@ -6,7 +6,7 @@ use compressors::chunked::ChunkedCompressor;
 use compressors::fsst::FSSTCompressor;
 use compressors::struct_::StructCompressor;
 use lazy_static::lazy_static;
-use log::{debug, info, warn};
+use log::{debug, info};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use vortex::array::{ChunkedArray, Constant};
@@ -225,7 +225,7 @@ impl<'a> SamplingCompressor<'a> {
                 check_dtype_unchanged(arr, compressed.as_ref());
                 return Ok(compressed);
             } else {
-                warn!(
+                debug!(
                     "{} cannot find compressor to compress {} like {}",
                     self, arr, l
                 );
