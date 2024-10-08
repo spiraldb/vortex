@@ -32,6 +32,10 @@ impl EncodingCompressor for FSSTCompressor {
         FSST::ID.as_ref()
     }
 
+    fn decompression_time_per_gb(&self) -> f64 {
+        0.5
+    }
+
     fn can_compress(&self, array: &vortex::Array) -> Option<&dyn EncodingCompressor> {
         // FSST arrays must have DType::Utf8.
         //

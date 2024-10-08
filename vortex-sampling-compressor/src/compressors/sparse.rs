@@ -20,6 +20,11 @@ impl EncodingCompressor for SparseCompressor {
         0
     }
 
+    fn decompression_time_per_gb(&self) -> f64 {
+        // this one is structural / a passthrough, so we can assume it's as fast as possible
+        0.0
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         array.is_encoding(Sparse::ID).then_some(self)
     }

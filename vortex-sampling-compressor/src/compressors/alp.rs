@@ -20,6 +20,10 @@ impl EncodingCompressor for ALPCompressor {
         ALP::ID.as_ref()
     }
 
+    fn decompression_time_per_gb(&self) -> f64 {
+        0.16
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support primitive arrays
         let parray = PrimitiveArray::try_from(array).ok()?;

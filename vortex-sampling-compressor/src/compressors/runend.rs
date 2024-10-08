@@ -23,6 +23,11 @@ impl EncodingCompressor for RunEndCompressor {
         RunEnd::ID.as_ref()
     }
 
+    fn decompression_time_per_gb(&self) -> f64 {
+        // this is arbitrary; RunEnd is lots of memcopies, but throughput varies wildly depending on number/length of runs
+        1.0
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         if array.encoding().id() != Primitive::ID {
             return None;

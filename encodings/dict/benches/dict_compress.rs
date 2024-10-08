@@ -1,11 +1,12 @@
 #![allow(clippy::unwrap_used)]
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use rand::distributions::{Alphanumeric, Uniform};
 use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
 use vortex::array::{PrimitiveArray, VarBinArray};
-use vortex::ArrayTrait;
+use vortex::compute::take;
+use vortex::{ArrayTrait, IntoCanonical as _};
 use vortex_dict::dict_encode_typed_primitive;
 use vortex_dtype::match_each_native_ptype;
 
@@ -49,16 +50,40 @@ fn dict_encode_varbin(arr: &VarBinArray) -> usize {
 }
 
 fn dict_encode(c: &mut Criterion) {
-    let primitive_arr = gen_primitive_dict(1_000_000, 0.00005);
-    let varbin_arr = gen_varbin_dict(1_000_000, 0.00005);
+    let mut group = c.benchmark_group("dict_encode");
 
-    c.bench_function("dict_encode_primitives", |b| {
+    let primitive_arr = gen_primitive_dict(1_000_000, 0.00005);
+    group.throughput(Throughput::Bytes(primitive_arr.nbytes() as u64));
+    group.bench_function("dict_encode_primitives", |b| {
         b.iter(|| black_box(dict_encode_primitive(&primitive_arr)));
     });
-    c.bench_function("dict_encode_varbin", |b| {
+
+    let varbin_arr = gen_varbin_dict(1_000_000, 0.00005);
+    group.throughput(Throughput::Bytes(varbin_arr.nbytes() as u64));
+    group.bench_function("dict_encode_varbin", |b| {
         b.iter(|| black_box(dict_encode_varbin(&varbin_arr)));
     });
 }
 
-criterion_group!(benches, dict_encode);
+fn dict_decode(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dict_decode");
+
+    let primitive_arr = gen_primitive_dict(1_000_000, 0.00005);
+    let (codes, values) = match_each_native_ptype!(primitive_arr.ptype(), |$P| {
+        dict_encode_typed_primitive::<$P>(&primitive_arr)
+    });
+    group.throughput(Throughput::Bytes(primitive_arr.nbytes() as u64));
+    group.bench_function("dict_decode_primitives", |b| {
+        b.iter(|| black_box(take(values.clone(), codes.clone()).unwrap().into_canonical().unwrap()));
+    });
+
+    let varbin_arr = gen_varbin_dict(1_000_000, 0.00005);
+    let (codes, values) = vortex_dict::dict_encode_varbin(&varbin_arr);
+    group.throughput(Throughput::Bytes(varbin_arr.nbytes() as u64));
+    group.bench_function("dict_decode_varbin", |b| {
+        b.iter(|| black_box(take(values.clone(), codes.clone()).unwrap().into_canonical().unwrap()));
+    });
+}
+
+criterion_group!(benches, dict_encode, dict_decode);
 criterion_main!(benches);

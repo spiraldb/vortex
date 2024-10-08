@@ -32,6 +32,8 @@ pub trait EncodingCompressor: Sync + Send + Debug {
         1
     }
 
+    fn decompression_time_per_gb(&self) -> f64;
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor>;
 
     fn compress<'a>(
@@ -159,6 +161,14 @@ impl<'a> CompressionTree<'a> {
             .iter()
             .filter_map(|child| child.as_ref().map(|c| c.child_count_recursive() + 1))
             .sum::<usize>()
+    }
+
+    pub fn decompression_time(&self) -> f64 {
+        self.children
+            .iter()
+            .filter_map(|child| child.as_ref().map(|c| c.decompression_time()))
+            .sum::<f64>()
+            + self.compressor.decompression_time_per_gb()
     }
 }
 

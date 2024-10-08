@@ -35,6 +35,10 @@ impl EncodingCompressor for BitPackedCompressor {
         0
     }
 
+    fn decompression_time_per_gb(&self) -> f64 {
+        0.02
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support primitive arrays
         let parray = PrimitiveArray::try_from(array).ok()?;

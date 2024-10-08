@@ -18,6 +18,10 @@ impl EncodingCompressor for ConstantCompressor {
         Constant::ID.as_ref()
     }
 
+    fn decompression_time_per_gb(&self) -> f64 {
+        0.01
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         (!array.is_empty() && array.statistics().compute_is_constant().unwrap_or(false))
             .then_some(self as &dyn EncodingCompressor)

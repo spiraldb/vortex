@@ -20,6 +20,10 @@ impl EncodingCompressor for DateTimePartsCompressor {
         DateTimeParts::ID.as_ref()
     }
 
+    fn decompression_time_per_gb(&self) -> f64 {
+        0.05 // basically 3 memcopys and some arithmetic
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         if let Ok(temporal_array) = TemporalArray::try_from(array) {
             match temporal_array.temporal_metadata() {
