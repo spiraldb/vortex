@@ -6,6 +6,96 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## `vortex-runend-bool` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.12.0...vortex-runend-bool-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+### Other
+- Faster RunEndBool decompression, plus metadata cleanup ([#981](https://github.com/spiraldb/vortex/pull/981))
+
+## `vortex-bytebool` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-bytebool-v0.12.0...vortex-bytebool-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+## `vortex-zigzag` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-zigzag-v0.12.0...vortex-zigzag-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+## `vortex-runend` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-runend-v0.12.0...vortex-runend-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+## `vortex-roaring` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-roaring-v0.12.0...vortex-roaring-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+### Other
+- RoaringBool bitmaps needs to manually append trailing false values when canonicalizing ([#988](https://github.com/spiraldb/vortex/pull/988))
+
+## `vortex-fsst` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-fsst-v0.12.0...vortex-fsst-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+## `vortex-dict` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-dict-v0.12.0...vortex-dict-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+### Other
+- Use foldhash in dict encoding ([#980](https://github.com/spiraldb/vortex/pull/980))
+
+## `vortex-datetime-parts` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-datetime-parts-v0.12.0...vortex-datetime-parts-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+## `vortex-serde` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-serde-v0.12.0...vortex-serde-v0.13.0) - 2024-10-08
+
+### Other
+- update Cargo.toml dependencies
+
+## `vortex-datafusion` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-datafusion-v0.12.0...vortex-datafusion-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+## `vortex-fastlanes` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-fastlanes-v0.12.0...vortex-fastlanes-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+## `vortex-scalar` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-scalar-v0.12.0...vortex-scalar-v0.13.0) - 2024-10-08
+
+### Added
+- proto matches serde: f16 serializes as an unsigned integer ([#992](https://github.com/spiraldb/vortex/pull/992))
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+### Fixed
+- rely on ScalarValue Display in Scalar Display ([#978](https://github.com/spiraldb/vortex/pull/978))
+- teach protobuf how to deserialize f16 ([#991](https://github.com/spiraldb/vortex/pull/991))
+
+## `vortex-array` - [0.13.0](https://github.com/spiraldb/vortex/compare/0.12.0...0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
+### Fixed
+- BitWidthFreq must be u64/usize ([#974](https://github.com/spiraldb/vortex/pull/974))
+
+### Other
+- Don't clone dtype on PrimitiveArray::cast ([#972](https://github.com/spiraldb/vortex/pull/972))
+
+## `vortex-alp` - [0.13.0](https://github.com/spiraldb/vortex/compare/vortex-alp-v0.12.0...vortex-alp-v0.13.0) - 2024-10-08
+
+### Added
+- teach *Metadata and ScalarValue to Display ([#975](https://github.com/spiraldb/vortex/pull/975))
+
 ## `vortex-runend-bool` - [0.12.0](https://github.com/spiraldb/vortex/compare/vortex-runend-bool-v0.11.0...vortex-runend-bool-v0.12.0) - 2024-10-03
 
 ### Added
