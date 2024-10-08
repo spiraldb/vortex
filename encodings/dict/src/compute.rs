@@ -49,7 +49,12 @@ impl TakeFn for DictArray {
 impl SliceFn for DictArray {
     // TODO(robert): Add function to trim the dictionary
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        Self::try_new(slice(self.codes(), start, stop)?, self.values()).map(|a| a.into_array())
+        let new_codes = slice(self.codes(), start, stop)?;
+        if (stop - start) * 5 < self.values_len() {
+            take(self.values(), &new_codes)
+        } else {
+            Self::try_new(new_codes, self.values()).map(|a| a.into_array())
+        }
     }
 }
 

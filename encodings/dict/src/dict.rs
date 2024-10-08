@@ -49,9 +49,14 @@ impl DictArray {
     }
 
     #[inline]
+    pub fn values_len(&self) -> usize {
+        self.metadata().values_len
+    }
+
+    #[inline]
     pub fn values(&self) -> Array {
         self.as_ref()
-            .child(0, self.dtype(), self.metadata().values_len)
+            .child(0, self.dtype(), self.values_len())
             .vortex_expect("DictArray is missing its values child array")
     }
 
