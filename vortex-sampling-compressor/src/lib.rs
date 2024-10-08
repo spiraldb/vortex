@@ -1,7 +1,9 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
+use compressors::delta::DeltaCompressor;
 use compressors::fsst::FSSTCompressor;
+use compressors::runend::RunEndCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use rand::rngs::StdRng;
@@ -36,14 +38,13 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 12] = [
+    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 13] = [
         &ALPCompressor as CompressorRef,
         &ALPRDCompressor,
         &BitPackedCompressor,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR,
-        // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
-        // &DeltaCompressor,
+        &DeltaCompressor,
         &DictCompressor,
         &FoRCompressor,
         &FSSTCompressor,
@@ -51,6 +52,15 @@ lazy_static! {
         &RoaringIntCompressor,
         &SparseCompressor,
         &ZigZagCompressor,
+    ];
+
+    pub static ref FASTEST_COMPRESSORS: [CompressorRef<'static>; 6] = [
+        &BitPackedCompressor,
+        &DateTimePartsCompressor,
+        &DEFAULT_RUN_END_COMPRESSOR,
+        &DictCompressor,
+        &FoRCompressor,
+        &SparseCompressor,
     ];
 }
 
@@ -107,11 +117,13 @@ pub enum ObjectiveConfig {
 pub struct CompressConfig {
     sample_size: u16,
     sample_count: u16,
+    rng_seed: u64,
+
     max_cost: u8,
     objective: ObjectiveConfig,
+
     target_block_bytesize: usize,
     target_block_size: usize,
-    rng_seed: u64,
 }
 
 impl Default for CompressConfig {
@@ -192,7 +204,7 @@ impl<'a> SamplingCompressor<'a> {
         cloned
     }
 
-    // Returns a new ctx used for compressing an auxiliary arrays.
+    // Returns a new ctx used for compressing an auxiliary array.
     // In practice, this means resetting any disabled encodings back to the original config.
     pub fn auxiliary(&self, name: &str) -> Self {
         let mut cloned = self.clone();
@@ -221,6 +233,14 @@ impl<'a> SamplingCompressor<'a> {
     pub fn including(&self, compressor: CompressorRef<'a>) -> Self {
         let mut cloned = self.clone();
         cloned.compressors.insert(compressor);
+        cloned
+    }
+
+    pub fn only(&self, compressors: &[CompressorRef<'a>]) -> Self {
+        let mut cloned = self.clone();
+        cloned.compressors.clear();
+        cloned.compressors.extend(compressors);
+        cloned.disabled_compressors.clear();
         cloned
     }
 

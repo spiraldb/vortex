@@ -23,10 +23,6 @@ impl EncodingCompressor for RunEndCompressor {
         RunEnd::ID.as_ref()
     }
 
-    fn cost(&self) -> u8 {
-        1
-    }
-
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         if array.encoding().id() != Primitive::ID {
             return None;
