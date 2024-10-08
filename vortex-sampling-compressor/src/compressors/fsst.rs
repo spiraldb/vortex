@@ -63,7 +63,7 @@ impl EncodingCompressor for FSSTCompressor {
         // between 2-3x depending on the text quality.
         //
         // It's not worth running a full compression step unless the array is large enough.
-        if array.nbytes() < 10 * FSST_SYMTAB_MAX_SIZE {
+        if array.nbytes() < 5 * FSST_SYMTAB_MAX_SIZE {
             return Ok(CompressedArray::uncompressed(array.clone()));
         }
 
