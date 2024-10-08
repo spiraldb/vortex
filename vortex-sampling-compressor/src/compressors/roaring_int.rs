@@ -18,11 +18,6 @@ impl EncodingCompressor for RoaringIntCompressor {
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        // Only support primitive enc arrays
-        if array.encoding().id() != RoaringInt::ID {
-            return None;
-        }
-
         // Only support non-nullable uint arrays
         if !array.dtype().is_unsigned_int() || array.dtype().is_nullable() {
             return None;

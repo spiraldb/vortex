@@ -20,7 +20,7 @@ impl EncodingCompressor for RoaringBoolCompressor {
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        // Only support bool enc arrays
+        // Only support bool arrays
         if array.encoding().id() != Bool::ID {
             return None;
         }
