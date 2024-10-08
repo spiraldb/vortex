@@ -40,7 +40,6 @@ fn main() {
         "Food" => BenchmarkDatasets::PBI(Food),
         _ => panic!("invalid dataset"),
     };
-
     let start = Instant::now();
     let uncompressed = dataset.to_vortex_array().unwrap();
     let compressed = compressor.compress(&uncompressed, None).unwrap();
