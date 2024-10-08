@@ -10,6 +10,8 @@ use vortex_error::VortexResult;
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
 
+use super::alp_rd::ALPRDCompressor;
+
 #[derive(Debug)]
 pub struct ALPCompressor;
 
@@ -53,6 +55,7 @@ impl EncodingCompressor for ALPCompressor {
             .map(|p| {
                 ctx.auxiliary("patches")
                     .excluding(self)
+                    .including(&ALPRDCompressor)
                     .compress(&p, like.as_ref().and_then(|l| l.child(1)))
             })
             .transpose()?;

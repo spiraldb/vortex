@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
+use compressors::bitpacked::BITPACK_WITH_PATCHES;
 use compressors::delta::DeltaCompressor;
 use compressors::fsst::FSSTCompressor;
-use compressors::runend::RunEndCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
 use rand::rngs::StdRng;
@@ -18,8 +18,6 @@ use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
 use vortex_error::VortexResult;
 
 use crate::compressors::alp::ALPCompressor;
-use crate::compressors::alp_rd::ALPRDCompressor;
-use crate::compressors::bitpacked::BitPackedCompressor;
 use crate::compressors::constant::ConstantCompressor;
 use crate::compressors::date_time_parts::DateTimePartsCompressor;
 use crate::compressors::dict::DictCompressor;
@@ -38,10 +36,9 @@ pub mod compressors;
 mod sampling;
 
 lazy_static! {
-    pub static ref ALL_COMPRESSORS: [CompressorRef<'static>; 13] = [
+    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 12] = [
         &ALPCompressor as CompressorRef,
-        &ALPRDCompressor,
-        &BitPackedCompressor,
+        &BITPACK_WITH_PATCHES,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR,
         &DeltaCompressor,
@@ -54,13 +51,14 @@ lazy_static! {
         &ZigZagCompressor,
     ];
 
-    pub static ref FASTEST_COMPRESSORS: [CompressorRef<'static>; 6] = [
-        &BitPackedCompressor,
+    pub static ref FASTEST_COMPRESSORS: [CompressorRef<'static>; 7] = [
+        &BITPACK_WITH_PATCHES,
         &DateTimePartsCompressor,
-        &DEFAULT_RUN_END_COMPRESSOR,
-        &DictCompressor,
+        &DEFAULT_RUN_END_COMPRESSOR, // replace with FastLanes RLE
+        &DictCompressor, // replace with FastLanes Dictionary
         &FoRCompressor,
         &SparseCompressor,
+        &ZigZagCompressor,
     ];
 }
 
@@ -176,7 +174,7 @@ impl CompressionStrategy for SamplingCompressor<'_> {
 
 impl Default for SamplingCompressor<'_> {
     fn default() -> Self {
-        Self::new(HashSet::from(*ALL_COMPRESSORS))
+        Self::new(HashSet::from(*DEFAULT_COMPRESSORS))
     }
 }
 
