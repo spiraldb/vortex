@@ -68,9 +68,6 @@ pub struct ScanPerfConfig {
     bytes_per_ms: f64,
     /// Latency in milliseconds
     latency_ms: f64,
-    /// Penalty (in milliseconds) per compression level
-    /// Intuitively, the penalty is roughly the cost of allocating a buffer and copying data
-    ms_penalty_per_child: f64,
 }
 
 impl ScanPerfConfig {
@@ -85,7 +82,6 @@ impl Default for ScanPerfConfig {
         Self {
             bytes_per_ms: 524_288.0,   // 500 MiB/s
             latency_ms: 50.0,          // 50 milliseconds for object storage
-            ms_penalty_per_child: 0.1, // 100 micros for allocation plus memcopy
         }
     }
 }
@@ -477,8 +473,7 @@ fn objective_function(
                 / (base_size_bytes as f64)
         }
         ObjectiveConfig::ScanPerf(config) => {
-            config.download_time(size_in_bytes)
-                + config.ms_penalty_per_child * (child_count_recursive as f64)
+            config.download_time(size_in_bytes) + array.decompression_time_ms()
         }
     }
 }

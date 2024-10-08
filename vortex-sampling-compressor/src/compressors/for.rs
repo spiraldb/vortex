@@ -24,7 +24,7 @@ impl EncodingCompressor for FoRCompressor {
         0
     }
 
-    fn decompression_time_per_gb(&self) -> f64 {
+    fn decompression_seconds_per_gb(&self) -> f64 {
         0.01
     }
 

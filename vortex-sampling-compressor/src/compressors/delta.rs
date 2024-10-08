@@ -21,7 +21,7 @@ impl EncodingCompressor for DeltaCompressor {
         2
     }
 
-    fn decompression_time_per_gb(&self) -> f64 {
+    fn decompression_seconds_per_gb(&self) -> f64 {
         // got ~18GiB/s on benchmarks; rounding down to 10 GiB/s to be conservative (and because we don't love delta)
         0.1
     }

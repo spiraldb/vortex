@@ -20,7 +20,7 @@ impl EncodingCompressor for SparseCompressor {
         0
     }
 
-    fn decompression_time_per_gb(&self) -> f64 {
+    fn decompression_seconds_per_gb(&self) -> f64 {
         // this one is structural / a passthrough, so we can assume it's as fast as possible
         0.0
     }

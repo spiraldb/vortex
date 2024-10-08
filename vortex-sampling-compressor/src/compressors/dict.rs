@@ -18,7 +18,7 @@ impl EncodingCompressor for DictCompressor {
         Dict::ID.as_ref()
     }
 
-    fn decompression_time_per_gb(&self) -> f64 {
+    fn decompression_seconds_per_gb(&self) -> f64 {
         // got 3-8 GiB/s on dict_compress benchmarks; picking 4 GiB/s for estimate
         0.25
     }

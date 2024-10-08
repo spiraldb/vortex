@@ -20,7 +20,7 @@ impl EncodingCompressor for RoaringBoolCompressor {
     }
 
         
-    fn decompression_time_per_gb(&self) -> f64 {
+    fn decompression_seconds_per_gb(&self) -> f64 {
         // this is made up
         1.0
     }

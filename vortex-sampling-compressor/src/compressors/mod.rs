@@ -32,7 +32,7 @@ pub trait EncodingCompressor: Sync + Send + Debug {
         1
     }
 
-    fn decompression_time_per_gb(&self) -> f64;
+    fn decompression_seconds_per_gb(&self) -> f64;
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor>;
 
@@ -146,6 +146,10 @@ impl<'a> CompressionTree<'a> {
             .map(|c| c.compress(array, Some(self.clone()), ctx.for_compressor(c)))
     }
 
+    pub fn compressor(&self) -> &dyn EncodingCompressor {
+        self.compressor
+    }
+
     /// Access the saved opaque metadata.
     ///
     /// This will consume the owned metadata, giving the caller ownership of
@@ -161,14 +165,6 @@ impl<'a> CompressionTree<'a> {
             .iter()
             .filter_map(|child| child.as_ref().map(|c| c.child_count_recursive() + 1))
             .sum::<usize>()
-    }
-
-    pub fn decompression_time(&self) -> f64 {
-        self.children
-            .iter()
-            .filter_map(|child| child.as_ref().map(|c| c.decompression_time()))
-            .sum::<f64>()
-            + self.compressor.decompression_time_per_gb()
     }
 }
 
@@ -205,6 +201,29 @@ impl<'a> CompressedArray<'a> {
     #[inline]
     pub fn nbytes(&self) -> usize {
         self.array.nbytes()
+    }
+
+    pub fn decompression_time_ms(&self) -> f64 {
+        const COEFF: f64 = 1.0 / 1_000_000.0; // convert (seconds per GB times bytes) to milliseconds
+        let children_time = self
+            .path()
+            .iter()
+            .map(|c| {
+                c.children
+                    .iter()
+                    .zip(self.array.children().iter())
+                    .map(|(c, a)| CompressedArray::new(a.clone(), c.clone()).decompression_time_ms())
+                    .sum::<f64>()
+            })
+            .sum::<f64>();
+        children_time
+            + self
+                .path()
+                .as_ref()
+                .map(|c| {
+                    c.compressor().decompression_seconds_per_gb() * (self.nbytes() as f64 * COEFF)
+                })
+                .unwrap_or(0.0)
     }
 }
 

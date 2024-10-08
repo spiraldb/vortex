@@ -18,7 +18,7 @@ impl EncodingCompressor for ConstantCompressor {
         Constant::ID.as_ref()
     }
 
-    fn decompression_time_per_gb(&self) -> f64 {
+    fn decompression_seconds_per_gb(&self) -> f64 {
         0.01
     }
 
