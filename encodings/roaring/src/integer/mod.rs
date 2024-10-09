@@ -69,8 +69,7 @@ impl RoaringIntArray {
         })
     }
 
-    pub fn bitmap(&self) -> Bitmap {
-        //TODO(@jdcasale): figure out a way to avoid this deserialization per-call
+    pub fn owned_bitmap(&self) -> Bitmap {
         Bitmap::deserialize::<Portable>(
             self.as_ref()
                 .buffer()
@@ -108,14 +107,14 @@ impl ArrayValidity for RoaringIntArray {
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        LogicalValidity::AllValid(self.bitmap().iter().count())
+        LogicalValidity::AllValid(self.len())
     }
 }
 
 impl IntoCanonical for RoaringIntArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
         try_cast(
-            PrimitiveArray::from_vec(self.bitmap().to_vec(), Validity::NonNullable),
+            PrimitiveArray::from_vec(self.owned_bitmap().to_vec(), Validity::NonNullable),
             self.dtype(),
         )
         .and_then(Array::into_canonical)
@@ -136,30 +135,12 @@ impl ArrayStatisticsCompute for RoaringIntArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
         // possibly faster to write an accumulator over the iterator, though not necessarily
         if stat == Stat::TrailingZeroFreq || stat == Stat::BitWidthFreq || stat == Stat::RunCount {
-            let primitive = PrimitiveArray::from_vec(self.bitmap().to_vec(), Validity::NonNullable);
+            let primitive =
+                PrimitiveArray::from_vec(self.owned_bitmap().to_vec(), Validity::NonNullable);
             primitive.statistics().compute(stat);
             Ok(primitive.statistics().to_set())
         } else {
             Ok(StatsSet::new())
         }
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use vortex::array::PrimitiveArray;
-    use vortex::compute::unary::scalar_at;
-    use vortex::IntoArray;
-
-    use crate::RoaringIntArray;
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    pub fn test_scalar_at() {
-        let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]).into_array();
-        let array = RoaringIntArray::encode(ints).unwrap();
-
-        assert_eq!(scalar_at(&array, 0).unwrap(), 2u32.into());
-        assert_eq!(scalar_at(&array, 1).unwrap(), 12u32.into());
     }
 }

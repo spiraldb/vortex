@@ -79,6 +79,6 @@ mod tests {
         assert!(compressed.path.is_some());
 
         let roaring = RoaringIntArray::try_from(compressed.array).unwrap();
-        assert!(roaring.bitmap().contains_range(1..=5));
+        assert!(roaring.owned_bitmap().contains_range(1..=5));
     }
 }
