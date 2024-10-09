@@ -131,7 +131,7 @@
 
 <script src="data.js"></script>
 <script id="main-script">
-    'use strict';
+  'use strict';
     (function () {
         function stringToColor(str) {
             // Random colours are generally pretty disgusting...
@@ -174,14 +174,40 @@
                 entries.forEach((entry, entryIdx) => {
                     const {tool, benches} = entry;
 
-                    for (const bench of benches) {
-                        const {name, range, unit, value} = bench;
+                    benches.forEach((bench, benchIdx) => {
+                        let {name, range, unit, value} = bench;
+
+                        // Normalize name and units
+                        let [q, seriesName] = name.split("/");
+                        if (seriesName.endsWith(" throughput")) {
+                            seriesName = seriesName.slice(0, seriesName.length - " throughput".length);
+                            q = q.replace("Time", "Throughput");
+                            let timeEntry = benches[benchIdx - 1]
+                            if (!timeEntry.name.includes(seriesName)) {
+                                console.log("could not find time information for throughput series: ", seriesNam);
+                                return
+                            }
+                            unit = "bytes/ns"
+                            value = value / timeEntry.value
+                        }
+                        seriesName = seriesName.replace(" compression", "");
+                        let prettyQ = q.replace("_", " ")
+                            .toUpperCase()
+                            .replace("PUBLIC BI ", "")
+                            .replace("YELLOW TAXI TRIP DATA ", "");
+                        if (prettyQ.includes("PARQUETUNCOMPRESSED")) {
+                            return
+                        }
+
+                        if (prettyQ.includes("TPC-H L COMMENT ")) {
+                            prettyQ = prettyQ.replace("TPC-H L COMMENT ", "");
+                            seriesName = "TPC-H l_comment " + seriesName;
+                        }
+
                         const is_nanos = unit === "ns/iter" || unit === "ns";
                         const is_bytes = unit === "bytes";
+                        const is_throughput = unit === "bytes/ns";
 
-                        // Normalize name
-                        let [q, seriesName] = name.split("/");
-                        let prettyQ = q.replace("_", " ").toUpperCase();
                         let sort_position = (q.slice(0, 4) == "tpch") ? parseInt(prettyQ.split(" ")[1].substring(1), 10) : 0;
 
                         let arr = map.get(prettyQ);
@@ -189,7 +215,7 @@
                             map.set(prettyQ, {
                                 sort_position,
                                 commits,
-                                unit: is_nanos ? "ms/iter" : (is_bytes ? "MB" : unit),
+                                unit: is_nanos ? "ms/iter" : (is_bytes ? "MiB" : (is_throughput ? "MiB/s" : unit)),
                                 series: new Map(),
                             });
                             arr = map.get(prettyQ);
@@ -201,8 +227,8 @@
                             series = arr.series.get(seriesName);
                         }
 
-                        series[entryIdx] = {range, value: (is_nanos || is_bytes) ? value / 1_000_000 : value};
-                    }
+                        series[entryIdx] = {range, value: is_nanos ? value / 1_000_000 : (is_bytes ? value / 1_048_576 : (is_throughput ? value * 1_000_000_000 / 1_048_576 : value))};
+                    });
                 });
 
                 function sortByPositionThenName(a, b) {
