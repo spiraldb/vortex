@@ -3,7 +3,9 @@ use std::collections::HashSet;
 use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDef, IntoArray};
-use vortex_alp::{alp_encode_components, match_each_alp_float_ptype, ALPArray, ALPEncoding, ALP};
+use vortex_alp::{
+    alp_encode_components, match_each_alp_float_ptype, ALPArray, ALPEncoding, ALPRDEncoding, ALP,
+};
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
@@ -81,6 +83,6 @@ impl EncodingCompressor for ALPCompressor {
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
-        HashSet::from([&ALPEncoding as EncodingRef])
+        HashSet::from([&ALPEncoding as EncodingRef, &ALPRDEncoding])
     }
 }

@@ -440,6 +440,6 @@ fn objective_function(
     let size_in_bytes = array.nbytes() as u64 + overhead_bytes;
 
     match &config.objective {
-        Objective::MinSize => (size_in_bytes as f64) / (base_size_bytes as f64)
+        Objective::MinSize => (size_in_bytes as f64) / (base_size_bytes as f64),
     }
 }
