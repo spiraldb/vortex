@@ -109,12 +109,10 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
 
     let compressed = compressor.compress(uncompressed.as_ref(), None).unwrap();
     let path = format!("{:#?}", compressed.path());
-    let estimated_decompression_time = compressed.decompression_time_ms(10.0);
 
     let compressed_array = compressed.into_array();
-    println!("compression tree: {}", compressed_array.tree_display());
+    //println!("compression tree: {}", compressed_array.tree_display());
     println!("compression path: {}", path);
-    println!("estimated decompression time: {}ms", estimated_decompression_time);
     println!("compression ratio: {}", compressed_size as f64 / uncompressed_size as f64);
 
     group.bench_function(format!("{} decompression", bench_name), |b| {
