@@ -11,7 +11,7 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray,
     IntoCanonical, TypedArray,
 };
 use vortex_buffer::Buffer;
@@ -118,8 +118,7 @@ impl IntoCanonical for RoaringIntArray {
             PrimitiveArray::from_vec(self.bitmap().to_vec(), Validity::NonNullable),
             self.dtype(),
         )
-        .and_then(|a| a.into_primitive())
-        .map(Canonical::Primitive)
+        .and_then(Array::into_canonical)
     }
 }
 
