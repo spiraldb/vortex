@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::array::{
-    BoolEncoding, ChunkedEncoding, ConstantEncoding, ExtensionEncoding, PrimitiveEncoding,
-    SparseEncoding, StructEncoding, VarBinEncoding, VarBinViewEncoding,
+    BoolEncoding, ChunkedEncoding, ConstantEncoding, ExtensionEncoding, NullEncoding,
+    PrimitiveEncoding, SparseEncoding, StructEncoding, VarBinEncoding, VarBinViewEncoding,
 };
 use crate::encoding::EncodingRef;
 
@@ -36,15 +36,16 @@ impl Default for Context {
     fn default() -> Self {
         Self {
             encodings: [
-                &BoolEncoding as EncodingRef,
-                &ChunkedEncoding,
-                &ConstantEncoding,
-                &ExtensionEncoding,
+                &NullEncoding as EncodingRef,
+                &BoolEncoding,
                 &PrimitiveEncoding,
-                &SparseEncoding,
                 &StructEncoding,
                 &VarBinEncoding,
                 &VarBinViewEncoding,
+                &ExtensionEncoding,
+                &SparseEncoding,
+                &ConstantEncoding,
+                &ChunkedEncoding,
             ]
             .into_iter()
             .map(|e| (e.id().code(), e))
