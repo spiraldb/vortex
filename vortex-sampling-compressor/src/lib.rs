@@ -6,7 +6,7 @@ use compressors::chunked::ChunkedCompressor;
 use compressors::fsst::FSSTCompressor;
 use compressors::struct_::StructCompressor;
 use lazy_static::lazy_static;
-use log::{debug, info};
+use log::{debug, info, warn};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use vortex::array::{ChunkedArray, Constant};
@@ -50,8 +50,6 @@ lazy_static! {
         &RoaringIntCompressor,
         &SparseCompressor,
         &ZigZagCompressor,
-        &StructCompressor,
-        &ChunkedCompressor,
     ];
 
     pub static ref FASTEST_COMPRESSORS: [CompressorRef<'static>; 7] = [
@@ -209,9 +207,6 @@ impl<'a> SamplingCompressor<'a> {
         arr: &Array,
         like: Option<&CompressionTree<'a>>,
     ) -> VortexResult<CompressedArray<'a>> {
-        // if arr.dtype().is_struct() {
-        //     warn!("like is {:?} {}", like, arr);
-        // }
         if arr.is_empty() {
             return Ok(CompressedArray::uncompressed(arr.clone()));
         }
@@ -225,7 +220,7 @@ impl<'a> SamplingCompressor<'a> {
                 check_dtype_unchanged(arr, compressed.as_ref());
                 return Ok(compressed);
             } else {
-                info!(
+                warn!(
                     "{} cannot find compressor to compress {} like {}",
                     self, arr, l
                 );
@@ -237,9 +232,6 @@ impl<'a> SamplingCompressor<'a> {
 
         check_validity_unchanged(arr, compressed.as_ref());
         check_dtype_unchanged(arr, compressed.as_ref());
-        // if arr.dtype().is_struct() {
-        //     warn!("found compression {:?} {}", compressed.path(), arr);
-        // }
         Ok(compressed)
     }
 
@@ -250,114 +242,106 @@ impl<'a> SamplingCompressor<'a> {
         }
     }
 
-    fn compress_array(&self, arr: &Array) -> VortexResult<CompressedArray<'a>> {
-        match arr.encoding().id() {
-            Constant::ID => {
-                // Not much better we can do than constant!
-                Ok(CompressedArray::uncompressed(arr.clone()))
-            }
-            _ => {
-                // Otherwise, we run sampled compression over pluggable encodings
-                let mut rng = StdRng::seed_from_u64(self.options.rng_seed);
-                let sampled = sampled_compression(arr, self, &mut rng)?;
-                Ok(sampled.unwrap_or_else(|| CompressedArray::uncompressed(arr.clone())))
-            }
+    fn compress_array(&self, array: &Array) -> VortexResult<CompressedArray<'a>> {
+        let mut rng = StdRng::seed_from_u64(self.options.rng_seed);
+        // let sampled = sampled_compression(arr, self, &mut rng)?;
+        // Ok(sampled.unwrap_or_else(|| CompressedArray::uncompressed(arr.clone())))
+
+        if array.encoding().id() == Constant::ID {
+            // Not much better we can do than constant!
+            return Ok(CompressedArray::uncompressed(array.clone()));
         }
-    }
-}
 
-fn sampled_compression<'a>(
-    array: &Array,
-    compressor: &SamplingCompressor<'a>,
-    rng: &mut StdRng,
-) -> VortexResult<Option<CompressedArray<'a>>> {
-    if let Some(cc) = ChunkedCompressor.can_compress(array) {
-        return cc.compress(array, None, compressor.clone()).map(Some);
-    }
+        if let Some(cc) = ChunkedCompressor.can_compress(array) {
+            return cc.compress(array, None, self.clone());
+        }
 
-    // First, we try constant compression and shortcut any sampling.
-    if let Some(cc) = ConstantCompressor.can_compress(array) {
-        return cc.compress(array, None, compressor.clone()).map(Some);
-    }
+        if let Some(cc) = StructCompressor.can_compress(array) {
+            return cc.compress(array, None, self.clone());
+        }
 
-    let mut candidates: Vec<&dyn EncodingCompressor> = compressor
-        .compressors
-        .iter()
-        .filter(|&encoding| !compressor.disabled_compressors.contains(encoding))
-        .filter(|compression| {
-            if compression.can_compress(array).is_some() {
-                if compressor.depth + compression.cost() > compressor.options.max_cost {
-                    debug!(
-                        "{} skipping encoding {} due to depth",
-                        compressor,
-                        compression.id()
-                    );
-                    return false;
-                }
-                true
-            } else {
-                false
-            }
-        })
-        .copied()
-        .collect();
+        if let Some(cc) = ConstantCompressor.can_compress(array) {
+            return cc.compress(array, None, self.clone());
+        }
 
-    info!("{} candidates for {}: {:?}", compressor, array, candidates);
+        let (mut candidates, too_deep) = self
+            .compressors
+            .iter()
+            .filter(|&encoding| !self.disabled_compressors.contains(encoding))
+            .filter(|&encoding| encoding.can_compress(array).is_some())
+            .partition::<Vec<&dyn EncodingCompressor>, _>(|&encoding| {
+                self.depth + encoding.cost() > self.options.max_cost
+            });
 
-    if candidates.is_empty() {
-        debug!(
-            "{} no compressors for array with dtype: {} and encoding: {}",
-            compressor,
-            array.dtype(),
-            array.encoding().id(),
-        );
-        return Ok(None);
-    }
-
-    // We prefer all other candidates to the array's own encoding.
-    // This is because we assume that the array's own encoding is the least efficient, but useful
-    // to destructure an array in the final stages of compression. e.g. VarBin would be DictEncoded
-    // but then the dictionary itself remains a VarBin array. DictEncoding excludes itself from the
-    // dictionary, but we still have a large offsets array that should be compressed.
-    // TODO(ngates): we actually probably want some way to prefer dict encoding over other varbin
-    //  encodings, e.g. FSST.
-    if candidates.len() > 1 {
-        candidates.retain(|&compression| compression.id() != array.encoding().id().as_ref());
-    }
-
-    if array.len()
-        <= (compressor.options.sample_size as usize * compressor.options.sample_count as usize)
-    {
-        // We're either already within a sample, or we're operating over a sufficiently small array.
-        return find_best_compression(candidates, array, compressor).map(Some);
-    }
-
-    // Take a sample of the array, then ask codecs for their best compression estimate.
-    let sample = ChunkedArray::try_new(
-        stratified_slices(
-            array.len(),
-            compressor.options.sample_size,
-            compressor.options.sample_count,
-            rng,
-        )
-        .into_iter()
-        .map(|(start, stop)| slice(array, start, stop))
-        .collect::<VortexResult<Vec<Array>>>()?,
-        array.dtype().clone(),
-    )?
-    .into_canonical()?
-    .into();
-
-    find_best_compression(candidates, &sample, compressor)?
-        .into_path()
-        .map(|best_compressor| {
-            info!(
-                "{} Compressing array {} with {}",
-                compressor, array, best_compressor
+        if !too_deep.is_empty() {
+            debug!(
+                "{} skipping encodings due to depth/cost: {}",
+                self,
+                too_deep
+                    .iter()
+                    .map(|x| x.id())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
-            best_compressor.compress_unchecked(array, compressor)
-        })
-        .transpose()
+        }
+
+        info!("{} candidates for {}: {:?}", self, array, candidates);
+
+        if candidates.is_empty() {
+            debug!(
+                "{} no compressors for array with dtype: {} and encoding: {}",
+                self,
+                array.dtype(),
+                array.encoding().id(),
+            );
+            return Ok(CompressedArray::uncompressed(array.clone()));
+        }
+
+        // We prefer all other candidates to the array's own encoding.
+        // This is because we assume that the array's own encoding is the least efficient, but useful
+        // to destructure an array in the final stages of compression. e.g. VarBin would be DictEncoded
+        // but then the dictionary itself remains a VarBin array. DictEncoding excludes itself from the
+        // dictionary, but we still have a large offsets array that should be compressed.
+        // TODO(ngates): we actually probably want some way to prefer dict encoding over other varbin
+        //  encodings, e.g. FSST.
+        if candidates.len() > 1 {
+            candidates.retain(|&compression| compression.id() != array.encoding().id().as_ref());
+        }
+
+        if array.len() <= (self.options.sample_size as usize * self.options.sample_count as usize) {
+            // We're either already within a sample, or we're operating over a sufficiently small array.
+            return find_best_compression(candidates, array, self);
+        }
+
+        // Take a sample of the array, then ask codecs for their best compression estimate.
+        let sample = ChunkedArray::try_new(
+            stratified_slices(
+                array.len(),
+                self.options.sample_size,
+                self.options.sample_count,
+                &mut rng,
+            )
+            .into_iter()
+            .map(|(start, stop)| slice(array, start, stop))
+            .collect::<VortexResult<Vec<Array>>>()?,
+            array.dtype().clone(),
+        )?
+        .into_canonical()?
+        .into();
+
+        let best = find_best_compression(candidates, &sample, self)?
+            .into_path()
+            .map(|best_compressor| {
+                info!(
+                    "{} Compressing array {} with {}",
+                    self, array, best_compressor
+                );
+                best_compressor.compress_unchecked(array, self)
+            })
+            .transpose()?;
+
+        Ok(best.unwrap_or_else(|| CompressedArray::uncompressed(array.clone())))
+    }
 }
 
 fn find_best_compression<'a>(
