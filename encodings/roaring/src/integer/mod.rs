@@ -4,12 +4,16 @@ pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
+use vortex::compute::unary::try_cast;
 use vortex::encoding::ids;
-use vortex::stats::{ArrayStatisticsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat, StatsSet};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray};
+use vortex::{
+    impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    TypedArray,
+};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, PType};
@@ -34,9 +38,25 @@ impl Display for RoaringIntMetadata {
 impl RoaringIntArray {
     pub fn try_new(bitmap: Bitmap, ptype: PType) -> VortexResult<Self> {
         if !ptype.is_unsigned_int() {
-            vortex_bail!("RoaringInt expected unsigned int");
+            vortex_bail!(MismatchedTypes: "unsigned int", ptype);
         }
+
         let length = bitmap.statistics().cardinality as usize;
+        let max = bitmap.maximum();
+        if max.map(|mv| mv as u64 > ptype.max_value()).unwrap_or(false) {
+            vortex_bail!(
+                "RoaringInt maximum value is greater than the maximum value for the primitive type"
+            );
+        }
+
+        let mut stats = StatsSet::new();
+        stats.set(Stat::NullCount, 0.into());
+        stats.set(Stat::Max, max.into());
+        stats.set(Stat::Min, bitmap.minimum().into());
+        stats.set(Stat::IsConstant, (length <= 1).into());
+        stats.set(Stat::IsSorted, true.into());
+        stats.set(Stat::IsStrictSorted, true.into());
+
         Ok(Self {
             typed: TypedArray::try_from_parts(
                 DType::Primitive(ptype, NonNullable),
@@ -49,8 +69,7 @@ impl RoaringIntArray {
         })
     }
 
-    pub fn bitmap(&self) -> Bitmap {
-        //TODO(@jdcasale): figure out a way to avoid this deserialization per-call
+    pub fn owned_bitmap(&self) -> Bitmap {
         Bitmap::deserialize::<Portable>(
             self.as_ref()
                 .buffer()
@@ -88,39 +107,40 @@ impl ArrayValidity for RoaringIntArray {
     }
 
     fn logical_validity(&self) -> LogicalValidity {
-        LogicalValidity::AllValid(self.bitmap().iter().count())
+        LogicalValidity::AllValid(self.len())
     }
 }
 
 impl IntoCanonical for RoaringIntArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        todo!()
+        try_cast(
+            PrimitiveArray::from_vec(self.owned_bitmap().to_vec(), Validity::NonNullable),
+            self.dtype(),
+        )
+        .and_then(Array::into_canonical)
     }
 }
 
 impl AcceptArrayVisitor for RoaringIntArray {
-    fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        todo!()
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_buffer(
+            self.as_ref()
+                .buffer()
+                .vortex_expect("Missing buffer in RoaringIntArray"),
+        )
     }
 }
 
-impl ArrayStatisticsCompute for RoaringIntArray {}
-
-#[cfg(test)]
-mod test {
-    use vortex::array::PrimitiveArray;
-    use vortex::compute::unary::scalar_at;
-    use vortex::IntoArray;
-
-    use crate::RoaringIntArray;
-
-    #[test]
-    #[cfg_attr(miri, ignore)]
-    pub fn test_scalar_at() {
-        let ints = PrimitiveArray::from(vec![2u32, 12, 22, 32]).into_array();
-        let array = RoaringIntArray::encode(ints).unwrap();
-
-        assert_eq!(scalar_at(&array, 0).unwrap(), 2u32.into());
-        assert_eq!(scalar_at(&array, 1).unwrap(), 12u32.into());
+impl ArrayStatisticsCompute for RoaringIntArray {
+    fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
+        // possibly faster to write an accumulator over the iterator, though not necessarily
+        if stat == Stat::TrailingZeroFreq || stat == Stat::BitWidthFreq || stat == Stat::RunCount {
+            let primitive =
+                PrimitiveArray::from_vec(self.owned_bitmap().to_vec(), Validity::NonNullable);
+            primitive.statistics().compute(stat);
+            Ok(primitive.statistics().to_set())
+        } else {
+            Ok(StatsSet::new())
+        }
     }
 }
