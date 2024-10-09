@@ -10,7 +10,9 @@ use vortex::{IntoArray as _, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
-use vortex_sampling_compressor::compressors::bitpacked::{BITPACK_NO_PATCHES, BITPACK_WITH_PATCHES};
+use vortex_sampling_compressor::compressors::bitpacked::{
+    BITPACK_NO_PATCHES, BITPACK_WITH_PATCHES,
+};
 use vortex_sampling_compressor::compressors::delta::DeltaCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
 use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
@@ -47,11 +49,18 @@ fn primitive(c: &mut Criterion) {
     for (compressor, name) in UINT_COMPRESSORS {
         group.bench_function(format!("{} compress", name), |b| {
             b.iter(|| {
-                black_box(compressor.compress(&int_array, None, ctx.including(compressor)).unwrap());
+                black_box(
+                    compressor
+                        .compress(&int_array, None, ctx.including(compressor))
+                        .unwrap(),
+                );
             })
         });
 
-        let compressed = compressor.compress(&int_array, None, ctx.including(compressor)).unwrap().into_array();
+        let compressed = compressor
+            .compress(&int_array, None, ctx.including(compressor))
+            .unwrap()
+            .into_array();
         group.bench_function(format!("{} decompress", name), |b| {
             b.iter(|| {
                 black_box(compressed.clone().into_canonical().unwrap());
@@ -67,11 +76,18 @@ fn primitive(c: &mut Criterion) {
     for (compressor, name) in SIGNED_INT_COMPRESSORS {
         group.bench_function(format!("{} compress", name), |b| {
             b.iter(|| {
-                black_box(compressor.compress(&int_array, None, ctx.including(compressor)).unwrap());
+                black_box(
+                    compressor
+                        .compress(&int_array, None, ctx.including(compressor))
+                        .unwrap(),
+                );
             })
         });
 
-        let compressed = compressor.compress(&int_array, None, ctx.including(compressor)).unwrap().into_array();
+        let compressed = compressor
+            .compress(&int_array, None, ctx.including(compressor))
+            .unwrap()
+            .into_array();
         group.bench_function(format!("{} decompress", name), |b| {
             b.iter(|| {
                 black_box(compressed.clone().into_canonical().unwrap());
@@ -80,18 +96,23 @@ fn primitive(c: &mut Criterion) {
     }
 
     let float_array = try_cast(int_array, PType::F32.into()).unwrap();
-    const FLOAT_COMPRESSORS: [(CompressorRef<'static>, &str); 2] = [
-        (&ALPCompressor, "alp"),
-        (&ALPRDCompressor, "alp_rd"),
-    ];
+    const FLOAT_COMPRESSORS: [(CompressorRef<'static>, &str); 2] =
+        [(&ALPCompressor, "alp"), (&ALPRDCompressor, "alp_rd")];
     for (compressor, name) in FLOAT_COMPRESSORS {
         group.bench_function(format!("{} compress", name), |b| {
             b.iter(|| {
-                black_box(compressor.compress(&float_array, None, ctx.including(compressor)).unwrap());
+                black_box(
+                    compressor
+                        .compress(&float_array, None, ctx.including(compressor))
+                        .unwrap(),
+                );
             })
         });
 
-        let compressed = compressor.compress(&float_array, None, ctx.including(compressor)).unwrap().into_array();
+        let compressed = compressor
+            .compress(&float_array, None, ctx.including(compressor))
+            .unwrap()
+            .into_array();
         group.bench_function(format!("{} decompress", name), |b| {
             b.iter(|| {
                 black_box(compressed.clone().into_canonical().unwrap());

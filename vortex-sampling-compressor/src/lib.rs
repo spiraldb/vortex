@@ -2,7 +2,6 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use compressors::bitpacked::BITPACK_WITH_PATCHES;
-use compressors::delta::DeltaCompressor;
 use compressors::fsst::FSSTCompressor;
 use lazy_static::lazy_static;
 use log::{debug, info, warn};
@@ -85,9 +84,9 @@ impl ScanPerfConfig {
 impl Default for ScanPerfConfig {
     fn default() -> Self {
         Self {
-            mib_per_second: 500.0,     // 500 MiB/s
-            latency_ms: 50.0,          // 50 milliseconds for object storage
-            assumed_compression_ratio: 3.0,  // 3:1 ratio of uncompressed data size to compressed data size
+            mib_per_second: 500.0,          // 500 MiB/s
+            latency_ms: 50.0,               // 50 milliseconds for object storage
+            assumed_compression_ratio: 3.0, // 3:1 ratio of uncompressed data size to compressed data size
         }
     }
 }
@@ -439,14 +438,16 @@ fn find_best_compression<'a>(
         let compressed_sample =
             compression.compress(sample, None, ctx.for_compressor(compression))?;
 
-        let objective = objective_function(
-            &compressed_sample,
-            sample.nbytes(),
-            &ctx.options().objective,
-        );
+        let objective = objective_function(&compressed_sample, sample.nbytes(), ctx.options());
 
         let ratio = (compressed_sample.nbytes() as f64) / (sample.nbytes() as f64);
-        debug!("{} ratio for {}: {}, objective fn value: {}", ctx, compression.id(), ratio, objective);
+        debug!(
+            "{} ratio for {}: {}, objective fn value: {}",
+            ctx,
+            compression.id(),
+            ratio,
+            objective
+        );
         if objective < best_objective {
             best_objective = objective;
             best = Some(compressed_sample)
@@ -471,7 +472,8 @@ fn objective_function(
     match &config.objective {
         Objective::MinSize => (size_in_bytes as f64) / (base_size_bytes as f64),
         Objective::ScanPerf(config) => {
-            config.download_time_ms(size_in_bytes) + array.decompression_time_ms(config.assumed_compression_ratio)
+            config.download_time_ms(size_in_bytes)
+                + array.decompression_time_ms(config.assumed_compression_ratio)
         }
     }
 }

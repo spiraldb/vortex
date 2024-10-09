@@ -74,14 +74,28 @@ fn dict_decode(c: &mut Criterion) {
     });
     group.throughput(Throughput::Bytes(primitive_arr.nbytes() as u64));
     group.bench_function("dict_decode_primitives", |b| {
-        b.iter(|| black_box(take(values.clone(), codes.clone()).unwrap().into_canonical().unwrap()));
+        b.iter(|| {
+            black_box(
+                take(values.clone(), codes.clone())
+                    .unwrap()
+                    .into_canonical()
+                    .unwrap(),
+            )
+        });
     });
 
     let varbin_arr = gen_varbin_dict(1_000_000, 0.00005);
     let (codes, values) = vortex_dict::dict_encode_varbin(&varbin_arr);
     group.throughput(Throughput::Bytes(varbin_arr.nbytes() as u64));
     group.bench_function("dict_decode_varbin", |b| {
-        b.iter(|| black_box(take(values.clone(), codes.clone()).unwrap().into_canonical().unwrap()));
+        b.iter(|| {
+            black_box(
+                take(values.clone(), codes.clone())
+                    .unwrap()
+                    .into_canonical()
+                    .unwrap(),
+            )
+        });
     });
 }
 

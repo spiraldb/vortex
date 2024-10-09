@@ -316,7 +316,7 @@ pub fn find_min_patchless_bit_width(array: &PrimitiveArray) -> VortexResult<usiz
 fn min_patchless_bit_width(bit_width_freq: &[usize]) -> VortexResult<usize> {
     if bit_width_freq.is_empty() {
         vortex_bail!("Empty bit width frequency!");
-    } 
+    }
     Ok(bit_width_freq
         .iter()
         .enumerate()
@@ -387,9 +387,7 @@ mod test {
             best_bit_width(&freq, bytes_per_exception(PType::U8)).unwrap(),
             3
         );
-        assert_eq!(
-            min_patchless_bit_width(&freq).unwrap(), 4
-        )
+        assert_eq!(min_patchless_bit_width(&freq).unwrap(), 4)
     }
 
     #[test]

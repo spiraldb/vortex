@@ -6,14 +6,19 @@ use vortex::stats::ArrayStatistics;
 use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::{vortex_err, vortex_panic, VortexResult};
 use vortex_fastlanes::{
-    bitpack, gather_patches, count_exceptions, find_best_bit_width, find_min_patchless_bit_width, BitPacked, BitPackedArray, BitPackedEncoding
+    bitpack, count_exceptions, find_best_bit_width, find_min_patchless_bit_width, gather_patches,
+    BitPacked, BitPackedArray, BitPackedEncoding,
 };
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::{constants, SamplingCompressor};
 
-pub const BITPACK_WITH_PATCHES: BitPackedCompressor = BitPackedCompressor{ allow_patches: true };
-pub const BITPACK_NO_PATCHES: BitPackedCompressor = BitPackedCompressor{ allow_patches: false };
+pub const BITPACK_WITH_PATCHES: BitPackedCompressor = BitPackedCompressor {
+    allow_patches: true,
+};
+pub const BITPACK_NO_PATCHES: BitPackedCompressor = BitPackedCompressor {
+    allow_patches: false,
+};
 
 #[derive(Debug)]
 pub struct BitPackedCompressor {
@@ -22,7 +27,11 @@ pub struct BitPackedCompressor {
 
 impl BitPackedCompressor {
     fn find_bit_width(&self, array: &PrimitiveArray) -> VortexResult<usize> {
-        if self.allow_patches { find_best_bit_width(array) } else { find_min_patchless_bit_width(array) }
+        if self.allow_patches {
+            find_best_bit_width(array)
+        } else {
+            find_min_patchless_bit_width(array)
+        }
     }
 }
 
@@ -81,7 +90,11 @@ impl EncodingCompressor for BitPackedCompressor {
         let bit_width = self.find_bit_width(&parray)?;
         let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
         if !self.allow_patches && num_exceptions > 0 {
-            vortex_panic!("Found {} exceptions with patchless bit width {}", num_exceptions, bit_width)
+            vortex_panic!(
+                "Found {} exceptions with patchless bit width {}",
+                num_exceptions,
+                bit_width
+            )
         }
 
         if bit_width == parray.ptype().bit_width() {

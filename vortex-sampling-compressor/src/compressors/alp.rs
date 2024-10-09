@@ -7,10 +7,9 @@ use vortex_alp::{alp_encode_components, match_each_alp_float_ptype, ALPArray, AL
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
+use super::alp_rd::ALPRDCompressor;
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::{constants, SamplingCompressor};
-
-use super::alp_rd::ALPRDCompressor;
 
 #[derive(Debug)]
 pub struct ALPCompressor;
@@ -18,7 +17,7 @@ pub struct ALPCompressor;
 impl EncodingCompressor for ALPCompressor {
     fn id(&self) -> &str {
         ALP::ID.as_ref()
-    }   
+    }
 
     fn cost(&self) -> u8 {
         constants::depth::ALP_COST
