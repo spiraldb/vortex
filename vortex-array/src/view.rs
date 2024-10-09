@@ -57,12 +57,9 @@ impl ArrayView {
 
         let encoding = ctx.lookup_encoding(array.encoding()).ok_or_else(
             || {
-                let pretty_known_encodings = ctx.encodings().map(|e| format!("- {}", e.id()))
-                    .collect::<Vec<String>>()
-                    .join("\n");
-                vortex_err!(InvalidSerde: "Unknown encoding with ID {:#02x}. Known encodings:\n{}", array.encoding(),
-                    pretty_known_encodings
-                )
+                let pretty_known_encodings = ctx.encodings()
+                    .format_with("\n", |e, f| f(&format_args!("- {}", e.id())));
+                vortex_err!(InvalidSerde: "Unknown encoding with ID {:#02x}. Known encodings:\n{pretty_known_encodings}", array.encoding())
             },
         )?;
 
