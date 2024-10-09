@@ -22,7 +22,7 @@ fn main() {
     let dataset: &str = &args.nth(0).unwrap();
 
     TermLogger::init(
-        LevelFilter::Warn,
+        LevelFilter::Info,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,

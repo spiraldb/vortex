@@ -52,7 +52,7 @@ impl ChunkedCompressor {
         }
         Ok(CompressedArray::new(
             ChunkedArray::try_new(compressed_chunks, array.dtype().clone())?.into_array(),
-            previous,
+            Some(CompressionTree::new(self, vec![previous])),
         ))
     }
 }

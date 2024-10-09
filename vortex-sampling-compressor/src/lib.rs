@@ -225,7 +225,7 @@ impl<'a> SamplingCompressor<'a> {
                 check_dtype_unchanged(arr, compressed.as_ref());
                 return Ok(compressed);
             } else {
-                debug!(
+                info!(
                     "{} cannot find compressor to compress {} like {}",
                     self, arr, l
                 );
@@ -302,7 +302,7 @@ fn sampled_compression<'a>(
         .copied()
         .collect();
 
-    debug!("{} candidates for {}: {:?}", compressor, array, candidates);
+    info!("{} candidates for {}: {:?}", compressor, array, candidates);
 
     if candidates.is_empty() {
         debug!(
@@ -351,7 +351,10 @@ fn sampled_compression<'a>(
     find_best_compression(candidates, &sample, compressor)?
         .into_path()
         .map(|best_compressor| {
-            info!("Compressing array {} with {}", array, best_compressor);
+            info!(
+                "{} Compressing array {} with {}",
+                compressor, array, best_compressor
+            );
             best_compressor.compress_unchecked(array, compressor)
         })
         .transpose()
