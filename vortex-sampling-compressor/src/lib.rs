@@ -361,6 +361,7 @@ fn find_best_compression<'a>(
 ) -> VortexResult<CompressedArray<'a>> {
     let mut best = None;
     let mut best_ratio = 1.0;
+
     for compression in candidates {
         debug!(
             "{} trying candidate {} for {}",
