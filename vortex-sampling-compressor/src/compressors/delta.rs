@@ -7,7 +7,7 @@ use vortex_error::VortexResult;
 use vortex_fastlanes::{delta_compress, Delta, DeltaArray, DeltaEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct DeltaCompressor;
@@ -21,9 +21,8 @@ impl EncodingCompressor for DeltaCompressor {
         2
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        // got ~18GiB/s on benchmarks; rounding down to 10 GiB/s to be conservative (and because we don't love delta)
-        0.1
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::DELTA_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

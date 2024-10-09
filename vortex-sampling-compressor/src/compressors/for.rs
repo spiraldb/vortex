@@ -10,7 +10,7 @@ use vortex_error::VortexResult;
 use vortex_fastlanes::{for_compress, FoR, FoRArray, FoREncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct FoRCompressor;
@@ -24,8 +24,8 @@ impl EncodingCompressor for FoRCompressor {
         0
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        0.01
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::FOR_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

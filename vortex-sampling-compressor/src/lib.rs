@@ -33,6 +33,7 @@ use crate::sampling::stratified_slices;
 #[cfg(feature = "arbitrary")]
 pub mod arbitrary;
 pub mod compressors;
+mod constants;
 mod sampling;
 
 lazy_static! {
@@ -64,15 +65,19 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct ScanPerfConfig {
-    /// bytes per second of throughput
-    bytes_per_ms: f64,
+    /// MiB per second of throughput
+    mib_per_second: f64,
     /// Latency in milliseconds
     latency_ms: f64,
+    /// Compression ratio to assume when calculating decompression time
+    assumed_compression_ratio: f64,
 }
 
 impl ScanPerfConfig {
     pub fn download_time(&self, nbytes: u64) -> f64 {
-        let throughput_ms = (nbytes as f64) / self.bytes_per_ms;
+        const MS_PER_SEC: f64 = 1000.0;
+        const BYTES_PER_MIB: f64 = (1 << 20) as f64;
+        let throughput_ms = (MS_PER_SEC / self.mib_per_second) * (nbytes as f64 / BYTES_PER_MIB);
         self.latency_ms + throughput_ms
     }
 }
@@ -80,8 +85,9 @@ impl ScanPerfConfig {
 impl Default for ScanPerfConfig {
     fn default() -> Self {
         Self {
-            bytes_per_ms: 524_288.0,   // 500 MiB/s
+            mib_per_second: 500.0,     // 500 MiB/s
             latency_ms: 50.0,          // 50 milliseconds for object storage
+            assumed_compression_ratio: 3.0,  // 3:1 ratio of uncompressed data size to compressed data size
         }
     }
 }
@@ -473,7 +479,7 @@ fn objective_function(
                 / (base_size_bytes as f64)
         }
         ObjectiveConfig::ScanPerf(config) => {
-            config.download_time(size_in_bytes) + array.decompression_time_ms()
+            config.download_time(size_in_bytes) + array.decompression_time_ms(config.assumed_compression_ratio)
         }
     }
 }

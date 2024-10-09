@@ -9,7 +9,7 @@ use vortex_runend::compress::runend_encode;
 use vortex_runend::{RunEnd, RunEndArray, RunEndEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 pub const DEFAULT_RUN_END_COMPRESSOR: RunEndCompressor = RunEndCompressor { ree_threshold: 2.0 };
 
@@ -23,9 +23,13 @@ impl EncodingCompressor for RunEndCompressor {
         RunEnd::ID.as_ref()
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
+    fn cost(&self) -> u8 {
+        constants::depth::RUN_END_COST
+    }
+
+    fn decompression_gib_per_second(&self) -> f64 {
         // this is arbitrary; RunEnd is lots of memcopies, but throughput varies wildly depending on number/length of runs
-        1.0
+        constants::decompression::RUN_END_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

@@ -10,7 +10,7 @@ use vortex_fastlanes::{
 };
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 pub const BITPACK_WITH_PATCHES: BitPackedCompressor = BitPackedCompressor{ allow_patches: true };
 pub const BITPACK_NO_PATCHES: BitPackedCompressor = BitPackedCompressor{ allow_patches: false };
@@ -35,8 +35,12 @@ impl EncodingCompressor for BitPackedCompressor {
         0
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        0.02
+    fn decompression_gib_per_second(&self) -> f64 {
+        if self.allow_patches {
+            constants::decompression::BITPACKED_WITH_PATCHES_GIB_PER_S
+        } else {
+            constants::decompression::BITPACKED_NO_PATCHES_GIB_PER_S
+        }
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

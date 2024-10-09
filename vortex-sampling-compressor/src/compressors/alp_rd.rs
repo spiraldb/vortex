@@ -11,7 +11,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_fastlanes::BitPackedEncoding;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncoderMetadata, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct ALPRDCompressor;
@@ -27,8 +27,12 @@ impl EncodingCompressor for ALPRDCompressor {
         ALPRD::ID.as_ref()
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        0.39
+    fn cost(&self) -> u8 {
+        constants::depth::ALP_RD_COST
+    }
+
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::ALP_RD_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

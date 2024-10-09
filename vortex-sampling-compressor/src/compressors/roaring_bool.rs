@@ -9,7 +9,7 @@ use vortex_error::VortexResult;
 use vortex_roaring::{roaring_bool_encode, RoaringBool, RoaringBoolEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct RoaringBoolCompressor;
@@ -19,10 +19,12 @@ impl EncodingCompressor for RoaringBoolCompressor {
         RoaringBool::ID.as_ref()
     }
 
-        
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        // this is made up
-        1.0
+    fn cost(&self) -> u8 {
+        constants::depth::ROARING_BOOL_COST
+    }
+
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::ROARING_BOOL_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

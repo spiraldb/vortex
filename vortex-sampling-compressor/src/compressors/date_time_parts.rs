@@ -10,7 +10,7 @@ use vortex_datetime_parts::{
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct DateTimePartsCompressor;
@@ -20,8 +20,12 @@ impl EncodingCompressor for DateTimePartsCompressor {
         DateTimeParts::ID.as_ref()
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        0.05 // basically 3 memcopys and some arithmetic
+    fn cost(&self) -> u8 {
+        constants::depth::DATE_TIME_PARTS_COST
+    }
+
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::DATE_TIME_PARTS_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

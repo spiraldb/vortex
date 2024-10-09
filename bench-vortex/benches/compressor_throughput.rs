@@ -10,7 +10,7 @@ use vortex::{IntoArray as _, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
-use vortex_sampling_compressor::compressors::bitpacked::{BitPackedCompressor, BITPACK_NO_PATCHES, BITPACK_WITH_PATCHES};
+use vortex_sampling_compressor::compressors::bitpacked::{BITPACK_NO_PATCHES, BITPACK_WITH_PATCHES};
 use vortex_sampling_compressor::compressors::delta::DeltaCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
 use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
@@ -34,7 +34,7 @@ fn primitive(c: &mut Criterion) {
     )
     .into_array();
 
-    let ctx = SamplingCompressor::new(HashSet::from([&FoRCompressor, &BITPACK_WITH_PATCHES]));
+    let ctx = SamplingCompressor::new(HashSet::new());
 
     const UINT_COMPRESSORS: [(CompressorRef<'static>, &str); 6] = [
         (&BITPACK_NO_PATCHES, "bitpacked_no_patches"),

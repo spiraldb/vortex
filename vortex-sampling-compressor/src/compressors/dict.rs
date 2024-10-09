@@ -8,7 +8,7 @@ use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray, Di
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct DictCompressor;
@@ -18,9 +18,12 @@ impl EncodingCompressor for DictCompressor {
         Dict::ID.as_ref()
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        // got 3-8 GiB/s on dict_compress benchmarks; picking 4 GiB/s for estimate
-        0.25
+    fn cost(&self) -> u8 {
+        constants::depth::DICT_COST
+    }
+
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::DICT_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

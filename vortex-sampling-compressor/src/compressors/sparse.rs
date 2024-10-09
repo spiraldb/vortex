@@ -6,7 +6,7 @@ use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct SparseCompressor;
@@ -20,9 +20,8 @@ impl EncodingCompressor for SparseCompressor {
         0
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        // this one is structural / a passthrough, so we can assume it's as fast as possible
-        0.0
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::SPARSE_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

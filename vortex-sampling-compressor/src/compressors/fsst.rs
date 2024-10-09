@@ -13,7 +13,7 @@ use vortex_fsst::{fsst_compress, fsst_train_compressor, FSSTArray, FSSTEncoding,
 
 use super::delta::DeltaCompressor;
 use super::{CompressedArray, CompressionTree, EncoderMetadata, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct FSSTCompressor;
@@ -32,8 +32,12 @@ impl EncodingCompressor for FSSTCompressor {
         FSST::ID.as_ref()
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        0.5
+    fn cost(&self) -> u8 {
+        constants::depth::FSST_COST
+    }
+
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::FSST_GIB_PER_S
     }
 
     fn can_compress(&self, array: &vortex::Array) -> Option<&dyn EncodingCompressor> {

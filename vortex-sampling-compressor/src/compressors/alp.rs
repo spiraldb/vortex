@@ -8,7 +8,7 @@ use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 use super::alp_rd::ALPRDCompressor;
 
@@ -18,10 +18,14 @@ pub struct ALPCompressor;
 impl EncodingCompressor for ALPCompressor {
     fn id(&self) -> &str {
         ALP::ID.as_ref()
+    }   
+
+    fn cost(&self) -> u8 {
+        constants::depth::ALP_COST
     }
 
-    fn decompression_seconds_per_gb(&self) -> f64 {
-        0.16
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::decompression::ALP_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

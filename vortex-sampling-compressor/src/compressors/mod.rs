@@ -28,11 +28,9 @@ pub mod zigzag;
 pub trait EncodingCompressor: Sync + Send + Debug {
     fn id(&self) -> &str;
 
-    fn cost(&self) -> u8 {
-        1
-    }
+    fn cost(&self) -> u8;
 
-    fn decompression_seconds_per_gb(&self) -> f64;
+    fn decompression_gib_per_second(&self) -> f64;
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor>;
 
@@ -203,8 +201,9 @@ impl<'a> CompressedArray<'a> {
         self.array.nbytes()
     }
 
-    pub fn decompression_time_ms(&self) -> f64 {
-        const COEFF: f64 = 1.0 / 1_000_000.0; // convert (seconds per GB times bytes) to milliseconds
+    pub fn decompression_time_ms(&self, assumed_compression_ratio: f64) -> f64 {
+        const MS_PER_SEC: f64 = 1000.0;
+        const BYTES_PER_GB: f64 = 1_073_741_824.0;
         let children_time = self
             .path()
             .iter()
@@ -212,7 +211,10 @@ impl<'a> CompressedArray<'a> {
                 c.children
                     .iter()
                     .zip(self.array.children().iter())
-                    .map(|(c, a)| CompressedArray::new(a.clone(), c.clone()).decompression_time_ms())
+                    .map(|(c, a)| {
+                        CompressedArray::new(a.clone(), c.clone())
+                            .decompression_time_ms(assumed_compression_ratio)
+                    })
                     .sum::<f64>()
             })
             .sum::<f64>();
@@ -221,7 +223,10 @@ impl<'a> CompressedArray<'a> {
                 .path()
                 .as_ref()
                 .map(|c| {
-                    c.compressor().decompression_seconds_per_gb() * (self.nbytes() as f64 * COEFF)
+                    (MS_PER_SEC / c.compressor().decompression_gib_per_second())
+                        * assumed_compression_ratio
+                        * self.nbytes() as f64
+                        / BYTES_PER_GB
                 })
                 .unwrap_or(0.0)
     }
