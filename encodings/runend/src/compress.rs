@@ -3,7 +3,6 @@ use std::cmp::min;
 use itertools::Itertools;
 use num_traits::{AsPrimitive, FromPrimitive};
 use vortex::array::PrimitiveArray;
-use vortex::compute::unary::scalar_at;
 use vortex::stats::{ArrayStatistics, Stat};
 use vortex::validity::Validity;
 use vortex::ArrayDType;
@@ -21,21 +20,19 @@ pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray)
         let (ends, values) = runend_encode_primitive(array.maybe_null_slice::<$P>());
 
         let mut compressed_values = PrimitiveArray::from_vec(values, validity);
+        compressed_values.statistics().set(Stat::IsConstant, false.into());
         compressed_values.statistics().set(Stat::RunCount, compressed_values.len().into());
         array.statistics().get(Stat::Min).map(|s| compressed_values.statistics().set(Stat::Min, s));
         array.statistics().get(Stat::Max).map(|s| compressed_values.statistics().set(Stat::Max, s));
-        array.statistics().get(Stat::IsConstant).map(|s| compressed_values.statistics().set(Stat::IsConstant, s));
         array.statistics().get(Stat::IsSorted).map(|s| compressed_values.statistics().set(Stat::IsSorted, s));
         array.statistics().get(Stat::IsStrictSorted).map(|s| compressed_values.statistics().set(Stat::IsStrictSorted, s));
 
         let compressed_ends = PrimitiveArray::from(ends);
-        compressed_ends.statistics().set(Stat::IsConstant, (compressed_ends.len() > 1).into());
         compressed_ends.statistics().set(Stat::IsSorted, true.into());
         compressed_ends.statistics().set(Stat::IsStrictSorted, true.into());
-        if (compressed_ends.len() > 0) {
-            compressed_ends.statistics().set(Stat::Min, scalar_at(&compressed_ends, 0).unwrap().into());
-            compressed_ends.statistics().set(Stat::Max, scalar_at(&compressed_ends, compressed_ends.len() - 1).unwrap().into());
-        }
+        compressed_ends.statistics().set(Stat::IsConstant, false.into());
+        compressed_ends.statistics().set(Stat::Max, array.len().into());
+        compressed_ends.statistics().set(Stat::RunCount, compressed_ends.len().into());
 
         assert_eq!(array.dtype(), compressed_values.dtype());
         (compressed_ends, compressed_values)
