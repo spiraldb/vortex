@@ -60,3 +60,31 @@ impl EncodingCompressor for RoaringIntCompressor {
         HashSet::from([&RoaringIntEncoding as EncodingRef])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::PrimitiveArray;
+    use vortex::validity::Validity;
+    use vortex::IntoArray;
+    use vortex_roaring::RoaringIntArray;
+
+    use crate::compressors::roaring_int::RoaringIntCompressor;
+    use crate::compressors::EncodingCompressor as _;
+    use crate::SamplingCompressor;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn test_roaring_int_compressor() {
+        let array =
+            PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5], Validity::NonNullable).into_array();
+        assert!(RoaringIntCompressor.can_compress(&array).is_some());
+        let compressed = RoaringIntCompressor
+            .compress(&array, None, SamplingCompressor::default())
+            .unwrap();
+        assert_eq!(compressed.array.len(), 5);
+        assert!(compressed.path.is_some());
+
+        let roaring = RoaringIntArray::try_from(compressed.array).unwrap();
+        assert!(roaring.owned_bitmap().contains_range(1..=5));
+    }
+}

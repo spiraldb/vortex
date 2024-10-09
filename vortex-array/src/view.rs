@@ -55,9 +55,13 @@ impl ArrayView {
         let array = flatbuffer_init(flatbuffer.as_ref())?;
         let flatbuffer_loc = array._tab.loc();
 
-        let encoding = ctx
-            .lookup_encoding(array.encoding())
-            .ok_or_else(|| vortex_err!(InvalidSerde: "Encoding ID out of bounds"))?;
+        let encoding = ctx.lookup_encoding(array.encoding()).ok_or_else(
+            || {
+                let pretty_known_encodings = ctx.encodings()
+                    .format_with("\n", |e, f| f(&format_args!("- {}", e.id())));
+                vortex_err!(InvalidSerde: "Unknown encoding with ID {:#02x}. Known encodings:\n{pretty_known_encodings}", array.encoding())
+            },
+        )?;
 
         let view = Self {
             encoding,
