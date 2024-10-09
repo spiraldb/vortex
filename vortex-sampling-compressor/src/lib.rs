@@ -470,7 +470,7 @@ fn objective_function(
     let child_count_recursive = array
         .path()
         .as_ref()
-        .map(CompressionTree::child_count_recursive)
+        .map(CompressionTree::num_descendants)
         .unwrap_or(0) as u64;
 
     match config {

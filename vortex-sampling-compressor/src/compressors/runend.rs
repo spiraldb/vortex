@@ -28,7 +28,6 @@ impl EncodingCompressor for RunEndCompressor {
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        // this is arbitrary; RunEnd is lots of memcopies, but throughput varies wildly depending on number/length of runs
         constants::decompression::RUN_END_GIB_PER_S
     }
 

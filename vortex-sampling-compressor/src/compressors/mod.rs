@@ -158,10 +158,10 @@ impl<'a> CompressionTree<'a> {
         std::mem::take(&mut self.metadata)
     }
 
-    pub fn child_count_recursive(&self) -> usize {
+    pub fn num_descendants(&self) -> usize {
         self.children
             .iter()
-            .filter_map(|child| child.as_ref().map(|c| c.child_count_recursive() + 1))
+            .filter_map(|child| child.as_ref().map(|c| c.num_descendants() + 1))
             .sum::<usize>()
     }
 }
