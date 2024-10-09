@@ -37,7 +37,11 @@ impl BitPackedCompressor {
 
 impl EncodingCompressor for BitPackedCompressor {
     fn id(&self) -> &str {
-        BitPacked::ID.as_ref()
+        if self.allow_patches {
+            "fastlanes.bitpacked"
+        } else {
+            "fastlanes.bitpacked_no_patches"
+        }
     }
 
     fn cost(&self) -> u8 {
