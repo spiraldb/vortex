@@ -135,8 +135,9 @@ impl Display for DType {
             List(c, n) => write!(f, "list({}){}", c, n),
             Extension(ext, n) => write!(
                 f,
-                "ext({}{}){}",
+                "ext({}, {}{}){}",
                 ext.id(),
+                ext.scalars_dtype(),
                 ext.metadata()
                     .map(|m| format!(", {:?}", m))
                     .unwrap_or_else(|| "".to_string()),

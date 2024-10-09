@@ -87,7 +87,19 @@ impl TryFrom<fb::DType<'_>> for DType {
                     })?);
                 let metadata = fb_ext.metadata().map(|m| ExtMetadata::from(m.bytes()));
                 Ok(Self::Extension(
-                    ExtDType::new(id, metadata),
+                    ExtDType::new(
+                        id,
+                        Arc::new(
+                            DType::try_from(fb_ext.scalars_dtype().ok_or_else(|| {
+                                vortex_err!(
+                        InvalidSerde: "scalars_dtype must be present on DType fbs message")
+                            })?)
+                            .map_err(|e| {
+                                vortex_err!("failed to create DType from fbs message: {e}")
+                            })?,
+                        ),
+                        metadata,
+                    ),
                     fb_ext.nullable().into(),
                 ))
             }
@@ -173,11 +185,13 @@ impl WriteFlatBuffer for DType {
             }
             Self::Extension(ext, n) => {
                 let id = Some(fbb.create_string(ext.id().as_ref()));
+                let scalars_dtype = Some(ext.scalars_dtype().write_flatbuffer(fbb));
                 let metadata = ext.metadata().map(|m| fbb.create_vector(m.as_ref()));
                 fb::Extension::create(
                     fbb,
                     &fb::ExtensionArgs {
                         id,
+                        scalars_dtype,
                         metadata,
                         nullable: (*n).into(),
                     },
