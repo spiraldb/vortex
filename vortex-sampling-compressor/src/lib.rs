@@ -81,7 +81,7 @@ impl ScanPerfConfig {
 impl Default for ScanPerfConfig {
     fn default() -> Self {
         Self {
-            mib_per_second: 500.0,          // 500 MiB/s for object storage
+            mib_per_second: 500.0,           // 500 MiB/s for object storage
             assumed_compression_ratio: 10.0, // 10:1 ratio of uncompressed data size to compressed data size
         }
     }

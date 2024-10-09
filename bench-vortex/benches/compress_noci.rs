@@ -11,7 +11,7 @@ use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{fetch_taxi_data, tpch};
 use criterion::{
-    black_box, criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion, Throughput
+    black_box, criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion, Throughput,
 };
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
@@ -113,7 +113,10 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
     let compressed_array = compressed.into_array();
     //println!("compression tree: {}", compressed_array.tree_display());
     println!("compression path: {}", path);
-    println!("compression ratio: {}", compressed_size as f64 / uncompressed_size as f64);
+    println!(
+        "compression ratio: {}",
+        compressed_size as f64 / uncompressed_size as f64
+    );
 
     group.bench_function(format!("{} decompression", bench_name), |b| {
         b.iter_batched(

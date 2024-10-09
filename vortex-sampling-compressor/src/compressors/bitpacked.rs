@@ -6,7 +6,8 @@ use vortex::stats::ArrayStatistics;
 use vortex::{Array, IntoArray};
 use vortex_error::{vortex_err, vortex_panic, VortexResult};
 use vortex_fastlanes::{
-    bitpack, count_exceptions, find_best_bit_width, find_min_patchless_bit_width, gather_patches, BitPackedArray, BitPackedEncoding,
+    bitpack, count_exceptions, find_best_bit_width, find_min_patchless_bit_width, gather_patches,
+    BitPackedArray, BitPackedEncoding,
 };
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
