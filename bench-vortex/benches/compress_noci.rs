@@ -87,7 +87,6 @@ fn vortex_written_size(array: &Array) -> u64 {
 fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
     compressor: &SamplingCompressor<'_>,
     make_uncompressed: F,
-    group_name: &str,
     group: &mut BenchmarkGroup<'_, T>,
     bench_name: &str,
 ) where
@@ -100,7 +99,7 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
     let mut compressed_size = 0;
 
     group.throughput(Throughput::Bytes(uncompressed_size as u64));
-    group.bench_function(format!("{} compression", bench_name), |b| {
+    group.bench_function(bench_name, |b| {
         b.iter_with_large_drop(|| {
             let compressed = black_box(compressor.compress(uncompressed.as_ref(), None).unwrap());
             compressed_size = compressed.nbytes();
@@ -144,13 +143,10 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
             Compression::ZSTD(ZstdLevel::default()),
         );
 
-        let parquet_uncompressed_nbytes =
-            parquet_written_size(uncompressed.as_ref(), Compression::UNCOMPRESSED);
-
         println!(
             "{}",
             serde_json::to_string(&GenericBenchmarkResults {
-                name: &format!("{} Vortex-to-ParquetZstd Ratio/{}", group_name, bench_name),
+                name: &format!("vortex:parquet-zstd size/{}", bench_name),
                 value: (vortex_nbytes as f64) / (parquet_zstd_nbytes as f64),
                 unit: "ratio",
                 range: 0.0,
@@ -161,21 +157,7 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         println!(
             "{}",
             serde_json::to_string(&GenericBenchmarkResults {
-                name: &format!(
-                    "{} Vortex-to-ParquetUncompressed Ratio/{}",
-                    group_name, bench_name
-                ),
-                value: (vortex_nbytes as f64) / (parquet_uncompressed_nbytes as f64),
-                unit: "ratio",
-                range: 0.0,
-            })
-            .unwrap()
-        );
-
-        println!(
-            "{}",
-            serde_json::to_string(&GenericBenchmarkResults {
-                name: &format!("{} Compression Ratio/{}", group_name, bench_name),
+                name: &format!("vortex:raw size/{}", bench_name),
                 value: (compressed_size as f64) / (uncompressed_size as f64),
                 unit: "ratio",
                 range: 0.0,
@@ -186,7 +168,7 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         println!(
             "{}",
             serde_json::to_string(&GenericBenchmarkResults {
-                name: &format!("{} Compression Size/{}", group_name, bench_name),
+                name: &format!("vortex size/{}", bench_name),
                 value: compressed_size as f64,
                 unit: "bytes",
                 range: 0.0,
@@ -198,13 +180,11 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
 
 fn yellow_taxi_trip_data(c: &mut Criterion) {
     taxi_data_parquet();
-    let group_name = "Yellow Taxi Trip Data";
-    let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
+    let mut group = c.benchmark_group("compress time");
     group.sample_size(10);
     benchmark_compress(
         &SamplingCompressor::default(),
         fetch_taxi_data,
-        group_name,
         &mut group,
         "taxi",
     );
@@ -212,8 +192,7 @@ fn yellow_taxi_trip_data(c: &mut Criterion) {
 }
 
 fn public_bi_benchmark(c: &mut Criterion) {
-    let group_name = "Public BI";
-    let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
+    let mut group = c.benchmark_group("compress time");
     group.sample_size(10);
     // group.measurement_time(Duration::new(10, 0));
 
@@ -236,7 +215,6 @@ fn public_bi_benchmark(c: &mut Criterion) {
         benchmark_compress(
             &SamplingCompressor::default(),
             || dataset.to_vortex_array().unwrap(),
-            group_name,
             &mut group,
             dataset_handle.dataset_name(),
         );
@@ -259,8 +237,7 @@ fn tpc_h_l_comment(c: &mut Criterion) {
     let compressor = SamplingCompressor::default().excluding(&FSSTCompressor);
     let compressor_fsst = SamplingCompressor::default();
 
-    let group_name = "TPC-H l_comment";
-    let mut group = c.benchmark_group(format!("{} Compression Time", group_name));
+    let mut group = c.benchmark_group("compress time");
     group.sample_size(10);
     group.measurement_time(Duration::new(15, 0));
 
@@ -283,17 +260,15 @@ fn tpc_h_l_comment(c: &mut Criterion) {
     benchmark_compress(
         &compressor,
         || &comments,
-        group_name,
         &mut group,
-        "chunked-without-fsst",
+        "TPC-H l_comment chunked without fsst",
     );
 
     benchmark_compress(
         &compressor_fsst,
         || &comments,
-        group_name,
         &mut group,
-        "chunked-with-fsst",
+        "TPC-H l_comment chunked",
     );
 
     let comments_canonical = comments
@@ -309,9 +284,8 @@ fn tpc_h_l_comment(c: &mut Criterion) {
     benchmark_compress(
         &compressor_fsst,
         || &comments_canonical_chunked,
-        group_name,
         &mut group,
-        "canonical-with-fsst",
+        "TPC-H l_comment canonical",
     );
 
     group.finish();
