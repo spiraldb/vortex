@@ -11,8 +11,8 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray,
-    IntoCanonical, TypedArray,
+    impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray, IntoCanonical,
+    TypedArray,
 };
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
@@ -134,21 +134,14 @@ impl AcceptArrayVisitor for RoaringIntArray {
 
 impl ArrayStatisticsCompute for RoaringIntArray {
     fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
-        let mut stats = self.statistics().to_set();
-        if stats.get(stat).is_some() {
-            return Ok(stats);
-        }
-
         // possibly faster to write an accumulator over the iterator, though not necessarily
         if stat == Stat::TrailingZeroFreq || stat == Stat::BitWidthFreq || stat == Stat::RunCount {
             let primitive = PrimitiveArray::from_vec(self.bitmap().to_vec(), Validity::NonNullable);
-            if let Some(prim_stat) = primitive.statistics().compute(stat) {
-                stats.set(stat, prim_stat);
-            }
-            stats.merge(&primitive.statistics().to_set());
+            primitive.statistics().compute(stat);
+            Ok(primitive.statistics().to_set())
+        } else {
+            Ok(StatsSet::new())
         }
-
-        Ok(stats)
     }
 }
 
