@@ -4,12 +4,16 @@ pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
 use vortex::array::PrimitiveArray;
+use vortex::compute::unary::try_cast;
 use vortex::encoding::ids;
-use vortex::stats::{ArrayStatisticsCompute, StatsSet};
-use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat, StatsSet};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::{impl_encoding, Array, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray};
+use vortex::{
+    impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    IntoCanonical, TypedArray,
+};
 use vortex_buffer::Buffer;
 use vortex_dtype::Nullability::NonNullable;
 use vortex_dtype::{DType, PType};
@@ -34,9 +38,25 @@ impl Display for RoaringIntMetadata {
 impl RoaringIntArray {
     pub fn try_new(bitmap: Bitmap, ptype: PType) -> VortexResult<Self> {
         if !ptype.is_unsigned_int() {
-            vortex_bail!("RoaringInt expected unsigned int");
+            vortex_bail!(MismatchedTypes: "unsigned int", ptype);
         }
+
         let length = bitmap.statistics().cardinality as usize;
+        let max = bitmap.maximum();
+        if max.map(|mv| mv as u64 > ptype.max_value()).unwrap_or(false) {
+            vortex_bail!(
+                "RoaringInt maximum value is greater than the maximum value for the primitive type"
+            );
+        }
+
+        let mut stats = StatsSet::new();
+        stats.set(Stat::NullCount, 0.into());
+        stats.set(Stat::Max, max.into());
+        stats.set(Stat::Min, bitmap.minimum().into());
+        stats.set(Stat::IsConstant, (length <= 1).into());
+        stats.set(Stat::IsSorted, true.into());
+        stats.set(Stat::IsStrictSorted, true.into());
+
         Ok(Self {
             typed: TypedArray::try_from_parts(
                 DType::Primitive(ptype, NonNullable),
@@ -94,17 +114,41 @@ impl ArrayValidity for RoaringIntArray {
 
 impl IntoCanonical for RoaringIntArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        todo!()
+        try_cast(
+            PrimitiveArray::from_vec(self.bitmap().to_vec(), Validity::NonNullable),
+            self.dtype(),
+        )
+        .and_then(|a| a.into_primitive())
+        .map(Canonical::Primitive)
     }
 }
 
 impl AcceptArrayVisitor for RoaringIntArray {
-    fn accept(&self, _visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        todo!()
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
+        visitor.visit_buffer(
+            self.as_ref()
+                .buffer()
+                .vortex_expect("Missing buffer in RoaringIntArray"),
+        )
     }
 }
 
-impl ArrayStatisticsCompute for RoaringIntArray {}
+impl ArrayStatisticsCompute for RoaringIntArray {
+    fn compute_statistics(&self, stat: Stat) -> VortexResult<StatsSet> {
+        let mut stats = self.statistics().to_set();
+        if stats.get(stat).is_some() {
+            return Ok(stats);
+        }
+
+        if stat == Stat::TrailingZeroFreq || stat == Stat::BitWidthFreq || stat == Stat::RunCount {
+            let primitive = PrimitiveArray::from_vec(self.bitmap().to_vec(), Validity::NonNullable);
+            let prim_stats = primitive.statistics().to_set();
+            stats.merge(&prim_stats);
+        }
+
+        Ok(stats)
+    }
+}
 
 #[cfg(test)]
 mod test {

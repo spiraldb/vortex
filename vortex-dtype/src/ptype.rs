@@ -204,8 +204,8 @@ impl PType {
         self.byte_width() * 8
     }
 
-    pub const fn max_value(&self) -> usize {
-        match_each_integer_ptype!(self, |$T| $T::MAX as usize)
+    pub const fn max_value(&self) -> u64 {
+        match_each_integer_ptype!(self, |$T| $T::MAX as u64)
     }
 
     pub fn to_signed(self) -> Self {
