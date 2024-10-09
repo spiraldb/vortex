@@ -68,6 +68,7 @@ mod tests {
     use crate::SamplingCompressor;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_roaring_int_compressor() {
         let array =
             PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5], Validity::NonNullable).into_array();
