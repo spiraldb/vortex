@@ -1,10 +1,10 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use itertools::Itertools;
-use vortex_dtype::DType;
+use half::f16;
 use vortex_dtype::Nullability::NonNullable;
-use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
+use vortex_dtype::{DType, NativePType, PType};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
@@ -104,21 +104,42 @@ impl<'a, T: for<'b> TryFrom<&'b Scalar, Error = VortexError>> TryFrom<&'a Scalar
     }
 }
 
-impl<T> From<Vec<T>> for Scalar
-where
-    Self: From<T>,
-{
-    fn from(value: Vec<T>) -> Self {
-        let scalars = value.into_iter().map(|v| Self::from(v)).collect_vec();
-        let element_dtype = scalars
-            .first()
-            .vortex_expect("Empty list, could not determine element dtype")
-            .dtype()
-            .clone();
-        let dtype = DType::List(Arc::new(element_dtype), NonNullable);
+macro_rules! from_native_ptype_for_scalar {
+    ($T:ty) => {
+        impl From<Vec<$T>> for Scalar {
+            fn from(value: Vec<$T>) -> Self {
+                Self {
+                    dtype: DType::List(
+                        DType::Primitive(<$T>::PTYPE, NonNullable).into(),
+                        NonNullable,
+                    ),
+                    value: ScalarValue::List(value.into_iter().map(ScalarValue::from).collect()),
+                }
+            }
+        }
+    };
+}
+
+from_native_ptype_for_scalar!(u8);
+from_native_ptype_for_scalar!(u16);
+from_native_ptype_for_scalar!(u32);
+from_native_ptype_for_scalar!(u64);
+from_native_ptype_for_scalar!(i8);
+from_native_ptype_for_scalar!(i16);
+from_native_ptype_for_scalar!(i32);
+from_native_ptype_for_scalar!(i64);
+from_native_ptype_for_scalar!(f16);
+from_native_ptype_for_scalar!(f32);
+from_native_ptype_for_scalar!(f64);
+
+impl From<Vec<usize>> for Scalar {
+    fn from(value: Vec<usize>) -> Self {
         Self {
-            dtype,
-            value: ScalarValue::List(scalars.into_iter().map(|s| s.value).collect_vec().into()),
+            dtype: DType::List(
+                DType::Primitive(PType::U64, NonNullable).into(),
+                NonNullable,
+            ),
+            value: ScalarValue::List(value.into_iter().map(ScalarValue::from).collect()),
         }
     }
 }
