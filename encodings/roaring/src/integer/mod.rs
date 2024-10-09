@@ -140,10 +140,13 @@ impl ArrayStatisticsCompute for RoaringIntArray {
             return Ok(stats);
         }
 
+        // possibly faster to write an accumulator over the iterator, though not necessarily
         if stat == Stat::TrailingZeroFreq || stat == Stat::BitWidthFreq || stat == Stat::RunCount {
             let primitive = PrimitiveArray::from_vec(self.bitmap().to_vec(), Validity::NonNullable);
-            let prim_stats = primitive.statistics().to_set();
-            stats.merge(&prim_stats);
+            if let Some(prim_stat) = primitive.statistics().compute(stat) {
+                stats.set(stat, prim_stat);
+            }
+            stats.merge(&primitive.statistics().to_set());
         }
 
         Ok(stats)
