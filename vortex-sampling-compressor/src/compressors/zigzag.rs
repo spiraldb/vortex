@@ -19,7 +19,7 @@ impl EncodingCompressor for ZigZagCompressor {
     }
 
     fn cost(&self) -> u8 {
-        0
+        constants::depth::ZIGZAG_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {

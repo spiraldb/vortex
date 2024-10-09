@@ -18,7 +18,7 @@ impl EncodingCompressor for DeltaCompressor {
     }
 
     fn cost(&self) -> u8 {
-        2
+        constants::depth::DELTA_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {

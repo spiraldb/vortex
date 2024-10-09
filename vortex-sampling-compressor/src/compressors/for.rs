@@ -21,7 +21,7 @@ impl EncodingCompressor for FoRCompressor {
     }
 
     fn cost(&self) -> u8 {
-        0
+        constants::depth::FOR_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
