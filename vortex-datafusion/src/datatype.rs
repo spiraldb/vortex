@@ -91,13 +91,14 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
             )))
         }
         DType::Extension(ext_dtype) => {
-            // Try and match against the known extension DTypes.
+            // Special case: the Vortex logical type system represents many temporal types from
+            // Arrow, and we want those to serialize properly.
             if is_temporal_ext_type(ext_dtype.id()) {
                 make_arrow_temporal_dtype(ext_dtype)
             } else {
-                // TODO(aduffy): allow extension type authors to plugin their own to/from Arrow
-                //  conversions.
-                vortex_panic!("Unsupported extension type \"{}\"", ext_dtype.id())
+                // All other extension types, we rely on the scalar type to determine how it gets
+                // pushed to Arrow.
+                infer_data_type(ext_dtype.scalars_dtype())
             }
         }
     }
@@ -109,7 +110,7 @@ mod test {
 
     use arrow_schema::{DataType, Field, FieldRef, Fields, Schema};
     use vortex_dtype::{
-        DType, ExtDType, ExtID, FieldName, FieldNames, Nullability, PType, StructDType,
+        DType, FieldName, FieldNames, Nullability, PType, StructDType,
     };
 
     use super::*;
@@ -163,16 +164,6 @@ mod test {
                 FieldRef::from(Field::new("field_b", DataType::Utf8, true)),
             ]))
         );
-    }
-
-    #[test]
-    #[should_panic]
-    fn test_dtype_conversion_panics() {
-        let _ = infer_data_type(&DType::Extension(ExtDType::new(
-            ExtID::from("my-fake-ext-dtype"),
-            Arc::new(PType::I32.into()),
-            None,
-        )));
     }
 
     #[test]

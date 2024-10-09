@@ -93,6 +93,11 @@ impl ExtDType {
     /// }
     /// ```
     pub fn new(id: ExtID, scalars_dtype: Arc<DType>, metadata: Option<ExtMetadata>) -> Self {
+        assert!(
+            !matches!(scalars_dtype.as_ref(), &DType::Extension(_)),
+            "ExtDType cannot have Extension scalars_dtype"
+        );
+
         Self {
             id,
             scalars_dtype,
