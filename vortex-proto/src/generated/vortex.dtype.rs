@@ -56,8 +56,6 @@ pub struct Extension {
     pub scalars_dtype: ::core::option::Option<::prost::alloc::boxed::Box<DType>>,
     #[prost(bytes = "vec", optional, tag = "3")]
     pub metadata: ::core::option::Option<::prost::alloc::vec::Vec<u8>>,
-    #[prost(bool, tag = "4")]
-    pub nullable: bool,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DType {

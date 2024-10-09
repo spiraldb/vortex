@@ -71,7 +71,7 @@ pub(crate) fn try_canonicalize_chunks(
         //                /             \
         //          storage             storage
         //
-        DType::Extension(ext_dtype, _) => {
+        DType::Extension(ext_dtype) => {
             // Recursively apply canonicalization and packing to the storage array backing
             // each chunk of the extension array.
             let storage_chunks: Vec<Array> = chunks

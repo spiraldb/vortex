@@ -54,7 +54,6 @@ table Extension {
     id: string;
     scalars_dtype: DType;
     metadata: [ubyte];
-    nullable: bool;
 }
 
 union Type {

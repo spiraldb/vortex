@@ -1130,7 +1130,6 @@ impl<'a> Extension<'a> {
   pub const VT_ID: flatbuffers::VOffsetT = 4;
   pub const VT_SCALARS_DTYPE: flatbuffers::VOffsetT = 6;
   pub const VT_METADATA: flatbuffers::VOffsetT = 8;
-  pub const VT_NULLABLE: flatbuffers::VOffsetT = 10;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -1145,7 +1144,6 @@ impl<'a> Extension<'a> {
     if let Some(x) = args.metadata { builder.add_metadata(x); }
     if let Some(x) = args.scalars_dtype { builder.add_scalars_dtype(x); }
     if let Some(x) = args.id { builder.add_id(x); }
-    builder.add_nullable(args.nullable);
     builder.finish()
   }
 
@@ -1171,13 +1169,6 @@ impl<'a> Extension<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'a, u8>>>(Extension::VT_METADATA, None)}
   }
-  #[inline]
-  pub fn nullable(&self) -> bool {
-    // Safety:
-    // Created from valid Table for this object
-    // which contains a valid value in this slot
-    unsafe { self._tab.get::<bool>(Extension::VT_NULLABLE, Some(false)).unwrap()}
-  }
 }
 
 impl flatbuffers::Verifiable for Extension<'_> {
@@ -1190,7 +1181,6 @@ impl flatbuffers::Verifiable for Extension<'_> {
      .visit_field::<flatbuffers::ForwardsUOffset<&str>>("id", Self::VT_ID, false)?
      .visit_field::<flatbuffers::ForwardsUOffset<DType>>("scalars_dtype", Self::VT_SCALARS_DTYPE, false)?
      .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, u8>>>("metadata", Self::VT_METADATA, false)?
-     .visit_field::<bool>("nullable", Self::VT_NULLABLE, false)?
      .finish();
     Ok(())
   }
@@ -1199,7 +1189,6 @@ pub struct ExtensionArgs<'a> {
     pub id: Option<flatbuffers::WIPOffset<&'a str>>,
     pub scalars_dtype: Option<flatbuffers::WIPOffset<DType<'a>>>,
     pub metadata: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, u8>>>,
-    pub nullable: bool,
 }
 impl<'a> Default for ExtensionArgs<'a> {
   #[inline]
@@ -1208,7 +1197,6 @@ impl<'a> Default for ExtensionArgs<'a> {
       id: None,
       scalars_dtype: None,
       metadata: None,
-      nullable: false,
     }
   }
 }
@@ -1231,10 +1219,6 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ExtensionBuilder<'a, 'b, A> {
     self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(Extension::VT_METADATA, metadata);
   }
   #[inline]
-  pub fn add_nullable(&mut self, nullable: bool) {
-    self.fbb_.push_slot::<bool>(Extension::VT_NULLABLE, nullable, false);
-  }
-  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ExtensionBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     ExtensionBuilder {
@@ -1255,7 +1239,6 @@ impl core::fmt::Debug for Extension<'_> {
       ds.field("id", &self.id());
       ds.field("scalars_dtype", &self.scalars_dtype());
       ds.field("metadata", &self.metadata());
-      ds.field("nullable", &self.nullable());
       ds.finish()
   }
 }

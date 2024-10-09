@@ -1,7 +1,7 @@
 use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 
-use crate::DType;
+use crate::{DType, Nullability};
 
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
@@ -108,6 +108,14 @@ impl ExtDType {
     #[inline]
     pub fn scalars_dtype(&self) -> &DType {
         self.scalars_dtype.as_ref()
+    }
+
+    pub fn with_scalars_nullability(&self, nullability: Nullability) -> Self {
+        Self::new(
+            self.id.clone(),
+            Arc::new(self.scalars_dtype.with_nullability(nullability)),
+            self.metadata.clone(),
+        )
     }
 
     #[inline]

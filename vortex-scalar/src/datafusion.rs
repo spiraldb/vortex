@@ -64,7 +64,7 @@ impl TryFrom<Scalar> for ScalarValue {
             DType::List(..) => {
                 todo!("list scalar conversion")
             }
-            DType::Extension(ext, _) => {
+            DType::Extension(ext) => {
                 if is_temporal_ext_type(ext.id()) {
                     let metadata = TemporalMetadata::try_from(&ext)?;
                     let pv = value.value.as_pvalue()?;
@@ -147,9 +147,10 @@ impl From<ScalarValue> for Scalar {
             ScalarValue::Date32(v)
             | ScalarValue::Time32Second(v)
             | ScalarValue::Time32Millisecond(v) => v.map(|i| {
-                let ext_dtype = make_temporal_ext_dtype(&value.data_type());
+                let ext_dtype = make_temporal_ext_dtype(&value.data_type())
+                    .with_scalars_nullability(Nullability::Nullable);
                 Scalar::new(
-                    DType::Extension(ext_dtype, Nullability::Nullable),
+                    DType::Extension(ext_dtype),
                     crate::ScalarValue::Primitive(PValue::I32(i)),
                 )
             }),
@@ -162,7 +163,7 @@ impl From<ScalarValue> for Scalar {
             | ScalarValue::TimestampNanosecond(v, _) => v.map(|i| {
                 let ext_dtype = make_temporal_ext_dtype(&value.data_type());
                 Scalar::new(
-                    DType::Extension(ext_dtype, Nullability::Nullable),
+                    DType::Extension(ext_dtype.with_scalars_nullability(Nullability::Nullable)),
                     crate::ScalarValue::Primitive(PValue::I64(i)),
                 )
             }),

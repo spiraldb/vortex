@@ -56,7 +56,6 @@ message Extension {
   string id = 1;
   DType scalars_dtype = 2;
   optional bytes metadata = 3;
-  bool nullable = 4;
 }
 
 message DType {

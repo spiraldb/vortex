@@ -90,7 +90,7 @@ pub(crate) fn infer_data_type(dtype: &DType) -> DataType {
                 dtype.is_nullable(),
             )))
         }
-        DType::Extension(ext_dtype, _) => {
+        DType::Extension(ext_dtype) => {
             // Try and match against the known extension DTypes.
             if is_temporal_ext_type(ext_dtype.id()) {
                 make_arrow_temporal_dtype(ext_dtype)
@@ -168,14 +168,11 @@ mod test {
     #[test]
     #[should_panic]
     fn test_dtype_conversion_panics() {
-        let _ = infer_data_type(&DType::Extension(
-            ExtDType::new(
-                ExtID::from("my-fake-ext-dtype"),
-                Arc::new(PType::I32.into()),
-                None,
-            ),
-            Nullability::NonNullable,
-        ));
+        let _ = infer_data_type(&DType::Extension(ExtDType::new(
+            ExtID::from("my-fake-ext-dtype"),
+            Arc::new(PType::I32.into()),
+            None,
+        )));
     }
 
     #[test]

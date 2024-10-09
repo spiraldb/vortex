@@ -55,7 +55,6 @@ impl TryFrom<&pb::DType> for DType {
                     ).map_err(|e| vortex_err!("failed converting DType from proto message: {}", e))?),
                     e.metadata.as_ref().map(|m| ExtMetadata::from(m.as_ref())),
                 ),
-                e.nullable.into(),
             )),
         }
     }
@@ -88,11 +87,10 @@ impl From<&DType> for pb::DType {
                     element_type: Some(Box::new(l.as_ref().into())),
                     nullable: (*n).into(),
                 })),
-                DType::Extension(e, n) => DtypeType::Extension(Box::new(pb::Extension {
+                DType::Extension(e) => DtypeType::Extension(Box::new(pb::Extension {
                     id: e.id().as_ref().into(),
                     scalars_dtype: Some(Box::new(e.scalars_dtype().into())),
                     metadata: e.metadata().map(|m| m.as_ref().into()),
-                    nullable: (*n).into(),
                 })),
             }),
         }
