@@ -18,11 +18,6 @@ impl EncodingCompressor for RoaringIntCompressor {
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        // Only support primitive enc arrays
-        if array.encoding().id() != RoaringInt::ID {
-            return None;
-        }
-
         // Only support non-nullable uint arrays
         if !array.dtype().is_unsigned_int() || array.dtype().is_nullable() {
             return None;
@@ -58,5 +53,25 @@ impl EncodingCompressor for RoaringIntCompressor {
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
         HashSet::from([&RoaringIntEncoding as EncodingRef])
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use vortex::{array::PrimitiveArray, validity::Validity, IntoArray};
+    use vortex_roaring::RoaringIntArray;
+
+    use crate::{compressors::{roaring_int::RoaringIntCompressor, EncodingCompressor as _}, SamplingCompressor};
+
+    #[test]
+    fn test_roaring_int_compressor() {
+        let array = PrimitiveArray::from_vec(vec![1u32, 2, 3, 4, 5], Validity::NonNullable).into_array();
+        assert!(RoaringIntCompressor.can_compress(&array).is_some());
+        let compressed = RoaringIntCompressor.compress(&array, None, SamplingCompressor::default()).unwrap();
+        assert_eq!(compressed.array.len(), 5);
+        assert!(compressed.path.is_some());
+
+        let roaring = RoaringIntArray::try_from(compressed.array).unwrap();
+        assert!(roaring.bitmap().contains_range(1..=5));
     }
 }
