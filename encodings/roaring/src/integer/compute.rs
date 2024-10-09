@@ -60,6 +60,7 @@ impl SliceFn for RoaringIntArray {
 
 #[cfg(test)]
 mod tests {
+    use vortex::array::PrimitiveArray;
     use vortex::compute::slice;
     use vortex::compute::unary::scalar_at;
 
