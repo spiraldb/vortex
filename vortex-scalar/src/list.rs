@@ -1,9 +1,8 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use half::f16;
+use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;
-use vortex_dtype::{DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
@@ -101,45 +100,5 @@ impl<'a, T: for<'b> TryFrom<&'b Scalar, Error = VortexError>> TryFrom<&'a Scalar
             elems.push(T::try_from(&e)?);
         }
         Ok(elems)
-    }
-}
-
-macro_rules! from_native_ptype_for_scalar {
-    ($T:ty) => {
-        impl From<Vec<$T>> for Scalar {
-            fn from(value: Vec<$T>) -> Self {
-                Self {
-                    dtype: DType::List(
-                        DType::Primitive(<$T>::PTYPE, NonNullable).into(),
-                        NonNullable,
-                    ),
-                    value: ScalarValue::List(value.into_iter().map(ScalarValue::from).collect()),
-                }
-            }
-        }
-    };
-}
-
-from_native_ptype_for_scalar!(u8);
-from_native_ptype_for_scalar!(u16);
-from_native_ptype_for_scalar!(u32);
-from_native_ptype_for_scalar!(u64);
-from_native_ptype_for_scalar!(i8);
-from_native_ptype_for_scalar!(i16);
-from_native_ptype_for_scalar!(i32);
-from_native_ptype_for_scalar!(i64);
-from_native_ptype_for_scalar!(f16);
-from_native_ptype_for_scalar!(f32);
-from_native_ptype_for_scalar!(f64);
-
-impl From<Vec<usize>> for Scalar {
-    fn from(value: Vec<usize>) -> Self {
-        Self {
-            dtype: DType::List(
-                DType::Primitive(PType::U64, NonNullable).into(),
-                NonNullable,
-            ),
-            value: ScalarValue::List(value.into_iter().map(ScalarValue::from).collect()),
-        }
     }
 }

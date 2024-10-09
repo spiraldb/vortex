@@ -57,3 +57,14 @@ impl<'a> TryFrom<&'a Scalar> for Buffer {
             .ok_or_else(|| vortex_err!("Can't extract present value from null scalar"))
     }
 }
+
+impl<'a> TryFrom<&'a Scalar> for bytes::Bytes {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> VortexResult<Self> {
+        match Buffer::try_from(value)? {
+            Buffer::Arrow(b) => Ok(bytes::Bytes::from(b.as_slice().to_vec())),
+            Buffer::Bytes(b) => Ok(b),
+        }
+    }
+}
