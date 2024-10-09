@@ -109,9 +109,7 @@ mod test {
     use std::sync::Arc;
 
     use arrow_schema::{DataType, Field, FieldRef, Fields, Schema};
-    use vortex_dtype::{
-        DType, FieldName, FieldNames, Nullability, PType, StructDType,
-    };
+    use vortex_dtype::{DType, FieldName, FieldNames, Nullability, PType, StructDType};
 
     use super::*;
 

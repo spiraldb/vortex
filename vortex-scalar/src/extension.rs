@@ -45,7 +45,6 @@ impl<'a> TryFrom<&'a Scalar> for ExtScalar<'a> {
 
 impl Scalar {
     pub fn extension(ext_dtype: ExtDType, value: ScalarValue) -> Self {
-        // Ensure that the ext_dtype is compatible with our scalar value type instead.
         Self {
             dtype: DType::Extension(ext_dtype),
             value,
