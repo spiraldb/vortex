@@ -31,10 +31,6 @@ impl EncodingCompressor for ALPRDCompressor {
         constants::depth::ALP_RD_COST
     }
 
-    fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::ALP_RD_GIB_PER_S
-    }
-
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support primitive arrays
         let parray = PrimitiveArray::try_from(array).ok()?;

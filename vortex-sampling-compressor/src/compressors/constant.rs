@@ -22,10 +22,6 @@ impl EncodingCompressor for ConstantCompressor {
         constants::depth::CONSTANT_COST
     }
 
-    fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::CONSTANT_GIB_PER_S
-    }
-
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         (!array.is_empty() && array.statistics().compute_is_constant().unwrap_or(false))
             .then_some(self as &dyn EncodingCompressor)

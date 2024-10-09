@@ -22,10 +22,6 @@ impl EncodingCompressor for ZigZagCompressor {
         constants::depth::ZIGZAG_COST
     }
 
-    fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::ZIGZAG_GIB_PER_S
-    }
-
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support primitive arrays
         let parray = PrimitiveArray::try_from(array).ok()?;

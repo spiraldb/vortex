@@ -20,10 +20,6 @@ impl EncodingCompressor for SparseCompressor {
         constants::depth::SPARSE_COST
     }
 
-    fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::SPARSE_GIB_PER_S
-    }
-
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         array.is_encoding(Sparse::ID).then_some(self)
     }

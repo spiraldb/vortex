@@ -21,10 +21,6 @@ impl EncodingCompressor for RoaringIntCompressor {
         constants::depth::ROARING_INT_COST
     }
 
-    fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::ROARING_INT_GIB_PER_S
-    }
-
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // Only support non-nullable uint arrays
         if !array.dtype().is_unsigned_int() || array.dtype().is_nullable() {

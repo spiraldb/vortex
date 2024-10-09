@@ -30,8 +30,6 @@ pub trait EncodingCompressor: Sync + Send + Debug {
 
     fn cost(&self) -> u8;
 
-    fn decompression_gib_per_second(&self) -> f64;
-
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor>;
 
     fn compress<'a>(
@@ -199,36 +197,6 @@ impl<'a> CompressedArray<'a> {
     #[inline]
     pub fn nbytes(&self) -> usize {
         self.array.nbytes()
-    }
-
-    pub fn decompression_time_ms(&self, assumed_compression_ratio: f64) -> f64 {
-        const MS_PER_SEC: f64 = 1000.0;
-        const BYTES_PER_GB: f64 = 1_073_741_824.0;
-        let children_time = self
-            .path()
-            .iter()
-            .map(|c| {
-                c.children
-                    .iter()
-                    .zip(self.array.children().iter())
-                    .map(|(c, a)| {
-                        CompressedArray::new(a.clone(), c.clone())
-                            .decompression_time_ms(assumed_compression_ratio)
-                    })
-                    .sum::<f64>()
-            })
-            .sum::<f64>();
-        children_time
-            + self
-                .path()
-                .as_ref()
-                .map(|c| {
-                    (MS_PER_SEC / c.compressor().decompression_gib_per_second())
-                        * assumed_compression_ratio
-                        * self.nbytes() as f64
-                        / BYTES_PER_GB
-                })
-                .unwrap_or(0.0)
     }
 }
 
