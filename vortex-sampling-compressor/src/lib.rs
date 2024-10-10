@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
 use compressors::bitpacked::BITPACK_WITH_PATCHES;
-use compressors::chunked::ChunkedCompressor;
+use compressors::chunked::DEFAULT_CHUNKED_COMPRESSOR;
 use compressors::fsst::FSSTCompressor;
 use compressors::struct_::StructCompressor;
 use lazy_static::lazy_static;
@@ -250,7 +250,7 @@ impl<'a> SamplingCompressor<'a> {
             return Ok(CompressedArray::uncompressed(array.clone()));
         }
 
-        if let Some(cc) = ChunkedCompressor.can_compress(array) {
+        if let Some(cc) = DEFAULT_CHUNKED_COMPRESSOR.can_compress(array) {
             return cc.compress(array, None, self.clone());
         }
 

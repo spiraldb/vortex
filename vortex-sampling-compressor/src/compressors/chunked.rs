@@ -13,7 +13,13 @@ use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
 use crate::SamplingCompressor;
 
 #[derive(Debug)]
-pub struct ChunkedCompressor;
+pub struct ChunkedCompressor {
+    relatively_good_ratio: f32,
+}
+
+pub const DEFAULT_CHUNKED_COMPRESSOR: ChunkedCompressor = ChunkedCompressor {
+    relatively_good_ratio: 1.2,
+};
 
 pub struct ChunkedCompressorMetadata(Option<f32>);
 
@@ -95,7 +101,9 @@ impl ChunkedCompressor {
     /// ```
     /// new_ratio <= old_ratio * ChunkedCompressor::RELATIVELY_GOOD_RATIO
     /// ```
-    const RELATIVELY_GOOD_RATIO: f32 = 1.2;
+    fn relatively_good_ratio(&self) -> f32 {
+        self.relatively_good_ratio
+    }
 
     fn compress_chunked<'a>(
         &'a self,
@@ -118,7 +126,7 @@ impl ChunkedCompressor {
             let ratio = (compressed_chunk.nbytes() as f32) / (chunk.nbytes() as f32);
             let exceeded_target_ratio = previous
                 .as_ref()
-                .map(|(_, target_ratio)| ratio > target_ratio * Self::RELATIVELY_GOOD_RATIO)
+                .map(|(_, target_ratio)| ratio > target_ratio * Self.relatively_good_ratio())
                 .unwrap_or(false);
 
             if ratio > 1.0 || exceeded_target_ratio {
