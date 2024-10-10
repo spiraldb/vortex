@@ -54,9 +54,9 @@ impl EncodingCompressor for ChunkedCompressor {
     }
 }
 
-fn like_into_parts<'a>(
-    tree: Option<CompressionTree<'a>>,
-) -> VortexResult<Option<(CompressionTree<'a>, f32)>> {
+fn like_into_parts(
+    tree: Option<CompressionTree<'_>>,
+) -> VortexResult<Option<(CompressionTree<'_>, f32)>> {
     match tree {
         None => Ok(None),
         Some(tree) => {
