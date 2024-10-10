@@ -568,18 +568,7 @@ array:</p>
 <span class="go">    buffer: 1 B</span>
 </pre></div>
 </div>
-<p>Compressed arrays use more complex encodings:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">arr</span><span class="p">)</span><span class="o">.</span><span class="n">tree_display</span><span class="p">())</span>
-<span class="go">root: fastlanes.for(0x17)(i64?, len=4) nbytes=1 B (100.00%)</span>
-<span class="go">  metadata: FoRMetadata { reference: Scalar { dtype: Primitive(I64, Nullable), value: Primitive(I64(1)) }, shift: 0 }</span>
-<span class="go">  encoded: fastlanes.bitpacked(0x15)(u64?, len=4) nbytes=1 B (100.00%)</span>
-<span class="go">    metadata: BitPackedMetadata { validity: Array, bit_width: 2, offset: 0, length: 4, has_patches: false }</span>
-<span class="go">    buffer: 256 B</span>
-<span class="go">    validity: vortex.bool(0x02)(bool, len=4) nbytes=1 B (100.00%)</span>
-<span class="go">      metadata: BoolMetadata { validity: NonNullable, first_byte_bit_offset: 0 }</span>
-<span class="go">      buffer: 1 B</span>
-</pre></div>
-</div>
+<p>Compressed arrays often have more complex, deeply nested encoding trees.</p>
 </section>
 </dd></dl>
 
