@@ -4620,6 +4620,7 @@ version = "0.12.0"
 dependencies = [
  "arbitrary",
  "arrow-array",
+ "bytes",
  "datafusion-common",
  "flatbuffers",
  "flexbuffers",

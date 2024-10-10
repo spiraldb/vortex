@@ -1,6 +1,7 @@
 use std::fmt::{Display, Write};
 use std::sync::Arc;
 
+use half::f16;
 use vortex_buffer::{Buffer, BufferString};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
@@ -134,6 +135,81 @@ impl ScalarValue {
         }
     }
 }
+
+impl From<usize> for ScalarValue {
+    fn from(value: usize) -> Self {
+        ScalarValue::Primitive(PValue::from(value))
+    }
+}
+
+impl From<String> for ScalarValue {
+    fn from(value: String) -> Self {
+        ScalarValue::BufferString(BufferString::from(value))
+    }
+}
+
+impl From<BufferString> for ScalarValue {
+    fn from(value: BufferString) -> Self {
+        ScalarValue::BufferString(value)
+    }
+}
+
+impl From<bytes::Bytes> for ScalarValue {
+    fn from(value: bytes::Bytes) -> Self {
+        ScalarValue::Buffer(Buffer::from(value))
+    }
+}
+
+impl From<Buffer> for ScalarValue {
+    fn from(value: Buffer) -> Self {
+        ScalarValue::Buffer(value)
+    }
+}
+
+impl<T> From<Option<T>> for ScalarValue
+where
+    ScalarValue: From<T>,
+{
+    fn from(value: Option<T>) -> Self {
+        match value {
+            None => ScalarValue::Null,
+            Some(value) => ScalarValue::from(value),
+        }
+    }
+}
+
+macro_rules! from_vec_for_scalar_value {
+    ($T:ty) => {
+        impl From<Vec<$T>> for ScalarValue {
+            fn from(value: Vec<$T>) -> Self {
+                ScalarValue::List(
+                    value
+                        .into_iter()
+                        .map(ScalarValue::from)
+                        .collect::<Vec<_>>()
+                        .into(),
+                )
+            }
+        }
+    };
+}
+
+// no From<Vec<u8>> because it could either be a List or a Buffer
+from_vec_for_scalar_value!(u16);
+from_vec_for_scalar_value!(u32);
+from_vec_for_scalar_value!(u64);
+from_vec_for_scalar_value!(usize);
+from_vec_for_scalar_value!(i8);
+from_vec_for_scalar_value!(i16);
+from_vec_for_scalar_value!(i32);
+from_vec_for_scalar_value!(i64);
+from_vec_for_scalar_value!(f16);
+from_vec_for_scalar_value!(f32);
+from_vec_for_scalar_value!(f64);
+from_vec_for_scalar_value!(String);
+from_vec_for_scalar_value!(BufferString);
+from_vec_for_scalar_value!(bytes::Bytes);
+from_vec_for_scalar_value!(Buffer);
 
 #[cfg(test)]
 mod test {

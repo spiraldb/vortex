@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use scalar_type::ScalarType;
 use vortex_dtype::DType;
 
 #[cfg(feature = "arbitrary")]
@@ -13,6 +14,7 @@ mod extension;
 mod list;
 mod primitive;
 mod pvalue;
+mod scalar_type;
 #[cfg(feature = "serde")]
 mod serde;
 mod struct_;
@@ -117,5 +119,28 @@ impl PartialOrd for Scalar {
 impl AsRef<Self> for Scalar {
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+impl<T> From<T> for Scalar
+where
+    T: ScalarType,
+    ScalarValue: From<T>,
+{
+    fn from(value: T) -> Self {
+        Scalar::new(T::dtype(), ScalarValue::from(value))
+    }
+}
+
+impl<T> From<Option<T>> for Scalar
+where
+    T: ScalarType,
+    ScalarValue: From<Option<T>>,
+{
+    fn from(value: Option<T>) -> Self {
+        Scalar {
+            dtype: T::dtype().as_nullable(),
+            value: value.into(),
+        }
     }
 }
