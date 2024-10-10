@@ -34,7 +34,7 @@ fn primitive(c: &mut Criterion) {
     let mut rng = rand::rngs::StdRng::seed_from_u64(0);
 
     let uint_array = PrimitiveArray::from_vec(
-        (0..num_values).map(|_| rng.gen_range(0..256)).collect_vec(),
+        (0..num_values).map(|_| rng.gen_range(0u32..256)).collect_vec(),
         Validity::NonNullable,
     )
     .into_array();
