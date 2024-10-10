@@ -21,7 +21,7 @@ impl EncodingCompressor for FoRCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::cost::FOR_COST
+        constants::FOR_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

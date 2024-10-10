@@ -18,7 +18,7 @@ impl EncodingCompressor for RoaringIntCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::cost::ROARING_INT_COST
+        constants::ROARING_INT_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

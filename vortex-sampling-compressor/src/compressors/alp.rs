@@ -22,7 +22,7 @@ impl EncodingCompressor for ALPCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::cost::ALP_COST
+        constants::ALP_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

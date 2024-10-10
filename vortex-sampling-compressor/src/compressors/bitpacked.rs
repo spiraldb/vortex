@@ -46,9 +46,9 @@ impl EncodingCompressor for BitPackedCompressor {
 
     fn cost(&self) -> u8 {
         if self.allow_patches {
-            constants::cost::BITPACKED_WITH_PATCHES_COST
+            constants::BITPACKED_WITH_PATCHES_COST
         } else {
-            constants::cost::BITPACKED_NO_PATCHES_COST
+            constants::BITPACKED_NO_PATCHES_COST
         }
     }
 
