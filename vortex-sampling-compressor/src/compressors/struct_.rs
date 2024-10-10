@@ -44,7 +44,7 @@ impl EncodingCompressor for StructCompressor {
 
         let (arrays, trees) = array
             .children()
-            .zip(children_trees)
+            .zip_eq(children_trees)
             .map(|(array, like)| ctx.compress(&array, like.as_ref()))
             .process_results(|iter| iter.map(|x| (x.array, x.path)).unzip())?;
 
