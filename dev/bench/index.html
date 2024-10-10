@@ -181,7 +181,7 @@
                         let [q, seriesName] = name.split("/");
                         if (seriesName.endsWith(" throughput")) {
                             seriesName = seriesName.slice(0, seriesName.length - " throughput".length);
-                            q = q.replace("Time", "Throughput");
+                            q = q.replace("time", "throughput");
                             let timeEntry = benches[benchIdx - 1]
                             if (!timeEntry.name.includes(seriesName)) {
                                 console.log("could not find time information for throughput series: ", seriesNam);
@@ -190,18 +190,10 @@
                             unit = "bytes/ns"
                             value = value / timeEntry.value
                         }
-                        seriesName = seriesName.replace(" compression", "");
                         let prettyQ = q.replace("_", " ")
-                            .toUpperCase()
-                            .replace("PUBLIC BI ", "")
-                            .replace("YELLOW TAXI TRIP DATA ", "");
+                            .toUpperCase();
                         if (prettyQ.includes("PARQUET-UNC")) {
                             return
-                        }
-
-                        if (prettyQ.includes("TPC-H L COMMENT ")) {
-                            prettyQ = prettyQ.replace("TPC-H L COMMENT ", "");
-                            seriesName = "TPC-H l_comment " + seriesName;
                         }
 
                         const is_nanos = unit === "ns/iter" || unit === "ns";
