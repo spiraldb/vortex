@@ -1,6 +1,8 @@
+// Adapted from Apache arrow-rs
 use std::sync::Arc;
 
 pub use adapter::*;
+pub use bit_iterator::{BitIndexIterator, BitSliceIterator};
 pub use ext::*;
 use vortex_dtype::{DType, NativePType};
 use vortex_error::{VortexExpect as _, VortexResult};
@@ -9,6 +11,8 @@ use crate::validity::Validity;
 use crate::Array;
 
 mod adapter;
+mod bit_chunk_iterator;
+mod bit_iterator;
 mod ext;
 
 pub const ITER_BATCH_SIZE: usize = 1024;

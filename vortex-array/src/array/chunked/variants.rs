@@ -48,11 +48,19 @@ impl NullArrayTrait for ChunkedArray {}
 
 impl BoolArrayTrait for ChunkedArray {
     fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
-        todo!()
+        let iterators = self
+            .chunks()
+            .map(|c| c.with_dyn(|a| a.as_bool_array_unchecked().maybe_null_indices_iter()))
+            .collect::<Vec<_>>();
+        Box::new(iterators.into_iter().flatten())
     }
 
     fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
-        todo!()
+        let iterators = self
+            .chunks()
+            .map(|c| c.with_dyn(|a| a.as_bool_array_unchecked().maybe_null_slices_iter()))
+            .collect::<Vec<_>>();
+        Box::new(iterators.into_iter().flatten())
     }
 }
 

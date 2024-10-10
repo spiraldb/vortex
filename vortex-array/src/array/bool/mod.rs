@@ -1,6 +1,5 @@
 use std::fmt::{Debug, Display};
 
-use arrow_buffer::bit_iterator::{BitIndexIterator, BitSliceIterator};
 use arrow_buffer::BooleanBuffer;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -9,6 +8,7 @@ use vortex_dtype::DType;
 use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::encoding::ids;
+use crate::iter::{BitIndexIterator, BitSliceIterator};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
@@ -96,12 +96,12 @@ impl ArrayVariants for BoolArray {
 }
 
 impl BoolArrayTrait for BoolArray {
-    fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a> {
-        Box::new(BitIndexIterator::new(self.buffer(), 0, self.len()))
+    fn maybe_null_indices_iter(&self) -> Box<dyn Iterator<Item = usize>> {
+        Box::new(BitIndexIterator::new(self.buffer().clone(), 0, self.len()))
     }
 
-    fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
-        Box::new(BitSliceIterator::new(self.buffer(), 0, self.len()))
+    fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
+        Box::new(BitSliceIterator::new(self.buffer().clone(), 0, self.len()))
     }
 }
 

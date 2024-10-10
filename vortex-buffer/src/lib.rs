@@ -123,6 +123,19 @@ impl AsRef<[u8]> for Buffer {
     }
 }
 
+impl<const N: usize> From<[u8; N]> for Buffer {
+    fn from(value: [u8; N]) -> Self {
+        // We prefer Arrow since it retains mutability
+        Self::Arrow(ArrowBuffer::from(value))
+    }
+}
+
+impl<const N: usize> From<&[u8; N]> for Buffer {
+    fn from(value: &[u8; N]) -> Self {
+        Self::Arrow(ArrowBuffer::from(value))
+    }
+}
+
 impl From<&[u8]> for Buffer {
     fn from(value: &[u8]) -> Self {
         // We prefer Arrow since it retains mutability
