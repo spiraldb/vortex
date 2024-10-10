@@ -8,7 +8,7 @@ use vortex_error::VortexResult;
 use vortex_zigzag::{zigzag_encode, ZigZag, ZigZagArray, ZigZagEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct ZigZagCompressor;
@@ -19,7 +19,7 @@ impl EncodingCompressor for ZigZagCompressor {
     }
 
     fn cost(&self) -> u8 {
-        0
+        constants::ZIGZAG_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

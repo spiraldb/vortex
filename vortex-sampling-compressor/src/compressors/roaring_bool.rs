@@ -9,7 +9,7 @@ use vortex_error::VortexResult;
 use vortex_roaring::{roaring_bool_encode, RoaringBool, RoaringBoolEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct RoaringBoolCompressor;
@@ -19,8 +19,12 @@ impl EncodingCompressor for RoaringBoolCompressor {
         RoaringBool::ID.as_ref()
     }
 
+    fn cost(&self) -> u8 {
+        constants::ROARING_BOOL_COST
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        // Only support bool enc arrays
+        // Only support bool arrays
         if array.encoding().id() != Bool::ID {
             return None;
         }

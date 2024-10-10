@@ -28,9 +28,7 @@ pub mod zigzag;
 pub trait EncodingCompressor: Sync + Send + Debug {
     fn id(&self) -> &str;
 
-    fn cost(&self) -> u8 {
-        1
-    }
+    fn cost(&self) -> u8;
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor>;
 
@@ -144,6 +142,10 @@ impl<'a> CompressionTree<'a> {
             .map(|c| c.compress(array, Some(self.clone()), ctx.for_compressor(c)))
     }
 
+    pub fn compressor(&self) -> &dyn EncodingCompressor {
+        self.compressor
+    }
+
     /// Access the saved opaque metadata.
     ///
     /// This will consume the owned metadata, giving the caller ownership of
@@ -152,6 +154,13 @@ impl<'a> CompressionTree<'a> {
     /// The value of `T` will almost always be `EncodingCompressor`-specific.
     pub fn metadata(&mut self) -> Option<Arc<dyn EncoderMetadata>> {
         std::mem::take(&mut self.metadata)
+    }
+
+    pub fn num_descendants(&self) -> usize {
+        self.children
+            .iter()
+            .filter_map(|child| child.as_ref().map(|c| c.num_descendants() + 1))
+            .sum::<usize>()
     }
 }
 
@@ -171,6 +180,11 @@ impl<'a> CompressedArray<'a> {
     }
 
     #[inline]
+    pub fn array(&self) -> &Array {
+        &self.array
+    }
+
+    #[inline]
     pub fn into_array(self) -> Array {
         self.array
     }
@@ -183,6 +197,10 @@ impl<'a> CompressedArray<'a> {
     #[inline]
     pub fn into_path(self) -> Option<CompressionTree<'a>> {
         self.path
+    }
+
+    pub fn into_parts(self) -> (Array, Option<CompressionTree<'a>>) {
+        (self.array, self.path)
     }
 
     #[inline]

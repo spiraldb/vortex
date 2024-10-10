@@ -10,7 +10,7 @@ use vortex_datetime_parts::{
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct DateTimePartsCompressor;
@@ -18,6 +18,10 @@ pub struct DateTimePartsCompressor;
 impl EncodingCompressor for DateTimePartsCompressor {
     fn id(&self) -> &str {
         DateTimeParts::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        constants::DATE_TIME_PARTS_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

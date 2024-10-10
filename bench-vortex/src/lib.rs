@@ -21,7 +21,7 @@ use vortex_dtype::DType;
 use vortex_fastlanes::DeltaEncoding;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
-use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
+use vortex_sampling_compressor::compressors::bitpacked::BITPACK_WITH_PATCHES;
 use vortex_sampling_compressor::compressors::date_time_parts::DateTimePartsCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
@@ -57,7 +57,7 @@ lazy_static! {
         &ALPCompressor as CompressorRef<'static>,
         &ALPRDCompressor,
         &DictCompressor,
-        &BitPackedCompressor,
+        &BITPACK_WITH_PATCHES,
         &FoRCompressor,
         &FSSTCompressor,
         &DateTimePartsCompressor,

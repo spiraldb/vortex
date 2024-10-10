@@ -8,7 +8,6 @@ use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{DType, FieldName, FieldNames, Nullability};
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
-use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
 use vortex_sampling_compressor::compressors::date_time_parts::DateTimePartsCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
 use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
@@ -30,6 +29,8 @@ mod tests {
     use vortex_dict::Dict;
     use vortex_fastlanes::FoR;
     use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
+    use vortex_sampling_compressor::compressors::bitpacked::BITPACK_WITH_PATCHES;
+    use vortex_sampling_compressor::compressors::delta::DeltaCompressor;
     use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 
     use super::*;
@@ -40,14 +41,13 @@ mod tests {
         let compressor = SamplingCompressor::new_with_options(
             HashSet::from([
                 &ALPCompressor as CompressorRef,
-                &ALPRDCompressor as CompressorRef,
-                &BitPackedCompressor,
-                // TODO(robert): Implement minimal compute for DeltaArrays - scalar_at and slice
-                // &DeltaCompressor,
+                &ALPRDCompressor,
+                &BITPACK_WITH_PATCHES,
+                &DateTimePartsCompressor,
+                &DeltaCompressor,
                 &DictCompressor,
                 &FoRCompressor,
                 &FSSTCompressor,
-                &DateTimePartsCompressor,
                 &RoaringBoolCompressor,
                 &RoaringIntCompressor,
                 &DEFAULT_RUN_END_COMPRESSOR,

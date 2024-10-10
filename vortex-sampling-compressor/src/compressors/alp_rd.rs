@@ -11,7 +11,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_fastlanes::BitPackedEncoding;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncoderMetadata, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct ALPRDCompressor;
@@ -25,6 +25,10 @@ impl EncoderMetadata for ALPRDEncoder {
 impl EncodingCompressor for ALPRDCompressor {
     fn id(&self) -> &str {
         ALPRD::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        constants::ALP_RD_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

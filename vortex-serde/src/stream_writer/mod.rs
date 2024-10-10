@@ -109,7 +109,6 @@ impl Display for ByteRange {
     }
 }
 
-#[allow(clippy::len_without_is_empty)]
 impl ByteRange {
     pub fn new(begin: u64, end: u64) -> Self {
         Self { begin, end }
@@ -117,6 +116,10 @@ impl ByteRange {
 
     pub fn len(&self) -> usize {
         (self.end - self.begin) as usize
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.begin == self.end
     }
 }
 

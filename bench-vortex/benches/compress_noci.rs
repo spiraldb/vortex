@@ -11,7 +11,7 @@ use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{fetch_taxi_data, tpch};
 use criterion::{
-    black_box, criterion_group, criterion_main, BenchmarkGroup, Criterion, Throughput,
+    black_box, criterion_group, criterion_main, BatchSize, BenchmarkGroup, Criterion, Throughput,
 };
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
@@ -102,9 +102,29 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
     group.throughput(Throughput::Bytes(uncompressed_size as u64));
     group.bench_function(format!("{} compression", bench_name), |b| {
         b.iter_with_large_drop(|| {
-            let compressed = black_box(compressor.compress(uncompressed.as_ref(), None)).unwrap();
+            let compressed = black_box(compressor.compress(uncompressed.as_ref(), None).unwrap());
             compressed_size = compressed.nbytes();
         });
+    });
+
+    let (compressed_array, path) = compressor
+        .compress(uncompressed.as_ref(), None)
+        .unwrap()
+        .into_parts();
+    println!("compression path: {:#?}", path);
+    println!(
+        "compression ratio: {}",
+        compressed_size as f64 / uncompressed_size as f64
+    );
+
+    group.bench_function(format!("{} decompression", bench_name), |b| {
+        b.iter_batched(
+            || compressed_array.clone(),
+            |compressed| {
+                black_box(compressed.into_canonical().unwrap().into_arrow().unwrap());
+            },
+            BatchSize::PerIteration,
+        );
     });
 
     if env::var("BENCH_VORTEX_RATIOS")

@@ -106,3 +106,8 @@ harness = false
 name = "bytes_at"
 test = false
 harness = false
+
+[[bench]]
+name = "compressor_throughput"
+test = false
+harness = false

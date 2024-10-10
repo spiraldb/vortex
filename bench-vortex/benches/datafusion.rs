@@ -19,7 +19,7 @@ use vortex::{Array, Context};
 use vortex_datafusion::memory::{VortexMemTable, VortexMemTableOptions};
 use vortex_dict::DictEncoding;
 use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
-use vortex_sampling_compressor::compressors::bitpacked::BitPackedCompressor;
+use vortex_sampling_compressor::compressors::bitpacked::BITPACK_WITH_PATCHES;
 use vortex_sampling_compressor::compressors::delta::DeltaCompressor;
 use vortex_sampling_compressor::compressors::dict::DictCompressor;
 use vortex_sampling_compressor::compressors::r#for::FoRCompressor;
@@ -37,7 +37,7 @@ lazy_static! {
 
 lazy_static! {
     pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
-        &BitPackedCompressor as CompressorRef<'static>,
+        &BITPACK_WITH_PATCHES as CompressorRef<'static>,
         &DictCompressor,
         &FoRCompressor,
         &DeltaCompressor

@@ -3,12 +3,15 @@ use std::collections::HashSet;
 use vortex::array::PrimitiveArray;
 use vortex::encoding::EncodingRef;
 use vortex::{Array, ArrayDef, IntoArray};
-use vortex_alp::{alp_encode_components, match_each_alp_float_ptype, ALPArray, ALPEncoding, ALP};
+use vortex_alp::{
+    alp_encode_components, match_each_alp_float_ptype, ALPArray, ALPEncoding, ALPRDEncoding, ALP,
+};
 use vortex_dtype::PType;
 use vortex_error::VortexResult;
 
+use super::alp_rd::ALPRDCompressor;
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct ALPCompressor;
@@ -16,6 +19,10 @@ pub struct ALPCompressor;
 impl EncodingCompressor for ALPCompressor {
     fn id(&self) -> &str {
         ALP::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        constants::ALP_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
@@ -53,6 +60,7 @@ impl EncodingCompressor for ALPCompressor {
             .map(|p| {
                 ctx.auxiliary("patches")
                     .excluding(self)
+                    .including(&ALPRDCompressor)
                     .compress(&p, like.as_ref().and_then(|l| l.child(1)))
             })
             .transpose()?;
@@ -75,6 +83,6 @@ impl EncodingCompressor for ALPCompressor {
     }
 
     fn used_encodings(&self) -> HashSet<EncodingRef> {
-        HashSet::from([&ALPEncoding as EncodingRef])
+        HashSet::from([&ALPEncoding as EncodingRef, &ALPRDEncoding])
     }
 }

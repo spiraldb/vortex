@@ -7,7 +7,7 @@ use vortex_error::VortexResult;
 use vortex_roaring::{roaring_int_encode, RoaringInt, RoaringIntEncoding};
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct RoaringIntCompressor;
@@ -15,6 +15,10 @@ pub struct RoaringIntCompressor;
 impl EncodingCompressor for RoaringIntCompressor {
     fn id(&self) -> &str {
         RoaringInt::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        constants::ROARING_INT_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

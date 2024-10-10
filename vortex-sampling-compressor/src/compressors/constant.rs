@@ -8,7 +8,7 @@ use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct ConstantCompressor;
@@ -16,6 +16,10 @@ pub struct ConstantCompressor;
 impl EncodingCompressor for ConstantCompressor {
     fn id(&self) -> &str {
         Constant::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        constants::CONSTANT_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

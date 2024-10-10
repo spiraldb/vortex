@@ -8,7 +8,7 @@ use vortex_dict::{dict_encode_primitive, dict_encode_varbin, Dict, DictArray, Di
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct DictCompressor;
@@ -16,6 +16,10 @@ pub struct DictCompressor;
 impl EncodingCompressor for DictCompressor {
     fn id(&self) -> &str {
         Dict::ID.as_ref()
+    }
+
+    fn cost(&self) -> u8 {
+        constants::DICT_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
