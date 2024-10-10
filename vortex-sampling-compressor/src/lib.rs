@@ -37,7 +37,7 @@ mod constants;
 mod sampling;
 
 lazy_static! {
-    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 13] = [
+    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 11] = [
         &ALPCompressor as CompressorRef,
         &BITPACK_WITH_PATCHES,
         &DateTimePartsCompressor,
