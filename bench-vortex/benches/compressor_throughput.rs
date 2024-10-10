@@ -1,13 +1,13 @@
 use std::collections::HashSet;
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion, Throughput};
 use itertools::Itertools as _;
 use mimalloc::MiMalloc;
 use rand::{Rng, SeedableRng as _};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::try_cast;
 use vortex::validity::Validity;
-use vortex::{Array, IntoArray as _, IntoCanonical};
+use vortex::{IntoArray as _, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
@@ -38,16 +38,20 @@ fn primitive(c: &mut Criterion) {
         Validity::NonNullable,
     )
     .into_array();
-    let int_array = try_cast(uint_array, PType::I32.into()).unwrap();
+    let int_array = try_cast(uint_array.clone(), PType::I32.into()).unwrap();
     let index_array = PrimitiveArray::from_vec(
         (0..num_values).map(|i| (i * 2) as u32 + 42).collect_vec(),
         Validity::NonNullable,
     )
     .into_array();
-    let float_array = try_cast(uint_array, PType::F32.into()).unwrap();
+    let float_array = try_cast(uint_array.clone(), PType::F32.into()).unwrap();
 
-    let compressors_names_and_arrays: [(CompressorRef<'static>, &str, &Array); _] = [
-        (&BITPACK_NO_PATCHES, "bitpacked_no_patches", &uint_array),
+    let compressors_names_and_arrays = [
+        (
+            &BITPACK_NO_PATCHES as CompressorRef,
+            "bitpacked_no_patches",
+            &uint_array,
+        ),
         (&BITPACK_WITH_PATCHES, "bitpacked_with_patches", &uint_array),
         (&DEFAULT_RUN_END_COMPRESSOR, "runend", &uint_array),
         (&DeltaCompressor, "delta", &uint_array),
@@ -59,19 +63,30 @@ fn primitive(c: &mut Criterion) {
         (&ALPRDCompressor, "alp_rd", &float_array),
     ];
 
+    let ctx = SamplingCompressor::new(HashSet::new());
     for (compressor, name, array) in compressors_names_and_arrays {
-        let ctx = SamplingCompressor::new(HashSet::from([compressor]));
         group.bench_function(format!("{} compress", name), |b| {
             b.iter(|| {
-                black_box(compressor.compress(array, None, ctx).unwrap());
+                black_box(
+                    compressor
+                        .compress(array, None, ctx.including(compressor))
+                        .unwrap(),
+                );
             })
         });
 
-        let compressed = compressor.compress(&array, None, ctx).unwrap().into_array();
+        let compressed = compressor
+            .compress(array, None, ctx.including(compressor))
+            .unwrap()
+            .into_array();
         group.bench_function(format!("{} decompress", name), |b| {
-            b.iter(|| {
-                black_box(compressed.clone().into_canonical().unwrap());
-            })
+            b.iter_batched(
+                || compressed.clone(),
+                |compressed| {
+                    black_box(compressed.into_canonical().unwrap());
+                },
+                BatchSize::SmallInput,
+            )
         });
     }
 }

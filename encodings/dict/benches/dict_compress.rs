@@ -7,7 +7,9 @@ use rand::{thread_rng, Rng};
 use vortex::array::{PrimitiveArray, VarBinArray};
 use vortex::compute::take;
 use vortex::{ArrayTrait, IntoArray as _, IntoCanonical as _};
-use vortex_dict::{dict_encode_primitive, dict_encode_typed_primitive, dict_encode_varbin, DictArray};
+use vortex_dict::{
+    dict_encode_primitive, dict_encode_typed_primitive, dict_encode_varbin, DictArray,
+};
 use vortex_dtype::match_each_native_ptype;
 
 fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
@@ -62,9 +64,7 @@ fn dict_decode(c: &mut Criterion) {
     group.bench_function("dict_decode_primitives", |b| {
         b.iter_batched(
             || DictArray::try_new(codes.clone().into_array(), values.clone().into_array()).unwrap(),
-            |dict_arr| {
-                black_box(dict_arr.into_canonical().unwrap())
-            },
+            |dict_arr| black_box(dict_arr.into_canonical().unwrap()),
             BatchSize::SmallInput,
         );
     });
@@ -75,9 +75,7 @@ fn dict_decode(c: &mut Criterion) {
     group.bench_function("dict_decode_varbin", |b| {
         b.iter_batched(
             || DictArray::try_new(codes.clone().into_array(), values.clone().into_array()).unwrap(),
-            |dict_arr| {
-                black_box(dict_arr.into_canonical().unwrap())
-            },
+            |dict_arr| black_box(dict_arr.into_canonical().unwrap()),
             BatchSize::SmallInput,
         );
     });

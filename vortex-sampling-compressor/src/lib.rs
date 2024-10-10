@@ -446,9 +446,22 @@ fn find_best_compression<'a>(
 
     let best = best.unwrap_or_else(|| CompressedArray::uncompressed(sample.clone()));
     if best_ratio < best_objective_ratio && best_ratio_sample.is_some() {
-        let best_ratio_sample = best_ratio_sample.vortex_expect("already checked that this Option is Some");
-        debug!("{} best objective fn value ({}) has ratio {} from {}", ctx, best_objective, best_ratio, best.array().tree_display());
-        debug!("{} best ratio ({}) has objective fn value {} from {}", ctx, best_ratio, best_objective, best_ratio_sample.array().tree_display());
+        let best_ratio_sample =
+            best_ratio_sample.vortex_expect("already checked that this Option is Some");
+        debug!(
+            "{} best objective fn value ({}) has ratio {} from {}",
+            ctx,
+            best_objective,
+            best_ratio,
+            best.array().tree_display()
+        );
+        debug!(
+            "{} best ratio ({}) has objective fn value {} from {}",
+            ctx,
+            best_ratio,
+            best_objective,
+            best_ratio_sample.array().tree_display()
+        );
     }
 
     Ok(best)
