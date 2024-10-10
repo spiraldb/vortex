@@ -135,7 +135,6 @@ where
 impl<T> From<Option<T>> for Scalar
 where
     T: ScalarType,
-    ScalarValue: From<T>,
     ScalarValue: From<Option<T>>,
 {
     fn from(value: Option<T>) -> Self {
