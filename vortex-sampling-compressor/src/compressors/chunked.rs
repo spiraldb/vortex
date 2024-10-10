@@ -57,32 +57,34 @@ impl EncodingCompressor for ChunkedCompressor {
 fn like_into_parts(
     tree: Option<CompressionTree<'_>>,
 ) -> VortexResult<Option<(CompressionTree<'_>, f32)>> {
-    match tree {
-        None => Ok(None),
-        Some(tree) => {
-            let (_, mut children, metadata) = tree.into_parts();
-            if let Some(target_ratio) = metadata {
-                if let Some(ChunkedCompressorMetadata(target_ratio)) =
-                    target_ratio.as_ref().as_any().downcast_ref()
-                {
-                    if children.len() == 1 {
-                        match (children.remove(0), target_ratio) {
-                            (Some(child), Some(ratio)) => Ok(Some((child, *ratio))),
-                            (None, None) => Ok(None),
-                            (..) => {
-                                vortex_bail!("chunked array compression tree must have a child iff it has a ratio")
-                            }
-                        }
-                    } else {
-                        vortex_bail!("chunked array compression tree must have one child")
-                    }
-                } else {
-                    vortex_bail!("chunked array compression tree must ChunkedCompressorMetadata")
-                }
-            } else {
-                vortex_bail!("chunked array compression tree must have metadata")
-            }
-        }
+    let (_, mut children, metadata) = match tree {
+        None => return Ok(None),
+        Some(tree) => tree.into_parts(),
+    };
+
+    let Some(target_ratio) = metadata else {
+        vortex_bail!("chunked array compression tree must have metadata")
+    };
+
+    let Some(ChunkedCompressorMetadata(target_ratio)) =
+        target_ratio.as_ref().as_any().downcast_ref()
+    else {
+        vortex_bail!(
+            "chunked array compression
+        tree must ChunkedCompressorMetadata"
+        )
+    };
+
+    if children.len() != 1 {
+        vortex_bail!("chunked array compression tree must have one child")
+    }
+
+    let child = children.remove(0);
+
+    match (child, target_ratio) {
+        (None, None) => Ok(None),
+        (Some(child), Some(ratio)) => Ok(Some((child, *ratio))),
+        (..) => vortex_bail!("chunked array compression tree must have a child iff it has a ratio"),
     }
 }
 
