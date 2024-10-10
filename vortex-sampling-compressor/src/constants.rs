@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-mod depth {
+pub mod depth {
     // structural pass-throughs have no cost
     pub const SPARSE_COST: u8 = 0;
     pub const STRUCT_COST: u8 = 0;
@@ -25,7 +25,7 @@ mod depth {
     pub const DELTA_COST: u8 = 1;
 }
 
-mod decompression {
+pub mod decompression {
     // decompression throughput
     pub const ALP_GIB_PER_S: f64 = 4.9;
     pub const ALP_RD_GIB_PER_S: f64 = 3.3;
