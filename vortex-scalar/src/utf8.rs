@@ -72,6 +72,14 @@ impl<'a> TryFrom<&'a Scalar> for BufferString {
     }
 }
 
+impl<'a> TryFrom<&'a Scalar> for String {
+    type Error = VortexError;
+
+    fn try_from(value: &'a Scalar) -> Result<Self, Self::Error> {
+        Ok(BufferString::try_from(value)?.to_string())
+    }
+}
+
 impl From<&str> for Scalar {
     fn from(value: &str) -> Self {
         Self {

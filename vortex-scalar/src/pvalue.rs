@@ -183,6 +183,7 @@ int_pvalue!(u8, U8);
 int_pvalue!(u16, U16);
 int_pvalue!(u32, U32);
 int_pvalue!(u64, U64);
+int_pvalue!(usize, U64);
 int_pvalue!(i8, I8);
 int_pvalue!(i16, I16);
 int_pvalue!(i32, I32);
@@ -237,6 +238,24 @@ macro_rules! impl_pvalue {
     };
 }
 
+impl_pvalue!(u8, U8);
+impl_pvalue!(u16, U16);
+impl_pvalue!(u32, U32);
+impl_pvalue!(u64, U64);
+impl_pvalue!(i8, I8);
+impl_pvalue!(i16, I16);
+impl_pvalue!(i32, I32);
+impl_pvalue!(i64, I64);
+impl_pvalue!(f16, F16);
+impl_pvalue!(f32, F32);
+impl_pvalue!(f64, F64);
+
+impl From<usize> for PValue {
+    fn from(value: usize) -> PValue {
+        PValue::U64(value as u64)
+    }
+}
+
 impl Display for PValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -254,18 +273,6 @@ impl Display for PValue {
         }
     }
 }
-
-impl_pvalue!(u8, U8);
-impl_pvalue!(u16, U16);
-impl_pvalue!(u32, U32);
-impl_pvalue!(u64, U64);
-impl_pvalue!(i8, I8);
-impl_pvalue!(i16, I16);
-impl_pvalue!(i32, I32);
-impl_pvalue!(i64, I64);
-impl_pvalue!(f16, F16);
-impl_pvalue!(f32, F32);
-impl_pvalue!(f64, F64);
 
 #[cfg(test)]
 mod test {

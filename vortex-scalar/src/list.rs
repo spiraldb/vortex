@@ -1,10 +1,9 @@
 use std::ops::Deref;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;
-use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::value::ScalarValue;
 use crate::Scalar;
@@ -101,24 +100,5 @@ impl<'a, T: for<'b> TryFrom<&'b Scalar, Error = VortexError>> TryFrom<&'a Scalar
             elems.push(T::try_from(&e)?);
         }
         Ok(elems)
-    }
-}
-
-impl<T> From<Vec<T>> for Scalar
-where
-    Self: From<T>,
-{
-    fn from(value: Vec<T>) -> Self {
-        let scalars = value.into_iter().map(|v| Self::from(v)).collect_vec();
-        let element_dtype = scalars
-            .first()
-            .vortex_expect("Empty list, could not determine element dtype")
-            .dtype()
-            .clone();
-        let dtype = DType::List(Arc::new(element_dtype), NonNullable);
-        Self {
-            dtype,
-            value: ScalarValue::List(scalars.into_iter().map(|s| s.value).collect_vec().into()),
-        }
     }
 }
