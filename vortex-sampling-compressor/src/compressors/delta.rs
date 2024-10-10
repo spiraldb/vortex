@@ -18,7 +18,7 @@ impl EncodingCompressor for DeltaCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::DELTA_COST
+        constants::cost::DELTA_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

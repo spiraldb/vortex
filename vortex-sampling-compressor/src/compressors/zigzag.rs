@@ -19,7 +19,7 @@ impl EncodingCompressor for ZigZagCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::ZIGZAG_COST
+        constants::cost::ZIGZAG_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

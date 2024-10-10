@@ -28,7 +28,7 @@ impl EncodingCompressor for ALPRDCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::ALP_RD_COST
+        constants::cost::ALP_RD_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

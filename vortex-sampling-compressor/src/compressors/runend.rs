@@ -24,7 +24,7 @@ impl EncodingCompressor for RunEndCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::RUN_END_COST
+        constants::cost::RUN_END_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

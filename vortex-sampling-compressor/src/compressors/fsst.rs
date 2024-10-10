@@ -33,7 +33,7 @@ impl EncodingCompressor for FSSTCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::FSST_COST
+        constants::cost::FSST_COST
     }
 
     fn can_compress(&self, array: &vortex::Array) -> Option<&dyn EncodingCompressor> {

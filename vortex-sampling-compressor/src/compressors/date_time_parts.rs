@@ -21,7 +21,7 @@ impl EncodingCompressor for DateTimePartsCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::DATE_TIME_PARTS_COST
+        constants::cost::DATE_TIME_PARTS_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

@@ -19,7 +19,7 @@ impl EncodingCompressor for DictCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::DICT_COST
+        constants::cost::DICT_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

@@ -19,7 +19,7 @@ impl EncodingCompressor for ConstantCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::CONSTANT_COST
+        constants::cost::CONSTANT_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

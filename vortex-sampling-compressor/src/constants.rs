@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-pub mod depth {
+pub mod cost {
     // structural pass-throughs have no cost
     pub const SPARSE_COST: u8 = 0;
     // TODO: struct

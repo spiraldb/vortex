@@ -17,7 +17,7 @@ impl EncodingCompressor for SparseCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::SPARSE_COST
+        constants::cost::SPARSE_COST
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
