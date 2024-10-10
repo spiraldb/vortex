@@ -1,9 +1,11 @@
 use std::io::Cursor;
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 use std::{env, fs};
 
 use arrow_array::RecordBatch;
+use arrow_schema::Schema;
 use bench_vortex::data_downloads::BenchmarkDataset;
 use bench_vortex::public_bi_data::BenchmarkDatasets;
 use bench_vortex::public_bi_data::PBIDataset::*;
@@ -11,6 +13,7 @@ use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{fetch_taxi_data, tpch};
 use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion, Throughput};
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
@@ -38,31 +41,63 @@ fn ensure_dir_exists(dir: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn parquet_written_size(array: &Array, compression: Compression) -> usize {
-    let mut buf = Cursor::new(Vec::new());
-    let chunked = ChunkedArray::try_from(array).unwrap();
+fn chunked_to_vec_record_batch(chunked: ChunkedArray) -> (Vec<RecordBatch>, Arc<Schema>) {
     let chunks_vec = chunked.chunks().collect::<Vec<_>>();
 
     if chunks_vec.is_empty() {
         panic!("empty chunks");
     }
 
-    let schema = RecordBatch::try_from(chunks_vec[0].clone())
-        .unwrap()
-        .schema();
+    let batches = chunks_vec
+        .iter()
+        .map(|x| RecordBatch::try_from(x.clone()).unwrap())
+        .collect::<Vec<_>>();
+    let schema = batches[0].schema();
+    (batches, schema)
+}
 
+fn parquet_compress(
+    batches: Vec<RecordBatch>,
+    schema: Arc<Schema>,
+    compression: Compression,
+) -> usize {
+    parquet_compress_into(batches, schema, compression, &mut Vec::new())
+}
+
+fn parquet_compress_into(
+    batches: Vec<RecordBatch>,
+    schema: Arc<Schema>,
+    compression: Compression,
+    buf: &mut Vec<u8>,
+) -> usize {
+    let mut buf = Cursor::new(buf);
     let writer_properties = WriterProperties::builder()
         .set_compression(compression)
         .build();
     let mut writer = ArrowWriter::try_new(&mut buf, schema, Some(writer_properties)).unwrap();
-    for chunk in chunks_vec {
-        let record_batch = RecordBatch::try_from(chunk).unwrap();
-        writer.write(&record_batch).unwrap();
+    for batch in batches {
+        writer.write(&batch).unwrap();
     }
     writer.flush().unwrap();
     let n_bytes = writer.bytes_written();
     writer.close().unwrap();
     n_bytes
+}
+
+fn parquet_decompress_from(buf: bytes::Bytes) -> usize {
+    let builder = ParquetRecordBatchReaderBuilder::try_new(buf).unwrap();
+    let reader = builder.build().unwrap();
+    let mut nbytes = 0;
+    for batch in reader {
+        nbytes += batch.unwrap().get_array_memory_size()
+    }
+    nbytes
+}
+
+fn parquet_written_size(array: &Array, compression: Compression) -> usize {
+    let chunked = ChunkedArray::try_from(array).unwrap();
+    let (batches, schema) = chunked_to_vec_record_batch(chunked);
+    parquet_compress(batches, schema, compression)
 }
 
 fn vortex_written_size(array: &Array) -> u64 {
@@ -113,6 +148,25 @@ fn benchmark_compress<F, U>(
         group.finish();
     }
 
+    {
+        let mut group = c.benchmark_group("parquet_rs-zstd compress time");
+        group.sample_size(sample_size);
+        group.throughput(Throughput::Bytes(uncompressed_size as u64));
+        measurement_time.map(|t| group.measurement_time(t));
+        group.bench_function(bench_name, |b| {
+            let chunked = ChunkedArray::try_from(uncompressed.as_ref()).unwrap();
+            let (batches, schema) = chunked_to_vec_record_batch(chunked);
+            b.iter_with_large_drop(|| {
+                black_box(parquet_compress(
+                    batches.clone(),
+                    schema.clone(),
+                    Compression::ZSTD(ZstdLevel::default()),
+                ));
+            });
+        });
+        group.finish();
+    }
+
     let (compressed_array, path) = compressor
         .compress(uncompressed.as_ref(), None)
         .unwrap()
@@ -126,6 +180,7 @@ fn benchmark_compress<F, U>(
     {
         let mut group = c.benchmark_group("decompress time");
         group.sample_size(sample_size);
+        group.throughput(Throughput::Bytes(uncompressed_size as u64));
         measurement_time.map(|t| group.measurement_time(t));
         group.bench_function(bench_name, |b| {
             b.iter_batched(
@@ -135,6 +190,29 @@ fn benchmark_compress<F, U>(
                 },
                 BatchSize::PerIteration,
             );
+        });
+        group.finish();
+    }
+
+    {
+        let mut group = c.benchmark_group("parquet_rs-zstd decompress time");
+        group.sample_size(sample_size);
+        group.throughput(Throughput::Bytes(uncompressed_size as u64));
+        measurement_time.map(|t| group.measurement_time(t));
+        group.bench_function(bench_name, |b| {
+            let chunked = ChunkedArray::try_from(uncompressed.as_ref()).unwrap();
+            let (batches, schema) = chunked_to_vec_record_batch(chunked);
+            let mut buf = Vec::new();
+            parquet_compress_into(
+                batches.clone(),
+                schema.clone(),
+                Compression::ZSTD(ZstdLevel::default()),
+                &mut buf,
+            );
+            let bytes = bytes::Bytes::from(buf);
+            b.iter_with_large_drop(|| {
+                black_box(parquet_decompress_from(bytes.clone()));
+            });
         });
         group.finish();
     }
