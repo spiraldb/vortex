@@ -39,9 +39,7 @@ impl EncodingCompressor for ChunkedCompressor {
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
-        ChunkedArray::try_from(array)
-            .ok()
-            .map(|_| self as &dyn EncodingCompressor)
+        array.is_encoding(Chunked::ID).then_some(self)
     }
 
     fn compress<'a>(
