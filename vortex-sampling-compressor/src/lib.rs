@@ -200,13 +200,6 @@ impl<'a> SamplingCompressor<'a> {
         cloned
     }
 
-    pub fn only(&self, compressors: &[CompressorRef<'a>]) -> Self {
-        let mut cloned = self.clone();
-        cloned.compressors.clear();
-        cloned.compressors.extend(compressors);
-        cloned
-    }
-
     #[allow(clippy::same_name_method)]
     pub fn compress(
         &self,
