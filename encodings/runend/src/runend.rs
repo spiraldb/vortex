@@ -36,7 +36,12 @@ impl Display for RunEndMetadata {
 
 impl RunEndArray {
     pub fn try_new(ends: Array, values: Array, validity: Validity) -> VortexResult<Self> {
-        Self::with_offset_and_size(ends, values, validity, 0)
+        let length = if ends.is_empty() {
+            0
+        } else {
+            scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?
+        };
+        Self::with_offset_and_size(ends, values, validity, 0, length)
     }
 
     pub(crate) fn with_offset_and_size(
@@ -44,6 +49,7 @@ impl RunEndArray {
         values: Array,
         validity: Validity,
         offset: usize,
+        length: usize,
     ) -> VortexResult<Self> {
         if values.dtype().nullability() != validity.nullability() {
             vortex_bail!(
@@ -66,12 +72,6 @@ impl RunEndArray {
         if !ends.statistics().compute_is_strict_sorted().unwrap_or(true) {
             vortex_bail!("Ends array must be strictly sorted");
         }
-
-        let length = if ends.is_empty() {
-            0
-        } else {
-            scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?
-        };
 
         let dtype = values.dtype().clone();
         let metadata = RunEndMetadata {
