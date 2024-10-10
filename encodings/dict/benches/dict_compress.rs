@@ -5,12 +5,8 @@ use rand::distributions::{Alphanumeric, Uniform};
 use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
 use vortex::array::{PrimitiveArray, VarBinArray};
-use vortex::compute::take;
 use vortex::{ArrayTrait, IntoArray as _, IntoCanonical as _};
-use vortex_dict::{
-    dict_encode_primitive, dict_encode_typed_primitive, dict_encode_varbin, DictArray,
-};
-use vortex_dtype::match_each_native_ptype;
+use vortex_dict::{dict_encode_primitive, dict_encode_varbin, DictArray};
 
 fn gen_primitive_dict(len: usize, uniqueness: f64) -> PrimitiveArray {
     let mut rng = thread_rng();
