@@ -98,8 +98,8 @@ impl ChunkedCompressor {
     /// use it, which saves us the cost of searching for a good compressor. This constant quantifies
     /// "reasonably well" as
     ///
-    /// ```
-    /// new_ratio <= old_ratio * ChunkedCompressor::RELATIVELY_GOOD_RATIO
+    /// ```no_run
+    /// new_ratio <= old_ratio * self.relatively_good_ratio
     /// ```
     fn relatively_good_ratio(&self) -> f32 {
         self.relatively_good_ratio
