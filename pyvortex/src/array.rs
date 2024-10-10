@@ -208,19 +208,7 @@ impl PyArray {
     ///         buffer: 1 B
     ///     <BLANKLINE>
     ///
-    /// Compressed arrays use more complex encodings:
-    ///
-    ///     >>> print(vortex.encoding.compress(arr).tree_display())
-    ///     root: fastlanes.for(0x17)(i64?, len=4) nbytes=1 B (100.00%)
-    ///       metadata: FoRMetadata { reference: Scalar { dtype: Primitive(I64, Nullable), value: Primitive(I64(1)) }, shift: 0 }
-    ///       encoded: fastlanes.bitpacked(0x15)(u64?, len=4) nbytes=1 B (100.00%)
-    ///         metadata: BitPackedMetadata { validity: Array, bit_width: 2, offset: 0, length: 4, has_patches: false }
-    ///         buffer: 256 B
-    ///         validity: vortex.bool(0x02)(bool, len=4) nbytes=1 B (100.00%)
-    ///           metadata: BoolMetadata { validity: NonNullable, first_byte_bit_offset: 0 }
-    ///           buffer: 1 B
-    ///     <BLANKLINE>
-    ///
+    /// Compressed arrays often have more complex, deeply nested encoding trees.
     fn tree_display(&self) -> String {
         self.inner.tree_display().to_string()
     }
