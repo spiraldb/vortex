@@ -126,7 +126,7 @@ impl ChunkedCompressor {
             let ratio = (compressed_chunk.nbytes() as f32) / (chunk.nbytes() as f32);
             let exceeded_target_ratio = previous
                 .as_ref()
-                .map(|(_, target_ratio)| ratio > target_ratio * Self.relatively_good_ratio())
+                .map(|(_, target_ratio)| ratio > target_ratio * self.relatively_good_ratio())
                 .unwrap_or(false);
 
             if ratio > 1.0 || exceeded_target_ratio {
