@@ -41,10 +41,10 @@ impl RunEndArray {
         } else {
             scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?
         };
-        Self::with_offset_and_size(ends, values, validity, 0, length)
+        Self::with_offset_and_length(ends, values, validity, 0, length)
     }
 
-    pub(crate) fn with_offset_and_size(
+    pub(crate) fn with_offset_and_length(
         ends: Array,
         values: Array,
         validity: Validity,
