@@ -14,7 +14,7 @@ use vortex::encoding::EncodingRef;
 use vortex::validity::Validity;
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, ArrayDType, ArrayDef, IntoArray, IntoCanonical};
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::compressors::alp::ALPCompressor;
 use crate::compressors::constant::ConstantCompressor;
@@ -395,6 +395,11 @@ fn find_best_compression<'a>(
 ) -> VortexResult<CompressedArray<'a>> {
     let mut best = None;
     let mut best_objective = 1.0;
+    let mut best_objective_ratio = 1.0;
+    // for logging
+    let mut best_ratio = 1.0;
+    let mut best_ratio_sample = None;
+
     for compression in candidates {
         debug!(
             "{} trying candidate {} for {}",
@@ -408,22 +413,45 @@ fn find_best_compression<'a>(
         let compressed_sample =
             compression.compress(sample, None, ctx.for_compressor(compression))?;
 
+        let ratio = (compressed_sample.nbytes() as f64) / (sample.nbytes() as f64);
         let objective = objective_function(&compressed_sample, sample.nbytes(), ctx.options());
 
-        let ratio = (compressed_sample.nbytes() as f64) / (sample.nbytes() as f64);
+        // track the compression ratio, just for logging
+        if ratio < best_ratio {
+            best_ratio = ratio;
+
+            // if we find one with a better compression ratio but worse objective value, save it
+            // for debug logging later.
+            if ratio < best_objective_ratio && objective >= best_objective {
+                best_ratio_sample = Some(compressed_sample.clone());
+            }
+        }
+
+        if objective < best_objective {
+            best_objective = objective;
+            best_objective_ratio = ratio;
+            best = Some(compressed_sample);
+        }
+
         debug!(
-            "{} ratio for {}: {}, objective fn value: {}",
+            "{} with {}: ratio ({}), objective fn value ({}); best so far: ratio ({}), objective fn value ({})",
             ctx,
             compression.id(),
             ratio,
-            objective
+            objective,
+            best_ratio,
+            best_objective
         );
-        if objective < best_objective {
-            best_objective = objective;
-            best = Some(compressed_sample)
-        }
     }
-    Ok(best.unwrap_or_else(|| CompressedArray::uncompressed(sample.clone())))
+
+    let best = best.unwrap_or_else(|| CompressedArray::uncompressed(sample.clone()));
+    if best_ratio < best_objective_ratio && best_ratio_sample.is_some() {
+        let best_ratio_sample = best_ratio_sample.vortex_expect("already checked that this Option is Some");
+        debug!("{} best objective fn value ({}) has ratio {} from {}", ctx, best_objective, best_ratio, best.array().tree_display());
+        debug!("{} best ratio ({}) has objective fn value {} from {}", ctx, best_ratio, best_objective, best_ratio_sample.array().tree_display());
+    }
+
+    Ok(best)
 }
 
 fn objective_function(
