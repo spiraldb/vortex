@@ -23,8 +23,12 @@ pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray)
     });
 
     // the values array stats are trivially derived
-    compressed_values.statistics().set(Stat::RunCount, compressed_values.len().into());
-    compressed_values.statistics().set(Stat::IsConstant, (compressed_values.len() == 1).into());
+    compressed_values
+        .statistics()
+        .set(Stat::RunCount, compressed_values.len().into());
+    compressed_values
+        .statistics()
+        .set(Stat::IsConstant, (compressed_values.len() == 1).into());
     if let Some(min) = array.statistics().get(Stat::Min) {
         compressed_values.statistics().set(Stat::Min, min);
     }
@@ -32,18 +36,33 @@ pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray)
         compressed_values.statistics().set(Stat::Max, max);
     }
     if let Some(is_sorted) = array.statistics().get(Stat::IsSorted) {
-        compressed_values.statistics().set(Stat::IsSorted, is_sorted);
+        compressed_values
+            .statistics()
+            .set(Stat::IsSorted, is_sorted);
     }
     if let Some(is_strict_sorted) = array.statistics().get(Stat::IsStrictSorted) {
-        compressed_values.statistics().set(Stat::IsStrictSorted, is_strict_sorted);
+        compressed_values
+            .statistics()
+            .set(Stat::IsStrictSorted, is_strict_sorted);
     }
-    
-    compressed_ends.statistics().set(Stat::IsConstant, (compressed_ends.len() == 1).into());
-    compressed_ends.statistics().set(Stat::IsSorted, true.into());
-    compressed_ends.statistics().set(Stat::IsStrictSorted, true.into());
+
+    compressed_ends
+        .statistics()
+        .set(Stat::IsConstant, (compressed_ends.len() == 1).into());
+    compressed_ends
+        .statistics()
+        .set(Stat::IsSorted, true.into());
+    compressed_ends
+        .statistics()
+        .set(Stat::IsStrictSorted, true.into());
     if !compressed_ends.is_empty() {
-        compressed_ends.statistics().set(Stat::Min, scalar_at(&compressed_ends, 0).vortex_unwrap());
-        compressed_ends.statistics().set(Stat::Max, scalar_at(&compressed_ends, compressed_ends.len() - 1).vortex_unwrap());
+        compressed_ends
+            .statistics()
+            .set(Stat::Min, scalar_at(&compressed_ends, 0).vortex_unwrap());
+        compressed_ends.statistics().set(
+            Stat::Max,
+            scalar_at(&compressed_ends, compressed_ends.len() - 1).vortex_unwrap(),
+        );
     }
 
     assert_eq!(array.dtype(), compressed_values.dtype());

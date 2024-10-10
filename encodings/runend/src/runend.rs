@@ -148,7 +148,11 @@ impl RunEndArray {
     #[inline]
     pub fn ends(&self) -> Array {
         self.as_ref()
-            .child(0, &self.metadata().ends_ptype.into(), self.metadata().num_runs)
+            .child(
+                0,
+                &self.metadata().ends_ptype.into(),
+                self.metadata().num_runs,
+            )
             .vortex_expect("RunEndArray is missing its run ends")
     }
 
