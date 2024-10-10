@@ -69,10 +69,7 @@ fn like_into_parts(
     let Some(ChunkedCompressorMetadata(target_ratio)) =
         target_ratio.as_ref().as_any().downcast_ref()
     else {
-        vortex_bail!(
-            "chunked array compression
-        tree must ChunkedCompressorMetadata"
-        )
+        vortex_bail!("chunked array compression tree must be ChunkedCompressorMetadata")
     };
 
     if children.len() != 1 {
@@ -89,6 +86,17 @@ fn like_into_parts(
 }
 
 impl ChunkedCompressor {
+    /// How far the compression ratio is allowed to grow from one chunk to another chunk.
+    ///
+    /// As long as a compressor compresses subsequent chunks "reasonably well" we should continue to
+    /// use it, which saves us the cost of searching for a good compressor. This constant quantifies
+    /// "reasonably well" as
+    ///
+    /// ```
+    /// new_ratio <= old_ratio * ChunkedCompressor::RELATIVELY_GOOD_RATIO
+    /// ```
+    const RELATIVELY_GOOD_RATIO: f32 = 1.2;
+
     fn compress_chunked<'a>(
         &'a self,
         array: &ChunkedArray,
@@ -110,7 +118,7 @@ impl ChunkedCompressor {
             let ratio = (compressed_chunk.nbytes() as f32) / (chunk.nbytes() as f32);
             let exceeded_target_ratio = previous
                 .as_ref()
-                .map(|(_, target_ratio)| ratio > target_ratio * 1.2)
+                .map(|(_, target_ratio)| ratio > target_ratio * Self::RELATIVELY_GOOD_RATIO)
                 .unwrap_or(false);
 
             if ratio > 1.0 || exceeded_target_ratio {
