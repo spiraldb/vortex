@@ -36,6 +36,7 @@ impl BufferedReader {
             if let Some(mut layout) = self.layouts.pop_front() {
                 if let Some(rr) = layout.read_next()? {
                     self.layouts.push_front(layout);
+                    // TODO(robert): If we know row offsets here we can collect enough read requests instead of returning them one by one
                     match rr {
                         read_more @ ReadResult::ReadMore(..) => {
                             return Ok(Some(read_more));

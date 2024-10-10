@@ -1,3 +1,4 @@
+use std::mem;
 use std::pin::Pin;
 use std::sync::{Arc, RwLock};
 use std::task::{ready, Context, Poll};
@@ -16,44 +17,60 @@ use vortex_schema::Schema;
 use super::null_as_false;
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::LayoutMessageCache;
+use crate::layouts::read::pruner::LayoutPruner;
+use crate::layouts::read::selection::RowSelector;
 use crate::layouts::read::{LayoutReader, MessageId, ReadResult, Scan};
 use crate::stream_writer::ByteRange;
+
+type BatchPrunerReader<R> = Result<LayoutPruner<R>, (R, Option<Box<dyn LayoutReader>>)>;
 
 pub struct LayoutBatchStream<R> {
     input: Option<R>,
     layout_reader: Box<dyn LayoutReader>,
     filter_reader: Option<Box<dyn LayoutReader>>,
+    layout_pruner: Option<LayoutPruner<R>>,
     scan: Scan,
     messages_cache: Arc<RwLock<LayoutMessageCache>>,
     state: StreamingState<R>,
     dtype: DType,
     cached_mask: Option<Array>,
+    pruned_rows: RowSelector,
 }
 
 impl<R: VortexReadAt> LayoutBatchStream<R> {
     pub fn new(
-        input: R,
         layout_reader: Box<dyn LayoutReader>,
-        filter_reader: Option<Box<dyn LayoutReader>>,
+        pruner: BatchPrunerReader<R>,
         messages_cache: Arc<RwLock<LayoutMessageCache>>,
         dtype: DType,
         scan: Scan,
     ) -> Self {
-        let state = if filter_reader.is_some() {
-            StreamingState::FilterInit
-        } else {
-            StreamingState::Init
-        };
+        let mut input = None;
+        let mut filter_reader = None;
+        let mut layout_pruner = None;
+        let mut state = StreamingState::Init;
+        if let Ok(pruner) = pruner {
+            layout_pruner = Some(pruner);
+            state = StreamingState::Pruning;
+        } else if let Err((i, fr)) = pruner {
+            input = Some(i);
+            filter_reader = fr;
+            if filter_reader.is_some() {
+                state = StreamingState::FilterInit;
+            }
+        }
 
-        LayoutBatchStream {
-            input: Some(input),
+        Self {
+            input,
             layout_reader,
             filter_reader,
+            layout_pruner,
             scan,
             messages_cache,
             dtype,
             state,
             cached_mask: None,
+            pruned_rows: RowSelector::default(),
         }
     }
 
@@ -79,13 +96,14 @@ enum StreamingState<R> {
     #[default]
     Init,
     FilterInit,
+    Pruning,
     Reading(StreamStateFuture<R>),
     FilterReading(StreamStateFuture<R>),
     Decoding(Array),
     Error,
 }
 
-impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
+impl<R: VortexReadAt + Unpin + 'static> Stream for LayoutBatchStream<R> {
     type Item = VortexResult<Array>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -151,45 +169,66 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                         batch = filter(batch, mask)?;
                     }
 
-                    let goto_state = if self.filter_reader.is_some() {
+                    self.state = if self.filter_reader.is_some() {
                         StreamingState::FilterInit
                     } else {
                         StreamingState::Init
                     };
-                    self.state = goto_state;
                     return Poll::Ready(Some(Ok(batch)));
                 }
-                StreamingState::Reading(f) => match ready!(f.poll_unpin(cx)) {
-                    Ok((input, messages)) => {
-                        self.store_messages(messages);
-                        self.input = Some(input);
+                StreamingState::Reading(f) | StreamingState::FilterReading(f) => {
+                    match ready!(f.poll_unpin(cx)) {
+                        Ok((input, messages)) => {
+                            self.store_messages(messages);
+                            self.input = Some(input);
 
-                        self.state = StreamingState::Init
+                            self.state = match &self.state {
+                                StreamingState::Reading(_) => StreamingState::Init,
+                                StreamingState::FilterReading(_) => StreamingState::FilterInit,
+                                _ => unreachable!("Matched on wrong state"),
+                            }
+                        }
+                        Err(e) => {
+                            self.state = StreamingState::Error;
+                            return Poll::Ready(Some(Err(e)));
+                        }
                     }
-                    Err(e) => {
-                        self.state = StreamingState::Error;
-                        return Poll::Ready(Some(Err(e)));
+                }
+                StreamingState::Pruning => {
+                    if let Some(pruner) = &mut self.layout_pruner {
+                        match ready!(pruner.try_poll_next_unpin(cx)) {
+                            None => {
+                                let (input, filter_reader) = self
+                                    .layout_pruner
+                                    .take()
+                                    .vortex_expect("Already checked for presence")
+                                    .into_parts();
+                                self.state = StreamingState::FilterInit;
+                                self.input = Some(input);
+                                self.filter_reader = Some(filter_reader);
+                                let pruned_rows = mem::take(&mut self.pruned_rows);
+                                self.layout_reader.with_selected_rows(&pruned_rows);
+                                if let Some(r) = self.filter_reader.as_mut() {
+                                    r.with_selected_rows(&pruned_rows)
+                                }
+                            }
+                            Some(rs) => self.pruned_rows.extend(rs?),
+                        }
+                    } else {
+                        self.state = if self.filter_reader.is_some() {
+                            StreamingState::FilterInit
+                        } else {
+                            StreamingState::Init
+                        };
                     }
-                },
-                StreamingState::FilterReading(f) => match ready!(f.poll_unpin(cx)) {
-                    Ok((input, messages)) => {
-                        self.store_messages(messages);
-                        self.input = Some(input);
-
-                        self.state = StreamingState::FilterInit
-                    }
-                    Err(e) => {
-                        self.state = StreamingState::Error;
-                        return Poll::Ready(Some(Err(e)));
-                    }
-                },
+                }
                 StreamingState::Error => return Poll::Ready(None),
             }
         }
     }
 }
 
-async fn read_ranges<R: VortexReadAt>(
+pub async fn read_ranges<R: VortexReadAt>(
     reader: R,
     ranges: Vec<(MessageId, ByteRange)>,
 ) -> VortexResult<(R, Vec<(MessageId, Bytes)>)> {

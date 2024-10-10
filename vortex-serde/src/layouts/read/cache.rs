@@ -3,7 +3,7 @@ use std::sync::{Arc, RwLock};
 use ahash::HashMap;
 use bytes::Bytes;
 use vortex_dtype::DType;
-use vortex_error::vortex_panic;
+use vortex_error::{vortex_panic, VortexExpect};
 
 use crate::layouts::read::{LayoutPartId, MessageId};
 
@@ -29,7 +29,7 @@ impl LayoutMessageCache {
 #[derive(Debug)]
 pub struct RelativeLayoutCache {
     root: Arc<RwLock<LayoutMessageCache>>,
-    dtype: DType,
+    dtype: Option<DType>,
     path: MessageId,
 }
 
@@ -37,7 +37,7 @@ impl RelativeLayoutCache {
     pub fn new(root: Arc<RwLock<LayoutMessageCache>>, dtype: DType) -> Self {
         Self {
             root,
-            dtype,
+            dtype: Some(dtype),
             path: Vec::new(),
         }
     }
@@ -48,7 +48,17 @@ impl RelativeLayoutCache {
         Self {
             root: self.root.clone(),
             path: new_path,
-            dtype,
+            dtype: Some(dtype),
+        }
+    }
+
+    pub fn relative_stored_dtype(&self, id: LayoutPartId) -> Self {
+        let mut new_path = self.path.clone();
+        new_path.push(id);
+        Self {
+            root: self.root.clone(),
+            path: new_path,
+            dtype: None,
         }
     }
 
@@ -78,12 +88,17 @@ impl RelativeLayoutCache {
             .remove(&self.absolute_id(path))
     }
 
-    pub fn dtype(&self) -> DType {
-        self.dtype.clone()
+    pub fn has_dtype(&self) -> bool {
+        self.dtype.is_some()
+    }
+
+    pub fn dtype(&self) -> &DType {
+        self.dtype.as_ref().vortex_expect("Must have dtype")
     }
 
     pub fn absolute_id(&self, path: &[LayoutPartId]) -> MessageId {
-        let mut lookup_key = self.path.clone();
+        let mut lookup_key = Vec::with_capacity(self.path.len() + path.len());
+        lookup_key.clone_from(&self.path);
         lookup_key.extend_from_slice(path);
         lookup_key
     }

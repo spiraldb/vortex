@@ -137,3 +137,50 @@ async fn unequal_batches() {
     assert_eq!(item_count, 10);
     assert_eq!(batch_count, 2);
 }
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn filtered() {
+    let strings = ChunkedArray::from_iter([
+        VarBinArray::from(vec!["ab", "foo", "bar", "bob"]).into_array(),
+        VarBinArray::from(vec!["baz", "ab", "foo", "bar", "baz", "alice"]).into_array(),
+    ])
+    .into_array();
+
+    let numbers = ChunkedArray::from_iter([
+        PrimitiveArray::from(vec![1u32, 2, 3, 4, 5]).into_array(),
+        PrimitiveArray::from(vec![6u32, 7, 8, 9, 10]).into_array(),
+    ])
+    .into_array();
+
+    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]);
+    let buf = Vec::new();
+    let mut writer = LayoutWriter::new(buf);
+    writer = writer.write_array_columns(st.into_array()).await.unwrap();
+    let written = writer.finalize().await.unwrap();
+
+    let mut stream = LayoutReaderBuilder::new(written, LayoutDeserializer::default())
+        .with_batch_size(5)
+        .build()
+        .await
+        .unwrap();
+    let mut batch_count = 0;
+    let mut item_count = 0;
+
+    while let Some(array) = stream.next().await {
+        let array = array.unwrap();
+        item_count += array.len();
+        batch_count += 1;
+
+        let numbers = array.with_dyn(|a| a.as_struct_array_unchecked().field_by_name("numbers"));
+
+        if let Some(numbers) = numbers {
+            let numbers = numbers.into_primitive().unwrap();
+            assert_eq!(numbers.ptype(), PType::U32);
+        } else {
+            panic!("Expected column doesn't exist")
+        }
+    }
+    assert_eq!(item_count, 10);
+    assert_eq!(batch_count, 2);
+}

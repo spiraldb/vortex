@@ -1,6 +1,6 @@
 use vortex_dtype::field::Field;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexExpect, VortexResult};
+use vortex_error::{vortex_err, VortexExpect, VortexResult, VortexUnwrap};
 use vortex_scalar::StructScalar;
 
 use crate::array::sparse::SparseArray;
@@ -54,6 +54,18 @@ impl BoolArrayTrait for SparseArray {
 
     fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         todo!()
+    }
+
+    fn not(&self) -> Array {
+        SparseArray::try_new(
+            self.indices(),
+            self.values()
+                .with_dyn(|a| a.as_bool_array_unchecked().not()),
+            self.len(),
+            self.fill_value().clone(),
+        )
+        .vortex_unwrap()
+        .into_array()
     }
 }
 

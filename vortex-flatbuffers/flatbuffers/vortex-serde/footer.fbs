@@ -4,8 +4,9 @@ table FlatLayout {
 }
 
 table NestedLayout {
-    children: [Layout];
     encoding: uint16;
+    metadata: [ubyte];
+    children: [Layout];
 }
 
 union LayoutVariant {
@@ -19,6 +20,7 @@ table Layout {
 
 table Footer {
     layout: Layout;
+    row_count: uint64;
 }
 
 root_type Footer;

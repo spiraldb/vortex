@@ -1,7 +1,6 @@
 use std::sync::{Arc, RwLock};
 
 use bytes::BytesMut;
-use vortex::{Array, ArrayDType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 
@@ -10,18 +9,21 @@ use crate::layouts::read::cache::{LayoutMessageCache, RelativeLayoutCache};
 use crate::layouts::read::context::LayoutDeserializer;
 use crate::layouts::read::filtering::RowFilter;
 use crate::layouts::read::footer::Footer;
+use crate::layouts::read::pruner::LayoutPruner;
+use crate::layouts::read::selection::RowSelector;
 use crate::layouts::read::stream::LayoutBatchStream;
 use crate::layouts::read::{Scan, DEFAULT_BATCH_SIZE, FILE_POSTSCRIPT_SIZE, INITIAL_READ_SIZE};
-use crate::layouts::MAGIC_BYTES;
+use crate::layouts::{PruningScan, MAGIC_BYTES};
 
 pub struct LayoutReaderBuilder<R> {
     reader: R,
     layout_serde: LayoutDeserializer,
     projection: Option<Projection>,
     size: Option<u64>,
-    indices: Option<Array>,
+    row_selector: Option<RowSelector>,
     row_filter: Option<RowFilter>,
     batch_size: Option<usize>,
+    stats_pruning: bool,
 }
 
 impl<R: VortexReadAt> LayoutReaderBuilder<R> {
@@ -32,8 +34,9 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             projection: None,
             row_filter: None,
             size: None,
-            indices: None,
+            row_selector: None,
             batch_size: None,
+            stats_pruning: true,
         }
     }
 
@@ -47,18 +50,18 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         self
     }
 
-    pub fn with_indices(mut self, array: Array) -> Self {
-        // TODO(#441): Allow providing boolean masks
-        assert!(
-            array.dtype().is_int(),
-            "Mask arrays have to be integer arrays"
-        );
-        self.indices = Some(array);
+    pub fn with_row_selector(mut self, array: RowSelector) -> Self {
+        self.row_selector = Some(array);
         self
     }
 
     pub fn with_row_filter(mut self, row_filter: RowFilter) -> Self {
         self.row_filter = Some(row_filter);
+        self
+    }
+
+    pub fn with_statistics_pruning(mut self, stat_pruning: bool) -> Self {
+        self.stats_pruning = stat_pruning;
         self
     }
 
@@ -69,6 +72,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
 
     pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
+        let row_count = footer.row_count()?;
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
 
         let filter_projection = self
@@ -100,7 +104,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             filter: self.row_filter.clone(),
             batch_size,
             projection: read_projection,
-            indices: self.indices,
+            rows: self.row_selector.clone(),
         };
 
         let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
@@ -110,7 +114,22 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),
         )?;
 
+        let pruning_scan = self
+            .stats_pruning
+            .then(|| {
+                self.row_filter
+                    .as_ref()
+                    .and_then(|f| f.to_pruning_filter())
+                    .map(|(pruning_filter, stats_projection)| PruningScan {
+                        stats_projection,
+                        filter: Some(pruning_filter),
+                        row_count,
+                    })
+            })
+            .flatten();
+
         let filter_reader = filter_dtype
+            .clone()
             .zip(filter_projection)
             .map(|(dtype, projection)| {
                 footer.layout(
@@ -118,17 +137,31 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
                         filter: self.row_filter,
                         batch_size,
                         projection,
-                        indices: None,
+                        rows: self.row_selector,
                     },
                     RelativeLayoutCache::new(message_cache.clone(), dtype),
                 )
             })
             .transpose()?;
 
+        let pruner = if let Some(pscan) = pruning_scan {
+            if let Some(fr) = filter_reader {
+                Ok(LayoutPruner::new(
+                    self.reader,
+                    fr,
+                    message_cache.clone(),
+                    pscan,
+                ))
+            } else {
+                Err((self.reader, filter_reader))
+            }
+        } else {
+            Err((self.reader, filter_reader))
+        };
+
         Ok(LayoutBatchStream::new(
-            self.reader,
             data_reader,
-            filter_reader,
+            pruner,
             message_cache,
             projected_dtype,
             scan,

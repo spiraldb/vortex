@@ -16,7 +16,7 @@ use vortex::{impl_encoding, Array, ArrayTrait, Canonical, IntoArray, IntoCanonic
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_dtype::Nullability::NonNullable;
-use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult, VortexUnwrap};
 
 mod compress;
 mod compute;
@@ -101,6 +101,12 @@ impl BoolArrayTrait for RoaringBoolArray {
 
     fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
         todo!()
+    }
+
+    fn not(&self) -> Array {
+        RoaringBoolArray::try_new(self.bitmap().flip(0..(self.len() as u32)), self.len())
+            .vortex_unwrap()
+            .into_array()
     }
 }
 

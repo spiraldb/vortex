@@ -9,10 +9,11 @@ use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadat
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
-    impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArrayVariant, IntoCanonical,
+    impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
+    IntoCanonical,
 };
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, VortexExpect as _, VortexResult, VortexUnwrap};
 
 use crate::compress::runend_bool_decode;
 
@@ -121,6 +122,12 @@ impl BoolArrayTrait for RunEndBoolArray {
 
     fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a> {
         todo!()
+    }
+
+    fn not(&self) -> Array {
+        RunEndBoolArray::try_new(self.ends(), !self.start(), self.validity())
+            .vortex_unwrap()
+            .into_array()
     }
 }
 

@@ -4,7 +4,7 @@ use vortex_dtype::field::Field;
 use vortex_dtype::flatbuffers::{deserialize_and_project, resolve_field_references};
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, VortexResult};
-use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
+use vortex_flatbuffers::{footer, message, ReadFlatBuffer};
 use vortex_schema::Schema;
 
 use crate::layouts::read::cache::RelativeLayoutCache;
@@ -53,6 +53,10 @@ impl Footer {
         (self.schema_offset - self.leftovers_offset) as usize
     }
 
+    pub fn row_count(&self) -> VortexResult<u64> {
+        Ok(self.fb_footer()?.row_count())
+    }
+
     pub fn layout(
         &self,
         scan: Scan,
@@ -63,7 +67,7 @@ impl Footer {
         let footer_bytes = self
             .leftovers
             .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset);
-        let fb_footer = root::<vortex_flatbuffers::footer::Footer>(&footer_bytes)?;
+        let fb_footer = root::<footer::Footer>(&footer_bytes)?;
 
         let fb_layout = fb_footer
             .layout()
@@ -89,7 +93,7 @@ impl Footer {
         deserialize_and_project(fb_dtype, projection)
     }
 
-    /// Convert all name based references to index based for sake of augmenting read projection
+    /// Convert all name based references to index based to share underlying message cache
     pub(crate) fn resolve_references(&self, projection: &[Field]) -> VortexResult<Vec<Field>> {
         let dtype = self
             .fb_schema()?
@@ -103,12 +107,19 @@ impl Footer {
             .collect::<VortexResult<Vec<_>>>()
     }
 
-    fn fb_schema(&self) -> VortexResult<fb::Schema> {
+    fn fb_footer(&self) -> VortexResult<footer::Footer> {
+        let start_offset = self.leftovers_layout_offset();
+        let end_offset = self.leftovers.len() - FILE_POSTSCRIPT_SIZE;
+        let footer_bytes = &self.leftovers[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
+        Ok(root::<footer::Footer>(footer_bytes)?)
+    }
+
+    fn fb_schema(&self) -> VortexResult<message::Schema> {
         let start_offset = self.leftovers_schema_offset();
         let end_offset = self.leftovers_layout_offset();
         let dtype_bytes = &self.leftovers[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
 
-        root::<fb::Message>(dtype_bytes)
+        root::<message::Message>(dtype_bytes)
             .map_err(|e| e.into())
             .and_then(|m| {
                 m.header_as_schema()

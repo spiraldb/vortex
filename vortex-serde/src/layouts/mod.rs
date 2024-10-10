@@ -1,7 +1,7 @@
 mod read;
 mod write;
 
-mod pruning;
+mod stats;
 #[cfg(test)]
 mod tests;
 

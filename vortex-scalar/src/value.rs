@@ -135,6 +135,12 @@ impl ScalarValue {
     }
 }
 
+impl<T: Into<ScalarValue>> From<Option<T>> for ScalarValue {
+    fn from(value: Option<T>) -> Self {
+        value.map(Into::into).unwrap_or(ScalarValue::Null)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use vortex_dtype::{DType, Nullability, PType, StructDType};

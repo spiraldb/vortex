@@ -6,17 +6,12 @@ use std::sync::Arc;
 use vortex::array::{ConstantArray, StructArray};
 use vortex::compute::{compare, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
-use vortex::{Array, IntoArray};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::field::Field;
-use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult, VortexUnwrap};
+use vortex_error::{vortex_err, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
-use vortex_schema::Schema;
 
 use crate::Operator;
-
-const NON_PRIMITIVE_COST_ESTIMATE: usize = 64;
-const COLUMN_COST_MULTIPLIER: usize = 1024;
 
 pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
     fn as_any(&self) -> &dyn Any;
@@ -25,7 +20,9 @@ pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
 
     fn references(&self) -> HashSet<Field>;
 
-    fn estimate_cost(&self, schema: &Schema) -> usize;
+    fn project(&self, projection: &[Field]) -> Option<Arc<dyn VortexExpr>>;
+
+    fn is_constant(&self) -> bool;
 }
 
 // Taken from apache-datafusion, necessary since you can't require VortexExpr implement PartialEq<dyn VortexExpr>
@@ -42,9 +39,6 @@ fn unbox_any(any: &dyn Any) -> &dyn Any {
         any
     }
 }
-
-#[derive(Debug, PartialEq, Hash, Clone, Eq)]
-pub struct NoOp;
 
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
@@ -68,6 +62,85 @@ impl BinaryExpr {
 
     pub fn op(&self) -> Operator {
         self.operator
+    }
+}
+
+impl VortexExpr for BinaryExpr {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn evaluate(&self, batch: &Array) -> VortexResult<Array> {
+        let lhs = self.lhs.evaluate(batch)?;
+        let rhs = self.rhs.evaluate(batch)?;
+
+        let array = match self.operator {
+            Operator::Eq => compare(lhs, rhs, ArrayOperator::Eq)?,
+            Operator::NotEq => compare(lhs, rhs, ArrayOperator::NotEq)?,
+            Operator::Lt => compare(lhs, rhs, ArrayOperator::Lt)?,
+            Operator::Lte => compare(lhs, rhs, ArrayOperator::Lte)?,
+            Operator::Gt => compare(lhs, rhs, ArrayOperator::Gt)?,
+            Operator::Gte => compare(lhs, rhs, ArrayOperator::Gte)?,
+            Operator::And => vortex::compute::and(lhs, rhs)?,
+            Operator::Or => vortex::compute::or(lhs, rhs)?,
+        };
+
+        Ok(array)
+    }
+
+    fn references(&self) -> HashSet<Field> {
+        let mut res = self.lhs.references();
+        res.extend(self.rhs.references());
+        res
+    }
+
+    fn project(&self, projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
+        let lhs_proj = self.lhs.project(projection);
+        let rhs_proj = self.rhs.project(projection);
+        if self.operator == Operator::And {
+            if let Some(lhsp) = lhs_proj {
+                if let Some(rhsp) = rhs_proj {
+                    Some(Arc::new(BinaryExpr::new(lhsp, self.operator, rhsp)))
+                } else {
+                    // TODO(robert): This might be too broad of a check since it should be limited only to fields in the projection
+                    self.rhs
+                        .references()
+                        .intersection(&lhsp.references())
+                        .next()
+                        .is_none()
+                        .then_some(lhsp)
+                }
+            } else if self
+                .lhs
+                .references()
+                .intersection(&self.rhs.references())
+                .next()
+                .is_none()
+            {
+                rhs_proj
+            } else {
+                None
+            }
+        } else {
+            Some(Arc::new(BinaryExpr::new(
+                lhs_proj?,
+                self.operator,
+                rhs_proj?,
+            )))
+        }
+    }
+
+    fn is_constant(&self) -> bool {
+        self.lhs.is_constant() && self.rhs.is_constant()
+    }
+}
+
+impl PartialEq<dyn Any> for BinaryExpr {
+    fn eq(&self, other: &dyn Any) -> bool {
+        unbox_any(other)
+            .downcast_ref::<Self>()
+            .map(|x| x.operator == self.operator && x.lhs.eq(&self.lhs) && x.rhs.eq(&self.rhs))
+            .unwrap_or(false)
     }
 }
 
@@ -110,7 +183,13 @@ impl VortexExpr for Column {
             Field::Name(n) => s.field_by_name(n),
             Field::Index(i) => s.field(*i),
         }
-        .ok_or_else(|| vortex_err!("Array doesn't contain child array {}", self.field))?;
+        .ok_or_else(|| {
+            vortex_err!(
+                "Array {} doesn't contain child {}",
+                batch.dtype(),
+                self.field
+            )
+        })?;
         Ok(column)
     }
 
@@ -118,10 +197,14 @@ impl VortexExpr for Column {
         HashSet::from([self.field.clone()])
     }
 
-    fn estimate_cost(&self, schema: &Schema) -> usize {
-        let field_dtype = schema.field_type(self.field()).vortex_unwrap();
+    fn project(&self, projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
+        projection
+            .contains(&self.field)
+            .then(|| Arc::new(Column::new(self.field.clone())) as Arc<dyn VortexExpr>)
+    }
 
-        dtype_cost_estimate(&field_dtype) * COLUMN_COST_MULTIPLIER
+    fn is_constant(&self) -> bool {
+        false
     }
 }
 
@@ -158,8 +241,12 @@ impl VortexExpr for Literal {
         HashSet::new()
     }
 
-    fn estimate_cost(&self, _schema: &Schema) -> usize {
-        dtype_cost_estimate(self.value.dtype())
+    fn project(&self, _projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
+        Some(Arc::new(Literal::new(self.value.clone())))
+    }
+
+    fn is_constant(&self) -> bool {
+        true
     }
 }
 
@@ -172,78 +259,161 @@ impl PartialEq<dyn Any> for Literal {
     }
 }
 
-impl VortexExpr for BinaryExpr {
+#[derive(Debug, Eq, PartialEq)]
+pub struct Identity;
+
+impl VortexExpr for Identity {
     fn as_any(&self) -> &dyn Any {
         self
     }
 
     fn evaluate(&self, batch: &Array) -> VortexResult<Array> {
-        let lhs = self.lhs.evaluate(batch)?;
-        let rhs = self.rhs.evaluate(batch)?;
-
-        let array = match self.operator {
-            Operator::Eq => compare(lhs, rhs, ArrayOperator::Eq)?,
-            Operator::NotEq => compare(lhs, rhs, ArrayOperator::NotEq)?,
-            Operator::Lt => compare(lhs, rhs, ArrayOperator::Lt)?,
-            Operator::Lte => compare(lhs, rhs, ArrayOperator::Lte)?,
-            Operator::Gt => compare(lhs, rhs, ArrayOperator::Gt)?,
-            Operator::Gte => compare(lhs, rhs, ArrayOperator::Gte)?,
-            Operator::And => vortex::compute::and(lhs, rhs)?,
-            Operator::Or => vortex::compute::or(lhs, rhs)?,
-        };
-
-        Ok(array)
-    }
-
-    fn references(&self) -> HashSet<Field> {
-        let mut res = self.lhs.references();
-        res.extend(self.rhs.references());
-        res
-    }
-
-    fn estimate_cost(&self, schema: &Schema) -> usize {
-        self.lhs.estimate_cost(schema) + self.rhs.estimate_cost(schema)
-    }
-}
-
-impl PartialEq<dyn Any> for BinaryExpr {
-    fn eq(&self, other: &dyn Any) -> bool {
-        unbox_any(other)
-            .downcast_ref::<Self>()
-            .map(|x| x.operator == self.operator && x.lhs.eq(&self.lhs) && x.rhs.eq(&self.rhs))
-            .unwrap_or(false)
-    }
-}
-
-impl VortexExpr for NoOp {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn evaluate(&self, _array: &Array) -> VortexResult<Array> {
-        vortex_bail!("NoOp::evaluate() should not be called")
+        Ok(batch.clone())
     }
 
     fn references(&self) -> HashSet<Field> {
         HashSet::new()
     }
 
-    fn estimate_cost(&self, _schema: &Schema) -> usize {
-        0
+    fn project(&self, _projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
+        Some(Arc::new(Identity))
+    }
+
+    fn is_constant(&self) -> bool {
+        false
     }
 }
 
-impl PartialEq<dyn Any> for NoOp {
+impl PartialEq<dyn Any> for Identity {
     fn eq(&self, other: &dyn Any) -> bool {
-        unbox_any(other).downcast_ref::<Self>().is_some()
+        unbox_any(other)
+            .downcast_ref::<Self>()
+            .map(|x| x == self)
+            .unwrap_or(false)
     }
 }
 
-fn dtype_cost_estimate(dtype: &DType) -> usize {
-    match dtype {
-        vortex_dtype::DType::Null => 0,
-        vortex_dtype::DType::Bool(_) => 1,
-        vortex_dtype::DType::Primitive(p, _) => p.byte_width(),
-        _ => NON_PRIMITIVE_COST_ESTIMATE,
+#[derive(Debug)]
+pub struct Not {
+    child: Arc<dyn VortexExpr>,
+}
+
+impl Not {
+    pub fn new(child: Arc<dyn VortexExpr>) -> Self {
+        Self { child }
+    }
+
+    pub fn child(&self) -> &Arc<dyn VortexExpr> {
+        &self.child
+    }
+}
+
+impl VortexExpr for Not {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn evaluate(&self, batch: &Array) -> VortexResult<Array> {
+        let child_result = self.child.evaluate(batch)?;
+        child_result.with_dyn(|a| {
+            a.as_bool_array()
+                .ok_or_else(|| vortex_err!("Child was not a bool array"))
+                .map(|b| b.not())
+        })
+    }
+
+    fn references(&self) -> HashSet<Field> {
+        self.child.references()
+    }
+
+    fn project(&self, projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
+        self.child
+            .project(projection)
+            .map(|c| Arc::new(Not::new(c)) as _)
+    }
+
+    fn is_constant(&self) -> bool {
+        false
+    }
+}
+
+impl PartialEq<dyn Any> for Not {
+    fn eq(&self, other: &dyn Any) -> bool {
+        unbox_any(other)
+            .downcast_ref::<Self>()
+            .map(|x| x.child.eq(&self.child))
+            .unwrap_or(false)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use vortex_dtype::field::Field;
+
+    use crate::{BinaryExpr, Column, Literal, Operator, VortexExpr};
+
+    #[test]
+    fn project_and() {
+        let band = BinaryExpr::new(
+            Arc::new(Column::new(Field::from("a"))),
+            Operator::And,
+            Arc::new(Column::new(Field::from("b"))),
+        );
+        let projection = vec![Field::from("b")];
+        assert_eq!(
+            *band.project(&projection).unwrap(),
+            *Column::new(Field::from("b")).as_any()
+        );
+    }
+
+    #[test]
+    fn project_or() {
+        let bor = BinaryExpr::new(
+            Arc::new(Column::new(Field::from("a"))),
+            Operator::Or,
+            Arc::new(Column::new(Field::from("b"))),
+        );
+        let projection = vec![Field::from("b")];
+        assert!(bor.project(&projection).is_none());
+    }
+
+    #[test]
+    fn project_nested() {
+        let band = BinaryExpr::new(
+            Arc::new(BinaryExpr::new(
+                Arc::new(Column::new(Field::from("a"))),
+                Operator::Lt,
+                Arc::new(Column::new(Field::from("b"))),
+            )),
+            Operator::And,
+            Arc::new(BinaryExpr::new(
+                Arc::new(Literal::new(5.into())),
+                Operator::Lt,
+                Arc::new(Column::new(Field::from("b"))),
+            )),
+        );
+        let projection = vec![Field::from("b")];
+        assert!(band.project(&projection).is_none());
+    }
+
+    #[test]
+    fn project_multicolumn() {
+        let blt = BinaryExpr::new(
+            Arc::new(Column::new(Field::from("a"))),
+            Operator::Lt,
+            Arc::new(Column::new(Field::from("b"))),
+        );
+        let projection = vec![Field::from("a"), Field::from("b")];
+        assert_eq!(
+            *blt.project(&projection).unwrap(),
+            *BinaryExpr::new(
+                Arc::new(Column::new(Field::from("a"))),
+                Operator::Lt,
+                Arc::new(Column::new(Field::from("b"))),
+            )
+            .as_any()
+        );
     }
 }

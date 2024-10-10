@@ -1,6 +1,6 @@
 use vortex_dtype::field::Field;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, vortex_panic, VortexResult};
+use vortex_error::{vortex_err, vortex_panic, VortexResult, VortexUnwrap};
 
 use crate::array::chunked::ChunkedArray;
 use crate::variants::{
@@ -53,6 +53,16 @@ impl BoolArrayTrait for ChunkedArray {
 
     fn maybe_null_slices_iter(&self) -> Box<dyn Iterator<Item = (usize, usize)>> {
         todo!()
+    }
+
+    fn not(&self) -> Array {
+        let chunks = self
+            .chunks()
+            .map(|c| c.with_dyn(|a| a.as_bool_array_unchecked().not()))
+            .collect::<Vec<_>>();
+        ChunkedArray::try_new(chunks, self.dtype().clone())
+            .vortex_unwrap()
+            .into_array()
     }
 }
 

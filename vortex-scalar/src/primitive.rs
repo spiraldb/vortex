@@ -171,14 +171,6 @@ macro_rules! primitive_scalar {
             }
         }
 
-        impl From<Option<$T>> for ScalarValue {
-            fn from(value: Option<$T>) -> Self {
-                value
-                    .map(|v| ScalarValue::Primitive(v.into()))
-                    .unwrap_or_else(|| ScalarValue::Null)
-            }
-        }
-
         impl TryFrom<&ScalarValue> for $T {
             type Error = VortexError;
 

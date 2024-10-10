@@ -95,7 +95,7 @@ pub fn compare(
         vortex_bail!("Compare operations only support arrays of the same type");
     }
 
-    if left.is_encoding(Constant::ID) {
+    if left.is_encoding(Constant::ID) && !right.is_encoding(Constant::ID) {
         return compare(right, left, operator.swap());
     }
 

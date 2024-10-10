@@ -10,10 +10,10 @@ use std::task::{Context, Poll};
 
 use arrow_array::RecordBatch;
 use arrow_schema::{DataType, Schema, SchemaRef};
-use datafusion::execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion::prelude::{DataFrame, SessionContext};
 use datafusion_common::{exec_datafusion_err, DataFusionError, Result as DFResult, Statistics};
 use datafusion_execution::object_store::ObjectStoreUrl;
+use datafusion_execution::{RecordBatchStream, SendableRecordBatchStream, TaskContext};
 use datafusion_expr::{Expr, Operator};
 use datafusion_physical_plan::{DisplayAs, DisplayFormatType, ExecutionPlan, PlanProperties};
 use futures::Stream;

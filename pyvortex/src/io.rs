@@ -172,7 +172,7 @@ pub fn read<'py>(
     ) -> VortexResult<Array> {
         let file = File::open(Path::new(fname)).await?;
 
-        let mut builder: LayoutReaderBuilder<File> = LayoutReaderBuilder::new(
+        let mut builder = LayoutReaderBuilder::new(
             file,
             LayoutDeserializer::new(MAXIMAL_CTX.clone(), LayoutContext::default().into()),
         )

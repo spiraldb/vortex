@@ -88,6 +88,7 @@ impl WriteFlatBuffer for NestedLayout {
             &fb::NestedLayoutArgs {
                 children: Some(children),
                 encoding: self.id.0,
+                metadata: None,
             },
         )
     }

@@ -15,6 +15,7 @@ readme = "README.md"
 
 [dependencies]
 ahash = { workspace = true }
+arrow-buffer = { workspace = true }
 bytes = { workspace = true }
 flatbuffers = { workspace = true }
 futures = { workspace = true }
@@ -34,7 +35,6 @@ vortex-scalar = { workspace = true, features = ["flatbuffers"] }
 vortex-schema = { workspace = true }
 
 [dev-dependencies]
-arrow = { workspace = true, features = ["ipc"] }
 arrow-array = { workspace = true }
 arrow-ipc = { workspace = true, features = ["lz4"] }
 arrow-schema = { workspace = true }
@@ -42,6 +42,7 @@ arrow-select = { workspace = true }
 criterion = { workspace = true, features = ["async_futures"] }
 futures-executor = { workspace = true }
 rand = { workspace = true }
+rstest = { workspace = true }
 simplelog = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
 vortex-alp = { path = "../encodings/alp" }
