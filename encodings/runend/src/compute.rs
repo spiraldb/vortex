@@ -103,7 +103,6 @@ impl SliceFn for RunEndArray {
             slice(self.ends(), slice_begin, slice_end + 1)?,
             slice(self.values(), slice_begin, slice_end + 1)?,
             self.validity().slice(start, stop)?,
-            stop - start,
             start + self.offset(),
         )?
         .into_array())
