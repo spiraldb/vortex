@@ -3,10 +3,11 @@ use std::collections::HashSet;
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use itertools::Itertools as _;
 use mimalloc::MiMalloc;
+use rand::{Rng, SeedableRng as _};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::try_cast;
 use vortex::validity::Validity;
-use vortex::{IntoArray as _, IntoCanonical};
+use vortex::{Array, IntoArray as _, IntoCanonical};
 use vortex_dtype::PType;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
@@ -30,89 +31,43 @@ fn primitive(c: &mut Criterion) {
     let num_values = u16::MAX as u64;
     group.throughput(Throughput::Bytes(num_values * 4));
 
-    let int_array = PrimitiveArray::from_vec(
-        (0..num_values).map(|i| i as u32 + 100).collect_vec(),
+    let mut rng = rand::rngs::StdRng::seed_from_u64(0);
+
+    let uint_array = PrimitiveArray::from_vec(
+        (0..num_values).map(|_| rng.gen_range(0..256)).collect_vec(),
         Validity::NonNullable,
     )
     .into_array();
+    let int_array = try_cast(uint_array, PType::I32.into()).unwrap();
+    let index_array = PrimitiveArray::from_vec(
+        (0..num_values).map(|i| (i * 2) as u32 + 42).collect_vec(),
+        Validity::NonNullable,
+    )
+    .into_array();
+    let float_array = try_cast(uint_array, PType::F32.into()).unwrap();
 
-    let ctx = SamplingCompressor::new(HashSet::new());
-
-    const UINT_COMPRESSORS: [(CompressorRef<'static>, &str); 6] = [
-        (&BITPACK_NO_PATCHES, "bitpacked_no_patches"),
-        (&BITPACK_WITH_PATCHES, "bitpacked_with_patches"),
-        (&DEFAULT_RUN_END_COMPRESSOR, "runend"),
-        (&DeltaCompressor, "delta"),
-        (&DictCompressor, "dict"),
-        (&RoaringIntCompressor, "roaring_int"),
+    let compressors_names_and_arrays: [(CompressorRef<'static>, &str, &Array); _] = [
+        (&BITPACK_NO_PATCHES, "bitpacked_no_patches", &uint_array),
+        (&BITPACK_WITH_PATCHES, "bitpacked_with_patches", &uint_array),
+        (&DEFAULT_RUN_END_COMPRESSOR, "runend", &uint_array),
+        (&DeltaCompressor, "delta", &uint_array),
+        (&DictCompressor, "dict", &uint_array),
+        (&RoaringIntCompressor, "roaring_int", &index_array),
+        (&FoRCompressor, "frame_of_reference", &int_array),
+        (&ZigZagCompressor, "zigzag", &int_array),
+        (&ALPCompressor, "alp", &float_array),
+        (&ALPRDCompressor, "alp_rd", &float_array),
     ];
-    for (compressor, name) in UINT_COMPRESSORS {
+
+    for (compressor, name, array) in compressors_names_and_arrays {
+        let ctx = SamplingCompressor::new(HashSet::from([compressor]));
         group.bench_function(format!("{} compress", name), |b| {
             b.iter(|| {
-                black_box(
-                    compressor
-                        .compress(&int_array, None, ctx.including(compressor))
-                        .unwrap(),
-                );
+                black_box(compressor.compress(array, None, ctx).unwrap());
             })
         });
 
-        let compressed = compressor
-            .compress(&int_array, None, ctx.including(compressor))
-            .unwrap()
-            .into_array();
-        group.bench_function(format!("{} decompress", name), |b| {
-            b.iter(|| {
-                black_box(compressed.clone().into_canonical().unwrap());
-            })
-        });
-    }
-
-    const SIGNED_INT_COMPRESSORS: [(CompressorRef<'static>, &str); 2] = [
-        (&FoRCompressor, "frame_of_reference"),
-        (&ZigZagCompressor, "zigzag"),
-    ];
-    let int_array = try_cast(int_array, PType::I32.into()).unwrap();
-    for (compressor, name) in SIGNED_INT_COMPRESSORS {
-        group.bench_function(format!("{} compress", name), |b| {
-            b.iter(|| {
-                black_box(
-                    compressor
-                        .compress(&int_array, None, ctx.including(compressor))
-                        .unwrap(),
-                );
-            })
-        });
-
-        let compressed = compressor
-            .compress(&int_array, None, ctx.including(compressor))
-            .unwrap()
-            .into_array();
-        group.bench_function(format!("{} decompress", name), |b| {
-            b.iter(|| {
-                black_box(compressed.clone().into_canonical().unwrap());
-            })
-        });
-    }
-
-    let float_array = try_cast(int_array, PType::F32.into()).unwrap();
-    const FLOAT_COMPRESSORS: [(CompressorRef<'static>, &str); 2] =
-        [(&ALPCompressor, "alp"), (&ALPRDCompressor, "alp_rd")];
-    for (compressor, name) in FLOAT_COMPRESSORS {
-        group.bench_function(format!("{} compress", name), |b| {
-            b.iter(|| {
-                black_box(
-                    compressor
-                        .compress(&float_array, None, ctx.including(compressor))
-                        .unwrap(),
-                );
-            })
-        });
-
-        let compressed = compressor
-            .compress(&float_array, None, ctx.including(compressor))
-            .unwrap()
-            .into_array();
+        let compressed = compressor.compress(&array, None, ctx).unwrap().into_array();
         group.bench_function(format!("{} decompress", name), |b| {
             b.iter(|| {
                 black_box(compressed.clone().into_canonical().unwrap());
