@@ -164,6 +164,16 @@ impl<'a> CompressionTree<'a> {
             .filter_map(|child| child.as_ref().map(|c| c.num_descendants() + 1))
             .sum::<usize>()
     }
+
+    pub fn into_parts(
+        self,
+    ) -> (
+        &'a dyn EncodingCompressor,
+        Vec<Option<CompressionTree<'a>>>,
+        Option<Arc<dyn EncoderMetadata>>,
+    ) {
+        (self.compressor, self.children, self.metadata)
+    }
 }
 
 #[derive(Debug, Clone)]
