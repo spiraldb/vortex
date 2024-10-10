@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
 
+use compressors::alp_rd::ALPRDCompressor;
 use compressors::bitpacked::BITPACK_WITH_PATCHES;
 use compressors::fsst::FSSTCompressor;
 use lazy_static::lazy_static;
@@ -36,8 +37,9 @@ mod constants;
 mod sampling;
 
 lazy_static! {
-    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 11] = [
+    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 12] = [
         &ALPCompressor as CompressorRef,
+        &ALPRDCompressor as CompressorRef,
         &BITPACK_WITH_PATCHES,
         &DateTimePartsCompressor,
         &DEFAULT_RUN_END_COMPRESSOR,
