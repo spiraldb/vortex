@@ -268,7 +268,7 @@ impl<'a> SamplingCompressor<'a> {
             .filter(|&encoding| !self.disabled_compressors.contains(encoding))
             .filter(|&encoding| encoding.can_compress(array).is_some())
             .partition::<Vec<&dyn EncodingCompressor>, _>(|&encoding| {
-                self.depth + encoding.cost() > self.options.max_cost
+                self.depth + encoding.cost() <= self.options.max_cost
             });
 
         if !too_deep.is_empty() {
