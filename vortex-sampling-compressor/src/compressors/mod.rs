@@ -180,6 +180,11 @@ impl<'a> CompressedArray<'a> {
     }
 
     #[inline]
+    pub fn array(&self) -> &Array {
+        &self.array
+    }
+
+    #[inline]
     pub fn into_array(self) -> Array {
         self.array
     }
@@ -192,6 +197,10 @@ impl<'a> CompressedArray<'a> {
     #[inline]
     pub fn into_path(self) -> Option<CompressionTree<'a>> {
         self.path
+    }
+
+    pub fn into_parts(self) -> (Array, Option<CompressionTree<'a>>) {
+        (self.array, self.path)
     }
 
     #[inline]

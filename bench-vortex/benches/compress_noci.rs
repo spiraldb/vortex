@@ -107,12 +107,8 @@ fn benchmark_compress<T: criterion::measurement::Measurement, F, U>(
         });
     });
 
-    let compressed = compressor.compress(uncompressed.as_ref(), None).unwrap();
-    let path = format!("{:#?}", compressed.path());
-
-    let compressed_array = compressed.into_array();
-    //println!("compression tree: {}", compressed_array.tree_display());
-    println!("compression path: {}", path);
+    let (compressed_array, path) = compressor.compress(uncompressed.as_ref(), None).unwrap().into_parts();
+    println!("compression path: {:#?}", path);
     println!(
         "compression ratio: {}",
         compressed_size as f64 / uncompressed_size as f64
