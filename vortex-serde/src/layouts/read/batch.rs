@@ -117,10 +117,13 @@ impl LayoutReader for FilterLayoutReader {
     }
 
     fn read_range(&mut self) -> VortexResult<Option<RangeResult>> {
-        match self.reader.read_next(RowSelector::new(vec![RowRange::new(
-            // FIXME: real ranges
-            0, 1,
-        )]))? {
+        match self.reader.read_next(RowSelector::new(
+            vec![RowRange::new(
+                // FIXME: real ranges
+                0, 1,
+            )],
+            10,
+        ))? {
             None => Ok(None),
             Some(rr) => match rr {
                 ReadResult::ReadMore(m) => Ok(Some(RangeResult::ReadMore(m))),
@@ -129,7 +132,7 @@ impl LayoutReader for FilterLayoutReader {
                     let selector = filter_result.with_dyn(|a| {
                         a.as_bool_array()
                             .ok_or_else(|| vortex_err!("Must be a bool array"))
-                            .map(|b| b.maybe_null_slices_iter().collect())
+                            .map(|b| RowSelector::from_ranges(b.maybe_null_slices_iter(), b.len()))
                     })?;
                     Ok(Some(RangeResult::Range(selector)))
                 }

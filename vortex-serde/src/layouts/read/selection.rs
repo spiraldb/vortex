@@ -18,6 +18,10 @@ impl RowRange {
     pub fn new(begin: usize, end: usize) -> Self {
         RowRange { begin, end }
     }
+
+    pub fn len(&self) -> usize {
+        self.end - self.begin
+    }
 }
 
 impl From<Range<usize>> for RowRange {
@@ -42,15 +46,30 @@ impl From<(usize, usize)> for RowRange {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RowSelector {
     ranges: Vec<RowRange>,
+    length: usize,
 }
 
 impl RowSelector {
-    pub fn new(ranges: Vec<RowRange>) -> Self {
-        Self { ranges }
+    pub fn from_ranges(
+        ranges: impl IntoIterator<Item = impl Into<RowRange>>,
+        length: usize,
+    ) -> Self {
+        Self {
+            ranges: ranges.into_iter().map(Into::into).collect(),
+            length,
+        }
+    }
+
+    pub fn new(ranges: Vec<RowRange>, length: usize) -> Self {
+        Self { ranges, length }
     }
 
     pub fn is_empty(&self) -> bool {
         self.ranges.is_empty()
+    }
+
+    pub fn length(&self) -> usize {
+        self.length
     }
 
     pub fn iter(&self) -> Iter<RowRange> {
@@ -88,7 +107,7 @@ impl RowSelector {
             }
         }
 
-        RowSelector::new(new_ranges)
+        RowSelector::new(new_ranges, min(self.length, other.length))
     }
 
     pub fn slice_array(&self, array: Array) -> VortexResult<Option<Array>> {
@@ -110,26 +129,23 @@ impl RowSelector {
     }
 
     pub fn offset(&self, offset: usize) -> RowSelector {
-        self.ranges
-            .iter()
-            .filter(|rr| rr.end > offset)
-            .map(|rr| {
-                RowRange::new(
-                    if offset > rr.begin {
-                        0
-                    } else {
-                        rr.begin - offset
-                    },
-                    rr.end - offset,
-                )
-            })
-            .collect()
-    }
-}
-
-impl<I: Into<RowRange>> FromIterator<I> for RowSelector {
-    fn from_iter<T: IntoIterator<Item = I>>(iter: T) -> Self {
-        RowSelector::new(iter.into_iter().map(Into::into).collect())
+        RowSelector::new(
+            self.ranges
+                .iter()
+                .filter(|rr| rr.end > offset)
+                .map(|rr| {
+                    RowRange::new(
+                        if offset > rr.begin {
+                            0
+                        } else {
+                            rr.begin - offset
+                        },
+                        rr.end - offset,
+                    )
+                })
+                .collect(),
+            self.length - offset,
+        )
     }
 }
 
@@ -164,10 +180,10 @@ mod tests {
     use crate::layouts::read::selection::RowSelector;
 
     #[rstest]
-    #[case(RowSelector::from_iter(vec![0..2, 9..10]), RowSelector::from_iter(vec![0..1]), RowSelector::from_iter(vec![0..1]))]
-    #[case(RowSelector::from_iter(vec![5..8, 9..10]), RowSelector::from_iter(vec![2..5]), RowSelector::default())]
-    #[case(RowSelector::from_iter(vec![0..4]), RowSelector::from_iter(vec![0..1, 2..3, 3..5]), RowSelector::from_iter(vec![0..1, 2..4]))]
-    #[case(RowSelector::from_iter(vec![0..3, 5..6]), RowSelector::from_iter(vec![2..6]), RowSelector::from_iter(vec![2..3, 5..6]))]
+    #[case(RowSelector::from_ranges(vec![0..2, 9..10], 10), RowSelector::from_ranges(vec![0..1], 10), RowSelector::from_ranges(vec![0..1], 10))]
+    #[case(RowSelector::from_ranges(vec![5..8, 9..10], 10), RowSelector::from_ranges(vec![2..5], 10), RowSelector::new(vec![], 10))]
+    #[case(RowSelector::from_ranges(vec![0..4], 10), RowSelector::from_ranges(vec![0..1, 2..3, 3..5], 10), RowSelector::from_ranges(vec![0..1, 2..4], 10))]
+    #[case(RowSelector::from_ranges(vec![0..3, 5..6], 10), RowSelector::from_ranges(vec![2..6], 10), RowSelector::from_ranges(vec![2..3, 5..6], 10))]
     fn intersection(
         #[case] first: RowSelector,
         #[case] second: RowSelector,

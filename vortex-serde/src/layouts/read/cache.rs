@@ -118,7 +118,7 @@ impl LazyDeserializedDType {
 #[derive(Debug)]
 pub struct RelativeLayoutCache {
     root: Arc<RwLock<LayoutMessageCache>>,
-    dtype: LazyDeserializedDType,
+    dtype: Option<LazyDeserializedDType>,
     path: MessageId,
 }
 
@@ -126,7 +126,7 @@ impl RelativeLayoutCache {
     pub fn new(root: Arc<RwLock<LayoutMessageCache>>, dtype: LazyDeserializedDType) -> Self {
         Self {
             root,
-            dtype,
+            dtype: Some(dtype),
             path: Vec::new(),
         }
     }
@@ -137,7 +137,17 @@ impl RelativeLayoutCache {
         Self {
             root: self.root.clone(),
             path: new_path,
-            dtype: LazyDeserializedDType::from_dtype(dtype),
+            dtype: Some(LazyDeserializedDType::from_dtype(dtype)),
+        }
+    }
+
+    pub fn inlined_schema(&self, id: LayoutPartId) -> Self {
+        let mut new_path = self.path.clone();
+        new_path.push(id);
+        Self {
+            root: self.root.clone(),
+            path: new_path,
+            dtype: None,
         }
     }
 
@@ -167,16 +177,20 @@ impl RelativeLayoutCache {
             .remove(&self.absolute_id(path))
     }
 
+    pub fn has_dtype(&self) -> bool {
+        self.dtype.is_some()
+    }
+
     pub(crate) fn resolve_field(&self, field: &Field) -> VortexResult<usize> {
-        self.dtype.resolve_field(field)
+        self.dtype.as_ref().unwrap().resolve_field(field)
     }
 
     pub fn dtype(&self) -> VortexResult<DType> {
-        self.dtype.dtype().cloned()
+        self.dtype.as_ref().unwrap().dtype().cloned()
     }
 
     pub fn projected_dtype(&self, projection: &[Field]) -> VortexResult<DType> {
-        self.dtype.project(projection)
+        self.dtype.as_ref().unwrap().project(projection)
     }
 
     pub fn absolute_id(&self, path: &[LayoutPartId]) -> MessageId {

@@ -2,8 +2,8 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use arrow::ipc::reader::StreamReader as ArrowStreamReader;
 use arrow_array::{Array, Int32Array, RecordBatch};
+use arrow_ipc::reader::StreamReader as ArrowStreamReader;
 use arrow_ipc::writer::{IpcWriteOptions, StreamWriter as ArrowStreamWriter};
 use arrow_ipc::{CompressionType, MetadataVersion};
 use arrow_schema::{DataType, Field, Schema};
