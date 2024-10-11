@@ -59,10 +59,9 @@ pub fn runend_encode(array: &PrimitiveArray) -> (PrimitiveArray, PrimitiveArray)
         compressed_ends
             .statistics()
             .set(Stat::Min, scalar_at(&compressed_ends, 0).vortex_unwrap());
-        compressed_ends.statistics().set(
-            Stat::Max,
-            scalar_at(&compressed_ends, compressed_ends.len() - 1).vortex_unwrap(),
-        );
+        compressed_ends
+            .statistics()
+            .set(Stat::Max, (array.len() as u64).into());
     }
 
     assert_eq!(array.dtype(), compressed_values.dtype());
