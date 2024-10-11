@@ -95,7 +95,7 @@ pub fn compare(
         vortex_bail!("Compare operations only support arrays of the same type");
     }
 
-    if left.is_encoding(Constant::ID) {
+    if left.is_encoding(Constant::ID) && !right.is_encoding(Constant::ID) {
         return compare(right, left, operator.swap());
     }
 
@@ -143,9 +143,10 @@ pub fn scalar_cmp(lhs: &Scalar, rhs: &Scalar, operator: Operator) -> Scalar {
 #[cfg(test)]
 mod tests {
     use itertools::Itertools;
+    use vortex_scalar::ScalarValue;
 
     use super::*;
-    use crate::array::BoolArray;
+    use crate::array::{BoolArray, ConstantArray};
     use crate::validity::Validity;
     use crate::{IntoArray, IntoArrayVariant};
 
@@ -219,5 +220,15 @@ mod tests {
             .into_bool()
             .unwrap();
         assert_eq!(to_int_indices(matches), [4u64]);
+    }
+
+    #[test]
+    fn constant_compare() {
+        let left = ConstantArray::new(Scalar::from(2u32), 10);
+        let right = ConstantArray::new(Scalar::from(10u32), 10);
+
+        let res = ConstantArray::try_from(compare(left, right, Operator::Gt).unwrap()).unwrap();
+        assert_eq!(res.scalar_value(), &ScalarValue::Bool(false));
+        assert_eq!(res.len(), 10);
     }
 }
