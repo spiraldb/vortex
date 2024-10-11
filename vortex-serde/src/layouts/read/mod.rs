@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use cache::RelativeLayoutCache;
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use vortex::array::BoolArray;
 use vortex::validity::Validity;
@@ -59,6 +60,8 @@ pub trait LayoutReader: Debug + Send {
     ///
     /// The layout is finished reading when it returns None
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>>;
+
+    fn message_cache(&self) -> &RelativeLayoutCache;
 
     // TODO(robert): Support stats pruning via planning. Requires propagating all the metadata
     //  to top level and then pushing down the result of it

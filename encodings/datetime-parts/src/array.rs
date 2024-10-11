@@ -38,6 +38,10 @@ impl DateTimePartsArray {
         seconds: Array,
         subsecond: Array,
     ) -> VortexResult<Self> {
+        let DType::Extension(..) = dtype.clone() else {
+            vortex_bail!(ComputeError: "expected dtype to be DType::Extension variant {}", dtype)
+        };
+
         if !days.dtype().is_int() || (dtype.is_nullable() != days.dtype().is_nullable()) {
             vortex_bail!(
                 "Expected integer with nullability {}, got {}",

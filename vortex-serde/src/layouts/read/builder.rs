@@ -105,6 +105,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
 
         let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
 
+        println!("projected_dtype: {} {}", projected_dtype, footer.dtype()?);
         let data_reader = footer.layout(
             scan.clone(),
             RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),

@@ -45,6 +45,10 @@ impl FlatLayout {
 }
 
 impl LayoutReader for FlatLayout {
+    fn message_cache(&self) -> &RelativeLayoutCache {
+        &self.cache
+    }
+
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match self.state {
             FlatLayoutState::Init => {
@@ -55,6 +59,10 @@ impl LayoutReader for FlatLayout {
                 )])))
             }
             FlatLayoutState::ReadBatch => {
+                println!(
+                    "LayoutReader.read_next()::ReadBatch path={:?}",
+                    self.cache.path
+                );
                 let mut buf = self.cache.get(&[]).ok_or_else(|| {
                     vortex_err!(
                         "Wrong state transition, message {:?} (with range {}) should have been fetched",
@@ -177,6 +185,10 @@ impl ColumnLayout {
 }
 
 impl LayoutReader for ColumnLayout {
+    fn message_cache(&self) -> &RelativeLayoutCache {
+        &self.message_cache
+    }
+
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ColumnLayoutState::Init => {
@@ -297,6 +309,10 @@ impl ChunkedLayout {
 }
 
 impl LayoutReader for ChunkedLayout {
+    fn message_cache(&self) -> &RelativeLayoutCache {
+        &self.message_cache
+    }
+
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ChunkedLayoutState::Init => {

@@ -99,7 +99,7 @@ impl ScalarAtFn for DateTimePartsArray {
 /// Enforces that the passed array is actually a [DateTimePartsArray] with proper metadata.
 pub fn decode_to_temporal(array: &DateTimePartsArray) -> VortexResult<TemporalArray> {
     let DType::Extension(ext, _) = array.dtype().clone() else {
-        vortex_bail!(ComputeError: "expected dtype to be DType::Extension variant")
+        vortex_bail!(ComputeError: "expected dtype to be DType::Extension variant {}", array.dtype())
     };
 
     let Ok(temporal_metadata) = TemporalMetadata::try_from(&ext) else {

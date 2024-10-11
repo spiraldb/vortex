@@ -6,10 +6,10 @@ use itertools::Itertools;
 use log::warn;
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, Nullability};
-use vortex_error::{vortex_err, VortexError, VortexExpect as _, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
-use crate::encoding::EncodingRef;
+use crate::encoding::{ids, EncodingRef};
 use crate::opaque::OpaqueEncoding;
 use crate::stats::{Stat, Statistics, StatsSet};
 use crate::visitor::ArrayVisitor;
@@ -62,6 +62,12 @@ impl ArrayView {
                 vortex_err!(InvalidSerde: "Unknown encoding with ID {:#02x}. Known encodings:\n{pretty_known_encodings}", array.encoding())
             },
         )?;
+
+        println!("ArrayView::try_new {} {:?}", dtype, encoding);
+
+        if array.encoding() == ids::FL_FOR && matches!(dtype, DType::Extension(..)) {
+            vortex_bail!("wtf mate {:?}", array);
+        }
 
         let view = Self {
             encoding,

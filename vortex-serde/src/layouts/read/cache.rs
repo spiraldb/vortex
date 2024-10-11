@@ -29,8 +29,8 @@ impl LayoutMessageCache {
 #[derive(Debug)]
 pub struct RelativeLayoutCache {
     root: Arc<RwLock<LayoutMessageCache>>,
-    dtype: DType,
-    path: MessageId,
+    pub dtype: DType,
+    pub path: MessageId,
 }
 
 impl RelativeLayoutCache {

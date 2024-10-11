@@ -130,6 +130,7 @@ fn vortex_compress_write(
     }
 
     let compressed = compressor.compress(array, None)?.into_array();
+    // println!("compressed: {}", compressed.tree_display());
     let mut cursor = Cursor::new(buf);
 
     runtime.block_on(async_write(&compressed, &mut cursor))?;
@@ -175,13 +176,15 @@ fn vortex_decompress_read(runtime: &Runtime, buf: Arc<Vec<u8>>) -> VortexResult<
         let dtype = stream.schema().clone().into();
         let vecs: Vec<Array> = stream.try_collect().await?;
 
-        ChunkedArray::try_new(vecs, dtype).map(|e| e.into())
+        let a: Array = ChunkedArray::try_new(vecs, dtype).map(|e| e.into())?;
+        // println!("{}", a.tree_display());
+        Ok(a)
     }
 
-    Ok(runtime
+    runtime
         .block_on(async_read(buf))?
         .into_canonical()?
-        .into_arrow()?)
+        .into_arrow()
 }
 
 fn benchmark_compress<F, U>(
@@ -254,6 +257,7 @@ fn benchmark_compress<F, U>(
             let mut buf = Vec::new();
             vortex_compress_write(&runtime, compressor, uncompressed.as_ref(), &mut buf).unwrap();
             let arc = Arc::new(buf);
+            // println!("{}", uncompressed.as_ref().tree_display());
             b.iter_with_large_drop(|| {
                 black_box(vortex_decompress_read(&runtime, arc.clone()).unwrap());
             });

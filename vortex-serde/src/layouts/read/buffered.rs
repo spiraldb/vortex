@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use itertools::Itertools;
 use vortex::array::ChunkedArray;
 use vortex::compute::slice;
 use vortex::{Array, ArrayDType, IntoArray};
@@ -33,6 +34,13 @@ impl BufferedReader {
 
     fn buffer(&mut self) -> VortexResult<Option<ReadResult>> {
         while self.buffered_row_count() < self.batch_size {
+            println!(
+                "layout dtypes: {}",
+                self.layouts
+                    .iter()
+                    .map(|l| l.message_cache().dtype.to_string())
+                    .join(", ")
+            );
             if let Some(mut layout) = self.layouts.pop_front() {
                 if let Some(rr) = layout.read_next()? {
                     self.layouts.push_front(layout);

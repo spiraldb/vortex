@@ -32,6 +32,7 @@ impl BatchReader {
             .enumerate()
             .filter(|(_, a)| a.is_none())
         {
+            println!("BatchReader({:?}, ..).read {}", self.names, i);
             match self.children[i].read_next()? {
                 Some(rr) => match rr {
                     ReadResult::ReadMore(message) => {
