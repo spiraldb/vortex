@@ -99,12 +99,12 @@ impl SliceFn for RunEndArray {
         let slice_begin = self.find_physical_index(start)?;
         let slice_end = self.find_physical_index(stop)?;
 
-        Ok(Self::with_offset_and_size(
+        Ok(Self::with_offset_and_length(
             slice(self.ends(), slice_begin, slice_end + 1)?,
             slice(self.values(), slice_begin, slice_end + 1)?,
             self.validity().slice(start, stop)?,
-            stop - start,
             start + self.offset(),
+            stop - start,
         )?
         .into_array())
     }
@@ -187,7 +187,7 @@ mod test {
     #[test]
     fn slice_with_nulls() {
         let array = RunEndArray::try_new(
-            PrimitiveArray::from(vec![3, 6, 8, 12]).into_array(),
+            PrimitiveArray::from(vec![3u32, 6, 8, 12]).into_array(),
             PrimitiveArray::from_vec(vec![1, 4, 2, 5], Validity::AllValid).into_array(),
             Validity::from(vec![
                 false, false, false, false, true, true, false, false, false, false, true, true,
