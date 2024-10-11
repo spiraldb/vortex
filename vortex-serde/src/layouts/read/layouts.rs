@@ -1,8 +1,10 @@
 use std::collections::VecDeque;
+use std::fmt::Display;
 use std::sync::Arc;
 
 use bytes::Bytes;
 use flatbuffers::{ForwardsUOffset, Vector};
+use itertools::Itertools;
 use vortex::Context;
 use vortex_dtype::field::Field;
 use vortex_dtype::DType;
@@ -33,6 +35,16 @@ pub struct FlatLayout {
     state: FlatLayoutState,
 }
 
+impl Display for FlatLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "FlatLayout(_, _, (_, {}, {:?}), _)",
+            self.cache.dtype, self.cache.path
+        )
+    }
+}
+
 impl FlatLayout {
     pub fn new(begin: u64, end: u64, ctx: Arc<Context>, cache: RelativeLayoutCache) -> Self {
         Self {
@@ -50,7 +62,8 @@ impl LayoutReader for FlatLayout {
     }
 
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
-        match self.state {
+        println!("{}.read_next()", self);
+        let a = match self.state {
             FlatLayoutState::Init => {
                 self.state = FlatLayoutState::ReadBatch;
                 Ok(Some(ReadResult::ReadMore(vec![(
@@ -60,7 +73,7 @@ impl LayoutReader for FlatLayout {
             }
             FlatLayoutState::ReadBatch => {
                 println!(
-                    "LayoutReader.read_next()::ReadBatch path={:?}",
+                    "FlatLayout.read_next()::ReadBatch path={:?}",
                     self.cache.path
                 );
                 let mut buf = self.cache.get(&[]).ok_or_else(|| {
@@ -82,7 +95,17 @@ impl LayoutReader for FlatLayout {
                 Ok(Some(ReadResult::Batch(array)))
             }
             FlatLayoutState::Finished => Ok(None),
-        }
+        };
+        println!(
+            "{}.read_next() -> {}",
+            self,
+            match &a {
+                Ok(Some(ReadResult::Batch(arr))) => format!("Ok(Some(ReadResult::Batch({})))", arr),
+                Ok(Some(x)) => format!("Ok(Some({:?}))", x),
+                x => format!("{:?}", x),
+            }
+        );
+        a
     }
 }
 
@@ -133,6 +156,16 @@ pub struct ColumnLayout {
     layout_serde: LayoutDeserializer,
     message_cache: RelativeLayoutCache,
     state: ColumnLayoutState,
+}
+
+impl Display for ColumnLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ColumnLayout(_, _, {:?}, _, (_, {}, {:?}), _)",
+            self.scan, self.message_cache.dtype, self.message_cache.path
+        )
+    }
 }
 
 impl ColumnLayout {
@@ -190,7 +223,8 @@ impl LayoutReader for ColumnLayout {
     }
 
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
-        match &mut self.state {
+        println!("{}.read_next", self);
+        let a = match &mut self.state {
             ColumnLayoutState::Init => {
                 let DType::Struct(s, ..) = self.message_cache.dtype() else {
                     vortex_bail!("Column layout must have struct dtype")
@@ -220,12 +254,26 @@ impl LayoutReader for ColumnLayout {
                         .collect::<VortexResult<Vec<_>>>()?,
                 };
 
+                println!(
+                    "ColumnLayout initializing: {}",
+                    column_layouts.iter().map(|x| x.to_string()).join(", ")
+                );
                 let reader = BatchReader::new(s.names().clone(), column_layouts);
                 self.state = ColumnLayoutState::ReadColumns(reader);
                 self.read_next()
             }
             ColumnLayoutState::ReadColumns(br) => br.read(),
-        }
+        };
+        println!(
+            "{}.read_next() -> {}",
+            self,
+            match &a {
+                Ok(Some(ReadResult::Batch(arr))) => format!("Ok(Some(ReadResult::Batch({})))", arr),
+                Ok(Some(x)) => format!("Ok(Some({:?}))", x),
+                x => format!("{:?}", x),
+            }
+        );
+        a
     }
 }
 
@@ -279,6 +327,16 @@ pub struct ChunkedLayout {
     state: ChunkedLayoutState,
 }
 
+impl Display for ChunkedLayout {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "ChunkedLayout(_, _, {:?}, _, (_, {}, {:?}), _)",
+            self.scan, self.message_cache.dtype, self.message_cache.path
+        )
+    }
+}
+
 impl ChunkedLayout {
     pub fn new(
         fb_bytes: Bytes,
@@ -314,7 +372,8 @@ impl LayoutReader for ChunkedLayout {
     }
 
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
-        match &mut self.state {
+        println!("{}.read_next", self);
+        let a = match &mut self.state {
             ChunkedLayoutState::Init => {
                 let children = self
                     .flatbuffer()
@@ -334,11 +393,25 @@ impl LayoutReader for ChunkedLayout {
                         )
                     })
                     .collect::<VortexResult<VecDeque<_>>>()?;
+                println!(
+                    "ChunkedLayout initializing: {}",
+                    children.iter().map(|x| x.to_string()).join(", ")
+                );
                 let reader = BufferedReader::new(children, self.scan.batch_size);
                 self.state = ChunkedLayoutState::ReadChunks(reader);
                 self.read_next()
             }
             ChunkedLayoutState::ReadChunks(cr) => cr.read(),
-        }
+        };
+        println!(
+            "{}.read_next() -> {}",
+            self,
+            match &a {
+                Ok(Some(ReadResult::Batch(arr))) => format!("Ok(Some(ReadResult::Batch({})))", arr),
+                Ok(Some(x)) => format!("Ok(Some({:?}))", x),
+                x => format!("{:?}", x),
+            }
+        );
+        a
     }
 }

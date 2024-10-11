@@ -69,6 +69,10 @@ impl ArrayView {
             vortex_bail!("wtf mate {:?}", array);
         }
 
+        if array.encoding() == ids::DATE_TIME_PARTS && !matches!(dtype, DType::Extension(..)) {
+            vortex_bail!("wtf mate {:?}", array);
+        }
+
         let view = Self {
             encoding,
             dtype,

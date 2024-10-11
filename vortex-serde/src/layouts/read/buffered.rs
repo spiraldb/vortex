@@ -35,10 +35,11 @@ impl BufferedReader {
     fn buffer(&mut self) -> VortexResult<Option<ReadResult>> {
         while self.buffered_row_count() < self.batch_size {
             println!(
-                "layout dtypes: {}",
+                "BufferedReader::buffer(): layout dtypes: {}",
                 self.layouts
                     .iter()
                     .map(|l| l.message_cache().dtype.to_string())
+                    .take(1)
                     .join(", ")
             );
             if let Some(mut layout) = self.layouts.pop_front() {

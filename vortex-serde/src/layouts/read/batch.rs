@@ -26,13 +26,18 @@ impl BatchReader {
 
     pub(crate) fn read(&mut self) -> VortexResult<Option<ReadResult>> {
         let mut messages = Vec::new();
+        println!(
+            "BatchReader(..).read {} {}",
+            self.arrays.len(),
+            self.arrays.iter().filter(|a| a.is_none()).count(),
+        );
         for (i, child_array) in self
             .arrays
             .iter_mut()
             .enumerate()
             .filter(|(_, a)| a.is_none())
         {
-            println!("BatchReader({:?}, ..).read {}", self.names, i);
+            println!("BatchReader({:?}, ..).read {}", self.names[0], i);
             match self.children[i].read_next()? {
                 Some(rr) => match rr {
                     ReadResult::ReadMore(message) => {

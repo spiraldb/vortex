@@ -84,6 +84,11 @@ impl LayoutDeserializer {
                 let flat_layout = fb_layout
                     .layout_as_flat_layout()
                     .ok_or_else(|| vortex_err!("Must be flat layout"))?;
+                println!(
+                    "FlatLayout begin end: {} {}",
+                    flat_layout.begin(),
+                    flat_layout.end(),
+                );
                 Ok(Box::new(FlatLayout::new(
                     flat_layout.begin(),
                     flat_layout.end(),
