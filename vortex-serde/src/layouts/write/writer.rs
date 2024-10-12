@@ -101,7 +101,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
         }
 
         if let Some(batches) = self.column_chunks.get_mut(column_idx) {
-            // Remove last entry from the list as it would be the same as first entry of next chunk
+            // Remove first entry from the list as it would be the same as last entry of the previous chunk
             row_offsets.pop_front();
 
             batches.batch_byte_offsets.push(byte_offsets);
