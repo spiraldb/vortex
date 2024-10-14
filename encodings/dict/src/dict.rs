@@ -1,13 +1,12 @@
 use std::fmt::{Debug, Display};
 
 use serde::{Deserialize, Serialize};
-use vortex::accessor::ArrayAccessor;
 use vortex::array::BoolArray;
 use vortex::compute::take;
 use vortex::compute::unary::scalar_at;
 use vortex::encoding::ids;
 use vortex::stats::StatsSet;
-use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
@@ -90,12 +89,13 @@ impl ArrayValidity for DictArray {
                 .into_primitive()
                 .vortex_expect("Failed to convert DictArray codes to primitive array");
             match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
-                ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
-                    LogicalValidity::Array(
-                        BoolArray::from(iter.flatten().map(|c| *c != 0).collect::<Vec<_>>())
-                            .into_array(),
-                    )
-                }).vortex_expect("Failed to convert DictArray codes into logical validity")
+                let is_valid = primitive_codes
+                    .maybe_null_slice::<$P>()
+                    .iter()
+                    .map(|c| * c != 0)
+                    .collect::<Vec<bool>>();
+                let bool_array = BoolArray::from(is_valid);
+                LogicalValidity::Array(bool_array.into_array())
             })
         } else {
             LogicalValidity::AllValid(self.len())
