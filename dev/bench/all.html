@@ -37,37 +37,7 @@
 <script src="data.js"></script>
 <script src="code.js"></script>
 <script id="main-script">
-initAndRender([
-    ["Random Access", undefined],
-    ["Vortex Compression", {
-       "keptCharts": [
-         "COMPRESS THROUGHPUT",
-         "PARQUET RS-ZSTD COMPRESS THROUGHPUT",
-         "DECOMPRESS THROUGHPUT",
-         "PARQUET RS-ZSTD DECOMPRESS THROUGHPUT",
-         "VORTEX COMPRESSION RATIO",
-         "VORTEX:PARQUET-ZSTD SIZE",
-       ],
-       "hiddenDatasets": new Set([
-         "AirlineSentiment",
-       ]),
-       "removedDatasets": new Set([
-         "TPC-H l_comment canonical",
-         "TPC-H l_comment chunked without fsst",
-       ]),
-      }
-    ],
-    ["TPC-H", {
-       "keptCharts": undefined,
-       "hiddenDatasets": new Set([
-         "vortex-in-memory-no-pushdown",
-         "vortex-in-memory-pushdown",
-         "vortex-file-uncompressed",
-       ]),
-       "removedDatasets": undefined,
-      }
-    ],
-]);
+  initAndRender();
 </script>
 </body>
 </html>
