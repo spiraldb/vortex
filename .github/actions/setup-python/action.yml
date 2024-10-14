@@ -13,7 +13,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.rye
-        key: "rye-${{ runner.os }}-${{ runner.cpu-model }}-${{ inputs.rye-version }}"
+        key: "rye-${{ runner.os }}-${{ runner.environment }}-${{ inputs.rye-version }}"
 
     - name: Set up Python
       uses: actions/setup-python@v5
