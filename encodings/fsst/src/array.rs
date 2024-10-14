@@ -82,7 +82,7 @@ impl FSSTArray {
 
         let symbols_len = symbols.len();
         let len = codes.len();
-        let uncompressed_lengths_ptype = uncompressed_lengths.dtype().try_into()?;
+        let uncompressed_lengths_ptype = PType::try_from(uncompressed_lengths.dtype())?;
         let codes_nullability = codes.dtype().nullability();
         let children = Arc::new([symbols, symbol_lengths, codes, uncompressed_lengths]);
 

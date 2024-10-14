@@ -31,20 +31,21 @@ impl Display for FoRMetadata {
 
 impl FoRArray {
     pub fn try_new(child: Array, reference: ScalarValue, shift: u8) -> VortexResult<Self> {
-        if reference.is_null() {
+        let Some(refpv) = reference.as_pvalue()? else {
             vortex_bail!("Reference value cannot be null");
-        }
+        };
 
-        if !reference.is_instance_of(child.dtype()) {
+        let child_ptype = PType::try_from(child.dtype())?;
+        if refpv.ptype().byte_width() != child_ptype.byte_width() {
             vortex_bail!(
-                "Reference value ({}) is not an instance of the child array dtype ({})",
+                "Reference value ({}) must have the same width as the child array dtype ({})",
                 reference,
                 child.dtype()
             );
         }
 
         Self::try_from_parts(
-            child.dtype().clone(),
+            DType::Primitive(refpv.ptype(), child.dtype().nullability()),
             child.len(),
             FoRMetadata { reference, shift },
             [child].into(),

@@ -78,6 +78,13 @@ impl PValue {
         &self.ptype() == ptype
     }
 
+    #[inline]
+    pub fn as_primitive<T: NativePType + TryFrom<PValue, Error = VortexError>>(
+        &self,
+    ) -> Result<T, VortexError> {
+        T::try_from(*self)
+    }
+
     #[allow(clippy::transmute_int_to_float, clippy::transmute_float_to_int)]
     pub fn reinterpret_cast(&self, ptype: PType) -> Self {
         if ptype == self.ptype() {

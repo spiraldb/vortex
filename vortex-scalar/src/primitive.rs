@@ -60,9 +60,7 @@ impl<'a> PrimitiveScalar<'a> {
             T::PTYPE
         );
 
-        self.pvalue
-            .as_ref()
-            .map(|pv| T::try_from(*pv).vortex_unwrap())
+        self.pvalue.map(|pv| pv.as_primitive::<T>().vortex_unwrap())
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
@@ -95,7 +93,7 @@ impl Scalar {
         }
     }
 
-    pub fn reinterpret_cast(&self, ptype: PType) -> Self {
+    pub fn reinterpret_cast(&self, ptype: PType) -> Scalar {
         let primitive = PrimitiveScalar::try_from(self).unwrap_or_else(|e| {
             vortex_panic!(e, "Failed to reinterpret cast {} to {}", self.dtype, ptype)
         });

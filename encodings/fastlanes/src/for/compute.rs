@@ -8,8 +8,8 @@ use vortex::compute::{
 };
 use vortex::{Array, ArrayDType, IntoArray};
 use vortex_dtype::{match_each_integer_ptype, NativePType};
-use vortex_error::{VortexError, VortexExpect as _, VortexResult};
-use vortex_scalar::{PValue, PrimitiveScalar, Scalar};
+use vortex_error::{VortexError, VortexExpect as _, VortexResult, VortexUnwrap as _};
+use vortex_scalar::{PValue, Scalar};
 
 use crate::FoRArray;
 
@@ -63,17 +63,23 @@ impl ScalarAtFn for FoRArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        let encoded_scalar =
-            scalar_at_unchecked(self.encoded(), index).reinterpret_cast(self.ptype());
-        let encoded =
-            PrimitiveScalar::try_from(&encoded_scalar).vortex_expect("Invalid encoded scalar");
-        let reference = PrimitiveScalar::try_new(self.dtype(), self.reference())
-            .vortex_expect("Invalid reference scalar");
+        let encoded_pvalue = scalar_at_unchecked(self.encoded(), index)
+            .into_value()
+            .as_pvalue()
+            .vortex_expect("Encoded scalar must be primitive")
+            .map(|p| p.reinterpret_cast(self.ptype()));
+        let reference = self
+            .reference()
+            .as_pvalue()
+            .vortex_expect("Reference scalar must be primitive")
+            .vortex_expect("Reference scalar cannot be null");
 
-        match_each_integer_ptype!(encoded.ptype(), |$P| {
-            encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))
-                    .map(|v| Scalar::primitive::<$P>(v, encoded.dtype().nullability()))
-                    .unwrap_or_else(|| Scalar::null(encoded.dtype().clone()))
+        match_each_integer_ptype!(self.ptype(), |$P| {
+            encoded_pvalue
+                .map(|v| v.as_primitive::<$P>().vortex_unwrap())
+                .map(|v| (v << self.shift()).wrapping_add(reference.as_primitive::<$P>().vortex_unwrap()))
+                .map(|v| Scalar::primitive::<$P>(v, self.dtype().nullability()))
+                .unwrap_or_else(|| Scalar::null(self.dtype().clone()))
         })
     }
 }
@@ -117,7 +123,8 @@ where
         .reference()
         .as_pvalue()?
         .vortex_expect("Reference must be a valid pvalue")
-        .try_into()?;
+        .as_primitive::<T>()
+        .vortex_unwrap();
     let primitive_value: T = value.cast(array.dtype())?.as_ref().try_into()?;
     // Make sure that smaller values are still smaller and not larger than (which they would be after wrapping_sub)
     if primitive_value < min {
@@ -166,10 +173,11 @@ mod test {
 
     #[test]
     fn for_scalar_at() {
-        let for_arr = for_compress(&PrimitiveArray::from(vec![1100, 1500, 1900])).unwrap();
-        assert_eq!(scalar_at(&for_arr, 0).unwrap(), 1100.into());
-        assert_eq!(scalar_at(&for_arr, 1).unwrap(), 1500.into());
-        assert_eq!(scalar_at(&for_arr, 2).unwrap(), 1900.into());
+        let for_arr = for_compress(&PrimitiveArray::from(vec![-100, 1100, 1500, 1900])).unwrap();
+        assert_eq!(scalar_at(&for_arr, 0).unwrap(), (-100).into());
+        assert_eq!(scalar_at(&for_arr, 1).unwrap(), 1100.into());
+        assert_eq!(scalar_at(&for_arr, 2).unwrap(), 1500.into());
+        assert_eq!(scalar_at(&for_arr, 3).unwrap(), 1900.into());
     }
 
     #[test]

@@ -13,7 +13,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
 };
-use vortex_dtype::{DType, Nullability, PType};
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::{runend_decode, runend_encode};
@@ -148,14 +148,12 @@ impl RunEndArray {
     #[inline]
     pub fn ends(&self) -> Array {
         self.as_ref()
-            .child(0, &self.ends_dtype(), self.metadata().num_runs)
+            .child(
+                0,
+                &DType::from(self.metadata().ends_ptype),
+                self.metadata().num_runs,
+            )
             .vortex_expect("RunEndArray is missing its run ends")
-    }
-
-    /// Get the DType of the ends array
-    #[inline]
-    pub fn ends_dtype(&self) -> DType {
-        DType::Primitive(self.metadata().ends_ptype, Nullability::NonNullable)
     }
 
     /// The scalar values.
