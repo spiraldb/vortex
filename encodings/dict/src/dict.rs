@@ -1,12 +1,13 @@
 use std::fmt::{Debug, Display};
 
+use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex::array::BoolArray;
 use vortex::compute::take;
 use vortex::compute::unary::scalar_at;
 use vortex::encoding::ids;
 use vortex::stats::StatsSet;
-use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
+use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
@@ -92,10 +93,10 @@ impl ArrayValidity for DictArray {
                 let is_valid = primitive_codes
                     .maybe_null_slice::<$P>()
                     .iter()
-                    .map(|c| * c != 0)
-                    .collect::<Vec<bool>>();
-                let bool_array = BoolArray::from(is_valid);
-                LogicalValidity::Array(bool_array.into_array())
+                    .copied()
+                    .map(|c| c != 0)
+                    .collect::<BooleanBuffer>();
+                LogicalValidity::Array(BoolArray::from(is_valid).into_array())
             })
         } else {
             LogicalValidity::AllValid(self.len())
