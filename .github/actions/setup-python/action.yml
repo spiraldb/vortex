@@ -1,10 +1,10 @@
-name: 'Setup Rust'
-description: 'Toolchain setup and Initial compilation'
+name: "Setup Rust"
+description: "Toolchain setup and Initial compilation"
 inputs:
   rye-version:
-    description: 'Rye version to use'
+    description: "Rye version to use"
     required: true
-    default: '0.41.0'
+    default: "0.41.0"
 runs:
   using: "composite"
   steps:
@@ -13,12 +13,12 @@ runs:
       uses: actions/cache@v4
       with:
         path: ~/.rye
-        key: "rye-${{ runner.os }}-${{ inputs.rye-version }}"
+        key: "rye-${{ runner.os }}-${{ runner.cpu-model }}-${{ inputs.rye-version }}"
 
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.11.9'
+        python-version: "3.11.9"
 
     - name: Rye Install
       shell: bash
@@ -53,4 +53,3 @@ runs:
     - name: Export Path
       shell: bash
       run: echo "PATH=$PATH" >> $GITHUB_ENV
-
