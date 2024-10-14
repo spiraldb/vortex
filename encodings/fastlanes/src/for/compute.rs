@@ -122,9 +122,8 @@ where
     let min: T = array
         .reference()
         .as_pvalue()?
-        .vortex_expect("Reference must be a valid pvalue")
-        .as_primitive::<T>()
-        .vortex_unwrap();
+        .vortex_expect("Reference value cannot be null")
+        .as_primitive::<T>()?;
     let primitive_value: T = value.cast(array.dtype())?.as_ref().try_into()?;
     // Make sure that smaller values are still smaller and not larger than (which they would be after wrapping_sub)
     if primitive_value < min {
