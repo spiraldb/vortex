@@ -26,7 +26,6 @@ pub struct RunEndMetadata {
     ends_ptype: PType,
     num_runs: usize,
     offset: usize,
-    length: usize,
 }
 
 impl Display for RunEndMetadata {
@@ -37,20 +36,24 @@ impl Display for RunEndMetadata {
 
 impl RunEndArray {
     pub fn try_new(ends: Array, values: Array, validity: Validity) -> VortexResult<Self> {
-        let length: usize = scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?;
-        Self::with_offset_and_size(ends, values, validity, length, 0)
+        let length = if ends.is_empty() {
+            0
+        } else {
+            scalar_at(&ends, ends.len() - 1)?.as_ref().try_into()?
+        };
+        Self::with_offset_and_length(ends, values, validity, 0, length)
     }
 
-    pub(crate) fn with_offset_and_size(
+    pub(crate) fn with_offset_and_length(
         ends: Array,
         values: Array,
         validity: Validity,
-        length: usize,
         offset: usize,
+        length: usize,
     ) -> VortexResult<Self> {
-        if values.dtype().is_nullable() == (validity == Validity::NonNullable) {
+        if values.dtype().nullability() != validity.nullability() {
             vortex_bail!(
-                "incorrect validity {:?} for dtype {}",
+                "invalid validity {:?} for dtype {}",
                 validity,
                 values.dtype()
             );
@@ -64,19 +67,18 @@ impl RunEndArray {
         }
 
         if !ends.dtype().is_unsigned_int() || ends.dtype().is_nullable() {
-            vortex_bail!("Ends array must be an unsigned integer array and cannot be nullable");
+            vortex_bail!(MismatchedTypes: "non-nullable unsigned int", ends.dtype());
+        }
+        if !ends.statistics().compute_is_strict_sorted().unwrap_or(true) {
+            vortex_bail!("Ends array must be strictly sorted");
         }
 
-        if !ends.statistics().compute_is_strict_sorted().unwrap_or(true) {
-            vortex_bail!("Ends array must be strictly sorted",);
-        }
         let dtype = values.dtype().clone();
         let metadata = RunEndMetadata {
             validity: validity.to_metadata(length)?,
-            ends_ptype: ends.dtype().try_into()?,
+            ends_ptype: PType::try_from(ends.dtype())?,
             num_runs: ends.len(),
             offset,
-            length,
         };
 
         let mut children = Vec::with_capacity(3);
