@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Display};
 
+use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
-use vortex::accessor::ArrayAccessor;
 use vortex::array::BoolArray;
 use vortex::compute::take;
 use vortex::compute::unary::scalar_at;
@@ -90,12 +90,12 @@ impl ArrayValidity for DictArray {
                 .into_primitive()
                 .vortex_expect("Failed to convert DictArray codes to primitive array");
             match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
-                ArrayAccessor::<$P>::with_iterator(&primitive_codes, |iter| {
-                    LogicalValidity::Array(
-                        BoolArray::from(iter.flatten().map(|c| *c != 0).collect::<Vec<_>>())
-                            .into_array(),
-                    )
-                }).vortex_expect("Failed to convert DictArray codes into logical validity")
+                let is_valid = primitive_codes
+                    .maybe_null_slice::<$P>();
+                let is_valid_buffer = BooleanBuffer::collect_bool(is_valid.len(), |idx| {
+                    is_valid[idx] != 0
+                });
+                LogicalValidity::Array(BoolArray::from(is_valid_buffer).into_array())
             })
         } else {
             LogicalValidity::AllValid(self.len())
