@@ -30,17 +30,17 @@ impl Display for FoRMetadata {
 }
 
 impl FoRArray {
-    pub fn try_new(
-        child: Array,
-        reference: ScalarValue,
-        shift: u8,
-    ) -> VortexResult<Self> {
+    pub fn try_new(child: Array, reference: ScalarValue, shift: u8) -> VortexResult<Self> {
         if reference.is_null() {
             vortex_bail!("Reference value cannot be null");
         }
 
         if !reference.is_instance_of(child.dtype()) {
-            vortex_bail!("Reference value ({}) is not an instance of the child array dtype ({})", reference, child.dtype());
+            vortex_bail!(
+                "Reference value ({}) is not an instance of the child array dtype ({})",
+                reference,
+                child.dtype()
+            );
         }
 
         Self::try_from_parts(

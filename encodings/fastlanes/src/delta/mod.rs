@@ -20,7 +20,7 @@ impl_encoding!("fastlanes.delta", ids::FL_DELTA, Delta);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaMetadata {
     validity: ValidityMetadata,
-    deltas_len: u64, 
+    deltas_len: u64,
     offset: u16, // must be <1024
 }
 

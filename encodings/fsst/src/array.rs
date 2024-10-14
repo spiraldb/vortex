@@ -69,7 +69,9 @@ impl FSSTArray {
             vortex_bail!(InvalidArgument: "uncompressed_lengths must be same len as codes");
         }
 
-        if !uncompressed_lengths.dtype().is_unsigned_int() || uncompressed_lengths.dtype().is_nullable() {
+        if !uncompressed_lengths.dtype().is_unsigned_int()
+            || uncompressed_lengths.dtype().is_nullable()
+        {
             vortex_bail!(InvalidArgument: "uncompressed_lengths must have unsigned integer type and cannot be nullable");
         }
 
@@ -134,7 +136,10 @@ impl FSSTArray {
     /// Get the DType of the uncompressed lengths array
     #[inline]
     pub fn uncompressed_lengths_dtype(&self) -> DType {
-        DType::Primitive(self.metadata().uncompressed_lengths_ptype, Nullability::NonNullable)
+        DType::Primitive(
+            self.metadata().uncompressed_lengths_ptype,
+            Nullability::NonNullable,
+        )
     }
 
     /// Get the validity for this array.

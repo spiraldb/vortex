@@ -67,8 +67,8 @@ impl ScalarAtFn for FoRArray {
             scalar_at_unchecked(self.encoded(), index).reinterpret_cast(self.ptype());
         let encoded =
             PrimitiveScalar::try_from(&encoded_scalar).vortex_expect("Invalid encoded scalar");
-        let reference =
-            PrimitiveScalar::try_new(self.dtype(), self.reference()).vortex_expect("Invalid reference scalar");
+        let reference = PrimitiveScalar::try_new(self.dtype(), self.reference())
+            .vortex_expect("Invalid reference scalar");
 
         match_each_integer_ptype!(encoded.ptype(), |$P| {
             encoded.typed_value::<$P>().map(|v| (v << self.shift()).wrapping_add(reference.typed_value::<$P>().unwrap()))
@@ -113,7 +113,11 @@ where
         + AddAssign
         + Into<PValue>,
 {
-    let min: T = array.reference().as_pvalue()?.vortex_expect("Reference must be a valid pvalue").try_into()?;
+    let min: T = array
+        .reference()
+        .as_pvalue()?
+        .vortex_expect("Reference must be a valid pvalue")
+        .try_into()?;
     let primitive_value: T = value.cast(array.dtype())?.as_ref().try_into()?;
     // Make sure that smaller values are still smaller and not larger than (which they would be after wrapping_sub)
     if primitive_value < min {
