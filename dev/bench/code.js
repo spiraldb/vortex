@@ -58,7 +58,8 @@ window.initAndRender = (function () {
                         value = value / timeEntry.value
                     }
                     let prettyQ = q.replace("_", " ")
-                        .toUpperCase();
+                        .toUpperCase()
+                        .replace("VORTEX:RAW SIZE", "VORTEX COMPRESSION RATIO");
                     if (prettyQ.includes("PARQUET-UNC")) {
                         return
                     }
@@ -249,7 +250,10 @@ window.initAndRender = (function () {
         }
 
         function renderBenchSet(name, benchSet, main, toc, groupFilterSettings) {
-            const {keptCharts, hiddenDatasets, removedDatasets} = groupFilterSettings;
+            const {keptCharts, hiddenDatasets, removedDatasets} = (
+                groupFilterSettings === undefined
+                    ? {keptCharts: undefined, hiddenDatasets: undefined, removedDatasets: undefined}
+                    : groupFilterSettings);
             const setElem = document.createElement('div');
             setElem.className = 'benchmark-set';
             main.appendChild(setElem);
@@ -286,15 +290,15 @@ window.initAndRender = (function () {
 
         const main = document.getElementById('main');
         const toc = document.getElementById('toc');
-        for (const {name, dataSet} of dataSets) {
-            if (keptGroups === undefined) {
-                renderBenchSet(name, dataSet, main, toc, {
-                    "keptCharts": undefined,
-                    "hiddenDatasets": undefined,
-                    "removedDatasets": undefined
-                });
-            } else if (keptGroups.get(name)) {
-                renderBenchSet(name, dataSet, main, toc, keptGroups.get(name));
+        if (keptGroups === undefined) {
+            for (const {name, dataSet} of dataSets) {
+                renderBenchSet(name, dataSet, main, toc, undefined);
+            }
+        } else {
+            const dataSetsMap = new Map(dataSets.map(({name, dataSet}) => [name, dataSet]));
+            for (const [name, groupFilterSettings] of keptGroups) {
+                const dataSet = dataSetsMap.get(name);
+                renderBenchSet(name, dataSet, main, toc, groupFilterSettings);
             }
         }
     }

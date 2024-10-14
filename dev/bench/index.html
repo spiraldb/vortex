@@ -37,14 +37,15 @@
 <script src="data.js"></script>
 <script src="code.js"></script>
 <script id="main-script">
-initAndRender(new Map([
+initAndRender([
+    ["Random Access", undefined],
     ["Vortex Compression", {
        "keptCharts": [
          "COMPRESS THROUGHPUT",
          "PARQUET RS-ZSTD COMPRESS THROUGHPUT",
          "DECOMPRESS THROUGHPUT",
          "PARQUET RS-ZSTD DECOMPRESS THROUGHPUT",
-         "VORTEX:RAW SIZE",
+         "VORTEX COMPRESSION RATIO",
          "VORTEX:PARQUET-ZSTD SIZE",
        ],
        "hiddenDatasets": new Set([
@@ -66,7 +67,7 @@ initAndRender(new Map([
        "removedDatasets": undefined,
       }
     ],
-]));
+]);
 </script>
 </body>
 </html>
