@@ -93,7 +93,7 @@ impl Scalar {
         }
     }
 
-    pub fn reinterpret_cast(&self, ptype: PType) -> Scalar {
+    pub fn reinterpret_cast(&self, ptype: PType) -> Self {
         let primitive = PrimitiveScalar::try_from(self).unwrap_or_else(|e| {
             vortex_panic!(e, "Failed to reinterpret cast {} to {}", self.dtype, ptype)
         });
