@@ -33,7 +33,7 @@ jobs:
 
       # The compression benchmarks rely on DuckDB being installed to convert CSV to Parquet
       - name: Install DuckDB
-        uses: adamgs/setup-duckdb-action@30cd713e81efd3aa6820c209a3c87b08d5cf17a6
+        uses: adamgs/setup-duckdb-action@9829317a6e9e9fecf6fc4ef7debcb4d9277d110e
         with:
           version: v1.0.0
 
