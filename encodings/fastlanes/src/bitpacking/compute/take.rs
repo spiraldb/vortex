@@ -14,7 +14,7 @@ use crate::{unpack_single_primitive, BitPackedArray};
 
 impl TakeFn for BitPackedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        if indices.len() / 2 > self.len() {
+        if indices.len() > self.len() {
             return self
                 .clone()
                 .into_canonical()?
