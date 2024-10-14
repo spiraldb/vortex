@@ -56,7 +56,8 @@ about which encodings to use or how to logically chunk data are left up to the `
 
 One of the unique attributes of the (in-progress) Vortex file format is that it encodes the physical layout of the data within the
 file's footer. This allows the file format to be effectively self-describing and to evolve without breaking changes to
-the file format specification.
+the file format specification. Relatedly, the layouts allow us to encode additional "heavyweight" metadata in the file; one planned
+such use case is to embed a WASM decoder for forward-compatbility with new encodings.
 
 ## Components
 
