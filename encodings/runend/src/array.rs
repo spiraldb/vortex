@@ -13,7 +13,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
 };
-use vortex_dtype::DType;
+use vortex_dtype::{DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::{runend_decode, runend_encode};
@@ -23,7 +23,7 @@ impl_encoding!("vortex.runend", ids::RUN_END, RunEnd);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunEndMetadata {
     validity: ValidityMetadata,
-    ends_dtype: DType,
+    ends_ptype: PType,
     num_runs: usize,
     offset: usize,
     length: usize,
@@ -63,13 +63,17 @@ impl RunEndArray {
             }
         }
 
+        if !ends.dtype().is_unsigned_int() || ends.dtype().is_nullable() {
+            vortex_bail!("Ends array must be an unsigned integer array and cannot be nullable");
+        }
+
         if !ends.statistics().compute_is_strict_sorted().unwrap_or(true) {
             vortex_bail!("Ends array must be strictly sorted",);
         }
         let dtype = values.dtype().clone();
         let metadata = RunEndMetadata {
             validity: validity.to_metadata(length)?,
-            ends_dtype: ends.dtype().clone(),
+            ends_ptype: ends.dtype().try_into()?,
             num_runs: ends.len(),
             offset,
             length,
@@ -142,8 +146,14 @@ impl RunEndArray {
     #[inline]
     pub fn ends(&self) -> Array {
         self.as_ref()
-            .child(0, &self.metadata().ends_dtype, self.metadata().num_runs)
+            .child(0, &self.ends_dtype(), self.metadata().num_runs)
             .vortex_expect("RunEndArray is missing its run ends")
+    }
+
+    /// Get the DType of the ends array
+    #[inline]
+    pub fn ends_dtype(&self) -> DType {
+        DType::Primitive(self.metadata().ends_ptype, Nullability::NonNullable)
     }
 
     /// The scalar values.
