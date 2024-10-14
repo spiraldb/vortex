@@ -146,16 +146,17 @@ impl FlatLayout {
 
         if let Some(array) = self.cached_array.take() {
             let rows_to_read = min(self.scan.batch_size, array.len());
-            self.offset = rows_to_read;
-            if array.len() > self.scan.batch_size {
+            let array = if array.len() > self.scan.batch_size {
                 let taken = slice(&array, 0, rows_to_read)?;
                 let leftover = slice(&array, rows_to_read, array.len())?;
                 self.cached_array = Some(leftover);
-                Ok(Some(ReadResult::Batch(taken)))
+                taken
             } else {
                 self.state = FlatLayoutState::Finished;
-                Ok(Some(ReadResult::Batch(array)))
-            }
+                array
+            };
+            self.offset += rows_to_read;
+            Ok(Some(ReadResult::Batch(array)))
         } else if let Some(buf) = self.cache.get(&[]) {
             let array = self.array_from_bytes(buf)?;
 
@@ -208,7 +209,7 @@ impl LayoutReader for FlatLayout {
                                         b.maybe_null_slices_iter().map(|(begin, end)| {
                                             RowRange::new(begin + self.offset, end + self.offset)
                                         }),
-                                        b.len(),
+                                        self.length as usize,
                                     )
                                 })
                         })?;
@@ -246,6 +247,7 @@ impl LayoutReader for FlatLayout {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, RwLock};
 
     use bytes::Bytes;
@@ -257,21 +259,26 @@ mod tests {
 
     use crate::layouts::read::cache::{LazyDeserializedDType, RelativeLayoutCache};
     use crate::layouts::read::layouts::flat::FlatLayout;
-    use crate::layouts::read::selection::RowSelector;
-    use crate::layouts::{
-        LayoutMessageCache, LayoutReader, RangeResult, ReadResult, RowFilter, Scan, ScanExpr,
+    use crate::layouts::read::layouts::test_read::{
+        read_layout, read_layout_data, read_layout_ranges,
     };
+    use crate::layouts::{LayoutMessageCache, LayoutReader, ReadResult, RowFilter, Scan, ScanExpr};
     use crate::message_writer::MessageWriter;
 
     async fn layout_and_bytes(
         cache: Arc<RwLock<LayoutMessageCache>>,
         scan: Scan,
-    ) -> (FlatLayout, Bytes) {
+    ) -> (FlatLayout, FlatLayout, Bytes) {
         let mut writer = MessageWriter::new(Vec::new());
         let array = PrimitiveArray::from((0..100).collect::<Vec<_>>()).into_array();
         let len = array.len();
         writer.write_batch(array).await.unwrap();
         let written = writer.into_inner();
+
+        let projection_scan = Scan {
+            expr: ScanExpr::Projection(Projection::All),
+            batch_size: scan.batch_size,
+        };
 
         (
             FlatLayout::new(
@@ -285,63 +292,25 @@ mod tests {
                     LazyDeserializedDType::from_dtype(PType::I32.into()),
                 ),
             ),
+            FlatLayout::new(
+                0,
+                written.len() as u64,
+                len as u64,
+                projection_scan,
+                Arc::new(Context::default()),
+                RelativeLayoutCache::new(
+                    cache.clone(),
+                    LazyDeserializedDType::from_dtype(PType::I32.into()),
+                ),
+            ),
             Bytes::from(written),
         )
-    }
-
-    fn read_layout_ranges(
-        layout: &mut dyn LayoutReader,
-        cache: Arc<RwLock<LayoutMessageCache>>,
-        buf: &Bytes,
-    ) -> Option<RowSelector> {
-        let mut s = None;
-        while let Some(rr) = layout.read_range().unwrap() {
-            match rr {
-                RangeResult::ReadMore(mut m) => {
-                    let mut write_cache_guard = cache.write().unwrap();
-                    write_cache_guard.set(m.remove(0).0, buf.clone());
-                }
-                RangeResult::Range(r) => s = Some(r),
-            }
-        }
-        s
-    }
-
-    fn read_layout_data(
-        layout: &mut dyn LayoutReader,
-        cache: Arc<RwLock<LayoutMessageCache>>,
-        buf: &Bytes,
-        selector: RowSelector,
-    ) -> Vec<Array> {
-        let mut arr = Vec::new();
-        while let Some(rr) = layout.read_next(selector.clone()).unwrap() {
-            match rr {
-                ReadResult::ReadMore(mut m) => {
-                    let mut write_cache_guard = cache.write().unwrap();
-                    write_cache_guard.set(m.remove(0).0, buf.clone());
-                }
-                ReadResult::Batch(a) => arr.push(a),
-            }
-        }
-
-        arr
-    }
-
-    fn read_layout(
-        layout: &mut dyn LayoutReader,
-        cache: Arc<RwLock<LayoutMessageCache>>,
-        buf: &Bytes,
-    ) -> Vec<Array> {
-        let selector = read_layout_ranges(layout, cache.clone(), buf);
-        selector
-            .map(|s| read_layout_data(layout, cache.clone(), buf, s))
-            .unwrap_or_default()
     }
 
     #[tokio::test]
     async fn read_range() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
@@ -353,7 +322,7 @@ mod tests {
             },
         )
         .await;
-        let arr = read_layout(&mut layout, cache, &buf).pop();
+        let arr = read_layout(&mut filter_layout, &mut projection_layout, cache, &buf).pop_front();
 
         assert!(arr.is_some());
         let arr = arr.unwrap();
@@ -366,7 +335,7 @@ mod tests {
     #[tokio::test]
     async fn read_range_no_filter() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Projection(Projection::All),
@@ -374,7 +343,7 @@ mod tests {
             },
         )
         .await;
-        let arr = read_layout(&mut layout, cache, &buf).pop();
+        let arr = read_layout(&mut filter_layout, &mut projection_layout, cache, &buf).pop_front();
 
         assert!(arr.is_some());
         let arr = arr.unwrap();
@@ -387,7 +356,7 @@ mod tests {
     #[tokio::test]
     async fn read_empty() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
@@ -399,7 +368,7 @@ mod tests {
             },
         )
         .await;
-        let arr = read_layout(&mut layout, cache, &buf).pop();
+        let arr = read_layout(&mut filter_layout, &mut projection_layout, cache, &buf).pop_front();
 
         assert!(arr.is_none());
     }
@@ -407,7 +376,7 @@ mod tests {
     #[tokio::test]
     async fn advance_read_range() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
@@ -419,8 +388,8 @@ mod tests {
             },
         )
         .await;
-        layout.advance(50).unwrap();
-        let arr = read_layout(&mut layout, cache, &buf).pop();
+        filter_layout.advance(50).unwrap();
+        let arr = read_layout(&mut filter_layout, &mut projection_layout, cache, &buf).pop_front();
 
         assert!(arr.is_some());
         let arr = arr.unwrap();
@@ -433,7 +402,7 @@ mod tests {
     #[tokio::test]
     async fn advance_skipped() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
@@ -445,8 +414,8 @@ mod tests {
             },
         )
         .await;
-        layout.advance(100).unwrap();
-        let arr = read_layout(&mut layout, cache, &buf).pop();
+        filter_layout.advance(100).unwrap();
+        let arr = read_layout(&mut filter_layout, &mut projection_layout, cache, &buf).pop_front();
 
         assert!(arr.is_none());
     }
@@ -454,7 +423,7 @@ mod tests {
     #[tokio::test]
     async fn batch_size() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
@@ -466,17 +435,19 @@ mod tests {
             },
         )
         .await;
-        let mut arr = read_layout(&mut layout, cache, &buf);
+        let mut arr = read_layout(&mut filter_layout, &mut projection_layout, cache, &buf);
 
         assert_eq!(
-            arr.remove(0)
+            arr.pop_front()
+                .unwrap()
                 .into_primitive()
                 .unwrap()
                 .maybe_null_slice::<i32>(),
             &(11..=60).collect::<Vec<_>>()
         );
         assert_eq!(
-            arr.remove(0)
+            arr.pop_front()
+                .unwrap()
                 .into_primitive()
                 .unwrap()
                 .maybe_null_slice::<i32>(),
@@ -487,7 +458,7 @@ mod tests {
     #[tokio::test]
     async fn advance_after_filter() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
@@ -499,9 +470,12 @@ mod tests {
             },
         )
         .await;
-        let s = read_layout_ranges(&mut layout, cache.clone(), &buf);
-        layout.advance(50).unwrap();
-        let mut arr = read_layout_data(&mut layout, cache, &buf, s.unwrap());
+        let selector = read_layout_ranges(&mut filter_layout, cache.clone(), &buf);
+        projection_layout.advance(50).unwrap();
+        let mut arr: Vec<Array> = selector
+            .into_iter()
+            .flat_map(|s| read_layout_data(&mut projection_layout, cache.clone(), &buf, s))
+            .collect();
 
         assert_eq!(
             arr.remove(0)
@@ -515,7 +489,7 @@ mod tests {
     #[tokio::test]
     async fn advance_mid_read() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-        let (mut layout, buf) = layout_and_bytes(
+        let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
@@ -527,9 +501,11 @@ mod tests {
             },
         )
         .await;
-        let s = read_layout_ranges(&mut layout, cache.clone(), &buf);
+        let s = read_layout_ranges(&mut filter_layout, cache.clone(), &buf).pop();
         let mut arr = Vec::new();
-        while let Some(rr) = layout.read_next(s.clone().unwrap()).unwrap() {
+        let advanced = AtomicBool::new(false);
+
+        while let Some(rr) = projection_layout.read_next(s.clone().unwrap()).unwrap() {
             match rr {
                 ReadResult::ReadMore(mut m) => {
                     let mut write_cache_guard = cache.write().unwrap();
@@ -537,7 +513,12 @@ mod tests {
                 }
                 ReadResult::Batch(a) => {
                     arr.push(a);
-                    layout.advance(90).unwrap();
+                    if advanced
+                        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                        .is_ok()
+                    {
+                        projection_layout.advance(90).unwrap();
+                    }
                 }
             }
         }

@@ -4,32 +4,30 @@ use vortex::array::StructArray;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray};
 use vortex_dtype::FieldNames;
-use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
+use vortex_error::{vortex_err, VortexExpect, VortexResult};
 
 use crate::layouts::read::selection::{RowRange, RowSelector};
 use crate::layouts::read::{LayoutReader, ReadResult};
 use crate::layouts::{Messages, RangeResult, RowFilter};
 
 #[derive(Debug)]
-pub struct BatchReader {
+pub struct ColumnBatchReader {
     names: FieldNames,
     children: Vec<Box<dyn LayoutReader>>,
     arrays: Vec<Option<Array>>,
-    row_start: usize,
 }
 
-impl BatchReader {
-    pub fn new(names: FieldNames, children: Vec<Box<dyn LayoutReader>>, row_start: usize) -> Self {
+impl ColumnBatchReader {
+    pub fn new(names: FieldNames, children: Vec<Box<dyn LayoutReader>>) -> Self {
         let arrays = vec![None; children.len()];
         Self {
             names,
             children,
             arrays,
-            row_start,
         }
     }
 
-    pub fn read_next_batch(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>> {
+    pub fn read_next(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>> {
         let mut messages = Vec::new();
         for (i, child_array) in self
             .arrays
@@ -70,12 +68,7 @@ impl BatchReader {
         }
     }
 
-    pub fn advance_batch(&mut self, up_to_row: usize) -> VortexResult<Messages> {
-        for buffered in self.arrays.iter().flatten() {
-            if self.row_start + buffered.len() != up_to_row {
-                vortex_bail!("BatchReader can only advance full batches")
-            }
-        }
+    pub fn advance(&mut self, up_to_row: usize) -> VortexResult<Messages> {
         self.arrays = vec![None; self.children.len()];
         let mut messages = Vec::new();
         for c in self.children.iter_mut() {
@@ -85,29 +78,34 @@ impl BatchReader {
     }
 }
 
-impl LayoutReader for BatchReader {
-    fn read_next(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>> {
-        self.read_next_batch(selection)
-    }
-
-    fn read_range(&mut self) -> VortexResult<Option<RangeResult>> {
-        vortex_bail!("Can't read range on batch reader")
-    }
-
-    fn advance(&mut self, up_to_row: usize) -> VortexResult<Messages> {
-        self.advance_batch(up_to_row)
-    }
-}
-
 #[derive(Debug)]
 pub struct FilterLayoutReader {
-    reader: Box<dyn LayoutReader>,
+    reader: ColumnBatchReader,
     row_filter: RowFilter,
+    row_offset: usize,
+    length: usize,
 }
 
 impl FilterLayoutReader {
-    pub fn new(reader: Box<dyn LayoutReader>, row_filter: RowFilter) -> Self {
-        Self { reader, row_filter }
+    pub fn new(
+        reader: ColumnBatchReader,
+        row_filter: RowFilter,
+        row_offset: usize,
+        length: usize,
+    ) -> Self {
+        Self {
+            reader,
+            row_filter,
+            row_offset,
+            length,
+        }
+    }
+
+    fn own_range(&self) -> RowSelector {
+        RowSelector::new(
+            vec![RowRange::new(self.row_offset, self.length)],
+            self.length,
+        )
     }
 }
 
@@ -117,13 +115,7 @@ impl LayoutReader for FilterLayoutReader {
     }
 
     fn read_range(&mut self) -> VortexResult<Option<RangeResult>> {
-        match self.reader.read_next(RowSelector::new(
-            vec![RowRange::new(
-                // FIXME: real ranges
-                0, 1,
-            )],
-            10,
-        ))? {
+        match self.reader.read_next(self.own_range())? {
             None => Ok(None),
             Some(rr) => match rr {
                 ReadResult::ReadMore(m) => Ok(Some(RangeResult::ReadMore(m))),
@@ -132,8 +124,21 @@ impl LayoutReader for FilterLayoutReader {
                     let selector = filter_result.with_dyn(|a| {
                         a.as_bool_array()
                             .ok_or_else(|| vortex_err!("Must be a bool array"))
-                            .map(|b| RowSelector::from_ranges(b.maybe_null_slices_iter(), b.len()))
+                            .map(|b| {
+                                RowSelector::new(
+                                    b.maybe_null_slices_iter()
+                                        .map(|(begin, end)| {
+                                            RowRange::new(
+                                                begin + self.row_offset,
+                                                end + self.row_offset,
+                                            )
+                                        })
+                                        .collect(),
+                                    self.row_offset + b.len(),
+                                )
+                            })
                     })?;
+                    self.row_offset += b.len();
                     Ok(Some(RangeResult::Range(selector)))
                 }
             },
@@ -146,19 +151,17 @@ impl LayoutReader for FilterLayoutReader {
 }
 
 #[derive(Debug)]
-pub struct BatchFilter {
+pub struct ColumnBatchFilter {
     children: Vec<Box<dyn LayoutReader>>,
     selectors: Vec<Option<RowSelector>>,
-    row_offset: usize,
 }
 
-impl BatchFilter {
-    pub fn new(children: Vec<Box<dyn LayoutReader>>, row_offset: usize) -> Self {
+impl ColumnBatchFilter {
+    pub fn new(children: Vec<Box<dyn LayoutReader>>) -> Self {
         let selectors = vec![None; children.len()];
         Self {
             children,
             selectors,
-            row_offset,
         }
     }
 
@@ -209,10 +212,17 @@ impl BatchFilter {
             Ok(Some(RangeResult::ReadMore(messages)))
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn filter_own() {}
+    pub fn advance(&mut self, up_to_row: usize) -> VortexResult<Messages> {
+        self.selectors = self
+            .selectors
+            .iter()
+            .map(|s| s.as_ref().map(|s| s.advance(up_to_row)))
+            .collect();
+        let mut messages = Vec::new();
+        for c in self.children.iter_mut() {
+            messages.extend(c.advance(up_to_row)?);
+        }
+        Ok(messages)
+    }
 }

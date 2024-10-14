@@ -147,6 +147,17 @@ impl RowSelector {
             self.length - offset,
         )
     }
+
+    pub fn advance(&self, up_to_row: usize) -> RowSelector {
+        RowSelector::new(
+            self.ranges
+                .iter()
+                .filter(|rr| rr.end > up_to_row)
+                .map(|rr| RowRange::new(max(up_to_row, rr.begin), rr.end))
+                .collect(),
+            self.length,
+        )
+    }
 }
 
 impl Extend<RowRange> for RowSelector {

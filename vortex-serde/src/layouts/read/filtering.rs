@@ -9,6 +9,8 @@ use vortex_dtype::field::Field;
 use vortex_error::{VortexExpect, VortexResult};
 use vortex_expr::{split_conjunction, VortexExpr};
 
+use crate::layouts::read::filter_project::filter_project;
+
 #[derive(Debug, Clone)]
 pub struct RowFilter {
     conjunction: Vec<Arc<dyn VortexExpr>>,
@@ -57,7 +59,7 @@ impl RowFilter {
         let conj = self
             .conjunction
             .iter()
-            .filter_map(|c| c.project(fields))
+            .filter_map(|c| filter_project(c, fields))
             .collect::<Vec<_>>();
         if conj.is_empty() {
             None

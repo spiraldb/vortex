@@ -19,8 +19,6 @@ pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
     fn evaluate(&self, batch: &Array) -> VortexResult<Array>;
 
     fn references(&self) -> HashSet<Field>;
-
-    fn project(&self, projection: &[Field]) -> Option<Arc<dyn VortexExpr>>;
 }
 
 // Taken from apache-datafusion, necessary since you can't require VortexExpr implement PartialEq<dyn VortexExpr>
@@ -112,10 +110,6 @@ impl VortexExpr for Column {
     fn references(&self) -> HashSet<Field> {
         HashSet::from([self.field.clone()])
     }
-
-    fn project(&self, _projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
-        todo!()
-    }
 }
 
 impl PartialEq<dyn Any> for Column {
@@ -149,10 +143,6 @@ impl VortexExpr for Literal {
 
     fn references(&self) -> HashSet<Field> {
         HashSet::new()
-    }
-
-    fn project(&self, _projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
-        todo!()
     }
 }
 
@@ -193,10 +183,6 @@ impl VortexExpr for BinaryExpr {
         res.extend(self.rhs.references());
         res
     }
-
-    fn project(&self, _projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
-        todo!()
-    }
 }
 
 impl PartialEq<dyn Any> for BinaryExpr {
@@ -222,10 +208,6 @@ impl VortexExpr for Identity {
 
     fn references(&self) -> HashSet<Field> {
         HashSet::new()
-    }
-
-    fn project(&self, _projection: &[Field]) -> Option<Arc<dyn VortexExpr>> {
-        Some(Arc::new(Identity))
     }
 }
 
