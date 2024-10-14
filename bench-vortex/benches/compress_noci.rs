@@ -14,7 +14,6 @@ use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
 use bench_vortex::{fetch_taxi_data, tpch};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
@@ -22,23 +21,12 @@ use parquet::file::properties::WriterProperties;
 use regex::Regex;
 use tokio::runtime::Runtime;
 use vortex::array::{ChunkedArray, StructArray};
-use vortex::encoding::EncodingRef;
-use vortex::{Array, ArrayDType, Context, IntoArray, IntoCanonical};
-use vortex_alp::{ALPEncoding, ALPRDEncoding};
-use vortex_bytebool::ByteBoolEncoding;
-use vortex_datetime_parts::DateTimePartsEncoding;
-use vortex_dict::DictEncoding;
+use vortex::{Array, ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
-use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
-use vortex_fsst::FSSTEncoding;
-use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
-use vortex_runend::RunEndEncoding;
-use vortex_runend_bool::RunEndBoolEncoding;
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
-use vortex_sampling_compressor::SamplingCompressor;
+use vortex_sampling_compressor::{SamplingCompressor, ALL_COMPRESSORS_CONTEXT};
 use vortex_serde::layouts::{LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter};
-use vortex_zigzag::ZigZagEncoding;
 
 #[derive(serde::Serialize)]
 struct GenericBenchmarkResults<'a> {
@@ -107,25 +95,6 @@ fn parquet_compressed_written_size(array: &Array, compression: Compression) -> u
     parquet_compress_write(batches, schema, compression, &mut Vec::new())
 }
 
-lazy_static! {
-    pub static ref MAXIMAL_CTX: Arc<Context> = Arc::new(Context::default().with_encodings([
-        &ALPEncoding as EncodingRef,
-        &ByteBoolEncoding,
-        &DateTimePartsEncoding,
-        &DictEncoding,
-        &BitPackedEncoding,
-        &DeltaEncoding,
-        &FoREncoding,
-        &FSSTEncoding,
-        &RoaringBoolEncoding,
-        &RoaringIntEncoding,
-        &RunEndEncoding,
-        &RunEndBoolEncoding,
-        &ZigZagEncoding,
-        &ALPRDEncoding,
-    ]));
-}
-
 fn vortex_compress_write(
     runtime: &Runtime,
     compressor: &SamplingCompressor<'_>,
@@ -152,7 +121,10 @@ fn vortex_decompress_read(runtime: &Runtime, buf: Arc<Vec<u8>>) -> VortexResult<
     async fn async_read(buf: Arc<Vec<u8>>) -> VortexResult<Array> {
         let builder: LayoutReaderBuilder<_> = LayoutReaderBuilder::new(
             buf,
-            LayoutDeserializer::new(MAXIMAL_CTX.clone(), LayoutContext::default().into()),
+            LayoutDeserializer::new(
+                ALL_COMPRESSORS_CONTEXT.clone(),
+                LayoutContext::default().into(),
+            ),
         );
 
         let stream = builder.build().await?;
@@ -162,10 +134,10 @@ fn vortex_decompress_read(runtime: &Runtime, buf: Arc<Vec<u8>>) -> VortexResult<
         ChunkedArray::try_new(vecs, dtype).map(|e| e.into())
     }
 
-    Ok(runtime
+    runtime
         .block_on(async_read(buf))?
         .into_canonical()?
-        .into_arrow()?)
+        .into_arrow()
 }
 
 fn vortex_compressed_written_size(

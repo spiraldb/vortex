@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 use std::fmt::{Debug, Display, Formatter};
+use std::sync::Arc;
 
 use compressors::bitpacked::BITPACK_WITH_PATCHES;
 use compressors::chunked::DEFAULT_CHUNKED_COMPRESSOR;
@@ -14,8 +15,18 @@ use vortex::compress::{check_dtype_unchanged, check_validity_unchanged, Compress
 use vortex::compute::slice;
 use vortex::encoding::EncodingRef;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayDType, ArrayDef, IntoCanonical};
+use vortex::{Array, ArrayDType, ArrayDef, Context, IntoCanonical};
+use vortex_alp::{ALPEncoding, ALPRDEncoding};
+use vortex_bytebool::ByteBoolEncoding;
+use vortex_datetime_parts::DateTimePartsEncoding;
+use vortex_dict::DictEncoding;
 use vortex_error::{VortexExpect as _, VortexResult};
+use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
+use vortex_fsst::FSSTEncoding;
+use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
+use vortex_runend::RunEndEncoding;
+use vortex_runend_bool::RunEndBoolEncoding;
+use vortex_zigzag::ZigZagEncoding;
 
 use crate::compressors::alp::ALPCompressor;
 use crate::compressors::constant::ConstantCompressor;
@@ -61,6 +72,23 @@ lazy_static! {
         &SparseCompressor,
         &ZigZagCompressor,
     ];
+
+    pub static ref ALL_COMPRESSORS_CONTEXT: Arc<Context> = Arc::new(Context::default().with_encodings([
+        &ALPEncoding as EncodingRef,
+        &ByteBoolEncoding,
+        &DateTimePartsEncoding,
+        &DictEncoding,
+        &BitPackedEncoding,
+        &DeltaEncoding,
+        &FoREncoding,
+        &FSSTEncoding,
+        &RoaringBoolEncoding,
+        &RoaringIntEncoding,
+        &RunEndEncoding,
+        &RunEndBoolEncoding,
+        &ZigZagEncoding,
+        &ALPRDEncoding,
+    ]));
 }
 
 #[derive(Debug, Clone)]

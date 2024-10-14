@@ -4607,6 +4607,7 @@ dependencies = [
  "rand",
  "vortex-alp",
  "vortex-array",
+ "vortex-bytebool",
  "vortex-datetime-dtype",
  "vortex-datetime-parts",
  "vortex-dict",
@@ -4616,6 +4617,7 @@ dependencies = [
  "vortex-fsst",
  "vortex-roaring",
  "vortex-runend",
+ "vortex-runend-bool",
  "vortex-zigzag",
 ]
 
