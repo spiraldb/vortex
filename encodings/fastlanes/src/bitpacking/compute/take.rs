@@ -4,7 +4,7 @@ use fastlanes::BitPacking;
 use itertools::Itertools;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{slice, take, TakeFn};
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
@@ -14,6 +14,14 @@ use crate::{unpack_single_primitive, BitPackedArray};
 
 impl TakeFn for BitPackedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
+        if indices.len() / 2 > self.len() {
+            return self
+                .clone()
+                .into_canonical()?
+                .into_primitive()?
+                .take(indices);
+        }
+
         let ptype: PType = self.dtype().try_into()?;
         let validity = self.validity();
         let taken_validity = validity.take(indices)?;
