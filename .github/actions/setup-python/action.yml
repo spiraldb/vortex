@@ -18,7 +18,7 @@ runs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.11.9"
+        python-version: "3.11"
 
     - name: Rye Install
       shell: bash
@@ -26,7 +26,7 @@ runs:
       if: steps.rye-cache.outputs.cache-hit != 'true'
       env:
         RYE_VERSION: "${{ inputs.rye-version }}"
-        RYE_TOOLCHAIN_VERSION: "3.11.9"
+        RYE_TOOLCHAIN_VERSION: "3.11"
         RYE_INSTALL_OPTION: "--yes"
 
     - name: Rye Shims
@@ -38,7 +38,7 @@ runs:
       uses: actions/cache@v4
       with:
         path: .venv
-        key: "venv-${{ runner.os }}-${{ hashFiles('requirements**.lock') }}"
+        key: "venv-${{ runner.os }}-${{ runner.environment }}-${{ hashFiles('requirements**.lock') }}"
 
     - name: Rye Sync
       shell: bash
