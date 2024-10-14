@@ -91,12 +91,11 @@ impl ArrayValidity for DictArray {
                 .vortex_expect("Failed to convert DictArray codes to primitive array");
             match_each_integer_ptype!(primitive_codes.ptype(), |$P| {
                 let is_valid = primitive_codes
-                    .maybe_null_slice::<$P>()
-                    .iter()
-                    .copied()
-                    .map(|c| c != 0)
-                    .collect::<BooleanBuffer>();
-                LogicalValidity::Array(BoolArray::from(is_valid).into_array())
+                    .maybe_null_slice::<$P>();
+                let is_valid_buffer = BooleanBuffer::collect_bool(is_valid.len(), |idx| {
+                    *is_valid[idx] != 0
+                })
+                LogicalValidity::Array(BoolArray::from(is_valid_buffer).into_array())
             })
         } else {
             LogicalValidity::AllValid(self.len())
