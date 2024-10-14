@@ -1,7 +1,10 @@
 #![allow(clippy::panic)]
 
+use std::iter;
+
 use futures::StreamExt;
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
+use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::PType;
 
@@ -136,4 +139,46 @@ async fn unequal_batches() {
     }
     assert_eq!(item_count, 10);
     assert_eq!(batch_count, 2);
+}
+
+#[tokio::test]
+async fn write_chunked() {
+    let strings = VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array();
+    let string_dtype = strings.dtype().clone();
+    let strings_chunked =
+        ChunkedArray::try_new(iter::repeat(strings).take(4).collect(), string_dtype)
+            .unwrap()
+            .into_array();
+    let numbers = PrimitiveArray::from(vec![1u32, 2, 3, 4]).into_array();
+    let numbers_dtype = numbers.dtype().clone();
+    let numbers_chunked =
+        ChunkedArray::try_new(iter::repeat(numbers).take(4).collect(), numbers_dtype)
+            .unwrap()
+            .into_array();
+    let st = StructArray::try_new(
+        ["strings".into(), "numbers".into()].into(),
+        vec![strings_chunked, numbers_chunked],
+        16,
+        Validity::NonNullable,
+    )
+    .unwrap()
+    .into_array();
+    let st_dtype = st.dtype().clone();
+
+    let chunked_st = ChunkedArray::try_new(iter::repeat(st).take(3).collect(), st_dtype)
+        .unwrap()
+        .into_array();
+    let buf = Vec::new();
+    let mut writer = LayoutWriter::new(buf);
+    writer = writer.write_array_columns(chunked_st).await.unwrap();
+    let written = writer.finalize().await.unwrap();
+    let mut reader = LayoutReaderBuilder::new(written, LayoutDeserializer::default())
+        .build()
+        .await
+        .unwrap();
+    let mut array_len: usize = 0;
+    while let Some(array) = reader.next().await {
+        array_len += array.unwrap().len();
+    }
+    assert_eq!(array_len, 48);
 }
