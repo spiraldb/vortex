@@ -1,13 +1,14 @@
-name: 'Cleanup'
-description: 'Cleanup workers for more space'
+name: "Cleanup"
+description: "Cleanup workers for more space"
 runs:
   using: "composite"
   steps:
     - name: Cleanup workers
       shell: bash
       run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /opt/ghc
-        sudo rm -rf "/usr/local/share/boost"
-        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-        sudo rm -rf /usr/local/lib/android
+        echo "Hello world"
+        # sudo rm -rf /usr/share/dotnet
+        # sudo rm -rf /opt/ghc
+        # sudo rm -rf "/usr/local/share/boost"
+        # sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        # sudo rm -rf /usr/local/lib/android
