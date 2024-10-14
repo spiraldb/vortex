@@ -93,8 +93,8 @@ impl ArrayValidity for DictArray {
                 let is_valid = primitive_codes
                     .maybe_null_slice::<$P>();
                 let is_valid_buffer = BooleanBuffer::collect_bool(is_valid.len(), |idx| {
-                    *is_valid[idx] != 0
-                })
+                    is_valid[idx] != 0
+                });
                 LogicalValidity::Array(BoolArray::from(is_valid_buffer).into_array())
             })
         } else {
