@@ -585,6 +585,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn read_multiple_selectors() {
+        let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
+        let (_, mut projection_layout, buf) = layout_and_bytes(
+            cache.clone(),
+            Scan {
+                expr: ScanExpr::Projection(Projection::All),
+                batch_size: 500,
+            },
+        )
+        .await;
+        let mut arr = [
+            RowSelector::new(vec![RowRange::new(0, 150)], 200),
+            RowSelector::new(vec![RowRange::new(250, 350)], 400),
+            RowSelector::new(vec![RowRange::new(400, 500)], 500),
+        ]
+        .into_iter()
+        .flat_map(|s| read_layout_data(&mut projection_layout, cache.clone(), &buf, s))
+        .collect::<VecDeque<_>>();
+
+        assert_eq!(arr.len(), 3);
+        assert_eq!(
+            arr.pop_front()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .maybe_null_slice::<i32>(),
+            &(0..100).chain(0..50).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            arr.pop_front()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .maybe_null_slice::<i32>(),
+            &(50..100).chain(0..50).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            arr.pop_front()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .maybe_null_slice::<i32>(),
+            &(0..100).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
     async fn advance_after_filter() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
         let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(

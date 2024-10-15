@@ -56,6 +56,10 @@ impl BufferedReader {
                         ReadResult::Batch(a) => self.arrays.push_back((row_r, a)),
                     }
                 } else {
+                    if row_r.end > selection.length() && row_r.begin < selection.length() {
+                        self.layouts.push_front((row_r, layout));
+                        return Ok(None);
+                    }
                     continue;
                 }
             } else {
