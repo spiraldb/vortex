@@ -1,5 +1,5 @@
-import pyarrow
 import pandas
+import pyarrow
 
 from ._lib import encoding as _encoding
 
