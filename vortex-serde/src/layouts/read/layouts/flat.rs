@@ -121,9 +121,7 @@ impl FlatLayout {
             let dtype_buf = buf.split_to(dtype_fb_length as usize);
             let msg = root::<message::Message>(&dtype_buf)?
                 .header_as_schema()
-                .ok_or_else(|| {
-                    vortex_err!("Expected schema message; this was checked earlier in the function")
-                })?;
+                .ok_or_else(|| vortex_err!("Expected schema message"))?;
             IPCDType::read_flatbuffer(&msg)?.0
         };
 
@@ -140,7 +138,10 @@ impl FlatLayout {
         selection: RowSelector,
         chunked: bool,
     ) -> VortexResult<Option<ReadResult>> {
-        if self.skipped() || self.state == FlatLayoutState::Finished {
+        if self.skipped()
+            || self.state == FlatLayoutState::Finished
+            || selection.length() <= self.offset
+        {
             return Ok(None);
         }
 
@@ -150,31 +151,34 @@ impl FlatLayout {
                 let taken = slice(&array, 0, rows_to_read)?;
                 let leftover = slice(&array, rows_to_read, array.len())?;
                 self.cached_array = Some(leftover);
+                self.offset += rows_to_read;
                 taken
             } else {
-                self.state = FlatLayoutState::Finished;
+                if selection.length() == self.length as usize {
+                    self.state = FlatLayoutState::Finished;
+                }
+                self.offset = selection.length();
                 array
             };
-            self.offset += rows_to_read;
             Ok(Some(ReadResult::Batch(array)))
         } else if let Some(buf) = self.cache.get(&[]) {
             let array = self.array_from_bytes(buf)?;
+            let selected = selection.offset(self.offset).slice_array(slice(
+                &array,
+                self.offset,
+                selection.length(),
+            )?)?;
 
-            let selected = if self.offset != 0 {
-                let len = array.len();
-                let offset = slice(array, self.offset, len)?;
-                selection.offset(self.offset).slice_array(offset)?
-            } else {
-                selection.slice_array(array)?
-            };
-
-            if selected.is_none() {
-                self.state = FlatLayoutState::Finished;
-                return Ok(None);
-            } else if chunked {
+            if chunked {
+                if selection.length() == self.length as usize && selected.is_none() {
+                    self.state = FlatLayoutState::Finished;
+                }
                 self.cached_array = selected;
                 self.read_next_internal(selection.clone(), chunked)
             } else {
+                if selection.length() == self.length as usize {
+                    self.state = FlatLayoutState::Finished;
+                }
                 Ok(selected.map(ReadResult::Batch))
             }
         } else {
@@ -229,12 +233,16 @@ impl LayoutReader for FlatLayout {
             vortex_bail!("Can't advance backwards")
         }
         if let Some(carr) = self.cached_array.take() {
-            let slice_end = carr.len();
-            self.cached_array = Some(slice(
-                carr,
-                slice_end - (self.length as usize - up_to_row),
-                slice_end,
-            )?);
+            if up_to_row > carr.len() {
+                self.cached_array = None;
+            } else {
+                let slice_end = carr.len();
+                self.cached_array = Some(slice(
+                    carr,
+                    slice_end - (self.length as usize - up_to_row),
+                    slice_end,
+                )?);
+            }
         }
         self.offset = up_to_row;
         if self.skipped() {
@@ -247,6 +255,7 @@ impl LayoutReader for FlatLayout {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, RwLock};
 
@@ -262,6 +271,7 @@ mod tests {
     use crate::layouts::read::layouts::test_read::{
         read_layout, read_layout_data, read_layout_ranges,
     };
+    use crate::layouts::read::selection::{RowRange, RowSelector};
     use crate::layouts::{LayoutMessageCache, LayoutReader, ReadResult, RowFilter, Scan, ScanExpr};
     use crate::message_writer::MessageWriter;
 
@@ -456,6 +466,47 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn read_multiple_selectors() {
+        let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
+        let (_, mut projection_layout, buf) = layout_and_bytes(
+            cache.clone(),
+            Scan {
+                expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
+                    Arc::new(Identity),
+                    Operator::Gt,
+                    Arc::new(Literal::new(10.into())),
+                )))),
+                batch_size: 50,
+            },
+        )
+        .await;
+        let mut arr = [
+            RowSelector::new(vec![RowRange::new(11, 50)], 50),
+            RowSelector::from_ranges(vec![RowRange::new(50, 100)], 100),
+        ]
+        .into_iter()
+        .flat_map(|s| read_layout_data(&mut projection_layout, cache.clone(), &buf, s))
+        .collect::<VecDeque<_>>();
+
+        assert_eq!(
+            arr.pop_front()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .maybe_null_slice::<i32>(),
+            &(11..50).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            arr.pop_front()
+                .unwrap()
+                .into_primitive()
+                .unwrap()
+                .maybe_null_slice::<i32>(),
+            &(50..100).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
     async fn advance_after_filter() {
         let cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
         let (mut filter_layout, mut projection_layout, buf) = layout_and_bytes(
@@ -507,9 +558,11 @@ mod tests {
 
         while let Some(rr) = projection_layout.read_next(s.clone().unwrap()).unwrap() {
             match rr {
-                ReadResult::ReadMore(mut m) => {
+                ReadResult::ReadMore(m) => {
                     let mut write_cache_guard = cache.write().unwrap();
-                    write_cache_guard.set(m.remove(0).0, buf.clone());
+                    for (id, range) in m {
+                        write_cache_guard.set(id, buf.slice(range.to_range()));
+                    }
                 }
                 ReadResult::Batch(a) => {
                     arr.push(a);

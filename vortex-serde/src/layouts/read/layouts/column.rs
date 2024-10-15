@@ -49,6 +49,7 @@ impl LayoutSpec for ColumnLayoutSpec {
 #[derive(Debug)]
 pub enum ColumnLayoutState {
     Init,
+    InitNoFilter,
     InitFilter,
     Filtering(ColumnBatchFilter),
     ReadColumns(ColumnBatchReader),
@@ -283,7 +284,10 @@ impl LayoutReader for ColumnLayout {
 
     fn read_range(&mut self) -> VortexResult<Option<RangeResult>> {
         match &mut self.state {
-            ColumnLayoutState::Init => Ok(None),
+            ColumnLayoutState::Init => {
+                self.state = ColumnLayoutState::InitNoFilter;
+                Ok(Some(RangeResult::Range(self.own_range())))
+            }
             ColumnLayoutState::InitFilter => {
                 if let ScanExpr::Filter(_) = &self.scan.expr {
                     self.state = ColumnLayoutState::Filtering(self.filter_reader()?);
@@ -294,6 +298,10 @@ impl LayoutReader for ColumnLayout {
                 }
             }
             ColumnLayoutState::Filtering(fr) => fr.read_more_ranges(),
+            ColumnLayoutState::InitNoFilter => {
+                self.state = ColumnLayoutState::Init;
+                Ok(None)
+            }
             s => vortex_bail!("We are returning ranges {s:?}"),
         }
     }
@@ -323,7 +331,7 @@ mod tests {
     use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
     use vortex_dtype::field::Field;
     use vortex_dtype::{DType, Nullability};
-    use vortex_expr::{BinaryExpr, Column, Identity, Literal, Operator};
+    use vortex_expr::{BinaryExpr, Column, Literal, Operator};
     use vortex_schema::projection::Projection;
 
     use crate::layouts::read::cache::{LazyDeserializedDType, RelativeLayoutCache};
@@ -440,7 +448,7 @@ mod tests {
                     .map(|s| unsafe { String::from_utf8_unchecked(s.to_vec()) })
                     .collect::<Vec<_>>())
                 .unwrap(),
-            iter::repeat("test text").take(88).collect::<Vec<_>>()
+            iter::repeat("test text").take(89).collect::<Vec<_>>()
         );
     }
 
@@ -495,7 +503,7 @@ mod tests {
             cache.clone(),
             Scan {
                 expr: ScanExpr::Filter(RowFilter::new(Arc::new(BinaryExpr::new(
-                    Arc::new(Identity),
+                    Arc::new(Column::new(Field::from("ints"))),
                     Operator::Gt,
                     Arc::new(Literal::new(10.into())),
                 )))),
@@ -614,7 +622,7 @@ mod tests {
             &(50..100).collect::<Vec<_>>()
         );
         assert_eq!(
-            arr.get(7)
+            arr.get(8)
                 .unwrap()
                 .with_dyn(|a| a.as_struct_array_unchecked().field(0))
                 .unwrap()
@@ -646,9 +654,11 @@ mod tests {
         for rs in s {
             while let Some(rr) = project_layout.read_next(rs.clone()).unwrap() {
                 match rr {
-                    ReadResult::ReadMore(mut m) => {
+                    ReadResult::ReadMore(m) => {
                         let mut write_cache_guard = cache.write().unwrap();
-                        write_cache_guard.set(m.remove(0).0, buf.clone());
+                        for (id, range) in m {
+                            write_cache_guard.set(id, buf.slice(range.to_range()));
+                        }
                     }
                     ReadResult::Batch(a) => {
                         arr.push(a);

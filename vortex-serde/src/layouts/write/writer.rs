@@ -130,7 +130,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
             let len = chunk.row_offsets.len() - 1;
             chunk.row_offsets.truncate(len);
 
-            assert!(chunks.len() == chunk.row_offsets.len());
+            assert_eq!(chunks.len(), chunk.row_offsets.len());
 
             let metadata_array = StructArray::try_new(
                 ["row_offset".into()].into(),

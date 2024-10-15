@@ -45,7 +45,8 @@ impl ColumnBatchReader {
                 None => {
                     debug_assert!(
                         self.arrays.iter().all(Option::is_none),
-                        "Expected layout to produce an array but it was empty"
+                        "Expected layout {}({i}) to produce an array but it was empty",
+                        self.names[i]
                     );
                     return Ok(None);
                 }

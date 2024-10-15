@@ -360,6 +360,8 @@ mod tests {
             .map(|(begin, end)| write::Layout::Flat(write::FlatLayout::new(*begin, *end)))
             .collect::<VecDeque<_>>();
 
+        row_offsets.truncate(row_offsets.len() - 1);
+
         let meta_len = row_offsets.len();
         let metadata_array = StructArray::try_new(
             ["row_offset".into()].into(),
@@ -644,9 +646,11 @@ mod tests {
         for rs in s {
             while let Some(rr) = projection_layout.read_next(rs.clone()).unwrap() {
                 match rr {
-                    ReadResult::ReadMore(mut m) => {
+                    ReadResult::ReadMore(m) => {
                         let mut write_cache_guard = cache.write().unwrap();
-                        write_cache_guard.set(m.remove(0).0, buf.clone());
+                        for (id, range) in m {
+                            write_cache_guard.set(id, buf.slice(range.to_range()));
+                        }
                     }
                     ReadResult::Batch(a) => {
                         arr.push(a);

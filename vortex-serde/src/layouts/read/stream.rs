@@ -13,7 +13,7 @@ use vortex_schema::Schema;
 
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::LayoutMessageCache;
-use crate::layouts::read::selection::RowSelector;
+use crate::layouts::read::selection::{RowRange, RowSelector};
 use crate::layouts::read::{LayoutReader, MessageId, ReadResult};
 use crate::layouts::RangeResult;
 use crate::stream_writer::ByteRange;
@@ -38,10 +38,16 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
         dtype: DType,
         row_count: u64,
     ) -> Self {
-        let state = if filter_reader.is_some() {
-            StreamingState::FilterInit
+        let (state, current_selector) = if filter_reader.is_some() {
+            (StreamingState::FilterInit, None)
         } else {
-            StreamingState::Init(true)
+            (
+                StreamingState::Init(false),
+                Some(RowSelector::new(
+                    vec![RowRange::new(0, row_count as usize)],
+                    row_count as usize,
+                )),
+            )
         };
 
         LayoutBatchStream {
@@ -51,7 +57,7 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
             layout_reader,
             filter_reader,
             messages_cache,
-            current_selector: None,
+            current_selector,
             state,
         }
     }
@@ -88,7 +94,10 @@ impl<R: VortexReadAt + Unpin + 'static> Stream for LayoutBatchStream<R> {
             match &mut self.state {
                 StreamingState::Init(more_filter) => {
                     let more_filter = *more_filter;
-                    let selector = self.current_selector.clone().unwrap_or_default();
+                    let selector = self
+                        .current_selector
+                        .clone()
+                        .ok_or_else(|| vortex_err!("Must have a selector"))?;
                     if let Some(read) = self.layout_reader.read_next(selector)? {
                         match read {
                             ReadResult::ReadMore(messages) => {
@@ -139,7 +148,7 @@ impl<R: VortexReadAt + Unpin + 'static> Stream for LayoutBatchStream<R> {
                         self.state = if filter_more {
                             StreamingState::FilterInit
                         } else {
-                            StreamingState::Init(true)
+                            StreamingState::Init(self.filter_reader.is_some())
                         };
                     }
                     Err(e) => {

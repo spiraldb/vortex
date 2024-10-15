@@ -15,10 +15,11 @@ pub fn read_layout_ranges(
     let mut s = Vec::new();
     while let Some(rr) = layout.read_range().unwrap() {
         match rr {
-            RangeResult::ReadMore(mut m) => {
+            RangeResult::ReadMore(m) => {
                 let mut write_cache_guard = cache.write().unwrap();
-                let (id, range) = m.remove(0);
-                write_cache_guard.set(id, buf.slice(range.to_range()));
+                for (id, range) in m {
+                    write_cache_guard.set(id, buf.slice(range.to_range()));
+                }
             }
             RangeResult::Range(r) => s.push(r),
         }
@@ -35,10 +36,11 @@ pub fn read_layout_data(
     let mut arr = Vec::new();
     while let Some(rr) = layout.read_next(selector.clone()).unwrap() {
         match rr {
-            ReadResult::ReadMore(mut m) => {
+            ReadResult::ReadMore(m) => {
                 let mut write_cache_guard = cache.write().unwrap();
-                let (id, range) = m.remove(0);
-                write_cache_guard.set(id, buf.slice(range.to_range()));
+                for (id, range) in m {
+                    write_cache_guard.set(id, buf.slice(range.to_range()));
+                }
             }
             ReadResult::Batch(a) => arr.push(a),
         }

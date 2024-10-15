@@ -110,11 +110,14 @@ impl RowSelector {
         RowSelector::new(new_ranges, min(self.length, other.length))
     }
 
-    pub fn slice_array(&self, array: Array) -> VortexResult<Option<Array>> {
+    pub fn slice_array(&self, array: impl AsRef<Array>) -> VortexResult<Option<Array>> {
+        let array = array.as_ref();
         let mut chunks = self
             .ranges
             .iter()
-            .map(|r| slice(&array, r.begin, r.end))
+            .filter(|r| r.begin < array.len())
+            .map(|r| RowRange::new(r.begin, min(r.end, array.len())))
+            .map(|r| slice(array, r.begin, r.end))
             .collect::<VortexResult<Vec<_>>>()?;
         match chunks.len() {
             0 | 1 => Ok(chunks.pop()),
