@@ -142,6 +142,7 @@ async fn unequal_batches() {
 }
 
 #[tokio::test]
+#[cfg_attr(miri, ignore)]
 async fn write_chunked() {
     let strings = VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array();
     let string_dtype = strings.dtype().clone();
