@@ -25,7 +25,7 @@ pub struct LayoutBatchStream<R> {
     layout_reader: Box<dyn LayoutReader>,
     filter_reader: Option<Box<dyn LayoutReader>>,
     messages_cache: Arc<RwLock<LayoutMessageCache>>,
-    current_selector: Option<RowSelector>,
+    current_selector: RowSelector,
     state: StreamingState<R>,
 }
 
@@ -38,16 +38,10 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
         dtype: DType,
         row_count: u64,
     ) -> Self {
-        let (state, current_selector) = if filter_reader.is_some() {
-            (StreamingState::FilterInit, None)
+        let state = if filter_reader.is_some() {
+            StreamingState::FilterInit
         } else {
-            (
-                StreamingState::Init(false),
-                Some(RowSelector::new(
-                    vec![RowRange::new(0, row_count as usize)],
-                    row_count as usize,
-                )),
-            )
+            StreamingState::Init(false)
         };
 
         LayoutBatchStream {
@@ -57,7 +51,10 @@ impl<R: VortexReadAt> LayoutBatchStream<R> {
             layout_reader,
             filter_reader,
             messages_cache,
-            current_selector,
+            current_selector: RowSelector::new(
+                vec![RowRange::new(0, row_count as usize)],
+                row_count as usize,
+            ),
             state,
         }
     }
@@ -94,10 +91,7 @@ impl<R: VortexReadAt + Unpin + 'static> Stream for LayoutBatchStream<R> {
             match &mut self.state {
                 StreamingState::Init(more_filter) => {
                     let more_filter = *more_filter;
-                    let selector = self
-                        .current_selector
-                        .clone()
-                        .ok_or_else(|| vortex_err!("Must have a selector"))?;
+                    let selector = self.current_selector.clone();
                     if let Some(read) = self.layout_reader.read_next(selector)? {
                         match read {
                             ReadResult::ReadMore(messages) => {
@@ -131,7 +125,7 @@ impl<R: VortexReadAt + Unpin + 'static> Stream for LayoutBatchStream<R> {
                                 self.state = StreamingState::Reading(read_future, true);
                             }
                             RangeResult::Range(rs) => {
-                                self.current_selector = Some(rs);
+                                self.current_selector = rs;
                                 self.state = StreamingState::Init(true);
                             }
                         }
