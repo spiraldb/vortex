@@ -1,3 +1,4 @@
+import pandas
 import pyarrow
 
 from ._lib import encoding as _encoding
@@ -8,19 +9,13 @@ Array = _encoding.Array
 compress = _encoding.compress
 
 
-def _Array_to_pandas(self: _encoding.Array, *, name: str | None = None, flatten: bool = False):
+def _Array_to_pandas(self: _encoding.Array):
     """Construct a Pandas dataframe from this Vortex array.
 
-    Parameters
-    ----------
-    obj : :class:`pyarrow.Array` or :class:`list`
-        The elements of this array or list become the elements of the Vortex array.
+    Warning
+    -------
 
-    name : :class:`str`, optional
-        The name of the column in the newly created dataframe. If unspecified, use `x`.
-
-    flatten : :class:`bool`
-        If :obj:`True`, Struct columns are flattened in the dataframe. See the examples.
+    Only struct-typed arrays can be converted to Pandas dataframes.
 
     Returns
     -------
@@ -29,28 +24,7 @@ def _Array_to_pandas(self: _encoding.Array, *, name: str | None = None, flatten:
     Examples
     --------
 
-    Construct a :class:`.pandas.DataFrame` with one column named `animals` from the contents of a Vortex
-    array:
-
-    >>> array = vortex.encoding.array(['dog', 'cat', 'mouse', 'rat'])
-    >>> array.to_pandas(name='animals')
-      animals
-    0     dog
-    1     cat
-    2   mouse
-    3     rat
-
-    Construct a :class:`.pandas.DataFrame` with the default column name:
-
-    >>> array = vortex.encoding.array(['dog', 'cat', 'mouse', 'rat'])
-    >>> array.to_pandas()
-           x
-    0    dog
-    1    cat
-    2  mouse
-    3    rat
-
-    Construct a dataframe with a Struct-typed column:
+    Construct a dataframe from a Vortex array:
 
     >>> array = vortex.encoding.array([
     ...     {'name': 'Joseph', 'age': 25},
@@ -59,27 +33,26 @@ def _Array_to_pandas(self: _encoding.Array, *, name: str | None = None, flatten:
     ...     {'name': 'Mikhail', 'age': 57},
     ... ])
     >>> array.to_pandas()
-                                     x
-    0    {'age': 25, 'name': 'Joseph'}
-    1  {'age': 31, 'name': 'Narendra'}
-    2    {'age': 33, 'name': 'Angela'}
-    3   {'age': 57, 'name': 'Mikhail'}
+       age      name
+    0   25    Joseph
+    1   31  Narendra
+    2   33    Angela
+    3   57   Mikhail
 
     Lift the struct fields to the top-level in the dataframe:
 
-    >>> array.to_pandas(flatten=True)
-       x.age    x.name
-    0     25    Joseph
-    1     31  Narendra
-    2     33    Angela
-    3     57   Mikhail
-
     """
-    name = name or "x"
-    table = pyarrow.Table.from_arrays([self.to_arrow()], [name])
-    if flatten:
-        table = table.flatten()
-    return table.to_pandas()
+    return table_from_struct_array(self.to_arrow()).to_pandas(types_mapper=pandas.ArrowDtype)
+
+
+def empty_table(schema: pyarrow.Schema) -> pyarrow.Table:
+    return pyarrow.Table.from_arrays([[] for _ in schema], schema=schema)
+
+
+def table_from_struct_array(array: pyarrow.StructArray | pyarrow.ChunkedArray):
+    if len(array) == 0:
+        return empty_table(pyarrow.schema(array.type))
+    return pyarrow.Table.from_struct_array(array)
 
 
 Array.to_pandas = _Array_to_pandas
