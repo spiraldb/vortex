@@ -48,6 +48,7 @@ mod implementation;
 pub mod iter;
 mod metadata;
 pub mod opaque;
+pub mod scalars;
 pub mod stats;
 pub mod stream;
 mod tree;
