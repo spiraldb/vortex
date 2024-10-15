@@ -4,10 +4,9 @@ use fastlanes::BitPacking;
 use itertools::Itertools;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{slice, take, TakeFn};
-use vortex::validity::ArrayValidity;
-use vortex::{Array, ArrayDType, ArrayValidity, IntoArray, IntoArrayVariant, IntoCanonical as _};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
-    match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType
+    match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
 use vortex_error::VortexResult;
 
@@ -114,17 +113,21 @@ fn do_patch_for_take_primitive<T: NativePType>(
     indices: &PrimitiveArray,
     output: &mut [T],
 ) -> VortexResult<()> {
-    let taken_patches = take(patches.as_ref(), indices.as_ref())?.into_canonical()?.into_primitive()?;
-    let base_index = output.len() - indices.len();
-    let output_patches = taken_patches.reinterpret_cast(T::PTYPE);
+    let taken_patches = take(patches.as_ref(), indices.as_ref())?;
+    let taken_patches = SparseArray::try_from(taken_patches)?;
 
-    output_patches
-        .maybe_null_slice::<T>()
+    let base_index = output.len() - indices.len();
+    let output_patches = taken_patches
+        .values()
+        .into_primitive()?
+        .reinterpret_cast(T::PTYPE);
+    taken_patches
+        .resolved_indices()
         .iter()
-        .enumerate()
-        .filter(|(i, _)| output_patches.is_valid(*i))
-        .for_each(|(i, val)| {
-            output[base_index + i] = *val;
+        .map(|idx| base_index + *idx)
+        .zip_eq(output_patches.maybe_null_slice::<T>())
+        .for_each(|(idx, val)| {
+            output[idx] = *val;
         });
 
     Ok(())
