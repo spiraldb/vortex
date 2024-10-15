@@ -60,9 +60,7 @@ impl<'a> PrimitiveScalar<'a> {
             T::PTYPE
         );
 
-        self.pvalue
-            .as_ref()
-            .map(|pv| T::try_from(*pv).vortex_unwrap())
+        self.pvalue.map(|pv| pv.as_primitive::<T>().vortex_unwrap())
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {

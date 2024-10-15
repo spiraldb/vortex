@@ -58,6 +58,9 @@ One of the unique attributes of the (in-progress) Vortex file format is that it 
 file's footer. This allows the file format to be effectively self-describing and to evolve without breaking changes to
 the file format specification.
 
+In fact, the format is designed to support forward compatibility by optionally embedding WASM decoders directly into the files
+themselves. This should help avoid the rapid calcification that has plagued other columnar file formats.
+
 ## Components
 
 ### Logical Types

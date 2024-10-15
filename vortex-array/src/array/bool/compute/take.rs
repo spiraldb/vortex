@@ -12,16 +12,16 @@ impl TakeFn for BoolArray {
         let validity = self.validity();
         let indices = indices.clone().into_primitive()?;
         match_each_integer_ptype!(indices.ptype(), |$I| {
-            Ok(BoolArray::from_vec(
+            Ok(BoolArray::try_new(
                 take_bool(&self.boolean_buffer(), indices.maybe_null_slice::<$I>()),
                 validity.take(indices.as_ref())?,
-            ).into_array())
+            )?.into_array())
         })
     }
 }
 
-fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> Vec<bool> {
-    indices.iter().map(|&idx| bools.value(idx.as_())).collect()
+fn take_bool<I: AsPrimitive<usize>>(bools: &BooleanBuffer, indices: &[I]) -> BooleanBuffer {
+    BooleanBuffer::collect_bool(indices.len(), |idx| bools.value(indices[idx].as_()))
 }
 
 #[cfg(test)]
