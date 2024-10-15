@@ -578,8 +578,7 @@ mod tests {
             &(11..=60).collect::<Vec<_>>()
         );
         assert_eq!(
-            arr.get(1)
-                .unwrap()
+            arr[1]
                 .with_dyn(|a| a.as_struct_array_unchecked().field(0))
                 .unwrap()
                 .into_primitive()
@@ -612,7 +611,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(
-            arr.get(0)
+            arr.first()
                 .unwrap()
                 .with_dyn(|a| a.as_struct_array_unchecked().field(0))
                 .unwrap()
@@ -622,8 +621,7 @@ mod tests {
             &(50..100).collect::<Vec<_>>()
         );
         assert_eq!(
-            arr.get(8)
-                .unwrap()
+            arr[8]
                 .with_dyn(|a| a.as_struct_array_unchecked().field(0))
                 .unwrap()
                 .into_primitive()

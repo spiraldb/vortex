@@ -182,15 +182,25 @@ impl RelativeLayoutCache {
     }
 
     pub(crate) fn resolve_field(&self, field: &Field) -> VortexResult<usize> {
-        self.dtype.as_ref().unwrap().resolve_field(field)
+        self.dtype
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Must have a dtype"))?
+            .resolve_field(field)
     }
 
     pub fn dtype(&self) -> VortexResult<DType> {
-        self.dtype.as_ref().unwrap().dtype().cloned()
+        self.dtype
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Must have a dtype"))?
+            .dtype()
+            .cloned()
     }
 
     pub fn projected_dtype(&self, projection: &[Field]) -> VortexResult<DType> {
-        self.dtype.as_ref().unwrap().project(projection)
+        self.dtype
+            .as_ref()
+            .ok_or_else(|| vortex_err!("Must have a dtype"))?
+            .project(projection)
     }
 
     pub fn absolute_id(&self, path: &[LayoutPartId]) -> MessageId {

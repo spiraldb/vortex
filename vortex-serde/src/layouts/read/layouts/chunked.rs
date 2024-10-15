@@ -208,7 +208,7 @@ impl LayoutReader for ChunkedLayout {
     }
 
     fn read_range(&mut self) -> VortexResult<Option<RangeResult>> {
-        if let ChunkedLayoutState::InitFilter = self.state {
+        if matches!(self.state, ChunkedLayoutState::InitFilter) {
             if matches!(self.scan.expr, ScanExpr::Filter(_)) {
                 let ranged_children = self.ranged_children()?;
                 self.state = ChunkedLayoutState::FilterChunks(ChunkedFilter::new(ranged_children));
@@ -662,8 +662,7 @@ mod tests {
             &(50..100).collect::<Vec<_>>()
         );
         assert_eq!(
-            arr.get(7)
-                .unwrap()
+            arr[7]
                 .clone()
                 .into_primitive()
                 .unwrap()
