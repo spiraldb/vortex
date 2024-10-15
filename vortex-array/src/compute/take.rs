@@ -1,7 +1,7 @@
 use log::info;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::{Array, ArrayDType as _, IntoCanonical as _};
+use crate::{array::SparseArray, Array, ArrayDType as _, IntoCanonical as _};
 
 pub trait TakeFn {
     fn take(&self, indices: &Array) -> VortexResult<Array>;
@@ -18,11 +18,12 @@ pub fn take(array: impl AsRef<Array>, indices: impl AsRef<Array>) -> VortexResul
         );
     }
 
-    // If the indices are large enough, it's faster to canonicalize the array and then take.
-    if indices.len() >= array.len() {
-        do_take(&Array::from(array.clone().into_canonical()?), indices)
-    } else {
+    // If the indices are large enough, it's faster to canonicalize the array and then take
+    // except for sparse arrays, where patching is faster in that form.
+    if indices.len() < array.len() || SparseArray::try_from(array).is_ok() {
         do_take(array, indices)
+    } else {
+        do_take(&Array::from(array.clone().into_canonical()?), indices)
     }
 }
 
