@@ -17,11 +17,6 @@ def _Array_to_pandas(self: _encoding.Array):
 
     Only struct-typed arrays can be converted to Pandas dataframes.
 
-    Parameters
-    ----------
-    obj : :class:`pyarrow.Array` or :class:`list`
-        The elements of this array or list become the elements of the Vortex array.
-
     Returns
     -------
     :class:`pandas.DataFrame`
