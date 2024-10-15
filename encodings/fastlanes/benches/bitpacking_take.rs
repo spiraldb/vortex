@@ -50,6 +50,22 @@ fn bench_take(c: &mut Criterion) {
     c.bench_function("take_10K_contiguous", |b| {
         b.iter(|| black_box(take(packed.as_ref(), contiguous_indices.as_ref()).unwrap()));
     });
+
+    let lots_of_indices: PrimitiveArray = (0..200_000)
+        .map(|i| (i * 42) % values.len() as u64)
+        .collect::<Vec<_>>()
+        .into();
+    c.bench_function("take_200K_dispersed", |b| {
+        b.iter(|| black_box(take(packed.as_ref(), lots_of_indices.as_ref()).unwrap()));
+    });
+
+    let lots_of_indices: PrimitiveArray = (0..200_000)
+        .map(|i| ((i * 42) % 1024) as u64)
+        .collect::<Vec<_>>()
+        .into();
+    c.bench_function("take_200K_first_chunk_only", |b| {
+        b.iter(|| black_box(take(packed.as_ref(), lots_of_indices.as_ref()).unwrap()));
+    });
 }
 
 fn bench_patched_take(c: &mut Criterion) {
@@ -110,6 +126,22 @@ fn bench_patched_take(c: &mut Criterion) {
         .into();
     c.bench_function("patched_take_10K_contiguous_patches", |b| {
         b.iter(|| black_box(take(packed.as_ref(), patch_indices.as_ref()).unwrap()));
+    });
+
+    let lots_of_indices: PrimitiveArray = (0..200_000)
+        .map(|i| (i * 42) % values.len() as u64)
+        .collect::<Vec<_>>()
+        .into();
+    c.bench_function("patched_take_200K_dispersed", |b| {
+        b.iter(|| black_box(take(packed.as_ref(), lots_of_indices.as_ref()).unwrap()));
+    });
+
+    let lots_of_indices: PrimitiveArray = (0..200_000)
+        .map(|i| ((i * 42) % 1024) as u64)
+        .collect::<Vec<_>>()
+        .into();
+    c.bench_function("patched_take_200K_first_chunk_only", |b| {
+        b.iter(|| black_box(take(packed.as_ref(), lots_of_indices.as_ref()).unwrap()));
     });
 
     // There are currently 2 magic parameters of note:
