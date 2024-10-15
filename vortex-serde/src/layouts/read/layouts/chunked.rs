@@ -461,7 +461,7 @@ mod tests {
             cache.clone(),
             Scan {
                 expr: ScanExpr::Projection(Projection::All),
-                batch_size: 500,
+                batch_size: 150,
             },
         )
         .await;
@@ -471,7 +471,7 @@ mod tests {
         let arr = arr.unwrap();
         assert_eq!(
             arr.into_primitive().unwrap().maybe_null_slice::<i32>(),
-            iter::repeat(0..100).take(5).flatten().collect::<Vec<_>>()
+            (0..100).chain(0..50).collect::<Vec<_>>()
         );
     }
 

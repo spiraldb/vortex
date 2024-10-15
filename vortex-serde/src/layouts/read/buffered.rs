@@ -33,7 +33,7 @@ impl BufferedReader {
     }
 
     fn buffered_row_count(&self) -> usize {
-        self.arrays.iter().map(|(rr, _)| rr.len()).sum()
+        self.arrays.iter().map(|(_, a)| a.len()).sum()
     }
 
     fn buffer(&mut self, selection: RowSelector) -> VortexResult<Option<ReadResult>> {
@@ -94,10 +94,7 @@ impl BufferedReader {
                     if array.len() > rows_to_read {
                         let taken = slice(&array, 0, rows_to_read)?;
                         let leftover = slice(&array, rows_to_read, array.len())?;
-                        self.arrays.push_front((
-                            RowRange::new(row_r.begin + rows_to_read, row_r.end),
-                            leftover,
-                        ));
+                        self.arrays.push_front((row_r, leftover));
                         rows_to_read -= taken.len();
                         result.push(taken);
                     } else {
