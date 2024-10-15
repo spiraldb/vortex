@@ -8,7 +8,7 @@ use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
-use vortex_error::VortexResult;
+use vortex_error::{VortexExpect as _, VortexResult};
 
 use crate::{unpack_single_primitive, BitPackedArray};
 
@@ -20,33 +20,28 @@ impl TakeFn for BitPackedArray {
 
         let indices = indices.clone().into_primitive()?;
         let taken = match_each_unsigned_integer_ptype!(ptype, |$T| {
-            PrimitiveArray::from_vec(take_primitive::<$T>(self, &indices)?, taken_validity)
+            match_each_integer_ptype!(indices.ptype(), |$I| {
+                PrimitiveArray::from_vec(take_primitive::<$T, $I>(self, &indices)?, taken_validity)
+            })
         });
         Ok(taken.reinterpret_cast(ptype).into_array())
     }
 }
 
-fn take_primitive<T: NativePType + BitPacking>(
+fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<Vec<T>> {
-    // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
-    let relative_indices: Vec<(usize, Vec<u16>)> = match_each_integer_ptype!(indices.ptype(), |$P| {
-        indices
-            .maybe_null_slice::<$P>()
-            .iter()
-            .map(|i| *i as usize + array.offset())
-            .chunk_by(|idx| idx / 1024)
-            .into_iter()
-            .map(|(k, g)| (k, g.map(|idx| (idx % 1024) as u16).collect()))
-            .collect()
-    });
-
     let bit_width = array.bit_width();
-
     let packed = array.packed_slice::<T>();
-
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
+
+    // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
+    let adjusted_indices = 
+    indices
+        .maybe_null_slice::<I>()
+        .iter()
+        .map(|i| i.to_usize().vortex_expect("index must be expressible as u64") + array.offset());
 
     // if we have a small number of relatively large batches, we gain by slicing and then patching inside the loop
     // if we have a large number of relatively small batches, the overhead isn't worth it, and we're better off with a bulk patch
@@ -62,7 +57,10 @@ fn take_primitive<T: NativePType + BitPacking>(
 
     let mut output = Vec::with_capacity(indices.len());
     let mut unpacked = [T::zero(); 1024];
-    for (chunk, offsets) in relative_indices {
+    
+    let mut prev_chunk_idx = u32::MAX;
+    let mut chunk_count = 0_usize;
+    for idx in adjusted_indices {
         let chunk_size = 128 * bit_width / size_of::<T>();
         let packed_chunk = &packed[chunk * chunk_size..][..chunk_size];
         if offsets.len() > unpack_chunk_threshold {
