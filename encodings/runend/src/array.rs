@@ -13,7 +13,7 @@ use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
 };
-use vortex_dtype::PType;
+use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, VortexExpect as _, VortexResult};
 
 use crate::compress::{runend_decode, runend_encode};
@@ -150,7 +150,7 @@ impl RunEndArray {
         self.as_ref()
             .child(
                 0,
-                &self.metadata().ends_ptype.into(),
+                &DType::from(self.metadata().ends_ptype),
                 self.metadata().num_runs,
             )
             .vortex_expect("RunEndArray is missing its run ends")
