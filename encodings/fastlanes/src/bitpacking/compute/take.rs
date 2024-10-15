@@ -4,7 +4,7 @@ use fastlanes::BitPacking;
 use itertools::Itertools;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{slice, take, TakeFn};
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
 use vortex_dtype::{
     match_each_integer_ptype, match_each_unsigned_integer_ptype, NativePType, PType,
 };
@@ -12,8 +12,23 @@ use vortex_error::VortexResult;
 
 use crate::{unpack_single_primitive, BitPackedArray};
 
+// assuming the buffer is already allocated (which will happen at most once) then unpacking
+// all 1024 elements takes ~8.8x as long as unpacking a single element on an M2 Macbook Air.
+// see https://github.com/spiraldb/vortex/pull/190#issue-2223752833
+const UNPACK_CHUNK_THRESHOLD: usize = 8;
+const BULK_PATCH_THRESHOLD: usize = 64;
+
 impl TakeFn for BitPackedArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
+        // If the indices are large enough, it's faster to flatten and take the primitive array.
+        if indices.len() * UNPACK_CHUNK_THRESHOLD > self.len() {
+            return self
+                .clone()
+                .into_canonical()?
+                .into_primitive()?
+                .take(indices);
+        }
+
         let ptype: PType = self.dtype().try_into()?;
         let validity = self.validity();
         let taken_validity = validity.take(indices)?;
@@ -51,21 +66,14 @@ fn take_primitive<T: NativePType + BitPacking>(
     // if we have a small number of relatively large batches, we gain by slicing and then patching inside the loop
     // if we have a large number of relatively small batches, the overhead isn't worth it, and we're better off with a bulk patch
     // roughly, if we have an average of less than 64 elements per batch, we prefer bulk patching
-    let prefer_bulk_patch = relative_indices.len() * 64 > indices.len();
-
-    // assuming the buffer is already allocated (which will happen at most once)
-    // then unpacking all 1024 elements takes ~8.8x as long as unpacking a single element
-    // see https://github.com/fulcrum-so/vortex/pull/190#issue-2223752833
-    // however, the gap should be smaller with larger registers (e.g., AVX-512) vs the 128 bit
-    // ones on M2 Macbook Air.
-    let unpack_chunk_threshold = 8;
+    let prefer_bulk_patch = relative_indices.len() * BULK_PATCH_THRESHOLD > indices.len();
 
     let mut output = Vec::with_capacity(indices.len());
     let mut unpacked = [T::zero(); 1024];
     for (chunk, offsets) in relative_indices {
         let chunk_size = 128 * bit_width / size_of::<T>();
         let packed_chunk = &packed[chunk * chunk_size..][..chunk_size];
-        if offsets.len() > unpack_chunk_threshold {
+        if offsets.len() > UNPACK_CHUNK_THRESHOLD {
             unsafe {
                 BitPacking::unchecked_unpack(bit_width, packed_chunk, &mut unpacked);
             }
