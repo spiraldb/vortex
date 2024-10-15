@@ -38,11 +38,11 @@ def _Array_to_pandas(self: _encoding.Array):
     ...     {'name': 'Mikhail', 'age': 57},
     ... ])
     >>> array.to_pandas()
-                                     x
-    0    {'age': 25, 'name': 'Joseph'}
-    1  {'age': 31, 'name': 'Narendra'}
-    2    {'age': 33, 'name': 'Angela'}
-    3   {'age': 57, 'name': 'Mikhail'}
+       age      name
+    0   25    Joseph
+    1   31  Narendra
+    2   33    Angela
+    3   57   Mikhail
 
     Lift the struct fields to the top-level in the dataframe:
 
