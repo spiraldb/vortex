@@ -229,13 +229,13 @@ impl ColumnLayout {
             .children()
             .ok_or_else(|| vortex_err!("Missing children"))?;
 
-        if let ScanExpr::Projection(p) = &self.scan.expr {
+        if let ScanExpr::Projection(ref p) = self.scan.expr {
             match p {
                 Projection::All => (0..fb_children.len())
                     .zip(s.dtypes().iter().cloned())
                     .map(|(idx, dtype)| self.read_child(idx, fb_children, dtype))
                     .collect::<VortexResult<Vec<_>>>(),
-                Projection::Flat(ref v) => v
+                Projection::Flat(v) => v
                     .iter()
                     .map(|f| self.message_cache.resolve_field(f))
                     .zip(s.dtypes().iter().cloned())
