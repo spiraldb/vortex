@@ -238,12 +238,8 @@ impl ColumnLayout {
                 Projection::Flat(ref v) => v
                     .iter()
                     .map(|f| self.message_cache.resolve_field(f))
-                    .enumerate()
-                    .map(|(idx, child_idx)| {
-                        child_idx.and_then(|cid| {
-                            self.read_child(cid, fb_children, s.dtypes()[idx].clone())
-                        })
-                    })
+                    .zip(s.dtypes().iter().cloned())
+                    .map(|(child_idx, dtype)| self.read_child(child_idx?, fb_children, dtype))
                     .collect::<VortexResult<Vec<_>>>(),
             }
         } else {
