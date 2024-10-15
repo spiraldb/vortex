@@ -5,7 +5,7 @@ use std::vec::IntoIter;
 
 use vortex::array::ChunkedArray;
 use vortex::compute::slice;
-use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
+use vortex::{Array, ArrayDType, IntoArray};
 use vortex_error::VortexResult;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -124,7 +124,6 @@ impl RowSelector {
             _ => {
                 let dtype = chunks[0].dtype().clone();
                 ChunkedArray::try_new(chunks, dtype)
-                    .and_then(|c| c.into_bool())
                     .map(IntoArray::into_array)
                     .map(Some)
             }

@@ -7,7 +7,7 @@ use vortex::array::BoolArray;
 use vortex::compute::and;
 use vortex::stats::ArrayStatistics;
 use vortex::validity::Validity;
-use vortex::{Array, ArrayLen, IntoArray, IntoArrayVariant};
+use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::Field;
 use vortex_error::{VortexExpect, VortexResult};
 use vortex_expr::{split_conjunction, VortexExpr};
