@@ -186,7 +186,7 @@ impl ColumnLayout {
                 self.length,
                 child_scan,
                 self.message_cache
-                    .relative(idx as u16, s.dtypes()[idx].clone()),
+                    .relative(resolved_child as u16, s.dtypes()[idx].clone()),
             )?;
 
             if self.offset != 0 {
