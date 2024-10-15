@@ -15,8 +15,7 @@ pub fn for_compress(array: &PrimitiveArray) -> VortexResult<Array> {
     let min = array
         .statistics()
         .compute(Stat::Min)
-        .ok_or_else(|| vortex_err!("Min stat not found"))?
-        .into_value();
+        .ok_or_else(|| vortex_err!("Min stat not found"))?;
 
     Ok(match_each_integer_ptype!(array.ptype(), |$T| {
         if shift == <$T>::PTYPE.bit_width() as u8 {

@@ -39,7 +39,7 @@ impl TakeFn for FoRArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
         Self::try_new(
             take(self.encoded(), indices)?,
-            self.reference().clone(),
+            self.owned_reference_scalar(),
             self.shift(),
         )
         .map(|a| a.into_array())
@@ -50,7 +50,7 @@ impl FilterFn for FoRArray {
     fn filter(&self, predicate: &Array) -> VortexResult<Array> {
         Self::try_new(
             filter(self.encoded(), predicate)?,
-            self.reference().clone(),
+            self.owned_reference_scalar(),
             self.shift(),
         )
         .map(|a| a.into_array())
@@ -88,7 +88,7 @@ impl SliceFn for FoRArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Self::try_new(
             slice(self.encoded(), start, stop)?,
-            self.reference().clone(),
+            self.owned_reference_scalar(),
             self.shift(),
         )
         .map(|a| a.into_array())
