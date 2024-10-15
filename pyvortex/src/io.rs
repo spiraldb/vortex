@@ -1,54 +1,23 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use futures::TryStreamExt;
-use lazy_static::lazy_static;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyfunction;
 use pyo3::types::{PyList, PyLong, PyString};
 use tokio::fs::File;
 use vortex::array::ChunkedArray;
-use vortex::encoding::EncodingRef;
-use vortex::{Array, Context};
-use vortex_alp::{ALPEncoding, ALPRDEncoding};
-use vortex_bytebool::ByteBoolEncoding;
-use vortex_datetime_parts::DateTimePartsEncoding;
-use vortex_dict::DictEncoding;
+use vortex::Array;
 use vortex_dtype::field::Field;
 use vortex_error::{vortex_panic, VortexResult};
-use vortex_fastlanes::{BitPackedEncoding, DeltaEncoding, FoREncoding};
-use vortex_fsst::FSSTEncoding;
-use vortex_roaring::{RoaringBoolEncoding, RoaringIntEncoding};
-use vortex_runend::RunEndEncoding;
-use vortex_runend_bool::RunEndBoolEncoding;
+use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
 use vortex_serde::layouts::{
     LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
 };
-use vortex_zigzag::ZigZagEncoding;
 
 use crate::error::PyVortexError;
 use crate::expr::PyExpr;
 use crate::PyArray;
-
-lazy_static! {
-    pub static ref MAXIMAL_CTX: Arc<Context> = Arc::new(Context::default().with_encodings([
-        &ALPEncoding as EncodingRef,
-        &ByteBoolEncoding,
-        &DateTimePartsEncoding,
-        &DictEncoding,
-        &BitPackedEncoding,
-        &DeltaEncoding,
-        &FoREncoding,
-        &FSSTEncoding,
-        &RoaringBoolEncoding,
-        &RoaringIntEncoding,
-        &RunEndEncoding,
-        &RunEndBoolEncoding,
-        &ZigZagEncoding,
-        &ALPRDEncoding,
-    ]));
-}
 
 /// Read a vortex struct array from the local filesystem.
 ///
@@ -174,7 +143,10 @@ pub fn read<'py>(
 
         let mut builder: LayoutReaderBuilder<File> = LayoutReaderBuilder::new(
             file,
-            LayoutDeserializer::new(MAXIMAL_CTX.clone(), LayoutContext::default().into()),
+            LayoutDeserializer::new(
+                ALL_COMPRESSORS_CONTEXT.clone(),
+                LayoutContext::default().into(),
+            ),
         )
         .with_projection(projection);
 
