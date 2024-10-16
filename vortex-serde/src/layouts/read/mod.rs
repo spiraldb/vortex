@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use arrow::buffer::BooleanBuffer;
+use arrow_buffer::BooleanBuffer;
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use vortex::array::BoolArray;
 use vortex::validity::Validity;

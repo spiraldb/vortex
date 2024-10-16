@@ -9,6 +9,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use crate::{unbox_any, Column, VortexExpr};
 
+// TODO(robert): Support wildcard and column exclusions
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Select {
     columns: Vec<Column>,
