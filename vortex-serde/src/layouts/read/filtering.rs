@@ -2,11 +2,9 @@ use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use arrow_buffer::BooleanBuffer;
-use vortex::array::BoolArray;
+use vortex::array::ConstantArray;
 use vortex::compute::and;
 use vortex::stats::ArrayStatistics;
-use vortex::validity::Validity;
 use vortex::{Array, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::Field;
 use vortex_error::{VortexExpect, VortexResult};
@@ -34,11 +32,7 @@ impl RowFilter {
             .evaluate(target)?;
         for expr in filter_iter {
             if mask.statistics().compute_true_count().unwrap_or_default() == 0 {
-                return BoolArray::try_new(
-                    BooleanBuffer::new_unset(target.len()),
-                    Validity::AllValid,
-                )
-                .map(IntoArray::into_array);
+                return Ok(ConstantArray::new(false, target.len()).into_array());
             }
 
             let new_mask = expr.evaluate(target)?;
