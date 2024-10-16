@@ -13,14 +13,14 @@ use vortex_scalar::{Scalar, ScalarValue};
 
 use crate::BitPackedArray;
 
-pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<BitPackedArray> {
+pub fn bitpack_encode(array: PrimitiveArray, bit_width: u8) -> VortexResult<BitPackedArray> {
     let bit_width_freq = array
         .statistics()
         .compute_bit_width_freq()
         .ok_or_else(|| vortex_err!(ComputeError: "missing bit width frequency"))?;
     let num_exceptions = count_exceptions(bit_width, &bit_width_freq);
 
-    if bit_width >= array.ptype().bit_width() {
+    if bit_width >= array.ptype().bit_width() as u8 {
         // Nothing we can do
         vortex_bail!("Cannot pack -- specified bit width is greater than or equal to raw bit width")
     }
@@ -50,7 +50,7 @@ pub fn bitpack_encode(array: PrimitiveArray, bit_width: usize) -> VortexResult<B
 /// Failure to do so will result in data loss.
 pub unsafe fn bitpack_encode_unchecked(
     array: PrimitiveArray,
-    bit_width: usize,
+    bit_width: u8,
 ) -> VortexResult<BitPackedArray> {
     let packed = bitpack(&array, bit_width)?;
 
@@ -67,7 +67,7 @@ pub unsafe fn bitpack_encode_unchecked(
 /// Bitpack a [PrimitiveArray] to the given width.
 ///
 /// On success, returns a [Buffer] containing the packed data.
-pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Buffer> {
+pub fn bitpack(parray: &PrimitiveArray, bit_width: u8) -> VortexResult<Buffer> {
     // We know the min is > 0, so it's safe to re-interpret signed integers as unsigned.
     let parray = parray.reinterpret_cast(parray.ptype().to_unsigned());
     let packed = match_each_unsigned_integer_ptype!(parray.ptype(), |$P| {
@@ -81,11 +81,12 @@ pub fn bitpack(parray: &PrimitiveArray, bit_width: usize) -> VortexResult<Buffer
 /// See `bitpack` for more caller information.
 pub fn bitpack_primitive<T: NativePType + BitPacking + ArrowNativeType>(
     array: &[T],
-    bit_width: usize,
+    bit_width: u8,
 ) -> Buffer {
     if bit_width == 0 {
         return Buffer::from_len_zeroed(0);
     }
+    let bit_width = bit_width as usize;
 
     // How many fastlanes vectors we will process.
     let num_chunks = (array.len() + 1023) / 1024;
@@ -137,14 +138,14 @@ pub fn bitpack_primitive<T: NativePType + BitPacking + ArrowNativeType>(
 
 pub fn gather_patches(
     parray: &PrimitiveArray,
-    bit_width: usize,
+    bit_width: u8,
     num_exceptions_hint: usize,
 ) -> Option<Array> {
     match_each_integer_ptype!(parray.ptype(), |$T| {
         let mut indices: Vec<u64> = Vec::with_capacity(num_exceptions_hint);
         let mut values: Vec<$T> = Vec::with_capacity(num_exceptions_hint);
         for (i, v) in parray.maybe_null_slice::<$T>().iter().enumerate() {
-            if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width && parray.is_valid(i) {
+            if (v.leading_zeros() as usize) < parray.ptype().bit_width() - bit_width as usize && parray.is_valid(i) {
                 indices.push(i as u64);
                 values.push(*v);
             }
@@ -164,9 +165,9 @@ pub fn gather_patches(
 }
 
 pub fn unpack(array: BitPackedArray) -> VortexResult<PrimitiveArray> {
-    let bit_width = array.bit_width();
+    let bit_width = array.bit_width() as usize;
     let length = array.len();
-    let offset = array.offset();
+    let offset = array.offset() as usize;
     let ptype = array.ptype();
     let mut unpacked = match_each_unsigned_integer_ptype!(array.ptype().to_unsigned(), |$P| {
         PrimitiveArray::from_vec(
@@ -272,10 +273,10 @@ pub fn unpack_primitive<T: NativePType + BitPacking>(
 }
 
 pub fn unpack_single(array: &BitPackedArray, index: usize) -> VortexResult<Scalar> {
-    let bit_width = array.bit_width();
+    let bit_width = array.bit_width() as usize;
     let ptype = array.ptype();
     // let packed = array.packed().into_primitive()?;
-    let index_in_encoded = index + array.offset();
+    let index_in_encoded = index + array.offset() as usize;
     let scalar: Scalar = match_each_unsigned_integer_ptype!(ptype.to_unsigned(), |$P| unsafe {
         unpack_single_primitive::<$P>(array.packed_slice::<$P>(), bit_width, index_in_encoded).into()
     });
@@ -304,7 +305,7 @@ pub unsafe fn unpack_single_primitive<T: NativePType + BitPacking>(
     unsafe { BitPacking::unchecked_unpack_single(bit_width, packed_chunk, index_in_chunk) }
 }
 
-pub fn find_min_patchless_bit_width(array: &PrimitiveArray) -> VortexResult<usize> {
+pub fn find_min_patchless_bit_width(array: &PrimitiveArray) -> VortexResult<u8> {
     let bit_width_freq = array
         .statistics()
         .compute_bit_width_freq()
@@ -313,19 +314,19 @@ pub fn find_min_patchless_bit_width(array: &PrimitiveArray) -> VortexResult<usiz
     min_patchless_bit_width(&bit_width_freq)
 }
 
-fn min_patchless_bit_width(bit_width_freq: &[usize]) -> VortexResult<usize> {
+fn min_patchless_bit_width(bit_width_freq: &[usize]) -> VortexResult<u8> {
     if bit_width_freq.is_empty() {
         vortex_bail!("Empty bit width frequency!");
     }
     Ok(bit_width_freq
         .iter()
         .enumerate()
-        .filter_map(|(bw, count)| (*count > 0).then_some(bw))
+        .filter_map(|(bw, count)| (*count > 0).then_some(bw as u8))
         .max()
         .unwrap_or_default())
 }
 
-pub fn find_best_bit_width(array: &PrimitiveArray) -> VortexResult<usize> {
+pub fn find_best_bit_width(array: &PrimitiveArray) -> VortexResult<u8> {
     let bit_width_freq = array
         .statistics()
         .compute_bit_width_freq()
@@ -336,7 +337,7 @@ pub fn find_best_bit_width(array: &PrimitiveArray) -> VortexResult<usize> {
 
 /// Assuming exceptions cost 1 value + 1 u32 index, figure out the best bit-width to use.
 /// We could try to be clever, but we can never really predict how the exceptions will compress.
-fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> VortexResult<usize> {
+fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> VortexResult<u8> {
     if bit_width_freq.len() > u8::MAX as usize {
         vortex_bail!("Too many bit widths");
     }
@@ -358,18 +359,18 @@ fn best_bit_width(bit_width_freq: &[usize], bytes_per_exception: usize) -> Vorte
         }
     }
 
-    Ok(best_width)
+    Ok(best_width as u8)
 }
 
 fn bytes_per_exception(ptype: PType) -> usize {
     ptype.byte_width() + 4
 }
 
-pub fn count_exceptions(bit_width: usize, bit_width_freq: &[usize]) -> usize {
-    if bit_width_freq.len() <= bit_width {
+pub fn count_exceptions(bit_width: u8, bit_width_freq: &[usize]) -> usize {
+    if bit_width_freq.len() <= bit_width as usize {
         return 0;
     }
-    bit_width_freq[bit_width + 1..].iter().sum()
+    bit_width_freq[bit_width as usize + 1..].iter().sum()
 }
 
 #[cfg(test)]
@@ -450,6 +451,6 @@ mod test {
         let array = PrimitiveArray::from_vec(values, Validity::AllValid);
         assert!(array.ptype().is_signed_int());
 
-        BitPackedArray::encode(array.as_ref(), 1024u32.ilog2() as usize).unwrap();
+        BitPackedArray::encode(array.as_ref(), 1024u32.ilog2() as u8).unwrap();
     }
 }

@@ -45,19 +45,22 @@ fn take_primitive<T: NativePType + BitPacking>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<Vec<T>> {
+    let offset = array.offset() as usize;
+
     // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
     let relative_indices: Vec<(usize, Vec<u16>)> = match_each_integer_ptype!(indices.ptype(), |$P| {
         indices
             .maybe_null_slice::<$P>()
             .iter()
-            .map(|i| *i as usize + array.offset())
+            .copied()
+            .map(|i| i as usize + offset)
             .chunk_by(|idx| idx / 1024)
             .into_iter()
             .map(|(k, g)| (k, g.map(|idx| (idx % 1024) as u16).collect()))
             .collect()
     });
 
-    let bit_width = array.bit_width();
+    let bit_width = array.bit_width() as usize;
 
     let packed = array.packed_slice::<T>();
 
@@ -96,9 +99,9 @@ fn take_primitive<T: NativePType + BitPacking>(
                 let patches_start = if chunk == 0 {
                     0
                 } else {
-                    (chunk * 1024) - array.offset()
+                    (chunk * 1024) - offset
                 };
-                let patches_end = min((chunk + 1) * 1024 - array.offset(), patches.len());
+                let patches_end = min((chunk + 1) * 1024 - offset, patches.len());
                 let patches_slice = slice(patches.as_ref(), patches_start, patches_end)?;
                 let patches_slice = SparseArray::try_from(patches_slice)?;
                 let offsets = PrimitiveArray::from(offsets);
