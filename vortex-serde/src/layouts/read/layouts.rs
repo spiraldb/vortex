@@ -209,7 +209,7 @@ impl LayoutReader for ColumnLayout {
                             layouts.push(self.read_child(index, fb_children, dtype.clone())?);
                         }
 
-                        (Arc::from(names.into_boxed_slice()), layouts)
+                        (Arc::from(names), layouts)
                     }
                 };
 
