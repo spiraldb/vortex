@@ -6,6 +6,7 @@ use bytes::{Bytes, BytesMut};
 use futures::Stream;
 use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
+use vortex::array::ChunkedArray;
 use vortex::compute::filter;
 use vortex::stats::ArrayStatistics;
 use vortex::Array;
@@ -182,6 +183,22 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                 },
                 StreamingState::Error => return Poll::Ready(None),
             }
+        }
+    }
+}
+
+impl<R: VortexReadAt + Unpin + Send + 'static> LayoutBatchStream<R> {
+    pub async fn read_all(self) -> VortexResult<Array> {
+        let dtype = self.schema().clone().into();
+        let vecs: Vec<Array> = self.try_collect().await?;
+        if vecs.len() == 1 {
+            vecs.into_iter().next().ok_or_else(|| {
+                vortex_panic!(
+                    "Should be impossible: vecs.len() == 1 but couldn't get first element"
+                )
+            })
+        } else {
+            ChunkedArray::try_new(vecs, dtype).map(|e| e.into())
         }
     }
 }
