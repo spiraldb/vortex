@@ -1,5 +1,6 @@
 use std::iter;
 
+use arrow_buffer::BooleanBuffer;
 use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_scalar::{BinaryScalar, BoolScalar, Utf8Scalar};
@@ -24,10 +25,14 @@ impl IntoCanonical for ConstantArray {
         };
 
         if let Ok(b) = BoolScalar::try_from(scalar) {
-            return Ok(Canonical::Bool(BoolArray::from_vec(
-                vec![b.value().unwrap_or_default(); self.len()],
+            return Ok(Canonical::Bool(BoolArray::try_new(
+                if b.value().unwrap_or_default() {
+                    BooleanBuffer::new_set(self.len())
+                } else {
+                    BooleanBuffer::new_unset(self.len())
+                },
                 validity,
-            )));
+            )?));
         }
 
         if let Ok(s) = Utf8Scalar::try_from(scalar) {

@@ -8,12 +8,11 @@ use futures_util::future::BoxFuture;
 use futures_util::{stream, FutureExt, StreamExt, TryStreamExt};
 use vortex::compute::filter;
 use vortex::stats::ArrayStatistics;
-use vortex::{Array, IntoArrayVariant};
+use vortex::Array;
 use vortex_dtype::DType;
 use vortex_error::{vortex_err, vortex_panic, VortexError, VortexExpect, VortexResult};
 use vortex_schema::Schema;
 
-use super::null_as_false;
 use crate::io::VortexReadAt;
 use crate::layouts::read::cache::LayoutMessageCache;
 use crate::layouts::read::{LayoutReader, MessageId, ReadResult, Scan};
@@ -141,8 +140,6 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Stream for LayoutBatchStream<R> {
                     let mut batch = arr.clone();
 
                     if let Some(mask) = self.cached_mask.take() {
-                        let mask = null_as_false(mask.into_bool()?)?;
-
                         if mask.statistics().compute_true_count().unwrap_or_default() == 0 {
                             self.state = StreamingState::Init;
                             continue;
