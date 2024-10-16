@@ -26,7 +26,7 @@ async fn test_read_simple() {
     ])
     .into_array();
 
-    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]);
+    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]).unwrap();
     let buf = Vec::new();
     let mut writer = LayoutWriter::new(buf);
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
@@ -65,7 +65,7 @@ async fn test_read_projection() {
     ])
     .into_array();
 
-    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]);
+    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]).unwrap();
     let buf = Vec::new();
     let mut writer = LayoutWriter::new(buf);
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
@@ -109,7 +109,7 @@ async fn unequal_batches() {
     ])
     .into_array();
 
-    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]);
+    let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]).unwrap();
     let buf = Vec::new();
     let mut writer = LayoutWriter::new(buf);
     writer = writer.write_array_columns(st.into_array()).await.unwrap();

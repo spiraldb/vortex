@@ -489,9 +489,11 @@ mod test {
                     .unwrap()
                     .into_array(),
                 )])
+                .unwrap()
                 .into_array(),
             ),
-        ]);
+        ])
+        .unwrap();
 
         let arrow_struct = nested_struct_array
             .into_canonical()
