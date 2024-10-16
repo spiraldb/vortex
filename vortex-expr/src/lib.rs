@@ -51,7 +51,7 @@ fn split_inner(expr: &Arc<dyn VortexExpr>, exprs: &mut Vec<Arc<dyn VortexExpr>>)
     match expr.as_any().downcast_ref::<BinaryExpr>() {
         Some(bexp) if bexp.op() == Operator::And => {
             split_inner(bexp.lhs(), exprs);
-            split_inner(bexp.lhs(), exprs);
+            split_inner(bexp.rhs(), exprs);
         }
         Some(_) | None => {
             exprs.push(expr.clone());
