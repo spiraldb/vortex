@@ -206,8 +206,5 @@ lto = "fat" # attempts to perform optimizations across all crates within the dep
 
 [profile.bench]
 inherits = "release"
-lto = "thin" # takes substantially less time to run than "fat" while still achieving similar performance gains
-
-[profile.profiling]
-inherits = "bench"
+lto = "thin" # takes less time to run than "fat" while still achieving similar performance gains
 debug = true
