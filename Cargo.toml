@@ -199,3 +199,14 @@ tests_outside_test_module = "deny"
 unwrap_in_result = "deny"
 unwrap_used = "deny"
 use_debug = "deny"
+
+[profile.release]
+codegen-units = 1
+lto = "fat" # attempts to perform optimizations across all crates within the dependency graph
+
+[profile.bench]
+lto = "thin" # takes substantially less time to run than "fat" while still achieving similar performance gains
+
+[profile.profiling]
+inherits = "bench"
+debug = true
