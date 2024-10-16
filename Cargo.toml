@@ -202,9 +202,9 @@ use_debug = "deny"
 
 [profile.release]
 codegen-units = 1
-lto = "fat" # attempts to perform optimizations across all crates within the dependency graph
+lto = true # attempts to perform optimizations across all crates within the dependency graph
 
 [profile.bench]
-inherits = "release"
-lto = "thin" # takes less time to run than "fat" while still achieving similar performance gains
+codegen-units = 16 # default for "release", which "bench" inherits
+lto = false # default
 debug = true
