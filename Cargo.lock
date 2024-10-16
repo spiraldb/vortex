@@ -401,6 +401,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-stream"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b5a71a6f37880a80d1d7f19efd781e4b5de42c88f0722cc13bcb6cc2cfe8476"
+dependencies = [
+ "async-stream-impl",
+ "futures-core",
+ "pin-project-lite",
+]
+
+[[package]]
+name = "async-stream-impl"
+version = "0.3.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c7c24de15d275a1ecfd47a380fb4d5ec9bfe0933f309ed5e705b775596a3574d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.79",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1622,6 +1644,32 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76a17331823cb8b0f61a5c44861cf24af41002e838d7ae54d68645a8b4c8f44a"
 
 [[package]]
+name = "fusio"
+version = "0.2.0"
+dependencies = [
+ "async-stream",
+ "base64",
+ "bytes",
+ "cfg-if",
+ "chrono",
+ "futures-core",
+ "http",
+ "http-body",
+ "http-body-util",
+ "itertools 0.13.0",
+ "monoio",
+ "percent-encoding",
+ "quick-xml",
+ "ring",
+ "serde",
+ "serde_json",
+ "serde_urlencoded",
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2416,6 +2464,7 @@ dependencies = [
  "nix 0.26.4",
  "pin-project-lite",
  "socket2",
+ "tokio",
  "windows-sys 0.48.0",
 ]
 
@@ -4540,6 +4589,19 @@ dependencies = [
  "vortex-error",
  "vortex-sampling-compressor",
  "vortex-scalar",
+]
+
+[[package]]
+name = "vortex-io"
+version = "0.12.0"
+dependencies = [
+ "bytes",
+ "fusio",
+ "futures",
+ "monoio",
+ "tokio",
+ "vortex-buffer",
+ "vortex-error",
 ]
 
 [[package]]

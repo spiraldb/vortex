@@ -1,0 +1,36 @@
+[package]
+name = "vortex-io"
+version.workspace = true
+homepage.workspace = true
+repository.workspace = true
+authors.workspace = true
+license.workspace = true
+keywords.workspace = true
+include.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+categories.workspace = true
+
+[features]
+aws = ["fusio/aws"]
+monoio = ["dep:monoio", "fusio/monoio"]
+tokio = ["dep:tokio"]
+
+
+[dependencies]
+bytes = { workspace = true }
+monoio = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true, features = ["fs", "net", "macros"] }
+fusio = { workspace = true, features = ["bytes", "dyn", "fs", "http"] }
+futures = { workspace = true }
+
+vortex-buffer = { workspace = true }
+vortex-error = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["full"] }
+
+
+[lints]
+workspace = true

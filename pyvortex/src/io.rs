@@ -130,6 +130,7 @@ use crate::PyArray;
 #[pyfunction]
 #[pyo3(signature = (f, projection = None, row_filter = None))]
 pub fn read<'py>(
+    // TODO(aduffy): look at the path to figure out which reader to use.
     f: &Bound<'py, PyString>,
     projection: Option<&Bound<'py, PyAny>>,
     row_filter: Option<&Bound<'py, PyExpr>>,
@@ -199,6 +200,7 @@ pub fn read<'py>(
 
     let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
 
+    // TODO: launch our thread-per-core downloader runtime.
     let inner = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?
