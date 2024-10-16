@@ -9,11 +9,11 @@ Vortex is an extensible, state-of-the-art columnar file format, with associated 
 in-memory, on-disk, and over-the-wire.
 
 Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster)
-and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput. It will also support very wide
-tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
+and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput as Parquet with zstd. 
+It will also support very wide tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
 
-Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines (or, analogously,
-what LLVM + Clang are to compilers): highly extensible, extremely fast, batteries-included.
+Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines: highly extensible,
+extremely fast, batteries-included.
 
 > [!CAUTION]
 > This library is still under rapid development and is a work in progress!
