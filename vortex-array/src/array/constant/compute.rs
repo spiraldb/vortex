@@ -18,6 +18,10 @@ impl ArrayCompute for ConstantArray {
         MaybeCompareFn::maybe_compare(self, other, operator)
     }
 
+    fn filter(&self) -> Option<&dyn FilterFn> {
+        Some(self)
+    }
+
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
         Some(self)
     }
