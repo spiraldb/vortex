@@ -27,6 +27,7 @@ pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
 
     fn evaluate(&self, batch: &Array) -> VortexResult<Array>;
 
+    /// Accumulate all field references from this expression and its children
     fn collect_references<'a>(&'a self, _references: &mut HashSet<&'a Field>) {}
 }
 
