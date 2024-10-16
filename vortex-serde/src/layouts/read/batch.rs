@@ -55,10 +55,10 @@ impl BatchReader {
                 .enumerate()
                 .map(|(i, a)| a.ok_or_else(|| vortex_err!("Missing child array at index {}", i)))
                 .collect::<VortexResult<Vec<_>>>()?;
-            return Ok(Some(ReadResult::Batch(
-                StructArray::from_fields(&self.names.iter().zip(child_arrays).collect::<Vec<_>>())
+            Ok(Some(ReadResult::Batch(
+                StructArray::from_fields(&self.names.iter().zip(child_arrays).collect::<Vec<_>>())?
                     .into_array(),
-            )));
+            )))
         } else {
             Ok(Some(ReadResult::ReadMore(messages)))
         }
