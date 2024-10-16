@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use arrow::buffer::BooleanBuffer;
 pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use vortex::array::BoolArray;
 use vortex::validity::Validity;
@@ -69,17 +70,17 @@ pub trait LayoutReader: Debug + Send {
 }
 
 pub fn null_as_false(array: BoolArray) -> VortexResult<Array> {
-    match array.validity() {
-        Validity::NonNullable => Ok(array.into_array()),
+    Ok(match array.validity() {
+        Validity::NonNullable => array.into_array(),
         Validity::AllValid => {
-            Ok(BoolArray::try_new(array.boolean_buffer(), Validity::NonNullable)?.into_array())
+            BoolArray::try_new(array.boolean_buffer(), Validity::NonNullable)?.into_array()
         }
-        Validity::AllInvalid => Ok(BoolArray::from(vec![false; array.len()]).into_array()),
+        Validity::AllInvalid => BoolArray::from(BooleanBuffer::new_unset(array.len())).into_array(),
         Validity::Array(v) => {
             let bool_buffer = &array.boolean_buffer() & &v.into_bool()?.boolean_buffer();
-            Ok(BoolArray::from(bool_buffer).into_array())
+            BoolArray::from(bool_buffer).into_array()
         }
-    }
+    })
 }
 
 #[cfg(test)]
