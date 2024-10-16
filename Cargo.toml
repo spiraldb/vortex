@@ -199,3 +199,12 @@ tests_outside_test_module = "deny"
 unwrap_in_result = "deny"
 unwrap_used = "deny"
 use_debug = "deny"
+
+[profile.release]
+codegen-units = 1
+lto = true # attempts to perform optimizations across all crates within the dependency graph
+
+[profile.bench]
+codegen-units = 16 # default for "release", which "bench" inherits
+lto = false # default
+debug = true
