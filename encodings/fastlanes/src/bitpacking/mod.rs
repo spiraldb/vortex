@@ -1,8 +1,8 @@
 use std::fmt::{Debug, Display};
 
+use ::serde::{Deserialize, Serialize};
 pub use compress::*;
 use fastlanes::BitPacking;
-use ::serde::{Deserialize, Serialize};
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
@@ -187,7 +187,7 @@ impl BitPackedArray {
         })
     }
 
-    pub fn encode(array: &Array, bit_width: usize) -> VortexResult<Self> {
+    pub fn encode(array: &Array, bit_width: u8) -> VortexResult<Self> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             bitpack_encode(parray, bit_width)
         } else {
