@@ -45,10 +45,13 @@ jobs:
 
       - name: Run benchmark
         shell: bash
+        env:
+          BENCH_VORTEX_RATIOS: '.*'
+          RUSTFLAGS: '-C target-cpu=native'
         run: |
           cargo install cargo-criterion
 
-          BENCH_VORTEX_RATIOS='.*' cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
+          cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
 
           cat out.json
 
