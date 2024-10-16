@@ -88,14 +88,6 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             Projection::Flat(ref projection) => footer.projected_dtype(projection)?,
         };
 
-        let filter_dtype = filter_projection
-            .as_ref()
-            .map(|p| match p {
-                Projection::All => footer.dtype(),
-                Projection::Flat(fields) => footer.projected_dtype(fields),
-            })
-            .transpose()?;
-
         let scan = Scan {
             filter: self.row_filter.clone(),
             batch_size,
@@ -107,12 +99,11 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
 
         let data_reader = footer.layout(
             scan.clone(),
-            RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),
+            RelativeLayoutCache::new(message_cache.clone(), footer.dtype()?),
         )?;
 
-        let filter_reader = filter_dtype
-            .zip(filter_projection)
-            .map(|(dtype, projection)| {
+        let filter_reader = filter_projection
+            .map(|projection| {
                 footer.layout(
                     Scan {
                         filter: self.row_filter,
@@ -120,7 +111,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
                         projection,
                         indices: None,
                     },
-                    RelativeLayoutCache::new(message_cache.clone(), dtype),
+                    RelativeLayoutCache::new(message_cache.clone(), footer.dtype()?),
                 )
             })
             .transpose()?;
