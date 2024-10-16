@@ -5,7 +5,7 @@ use bytes::Bytes;
 use flatbuffers::{ForwardsUOffset, Vector};
 use itertools::Itertools;
 use vortex::Context;
-use vortex_dtype::DType;
+use vortex_dtype::{DType, FieldInfo};
 use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 use vortex_flatbuffers::footer as fb;
 use vortex_schema::projection::Projection;
@@ -180,7 +180,7 @@ impl LayoutReader for ColumnLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ColumnLayoutState::Init => {
-                let DType::Struct(s, ..) = self.message_cache.dtype() else {
+                let DType::Struct(struct_dtype, ..) = self.message_cache.dtype() else {
                     vortex_bail!("Column layout must have struct dtype")
                 };
 
@@ -189,27 +189,27 @@ impl LayoutReader for ColumnLayout {
                     .children()
                     .ok_or_else(|| vortex_err!("Missing children"))?;
 
-                let (names, column_layouts) = match self.scan.projection {
+                let (names, column_layouts) = match &self.scan.projection {
                     Projection::All => {
                         let layouts = (0..fb_children.len())
-                            .zip_eq(s.dtypes().iter())
+                            .zip_eq(struct_dtype.dtypes().iter())
                             .map(|(index, dtype)| {
                                 self.read_child(index, fb_children, dtype.clone())
                             })
                             .collect::<VortexResult<Vec<_>>>()?;
-                        (s.names().clone(), layouts)
+                        (struct_dtype.names().clone(), layouts)
                     }
-                    Projection::Flat(ref v) => {
-                        let (names, column_layouts): (Vec<Arc<str>>, _) = v
-                            .iter()
-                            .map(|x| {
-                                s.field(x).and_then(|(index, name, dtype)| {
-                                    Ok((name, self.read_child(index, fb_children, dtype.clone())?))
-                                })
-                            })
-                            .process_results(|iter| iter.unzip())?;
+                    Projection::Flat(projected_fields) => {
+                        let mut names = Vec::with_capacity(projected_fields.len());
+                        let mut layouts = Vec::with_capacity(projected_fields.len());
+                        for projected_field in projected_fields {
+                            let FieldInfo { index, name, dtype } =
+                                struct_dtype.field_info(projected_field)?;
+                            names.push(name);
+                            layouts.push(self.read_child(index, fb_children, dtype.clone())?);
+                        }
 
-                        (Arc::from(names.into_boxed_slice()), column_layouts)
+                        (Arc::from(names.into_boxed_slice()), layouts)
                     }
                 };
 

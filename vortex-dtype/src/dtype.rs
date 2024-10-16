@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use DType::*;
 
 use crate::field::Field;
@@ -153,6 +153,12 @@ pub struct StructDType {
     dtypes: Arc<[DType]>,
 }
 
+pub struct FieldInfo<'a> {
+    pub index: usize,
+    pub name: Arc<str>,
+    pub dtype: &'a DType,
+}
+
 impl StructDType {
     pub fn new(names: FieldNames, dtypes: Vec<DType>) -> Self {
         Self {
@@ -169,20 +175,21 @@ impl StructDType {
         self.names.iter().position(|n| n.as_ref() == name)
     }
 
-    pub fn field(&self, field: &Field) -> VortexResult<(usize, Arc<str>, &DType)> {
-        self.maybe_field(field)
-            .ok_or_else(|| vortex_err!("expected field ({}) to exist", field))
-    }
-
-    pub fn maybe_field(&self, field: &Field) -> Option<(usize, Arc<str>, &DType)> {
+    pub fn field_info<'a>(&'a self, field: &Field) -> VortexResult<FieldInfo<'a>> {
         let index = match field {
-            Field::Name(name) => self.find_name(name)?,
+            Field::Name(name) => self
+                .find_name(name)
+                .ok_or_else(|| vortex_err!("Unknown field: {}", name))?,
             Field::Index(index) => *index,
         };
         if index > self.names.len() {
-            return None;
+            vortex_bail!("field index out of bounds: {}", index)
         }
-        Some((index, self.names[index].clone(), &self.dtypes[index]))
+        Ok(FieldInfo {
+            index,
+            name: self.names[index].clone(),
+            dtype: &self.dtypes[index],
+        })
     }
 
     pub fn dtypes(&self) -> &Arc<[DType]> {
@@ -194,9 +201,7 @@ impl StructDType {
         let mut dtypes = Vec::with_capacity(projection.len());
 
         for field in projection.iter() {
-            let (_, name, dtype) = self
-                .maybe_field(field)
-                .ok_or_else(|| vortex_err!("Unknown field {}", field))?;
+            let FieldInfo { name, dtype, .. } = self.field_info(field)?;
 
             names.push(name.clone());
             dtypes.push(dtype.clone());
