@@ -55,10 +55,9 @@ impl VortexExpr for BinaryExpr {
         }
     }
 
-    fn references(&self) -> HashSet<Field> {
-        let mut res = self.lhs.references();
-        res.extend(self.rhs.references());
-        res
+    fn collect_references<'a>(&'a self, references: &mut HashSet<&'a Field>) {
+        self.lhs.collect_references(references);
+        self.rhs.collect_references(references);
     }
 }
 

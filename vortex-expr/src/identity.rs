@@ -1,8 +1,6 @@
 use std::any::Any;
-use std::collections::HashSet;
 
 use vortex::Array;
-use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
 
 use crate::{unbox_any, VortexExpr};
@@ -17,10 +15,6 @@ impl VortexExpr for Identity {
 
     fn evaluate(&self, batch: &Array) -> VortexResult<Array> {
         Ok(batch.clone())
-    }
-
-    fn references(&self) -> HashSet<Field> {
-        HashSet::new()
     }
 }
 

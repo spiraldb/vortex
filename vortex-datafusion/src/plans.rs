@@ -1,6 +1,7 @@
 //! Physical operators needed to implement scanning of Vortex arrays with pushdown.
 
 use std::any::Any;
+use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -122,10 +123,13 @@ impl ExecutionPlan for RowSelectorExec {
             .into());
         }
 
+        let mut filter_refs = HashSet::new();
+        self.filter_expr.collect_references(&mut filter_refs);
+
         Ok(Box::pin(RowIndicesStream {
             chunked_array: self.chunked_array.clone(),
             chunk_idx: 0,
-            filter_projection: self.filter_expr.references().iter().cloned().collect(),
+            filter_projection: filter_refs.into_iter().cloned().collect(),
             conjunction_expr: self.filter_expr.clone(),
         }))
     }
@@ -155,7 +159,11 @@ impl Stream for RowIndicesStream {
         // Get the unfiltered record batch.
         // Since this is a one-shot, we only want to poll the inner future once, to create the
         // initial batch for us to process.
-        let vortex_struct = next_chunk.into_struct()?.project(&this.filter_projection)?;
+        let vortex_struct = next_chunk.with_dyn(|a| {
+            a.as_struct_array()
+                .ok_or_else(|| vortex_err!("Not a struct array"))?
+                .project(&this.filter_projection)
+        })?;
 
         let selection = this
             .conjunction_expr

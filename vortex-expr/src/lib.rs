@@ -1,5 +1,3 @@
-#![feature(iter_intersperse)]
-
 use std::any::Any;
 use std::collections::HashSet;
 use std::fmt::Debug;
@@ -23,32 +21,30 @@ use vortex::Array;
 use vortex_dtype::field::Field;
 use vortex_error::{VortexExpect, VortexResult};
 
-/// [`VortexExpr`] represents logical operation on [`Array`]s
+/// Represents logical operation on [`Array`]s
 pub trait VortexExpr: Debug + Send + Sync + PartialEq<dyn Any> {
     fn as_any(&self) -> &dyn Any;
 
     fn evaluate(&self, batch: &Array) -> VortexResult<Array>;
 
-    fn references(&self) -> HashSet<Field>;
+    fn collect_references<'a>(&'a self, _references: &mut HashSet<&'a Field>) {}
 }
 
-/// Split expression into conjunctive normal form
+/// Splits top level and operations into separate expressions
 pub fn split_conjunction(expr: &Arc<dyn VortexExpr>) -> Vec<Arc<dyn VortexExpr>> {
-    split_inner(expr, vec![])
+    let mut conjunctions = vec![];
+    split_inner(expr, &mut conjunctions);
+    conjunctions
 }
 
-fn split_inner(
-    expr: &Arc<dyn VortexExpr>,
-    mut exprs: Vec<Arc<dyn VortexExpr>>,
-) -> Vec<Arc<dyn VortexExpr>> {
+fn split_inner(expr: &Arc<dyn VortexExpr>, exprs: &mut Vec<Arc<dyn VortexExpr>>) {
     match expr.as_any().downcast_ref::<BinaryExpr>() {
         Some(bexp) if bexp.op() == Operator::And => {
-            let split = split_inner(bexp.lhs(), exprs);
-            split_inner(bexp.rhs(), split)
+            split_inner(bexp.lhs(), exprs);
+            split_inner(bexp.lhs(), exprs);
         }
         Some(_) | None => {
             exprs.push(expr.clone());
-            exprs
         }
     }
 }

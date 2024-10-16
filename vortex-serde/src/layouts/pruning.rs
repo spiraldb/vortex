@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 use std::collections::hash_map::Entry;
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use ahash::{HashMap, HashMapExt};
@@ -86,7 +87,9 @@ impl<'a> PruningPredicateRewriter<'a> {
     ) -> Option<Self> {
         // TODO(robert): Simplify expression to guarantee that each column is not compared to itself
         //  For majority of cases self column references are likely not prunable
-        if other_exp.references().contains(&column) {
+        let mut refs = HashSet::new();
+        other_exp.collect_references(&mut refs);
+        if refs.contains(&column) {
             return None;
         }
 

@@ -36,7 +36,7 @@ impl RowFilter {
             if mask.statistics().compute_true_count().unwrap_or_default() == 0 {
                 return BoolArray::try_new(
                     BooleanBuffer::new_unset(target.len()),
-                    Validity::AllInvalid,
+                    Validity::AllValid,
                 )
                 .map(IntoArray::into_array);
             }
@@ -49,10 +49,10 @@ impl RowFilter {
     }
 
     /// Returns a set of all referenced fields in the underlying filter
-    pub fn references(&self) -> HashSet<Field> {
+    pub fn references(&self) -> HashSet<&Field> {
         let mut set = HashSet::new();
         for expr in self.conjunction.iter() {
-            set.extend(expr.references().iter().cloned());
+            expr.collect_references(&mut set);
         }
 
         set

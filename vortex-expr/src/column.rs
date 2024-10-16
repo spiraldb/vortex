@@ -51,8 +51,8 @@ impl VortexExpr for Column {
         .ok_or_else(|| vortex_err!("Array doesn't contain child array {}", self.field))
     }
 
-    fn references(&self) -> HashSet<Field> {
-        HashSet::from([self.field.clone()])
+    fn collect_references<'a>(&'a self, references: &mut HashSet<&'a Field>) {
+        references.insert(self.field());
     }
 }
 
