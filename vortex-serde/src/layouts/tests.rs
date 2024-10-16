@@ -7,9 +7,10 @@ use futures::StreamExt;
 use vortex::accessor::ArrayAccessor;
 use vortex::array::{ChunkedArray, PrimitiveArray, StructArray, VarBinArray};
 use vortex::validity::Validity;
+use vortex::variants::StructArrayTrait;
 use vortex::{ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_dtype::field::Field;
-use vortex_dtype::{DType, Nullability, PType};
+use vortex_dtype::{DType, Nullability, PType, StructDType};
 use vortex_expr::{BinaryExpr, Column, Literal, Operator};
 
 use crate::layouts::write::LayoutWriter;
@@ -57,17 +58,21 @@ async fn test_read_simple() {
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
 async fn test_read_projection() {
+    let strings_expected = ["ab", "foo", "bar", "baz", "ab", "foo", "bar", "baz"];
     let strings = ChunkedArray::from_iter([
-        VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
-        VarBinArray::from(vec!["ab", "foo", "bar", "baz"]).into_array(),
+        VarBinArray::from(strings_expected[..4].to_vec()).into_array(),
+        VarBinArray::from(strings_expected[4..].to_vec()).into_array(),
     ])
     .into_array();
+    let strings_dtype = strings.dtype().clone();
 
+    let numbers_expected = [1u32, 2, 3, 4, 5, 6, 7, 8];
     let numbers = ChunkedArray::from_iter([
-        PrimitiveArray::from(vec![1u32, 2, 3, 4]).into_array(),
-        PrimitiveArray::from(vec![5u32, 6, 7, 8]).into_array(),
+        PrimitiveArray::from(numbers_expected[..4].to_vec()).into_array(),
+        PrimitiveArray::from(numbers_expected[4..].to_vec()).into_array(),
     ])
     .into_array();
+    let numbers_dtype = numbers.dtype().clone();
 
     let st = StructArray::from_fields(&[("strings", strings), ("numbers", numbers)]).unwrap();
     let buf = Vec::new();
@@ -75,27 +80,125 @@ async fn test_read_projection() {
     writer = writer.write_array_columns(st.into_array()).await.unwrap();
     let written = writer.finalize().await.unwrap();
 
-    let mut stream = LayoutReaderBuilder::new(written, LayoutDeserializer::default())
+    let array = LayoutReaderBuilder::new(written.clone(), LayoutDeserializer::default())
         .with_projection(Projection::new([0]))
         .with_batch_size(5)
         .build()
         .await
+        .unwrap()
+        .read_all()
+        .await
         .unwrap();
-    let mut item_count = 0;
-    let mut batch_count = 0;
 
-    while let Some(array) = stream.next().await {
-        let array = array.unwrap();
-        item_count += array.len();
-        batch_count += 1;
+    assert_eq!(
+        array.dtype(),
+        &DType::Struct(
+            StructDType::new(vec!["strings".into()].into(), vec![strings_dtype.clone()]),
+            Nullability::NonNullable,
+        )
+    );
 
-        let struct_dtype = array.dtype().as_struct().unwrap();
-        assert_eq!(struct_dtype.dtypes().len(), 1);
-        assert_eq!(struct_dtype.names()[0].as_ref(), "strings");
-    }
+    let actual = array
+        .into_struct()
+        .unwrap()
+        .field(0)
+        .unwrap()
+        .into_varbin()
+        .unwrap()
+        .with_iterator(|x| {
+            x.map(|x| unsafe { String::from_utf8_unchecked(x.unwrap().to_vec()) })
+                .collect::<Vec<_>>()
+        })
+        .unwrap();
+    assert_eq!(actual, strings_expected);
 
-    assert_eq!(item_count, 8);
-    assert_eq!(batch_count, 2);
+    let array = LayoutReaderBuilder::new(written.clone(), LayoutDeserializer::default())
+        .with_projection(Projection::Flat(vec![Field::Name("strings".to_string())]))
+        .with_batch_size(5)
+        .build()
+        .await
+        .unwrap()
+        .read_all()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        array.dtype(),
+        &DType::Struct(
+            StructDType::new(vec!["strings".into()].into(), vec![strings_dtype.clone()]),
+            Nullability::NonNullable,
+        )
+    );
+
+    let actual = array
+        .into_struct()
+        .unwrap()
+        .field(0)
+        .unwrap()
+        .into_varbin()
+        .unwrap()
+        .with_iterator(|x| {
+            x.map(|x| unsafe { String::from_utf8_unchecked(x.unwrap().to_vec()) })
+                .collect::<Vec<_>>()
+        })
+        .unwrap();
+    assert_eq!(actual, strings_expected);
+
+    let array = LayoutReaderBuilder::new(written.clone(), LayoutDeserializer::default())
+        .with_projection(Projection::new([1]))
+        .with_batch_size(5)
+        .build()
+        .await
+        .unwrap()
+        .read_all()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        array.dtype(),
+        &DType::Struct(
+            StructDType::new(vec!["numbers".into()].into(), vec![numbers_dtype.clone()]),
+            Nullability::NonNullable,
+        )
+    );
+
+    let primitive_array = array
+        .into_struct()
+        .unwrap()
+        .field(0)
+        .unwrap()
+        .into_primitive()
+        .unwrap();
+    let actual = primitive_array.maybe_null_slice::<u32>();
+    assert_eq!(actual, numbers_expected);
+
+    let array = LayoutReaderBuilder::new(written.clone(), LayoutDeserializer::default())
+        .with_projection(Projection::Flat(vec![Field::Name("numbers".to_string())]))
+        .with_batch_size(5)
+        .build()
+        .await
+        .unwrap()
+        .read_all()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        array.dtype(),
+        &DType::Struct(
+            StructDType::new(vec!["numbers".into()].into(), vec![numbers_dtype.clone()]),
+            Nullability::NonNullable,
+        )
+    );
+
+    let primitive_array = array
+        .into_struct()
+        .unwrap()
+        .field(0)
+        .unwrap()
+        .into_primitive()
+        .unwrap();
+    let actual = primitive_array.maybe_null_slice::<u32>();
+    assert_eq!(actual, numbers_expected);
 }
 
 #[tokio::test]
