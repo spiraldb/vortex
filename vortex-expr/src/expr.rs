@@ -36,9 +36,6 @@ fn unbox_any(any: &dyn Any) -> &dyn Any {
     }
 }
 
-#[derive(Debug, PartialEq, Hash, Clone, Eq)]
-pub struct NoOp;
-
 #[derive(Debug, Clone)]
 pub struct BinaryExpr {
     lhs: Arc<dyn VortexExpr>,
