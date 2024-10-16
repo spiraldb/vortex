@@ -15,6 +15,7 @@ readme = "README.md"
 
 [dependencies]
 ahash = { workspace = true }
+arrow-buffer = { workspace = true }
 bytes = { workspace = true }
 flatbuffers = { workspace = true }
 futures = { workspace = true }

@@ -77,7 +77,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             .map(|f| f.references())
             // This is necessary to have globally addressed columns in the relative cache,
             // there is probably a better of doing that, but this works for now and the API isn't very externally-useful.
-            .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
+            .map(|refs| footer.resolve_references(&refs.into_iter().cloned().collect::<Vec<_>>()))
             .transpose()?
             .map(Projection::from);
 
