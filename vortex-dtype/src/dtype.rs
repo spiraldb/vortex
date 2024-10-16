@@ -3,7 +3,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 
 use itertools::Itertools;
-use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_error::{vortex_err, VortexResult};
 use DType::*;
 
 use crate::field::Field;
