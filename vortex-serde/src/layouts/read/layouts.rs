@@ -3,9 +3,9 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use flatbuffers::{ForwardsUOffset, Vector};
+use itertools::Itertools;
 use vortex::Context;
-use vortex_dtype::field::Field;
-use vortex_dtype::{DType, StructDType};
+use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 use vortex_flatbuffers::footer as fb;
 use vortex_schema::projection::Projection;
@@ -174,51 +174,46 @@ impl ColumnLayout {
             self.message_cache.relative(idx as u16, dtype),
         )
     }
-
-    fn struct_dtype(&self) -> VortexResult<StructDType> {
-        let DType::Struct(s, ..) = self.message_cache.dtype() else {
-            vortex_bail!("Column layout must have struct dtype")
-        };
-
-        match &self.scan.projection {
-            Projection::All => Ok(s),
-            Projection::Flat(p) => s.project(p),
-        }
-    }
 }
 
 impl LayoutReader for ColumnLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ColumnLayoutState::Init => {
-                let s = self.struct_dtype()?;
+                let DType::Struct(s, ..) = self.message_cache.dtype() else {
+                    vortex_bail!("Column layout must have struct dtype")
+                };
 
                 let fb_children = self
                     .flatbuffer()
                     .children()
                     .ok_or_else(|| vortex_err!("Missing children"))?;
 
-                let column_layouts = match self.scan.projection {
-                    Projection::All => (0..fb_children.len())
-                        .zip(s.dtypes().iter().cloned())
-                        .map(|(idx, dtype)| self.read_child(idx, fb_children, dtype))
-                        .collect::<VortexResult<Vec<_>>>()?,
-                    Projection::Flat(ref v) => v
-                        .iter()
-                        .zip(s.dtypes().iter().cloned())
-                        .map(|(projected_field, dtype)| {
-                            let child_idx = match projected_field {
-                                Field::Name(n) => s.find_name(n.as_ref()).ok_or_else(|| {
-                                    vortex_err!("Invalid projection, trying to select  {n}")
-                                })?,
-                                Field::Index(i) => *i,
-                            };
-                            self.read_child(child_idx, fb_children, dtype)
-                        })
-                        .collect::<VortexResult<Vec<_>>>()?,
+                let (names, column_layouts) = match self.scan.projection {
+                    Projection::All => {
+                        let layouts = (0..fb_children.len())
+                            .zip_eq(s.dtypes().iter())
+                            .map(|(index, dtype)| {
+                                self.read_child(index, fb_children, dtype.clone())
+                            })
+                            .collect::<VortexResult<Vec<_>>>()?;
+                        (s.names().clone(), layouts)
+                    }
+                    Projection::Flat(ref v) => {
+                        let (names, column_layouts): (Vec<Arc<str>>, _) = v
+                            .iter()
+                            .map(|x| {
+                                s.field(x).and_then(|(index, name, dtype)| {
+                                    Ok((name, self.read_child(index, fb_children, dtype.clone())?))
+                                })
+                            })
+                            .process_results(|iter| iter.unzip())?;
+
+                        (Arc::from(names.into_boxed_slice()), column_layouts)
+                    }
                 };
 
-                let reader = BatchReader::new(s.names().clone(), column_layouts);
+                let reader = BatchReader::new(names, column_layouts);
                 self.state = ColumnLayoutState::ReadColumns(reader);
                 self.read_next()
             }

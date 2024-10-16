@@ -169,6 +169,19 @@ impl StructDType {
         self.names.iter().position(|n| n.as_ref() == name)
     }
 
+    pub fn field(&self, field: &Field) -> VortexResult<(usize, Arc<str>, &DType)> {
+        self.maybe_field(field)
+            .ok_or_else(|| vortex_err!("expected field ({}) to exist", field))
+    }
+
+    pub fn maybe_field(&self, field: &Field) -> Option<(usize, Arc<str>, &DType)> {
+        let index = match field {
+            Field::Name(name) => self.find_name(name)?,
+            Field::Index(index) => *index,
+        };
+        Some((index, self.names[index].clone(), &self.dtypes[index]))
+    }
+
     pub fn dtypes(&self) -> &Arc<[DType]> {
         &self.dtypes
     }
