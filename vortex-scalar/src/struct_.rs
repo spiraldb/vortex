@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::sync::Arc;
 
 use vortex_dtype::field::Field;
@@ -9,7 +10,7 @@ use crate::Scalar;
 
 pub struct StructScalar<'a> {
     dtype: &'a DType,
-    fields: Option<Arc<[ScalarValue]>>,
+    fields: Option<&'a Arc<[ScalarValue]>>,
 }
 
 impl<'a> StructScalar<'a> {
@@ -19,7 +20,7 @@ impl<'a> StructScalar<'a> {
         }
         Ok(Self {
             dtype,
-            fields: value.as_list()?.cloned(),
+            fields: value.as_list()?,
         })
     }
 
@@ -54,7 +55,7 @@ impl<'a> StructScalar<'a> {
     }
 
     pub fn fields(&self) -> Option<&[ScalarValue]> {
-        self.fields.as_deref()
+        self.fields.map(Arc::deref)
     }
 
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {

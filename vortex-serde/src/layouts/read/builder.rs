@@ -1,18 +1,17 @@
 use std::sync::{Arc, RwLock};
 
-use bytes::BytesMut;
 use vortex::{Array, ArrayDType};
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::VortexResult;
 use vortex_schema::projection::Projection;
 
 use crate::io::VortexReadAt;
-use crate::layouts::read::cache::{LayoutMessageCache, RelativeLayoutCache};
+use crate::layouts::read::cache::{LayoutMessageCache, LazyDeserializedDType, RelativeLayoutCache};
 use crate::layouts::read::context::LayoutDeserializer;
 use crate::layouts::read::filtering::RowFilter;
-use crate::layouts::read::footer::Footer;
+use crate::layouts::read::footer::FooterReader;
 use crate::layouts::read::stream::LayoutBatchStream;
-use crate::layouts::read::{Scan, DEFAULT_BATCH_SIZE, FILE_POSTSCRIPT_SIZE, INITIAL_READ_SIZE};
-use crate::layouts::MAGIC_BYTES;
+use crate::layouts::read::{Scan, DEFAULT_BATCH_SIZE};
+use crate::layouts::ScanExpr;
 
 pub struct LayoutReaderBuilder<R> {
     reader: R,
@@ -67,20 +66,13 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         self
     }
 
-    pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
-        let footer = self.read_footer().await?;
+    pub async fn build(self) -> VortexResult<LayoutBatchStream<R>> {
+        let file_size = self.size().await as u64;
+        let footer = FooterReader::new(self.layout_serde)
+            .read_footer(&self.reader, file_size)
+            .await?;
+        let row_count = footer.row_count()?;
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
-
-        let filter_projection = self
-            .row_filter
-            .as_ref()
-            .map(|f| f.references())
-            // This is necessary to have globally addressed columns in the relative cache,
-            // there is probably a better of doing that, but this works for now and the API isn't very externally-useful.
-            .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
-            .transpose()?
-            .map(Projection::from);
-
         let read_projection = self.projection.unwrap_or_default();
 
         let projected_dtype = match read_projection {
@@ -88,42 +80,35 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             Projection::Flat(ref projection) => footer.projected_dtype(projection)?,
         };
 
-        let filter_dtype = filter_projection
-            .as_ref()
-            .map(|p| match p {
-                Projection::All => footer.dtype(),
-                Projection::Flat(fields) => footer.projected_dtype(fields),
+        let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
+
+        let filter_reader = self
+            .row_filter
+            .map(|rf| {
+                footer.layout(
+                    Scan {
+                        expr: ScanExpr::Filter(rf),
+                        batch_size,
+                    },
+                    RelativeLayoutCache::new(
+                        message_cache.clone(),
+                        LazyDeserializedDType::from_bytes(footer.dtype_bytes()),
+                    ),
+                )
             })
             .transpose()?;
 
         let scan = Scan {
-            filter: self.row_filter.clone(),
             batch_size,
-            projection: read_projection,
-            indices: self.indices,
+            expr: ScanExpr::Projection(read_projection),
         };
-
-        let message_cache = Arc::new(RwLock::new(LayoutMessageCache::default()));
-
         let data_reader = footer.layout(
             scan.clone(),
-            RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),
+            RelativeLayoutCache::new(
+                message_cache.clone(),
+                LazyDeserializedDType::from_bytes(footer.dtype_bytes()),
+            ),
         )?;
-
-        let filter_reader = filter_dtype
-            .zip(filter_projection)
-            .map(|(dtype, projection)| {
-                footer.layout(
-                    Scan {
-                        filter: self.row_filter,
-                        batch_size,
-                        projection,
-                        indices: None,
-                    },
-                    RelativeLayoutCache::new(message_cache.clone(), dtype),
-                )
-            })
-            .transpose()?;
 
         Ok(LayoutBatchStream::new(
             self.reader,
@@ -131,7 +116,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
             filter_reader,
             message_cache,
             projected_dtype,
-            scan,
+            row_count,
         ))
     }
 
@@ -142,44 +127,5 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         };
 
         size as usize
-    }
-
-    pub async fn read_footer(&mut self) -> VortexResult<Footer> {
-        let file_size = self.size().await;
-
-        if file_size < FILE_POSTSCRIPT_SIZE {
-            vortex_bail!(
-                "Malformed vortex file, size {} must be at least {}",
-                file_size,
-                FILE_POSTSCRIPT_SIZE,
-            )
-        }
-
-        let read_size = INITIAL_READ_SIZE.min(file_size);
-        let mut buf = BytesMut::with_capacity(read_size);
-        unsafe { buf.set_len(read_size) }
-
-        let read_offset = (file_size - read_size) as u64;
-        buf = self.reader.read_at_into(read_offset, buf).await?;
-
-        let magic_bytes_loc = read_size - MAGIC_BYTES.len();
-
-        let magic_number = &buf[magic_bytes_loc..];
-        if magic_number != MAGIC_BYTES {
-            vortex_bail!("Malformed file, invalid magic bytes, got {magic_number:?}")
-        }
-
-        let layout_offset =
-            u64::from_le_bytes(buf[magic_bytes_loc - 8..magic_bytes_loc].try_into()?);
-        let schema_offset =
-            u64::from_le_bytes(buf[magic_bytes_loc - 16..magic_bytes_loc - 8].try_into()?);
-
-        Ok(Footer {
-            schema_offset,
-            layout_offset,
-            leftovers: buf.freeze(),
-            leftovers_offset: read_offset,
-            layout_serde: self.layout_serde.clone(),
-        })
     }
 }
