@@ -1,7 +1,6 @@
 //! Physical operators needed to implement scanning of Vortex arrays with pushdown.
 
 use std::any::Any;
-use std::collections::HashSet;
 use std::fmt::{Debug, Formatter};
 use std::pin::Pin;
 use std::sync::Arc;
@@ -123,13 +122,11 @@ impl ExecutionPlan for RowSelectorExec {
             .into());
         }
 
-        let mut filter_refs = HashSet::new();
-        self.filter_expr.collect_references(&mut filter_refs);
-
+        let filter_projection = self.filter_expr.references().into_iter().cloned().collect();
         Ok(Box::pin(RowIndicesStream {
             chunked_array: self.chunked_array.clone(),
             chunk_idx: 0,
-            filter_projection: filter_refs.into_iter().cloned().collect(),
+            filter_projection,
             conjunction_expr: self.filter_expr.clone(),
         }))
     }
