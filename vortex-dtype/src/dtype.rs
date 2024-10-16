@@ -179,6 +179,9 @@ impl StructDType {
             Field::Name(name) => self.find_name(name)?,
             Field::Index(index) => *index,
         };
+        if index > self.names.len() {
+            return None;
+        }
         Some((index, self.names[index].clone(), &self.dtypes[index]))
     }
 
@@ -191,20 +194,12 @@ impl StructDType {
         let mut dtypes = Vec::with_capacity(projection.len());
 
         for field in projection.iter() {
-            let idx = match field {
-                Field::Name(n) => self
-                    .find_name(n.as_ref())
-                    .ok_or_else(|| vortex_err!("Unknown field {n}"))?,
-                Field::Index(i) => {
-                    if *i > self.names.len() {
-                        vortex_bail!("Projection column is out of bounds");
-                    }
-                    *i
-                }
-            };
+            let (_, name, dtype) = self
+                .maybe_field(field)
+                .ok_or_else(|| vortex_err!("Unknown field {}", field))?;
 
-            names.push(self.names[idx].clone());
-            dtypes.push(self.dtypes[idx].clone());
+            names.push(name.clone());
+            dtypes.push(dtype.clone());
         }
 
         Ok(StructDType::new(names.into(), dtypes))
