@@ -46,7 +46,7 @@ impl VortexExpr for Select {
                                 .map(|s| &**s)
                                 .ok_or_else(|| vortex_err!("Column doesn't exist")),
                         })
-                        .collect::<VortexResult<Vec<_>>>()?;
+                        .collect::<VortexResult<HashSet<_>>>()?;
                     let included_names = st
                         .names()
                         .iter()
