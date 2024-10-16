@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use vortex::array::{ConstantArray, StructArray};
-use vortex::compute::{compare, Operator as ArrayOperator};
+use vortex::compute::{and, compare, or, Operator as ArrayOperator};
 use vortex::variants::StructArrayTrait;
 use vortex::{Array, IntoArray};
 use vortex_dtype::field::Field;
@@ -161,18 +161,16 @@ impl VortexExpr for BinaryExpr {
         let lhs = self.lhs.evaluate(batch)?;
         let rhs = self.rhs.evaluate(batch)?;
 
-        let array = match self.operator {
-            Operator::Eq => compare(lhs, rhs, ArrayOperator::Eq)?,
-            Operator::NotEq => compare(lhs, rhs, ArrayOperator::NotEq)?,
-            Operator::Lt => compare(lhs, rhs, ArrayOperator::Lt)?,
-            Operator::Lte => compare(lhs, rhs, ArrayOperator::Lte)?,
-            Operator::Gt => compare(lhs, rhs, ArrayOperator::Gt)?,
-            Operator::Gte => compare(lhs, rhs, ArrayOperator::Gte)?,
-            Operator::And => vortex::compute::and(lhs, rhs)?,
-            Operator::Or => vortex::compute::or(lhs, rhs)?,
-        };
-
-        Ok(array)
+        match self.operator {
+            Operator::Eq => compare(lhs, rhs, ArrayOperator::Eq),
+            Operator::NotEq => compare(lhs, rhs, ArrayOperator::NotEq),
+            Operator::Lt => compare(lhs, rhs, ArrayOperator::Lt),
+            Operator::Lte => compare(lhs, rhs, ArrayOperator::Lte),
+            Operator::Gt => compare(lhs, rhs, ArrayOperator::Gt),
+            Operator::Gte => compare(lhs, rhs, ArrayOperator::Gte),
+            Operator::And => and(lhs, rhs),
+            Operator::Or => or(lhs, rhs),
+        }
     }
 
     fn references(&self) -> HashSet<Field> {
