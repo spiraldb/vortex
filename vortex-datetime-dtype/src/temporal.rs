@@ -35,12 +35,12 @@ pub enum TemporalJiff {
 }
 
 impl Display for TemporalJiff {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TemporalJiff::Time(x) => write!(f, "{}", x),
-            TemporalJiff::Date(x) => write!(f, "{}", x),
-            TemporalJiff::Timestamp(x) => write!(f, "{}", x),
-            TemporalJiff::Zoned(x) => write!(f, "{}", x),
+            TemporalJiff::Time(x) => write!(fmt, "{}", x),
+            TemporalJiff::Date(x) => write!(fmt, "{}", x),
+            TemporalJiff::Timestamp(x) => write!(fmt, "{}", x),
+            TemporalJiff::Zoned(x) => write!(fmt, "{}", x),
         }
     }
 }

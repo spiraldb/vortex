@@ -48,7 +48,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCSchema<'a> {
+impl WriteFlatBuffer for IPCSchema<'_> {
     type Target<'t> = fb::Schema<'t>;
 
     fn write_flatbuffer<'fb>(
@@ -60,7 +60,7 @@ impl<'a> WriteFlatBuffer for IPCSchema<'a> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCBatch<'a> {
+impl WriteFlatBuffer for IPCBatch<'_> {
     type Target<'t> = fb::Batch<'t>;
 
     fn write_flatbuffer<'fb>(
@@ -101,7 +101,7 @@ impl<'a> WriteFlatBuffer for IPCBatch<'a> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCArray<'a> {
+impl WriteFlatBuffer for IPCArray<'_> {
     type Target<'t> = fba::Array<'t>;
 
     fn write_flatbuffer<'fb>(
@@ -162,7 +162,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCPage<'a> {
+impl WriteFlatBuffer for IPCPage<'_> {
     type Target<'t> = fb::Page<'t>;
 
     fn write_flatbuffer<'fb>(

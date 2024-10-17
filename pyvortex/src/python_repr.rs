@@ -12,7 +12,7 @@ struct DTypePythonRepr<'a>(&'a DType);
 
 impl PythonRepr for DType {
     fn python_repr(&self) -> impl Display {
-        return DTypePythonRepr(self);
+        DTypePythonRepr(self)
     }
 }
 
@@ -62,7 +62,7 @@ struct NullabilityPythonRepr<'a>(&'a Nullability);
 
 impl PythonRepr for Nullability {
     fn python_repr(&self) -> impl Display {
-        return NullabilityPythonRepr(self);
+        NullabilityPythonRepr(self)
     }
 }
 
@@ -80,7 +80,7 @@ struct ExtMetadataPythonRepr<'a>(&'a ExtMetadata);
 
 impl PythonRepr for ExtMetadata {
     fn python_repr(&self) -> impl Display {
-        return ExtMetadataPythonRepr(self);
+        ExtMetadataPythonRepr(self)
     }
 }
 
