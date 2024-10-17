@@ -7,7 +7,6 @@ from ._lib import encoding as _encoding
 
 if TYPE_CHECKING:
     import numpy
-    import torch
 
 __doc__ = _encoding.__doc__
 
@@ -224,7 +223,7 @@ def _Array_to_polars_series(self: _encoding.Array):  # -> 'polars.Series':  # br
 Array.to_polars_series = _Array_to_polars_series
 
 
-def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "numpy.ndarray":
+def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True, writable: bool = False) -> "numpy.ndarray":
     """Construct a NumPy array from this Vortex array.
 
     This is an alias for :code:`self.to_arrow_array().to_numpy(zero_copy_only)`
@@ -235,6 +234,10 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "n
         When :obj:`True`, this method will raise an error unless a NumPy array can be created without
         copying the data. This is only possible when the array is a primitive array without nulls.
 
+    writable : :class:`bool`
+        When :obj:`True`, the NumPy array is writable (aka mutable). Only one of `zero_copy_only`
+        and `writable` can be :obj:`True` because Vortex expects to own the memory of its arrays.
+
     Returns
     -------
     :class:`numpy.ndarray`
@@ -242,45 +245,23 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "n
     Examples
     --------
 
-    Construct an ndarray from a Vortex array:
+    Construct an immutable ndarray from a Vortex array:
 
     >>> array = vortex.encoding.array([1, 0, 0, 1])
     >>> array.to_numpy()
     array([1, 0, 0, 1])
 
+    Construct a mutable ndarray by copying a Vortex array:
+
+    >>> array = vortex.encoding.array([1, 0, 0, 1])
+    >>> array.to_numpy(zero_copy_only=False, writable=True)
+    array([1, 0, 0, 1])
+
     """
-    return self.to_arrow_array().to_numpy(zero_copy_only=zero_copy_only)
+    return self.to_arrow_array().to_numpy(zero_copy_only=zero_copy_only, writable=writable)
 
 
 Array.to_numpy = _Array_to_numpy
-
-
-def _Array_to_torch(self: _encoding.Array) -> "torch.tensor":
-    """Construct a Torch tensor from this Vortex array.
-
-    Warning
-    -------
-
-    Only numeric arrays can be converted to Torch tensors.
-
-    Returns
-    -------
-    :class:`torch.Tensor`
-
-    Examples
-    --------
-
-    >>> array = vortex.encoding.array([25, 31, 33, 57])
-    >>> array.to_torch()
-    tensor([25, 31, 33, 57])
-
-    """
-    import torch
-
-    return torch.from_numpy(self.to_numpy())
-
-
-Array.to_torch = _Array_to_torch
 
 
 def array(obj: pyarrow.Array | list) -> Array:

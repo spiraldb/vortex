@@ -37,12 +37,8 @@ docutils==0.21.2
     # via sphinx
 executing==2.0.1
     # via stack-data
-filelock==3.16.1
-    # via torch
 fonttools==4.53.1
     # via matplotlib
-fsspec==2024.9.0
-    # via torch
 idna==3.8
     # via requests
 imagesize==1.4.1
@@ -54,7 +50,6 @@ jedi==0.19.1
     # via ipython
 jinja2==3.1.3
     # via sphinx
-    # via torch
 kiwisolver==1.4.7
     # via matplotlib
 markupsafe==2.1.5
@@ -64,10 +59,6 @@ matplotlib==3.9.2
 matplotlib-inline==0.1.7
     # via ipython
 maturin==1.7.4
-mpmath==1.3.0
-    # via sympy
-networkx==3.4.1
-    # via torch
 nodeenv==1.9.1
     # via pyright
 numpy==1.26.4
@@ -157,10 +148,6 @@ stack-data==0.6.3
     # via ipython
 substrait==0.23.0
     # via vortex-array
-sympy==1.13.1
-    # via torch
-torch==2.5.0
-    # via vortex-array
 traitlets==5.14.3
     # via ipython
     # via matplotlib-inline
@@ -168,7 +155,6 @@ typing-extensions==4.12.2
     # via ipython
     # via pydata-sphinx-theme
     # via pyright
-    # via torch
 tzdata==2024.1
     # via pandas
 urllib3==2.2.2

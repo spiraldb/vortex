@@ -28,7 +28,6 @@ intersphinx_mapping = {
     "pandas": ("https://pandas.pydata.org/docs/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
     "polars": ("https://docs.pola.rs/api/python/stable/", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
 }
 
 nitpicky = True  # ensures all :class:, :obj:, etc. links are valid
