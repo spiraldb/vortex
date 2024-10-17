@@ -4,7 +4,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
 use vortex::array::ChunkedArray;
-use vortex::compute::take;
+use vortex::compute::{slice, take};
 use vortex::{Array, ArrayDType, IntoCanonical};
 
 use crate::dtype::PyDType;
@@ -140,6 +140,11 @@ impl PyArray {
 
     /// Filter, permute, and/or repeat elements by their index.
     ///
+    /// Parameters
+    /// ----------
+    /// indices : :class:`vortex.encoding.Array`
+    ///     An array of indices to keep.
+    ///
     /// Returns
     /// -------
     /// :class:`vortex.encoding.Array`
@@ -184,6 +189,63 @@ impl PyArray {
         take(&self.inner, indices)
             .map_err(PyVortexError::map_err)
             .and_then(|arr| Bound::new(py, PyArray { inner: arr }))
+    }
+
+    /// Keep only a contiguous subset of elements.
+    ///
+    /// Parameters
+    /// ----------
+    /// start : :class:`int`
+    ///     The start index of the range to keep, inclusive.
+    ///
+    /// end : :class:`int`
+    ///     The end index, exclusive.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`vortex.encoding.Array`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Keep only the second through third elements:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> a.slice(1, 3).to_arrow_array()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
+    ///       "b",
+    ///       "c"
+    ///     ]
+    ///
+    /// Keep none of the elements:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> a.slice(3, 3).to_arrow_array()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     []
+    ///
+    /// Unlike Python, it is an error to slice outside the bounds of the array:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> a.slice(2, 10).to_arrow_array()
+    ///     Traceback (most recent call last):
+    ///     ...
+    ///     ValueError: index 10 out of bounds from 0 to 4
+    ///
+    /// Or to slice with a negative value:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> a.slice(-2, -1).to_arrow_array()
+    ///     Traceback (most recent call last):
+    ///     ...
+    ///     OverflowError: can't convert negative int to unsigned
+    ///
+    #[pyo3(signature = (start, end, *))]
+    fn slice(&self, start: usize, end: usize) -> PyResult<PyArray> {
+        slice(&self.inner, start, end)
+            .map(PyArray::new)
+            .map_err(PyVortexError::map_err)
     }
 
     /// Internal technical details about the encoding of this Array.
