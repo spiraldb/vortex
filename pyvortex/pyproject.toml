@@ -5,7 +5,7 @@ name = "vortex-array"
 dynamic = ["version", "description", "authors"]
 readme = "README.md"
 dependencies = [
-    "pyarrow>=15.0.0",
+    "pyarrow>=17.0.0",
 ]
 requires-python = ">= 3.11"
 
