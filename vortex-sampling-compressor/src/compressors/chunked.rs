@@ -37,7 +37,7 @@ impl EncodingCompressor for ChunkedCompressor {
     fn cost(&self) -> u8 {
         constants::CHUNKED_COST
     }
- 
+
     fn decompression_gib_per_second(&self) -> f64 {
         constants::CHUNKED_GIB_PER_S
     }
