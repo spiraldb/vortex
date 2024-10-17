@@ -36,7 +36,7 @@ use crate::PyArray;
 /// ...     {'name': 'Mikhail', 'age': 57},
 /// ...     {'name': None, 'age': None},
 /// ... ])
-/// >>> vortex.io.write(a, "a.vortex")
+/// >>> vortex.io.write("a.vortex", a)
 /// >>> b = vortex.io.read("a.vortex")
 /// >>> b.to_arrow()
 /// <pyarrow.lib.StructArray object at ...>
@@ -121,7 +121,7 @@ use crate::PyArray;
 /// ...     {'name': 'Mikhail', 'age': 57},
 /// ...     {'name': None, 'age': None},
 /// ... ])
-/// >>> vortex.io.write(a, "a.vortex")
+/// >>> vortex.io.write("a.vortex", a)
 /// >>> b = vortex.io.read("a.vortex")
 /// >>> # b.to_arrow()
 ///
@@ -216,9 +216,9 @@ pub fn read<'py>(
 /// ...     {'x': 11},
 /// ...     {'x': None},
 /// ... ])
-/// >>> vortex.io.write(a, "a.vortex")
+/// >>> vortex.io.write("a.vortex", a)
 ///
-pub fn write(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -> PyResult<()> {
+pub fn write(f: &Bound<'_, PyString>, array: &Bound<'_, PyArray>) -> PyResult<()> {
     async fn run(array: &Array, fname: &str) -> VortexResult<()> {
         let file = File::create(Path::new(fname)).await?;
         let mut writer = LayoutWriter::new(file);

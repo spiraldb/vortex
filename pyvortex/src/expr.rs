@@ -25,7 +25,7 @@ use crate::dtype::PyDType;
 /// ...     {'name': 'Mikhail', 'age': 57},
 /// ...     {'name': None, 'age': None},
 /// ... ])
-/// >>> vortex.io.write(a, "a.vortex")
+/// >>> vortex.io.write("a.vortex", a)
 ///
 /// Read only those rows whose age column is greater than 35:
 ///
