@@ -55,6 +55,11 @@ impl Scalar {
     }
 
     #[inline]
+    pub fn into_parts(self) -> (DType, ScalarValue) {
+        (self.dtype, self.value)
+    }
+
+    #[inline]
     pub fn into_value(self) -> ScalarValue {
         self.value
     }
