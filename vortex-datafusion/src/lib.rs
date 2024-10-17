@@ -30,7 +30,6 @@ use crate::statistics::chunked_array_df_stats;
 pub mod memory;
 pub mod persistent;
 
-mod datatype;
 mod plans;
 mod statistics;
 

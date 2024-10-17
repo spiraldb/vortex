@@ -13,12 +13,12 @@ use datafusion_physical_expr::{create_physical_expr, EquivalenceProperties};
 use datafusion_physical_plan::{ExecutionMode, ExecutionPlan, Partitioning, PlanProperties};
 use itertools::Itertools;
 use vortex::array::ChunkedArray;
+use vortex::arrow::infer_schema;
 use vortex::{Array, ArrayDType as _};
 use vortex_error::{VortexError, VortexExpect as _};
 use vortex_expr::datafusion::convert_expr_to_vortex;
 use vortex_expr::VortexExpr;
 
-use crate::datatype::infer_schema;
 use crate::plans::{RowSelectorExec, TakeRowsExec};
 use crate::{can_be_pushed_down, VortexScanExec};
 
@@ -40,7 +40,7 @@ impl VortexMemTable {
     ///
     /// Creation will panic if the provided array is not of `DType::Struct` type.
     pub fn new(array: Array, options: VortexMemTableOptions) -> Self {
-        let arrow_schema = infer_schema(array.dtype());
+        let arrow_schema = infer_schema(array.dtype()).vortex_expect("schema is inferable");
         let schema_ref = SchemaRef::new(arrow_schema);
 
         let array = match ChunkedArray::try_from(&array) {
