@@ -20,18 +20,18 @@ fn random_scalar_value(u: &mut Unstructured, dtype: &DType) -> Result<ScalarValu
             u.arbitrary::<String>()?,
         ))),
         DType::Binary(_) => Ok(ScalarValue::Buffer(Buffer::from(u.arbitrary::<Vec<u8>>()?))),
-        DType::Struct(d, _) => Ok(ScalarValue::List(
-            d.dtypes()
+        DType::Struct(sdt, _) => Ok(ScalarValue::List(
+            sdt.dtypes()
                 .iter()
                 .map(|d| random_scalar_value(u, d))
                 .collect::<Result<Vec<_>>>()?
                 .into(),
         )),
-        DType::List(d, _) => Ok(ScalarValue::List(
+        DType::List(edt, _) => Ok(ScalarValue::List(
             iter::from_fn(|| {
                 u.arbitrary()
                     .unwrap_or(false)
-                    .then(|| random_scalar_value(u, d))
+                    .then(|| random_scalar_value(u, edt))
             })
             .collect::<Result<Vec<ScalarValue>>>()?
             .into(),

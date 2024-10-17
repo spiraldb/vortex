@@ -59,12 +59,12 @@ impl LazyDeserializedDType {
     /// Restrict the underlying dtype to selected fields
     pub fn project(&self, projection: &[Field]) -> VortexResult<Arc<Self>> {
         match &self.inner {
-            LazyDTypeState::Value(d) => {
-                let DType::Struct(s, n) = d else {
+            LazyDTypeState::Value(dtype) => {
+                let DType::Struct(sdt, n) = dtype else {
                     vortex_bail!("Not a struct dtype")
                 };
                 Ok(Arc::new(LazyDeserializedDType::from_dtype(DType::Struct(
-                    s.project(projection)?,
+                    sdt.project(projection)?,
                     *n,
                 ))))
             }
@@ -102,12 +102,12 @@ impl LazyDeserializedDType {
     /// Convert all name based references to index based to create globally addressable filter
     pub(crate) fn resolve_field(&self, field: &Field) -> VortexResult<usize> {
         match &self.inner {
-            LazyDTypeState::Value(d) => {
-                let DType::Struct(s, _) = d else {
+            LazyDTypeState::Value(dtype) => {
+                let DType::Struct(sdt, _) = dtype else {
                     vortex_bail!("Trying to resolve fields in non struct dtype")
                 };
                 match field {
-                    Field::Name(n) => s
+                    Field::Name(n) => sdt
                         .names()
                         .iter()
                         .position(|name| name.as_ref() == n.as_str())
