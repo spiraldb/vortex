@@ -70,7 +70,7 @@ impl LazyDeserializedDType {
             }
             LazyDTypeState::Serialized(b, _, proj) => {
                 let projection = match proj {
-                    Projection::All => Projection::Flat(projection.to_owned()),
+                    Projection::All => Projection::Flat(projection.to_vec()),
                     // TODO(robert): Respect existing projection list, only really an issue for nested structs
                     Projection::Flat(_) => vortex_bail!("Can't project already projected dtype"),
                 };
