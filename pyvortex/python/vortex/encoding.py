@@ -1,12 +1,13 @@
 from typing import TYPE_CHECKING
+
 import pandas
 import pyarrow
 
 from ._lib import encoding as _encoding
 
 if TYPE_CHECKING:
-    import pandas
     import numpy
+    import pandas
 
 __doc__ = _encoding.__doc__
 
@@ -64,7 +65,7 @@ def _Array_to_arrow_table(self: _encoding.Array) -> pyarrow.Table:
 Array.to_arrow_table = _Array_to_arrow_table
 
 
-def _Array_to_pandas(self: _encoding.Array) -> 'pandas.DataFrame':
+def _Array_to_pandas(self: _encoding.Array) -> "pandas.DataFrame":
     """Construct a Pandas dataframe from this Vortex array.
 
     Warning
@@ -103,7 +104,9 @@ def _Array_to_pandas(self: _encoding.Array) -> 'pandas.DataFrame':
 Array.to_pandas = _Array_to_pandas
 
 
-def _Array_to_polars_dataframe(self: _encoding.Array): # -> 'polars.DataFrame':  # breaks docs due to Polars issue #7027
+def _Array_to_polars_dataframe(
+    self: _encoding.Array,
+):  # -> 'polars.DataFrame':  # breaks docs due to Polars issue #7027
     """Construct a Polars dataframe from this Vortex array.
 
     .. seealso::
@@ -153,7 +156,7 @@ def _Array_to_polars_dataframe(self: _encoding.Array): # -> 'polars.DataFrame': 
 Array.to_polars_dataframe = _Array_to_polars_dataframe
 
 
-def _Array_to_polars_series(self: _encoding.Array): # -> 'polars.Series':  # breaks docs due to Polars issue #7027
+def _Array_to_polars_series(self: _encoding.Array):  # -> 'polars.Series':  # breaks docs due to Polars issue #7027
     """Construct a Polars series from this Vortex array.
 
     .. seealso::
@@ -176,10 +179,10 @@ def _Array_to_polars_series(self: _encoding.Array): # -> 'polars.Series':  # bre
     shape: (4,)
     Series: '' [i64]
     [
-    	1
-    	null
-    	2
-    	3
+        1
+        null
+        2
+        3
     ]
 
     Convert a UTF-8 string array to a Polars Series:
@@ -188,10 +191,10 @@ def _Array_to_polars_series(self: _encoding.Array): # -> 'polars.Series':  # bre
     shape: (4,)
     Series: '' [str]
     [
-    	"hello, "
-    	"is"
-    	"it"
-    	"me?"
+        "hello, "
+        "is"
+        "it"
+        "me?"
     ]
 
     Convert a struct array to a Polars Series:
@@ -206,10 +209,10 @@ def _Array_to_polars_series(self: _encoding.Array): # -> 'polars.Series':  # bre
     shape: (4,)
     Series: '' [struct[2]]
     [
-    	{25,"Joseph"}
-    	{31,"Narendra"}
-    	{33,"Angela"}
-    	{57,"Mikhail"}
+        {25,"Joseph"}
+        {31,"Narendra"}
+        {33,"Angela"}
+        {57,"Mikhail"}
     ]
 
     """
@@ -221,7 +224,7 @@ def _Array_to_polars_series(self: _encoding.Array): # -> 'polars.Series':  # bre
 Array.to_polars_series = _Array_to_polars_series
 
 
-def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> 'numpy.ndarray':
+def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "numpy.ndarray":
     """Construct a NumPy array from this Vortex array.
 
     This is an alias for :code:`self.to_arrow().to_numpy(zero_copy_only)`
