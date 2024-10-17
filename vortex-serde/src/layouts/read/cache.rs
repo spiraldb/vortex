@@ -7,7 +7,7 @@ use once_cell::sync::OnceCell;
 use vortex_dtype::field::Field;
 use vortex_dtype::flatbuffers::{deserialize_and_project, resolve_field};
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexResult};
 use vortex_flatbuffers::message;
 use vortex_schema::projection::Projection;
 
@@ -33,86 +33,89 @@ impl LayoutMessageCache {
 }
 
 #[derive(Debug)]
+enum LazyDTypeState {
+    Value(DType),
+    Serialized(Bytes, OnceCell<DType>, Projection),
+}
+
+#[derive(Debug)]
 pub struct LazyDeserializedDType {
-    dtype_bytes: Option<Bytes>,
-    dtype: OnceCell<DType>,
-    projection: Projection,
+    inner: LazyDTypeState,
 }
 
 impl LazyDeserializedDType {
     pub fn from_bytes(dtype_bytes: Bytes, projection: Projection) -> Self {
         Self {
-            dtype_bytes: Some(dtype_bytes),
-            dtype: OnceCell::new(),
-            projection,
+            inner: LazyDTypeState::Serialized(dtype_bytes, OnceCell::new(), projection),
         }
     }
 
-    pub fn from_dtype(dtype: DType, projection: Projection) -> Self {
+    pub fn from_dtype(dtype: DType) -> Self {
         Self {
-            dtype: OnceCell::from(dtype),
-            dtype_bytes: None,
-            projection,
+            inner: LazyDTypeState::Value(dtype),
         }
     }
 
     /// Restrict the underlying dtype to selected fields
     pub fn project(&self, projection: &[Field]) -> VortexResult<Arc<Self>> {
-        // TODO(robert): Respect existing projection list, only really an issue for nested structs
-        if let Some(ref b) = self.dtype_bytes {
-            Ok(Arc::new(LazyDeserializedDType::from_bytes(
+        match &self.inner {
+            LazyDTypeState::Value(d) => {
+                let DType::Struct(s, n) = d else {
+                    vortex_bail!("Not a struct dtype")
+                };
+                Ok(Arc::new(LazyDeserializedDType::from_dtype(DType::Struct(
+                    s.project(projection)?,
+                    *n,
+                ))))
+            }
+            // TODO(robert): Respect existing projection list, only really an issue for nested structs
+            LazyDTypeState::Serialized(b, ..) => Ok(Arc::new(LazyDeserializedDType::from_bytes(
                 b.clone(),
                 Projection::Flat(projection.to_owned()),
-            )))
-        } else if let Some(d) = self.dtype.get() {
-            let DType::Struct(s, n) = d else {
-                vortex_bail!("Not a struct dtype")
-            };
-            Ok(Arc::new(LazyDeserializedDType::from_dtype(
-                DType::Struct(s.project(projection)?, *n),
-                Projection::Flat(projection.to_vec()),
-            )))
-        } else {
-            vortex_bail!("Wrong state");
+            ))),
         }
     }
 
     /// Get vortex dtype out of serialized bytes
     pub fn value(&self) -> VortexResult<&DType> {
-        self.dtype.get_or_try_init(|| {
-            let fb_dtype = Self::fb_schema(self.dtype_bytes.as_ref().vortex_expect("Wrong state"))?
-                .dtype()
-                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
-            match &self.projection {
-                Projection::All => DType::try_from(fb_dtype)
-                    .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e)),
-                Projection::Flat(p) => deserialize_and_project(fb_dtype, p),
-            }
-        })
+        match &self.inner {
+            LazyDTypeState::Value(d) => Ok(d),
+            LazyDTypeState::Serialized(b, c, p) => c.get_or_try_init(|| {
+                let fb_dtype = Self::fb_schema(b)?
+                    .dtype()
+                    .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
+                match &p {
+                    Projection::All => DType::try_from(fb_dtype)
+                        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {e}")),
+                    Projection::Flat(p) => deserialize_and_project(fb_dtype, p),
+                }
+            }),
+        }
     }
 
     /// Convert all name based references to index based to create globally addressable filter
     pub(crate) fn resolve_field(&self, field: &Field) -> VortexResult<usize> {
-        if let Some(ref b) = self.dtype_bytes {
-            let fb_struct = Self::fb_schema(b.as_ref())?
-                .dtype()
-                .and_then(|d| d.type__as_struct_())
-                .ok_or_else(|| vortex_err!("The top-level type should be a struct"))?;
-            resolve_field(fb_struct, field)
-        } else if let Some(d) = self.dtype.get() {
-            let DType::Struct(s, _) = d else {
-                vortex_bail!("Trying to resolve fields in non struct dtype")
-            };
-            match field {
-                Field::Name(n) => s
-                    .names()
-                    .iter()
-                    .position(|name| name.as_ref() == n.as_str())
-                    .ok_or_else(|| vortex_err!("Can't find {n} in the type")),
-                Field::Index(i) => Ok(*i),
+        match &self.inner {
+            LazyDTypeState::Value(d) => {
+                let DType::Struct(s, _) = d else {
+                    vortex_bail!("Trying to resolve fields in non struct dtype")
+                };
+                match field {
+                    Field::Name(n) => s
+                        .names()
+                        .iter()
+                        .position(|name| name.as_ref() == n.as_str())
+                        .ok_or_else(|| vortex_err!("Can't find {n} in the type")),
+                    Field::Index(i) => Ok(*i),
+                }
             }
-        } else {
-            vortex_bail!("Wrong state");
+            LazyDTypeState::Serialized(b, ..) => {
+                let fb_struct = Self::fb_schema(b.as_ref())?
+                    .dtype()
+                    .and_then(|d| d.type__as_struct_())
+                    .ok_or_else(|| vortex_err!("The top-level type should be a struct"))?;
+                resolve_field(fb_struct, field)
+            }
         }
     }
 
