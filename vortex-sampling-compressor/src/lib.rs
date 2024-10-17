@@ -30,12 +30,12 @@ use crate::compressors::zigzag::ZigZagCompressor;
 
 #[cfg(feature = "arbitrary")]
 pub mod arbitrary;
-mod compressor;
 pub mod compressors;
 mod constants;
 mod sampling;
+mod sampling_compressor;
 
-pub use compressor::*;
+pub use sampling_compressor::*;
 
 lazy_static! {
     pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 11] = [
