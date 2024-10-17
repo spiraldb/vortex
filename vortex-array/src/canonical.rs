@@ -5,12 +5,11 @@ use arrow_array::types::{
     UInt32Type, UInt64Type, UInt8Type,
 };
 use arrow_array::{
-    ArrayRef, ArrowPrimitiveType, BinaryArray, BooleanArray as ArrowBoolArray, Date32Array,
-    Date64Array, LargeBinaryArray, LargeStringArray, NullArray as ArrowNullArray,
-    PrimitiveArray as ArrowPrimitiveArray, StringArray, StructArray as ArrowStructArray,
-    Time32MillisecondArray, Time32SecondArray, Time64MicrosecondArray, Time64NanosecondArray,
-    TimestampMicrosecondArray, TimestampMillisecondArray, TimestampNanosecondArray,
-    TimestampSecondArray,
+    ArrayRef, ArrowPrimitiveType, BooleanArray as ArrowBoolArray, Date32Array, Date64Array,
+    NullArray as ArrowNullArray, PrimitiveArray as ArrowPrimitiveArray,
+    StructArray as ArrowStructArray, Time32MillisecondArray, Time32SecondArray,
+    Time64MicrosecondArray, Time64NanosecondArray, TimestampMicrosecondArray,
+    TimestampMillisecondArray, TimestampNanosecondArray, TimestampSecondArray,
 };
 use arrow_buffer::ScalarBuffer;
 use arrow_schema::{Field, Fields};
@@ -19,14 +18,14 @@ use vortex_dtype::{DType, NativePType, PType};
 use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::{
-    BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray, TemporalArray, VarBinArray,
+    varbinview_as_arrow, BoolArray, ExtensionArray, NullArray, PrimitiveArray, StructArray,
+    TemporalArray, VarBinViewArray,
 };
-use crate::arrow::wrappers::as_offset_buffer;
 use crate::compute::unary::try_cast;
 use crate::encoding::ArrayEncoding;
 use crate::validity::ArrayValidity;
 use crate::variants::StructArrayTrait;
-use crate::{Array, ArrayDType, IntoArray, ToArray};
+use crate::{Array, ArrayDType, IntoArray};
 
 /// The set of canonical array encodings, also the set of encodings that can be transferred to
 /// Arrow with zero-copy.
@@ -41,26 +40,23 @@ use crate::{Array, ArrayDType, IntoArray, ToArray};
 /// decompress it later to pass to a compute kernel, there are multiple suitable Arrow array
 /// variants to hold the data.
 ///
-/// To disambiguate, we choose a canonical physical encoding for every Vortex [`DType`], which
+/// To disambiguate, we choose a canonical physical encoding for every Vortex `DType`, which
 /// will correspond to an arrow-rs [`arrow_schema::DataType`].
 ///
 /// # Views support
 ///
-/// Binary and String views are a new, better encoding format for nearly all use-cases. For now,
-/// because DataFusion does not include pervasive support for compute over StringView, we opt to use
-/// the [`VarBinArray`] as the canonical encoding (which corresponds to the Arrow `BinaryViewArray`).
+/// Binary and String views, also known as "German strings" are a better encoding format for
+/// nearly all use-cases. Variable-length binary views are part of the Apache Arrow spec, and are
+/// fully supported by the Datafusio query engine. We use them as our canonical string encoding
+/// for all `Utf8` and `Binary` typed arrays in Vortex.
 ///
-/// We expect to change this soon once DataFusion is able to finish up some initial support, which
-/// is tracked in <https://github.com/apache/datafusion/issues/10918>.
 #[derive(Debug, Clone)]
 pub enum Canonical {
     Null(NullArray),
     Bool(BoolArray),
     Primitive(PrimitiveArray),
     Struct(StructArray),
-    VarBin(VarBinArray),
-    // TODO(aduffy): switch to useing VarBinView instead of VarBin
-    // VarBinView(VarBinViewArray),
+    VarBinView(VarBinViewArray),
     Extension(ExtensionArray),
 }
 
@@ -76,7 +72,7 @@ impl Canonical {
             Canonical::Bool(a) => bool_to_arrow(a)?,
             Canonical::Primitive(a) => primitive_to_arrow(a)?,
             Canonical::Struct(a) => struct_to_arrow(a)?,
-            Canonical::VarBin(a) => varbin_to_arrow(a)?,
+            Canonical::VarBinView(a) => varbinview_as_arrow(a),
             Canonical::Extension(a) => {
                 if !is_temporal_ext_type(a.id()) {
                     vortex_bail!("unsupported extension dtype with ID {}", a.id().as_ref())
@@ -117,10 +113,10 @@ impl Canonical {
         }
     }
 
-    pub fn into_varbin(self) -> VortexResult<VarBinArray> {
+    pub fn into_varbinview(self) -> VortexResult<VarBinViewArray> {
         match self {
-            Canonical::VarBin(a) => Ok(a),
-            _ => vortex_bail!("Cannot unwrap VarBinArray from {:?}", &self),
+            Canonical::VarBinView(a) => Ok(a),
+            _ => vortex_bail!("Cannot unwrap VarBinViewArray from {:?}", &self),
         }
     }
 
@@ -210,77 +206,6 @@ fn struct_to_arrow(struct_array: StructArray) -> VortexResult<ArrayRef> {
         field_arrays,
         nulls,
     )?))
-}
-
-fn varbin_to_arrow(varbin_array: VarBinArray) -> VortexResult<ArrayRef> {
-    let offsets = varbin_array
-        .offsets()
-        .into_primitive()
-        .map_err(|err| err.with_context("Failed to canonicalize offsets"))?;
-    let offsets = match offsets.ptype() {
-        PType::I32 | PType::I64 => offsets,
-        PType::U64 => offsets.reinterpret_cast(PType::I64),
-        PType::U32 => offsets.reinterpret_cast(PType::I32),
-        // Unless it's u64, everything else can be converted into an i32.
-        _ => try_cast(offsets.to_array(), PType::I32.into())
-            .and_then(|a| a.into_primitive())
-            .map_err(|err| err.with_context("Failed to cast offsets to PrimitiveArray of i32"))?,
-    };
-    let nulls = varbin_array
-        .logical_validity()
-        .to_null_buffer()
-        .map_err(|err| err.with_context("Failed to get null buffer from logical validity"))?;
-
-    let data = varbin_array
-        .bytes()
-        .into_primitive()
-        .map_err(|err| err.with_context("Failed to canonicalize bytes"))?;
-    if data.ptype() != PType::U8 {
-        vortex_bail!("Expected bytes to be of type U8, got {}", data.ptype());
-    }
-    let data = data.buffer();
-
-    // Switch on Arrow DType.
-    Ok(match varbin_array.dtype() {
-        DType::Binary(_) => match offsets.ptype() {
-            PType::I32 => Arc::new(unsafe {
-                BinaryArray::new_unchecked(
-                    as_offset_buffer::<i32>(offsets),
-                    data.clone().into_arrow(),
-                    nulls,
-                )
-            }),
-            PType::I64 => Arc::new(unsafe {
-                LargeBinaryArray::new_unchecked(
-                    as_offset_buffer::<i64>(offsets),
-                    data.clone().into_arrow(),
-                    nulls,
-                )
-            }),
-            _ => vortex_bail!("Invalid offsets type {}", offsets.ptype()),
-        },
-        DType::Utf8(_) => match offsets.ptype() {
-            PType::I32 => Arc::new(unsafe {
-                StringArray::new_unchecked(
-                    as_offset_buffer::<i32>(offsets),
-                    data.clone().into_arrow(),
-                    nulls,
-                )
-            }),
-            PType::I64 => Arc::new(unsafe {
-                LargeStringArray::new_unchecked(
-                    as_offset_buffer::<i64>(offsets),
-                    data.clone().into_arrow(),
-                    nulls,
-                )
-            }),
-            _ => vortex_bail!("Invalid offsets type {}", offsets.ptype()),
-        },
-        _ => vortex_bail!(
-            "expected utf8 or binary instead of {}",
-            varbin_array.dtype()
-        ),
-    })
 }
 
 fn temporal_to_arrow(temporal_array: TemporalArray) -> VortexResult<ArrayRef> {
@@ -385,7 +310,7 @@ pub trait IntoArrayVariant {
 
     fn into_struct(self) -> VortexResult<StructArray>;
 
-    fn into_varbin(self) -> VortexResult<VarBinArray>;
+    fn into_varbinview(self) -> VortexResult<VarBinViewArray>;
 
     fn into_extension(self) -> VortexResult<ExtensionArray>;
 }
@@ -410,8 +335,8 @@ where
         self.into_canonical()?.into_struct()
     }
 
-    fn into_varbin(self) -> VortexResult<VarBinArray> {
-        self.into_canonical()?.into_varbin()
+    fn into_varbinview(self) -> VortexResult<VarBinViewArray> {
+        self.into_canonical()?.into_varbinview()
     }
 
     fn into_extension(self) -> VortexResult<ExtensionArray> {
@@ -441,7 +366,7 @@ impl From<Canonical> for Array {
             Canonical::Bool(a) => a.into(),
             Canonical::Primitive(a) => a.into(),
             Canonical::Struct(a) => a.into(),
-            Canonical::VarBin(a) => a.into(),
+            Canonical::VarBinView(a) => a.into(),
             Canonical::Extension(a) => a.into(),
         }
     }
@@ -454,7 +379,8 @@ mod test {
     use arrow_array::cast::AsArray;
     use arrow_array::types::{Int32Type, Int64Type, UInt64Type};
     use arrow_array::{
-        Array, PrimitiveArray as ArrowPrimitiveArray, StringArray, StructArray as ArrowStructArray,
+        Array, PrimitiveArray as ArrowPrimitiveArray, StringViewArray,
+        StructArray as ArrowStructArray,
     };
     use arrow_buffer::NullBufferBuilder;
     use arrow_schema::{DataType, Field};
@@ -538,7 +464,7 @@ mod test {
         nulls.append_n_non_nulls(4);
         nulls.append_null();
         nulls.append_non_null();
-        let names = Arc::new(StringArray::from_iter(vec![
+        let names = Arc::new(StringViewArray::from_iter(vec![
             Some("Joseph"),
             None,
             Some("Angela"),
@@ -557,7 +483,7 @@ mod test {
 
         let arrow_struct = ArrowStructArray::new(
             vec![
-                Arc::new(Field::new("name", DataType::Utf8, true)),
+                Arc::new(Field::new("name", DataType::Utf8View, true)),
                 Arc::new(Field::new("age", DataType::Int32, true)),
             ]
             .into(),

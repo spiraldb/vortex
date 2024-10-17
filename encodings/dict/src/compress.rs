@@ -4,11 +4,14 @@ use hashbrown::hash_map::{Entry, RawEntryMut};
 use hashbrown::{DefaultHashBuilder, HashMap};
 use num_traits::AsPrimitive;
 use vortex::accessor::ArrayAccessor;
-use vortex::array::{PrimitiveArray, VarBinArray};
+use vortex::array::{PrimitiveArray, VarBinArray, VarBinViewArray};
 use vortex::validity::Validity;
-use vortex::{ArrayDType, IntoArray};
+use vortex::{ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, ToBytes};
 use vortex_error::VortexExpect as _;
+
+/// Statically assigned code for a null value.
+pub const NULL_CODE: u64 = 0;
 
 #[derive(Debug)]
 struct Value<T>(T);
@@ -89,6 +92,21 @@ pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) 
         .vortex_expect("Failed to dictionary encode varbin array")
 }
 
+/// Dictionary encode a VarbinViewArray.
+pub fn dict_encode_varbinview(array: &VarBinViewArray) -> (PrimitiveArray, VarBinViewArray) {
+    let (codes, values) = array
+        .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
+        .unwrap();
+    (
+        codes,
+        values
+            .into_canonical()
+            .vortex_expect("VarBin to canonical")
+            .into_varbinview()
+            .vortex_expect("VarBinView"),
+    )
+}
+
 fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     offsets: &'a [T],
     bytes: &'a [u8],
@@ -98,6 +116,103 @@ fn lookup_bytes<'a, T: NativePType + AsPrimitive<usize>>(
     let end: usize = offsets[idx + 1].as_();
     &bytes[begin..end]
 }
+
+// Impl our own for different things here.
+
+// fn dict_encode_typed_view<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinViewArray)
+// where
+//     I: Iterator<Item = Option<U>>,
+//     U: AsRef<[u8]>,
+// {
+//     let (lower, _) = values.size_hint();
+//     let hasher = DefaultHashBuilder::default();
+//     let mut lookup_dict: HashMap<u64, (), ()> = HashMap::with_hasher(());
+//
+//     // The codes, which will become the primitive array.
+//     let mut codes: Vec<u64> = Vec::with_capacity(lower);
+//
+//     let mut views: Vec<BinaryView> = Vec::new();
+//
+//     // Generate a new output buffer once we've overflowed the i32 range.
+//     let mut buffers: Vec<Vec<u8>> = Vec::with_capacity(1);
+//     let mut string_heap: Vec<u8> = Vec::with_capacity(1024);
+//
+//     // Accumulate a temporary buffer of code bytes for fast lookups.
+//
+//     for o_val in values {
+//         match o_val {
+//             None => codes.push(NULL_CODE),
+//             Some(val) => {
+//                 let byte_ref = val.as_ref();
+//                 let value_hash = hasher.hash_one(byte_ref);
+//                 let raw_entry = lookup_dict
+//                     .raw_entry_mut()
+//                     .from_hash(value_hash, |idx| todo!());
+//
+//                 let code = match raw_entry {
+//                     RawEntryMut::Occupied(o) => *o.into_key(),
+//                     RawEntryMut::Vacant(vac) => {
+//                         let next_code = views.len() as u64;
+//                         let slice = val.as_ref();
+//                         assert!(
+//                             slice.len() < (i32::MAX as usize),
+//                             "cannot append a value of length >= 2^31 to VarBinViewArray"
+//                         );
+//                         if slice.len() >= BinaryView::MAX_INLINED_SIZE {
+//                             // Rollover a new heap.
+//                             if string_heap.len() + slice.len() >= (i32::MAX as usize) {
+//                                 buffers.push(string_heap);
+//                                 string_heap = Vec::with_capacity(1024);
+//                             }
+//
+//                             views.push(BinaryView::new_view(
+//                                 slice.len() as u32,
+//                                 [slice[0], slice[1], slice[2], slice[3]],
+//                                 buffers.len() as u32,
+//                                 string_heap.len() as u32,
+//                             ));
+//
+//                             string_heap.extend_from_slice(slice);
+//                         } else {
+//                             // Append an inlined view.
+//                             views.push(BinaryView::new_inlined(slice));
+//                         }
+//
+//                         vac.insert_with_hasher(value_hash, next_code, (), |code| {
+//                             // Get access to the value...again.
+//                             hasher.hash_one(
+//
+//                             )
+//                         });
+//                         next_code
+//                     }
+//                 };
+//                 codes.push(code)
+//             }
+//         }
+//     }
+//
+//     let values_validity = if dtype.is_nullable() {
+//         let mut validity = BooleanBufferBuilder::new(views.len());
+//         validity.append(false); // First code is false
+//         validity.append_n(true, offsets.len() - 2);
+//
+//         validity.into()
+//     } else {
+//         Validity::NonNullable
+//     };
+//
+//     (
+//         PrimitiveArray::from(codes),
+//         VarBinArray::try_new(
+//             PrimitiveArray::from(offsets).into_array(),
+//             PrimitiveArray::from(bytes).into_array(),
+//             dtype,
+//             values_validity,
+//         )
+//         .vortex_expect("Failed to create VarBinArray dictionary during encoding"),
+//     )
+// }
 
 fn dict_encode_typed_varbin<I, U>(dtype: DType, values: I) -> (PrimitiveArray, VarBinArray)
 where

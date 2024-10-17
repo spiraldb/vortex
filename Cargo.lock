@@ -4422,6 +4422,7 @@ dependencies = [
 name = "vortex-dict"
 version = "0.12.0"
 dependencies = [
+ "arrow-array",
  "arrow-buffer",
  "criterion",
  "hashbrown 0.15.0",

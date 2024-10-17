@@ -3,31 +3,30 @@ use std::sync::Arc;
 use std::{mem, slice};
 
 use ::serde::{Deserialize, Serialize};
-use arrow_array::builder::{BinaryViewBuilder, StringViewBuilder};
-use arrow_array::{ArrayRef, BinaryViewArray, StringViewArray};
+use arrow_array::builder::{BinaryViewBuilder, GenericByteViewBuilder, StringViewBuilder};
+use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
+use arrow_array::{ArrayRef, BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
 use static_assertions::{assert_eq_align, assert_eq_size};
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect, VortexResult};
 
 use super::PrimitiveArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
+use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
-    impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArrayVariant,
-    IntoCanonical,
+    impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArrayVariant, IntoCanonical,
 };
-use crate::encoding::ids;
 
 mod accessor;
 mod compute;
 mod stats;
 mod variants;
-
 
 #[derive(Clone, Copy, Debug)]
 #[repr(C, align(8))]
@@ -319,11 +318,54 @@ impl VarBinViewArray {
     }
 
     pub fn validity(&self) -> Validity {
-        self.metadata().validity.to_validity(|| self.as_ref().child(
-            self.metadata().buffer_lens.len() + 1,
-            &Validity::DTYPE,
-            self.len(),
-        ).vortex_expect("VarBinViewArray: validity child"))
+        self.metadata().validity.to_validity(|| {
+            self.as_ref()
+                .child(
+                    self.metadata().buffer_lens.len() + 1,
+                    &Validity::DTYPE,
+                    self.len(),
+                )
+                .vortex_expect("VarBinViewArray: validity child")
+        })
+    }
+
+    /// Accumulate an iterable set of values into our type here.
+    #[allow(clippy::same_name_method)]
+    pub fn from_iter<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
+        iter: I,
+        dtype: DType,
+    ) -> Self {
+        match dtype {
+            DType::Utf8(nullability) => {
+                let string_view_array = generic_byte_view_builder::<StringViewType, _, _>(
+                    iter.into_iter(),
+                    |builder, v| {
+                        match v {
+                            None => builder.append_null(),
+                            Some(inner) => {
+                                // SAFETY: the caller must provide valid utf8 values if Utf8 DType is passed.
+                                let utf8 = unsafe { std::str::from_utf8_unchecked(inner.as_ref()) };
+                                builder.append_value(utf8);
+                            }
+                        }
+                    },
+                );
+                VarBinViewArray::try_from(Array::from_arrow(&string_view_array, nullability.into()))
+                    .vortex_expect("StringViewArray to VarBinViewArray downcast")
+            }
+            DType::Binary(nullability) => {
+                let binary_view_array = generic_byte_view_builder::<BinaryViewType, _, _>(
+                    iter.into_iter(),
+                    |builder, v| match v {
+                        None => builder.append_null(),
+                        Some(bytes) => builder.append_value(bytes.as_ref()),
+                    },
+                );
+                VarBinViewArray::try_from(Array::from_arrow(&binary_view_array, nullability.into()))
+                    .vortex_expect("BinaryViewArray to VarBinViewArray downcast")
+            }
+            other => vortex_panic!("VarBinViewArray must be Utf8 or Binary, was {other}"),
+        }
     }
 
     pub fn from_iter_str<T: AsRef<str>, I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -384,6 +426,25 @@ impl VarBinViewArray {
             Ok(view.as_inlined().value().to_vec())
         }
     }
+}
+
+// Generic helper to create an Arrow ByteViewBuilder of the appropriate type.
+fn generic_byte_view_builder<B, V, F>(
+    values: impl Iterator<Item = Option<V>>,
+    mut append_fn: F,
+) -> GenericByteViewArray<B>
+where
+    B: ByteViewType,
+    V: AsRef<[u8]>,
+    F: FnMut(&mut GenericByteViewBuilder<B>, Option<V>) -> (),
+{
+    let mut builder = GenericByteViewBuilder::<B>::new();
+
+    for value in values {
+        append_fn(&mut builder, value);
+    }
+
+    builder.finish()
 }
 
 impl ArrayTrait for VarBinViewArray {}
@@ -506,11 +567,11 @@ mod test {
             VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"]);
         assert_eq!(binary_arr.len(), 2);
         assert_eq!(
-            scalar_at(binary_arr, 0).unwrap(),
+            scalar_at(&binary_arr, 0).unwrap(),
             Scalar::from("hello world")
         );
         assert_eq!(
-            scalar_at(binary_arr, 1).unwrap(),
+            scalar_at(&binary_arr, 1).unwrap(),
             Scalar::from("hello world this is a long string")
         );
     }
