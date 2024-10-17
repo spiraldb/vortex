@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import pandas
+import polars
 import pyarrow
 
 from ._lib import encoding as _encoding
@@ -98,6 +99,8 @@ def _Array_to_pandas(self: _encoding.Array) -> "pandas.DataFrame":
     Lift the struct fields to the top-level in the dataframe:
 
     """
+    import pandas
+
     return self.to_arrow_table().to_pandas(types_mapper=pandas.ArrowDtype)
 
 
@@ -229,6 +232,16 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "n
 
     This is an alias for :code:`self.to_arrow_array().to_numpy(zero_copy_only)`
 
+    Parameters
+    ----------
+    zero_copy_only : :class:`bool`
+        When :obj:`True`, this method will raise an error unless a NumPy array can be created without
+        copying the data. This is only possible when the array is a primitive array without nulls.
+
+    writable : :class:`bool`
+        When :obj:`True`, the returned array is writable. This method returns non-writable arrays
+        by default because Arrow arrays are immutable.
+
     Returns
     -------
     :class:`numpy.ndarray`
@@ -247,6 +260,34 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "n
 
 
 Array.to_numpy = _Array_to_numpy
+
+
+def _Array_to_torch(self: _encoding.Array):
+    """Construct a Torch tensor from this Vortex array.
+
+    Warning
+    -------
+
+    Only numeric arrays can be converted to Torch tensors.
+
+    Returns
+    -------
+    :class:`torch.Tensor`
+
+    Examples
+    --------
+
+    >>> array = vortex.encoding.array([25, 31, 33, 57])
+    >>> array.to_torch()
+    tensor([25, 31, 33, 57])
+
+    """
+    import torch
+
+    return torch.from_numpy(self.to_numpy())
+
+
+Array.to_torch = _Array_to_torch
 
 
 def array(obj: pyarrow.Array | list) -> Array:

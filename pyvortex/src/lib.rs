@@ -43,11 +43,13 @@ fn _lib(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
 
     io.add_function(wrap_pyfunction!(io::read, m)?)?;
     io.add_function(wrap_pyfunction!(io::write, m)?)?;
+    io.add_function(wrap_pyfunction!(io::dataset, m)?)?;
 
     let expr = PyModule::new_bound(py, "expr")?;
     m.add_submodule(&expr)?;
 
     expr.add_function(wrap_pyfunction!(expr::column, m)?)?;
+    expr.add_function(wrap_pyfunction!(expr::literal, m)?)?;
     expr.add_class::<PyExpr>()?;
 
     Ok(())

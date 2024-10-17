@@ -1,16 +1,23 @@
 use std::path::Path;
+use std::sync::Arc;
 
+use arrow::datatypes::SchemaRef;
+use arrow::pyarrow::ToPyArrow;
+use futures::TryStreamExt;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyfunction;
 use pyo3::types::{PyList, PyLong, PyString};
 use tokio::fs::File;
+use vortex::array::ChunkedArray;
+use vortex::arrow::infer_schema;
 use vortex::Array;
 use vortex_dtype::field::Field;
-use vortex_error::VortexResult;
+use vortex_error::{vortex_panic, VortexResult};
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
 use vortex_serde::layouts::{
-    LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
+    Footer, LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection,
+    RowFilter,
 };
 
 use crate::error::PyVortexError;
@@ -236,4 +243,121 @@ pub fn write(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -> PyResult<()
         .build()?
         .block_on(run(&array, fname))
         .map_err(PyVortexError::map_err)
+}
+
+#[pyclass(name = "Dataset", module = "io", sequence, subclass)]
+/// An array of zero or more *rows* each with the same set of *columns*.
+pub struct PyDataset {
+    fname: String,
+    _footer: Footer,
+    schema: SchemaRef,
+}
+
+impl PyDataset {
+    pub fn new(fname: &Bound<'_, PyString>) -> PyResult<PyDataset> {
+        async fn run(fname: &str) -> VortexResult<PyDataset> {
+            let file = File::open(Path::new(fname)).await?;
+            let mut reader_builder = LayoutReaderBuilder::new(
+                file,
+                LayoutDeserializer::new(
+                    ALL_COMPRESSORS_CONTEXT.clone(),
+                    LayoutContext::default().into(),
+                ),
+            );
+
+            let footer = reader_builder.read_footer().await?;
+            let schema = infer_schema(&footer.dtype()?)?;
+
+            Ok(PyDataset {
+                fname: fname.to_string(),
+                _footer: footer,
+                schema: Arc::new(schema),
+            })
+        }
+
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(run(fname.to_str()?))
+            .map_err(PyVortexError::map_err)
+    }
+}
+
+#[pymethods]
+impl PyDataset {
+    pub fn fname(&self) -> &String {
+        &self.fname
+    }
+
+    pub fn schema(self_: PyRef<Self>) -> PyResult<PyObject> {
+        self_.schema.to_pyarrow(self_.py())
+    }
+
+    #[pyo3(signature = (columns, batch_size, row_filter))]
+    pub fn to_array<'py>(
+        self_: PyRef<'py, Self>,
+        columns: Option<Vec<String>>,
+        batch_size: Option<usize>,
+        row_filter: Option<&Bound<'py, PyExpr>>,
+    ) -> PyResult<Bound<'py, PyArray>> {
+        async fn run(
+            fname: &String,
+            projection: Projection,
+            batch_size: Option<usize>,
+            row_filter: Option<RowFilter>,
+        ) -> VortexResult<Array> {
+            let file = File::open(Path::new(fname)).await?;
+            let mut reader_builder = LayoutReaderBuilder::new(
+                file,
+                LayoutDeserializer::new(
+                    ALL_COMPRESSORS_CONTEXT.clone(),
+                    LayoutContext::default().into(),
+                ),
+            )
+            .with_projection(projection);
+
+            if let Some(batch_size) = batch_size {
+                reader_builder = reader_builder.with_batch_size(batch_size);
+            }
+
+            if let Some(row_filter) = row_filter {
+                reader_builder = reader_builder.with_row_filter(row_filter);
+            }
+
+            let stream = reader_builder.build().await?;
+            let dtype = stream.schema().clone().into();
+            let vecs: Vec<Array> = stream.try_collect().await?;
+            if vecs.len() == 1 {
+                vecs.into_iter().next().ok_or_else(|| {
+                    vortex_panic!(
+                        "Should be impossible: vecs.len() == 1 but couldn't get first element"
+                    )
+                })
+            } else {
+                ChunkedArray::try_new(vecs, dtype).map(|e| e.into())
+            }
+        }
+
+        let projection = match columns {
+            None => Projection::All,
+            Some(columns) => {
+                Projection::Flat(columns.into_iter().map(Field::Name).collect::<Vec<_>>())
+            }
+        };
+
+        let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
+
+        let inner = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(run(self_.fname(), projection, batch_size, row_filter))
+            .map_err(PyVortexError::map_err)?;
+
+        Bound::new(self_.py(), PyArray::new(inner))
+    }
+}
+
+#[pyfunction]
+pub fn dataset(fname: &Bound<'_, PyString>) -> PyResult<PyDataset> {
+    PyDataset::new(fname)
 }
