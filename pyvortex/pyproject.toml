@@ -20,6 +20,9 @@ pandas = [
 numpy = [
     "numpy>=1.26.0",
 ]
+torch = [
+    "torch>=1.26.0",
+]
 
 [project.urls]
 Documentation = "https://spiraldb.github.io/vortex/docs/"

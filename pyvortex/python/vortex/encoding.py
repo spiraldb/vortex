@@ -7,6 +7,7 @@ from ._lib import encoding as _encoding
 
 if TYPE_CHECKING:
     import numpy
+    import torch
 
 __doc__ = _encoding.__doc__
 
@@ -254,7 +255,7 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "n
 Array.to_numpy = _Array_to_numpy
 
 
-def _Array_to_torch(self: _encoding.Array):
+def _Array_to_torch(self: _encoding.Array) -> "torch.tensor":
     """Construct a Torch tensor from this Vortex array.
 
     Warning
