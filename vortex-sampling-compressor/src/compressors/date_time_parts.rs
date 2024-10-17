@@ -21,11 +21,11 @@ impl EncodingCompressor for DateTimePartsCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::DATE_TIME_PARTS_COST
+        constants::DATE_TIME_PARTS_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::DATE_TIME_PARTS_GIB_PER_S
+        constants::DATE_TIME_PARTS_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

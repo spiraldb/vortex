@@ -101,20 +101,18 @@ pub struct ScanPerfConfig {
 
 impl ScanPerfConfig {
     pub fn download_time_ms(&self, nbytes: u64) -> f64 {
-        millis_from_throughput_and_size(self.mib_per_second, nbytes)
+        Self::millis_from_throughput_and_size(self.mib_per_second, nbytes)
     }
 
     pub fn starting_value(&self, nbytes: u64) -> f64 {
-        // hack: assume decompression throughput of 100 MiB/s (very slow) and
-        // compression ratio of 20:1 (very high)
-        self.download_time_ms(nbytes) + millis_from_throughput_and_size(100.0, nbytes * 20)
+        self.download_time_ms(nbytes) * 1.1
     }
-}
 
-fn millis_from_throughput_and_size(mib_per_second: f64, nbytes: u64) -> f64 {
-    const MS_PER_SEC: f64 = 1000.0;
-    const BYTES_PER_MIB: f64 = (1 << 20) as f64;
-    (MS_PER_SEC / mib_per_second) * (nbytes as f64 / BYTES_PER_MIB)
+    fn millis_from_throughput_and_size(mib_per_second: f64, nbytes: u64) -> f64 {
+        const MS_PER_SEC: f64 = 1000.0;
+        const BYTES_PER_MIB: f64 = (1 << 20) as f64;
+        (MS_PER_SEC / mib_per_second) * (nbytes as f64 / BYTES_PER_MIB)
+    }
 }
 
 impl Default for ScanPerfConfig {

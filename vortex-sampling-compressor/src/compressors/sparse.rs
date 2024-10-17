@@ -17,11 +17,11 @@ impl EncodingCompressor for SparseCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::SPARSE_COST
+        constants::SPARSE_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::SPARSE_GIB_PER_S
+        constants::SPARSE_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

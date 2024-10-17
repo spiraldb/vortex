@@ -24,11 +24,11 @@ impl EncodingCompressor for RunEndCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::RUN_END_COST
+        constants::RUN_END_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::RUN_END_GIB_PER_S
+        constants::RUN_END_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

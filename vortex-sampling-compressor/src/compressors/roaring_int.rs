@@ -18,11 +18,11 @@ impl EncodingCompressor for RoaringIntCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::ROARING_INT_COST
+        constants::ROARING_INT_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::ROARING_INT_GIB_PER_S
+        constants::ROARING_INT_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

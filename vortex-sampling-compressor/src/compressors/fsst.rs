@@ -33,11 +33,11 @@ impl EncodingCompressor for FSSTCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::FSST_COST
+        constants::FSST_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::FSST_GIB_PER_S
+        constants::FSST_GIB_PER_S
     }
 
     fn can_compress(&self, array: &vortex::Array) -> Option<&dyn EncodingCompressor> {

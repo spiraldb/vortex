@@ -21,11 +21,11 @@ impl EncodingCompressor for FoRCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::FOR_COST
+        constants::FOR_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::FOR_GIB_PER_S
+        constants::FOR_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

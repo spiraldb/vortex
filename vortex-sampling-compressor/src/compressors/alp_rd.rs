@@ -28,11 +28,11 @@ impl EncodingCompressor for ALPRDCompressor {
     }
 
     fn cost(&self) -> u8 {
-        constants::depth::ALP_RD_COST
+        constants::ALP_RD_COST
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
-        constants::decompression::ALP_RD_GIB_PER_S
+        constants::ALP_RD_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

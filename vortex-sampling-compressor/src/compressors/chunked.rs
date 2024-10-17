@@ -10,7 +10,7 @@ use vortex_error::{vortex_bail, VortexResult};
 
 use super::EncoderMetadata;
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct ChunkedCompressor {
@@ -35,7 +35,11 @@ impl EncodingCompressor for ChunkedCompressor {
     }
 
     fn cost(&self) -> u8 {
-        0
+        constants::CHUNKED_COST
+    }
+ 
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::CHUNKED_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {

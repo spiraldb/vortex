@@ -46,17 +46,17 @@ impl EncodingCompressor for BitPackedCompressor {
 
     fn cost(&self) -> u8 {
         if self.allow_patches {
-            constants::depth::BITPACKED_WITH_PATCHES_COST
+            constants::BITPACKED_WITH_PATCHES_COST
         } else {
-            constants::depth::BITPACKED_NO_PATCHES_COST
+            constants::BITPACKED_NO_PATCHES_COST
         }
     }
 
     fn decompression_gib_per_second(&self) -> f64 {
         if self.allow_patches {
-            constants::decompression::BITPACKED_WITH_PATCHES_GIB_PER_S
+            constants::BITPACKED_WITH_PATCHES_GIB_PER_S
         } else {
-            constants::decompression::BITPACKED_NO_PATCHES_GIB_PER_S
+            constants::BITPACKED_NO_PATCHES_GIB_PER_S
         }
     }
 
