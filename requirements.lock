@@ -4,7 +4,7 @@
 # last locked with the following flags:
 #   pre: false
 #   features: []
-#   all-features: false
+#   all-features: true
 #   with-sources: false
 #   generate-hashes: false
 #   universal: false
@@ -51,6 +51,7 @@ numpy==2.1.1
     # via pandas
     # via pyarrow
     # via pyvortex
+    # via vortex-array
     # via xarray
 packaging==24.1
     # via matplotlib
@@ -59,9 +60,12 @@ packaging==24.1
     # via xarray
 pandas==2.2.2
     # via pyvortex
+    # via vortex-array
     # via xarray
 pillow==10.4.0
     # via matplotlib
+polars==1.9.0
+    # via vortex-array
 pyarrow==17.0.0
     # via vortex-array
 pydata-sphinx-theme==0.15.4

@@ -30,7 +30,7 @@ use crate::dtype::PyDType;
 /// Read only those rows whose age column is greater than 35:
 ///
 /// >>> e = vortex.io.read("a.vortex", row_filter = vortex.expr.column("age") > 35)
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
@@ -47,7 +47,7 @@ use crate::dtype::PyDType;
 ///
 /// >>> age = vortex.expr.column("age")
 /// >>> e = vortex.io.read("a.vortex", row_filter = (age > 21) & (age <= 33))
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
@@ -65,7 +65,7 @@ use crate::dtype::PyDType;
 ///
 /// >>> name = vortex.expr.column("name")
 /// >>> e = vortex.io.read("a.vortex", row_filter = name == "Joseph")
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
@@ -83,7 +83,7 @@ use crate::dtype::PyDType;
 ///
 /// >>> name = vortex.expr.column("name")
 /// >>> e = vortex.io.read("a.vortex", row_filter = (name == "Angela") | ((age >= 20) & (age <= 30)))
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64

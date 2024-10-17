@@ -38,7 +38,7 @@ use crate::PyArray;
 /// ... ])
 /// >>> vortex.io.write(a, "a.vortex")
 /// >>> b = vortex.io.read("a.vortex")
-/// >>> b.to_arrow()
+/// >>> b.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
@@ -61,7 +61,7 @@ use crate::PyArray;
 /// Read just the age column:
 ///
 /// >>> c = vortex.io.read("a.vortex", projection = ["age"])
-/// >>> c.to_arrow()
+/// >>> c.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
@@ -76,7 +76,7 @@ use crate::PyArray;
 /// Read just the name column, by its index:
 ///
 /// >>> d = vortex.io.read("a.vortex", projection = [1])
-/// >>> d.to_arrow()
+/// >>> d.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: string
@@ -92,7 +92,7 @@ use crate::PyArray;
 /// Keep rows with an age above 35. This will read O(N_KEPT) rows, when the file format allows.
 ///
 /// >>> e = vortex.io.read("a.vortex", row_filter = vortex.expr.column("age") > 35)
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
@@ -109,7 +109,7 @@ use crate::PyArray;
 /// Read the age column by name, twice, and the name column by index, once:
 ///
 /// >>> # e = vortex.io.read("a.vortex", projection = ["age", 1, "age"])
-/// >>> # e.to_arrow()
+/// >>> # e.to_arrow_array()
 ///
 /// TODO(DK): Top-level nullness does not work.
 ///
@@ -123,7 +123,7 @@ use crate::PyArray;
 /// ... ])
 /// >>> vortex.io.write(a, "a.vortex")
 /// >>> b = vortex.io.read("a.vortex")
-/// >>> # b.to_arrow()
+/// >>> # b.to_arrow_array()
 ///
 #[pyfunction]
 #[pyo3(signature = (f, projection = None, row_filter = None))]
