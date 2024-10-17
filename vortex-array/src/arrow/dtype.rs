@@ -106,11 +106,6 @@ impl FromArrowType<&Field> for DType {
 }
 
 /// Convert a Vortex [struct DType][DType] to an Arrow [Schema].
-///
-/// # Panics
-///
-/// This function will panic if the provided `dtype` is not a StructDType, or if the struct DType
-/// has top-level nullability.
 pub fn infer_schema(dtype: &DType) -> VortexResult<Schema> {
     let DType::Struct(struct_dtype, nullable) = dtype else {
         vortex_bail!("only DType::Struct can be converted to arrow schema");
