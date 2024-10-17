@@ -16,8 +16,7 @@ use vortex_dtype::field::Field;
 use vortex_error::{vortex_panic, VortexResult};
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
 use vortex_serde::layouts::{
-    Footer, LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection,
-    RowFilter,
+    LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
 };
 
 use crate::error::PyVortexError;
@@ -249,7 +248,6 @@ pub fn write(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -> PyResult<()
 /// An on-disk Vortex dataset for use with an Arrow-compatible query engine.
 pub struct PyDataset {
     fname: String,
-    _footer: Footer,
     schema: SchemaRef,
 }
 
@@ -270,7 +268,6 @@ impl PyDataset {
 
             Ok(PyDataset {
                 fname: fname.to_string(),
-                _footer: footer,
                 schema: Arc::new(schema),
             })
         }
