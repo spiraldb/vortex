@@ -6,7 +6,7 @@ use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 
 use crate::io::VortexReadAt;
-use crate::layouts::read::cache::{LayoutMessageCache, RelativeLayoutCache};
+use crate::layouts::read::cache::{LayoutMessageCache, LazyDeserializedDType, RelativeLayoutCache};
 use crate::layouts::read::context::LayoutDeserializer;
 use crate::layouts::read::filtering::RowFilter;
 use crate::layouts::read::footer::Footer;
@@ -70,31 +70,23 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
     pub async fn build(mut self) -> VortexResult<LayoutBatchStream<R>> {
         let footer = self.read_footer().await?;
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
+        // TODO(robert): Propagate projection immediately instead of delegating to layouts, needs more restructuring
+        let footer_dtype = Arc::new(LazyDeserializedDType::from_bytes(
+            footer.dtype_bytes()?,
+            Projection::All,
+        ));
+        let read_projection = self.projection.unwrap_or_default();
 
         let filter_projection = self
             .row_filter
             .as_ref()
-            .map(|f| f.references())
-            // This is necessary to have globally addressed columns in the relative cache,
-            // there is probably a better of doing that, but this works for now and the API isn't very externally-useful.
-            .map(|refs| footer.resolve_references(&refs.into_iter().collect::<Vec<_>>()))
-            .transpose()?
+            .map(|f| f.references().into_iter().cloned().collect::<Vec<_>>())
             .map(Projection::from);
-
-        let read_projection = self.projection.unwrap_or_default();
 
         let projected_dtype = match read_projection {
             Projection::All => footer.dtype()?,
             Projection::Flat(ref projection) => footer.projected_dtype(projection)?,
         };
-
-        let filter_dtype = filter_projection
-            .as_ref()
-            .map(|p| match p {
-                Projection::All => footer.dtype(),
-                Projection::Flat(fields) => footer.projected_dtype(fields),
-            })
-            .transpose()?;
 
         let scan = Scan {
             filter: self.row_filter.clone(),
@@ -107,12 +99,11 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
 
         let data_reader = footer.layout(
             scan.clone(),
-            RelativeLayoutCache::new(message_cache.clone(), projected_dtype.clone()),
+            RelativeLayoutCache::new(message_cache.clone(), footer_dtype.clone()),
         )?;
 
-        let filter_reader = filter_dtype
-            .zip(filter_projection)
-            .map(|(dtype, projection)| {
+        let filter_reader = filter_projection
+            .map(|projection| {
                 footer.layout(
                     Scan {
                         filter: self.row_filter,
@@ -120,7 +111,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
                         projection,
                         indices: None,
                     },
-                    RelativeLayoutCache::new(message_cache.clone(), dtype),
+                    RelativeLayoutCache::new(message_cache.clone(), footer_dtype),
                 )
             })
             .transpose()?;

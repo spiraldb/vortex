@@ -5,15 +5,15 @@
 [![Documentation](https://docs.rs/vortex-array/badge.svg)](https://docs.rs/vortex-array)
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/vortex-array)](https://pypi.org/project/vortex-array/)
 
-Vortex is a toolkit for working with compressed Apache Arrow arrays in-memory, on-disk, and over-the-wire.
-
-Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines (or, analogously,
-what LLVM + Clang are to compilers): a highly extensible & extremely fast *framework* for building a modern
-columnar file format, with a state-of-the-art, "batteries included" reference implementation.
+Vortex is an extensible, state-of-the-art columnar file format, with associated tools for working with compressed Apache Arrow arrays 
+in-memory, on-disk, and over-the-wire.
 
 Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster)
-and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput. It will also support very wide
-tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
+and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput as Parquet with zstd. 
+It will also support very wide tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
+
+Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines: highly extensible,
+extremely fast, batteries-included.
 
 > [!CAUTION]
 > This library is still under rapid development and is a work in progress!
@@ -57,6 +57,9 @@ about which encodings to use or how to logically chunk data are left up to the `
 One of the unique attributes of the (in-progress) Vortex file format is that it encodes the physical layout of the data within the
 file's footer. This allows the file format to be effectively self-describing and to evolve without breaking changes to
 the file format specification.
+
+In fact, the format is designed to support forward compatibility by optionally embedding WASM decoders directly into the files
+themselves. This should help avoid the rapid calcification that has plagued other columnar file formats.
 
 ## Components
 
@@ -224,19 +227,20 @@ and OSS developers.
 In particular, the following academic papers greatly influenced the development:
 
 * Maximilian Kuschewski, David Sauerwein, Adnan Alhomssi, and Viktor Leis.
-    2023. [BtrBlocks: Efficient Columnar Compression
-          for Data Lakes](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf). Proc. ACM Manag. Data 1,
-          2,
-          Article 118 (June 2023), 14 pages. https://doi.org/10.1145/3589263
-* Azim Afroozeh and Peter
-  Boncz. [The FastLanes Compression Layout: Decoding >100 Billion Integers per Second with Scalar
+  [BtrBlocks: Efficient Columnar Compression for Data Lakes](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf).
+  Proc. ACM Manag. Data 1, 2, Article 118 (June 2023), 14 pages.
+* Azim Afroozeh and Peter Boncz. [The FastLanes Compression Layout: Decoding >100 Billion Integers per Second with Scalar
   Code](https://www.vldb.org/pvldb/vol16/p2132-afroozeh.pdf). PVLDB, 16(9): 2132 - 2144, 2023.
 * Peter Boncz, Thomas Neumann, and Viktor Leis. [FSST: Fast Random Access String
   Compression](https://www.vldb.org/pvldb/vol13/p2649-boncz.pdf).
   PVLDB, 13(11): 2649-2661, 2020.
-* Azim Afroozeh, Leonardo X. Kuffo, and Peter Boncz. 2023. [ALP: Adaptive Lossless floating-Point
-  Compression](https://ir.cwi.nl/pub/33334/33334.pdf). Proc. ACM
-  Manag. Data 1, 4 (SIGMOD), Article 230 (December 2023), 26 pages. https://doi.org/10.1145/3626717
+* Azim Afroozeh, Leonardo X. Kuffo, and Peter Boncz. [ALP: Adaptive Lossless floating-Point
+  Compression](https://ir.cwi.nl/pub/33334/33334.pdf). Proc. ACM Manag. Data 1, 4 (SIGMOD), Article 230
+  (December 2023), 26 pages.
+* Biswapesh Chattopadhyay, Priyam Dutta, Weiran Liu, Ott Tinn, Andrew Mccormick, Aniket Mokashi, Paul Harvey,
+  Hector Gonzalez, David Lomax, Sagar Mittal, et al. [Procella: Unifying serving and analytical
+  data at YouTube](https://dl.acm.org/citation.cfm?id=3360438). PVLDB, 12(12): 2022-2034, 2019.
+
 
 Additionally, we benefited greatly from:
 

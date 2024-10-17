@@ -26,7 +26,7 @@ pub struct BitPackedCompressor {
 }
 
 impl BitPackedCompressor {
-    fn find_bit_width(&self, array: &PrimitiveArray) -> VortexResult<usize> {
+    fn find_bit_width(&self, array: &PrimitiveArray) -> VortexResult<u8> {
         if self.allow_patches {
             find_best_bit_width(array)
         } else {
@@ -72,7 +72,7 @@ impl EncodingCompressor for BitPackedCompressor {
         let bit_width = self.find_bit_width(&parray).ok()?;
 
         // Check that the bit width is less than the type's bit width
-        if bit_width == parray.ptype().bit_width() {
+        if bit_width == parray.ptype().bit_width() as u8 {
             return None;
         }
 
@@ -101,7 +101,7 @@ impl EncodingCompressor for BitPackedCompressor {
             )
         }
 
-        if bit_width == parray.ptype().bit_width() {
+        if bit_width == parray.ptype().bit_width() as u8 {
             // Nothing we can do
             return Ok(CompressedArray::uncompressed(array.clone()));
         }

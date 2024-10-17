@@ -13,6 +13,7 @@ use crate::SamplingCompressor;
 pub mod alp;
 pub mod alp_rd;
 pub mod bitpacked;
+pub mod chunked;
 pub mod constant;
 pub mod date_time_parts;
 pub mod delta;
@@ -23,6 +24,7 @@ pub mod roaring_bool;
 pub mod roaring_int;
 pub mod runend;
 pub mod sparse;
+pub mod struct_;
 pub mod zigzag;
 
 pub trait EncodingCompressor: Sync + Send + Debug {
@@ -164,6 +166,17 @@ impl<'a> CompressionTree<'a> {
             .filter_map(|child| child.as_ref().map(|c| c.num_descendants() + 1))
             .sum::<usize>()
     }
+
+    #[allow(clippy::type_complexity)]
+    pub fn into_parts(
+        self,
+    ) -> (
+        &'a dyn EncodingCompressor,
+        Vec<Option<CompressionTree<'a>>>,
+        Option<Arc<dyn EncoderMetadata>>,
+    ) {
+        (self.compressor, self.children, self.metadata)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -201,6 +214,7 @@ impl<'a> CompressedArray<'a> {
         self.path
     }
 
+    #[inline]
     pub fn into_parts(self) -> (Array, Option<CompressionTree<'a>>) {
         (self.array, self.path)
     }

@@ -16,11 +16,13 @@ readme = { workspace = true }
 [dependencies]
 arbitrary = { workspace = true, optional = true }
 fsst-rs = { workspace = true }
+itertools = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 rand = { workspace = true }
 vortex-alp = { workspace = true }
 vortex-array = { workspace = true }
+vortex-bytebool = { workspace = true }
 vortex-datetime-dtype = { workspace = true }
 vortex-datetime-parts = { workspace = true }
 vortex-dict = { workspace = true }
@@ -30,6 +32,7 @@ vortex-fastlanes = { workspace = true }
 vortex-fsst = { workspace = true }
 vortex-roaring = { workspace = true }
 vortex-runend = { workspace = true }
+vortex-runend-bool = { workspace = true }
 vortex-zigzag = { workspace = true }
 
 [dev-dependencies]

@@ -4,7 +4,7 @@ use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat, StatsSet};
 use vortex_error::VortexResult;
 use vortex_scalar::Scalar;
 
-use crate::dict::DictArray;
+use crate::DictArray;
 
 impl ArrayStatisticsCompute for DictArray {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {

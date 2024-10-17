@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use bytes::Bytes;
 use flatbuffers::{ForwardsUOffset, Vector};
+use itertools::Itertools;
 use vortex::Context;
-use vortex_dtype::field::Field;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexExpect as _, VortexResult};
 use vortex_flatbuffers::footer as fb;
@@ -12,7 +12,7 @@ use vortex_schema::projection::Projection;
 
 use crate::layouts::read::batch::BatchReader;
 use crate::layouts::read::buffered::BufferedReader;
-use crate::layouts::read::cache::RelativeLayoutCache;
+use crate::layouts::read::cache::{LazyDeserializedDType, RelativeLayoutCache};
 use crate::layouts::read::context::{LayoutDeserializer, LayoutId, LayoutSpec};
 use crate::layouts::read::{LayoutReader, ReadResult, Scan};
 use crate::stream_writer::ByteRange;
@@ -69,7 +69,8 @@ impl LayoutReader for FlatLayout {
                     read_buf = buf.split_to(u);
                 }
 
-                let array = array_reader.into_array(self.ctx.clone(), self.cache.dtype())?;
+                let array = array_reader
+                    .into_array(self.ctx.clone(), self.cache.dtype().value()?.clone())?;
                 self.state = FlatLayoutState::Finished;
                 Ok(Some(ReadResult::Batch(array)))
             }
@@ -171,8 +172,18 @@ impl ColumnLayout {
             self.fb_bytes.clone(),
             layout._tab.loc(),
             child_scan,
-            self.message_cache.relative(idx as u16, dtype),
+            self.message_cache.relative(
+                idx as u16,
+                Arc::new(LazyDeserializedDType::from_dtype(dtype)),
+            ),
         )
+    }
+
+    pub fn lazy_dtype(&self) -> VortexResult<Arc<LazyDeserializedDType>> {
+        match &self.scan.projection {
+            Projection::All => Ok(self.message_cache.dtype().clone()),
+            Projection::Flat(p) => self.message_cache.dtype().project(p),
+        }
     }
 }
 
@@ -180,8 +191,9 @@ impl LayoutReader for ColumnLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         match &mut self.state {
             ColumnLayoutState::Init => {
-                let DType::Struct(s, ..) = self.message_cache.dtype() else {
-                    vortex_bail!("Column layout must have struct dtype")
+                let result_lazy_dtype = self.lazy_dtype()?;
+                let DType::Struct(s, _) = result_lazy_dtype.value()? else {
+                    vortex_bail!("DType was not a struct")
                 };
 
                 let fb_children = self
@@ -189,26 +201,20 @@ impl LayoutReader for ColumnLayout {
                     .children()
                     .ok_or_else(|| vortex_err!("Missing children"))?;
 
-                let column_layouts = match self.scan.projection {
+                let child_layouts = match &self.scan.projection {
                     Projection::All => (0..fb_children.len())
-                        .map(|idx| self.read_child(idx, fb_children, s.dtypes()[idx].clone()))
+                        .zip_eq(s.dtypes().iter())
+                        .map(|(index, dtype)| self.read_child(index, fb_children, dtype.clone()))
                         .collect::<VortexResult<Vec<_>>>()?,
-                    Projection::Flat(ref v) => v
+                    Projection::Flat(proj) => proj
                         .iter()
+                        .map(|f| result_lazy_dtype.resolve_field(f))
                         .zip(s.dtypes().iter().cloned())
-                        .map(|(projected_field, dtype)| {
-                            let child_idx = match projected_field {
-                                Field::Name(n) => s.find_name(n.as_ref()).ok_or_else(|| {
-                                    vortex_err!("Invalid projection, trying to select  {n}")
-                                })?,
-                                Field::Index(i) => *i,
-                            };
-                            self.read_child(child_idx, fb_children, dtype)
-                        })
+                        .map(|(child_idx, dtype)| self.read_child(child_idx?, fb_children, dtype))
                         .collect::<VortexResult<Vec<_>>>()?,
                 };
 
-                let reader = BatchReader::new(s.names().clone(), column_layouts);
+                let reader = BatchReader::new(s.names().clone(), child_layouts);
                 self.state = ColumnLayoutState::ReadColumns(reader);
                 self.read_next()
             }

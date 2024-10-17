@@ -125,9 +125,9 @@ struct BitPackedSearch<'a, T> {
     // NOTE: caching this here is important for performance, as each call to `maybe_null_slice`
     //  invokes a call to DType <> PType conversion
     packed_maybe_null_slice: &'a [T],
-    offset: usize,
+    offset: u16,
     length: usize,
-    bit_width: usize,
+    bit_width: u8,
     first_invalid_idx: usize,
 }
 
@@ -172,8 +172,8 @@ impl<T: BitPacking + NativePType> IndexOrd<T> for BitPackedSearch<'_, T> {
         let val: T = unsafe {
             unpack_single_primitive(
                 self.packed_maybe_null_slice,
-                self.bit_width,
-                idx + self.offset,
+                self.bit_width as usize,
+                idx + self.offset as usize,
             )
         };
         Some(val.compare(*elem))
