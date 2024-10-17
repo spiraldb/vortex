@@ -31,20 +31,29 @@ cycler==0.12.1
 docutils==0.21.2
     # via pydata-sphinx-theme
     # via sphinx
+filelock==3.16.1
+    # via torch
 fonttools==4.54.1
     # via matplotlib
+fsspec==2024.9.0
+    # via torch
 idna==3.10
     # via requests
 imagesize==1.4.1
     # via sphinx
 jinja2==3.1.4
     # via sphinx
+    # via torch
 kiwisolver==1.4.7
     # via matplotlib
 markupsafe==3.0.1
     # via jinja2
 matplotlib==3.9.2
     # via pyvortex
+mpmath==1.3.0
+    # via sympy
+networkx==3.4.1
+    # via torch
 numpy==2.1.2
     # via contourpy
     # via matplotlib
@@ -107,8 +116,13 @@ sphinxcontrib-serializinghtml==2.0.0
     # via sphinx
 substrait==0.23.0
     # via vortex-array
+sympy==1.13.1
+    # via torch
+torch==2.5.0
+    # via vortex-array
 typing-extensions==4.12.2
     # via pydata-sphinx-theme
+    # via torch
 tzdata==2024.2
     # via pandas
 urllib3==2.2.3

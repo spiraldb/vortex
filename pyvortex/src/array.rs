@@ -211,11 +211,35 @@ impl PyArray {
     /// Keep only the second through third elements:
     ///
     ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
-    ///     >>> a.slice(1, 2).to_arrow()
+    ///     >>> a.slice(1, 2).to_arrow_array()
     ///     <pyarrow.lib.StringArray object at ...>
     ///     [
     ///       "b",
     ///       "c"
+    ///     ]
+    ///
+    /// Keep none of the elements:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> a.slice(3, 3).to_arrow_array()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
+    ///     ]
+    ///
+    /// Unlike Python, it is an error to slice outside the bounds of the array:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> a.slice(4, 4).to_arrow_array()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
+    ///     ]
+    ///
+    /// Or to slice with a negative value:
+    ///
+    ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    ///     >>> a.slice(-2, -1).to_arrow_array()
+    ///     <pyarrow.lib.StringArray object at ...>
+    ///     [
     ///     ]
     ///
     #[pyo3(signature = (start, end, *))]
