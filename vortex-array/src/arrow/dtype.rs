@@ -1,10 +1,23 @@
+//! Convert between Vortex [vortex_dtype::DType] and Apache Arrow [arrow_schema::DataType].
+//!
+//! Apache Arrow's type system includes physical information, which could lead to ambiguities as
+//! Vortex treats encodings as separate from logical types.
+//!
+//! [`infer_schema`] and its sibling [`infer_data_type`] use a simple algorithm, where every
+//! logical type is encoded in its simplest corresponding Arrow type. This reflects the reality that
+//! most compute engines don't make use of the entire type range arrow-rs supports.
+//!
+//! For this reason, it's recommended to do as much computation as possible within Vortex, and then
+//! materialize an Arrow ArrayRef at the very end of the processing chain.
+
 use std::sync::Arc;
 
-use arrow_schema::{DataType, Field, SchemaRef};
+use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaBuilder, SchemaRef};
 use itertools::Itertools;
-use vortex_datetime_dtype::arrow::make_temporal_ext_dtype;
+use vortex_datetime_dtype::arrow::{make_arrow_temporal_dtype, make_temporal_ext_dtype};
+use vortex_datetime_dtype::is_temporal_ext_type;
 use vortex_dtype::{DType, Nullability, PType, StructDType};
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
 use crate::arrow::{FromArrowType, TryFromArrowType};
 
@@ -89,5 +102,203 @@ impl FromArrowType<&Field> for DType {
             ),
             _ => unimplemented!("Arrow data type not yet supported: {:?}", field.data_type()),
         }
+    }
+}
+
+/// Convert a Vortex [struct DType][DType] to an Arrow [Schema].
+///
+/// # Panics
+///
+/// This function will panic if the provided `dtype` is not a StructDType, or if the struct DType
+/// has top-level nullability.
+pub fn infer_schema(dtype: &DType) -> VortexResult<Schema> {
+    let DType::Struct(struct_dtype, nullable) = dtype else {
+        vortex_bail!("only DType::Struct can be converted to arrow schema");
+    };
+
+    if *nullable != Nullability::NonNullable {
+        vortex_bail!("top-level struct in Schema must be NonNullable");
+    }
+
+    let mut builder = SchemaBuilder::with_capacity(struct_dtype.names().len());
+    for (field_name, field_dtype) in struct_dtype
+        .names()
+        .iter()
+        .zip(struct_dtype.dtypes().iter())
+    {
+        builder.push(FieldRef::from(Field::new(
+            field_name.to_string(),
+            infer_data_type(field_dtype)?,
+            field_dtype.is_nullable(),
+        )));
+    }
+
+    Ok(builder.finish())
+}
+
+pub fn infer_data_type(dtype: &DType) -> VortexResult<DataType> {
+    Ok(match dtype {
+        DType::Null => DataType::Null,
+        DType::Bool(_) => DataType::Boolean,
+        DType::Primitive(ptype, _) => match ptype {
+            PType::U8 => DataType::UInt8,
+            PType::U16 => DataType::UInt16,
+            PType::U32 => DataType::UInt32,
+            PType::U64 => DataType::UInt64,
+            PType::I8 => DataType::Int8,
+            PType::I16 => DataType::Int16,
+            PType::I32 => DataType::Int32,
+            PType::I64 => DataType::Int64,
+            PType::F16 => DataType::Float16,
+            PType::F32 => DataType::Float32,
+            PType::F64 => DataType::Float64,
+        },
+        DType::Utf8(_) => DataType::Utf8,
+        DType::Binary(_) => DataType::Binary,
+        DType::Struct(struct_dtype, _) => {
+            let mut fields = Vec::with_capacity(struct_dtype.names().len());
+            for (field_name, field_dt) in struct_dtype
+                .names()
+                .iter()
+                .zip(struct_dtype.dtypes().iter())
+            {
+                fields.push(FieldRef::from(Field::new(
+                    field_name.to_string(),
+                    infer_data_type(field_dt)?,
+                    field_dt.is_nullable(),
+                )));
+            }
+
+            DataType::Struct(Fields::from(fields))
+        }
+        DType::List(list_dt, _) => {
+            let dtype: &DType = list_dt;
+            DataType::List(FieldRef::from(Field::new(
+                "element",
+                infer_data_type(dtype)?,
+                dtype.is_nullable(),
+            )))
+        }
+        DType::Extension(ext_dtype, _) => {
+            // Try and match against the known extension DTypes.
+            if is_temporal_ext_type(ext_dtype.id()) {
+                make_arrow_temporal_dtype(ext_dtype)
+            } else {
+                vortex_bail!("Unsupported extension type \"{}\"", ext_dtype.id())
+            }
+        }
+    })
+}
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use arrow_schema::{DataType, Field, FieldRef, Fields, Schema};
+    use vortex_dtype::{
+        DType, ExtDType, ExtID, FieldName, FieldNames, Nullability, PType, StructDType,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_dtype_conversion_success() {
+        assert_eq!(infer_data_type(&DType::Null).unwrap(), DataType::Null);
+
+        assert_eq!(
+            infer_data_type(&DType::Bool(Nullability::NonNullable)).unwrap(),
+            DataType::Boolean
+        );
+
+        assert_eq!(
+            infer_data_type(&DType::Primitive(PType::U64, Nullability::NonNullable)).unwrap(),
+            DataType::UInt64
+        );
+
+        assert_eq!(
+            infer_data_type(&DType::Utf8(Nullability::NonNullable)).unwrap(),
+            DataType::Utf8
+        );
+
+        assert_eq!(
+            infer_data_type(&DType::Binary(Nullability::NonNullable)).unwrap(),
+            DataType::Binary
+        );
+
+        assert_eq!(
+            infer_data_type(&DType::List(
+                Arc::new(DType::Bool(Nullability::NonNullable)),
+                Nullability::Nullable,
+            ))
+            .unwrap(),
+            DataType::List(FieldRef::from(Field::new(
+                "element".to_string(),
+                DataType::Boolean,
+                false,
+            )))
+        );
+
+        assert_eq!(
+            infer_data_type(&DType::Struct(
+                StructDType::new(
+                    FieldNames::from(vec![FieldName::from("field_a"), FieldName::from("field_b")]),
+                    vec![DType::Bool(false.into()), DType::Utf8(true.into())],
+                ),
+                Nullability::NonNullable,
+            ))
+            .unwrap(),
+            DataType::Struct(Fields::from(vec![
+                FieldRef::from(Field::new("field_a", DataType::Boolean, false)),
+                FieldRef::from(Field::new("field_b", DataType::Utf8, true)),
+            ]))
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_dtype_conversion_panics() {
+        let _ = infer_data_type(&DType::Extension(
+            ExtDType::new(ExtID::from("my-fake-ext-dtype"), None),
+            Nullability::NonNullable,
+        ))
+        .unwrap();
+    }
+
+    #[test]
+    fn test_schema_conversion() {
+        let struct_dtype = the_struct();
+        let schema_nonnull = DType::Struct(struct_dtype.clone(), Nullability::NonNullable);
+
+        assert_eq!(
+            infer_schema(&schema_nonnull).unwrap(),
+            Schema::new(Fields::from(vec![
+                Field::new("field_a", DataType::Boolean, false),
+                Field::new("field_b", DataType::Utf8, false),
+                Field::new("field_c", DataType::Int32, true),
+            ]))
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_schema_conversion_panics() {
+        let struct_dtype = the_struct();
+        let schema_null = DType::Struct(struct_dtype.clone(), Nullability::Nullable);
+        let _ = infer_schema(&schema_null).unwrap();
+    }
+
+    fn the_struct() -> StructDType {
+        StructDType::new(
+            FieldNames::from([
+                FieldName::from("field_a"),
+                FieldName::from("field_b"),
+                FieldName::from("field_c"),
+            ]),
+            vec![
+                DType::Bool(Nullability::NonNullable),
+                DType::Utf8(Nullability::NonNullable),
+                DType::Primitive(PType::I32, Nullability::Nullable),
+            ],
+        )
     }
 }
