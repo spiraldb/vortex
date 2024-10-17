@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use compressors::bitpacked::BITPACK_WITH_PATCHES;
 use compressors::fsst::FSSTCompressor;
-use compressors::CompressorRef;
+use compressors::{CompressedArray, CompressionTree, CompressorRef};
 use lazy_static::lazy_static;
 use vortex::encoding::EncodingRef;
 use vortex::Context;
@@ -125,6 +125,29 @@ impl Objective {
         match self {
             Objective::MinSize => 1.0,
             Objective::ScanPerf(config) => config.starting_value(nbytes),
+        }
+    }
+
+    pub fn evaluate(
+        array: &CompressedArray,
+        base_size_bytes: usize,
+        config: &CompressConfig,
+    ) -> f64 {
+        let num_descendants = array
+            .path()
+            .as_ref()
+            .map(CompressionTree::num_descendants)
+            .unwrap_or(0) as u64;
+        let overhead_bytes = num_descendants * config.overhead_bytes_per_array;
+        let size_in_bytes = array.nbytes() as u64 + overhead_bytes;
+    
+        match &config.objective {
+            Objective::MinSize => (size_in_bytes as f64) / (base_size_bytes as f64),
+            Objective::ScanPerf(config) => {
+                let download_time = config.download_time_ms(size_in_bytes);
+                let decompression_time = array.decompression_time_ms(config.assumed_compression_ratio);
+                download_time + decompression_time
+            }
         }
     }
 }

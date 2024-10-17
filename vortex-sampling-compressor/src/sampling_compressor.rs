@@ -290,7 +290,7 @@ pub(crate) fn find_best_compression<'a>(
             compression.compress(sample, None, ctx.for_compressor(compression))?;
 
         let ratio = (compressed_sample.nbytes() as f64) / (sample.nbytes() as f64);
-        let objective = objective_function(&compressed_sample, sample.nbytes(), ctx.options());
+        let objective = Objective::evaluate(&compressed_sample, sample.nbytes(), ctx.options());
 
         // track the compression ratio, just for logging
         if ratio < best_ratio {
@@ -341,27 +341,4 @@ pub(crate) fn find_best_compression<'a>(
     }
 
     Ok(best)
-}
-
-pub(crate) fn objective_function(
-    array: &CompressedArray,
-    base_size_bytes: usize,
-    config: &CompressConfig,
-) -> f64 {
-    let num_descendants = array
-        .path()
-        .as_ref()
-        .map(CompressionTree::num_descendants)
-        .unwrap_or(0) as u64;
-    let overhead_bytes = num_descendants * config.overhead_bytes_per_array;
-    let size_in_bytes = array.nbytes() as u64 + overhead_bytes;
-
-    match &config.objective {
-        Objective::MinSize => (size_in_bytes as f64) / (base_size_bytes as f64),
-        Objective::ScanPerf(config) => {
-            let download_time = config.download_time_ms(size_in_bytes);
-            let decompression_time = array.decompression_time_ms(config.assumed_compression_ratio);
-            download_time + decompression_time
-        }
-    }
 }
