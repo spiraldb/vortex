@@ -2,7 +2,6 @@ use std::sync::{Arc, RwLock};
 
 use bytes::BytesMut;
 use vortex::{Array, ArrayDType};
-use vortex_dtype::field::Field;
 use vortex_error::{vortex_bail, VortexResult};
 use vortex_schema::projection::Projection;
 
@@ -81,15 +80,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         let filter_projection = self
             .row_filter
             .as_ref()
-            .map(|f| f.references())
-            // This is necessary to have globally addressed columns in the relative cache,
-            // there is probably a better of doing that, but this works for now and the API isn't very externally-useful.
-            .map(|refs| {
-                refs.into_iter()
-                    .map(|f| footer_dtype.resolve_field(f).map(Field::from))
-                    .collect::<VortexResult<Vec<_>>>()
-            })
-            .transpose()?
+            .map(|f| f.references().into_iter().cloned().collect::<Vec<_>>())
             .map(Projection::from);
 
         let projected_dtype = match read_projection {
