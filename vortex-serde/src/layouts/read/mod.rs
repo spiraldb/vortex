@@ -45,11 +45,11 @@ pub struct Scan {
 /// Unique identifier for a message within a layout
 pub type LayoutPartId = u16;
 pub type MessageId = Vec<LayoutPartId>;
-pub type Messages = Vec<(MessageId, ByteRange)>;
+pub type Message = (MessageId, ByteRange);
 
 #[derive(Debug)]
 pub enum ReadResult {
-    ReadMore(Messages),
+    ReadMore(Vec<Message>),
     Batch(Array),
 }
 
