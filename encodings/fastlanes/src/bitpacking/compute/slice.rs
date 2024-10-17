@@ -9,14 +9,14 @@ use crate::BitPackedArray;
 
 impl SliceFn for BitPackedArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
-        let offset_start = start + self.offset();
-        let offset_stop = stop + self.offset();
+        let offset_start = start + self.offset() as usize;
+        let offset_stop = stop + self.offset() as usize;
         let offset = offset_start % 1024;
         let block_start = max(0, offset_start - offset);
         let block_stop = ((offset_stop + 1023) / 1024) * 1024;
 
-        let encoded_start = (block_start / 8) * self.bit_width();
-        let encoded_stop = (block_stop / 8) * self.bit_width();
+        let encoded_start = (block_start / 8) * self.bit_width() as usize;
+        let encoded_stop = (block_stop / 8) * self.bit_width() as usize;
         // slice the buffer using the encoded start/stop values
         Self::try_new_from_offset(
             self.packed().slice(encoded_start..encoded_stop),
@@ -35,7 +35,7 @@ impl SliceFn for BitPackedArray {
                 }),
             self.bit_width(),
             stop - start,
-            offset,
+            offset as u16,
         )
         .map(|a| a.into_array())
     }

@@ -119,20 +119,20 @@ impl Display for DType {
         match self {
             Null => write!(f, "null"),
             Bool(n) => write!(f, "bool{}", n),
-            Primitive(p, n) => write!(f, "{}{}", p, n),
+            Primitive(pt, n) => write!(f, "{}{}", pt, n),
             Utf8(n) => write!(f, "utf8{}", n),
             Binary(n) => write!(f, "binary{}", n),
-            Struct(st, n) => write!(
+            Struct(sdt, n) => write!(
                 f,
                 "{{{}}}{}",
-                st.names()
+                sdt.names()
                     .iter()
-                    .zip(st.dtypes().iter())
+                    .zip(sdt.dtypes().iter())
                     .map(|(n, dt)| format!("{}={}", n, dt))
                     .join(", "),
                 n
             ),
-            List(c, n) => write!(f, "list({}){}", c, n),
+            List(edt, n) => write!(f, "list({}){}", edt, n),
             Extension(ext, n) => write!(
                 f,
                 "ext({}{}){}",
@@ -153,6 +153,12 @@ pub struct StructDType {
     dtypes: Arc<[DType]>,
 }
 
+pub struct FieldInfo<'a> {
+    pub index: usize,
+    pub name: Arc<str>,
+    pub dtype: &'a DType,
+}
+
 impl StructDType {
     pub fn new(names: FieldNames, dtypes: Vec<DType>) -> Self {
         Self {
@@ -169,6 +175,23 @@ impl StructDType {
         self.names.iter().position(|n| n.as_ref() == name)
     }
 
+    pub fn field_info(&self, field: &Field) -> VortexResult<FieldInfo> {
+        let index = match field {
+            Field::Name(name) => self
+                .find_name(name)
+                .ok_or_else(|| vortex_err!("Unknown field: {}", name))?,
+            Field::Index(index) => *index,
+        };
+        if index > self.names.len() {
+            vortex_bail!("field index out of bounds: {}", index)
+        }
+        Ok(FieldInfo {
+            index,
+            name: self.names[index].clone(),
+            dtype: &self.dtypes[index],
+        })
+    }
+
     pub fn dtypes(&self) -> &Arc<[DType]> {
         &self.dtypes
     }
@@ -178,20 +201,10 @@ impl StructDType {
         let mut dtypes = Vec::with_capacity(projection.len());
 
         for field in projection.iter() {
-            let idx = match field {
-                Field::Name(n) => self
-                    .find_name(n.as_ref())
-                    .ok_or_else(|| vortex_err!("Unknown field {n}"))?,
-                Field::Index(i) => {
-                    if *i > self.names.len() {
-                        vortex_bail!("Projection column is out of bounds");
-                    }
-                    *i
-                }
-            };
+            let FieldInfo { name, dtype, .. } = self.field_info(field)?;
 
-            names.push(self.names[idx].clone());
-            dtypes.push(self.dtypes[idx].clone());
+            names.push(name.clone());
+            dtypes.push(dtype.clone());
         }
 
         Ok(StructDType::new(names.into(), dtypes))

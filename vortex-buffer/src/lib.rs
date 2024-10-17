@@ -100,11 +100,7 @@ impl Buffer {
     pub fn into_arrow(self) -> ArrowBuffer {
         match self {
             Buffer::Arrow(a) => a,
-            Buffer::Bytes(b) => {
-                let v: Vec<u8> = b.into();
-
-                ArrowBuffer::from_vec(v)
-            }
+            Buffer::Bytes(b) => ArrowBuffer::from_vec(Vec::<u8>::from(b)),
         }
     }
 }

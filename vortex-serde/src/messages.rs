@@ -1,12 +1,12 @@
-use flatbuffers::{FlatBufferBuilder, Follow, WIPOffset};
+use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use itertools::Itertools;
 use vortex::stats::ArrayStatistics;
 use vortex::{flatbuffers as fba, Array};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexError, VortexExpect as _};
+use vortex_error::VortexExpect as _;
 use vortex_flatbuffers::message::Compression;
-use vortex_flatbuffers::{message as fb, FlatBufferRoot, ReadFlatBuffer, WriteFlatBuffer};
+use vortex_flatbuffers::{message as fb, FlatBufferRoot, WriteFlatBuffer};
 
 use crate::ALIGNMENT;
 
@@ -20,8 +20,6 @@ pub struct IPCSchema<'a>(pub &'a DType);
 pub struct IPCBatch<'a>(pub &'a Array);
 pub struct IPCArray<'a>(pub &'a Array, usize);
 pub struct IPCPage<'a>(pub &'a Buffer);
-
-pub struct IPCDType(pub DType);
 
 impl FlatBufferRoot for IPCMessage<'_> {}
 
@@ -50,7 +48,7 @@ impl WriteFlatBuffer for IPCMessage<'_> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCSchema<'a> {
+impl WriteFlatBuffer for IPCSchema<'_> {
     type Target<'t> = fb::Schema<'t>;
 
     fn write_flatbuffer<'fb>(
@@ -62,24 +60,7 @@ impl<'a> WriteFlatBuffer for IPCSchema<'a> {
     }
 }
 
-impl ReadFlatBuffer for IPCDType {
-    type Source<'t> = fb::Schema<'t>;
-    type Error = VortexError;
-
-    fn read_flatbuffer<'buf>(
-        fb: &<Self::Source<'buf> as Follow<'buf>>::Inner,
-    ) -> Result<Self, Self::Error> {
-        let dtype = DType::try_from(
-            fb.dtype()
-                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
-        )
-        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))?;
-
-        Ok(IPCDType(dtype))
-    }
-}
-
-impl<'a> WriteFlatBuffer for IPCBatch<'a> {
+impl WriteFlatBuffer for IPCBatch<'_> {
     type Target<'t> = fb::Batch<'t>;
 
     fn write_flatbuffer<'fb>(
@@ -120,7 +101,7 @@ impl<'a> WriteFlatBuffer for IPCBatch<'a> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCArray<'a> {
+impl WriteFlatBuffer for IPCArray<'_> {
     type Target<'t> = fba::Array<'t>;
 
     fn write_flatbuffer<'fb>(
@@ -181,7 +162,7 @@ impl<'a> WriteFlatBuffer for IPCArray<'a> {
     }
 }
 
-impl<'a> WriteFlatBuffer for IPCPage<'a> {
+impl WriteFlatBuffer for IPCPage<'_> {
     type Target<'t> = fb::Page<'t>;
 
     fn write_flatbuffer<'fb>(

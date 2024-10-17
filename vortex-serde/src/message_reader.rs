@@ -9,10 +9,9 @@ use vortex::{Array, ArrayView, Context, IntoArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
-use vortex_flatbuffers::{message as fb, ReadFlatBuffer};
+use vortex_flatbuffers::message as fb;
 
 use crate::io::VortexRead;
-use crate::messages::IPCDType;
 
 pub const FLATBUFFER_SIZE_LENGTH: usize = 4;
 
@@ -99,7 +98,11 @@ impl<R: VortexRead> MessageReader<R> {
                 vortex_err!("Expected schema message; this was checked earlier in the function")
             })?;
 
-        Ok(IPCDType::read_flatbuffer(&msg)?.0)
+        DType::try_from(
+            msg.dtype()
+                .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?,
+        )
+        .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))
     }
 
     pub async fn maybe_read_chunk(

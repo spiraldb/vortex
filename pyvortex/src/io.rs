@@ -1,15 +1,13 @@
 use std::path::Path;
 
-use futures::TryStreamExt;
 use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::pyfunction;
 use pyo3::types::{PyList, PyLong, PyString};
 use tokio::fs::File;
-use vortex::array::ChunkedArray;
 use vortex::Array;
 use vortex_dtype::field::Field;
-use vortex_error::{vortex_panic, VortexResult};
+use vortex_error::VortexResult;
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
 use vortex_serde::layouts::{
     LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
@@ -154,20 +152,7 @@ pub fn read<'py>(
             builder = builder.with_row_filter(row_filter);
         }
 
-        let stream = builder.build().await?;
-        let dtype = stream.schema().clone().into();
-
-        let vecs: Vec<Array> = stream.try_collect().await?;
-
-        if vecs.len() == 1 {
-            vecs.into_iter().next().ok_or_else(|| {
-                vortex_panic!(
-                    "Should be impossible: vecs.len() == 1 but couldn't get first element"
-                )
-            })
-        } else {
-            ChunkedArray::try_new(vecs, dtype).map(|e| e.into())
-        }
+        builder.build().await?.read_all().await
     }
 
     let fname = f.to_str()?; // TODO(dk): support file objects

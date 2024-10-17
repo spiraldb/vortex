@@ -222,7 +222,7 @@ impl RDEncoder {
         // SparseArray for exceptions.
         let exceptions = (!exceptions_pos.is_empty()).then(|| {
             let max_exc_pos = exceptions_pos.last().copied().unwrap_or_default();
-            let bw = bit_width!(max_exc_pos);
+            let bw = bit_width!(max_exc_pos) as u8;
 
             let exc_pos_array = PrimitiveArray::from(exceptions_pos);
             // SAFETY: We calculate bw such that it is wide enough to hold the largest position index.

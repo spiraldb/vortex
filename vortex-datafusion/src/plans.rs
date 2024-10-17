@@ -122,10 +122,11 @@ impl ExecutionPlan for RowSelectorExec {
             .into());
         }
 
+        let filter_projection = self.filter_expr.references().into_iter().cloned().collect();
         Ok(Box::pin(RowIndicesStream {
             chunked_array: self.chunked_array.clone(),
             chunk_idx: 0,
-            filter_projection: self.filter_expr.references().iter().cloned().collect(),
+            filter_projection,
             conjunction_expr: self.filter_expr.clone(),
         }))
     }
@@ -155,7 +156,11 @@ impl Stream for RowIndicesStream {
         // Get the unfiltered record batch.
         // Since this is a one-shot, we only want to poll the inner future once, to create the
         // initial batch for us to process.
-        let vortex_struct = next_chunk.into_struct()?.project(&this.filter_projection)?;
+        let vortex_struct = next_chunk.with_dyn(|a| {
+            a.as_struct_array()
+                .ok_or_else(|| vortex_err!("Not a struct array"))?
+                .project(&this.filter_projection)
+        })?;
 
         let selection = this
             .conjunction_expr

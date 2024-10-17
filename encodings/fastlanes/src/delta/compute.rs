@@ -39,7 +39,7 @@ impl SliceFn for DeltaArray {
         let physical_stop = stop + self.offset();
 
         let start_chunk = physical_start / 1024;
-        let stop_chunk = (physical_stop + 1024 - 1) / 1024;
+        let stop_chunk = physical_stop.div_ceil(1024);
 
         let bases = self.bases();
         let deltas = self.deltas();

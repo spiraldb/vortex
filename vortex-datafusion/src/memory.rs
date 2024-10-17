@@ -243,6 +243,7 @@ mod test {
             ("president", names.into_array()),
             ("term_start", term_start.into_array()),
         ])
+        .unwrap()
         .into_array()
     }
 
