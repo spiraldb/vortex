@@ -1,14 +1,12 @@
 from typing import TYPE_CHECKING
 
 import pandas
-import polars
 import pyarrow
 
 from ._lib import encoding as _encoding
 
 if TYPE_CHECKING:
     import numpy
-    import pandas
 
 __doc__ = _encoding.__doc__
 
@@ -99,7 +97,6 @@ def _Array_to_pandas(self: _encoding.Array) -> "pandas.DataFrame":
     Lift the struct fields to the top-level in the dataframe:
 
     """
-    import pandas
 
     return self.to_arrow_table().to_pandas(types_mapper=pandas.ArrowDtype)
 
