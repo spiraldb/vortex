@@ -9,6 +9,17 @@ dependencies = [
 ]
 requires-python = ">= 3.11"
 
+[project.optional-dependencies]
+polars = [
+    "polars>=1.9.0",
+]
+pandas = [
+    "pandas>=2.2.0",
+]
+numpy = [
+    "numpy>=1.26.0",
+]
+
 [project.urls]
 Documentation = "https://spiraldb.github.io/vortex/docs/"
 Changelog = "https://github.com/spiraldb/vortex/blob/develop/CHANGELOG.md"
@@ -25,6 +36,7 @@ dev-dependencies = [
     "ipython>=8.26.0",
     "pandas>=2.2.2",
     "pip",
+    "pyright>=1.1.385",
 ]
 
 [tool.maturin]

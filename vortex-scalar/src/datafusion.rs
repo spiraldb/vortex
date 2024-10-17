@@ -168,6 +168,6 @@ impl From<ScalarValue> for Scalar {
             }),
             _ => unimplemented!("Can't convert {value:?} value to a Vortex scalar"),
         }
-        .unwrap_or(Scalar::null(DType::Null))
+        .unwrap_or_else(|| Scalar::null(DType::Null))
     }
 }

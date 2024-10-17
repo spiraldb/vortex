@@ -119,20 +119,20 @@ impl Display for DType {
         match self {
             Null => write!(f, "null"),
             Bool(n) => write!(f, "bool{}", n),
-            Primitive(p, n) => write!(f, "{}{}", p, n),
+            Primitive(pt, n) => write!(f, "{}{}", pt, n),
             Utf8(n) => write!(f, "utf8{}", n),
             Binary(n) => write!(f, "binary{}", n),
-            Struct(st, n) => write!(
+            Struct(sdt, n) => write!(
                 f,
                 "{{{}}}{}",
-                st.names()
+                sdt.names()
                     .iter()
-                    .zip(st.dtypes().iter())
+                    .zip(sdt.dtypes().iter())
                     .map(|(n, dt)| format!("{}={}", n, dt))
                     .join(", "),
                 n
             ),
-            List(c, n) => write!(f, "list({}){}", c, n),
+            List(edt, n) => write!(f, "list({}){}", edt, n),
             Extension(ext, n) => write!(
                 f,
                 "ext({}{}){}",

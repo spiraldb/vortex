@@ -160,8 +160,8 @@ impl WriteFlatBuffer for DType {
                 )
                 .as_union_value()
             }
-            Self::List(e, n) => {
-                let element_type = Some(e.as_ref().write_flatbuffer(fbb));
+            Self::List(edt, n) => {
+                let element_type = Some(edt.as_ref().write_flatbuffer(fbb));
                 fb::List::create(
                     fbb,
                     &fb::ListArgs {
