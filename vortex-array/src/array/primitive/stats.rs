@@ -47,7 +47,7 @@ impl<T: PStatsType> ArrayStatisticsCompute for &[T] {
 
 struct NullableValues<'a, T: PStatsType>(&'a [T], &'a BooleanBuffer);
 
-impl<'a, T: PStatsType> ArrayStatisticsCompute for NullableValues<'a, T> {
+impl<T: PStatsType> ArrayStatisticsCompute for NullableValues<'_, T> {
     fn compute_statistics(&self, _stat: Stat) -> VortexResult<StatsSet> {
         let values = self.0;
         if values.is_empty() {
