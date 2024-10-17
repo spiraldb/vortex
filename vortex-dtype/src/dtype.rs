@@ -115,26 +115,26 @@ impl DType {
 }
 
 impl Display for DType {
-    fn fmt(&self, fmt: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            Null => write!(fmt, "null"),
-            Bool(n) => write!(fmt, "bool{}", n),
-            Primitive(pt, n) => write!(fmt, "{}{}", pt, n),
-            Utf8(n) => write!(fmt, "utf8{}", n),
-            Binary(n) => write!(fmt, "binary{}", n),
-            Struct(st, n) => write!(
-                fmt,
+            Null => write!(f, "null"),
+            Bool(n) => write!(f, "bool{}", n),
+            Primitive(pt, n) => write!(f, "{}{}", pt, n),
+            Utf8(n) => write!(f, "utf8{}", n),
+            Binary(n) => write!(f, "binary{}", n),
+            Struct(sdt, n) => write!(
+                f,
                 "{{{}}}{}",
-                st.names()
+                sdt.names()
                     .iter()
-                    .zip(st.dtypes().iter())
+                    .zip(sdt.dtypes().iter())
                     .map(|(n, dt)| format!("{}={}", n, dt))
                     .join(", "),
                 n
             ),
-            List(edt, n) => write!(fmt, "list({}){}", edt, n),
+            List(edt, n) => write!(f, "list({}){}", edt, n),
             Extension(ext, n) => write!(
-                fmt,
+                f,
                 "ext({}{}){}",
                 ext.id(),
                 ext.metadata()
