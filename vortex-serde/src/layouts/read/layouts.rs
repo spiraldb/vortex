@@ -206,7 +206,7 @@ impl LayoutReader for ColumnLayout {
                         .zip_eq(s.dtypes().iter())
                         .map(|(index, dtype)| self.read_child(index, fb_children, dtype.clone()))
                         .collect::<VortexResult<Vec<_>>>()?,
-                    Projection::Flat(v) => v
+                    Projection::Flat(proj) => proj
                         .iter()
                         .map(|f| result_lazy_dtype.resolve_field(f))
                         .zip(s.dtypes().iter().cloned())

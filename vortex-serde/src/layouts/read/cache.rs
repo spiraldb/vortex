@@ -68,23 +68,29 @@ impl LazyDeserializedDType {
                     *n,
                 ))))
             }
-            // TODO(robert): Respect existing projection list, only really an issue for nested structs
-            LazyDTypeState::Serialized(b, ..) => Ok(Arc::new(LazyDeserializedDType::from_bytes(
-                b.clone(),
-                Projection::Flat(projection.to_owned()),
-            ))),
+            LazyDTypeState::Serialized(b, _, proj) => {
+                let projection = match proj {
+                    Projection::All => Projection::Flat(projection.to_vec()),
+                    // TODO(robert): Respect existing projection list, only really an issue for nested structs
+                    Projection::Flat(_) => vortex_bail!("Can't project already projected dtype"),
+                };
+                Ok(Arc::new(LazyDeserializedDType::from_bytes(
+                    b.clone(),
+                    projection,
+                )))
+            }
         }
     }
 
     /// Get vortex dtype out of serialized bytes
     pub fn value(&self) -> VortexResult<&DType> {
         match &self.inner {
-            LazyDTypeState::Value(d) => Ok(d),
-            LazyDTypeState::Serialized(b, c, p) => c.get_or_try_init(|| {
-                let fb_dtype = Self::fb_schema(b)?
+            LazyDTypeState::Value(dtype) => Ok(dtype),
+            LazyDTypeState::Serialized(bytes, cache, proj) => cache.get_or_try_init(|| {
+                let fb_dtype = Self::fb_schema(bytes)?
                     .dtype()
                     .ok_or_else(|| vortex_err!(InvalidSerde: "Schema missing DType"))?;
-                match &p {
+                match &proj {
                     Projection::All => DType::try_from(fb_dtype)
                         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {e}")),
                     Projection::Flat(p) => deserialize_and_project(fb_dtype, p),
