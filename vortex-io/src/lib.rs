@@ -8,6 +8,7 @@ mod write;
 
 #[cfg(feature = "tokio")]
 pub mod tokio;
+mod fusio;
 
 use std::future::Future;
 use std::io;

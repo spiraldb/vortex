@@ -6,10 +6,10 @@ use std::io;
 use bytes::BytesMut;
 use futures_util::FutureExt;
 use monoio::buf::IoBufMut;
-use monoio::io::{AsyncReadRent, AsyncReadRentExt, AsyncWriteRent, AsyncWriteRentExt};
+use monoio::io::{AsyncReadRent, AsyncReadRentAt, AsyncReadRentExt, AsyncWriteRent, AsyncWriteRentExt};
 use vortex_buffer::io_buf::IoBuf;
 
-use crate::io::{VortexRead, VortexWrite};
+use crate::io::{VortexRead, VortexReadAt, VortexWrite};
 
 pub struct MonoAdapter<IO>(IO);
 
@@ -22,6 +22,18 @@ impl<R: AsyncReadRent> VortexRead for MonoAdapter<R> {
                 Ok(_len) => Ok(buffer.into_inner()),
                 Err(e) => Err(e),
             })
+    }
+}
+
+impl<R: AsyncReadRentAt> VortexReadAt for MonoAdapter<R> {
+    fn read_at_into(&self, pos: u64, buffer: BytesMut) -> impl Future<Output=io::Result<BytesMut>> + Send {
+        // Any way to cast this into something mutable...?
+        AsyncReadRentAt::read_at()
+        todo!()
+    }
+
+    fn size(&self) -> impl Future<Output=u64> {
+        todo!()
     }
 }
 

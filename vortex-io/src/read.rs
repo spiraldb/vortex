@@ -14,7 +14,7 @@ pub trait VortexRead {
 #[allow(clippy::len_without_is_empty)]
 pub trait VortexReadAt: Send + Sync {
     fn read_at_into(
-        &self,
+        &mut self,
         pos: u64,
         buffer: BytesMut,
     ) -> impl Future<Output = io::Result<BytesMut>> + Send;
@@ -31,11 +31,11 @@ pub trait VortexReadAt: Send + Sync {
 
 impl<T: VortexReadAt> VortexReadAt for Arc<T> {
     fn read_at_into(
-        &self,
+        &mut self,
         pos: u64,
         buffer: BytesMut,
     ) -> impl Future<Output = io::Result<BytesMut>> + Send {
-        T::read_at_into(self, pos, buffer)
+        T::read_at_into(self.as_mut(), pos, buffer)
     }
 
     fn performance_hint(&self) -> usize {
@@ -62,19 +62,20 @@ impl VortexRead for BytesMut {
 
 impl<R: VortexReadAt> VortexRead for Cursor<R> {
     async fn read_into(&mut self, buffer: BytesMut) -> io::Result<BytesMut> {
-        let res = R::read_at_into(self.get_ref(), self.position(), buffer).await?;
-        self.set_position(self.position() + res.len() as u64);
+        let pos = self.position();
+        let res = R::read_at_into(self.get_mut(), pos, buffer).await?;
+        self.set_position(pos + res.len() as u64);
         Ok(res)
     }
 }
 
 impl<R: ?Sized + VortexReadAt> VortexReadAt for &R {
     fn read_at_into(
-        &self,
+        &mut self,
         pos: u64,
         buffer: BytesMut,
     ) -> impl Future<Output = io::Result<BytesMut>> + Send {
-        R::read_at_into(*self, pos, buffer)
+        R::read_at_into(self, pos, buffer)
     }
 
     fn performance_hint(&self) -> usize {
@@ -88,11 +89,11 @@ impl<R: ?Sized + VortexReadAt> VortexReadAt for &R {
 
 impl VortexReadAt for Vec<u8> {
     fn read_at_into(
-        &self,
+        &mut self,
         pos: u64,
         buffer: BytesMut,
     ) -> impl Future<Output = io::Result<BytesMut>> {
-        VortexReadAt::read_at_into(self.as_slice(), pos, buffer)
+        VortexReadAt::read_at_into(self.as_mut_slice(), pos, buffer)
     }
 
     async fn size(&self) -> u64 {
@@ -101,7 +102,7 @@ impl VortexReadAt for Vec<u8> {
 }
 
 impl VortexReadAt for [u8] {
-    async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
+    async fn read_at_into(&mut self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
         if buffer.len() + pos as usize > self.len() {
             Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
@@ -120,7 +121,7 @@ impl VortexReadAt for [u8] {
 }
 
 impl VortexReadAt for Buffer {
-    async fn read_at_into(&self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
+    async fn read_at_into(&mut self, pos: u64, mut buffer: BytesMut) -> io::Result<BytesMut> {
         if buffer.len() + pos as usize > self.len() {
             Err(io::Error::new(
                 io::ErrorKind::UnexpectedEof,
