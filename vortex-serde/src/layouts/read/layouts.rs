@@ -174,7 +174,7 @@ impl ColumnLayout {
             child_scan,
             self.message_cache.relative(
                 idx as u16,
-                Arc::new(LazyDeserializedDType::from_dtype(dtype, Projection::All)),
+                Arc::new(LazyDeserializedDType::from_dtype(dtype)),
             ),
         )
     }
