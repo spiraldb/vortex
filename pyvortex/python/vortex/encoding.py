@@ -234,10 +234,6 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "n
         When :obj:`True`, this method will raise an error unless a NumPy array can be created without
         copying the data. This is only possible when the array is a primitive array without nulls.
 
-    writable : :class:`bool`
-        When :obj:`True`, the returned array is writable. This method returns non-writable arrays
-        by default because Arrow arrays are immutable.
-
     Returns
     -------
     :class:`numpy.ndarray`
