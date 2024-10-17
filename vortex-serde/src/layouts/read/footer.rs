@@ -152,7 +152,7 @@ impl FooterReader {
         }
 
         let ps = root::<vortex_flatbuffers::footer::Postscript>(
-            &buf[magic_bytes_loc - 32..magic_bytes_loc],
+            &buf[magic_bytes_loc - (FILE_POSTSCRIPT_SIZE - MAGIC_BYTES.len())..magic_bytes_loc],
         )?;
 
         Ok(Footer {

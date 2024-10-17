@@ -9,7 +9,7 @@ use vortex_flatbuffers::footer;
 
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::{
-    LayoutDeserializer, LayoutId, LayoutReader, LayoutSpec, Messages, ReadResult, Scan,
+    LayoutDeserializer, LayoutId, LayoutReader, LayoutSpec, Message, ReadResult, Scan,
 };
 use crate::message_reader::ArrayBufferReader;
 use crate::stream_writer::ByteRange;
@@ -92,8 +92,8 @@ impl FlatLayout {
         }
     }
 
-    fn own_message(&self) -> Messages {
-        vec![(self.cache.absolute_id(&[]), self.range)]
+    fn own_message(&self) -> Message {
+        (self.cache.absolute_id(&[]), self.range)
     }
 
     fn array_from_bytes(&self, mut buf: Bytes) -> VortexResult<Array> {
@@ -128,7 +128,7 @@ impl LayoutReader for FlatLayout {
             self.cached_array = Some(self.array_from_bytes(buf)?);
             self.read_next()
         } else {
-            Ok(Some(ReadResult::ReadMore(self.own_message())))
+            Ok(Some(ReadResult::ReadMore(vec![self.own_message()])))
         }
     }
 }
