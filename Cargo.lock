@@ -4676,6 +4676,7 @@ dependencies = [
  "itertools 0.13.0",
  "monoio",
  "object_store",
+ "once_cell",
  "pin-project",
  "rand",
  "simplelog",

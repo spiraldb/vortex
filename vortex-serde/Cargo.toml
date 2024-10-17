@@ -23,6 +23,7 @@ futures-util = { workspace = true }
 itertools = { workspace = true }
 monoio = { workspace = true, optional = true, features = ["bytes"] }
 object_store = { workspace = true, optional = true }
+once_cell = { workspace = true }
 pin-project = { workspace = true }
 tokio = { workspace = true, features = ["io-util", "fs"], optional = true }
 vortex-array = { workspace = true }

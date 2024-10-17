@@ -175,7 +175,7 @@ impl StructDType {
         self.names.iter().position(|n| n.as_ref() == name)
     }
 
-    pub fn field_info<'a>(&'a self, field: &Field) -> VortexResult<FieldInfo<'a>> {
+    pub fn field_info(&self, field: &Field) -> VortexResult<FieldInfo> {
         let index = match field {
             Field::Name(name) => self
                 .find_name(name)
