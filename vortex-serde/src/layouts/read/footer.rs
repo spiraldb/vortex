@@ -1,15 +1,16 @@
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use flatbuffers::root;
 use vortex_dtype::field::Field;
 use vortex_dtype::flatbuffers::deserialize_and_project;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_flatbuffers::message as fb;
-use vortex_schema::Schema;
 
+use crate::io::VortexReadAt;
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::read::context::LayoutDeserializer;
-use crate::layouts::read::{LayoutReader, Scan, FILE_POSTSCRIPT_SIZE};
+use crate::layouts::read::{LayoutReader, Scan, FILE_POSTSCRIPT_SIZE, INITIAL_READ_SIZE};
+use crate::layouts::MAGIC_BYTES;
 use crate::FLATBUFFER_SIZE_LENGTH;
 
 /// Wrapper around serialized file footer. Provides handle on file schema and
@@ -37,7 +38,7 @@ use crate::FLATBUFFER_SIZE_LENGTH;
 ///
 pub struct Footer {
     pub(crate) schema_offset: u64,
-    pub(crate) layout_offset: u64,
+    pub(crate) footer_offset: u64,
     pub(crate) leftovers: Bytes,
     pub(crate) leftovers_offset: u64,
     pub(crate) layout_serde: LayoutDeserializer,
@@ -45,7 +46,7 @@ pub struct Footer {
 
 impl Footer {
     fn leftovers_layout_offset(&self) -> usize {
-        (self.layout_offset - self.leftovers_offset) as usize
+        (self.footer_offset - self.leftovers_offset) as usize
     }
 
     fn leftovers_schema_offset(&self) -> usize {
@@ -92,10 +93,6 @@ impl Footer {
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))
     }
 
-    pub fn schema(&self) -> VortexResult<Schema> {
-        self.dtype().map(Schema::new)
-    }
-
     pub fn projected_dtype(&self, projection: &[Field]) -> VortexResult<DType> {
         let fb_dtype = self
             .fb_schema()?
@@ -115,5 +112,55 @@ impl Footer {
                 m.header_as_schema()
                     .ok_or_else(|| vortex_err!("Message was not a schema"))
             })
+    }
+}
+
+pub struct FooterReader {
+    layout_serde: LayoutDeserializer,
+}
+
+impl FooterReader {
+    pub fn new(layout_serde: LayoutDeserializer) -> Self {
+        Self { layout_serde }
+    }
+
+    pub async fn read_footer<R: VortexReadAt>(
+        &self,
+        read: &R,
+        file_size: u64,
+    ) -> VortexResult<Footer> {
+        if file_size < FILE_POSTSCRIPT_SIZE as u64 {
+            vortex_bail!(
+                "Malformed vortex file, size {} must be at least {}",
+                file_size,
+                FILE_POSTSCRIPT_SIZE,
+            )
+        }
+
+        let read_size = INITIAL_READ_SIZE.min(file_size as usize);
+        let mut buf = BytesMut::with_capacity(read_size);
+        unsafe { buf.set_len(read_size) }
+
+        let read_offset = file_size - read_size as u64;
+        buf = read.read_at_into(read_offset, buf).await?;
+
+        let magic_bytes_loc = read_size - MAGIC_BYTES.len();
+
+        let magic_number = &buf[magic_bytes_loc..];
+        if magic_number != MAGIC_BYTES {
+            vortex_bail!("Malformed file, invalid magic bytes, got {magic_number:?}")
+        }
+
+        let ps = root::<vortex_flatbuffers::footer::Postscript>(
+            &buf[magic_bytes_loc - 32..magic_bytes_loc],
+        )?;
+
+        Ok(Footer {
+            schema_offset: ps.schema_offset(),
+            footer_offset: ps.footer_offset(),
+            leftovers: buf.freeze(),
+            leftovers_offset: read_offset,
+            layout_serde: self.layout_serde.clone(),
+        })
     }
 }
