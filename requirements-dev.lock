@@ -92,6 +92,8 @@ polars==1.9.0
     # via vortex-array
 prompt-toolkit==3.0.47
     # via ipython
+protobuf==5.28.2
+    # via substrait
 ptyprocess==0.7.0
     # via pexpect
 pure-eval==0.2.3
@@ -144,6 +146,8 @@ sphinxcontrib-serializinghtml==2.0.0
     # via sphinx
 stack-data==0.6.3
     # via ipython
+substrait==0.23.0
+    # via vortex-array
 traitlets==5.14.3
     # via ipython
     # via matplotlib-inline

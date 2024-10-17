@@ -6,6 +6,7 @@ use pyo3::prelude::*;
 
 mod array;
 mod compress;
+mod dataset;
 mod dtype;
 mod encode;
 mod error;
@@ -44,10 +45,16 @@ fn _lib(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     io.add_function(wrap_pyfunction!(io::read, m)?)?;
     io.add_function(wrap_pyfunction!(io::write, m)?)?;
 
+    let dataset = PyModule::new_bound(py, "dataset")?;
+    m.add_submodule(&dataset)?;
+
+    dataset.add_function(wrap_pyfunction!(dataset::dataset, m)?)?;
+
     let expr = PyModule::new_bound(py, "expr")?;
     m.add_submodule(&expr)?;
 
     expr.add_function(wrap_pyfunction!(expr::column, m)?)?;
+    expr.add_function(wrap_pyfunction!(expr::literal, m)?)?;
     expr.add_class::<PyExpr>()?;
 
     Ok(())
