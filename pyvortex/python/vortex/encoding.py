@@ -29,7 +29,7 @@ def _Array_to_arrow_table(self: _encoding.Array) -> pyarrow.Table:
     """Construct an Arrow table from this Vortex array.
 
     .. seealso::
-        :meth:`.to_arrow`
+        :meth:`.to_arrow_array`
 
     Warning
     -------
@@ -59,7 +59,7 @@ def _Array_to_arrow_table(self: _encoding.Array) -> pyarrow.Table:
     name: [["Joseph","Narendra","Angela","Mikhail"]]
 
     """
-    return arrow_table_from_struct_array(self.to_arrow())
+    return arrow_table_from_struct_array(self.to_arrow_array())
 
 
 Array.to_arrow_table = _Array_to_arrow_table
@@ -218,7 +218,7 @@ def _Array_to_polars_series(self: _encoding.Array):  # -> 'polars.Series':  # br
     """
     import polars
 
-    return polars.from_arrow(self.to_arrow())
+    return polars.from_arrow(self.to_arrow_array())
 
 
 Array.to_polars_series = _Array_to_polars_series
@@ -227,7 +227,7 @@ Array.to_polars_series = _Array_to_polars_series
 def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "numpy.ndarray":
     """Construct a NumPy array from this Vortex array.
 
-    This is an alias for :code:`self.to_arrow().to_numpy(zero_copy_only)`
+    This is an alias for :code:`self.to_arrow_array().to_numpy(zero_copy_only)`
 
     Returns
     -------
@@ -243,7 +243,7 @@ def _Array_to_numpy(self: _encoding.Array, *, zero_copy_only: bool = True) -> "n
     array([1, 0, 0, 1])
 
     """
-    return self.to_arrow().to_numpy(zero_copy_only=zero_copy_only)
+    return self.to_arrow_array().to_numpy(zero_copy_only=zero_copy_only)
 
 
 Array.to_numpy = _Array_to_numpy
@@ -268,7 +268,7 @@ def array(obj: pyarrow.Array | list) -> Array:
 
     A Vortex array containing the first three integers.
 
-    >>> vortex.encoding.array([1, 2, 3]).to_arrow()
+    >>> vortex.encoding.array([1, 2, 3]).to_arrow_array()
     <pyarrow.lib.Int64Array object at ...>
     [
       1,
@@ -278,7 +278,7 @@ def array(obj: pyarrow.Array | list) -> Array:
 
     The same Vortex array with a null value in the third position.
 
-    >>> vortex.encoding.array([1, 2, None, 3]).to_arrow()
+    >>> vortex.encoding.array([1, 2, None, 3]).to_arrow_array()
     <pyarrow.lib.Int64Array object at ...>
     [
       1,
@@ -290,7 +290,7 @@ def array(obj: pyarrow.Array | list) -> Array:
     Initialize a Vortex array from an Arrow array:
 
     >>> arrow = pyarrow.array(['Hello', 'it', 'is', 'me'])
-    >>> vortex.encoding.array(arrow).to_arrow()
+    >>> vortex.encoding.array(arrow).to_arrow_array()
     <pyarrow.lib.StringArray object at ...>
     [
       "Hello",

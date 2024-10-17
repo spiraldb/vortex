@@ -43,14 +43,14 @@ impl PyArray {
     ///
     /// Round-trip an Arrow array through a Vortex array:
     ///
-    ///     >>> vortex.encoding.array([1, 2, 3]).to_arrow()
+    ///     >>> vortex.encoding.array([1, 2, 3]).to_arrow_array()
     ///     <pyarrow.lib.Int64Array object at ...>
     ///     [
     ///       1,
     ///       2,
     ///       3
     ///     ]
-    fn to_arrow(self_: PyRef<'_, Self>) -> PyResult<Bound<PyAny>> {
+    fn to_arrow_array(self_: PyRef<'_, Self>) -> PyResult<Bound<PyAny>> {
         // NOTE(ngates): for struct arrays, we could also return a RecordBatchStreamReader.
         let py = self_.py();
         let vortex = &self_.inner;
@@ -151,7 +151,7 @@ impl PyArray {
     ///
     ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
     ///     >>> indices = vortex.encoding.array([0, 2])
-    ///     >>> a.take(indices).to_arrow()
+    ///     >>> a.take(indices).to_arrow_array()
     ///     <pyarrow.lib.StringArray object at ...>
     ///     [
     ///       "a",
@@ -162,7 +162,7 @@ impl PyArray {
     ///
     ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
     ///     >>> indices = vortex.encoding.array([0, 1, 1, 0])
-    ///     >>> a.take(indices).to_arrow()
+    ///     >>> a.take(indices).to_arrow_array()
     ///     <pyarrow.lib.StringArray object at ...>
     ///     [
     ///       "a",
