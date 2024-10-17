@@ -72,11 +72,15 @@ impl Footer {
             .read_layout(footer_bytes, loc, scan, message_cache)
     }
 
-    pub fn dtype_bytes(&self) -> Bytes {
+    pub fn dtype_bytes(&self) -> VortexResult<Bytes> {
         let start_offset = self.leftovers_schema_offset();
         let end_offset = self.leftovers_layout_offset();
-        self.leftovers
-            .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset)
+        let bytes = self
+            .leftovers
+            .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset);
+        // Run validation on dtype bytes
+        self.fb_schema()?;
+        Ok(bytes)
     }
 
     pub fn dtype(&self) -> VortexResult<DType> {

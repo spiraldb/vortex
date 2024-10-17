@@ -72,7 +72,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);
         // TODO(robert): Propagate projection immediately instead of delegating to layouts, needs more restructuring
         let footer_dtype = Arc::new(LazyDeserializedDType::from_bytes(
-            footer.dtype_bytes(),
+            footer.dtype_bytes()?,
             Projection::All,
         ));
         let read_projection = self.projection.unwrap_or_default();

@@ -2,7 +2,7 @@ use std::sync::{Arc, RwLock};
 
 use ahash::HashMap;
 use bytes::Bytes;
-use flatbuffers::root;
+use flatbuffers::root_unchecked;
 use once_cell::sync::OnceCell;
 use vortex_dtype::field::Field;
 use vortex_dtype::flatbuffers::{deserialize_and_project, resolve_field};
@@ -56,6 +56,7 @@ impl LazyDeserializedDType {
         }
     }
 
+    /// Restrict the underlying dtype to selected fields
     pub fn project(&self, projection: &[Field]) -> VortexResult<Arc<Self>> {
         // TODO(robert): Respect existing projection list, only really an issue for nested structs
         if let Some(ref b) = self.dtype_bytes {
@@ -76,6 +77,7 @@ impl LazyDeserializedDType {
         }
     }
 
+    /// Get vortex dtype out of serialized bytes
     pub fn value(&self) -> VortexResult<&DType> {
         self.dtype.get_or_try_init(|| {
             let fb_dtype = Self::fb_schema(self.dtype_bytes.as_ref().vortex_expect("Wrong state"))?
@@ -115,12 +117,9 @@ impl LazyDeserializedDType {
     }
 
     fn fb_schema(bytes: &[u8]) -> VortexResult<message::Schema> {
-        root::<message::Message>(bytes)
-            .map_err(|e| e.into())
-            .and_then(|m| {
-                m.header_as_schema()
-                    .ok_or_else(|| vortex_err!("Message was not a schema"))
-            })
+        unsafe { root_unchecked::<message::Message>(bytes) }
+            .header_as_schema()
+            .ok_or_else(|| vortex_err!("Message was not a schema"))
     }
 }
 
