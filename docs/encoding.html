@@ -407,7 +407,7 @@ document.write(`
 <p>Keep only the first and third elements:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
 <span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  &quot;a&quot;,</span>
@@ -418,7 +418,7 @@ document.write(`
 <p>Permute and repeat the first and second elements:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
 <span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  &quot;a&quot;,</span>
@@ -432,9 +432,13 @@ document.write(`
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="vortex.encoding.Array.to_arrow">
-<span class="sig-name descname"><span class="pre">to_arrow</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.to_arrow" title="Link to this definition">#</a></dt>
+<dt class="sig sig-object py" id="vortex.encoding.Array.to_arrow_array">
+<span class="sig-name descname"><span class="pre">to_arrow_array</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.to_arrow_array" title="Link to this definition">#</a></dt>
 <dd><p>Convert this array to an Arrow array.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="#vortex.encoding.Array.to_arrow_table" title="vortex.encoding.Array.to_arrow_table"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_arrow_table()</span></code></a></p>
+</div>
 <section id="id3">
 <h2>Returns<a class="headerlink" href="#id3" title="Link to this heading">#</a></h2>
 <p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v17.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Array</span></code></a></p>
@@ -442,7 +446,7 @@ document.write(`
 <section id="id4">
 <h2>Examples<a class="headerlink" href="#id4" title="Link to this heading">#</a></h2>
 <p>Round-trip an Arrow array through a Vortex array:</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
 <span class="go">&lt;pyarrow.lib.Int64Array object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  1,</span>
@@ -455,16 +459,52 @@ document.write(`
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="vortex.encoding.Array.to_numpy">
-<span class="sig-name descname"><span class="pre">to_numpy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zero_copy_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.to_numpy" title="Link to this definition">#</a></dt>
-<dd><p>Construct a NumPy array from this Vortex array.</p>
-<p>This is an alias for <code class="code docutils literal notranslate"><span class="pre">self.to_arrow().to_numpy(zero_copy_only)</span></code></p>
+<dt class="sig sig-object py" id="vortex.encoding.Array.to_arrow_table">
+<span class="sig-name descname"><span class="pre">to_arrow_table</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v17.0.0)"><span class="pre">Table</span></a></span></span><a class="headerlink" href="#vortex.encoding.Array.to_arrow_table" title="Link to this definition">#</a></dt>
+<dd><p>Construct an Arrow table from this Vortex array.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="#vortex.encoding.Array.to_arrow_array" title="vortex.encoding.Array.to_arrow_array"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_arrow_array()</span></code></a></p>
+</div>
+<section id="warning">
+<h2>Warning<a class="headerlink" href="#warning" title="Link to this heading">#</a></h2>
+<p>Only struct-typed arrays can be converted to Arrow tables.</p>
+</section>
 <section id="id5">
 <h2>Returns<a class="headerlink" href="#id5" title="Link to this heading">#</a></h2>
-<p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a></p>
+<p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v17.0.0)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pyarrow.Table</span></code></a></p>
 </section>
 <section id="id6">
 <h2>Examples<a class="headerlink" href="#id6" title="Link to this heading">#</a></h2>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">array</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Narendra&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Angela&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">33</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Mikhail&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">57</span><span class="p">},</span>
+<span class="gp">... </span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">array</span><span class="o">.</span><span class="n">to_arrow_table</span><span class="p">()</span>
+<span class="go">pyarrow.Table</span>
+<span class="go">age: int64</span>
+<span class="go">name: string</span>
+<span class="go">----</span>
+<span class="go">age: [[25,31,33,57]]</span>
+<span class="go">name: [[&quot;Joseph&quot;,&quot;Narendra&quot;,&quot;Angela&quot;,&quot;Mikhail&quot;]]</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vortex.encoding.Array.to_numpy">
+<span class="sig-name descname"><span class="pre">to_numpy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">zero_copy_only</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.1)"><span class="pre">numpy.ndarray</span></a></span></span><a class="headerlink" href="#vortex.encoding.Array.to_numpy" title="Link to this definition">#</a></dt>
+<dd><p>Construct a NumPy array from this Vortex array.</p>
+<p>This is an alias for <code class="code docutils literal notranslate"><span class="pre">self.to_arrow_array().to_numpy(zero_copy_only)</span></code></p>
+<section id="id7">
+<h2>Returns<a class="headerlink" href="#id7" title="Link to this heading">#</a></h2>
+<p><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.1)"><code class="xref py py-class docutils literal notranslate"><span class="pre">numpy.ndarray</span></code></a></p>
+</section>
+<section id="id8">
+<h2>Examples<a class="headerlink" href="#id8" title="Link to this heading">#</a></h2>
 <p>Construct an ndarray from a Vortex array:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">array</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">array</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
@@ -476,18 +516,18 @@ document.write(`
 
 <dl class="py method">
 <dt class="sig sig-object py" id="vortex.encoding.Array.to_pandas">
-<span class="sig-name descname"><span class="pre">to_pandas</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.to_pandas" title="Link to this definition">#</a></dt>
+<span class="sig-name descname"><span class="pre">to_pandas</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.2.3)"><span class="pre">DataFrame</span></a></span></span><a class="headerlink" href="#vortex.encoding.Array.to_pandas" title="Link to this definition">#</a></dt>
 <dd><p>Construct a Pandas dataframe from this Vortex array.</p>
-<section id="warning">
-<h2>Warning<a class="headerlink" href="#warning" title="Link to this heading">#</a></h2>
+<section id="id9">
+<h2>Warning<a class="headerlink" href="#id9" title="Link to this heading">#</a></h2>
 <p>Only struct-typed arrays can be converted to Pandas dataframes.</p>
 </section>
-<section id="id7">
-<h2>Returns<a class="headerlink" href="#id7" title="Link to this heading">#</a></h2>
+<section id="id10">
+<h2>Returns<a class="headerlink" href="#id10" title="Link to this heading">#</a></h2>
 <p><a class="reference external" href="https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.html#pandas.DataFrame" title="(in pandas v2.2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">pandas.DataFrame</span></code></a></p>
 </section>
-<section id="id8">
-<h2>Examples<a class="headerlink" href="#id8" title="Link to this heading">#</a></h2>
+<section id="id11">
+<h2>Examples<a class="headerlink" href="#id11" title="Link to this heading">#</a></h2>
 <p>Construct a dataframe from a Vortex array:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">array</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
 <span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
@@ -508,6 +548,106 @@ document.write(`
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="vortex.encoding.Array.to_polars_dataframe">
+<span class="sig-name descname"><span class="pre">to_polars_dataframe</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.to_polars_dataframe" title="Link to this definition">#</a></dt>
+<dd><p>Construct a Polars dataframe from this Vortex array.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="#vortex.encoding.Array.to_polars_series" title="vortex.encoding.Array.to_polars_series"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_polars_series()</span></code></a></p>
+</div>
+<section id="id12">
+<h2>Warning<a class="headerlink" href="#id12" title="Link to this heading">#</a></h2>
+<p>Only struct-typed arrays can be converted to Polars dataframes.</p>
+</section>
+<section id="id13">
+<h2>Returns<a class="headerlink" href="#id13" title="Link to this heading">#</a></h2>
+<p><a class="reference external" href="https://docs.pola.rs/api/python/stable/reference/dataframe/index.html">polars.DataFrame</a></p>
+</section>
+<section id="id14">
+<h2>Examples<a class="headerlink" href="#id14" title="Link to this heading">#</a></h2>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">array</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Narendra&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Angela&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">33</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Mikhail&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">57</span><span class="p">},</span>
+<span class="gp">... </span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">array</span><span class="o">.</span><span class="n">to_polars_dataframe</span><span class="p">()</span>
+<span class="go">shape: (4, 2)</span>
+<span class="go">┌─────┬──────────┐</span>
+<span class="go">│ age ┆ name     │</span>
+<span class="go">│ --- ┆ ---      │</span>
+<span class="go">│ i64 ┆ str      │</span>
+<span class="go">╞═════╪══════════╡</span>
+<span class="go">│ 25  ┆ Joseph   │</span>
+<span class="go">│ 31  ┆ Narendra │</span>
+<span class="go">│ 33  ┆ Angela   │</span>
+<span class="go">│ 57  ┆ Mikhail  │</span>
+<span class="go">└─────┴──────────┘</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="vortex.encoding.Array.to_polars_series">
+<span class="sig-name descname"><span class="pre">to_polars_series</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.to_polars_series" title="Link to this definition">#</a></dt>
+<dd><p>Construct a Polars series from this Vortex array.</p>
+<div class="admonition seealso">
+<p class="admonition-title">See also</p>
+<p><a class="reference internal" href="#vortex.encoding.Array.to_polars_dataframe" title="vortex.encoding.Array.to_polars_dataframe"><code class="xref py py-meth docutils literal notranslate"><span class="pre">to_polars_dataframe()</span></code></a></p>
+</div>
+<section id="id15">
+<h2>Returns<a class="headerlink" href="#id15" title="Link to this heading">#</a></h2>
+<p><a class="reference external" href="https://docs.pola.rs/api/python/stable/reference/series/index.html">polars.Series</a></p>
+</section>
+<section id="id16">
+<h2>Examples<a class="headerlink" href="#id16" title="Link to this heading">#</a></h2>
+<p>Convert a numeric array with nulls to a Polars Series:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_polars_series</span><span class="p">()</span>  
+<span class="go">shape: (4,)</span>
+<span class="go">Series: &#39;&#39; [i64]</span>
+<span class="go">[</span>
+<span class="go">    1</span>
+<span class="go">    null</span>
+<span class="go">    2</span>
+<span class="go">    3</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+<p>Convert a UTF-8 string array to a Polars Series:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;hello, &#39;</span><span class="p">,</span> <span class="s1">&#39;is&#39;</span><span class="p">,</span> <span class="s1">&#39;it&#39;</span><span class="p">,</span> <span class="s1">&#39;me?&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">to_polars_series</span><span class="p">()</span>  
+<span class="go">shape: (4,)</span>
+<span class="go">Series: &#39;&#39; [str]</span>
+<span class="go">[</span>
+<span class="go">    &quot;hello, &quot;</span>
+<span class="go">    &quot;is&quot;</span>
+<span class="go">    &quot;it&quot;</span>
+<span class="go">    &quot;me?&quot;</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+<p>Convert a struct array to a Polars Series:</p>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">array</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Joseph&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">25</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Narendra&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">31</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Angela&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">33</span><span class="p">},</span>
+<span class="gp">... </span>    <span class="p">{</span><span class="s1">&#39;name&#39;</span><span class="p">:</span> <span class="s1">&#39;Mikhail&#39;</span><span class="p">,</span> <span class="s1">&#39;age&#39;</span><span class="p">:</span> <span class="mi">57</span><span class="p">},</span>
+<span class="gp">... </span><span class="p">])</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">array</span><span class="o">.</span><span class="n">to_polars_series</span><span class="p">()</span>  
+<span class="go">shape: (4,)</span>
+<span class="go">Series: &#39;&#39; [struct[2]]</span>
+<span class="go">[</span>
+<span class="go">    {25,&quot;Joseph&quot;}</span>
+<span class="go">    {31,&quot;Narendra&quot;}</span>
+<span class="go">    {33,&quot;Angela&quot;}</span>
+<span class="go">    {57,&quot;Mikhail&quot;}</span>
+<span class="go">]</span>
+</pre></div>
+</div>
+</section>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="vortex.encoding.Array.tree_display">
 <span class="sig-name descname"><span class="pre">tree_display</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.Array.tree_display" title="Link to this definition">#</a></dt>
 <dd><p>Internal technical details about the encoding of this Array.</p>
@@ -515,12 +655,12 @@ document.write(`
 <h2>Warnings<a class="headerlink" href="#warnings" title="Link to this heading">#</a></h2>
 <p>The format of the returned string may change without notice.</p>
 </section>
-<section id="id9">
-<h2>Returns<a class="headerlink" href="#id9" title="Link to this heading">#</a></h2>
+<section id="id17">
+<h2>Returns<a class="headerlink" href="#id17" title="Link to this heading">#</a></h2>
 <p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></p>
 </section>
-<section id="id10">
-<h2>Examples<a class="headerlink" href="#id10" title="Link to this heading">#</a></h2>
+<section id="id18">
+<h2>Examples<a class="headerlink" href="#id18" title="Link to this heading">#</a></h2>
 <p>Uncompressed arrays have straightforward encodings:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">arr</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">print</span><span class="p">(</span><span class="n">arr</span><span class="o">.</span><span class="n">tree_display</span><span class="p">())</span>
@@ -550,14 +690,14 @@ document.write(`
 </dd>
 </dl>
 </section>
-<section id="id11">
-<h2>Returns<a class="headerlink" href="#id11" title="Link to this heading">#</a></h2>
+<section id="id19">
+<h2>Returns<a class="headerlink" href="#id19" title="Link to this heading">#</a></h2>
 <p><a class="reference internal" href="#vortex.encoding.Array" title="vortex.encoding.Array"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.encoding.Array</span></code></a></p>
 </section>
-<section id="id12">
-<h2>Examples<a class="headerlink" href="#id12" title="Link to this heading">#</a></h2>
+<section id="id20">
+<h2>Examples<a class="headerlink" href="#id20" title="Link to this heading">#</a></h2>
 <p>A Vortex array containing the first three integers.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
 <span class="go">&lt;pyarrow.lib.Int64Array object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  1,</span>
@@ -567,7 +707,7 @@ document.write(`
 </pre></div>
 </div>
 <p>The same Vortex array with a null value in the third position.</p>
-<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
 <span class="go">&lt;pyarrow.lib.Int64Array object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  1,</span>
@@ -579,7 +719,7 @@ document.write(`
 </div>
 <p>Initialize a Vortex array from an Arrow array:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">arrow</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;Hello&#39;</span><span class="p">,</span> <span class="s1">&#39;it&#39;</span><span class="p">,</span> <span class="s1">&#39;is&#39;</span><span class="p">,</span> <span class="s1">&#39;me&#39;</span><span class="p">])</span>
-<span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">arrow</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow</span><span class="p">()</span>
+<span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">arrow</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
 <span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  &quot;Hello&quot;,</span>
@@ -596,15 +736,15 @@ document.write(`
 <dt class="sig sig-object py" id="vortex.encoding.compress">
 <span class="sig-prename descclassname"><span class="pre">vortex.encoding.</span></span><span class="sig-name descname"><span class="pre">compress</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#vortex.encoding.compress" title="Link to this definition">#</a></dt>
 <dd><p>Attempt to compress a vortex array.</p>
-<section id="id13">
-<h2>Parameters<a class="headerlink" href="#id13" title="Link to this heading">#</a></h2>
+<section id="id21">
+<h2>Parameters<a class="headerlink" href="#id21" title="Link to this heading">#</a></h2>
 <dl>
 <dt>array<span class="classifier"><a class="reference internal" href="#vortex.encoding.Array" title="vortex.encoding.Array"><code class="xref py py-class docutils literal notranslate"><span class="pre">vortex.encoding.Array</span></code></a></span></dt><dd><p>The array.</p>
 </dd>
 </dl>
 </section>
-<section id="id14">
-<h2>Examples<a class="headerlink" href="#id14" title="Link to this heading">#</a></h2>
+<section id="id22">
+<h2>Examples<a class="headerlink" href="#id22" title="Link to this heading">#</a></h2>
 <p>Compress a very sparse array of integers:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">42</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="nb">str</span><span class="p">(</span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">a</span><span class="p">))</span>
@@ -681,9 +821,12 @@ document.write(`
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.__len__"><code class="docutils literal notranslate"><span class="pre">Array.__len__()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.dtype"><code class="docutils literal notranslate"><span class="pre">Array.dtype</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.take"><code class="docutils literal notranslate"><span class="pre">Array.take()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.to_arrow"><code class="docutils literal notranslate"><span class="pre">Array.to_arrow()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.to_arrow_array"><code class="docutils literal notranslate"><span class="pre">Array.to_arrow_array()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.to_arrow_table"><code class="docutils literal notranslate"><span class="pre">Array.to_arrow_table()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.to_numpy"><code class="docutils literal notranslate"><span class="pre">Array.to_numpy()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.to_pandas"><code class="docutils literal notranslate"><span class="pre">Array.to_pandas()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.to_polars_dataframe"><code class="docutils literal notranslate"><span class="pre">Array.to_polars_dataframe()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.to_polars_series"><code class="docutils literal notranslate"><span class="pre">Array.to_polars_series()</span></code></a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#vortex.encoding.Array.tree_display"><code class="docutils literal notranslate"><span class="pre">Array.tree_display()</span></code></a></li>
 </ul>
 </li>
