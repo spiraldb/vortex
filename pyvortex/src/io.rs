@@ -246,7 +246,7 @@ pub fn write(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -> PyResult<()
 }
 
 #[pyclass(name = "Dataset", module = "io", sequence, subclass)]
-/// An array of zero or more *rows* each with the same set of *columns*.
+/// An on-disk Vortex dataset for use with an Arrow-compatible query engine.
 pub struct PyDataset {
     fname: String,
     _footer: Footer,
