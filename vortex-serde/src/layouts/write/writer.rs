@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::mem;
+use std::{io, mem};
 
 use flatbuffers::FlatBufferBuilder;
 use futures::{Stream, TryStreamExt};
@@ -15,7 +15,7 @@ use vortex_flatbuffers::WriteFlatBuffer;
 use crate::io::VortexWrite;
 use crate::layouts::write::footer::{Footer, Postscript};
 use crate::layouts::write::layouts::Layout;
-use crate::layouts::MAGIC_BYTES;
+use crate::layouts::{MAGIC_BYTES, VERSION};
 use crate::MessageWriter;
 
 pub struct LayoutWriter<W> {
@@ -173,17 +173,26 @@ impl<W: VortexWrite> LayoutWriter<W> {
             .await?;
 
         let mut w = self.msgs.into_inner();
-        let mut fbb = FlatBufferBuilder::new();
-        let ps_fb = ps.write_flatbuffer(&mut fbb);
-        fbb.finish_minimal(ps_fb);
-        let (buffer, buffer_begin) = fbb.collapse();
-        let buffer_end = buffer.len();
+        w = write_fb_raw(w, ps).await?;
 
-        w.write_all(buffer.slice_owned(buffer_begin..buffer_end))
-            .await?;
-        w.write_all(MAGIC_BYTES).await?;
+        let mut eof = [0u8; 8];
+        eof[2..4].copy_from_slice(&VERSION.to_le_bytes());
+        eof[4..8].copy_from_slice(&MAGIC_BYTES);
+        w.write_all(eof).await?;
         Ok(w)
     }
+}
+
+async fn write_fb_raw<W: VortexWrite, F: WriteFlatBuffer>(mut writer: W, fb: F) -> io::Result<W> {
+    let mut fbb = FlatBufferBuilder::new();
+    let ps_fb = fb.write_flatbuffer(&mut fbb);
+    fbb.finish_minimal(ps_fb);
+    let (buffer, buffer_begin) = fbb.collapse();
+    let buffer_end = buffer.len();
+    writer
+        .write_all(buffer.slice_owned(buffer_begin..buffer_end))
+        .await?;
+    Ok(writer)
 }
 
 #[derive(Clone, Debug)]
@@ -211,7 +220,7 @@ mod tests {
     use vortex_flatbuffers::WriteFlatBuffer;
 
     use crate::layouts::write::footer::Postscript;
-    use crate::layouts::{LayoutWriter, FILE_POSTSCRIPT_SIZE};
+    use crate::layouts::{LayoutWriter, FOOTER_POSTSCRIPT_SIZE};
 
     #[test]
     fn write_columns() {
@@ -242,7 +251,7 @@ mod tests {
 
         assert_eq!(
             buffer[buffer_begin..buffer_end].len(),
-            FILE_POSTSCRIPT_SIZE - 4
+            FOOTER_POSTSCRIPT_SIZE
         );
         assert_eq!(buffer[buffer_begin..buffer_end].len(), 32);
     }

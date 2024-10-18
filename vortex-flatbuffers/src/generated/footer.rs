@@ -369,73 +369,73 @@ impl core::fmt::Debug for Postscript<'_> {
   }
 }
 #[inline]
-/// Verifies that a buffer of bytes contains a `Postscript`
+/// Verifies that a buffer of bytes contains a `Footer`
 /// and returns it.
 /// Note that verification is still experimental and may not
 /// catch every error, or be maximally performant. For the
 /// previous, unchecked, behavior use
-/// `root_as_postscript_unchecked`.
-pub fn root_as_postscript(buf: &[u8]) -> Result<Postscript, flatbuffers::InvalidFlatbuffer> {
-  flatbuffers::root::<Postscript>(buf)
+/// `root_as_footer_unchecked`.
+pub fn root_as_footer(buf: &[u8]) -> Result<Footer, flatbuffers::InvalidFlatbuffer> {
+  flatbuffers::root::<Footer>(buf)
 }
 #[inline]
 /// Verifies that a buffer of bytes contains a size prefixed
-/// `Postscript` and returns it.
+/// `Footer` and returns it.
 /// Note that verification is still experimental and may not
 /// catch every error, or be maximally performant. For the
 /// previous, unchecked, behavior use
-/// `size_prefixed_root_as_postscript_unchecked`.
-pub fn size_prefixed_root_as_postscript(buf: &[u8]) -> Result<Postscript, flatbuffers::InvalidFlatbuffer> {
-  flatbuffers::size_prefixed_root::<Postscript>(buf)
+/// `size_prefixed_root_as_footer_unchecked`.
+pub fn size_prefixed_root_as_footer(buf: &[u8]) -> Result<Footer, flatbuffers::InvalidFlatbuffer> {
+  flatbuffers::size_prefixed_root::<Footer>(buf)
 }
 #[inline]
 /// Verifies, with the given options, that a buffer of bytes
-/// contains a `Postscript` and returns it.
+/// contains a `Footer` and returns it.
 /// Note that verification is still experimental and may not
 /// catch every error, or be maximally performant. For the
 /// previous, unchecked, behavior use
-/// `root_as_postscript_unchecked`.
-pub fn root_as_postscript_with_opts<'b, 'o>(
+/// `root_as_footer_unchecked`.
+pub fn root_as_footer_with_opts<'b, 'o>(
   opts: &'o flatbuffers::VerifierOptions,
   buf: &'b [u8],
-) -> Result<Postscript<'b>, flatbuffers::InvalidFlatbuffer> {
-  flatbuffers::root_with_opts::<Postscript<'b>>(opts, buf)
+) -> Result<Footer<'b>, flatbuffers::InvalidFlatbuffer> {
+  flatbuffers::root_with_opts::<Footer<'b>>(opts, buf)
 }
 #[inline]
 /// Verifies, with the given verifier options, that a buffer of
-/// bytes contains a size prefixed `Postscript` and returns
+/// bytes contains a size prefixed `Footer` and returns
 /// it. Note that verification is still experimental and may not
 /// catch every error, or be maximally performant. For the
 /// previous, unchecked, behavior use
-/// `root_as_postscript_unchecked`.
-pub fn size_prefixed_root_as_postscript_with_opts<'b, 'o>(
+/// `root_as_footer_unchecked`.
+pub fn size_prefixed_root_as_footer_with_opts<'b, 'o>(
   opts: &'o flatbuffers::VerifierOptions,
   buf: &'b [u8],
-) -> Result<Postscript<'b>, flatbuffers::InvalidFlatbuffer> {
-  flatbuffers::size_prefixed_root_with_opts::<Postscript<'b>>(opts, buf)
+) -> Result<Footer<'b>, flatbuffers::InvalidFlatbuffer> {
+  flatbuffers::size_prefixed_root_with_opts::<Footer<'b>>(opts, buf)
 }
 #[inline]
-/// Assumes, without verification, that a buffer of bytes contains a Postscript and returns it.
+/// Assumes, without verification, that a buffer of bytes contains a Footer and returns it.
 /// # Safety
-/// Callers must trust the given bytes do indeed contain a valid `Postscript`.
-pub unsafe fn root_as_postscript_unchecked(buf: &[u8]) -> Postscript {
-  flatbuffers::root_unchecked::<Postscript>(buf)
+/// Callers must trust the given bytes do indeed contain a valid `Footer`.
+pub unsafe fn root_as_footer_unchecked(buf: &[u8]) -> Footer {
+  flatbuffers::root_unchecked::<Footer>(buf)
 }
 #[inline]
-/// Assumes, without verification, that a buffer of bytes contains a size prefixed Postscript and returns it.
+/// Assumes, without verification, that a buffer of bytes contains a size prefixed Footer and returns it.
 /// # Safety
-/// Callers must trust the given bytes do indeed contain a valid size prefixed `Postscript`.
-pub unsafe fn size_prefixed_root_as_postscript_unchecked(buf: &[u8]) -> Postscript {
-  flatbuffers::size_prefixed_root_unchecked::<Postscript>(buf)
+/// Callers must trust the given bytes do indeed contain a valid size prefixed `Footer`.
+pub unsafe fn size_prefixed_root_as_footer_unchecked(buf: &[u8]) -> Footer {
+  flatbuffers::size_prefixed_root_unchecked::<Footer>(buf)
 }
 #[inline]
-pub fn finish_postscript_buffer<'a, 'b, A: flatbuffers::Allocator + 'a>(
+pub fn finish_footer_buffer<'a, 'b, A: flatbuffers::Allocator + 'a>(
     fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
-    root: flatbuffers::WIPOffset<Postscript<'a>>) {
+    root: flatbuffers::WIPOffset<Footer<'a>>) {
   fbb.finish(root, None);
 }
 
 #[inline]
-pub fn finish_size_prefixed_postscript_buffer<'a, 'b, A: flatbuffers::Allocator + 'a>(fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>, root: flatbuffers::WIPOffset<Postscript<'a>>) {
+pub fn finish_size_prefixed_footer_buffer<'a, 'b, A: flatbuffers::Allocator + 'a>(fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>, root: flatbuffers::WIPOffset<Footer<'a>>) {
   fbb.finish_size_prefixed(root, None);
 }

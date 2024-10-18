@@ -14,5 +14,5 @@ table Postscript {
     footer_offset: uint64;
 }
 
-root_type Footer;
 root_type Postscript;
+root_type Footer;
