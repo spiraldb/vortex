@@ -77,7 +77,7 @@ impl FromArrowType<&Field> for DType {
         match field.data_type() {
             DataType::Null => Null,
             DataType::Boolean => Bool(nullability),
-            DataType::Utf8View | DataType::LargeUtf8 | DataType::Utf8ViewView => Utf8(nullability),
+            DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => Utf8(nullability),
             DataType::Binary | DataType::LargeBinary | DataType::BinaryView => Binary(nullability),
             DataType::Date32
             | DataType::Date64
@@ -149,7 +149,7 @@ pub fn infer_data_type(dtype: &DType) -> VortexResult<DataType> {
             PType::F64 => DataType::Float64,
         },
         DType::Utf8(_) => DataType::Utf8View,
-        DType::Binary(_) => DataType::Binary,
+        DType::Binary(_) => DataType::BinaryView,
         DType::Struct(struct_dtype, _) => {
             let mut fields = Vec::with_capacity(struct_dtype.names().len());
             for (field_name, field_dt) in struct_dtype
@@ -211,7 +211,7 @@ mod test {
 
         assert_eq!(
             infer_data_type(&DType::Binary(Nullability::NonNullable)).unwrap(),
-            DataType::Binary
+            DataType::BinaryView
         );
 
         assert_eq!(
