@@ -1,19 +1,20 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use arrow::array::RecordBatchReader;
 use arrow::datatypes::SchemaRef;
-use arrow::pyarrow::ToPyArrow;
+use arrow::pyarrow::{IntoPyArrow, ToPyArrow};
 use pyo3::prelude::*;
 use pyo3::pyfunction;
 use pyo3::types::PyString;
 use tokio::fs::File;
 use vortex::arrow::infer_schema;
-use vortex::Array;
 use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
 use vortex_serde::layouts::{
     LayoutContext, LayoutDeserializer, LayoutReaderBuilder, Projection, RowFilter,
+    VortexRecordBatchReader,
 };
 
 use crate::error::PyVortexError;
@@ -46,16 +47,6 @@ impl PyDataset {
             schema: Arc::new(schema),
         })
     }
-
-    async fn read(
-        &self,
-        fname: &str,
-        projection: Projection,
-        batch_size: Option<usize>,
-        row_filter: Option<RowFilter>,
-    ) -> VortexResult<Array> {
-        io::async_read(fname, projection, batch_size, row_filter).await
-    }
 }
 
 #[pymethods]
@@ -87,9 +78,47 @@ impl PyDataset {
         tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()?
-            .block_on(self.read(self.fname(), projection, batch_size, row_filter))
+            .block_on(io::async_read(
+                self.fname(),
+                projection,
+                batch_size,
+                row_filter,
+            ))
             .map_err(PyVortexError::map_err)
             .map(PyArray::new)
+    }
+
+    #[pyo3(signature = (columns, batch_size, row_filter))]
+    pub fn to_record_batch_reader(
+        self_: PyRef<Self>,
+        columns: Option<Vec<String>>,
+        batch_size: Option<usize>,
+        row_filter: Option<&Bound<PyExpr>>,
+    ) -> PyResult<PyObject> {
+        let projection = match columns {
+            None => Projection::All,
+            Some(columns) => {
+                Projection::Flat(columns.into_iter().map(Field::Name).collect::<Vec<_>>())
+            }
+        };
+
+        let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
+
+        let layout_reader = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?
+            .block_on(io::layout_reader(
+                self_.fname(),
+                projection,
+                batch_size,
+                row_filter,
+            ))
+            .map_err(PyVortexError::map_err)?;
+
+        let record_batch_rader: Box<dyn RecordBatchReader + Send> =
+            Box::new(VortexRecordBatchReader::new(layout_reader).map_err(PyVortexError::map_err)?);
+
+        record_batch_rader.into_pyarrow(self_.py())
     }
 }
 

@@ -10,7 +10,8 @@ use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
 use vortex_serde::layouts::{
-    LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
+    LayoutBatchStream, LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter,
+    Projection, RowFilter,
 };
 
 use crate::error::PyVortexError;
@@ -169,12 +170,12 @@ pub fn read(
         .map(PyArray::new)
 }
 
-pub(crate) async fn async_read(
+pub(crate) async fn layout_reader(
     fname: &str,
     projection: Projection,
     batch_size: Option<usize>,
     row_filter: Option<RowFilter>,
-) -> VortexResult<Array> {
+) -> VortexResult<LayoutBatchStream<File>> {
     let file = File::open(Path::new(fname)).await?;
 
     let mut builder: LayoutReaderBuilder<File> = LayoutReaderBuilder::new(
@@ -194,7 +195,19 @@ pub(crate) async fn async_read(
         builder = builder.with_row_filter(row_filter);
     }
 
-    builder.build().await?.read_all().await
+    builder.build().await
+}
+
+pub(crate) async fn async_read(
+    fname: &str,
+    projection: Projection,
+    batch_size: Option<usize>,
+    row_filter: Option<RowFilter>,
+) -> VortexResult<Array> {
+    layout_reader(fname, projection, batch_size, row_filter)
+        .await?
+        .read_all()
+        .await
 }
 
 #[pyfunction]

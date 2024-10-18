@@ -124,6 +124,32 @@ class VortexDataset(pyarrow.dataset.Dataset):
     ) -> pa.Table:
         raise NotImplementedError("take")
 
+    def to_record_batch_reader(
+        self,
+        columns: list[str] | None = None,
+        filter: pc.Expression | None = None,
+        batch_size: int | None = None,
+        batch_readahead: int | None = None,
+        fragment_readahead: int | None = None,
+        fragment_scan_options: pa.dataset.FragmentScanOptions | None = None,
+        use_threads: bool = True,
+        memory_pool: pa.MemoryPool = None,
+    ):
+        if batch_readahead is not None:
+            raise ValueError("batch_readahead not supported")
+        if fragment_readahead is not None:
+            raise ValueError("fragment_readahead not supported")
+        if fragment_scan_options is not None:
+            raise ValueError("fragment_scan_options not supported")
+        if use_threads is True:
+            warnings.warn("Vortex does not support threading. Ignoring use_threads=True")
+        if columns is not None and len(columns) == 0:
+            raise ValueError("empty projections are not currently supported")
+        del memory_pool
+        if filter is not None:
+            filter = arrow_to_vortex_expr(filter, self.schema)
+        return self._dataset.to_record_batch_reader(columns, batch_size, filter)
+
     def to_batches(
         self,
         columns: list[str] | None = None,
@@ -233,7 +259,16 @@ class VortexScanner(pa.dataset.Scanner):
         )
 
     def to_reader(self) -> pa.RecordBatchReader:
-        raise NotImplementedError
+        return self._dataset.to_record_batch_reader(
+            self._columns,
+            self._filter,
+            self._batch_size,
+            self._batch_readahead,
+            self._fragment_readahead,
+            self._fragment_scan_options,
+            self._use_threads,
+            self._memory_pool,
+        )
 
     def to_table(self) -> pa.Table:
         return self._dataset.to_table(
