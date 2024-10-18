@@ -2,10 +2,7 @@ use bytes::Bytes;
 use flatbuffers::{FlatBufferBuilder, WIPOffset};
 use vortex_flatbuffers::{footer as fb, WriteFlatBuffer};
 
-use crate::layouts::{
-    LayoutId, CHUNKED_LAYOUT_ID,
-    COLUMN_LAYOUT_ID, FLAT_LAYOUT_ID,
-};
+use crate::layouts::{LayoutId, CHUNKED_LAYOUT_ID, COLUMN_LAYOUT_ID, FLAT_LAYOUT_ID};
 
 #[derive(Debug, Clone)]
 pub struct Layout {
@@ -25,6 +22,9 @@ impl Layout {
         }
     }
 
+    /// Create a chunked layout with children.
+    ///
+    /// has_metadata indicates whether first child is a layout containing metadata about other children.
     pub fn chunked(children: Vec<Layout>, has_metadata: bool) -> Self {
         Self {
             id: CHUNKED_LAYOUT_ID,
