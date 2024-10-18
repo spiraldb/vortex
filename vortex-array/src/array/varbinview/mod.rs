@@ -1,13 +1,13 @@
 use std::fmt::{Debug, Display, Formatter};
+use std::slice;
 use std::sync::Arc;
-use std::{mem, slice};
 
-use ::serde::{Deserialize, Serialize};
 use arrow_array::builder::{BinaryViewBuilder, GenericByteViewBuilder, StringViewBuilder};
 use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
 use arrow_array::{ArrayRef, BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
+use ::serde::{Deserialize, Serialize};
 use static_assertions::{assert_eq_align, assert_eq_size};
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect, VortexResult};
@@ -94,7 +94,14 @@ impl Ref {
 #[derive(Clone, Copy)]
 #[repr(C, align(8))]
 pub union BinaryView {
+    // Numeric representation. This is logically `u128`, but we split it into the high and low
+    // bits to preserve the alignment.
+    num: [u64; 2],
+
+    // Inlined representation: strings <= 12 bytes
     inlined: Inlined,
+
+    // Reference type: strings > 12 bytes.
     _ref: Ref,
 }
 
@@ -149,7 +156,13 @@ impl BinaryView {
     }
 
     pub fn as_u128(&self) -> u128 {
-        unsafe { mem::transmute::<BinaryView, u128>(*self) }
+        let mut tmp = 0u128;
+        unsafe {
+            tmp |= self.num[0] as u128;
+            tmp |= (self.num[1] as u128) << 64;
+        }
+
+        tmp
     }
 }
 

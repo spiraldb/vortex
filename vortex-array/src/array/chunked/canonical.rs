@@ -1,4 +1,3 @@
-use arrow_array::UInt8Array;
 use arrow_buffer::{BooleanBufferBuilder, Buffer, MutableBuffer, ScalarBuffer};
 use vortex_dtype::{DType, PType, StructDType};
 use vortex_error::{vortex_bail, vortex_err, ErrString, VortexResult};
@@ -9,7 +8,6 @@ use crate::array::null::NullArray;
 use crate::array::primitive::PrimitiveArray;
 use crate::array::struct_::StructArray;
 use crate::array::{BinaryView, BoolArray, VarBinViewArray};
-use crate::arrow::FromArrowArray;
 use crate::validity::Validity;
 use crate::{
     Array, ArrayDType, ArrayValidity, Canonical, IntoArray, IntoArrayVariant, IntoCanonical,
@@ -198,7 +196,7 @@ fn pack_views(
     dtype: &DType,
     validity: Validity,
 ) -> VortexResult<VarBinViewArray> {
-    let mut views = Vec::new();
+    let mut views: Vec<u128> = Vec::new();
     let mut buffers = Vec::new();
     for chunk in chunks {
         // Each chunk's views have buffer IDs that are zero-referenced.
@@ -215,34 +213,25 @@ fn pack_views(
         for view in canonical_chunk.view_slice() {
             if view.is_inlined() {
                 // Inlined views can be copied directly into the output
-                views.push(*view);
+                views.push(view.as_u128());
             } else {
                 // Referencing views must have their buffer_index adjusted with new offsets
                 let view_ref = view.as_view();
-                views.push(BinaryView::new_view(
-                    view.len(),
-                    *view_ref.prefix(),
-                    (buffers_offset as u32) + view_ref.buffer_index(),
-                    view_ref.offset(),
-                ));
+                views.push(
+                    BinaryView::new_view(
+                        view.len(),
+                        *view_ref.prefix(),
+                        (buffers_offset as u32) + view_ref.buffer_index(),
+                        view_ref.offset(),
+                    )
+                    .as_u128(),
+                );
             }
         }
     }
 
-    // Reinterpret views from Vec<BinaryView> to Vec<u8>.
-    // BinaryView is 16 bytes, so we need to be careful to set the length
-    // and capacity of the new Vec accordingly.
-    let (ptr, length, capacity) = views.into_raw_parts();
-    let views_u8: Vec<u8> = unsafe { Vec::from_raw_parts(ptr.cast(), 16 * length, 16 * capacity) };
-
-    let arrow_views_array = UInt8Array::new(ScalarBuffer::from(views_u8), None);
-
-    VarBinViewArray::try_new(
-        Array::from_arrow(&arrow_views_array, false),
-        buffers,
-        dtype.clone(),
-        validity,
-    )
+    let views_buffer: Buffer = ScalarBuffer::<u128>::from(views).into_inner().into();
+    VarBinViewArray::try_new(Array::from(views_buffer), buffers, dtype.clone(), validity)
 }
 
 #[cfg(test)]
