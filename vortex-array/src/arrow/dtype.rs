@@ -77,7 +77,7 @@ impl FromArrowType<&Field> for DType {
         match field.data_type() {
             DataType::Null => Null,
             DataType::Boolean => Bool(nullability),
-            DataType::Utf8 | DataType::LargeUtf8 | DataType::Utf8View => Utf8(nullability),
+            DataType::Utf8View | DataType::LargeUtf8 | DataType::Utf8ViewView => Utf8(nullability),
             DataType::Binary | DataType::LargeBinary | DataType::BinaryView => Binary(nullability),
             DataType::Date32
             | DataType::Date64
@@ -148,7 +148,7 @@ pub fn infer_data_type(dtype: &DType) -> VortexResult<DataType> {
             PType::F32 => DataType::Float32,
             PType::F64 => DataType::Float64,
         },
-        DType::Utf8(_) => DataType::Utf8,
+        DType::Utf8(_) => DataType::Utf8View,
         DType::Binary(_) => DataType::Binary,
         DType::Struct(struct_dtype, _) => {
             let mut fields = Vec::with_capacity(struct_dtype.names().len());
@@ -206,7 +206,7 @@ mod test {
 
         assert_eq!(
             infer_data_type(&DType::Utf8(Nullability::NonNullable)).unwrap(),
-            DataType::Utf8
+            DataType::Utf8View
         );
 
         assert_eq!(
@@ -225,7 +225,7 @@ mod test {
             .unwrap(),
             DataType::Struct(Fields::from(vec![
                 FieldRef::from(Field::new("field_a", DataType::Boolean, false)),
-                FieldRef::from(Field::new("field_b", DataType::Utf8, true)),
+                FieldRef::from(Field::new("field_b", DataType::Utf8View, true)),
             ]))
         );
     }
@@ -249,7 +249,7 @@ mod test {
             infer_schema(&schema_nonnull).unwrap(),
             Schema::new(Fields::from(vec![
                 Field::new("field_a", DataType::Boolean, false),
-                Field::new("field_b", DataType::Utf8, false),
+                Field::new("field_b", DataType::Utf8View, false),
                 Field::new("field_c", DataType::Int32, true),
             ]))
         );
