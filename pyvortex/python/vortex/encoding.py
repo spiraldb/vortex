@@ -1,7 +1,21 @@
 from typing import TYPE_CHECKING
 
-import pandas
 import pyarrow
+import pandas
+
+# HACK: monkey-patch a fixed implementation of the pd.ArrowDtype.type property accessor.
+# See https://github.com/pandas-dev/pandas/issues/60068 for more details
+
+_old_ArrowDtype_type = pandas.ArrowDtype.type
+@property
+def __ArrowDtype_type_patched(self):
+    if pyarrow.types.is_string_view(self.pyarrow_dtype):
+        return str
+    if pyarrow.types.is_binary_view(self.pyarrow_dtype):
+        return bytes
+    return _old_ArrowDtype_type(self)
+
+pandas.ArrowDtype.type = __ArrowDtype_type_patched
 
 from ._lib import encoding as _encoding
 
@@ -88,10 +102,12 @@ def _Array_to_pandas(self: _encoding.Array) -> "pandas.DataFrame":
     ...     {'name': 'Angela', 'age': 33},
     ...     {'name': 'Mikhail', 'age': 57},
     ... ])
-    >>> array.to_pandas().dtypes
-    age           int64[pyarrow]
-    name    string_view[pyarrow]
-    dtype: object
+    >>> array.to_pandas()
+       age      name
+    0   25    Joseph
+    1   31  Narendra
+    2   33    Angela
+    3   57   Mikhail
 
 
     Lift the struct fields to the top-level in the dataframe:
