@@ -7,8 +7,7 @@ use vortex_scalar::{BinaryScalar, BoolScalar, Utf8Scalar};
 
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
-use crate::array::varbin::VarBinArray;
-use crate::array::BoolArray;
+use crate::array::{BoolArray, VarBinViewArray};
 use crate::validity::Validity;
 use crate::{ArrayDType, Canonical, IntoCanonical};
 
@@ -39,7 +38,7 @@ impl IntoCanonical for ConstantArray {
             let value = s.value();
             let const_value = value.as_ref().map(|v| v.as_bytes());
 
-            return Ok(Canonical::VarBin(VarBinArray::from_iter(
+            return Ok(Canonical::VarBinView(VarBinViewArray::from_iter(
                 iter::repeat(const_value).take(self.len()),
                 DType::Utf8(validity.nullability()),
             )));
@@ -49,7 +48,7 @@ impl IntoCanonical for ConstantArray {
             let value = b.value();
             let const_value = value.as_ref().map(|v| v.as_slice());
 
-            return Ok(Canonical::VarBin(VarBinArray::from_iter(
+            return Ok(Canonical::VarBinView(VarBinViewArray::from_iter(
                 iter::repeat(const_value).take(self.len()),
                 DType::Binary(validity.nullability()),
             )));
@@ -65,5 +64,30 @@ impl IntoCanonical for ConstantArray {
         }
 
         vortex_bail!("Unsupported scalar type {}", self.dtype())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::array::ConstantArray;
+    use crate::compute::unary::scalar_at;
+    use crate::IntoCanonical;
+
+    #[test]
+    fn test_canonicalize_const_str() {
+        let const_array = ConstantArray::new("four".to_string(), 4);
+
+        // Check all values correct.
+        let canonical = const_array
+            .into_canonical()
+            .unwrap()
+            .into_varbinview()
+            .unwrap();
+
+        assert_eq!(canonical.len(), 4);
+
+        for i in 0..=3 {
+            assert_eq!(scalar_at(&canonical, i).unwrap(), "four".into(),);
+        }
     }
 }

@@ -205,6 +205,17 @@ impl VarBinArray {
         let sliced = slice(self.bytes(), start, end)?;
         Ok(sliced.into_primitive()?.buffer().clone())
     }
+
+    /// Consumes self, returning a tuple containing the `DType`, the `bytes` array,
+    /// the `offsets` array, and the `validity`.
+    pub fn into_parts(self) -> (DType, Array, Array, Validity) {
+        (
+            self.dtype().clone(),
+            self.bytes(),
+            self.offsets(),
+            self.validity(),
+        )
+    }
 }
 
 impl ArrayTrait for VarBinArray {}

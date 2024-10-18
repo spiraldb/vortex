@@ -209,7 +209,7 @@ impl PyArray {
     ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
     ///     >>> indices = vortex.encoding.array([0, 2])
     ///     >>> a.take(indices).to_arrow_array()
-    ///     <pyarrow.lib.StringArray object at ...>
+    ///     <pyarrow.lib.StringViewArray object at ...>
     ///     [
     ///       "a",
     ///       "c"
@@ -220,7 +220,7 @@ impl PyArray {
     ///     >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
     ///     >>> indices = vortex.encoding.array([0, 1, 1, 0])
     ///     >>> a.take(indices).to_arrow_array()
-    ///     <pyarrow.lib.StringArray object at ...>
+    ///     <pyarrow.lib.StringViewArray object at ...>
     ///     [
     ///       "a",
     ///       "b",
