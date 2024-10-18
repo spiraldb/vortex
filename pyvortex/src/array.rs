@@ -2,11 +2,14 @@ use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyList};
+use pyo3::types::{IntoPyDict, PyDict, PyInt, PyList};
 use vortex::array::ChunkedArray;
-use vortex::compute::unary::fill_forward;
+use vortex::compute::unary::{fill_forward, scalar_at};
 use vortex::compute::{slice, take};
 use vortex::{Array, ArrayDType, IntoCanonical};
+use vortex_dtype::DType;
+use vortex_error::vortex_panic;
+use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
@@ -190,6 +193,69 @@ impl PyArray {
             .map(|arr| PyArray { inner: arr })
     }
 
+    /// Retrieve a row by its index.
+    ///
+    /// Parameters
+    /// ----------
+    /// index : :class:`int`
+    ///     The index of interest. Must be greater than or equal to zero and less than the length of
+    ///     this array.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`Any`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Retrieve the third element from an array of strings:
+    ///
+    /// >>> vortex.encoding.array(["hello", "goodbye", "it", "is"]).scalar_at(2)
+    /// 'it'
+    ///
+    /// Retrieve the last element from an array of integers:
+    ///
+    /// >>> vortex.encoding.array([10, 42, 999, 1992]).scalar_at(3)
+    /// 1992
+    ///
+    /// Retrieve an element from an array of structures:
+    ///
+    /// >>> array = vortex.encoding.array([
+    /// ...     {'name': 'Joseph', 'age': 25},
+    /// ...     {'name': 'Narendra', 'age': 31},
+    /// ...     {'name': 'Angela', 'age': 33},
+    /// ...     None,
+    /// ...     {'name': 'Mikhail', 'age': 57},
+    /// ... ])
+    /// >>> array.scalar_at(2)
+    /// {'age': 33, 'name': 'Angela'}
+    ///
+    /// Retrieve a missing element from an array of structures:
+    ///
+    /// >>> array.scalar_at(3) is None
+    /// True
+    ///
+    /// Out of bounds accesses are prohibited:
+    ///
+    /// >>> vortex.encoding.array([10, 42, 999, 1992]).scalar_at(10)
+    /// Traceback (most recent call last):
+    /// ...
+    /// ValueError: index 10 out of bounds from 0 to 4
+    /// ...
+    ///
+    /// Unlike Python, negative indices are not supported:
+    ///
+    /// >>> vortex.encoding.array([10, 42, 999, 1992]).scalar_at(-2)
+    /// Traceback (most recent call last):
+    /// ...
+    /// OverflowError: can't convert negative int to unsigned
+    ///
+    fn scalar_at(&self, index: &Bound<PyInt>) -> PyResult<PyObject> {
+        scalar_at(&self.inner, index.extract()?)
+            .map_err(PyVortexError::map_err)
+            .and_then(|scalar| scalar_to_py(index.py(), &scalar))
+    }
+
     /// Filter, permute, and/or repeat elements by their index.
     ///
     /// Parameters
@@ -329,4 +395,47 @@ impl PyArray {
     fn tree_display(&self) -> String {
         self.inner.tree_display().to_string()
     }
+}
+
+fn scalar_to_py(py: Python, x: &Scalar) -> PyResult<PyObject> {
+    scalar_value_to_py(py, x.value(), x.dtype())
+}
+
+fn scalar_value_to_py(py: Python, x: &ScalarValue, dtype: &DType) -> PyResult<PyObject> {
+    return match x {
+        ScalarValue::Bool(x) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::U8(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::U16(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::U32(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::U64(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::I8(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::I16(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::I32(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::I64(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::F16(x)) => Ok(x.to_f32().into_py(py)),
+        ScalarValue::Primitive(PValue::F32(x)) => Ok(x.into_py(py)),
+        ScalarValue::Primitive(PValue::F64(x)) => Ok(x.into_py(py)),
+        ScalarValue::Buffer(x) => Ok(x.into_py(py)),
+        ScalarValue::BufferString(x) => Ok(x.into_py(py)),
+        ScalarValue::List(x) => match dtype {
+            DType::List(dtype, ..) => Ok(x
+                .iter()
+                .map(|x| scalar_value_to_py(py, x, dtype))
+                .collect::<Result<Vec<_>, _>>()?
+                .into_py(py)),
+            DType::Struct(dtype, ..) => {
+                let dict = PyDict::new_bound(py);
+                for ((child, name), dtype) in x
+                    .iter()
+                    .zip(dtype.names().iter())
+                    .zip(dtype.dtypes().iter())
+                {
+                    dict.set_item(name.to_string(), scalar_value_to_py(py, child, dtype)?)?
+                }
+                Ok(dict.into_py(py))
+            }
+            _ => vortex_panic!("impossible"),
+        },
+        ScalarValue::Null => Ok(py.None()),
+    };
 }
