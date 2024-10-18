@@ -386,13 +386,13 @@ mod test {
     use datafusion_physical_expr::create_physical_expr;
     use itertools::Itertools;
     use vortex::array::{BoolArray, ChunkedArray, PrimitiveArray, StructArray};
+    use vortex::arrow::infer_schema;
     use vortex::validity::Validity;
     use vortex::{ArrayDType, IntoArray};
     use vortex_dtype::field::Field;
     use vortex_dtype::FieldName;
     use vortex_expr::datafusion::convert_expr_to_vortex;
 
-    use crate::datatype::infer_schema;
     use crate::plans::{RowIndicesStream, ROW_SELECTOR_SCHEMA_REF};
 
     #[tokio::test]
@@ -414,7 +414,7 @@ mod test {
         let chunked_array =
             ChunkedArray::try_new(vec![chunk.clone(), chunk.clone()], dtype).unwrap();
 
-        let schema = infer_schema(chunk.dtype());
+        let schema = infer_schema(chunk.dtype()).unwrap();
         let logical_expr = and((col("a")).eq(lit(2u64)), col("b").eq(lit(true)));
         let df_expr = create_physical_expr(
             &logical_expr,
