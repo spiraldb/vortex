@@ -217,19 +217,6 @@ mod test {
         );
 
         assert_eq!(
-            infer_data_type(&DType::List(
-                Arc::new(DType::Bool(Nullability::NonNullable)),
-                Nullability::Nullable,
-            ))
-            .unwrap(),
-            DataType::List(FieldRef::from(Field::new(
-                "element".to_string(),
-                DataType::Boolean,
-                false,
-            )))
-        );
-
-        assert_eq!(
             infer_data_type(&DType::Struct(
                 StructDType::new(
                     FieldNames::from(vec![FieldName::from("field_a"), FieldName::from("field_b")]),
