@@ -38,8 +38,8 @@ dev-dependencies = [
     "pandas>=2.2.2",
     "pip",
     "pyright>=1.1.385",
-    "polars>1.9.0",
-    "duckdb>1.1.2",
+    "polars>=1.9.0",
+    "duckdb>=1.1.2",
 ]
 
 [tool.maturin]
