@@ -20,7 +20,6 @@ pub use builder::LayoutReaderBuilder;
 pub use cache::LayoutMessageCache;
 pub use context::*;
 pub use filtering::RowFilter;
-pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec, FlatLayoutSpec};
 pub use stream::LayoutBatchStream;
 pub use vortex_schema::projection::Projection;
 pub use vortex_schema::Schema;

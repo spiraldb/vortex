@@ -18,13 +18,9 @@ use crate::stream_writer::ByteRange;
 #[derive(Debug)]
 pub struct FlatLayoutSpec;
 
-impl FlatLayoutSpec {
-    pub const ID: LayoutId = FLAT_LAYOUT_ID;
-}
-
 impl LayoutSpec for FlatLayoutSpec {
     fn id(&self) -> LayoutId {
-        Self::ID
+        FLAT_LAYOUT_ID
     }
 
     fn layout(

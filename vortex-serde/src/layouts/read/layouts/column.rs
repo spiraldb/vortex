@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use bytes::Bytes;
-use cate::layouts::read::batch::BatchReader;
 use flatbuffers::{ForwardsUOffset, Vector};
 use itertools::Itertools;
 use vortex_dtype::DType;
@@ -9,6 +8,7 @@ use vortex_error::{vortex_bail, vortex_err, VortexResult};
 use vortex_flatbuffers::footer as fb;
 use vortex_schema::projection::Projection;
 
+use crate::layouts::read::batch::BatchReader;
 use crate::layouts::read::cache::{LazyDeserializedDType, RelativeLayoutCache};
 use crate::layouts::read::context::{LayoutDeserializer, LayoutId, LayoutSpec};
 use crate::layouts::read::{LayoutReader, ReadResult, Scan};
@@ -17,13 +17,9 @@ use crate::layouts::COLUMN_LAYOUT_ID;
 #[derive(Debug)]
 pub struct ColumnLayoutSpec;
 
-impl ColumnLayoutSpec {
-    pub const ID: LayoutId = COLUMN_LAYOUT_ID;
-}
-
 impl LayoutSpec for ColumnLayoutSpec {
     fn id(&self) -> LayoutId {
-        Self::ID
+        COLUMN_LAYOUT_ID
     }
 
     fn layout(

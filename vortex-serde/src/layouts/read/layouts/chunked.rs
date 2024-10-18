@@ -13,13 +13,9 @@ use crate::layouts::{
 #[derive(Debug)]
 pub struct ChunkedLayoutSpec;
 
-impl ChunkedLayoutSpec {
-    pub const ID: LayoutId = CHUNKED_LAYOUT_ID;
-}
-
 impl LayoutSpec for ChunkedLayoutSpec {
     fn id(&self) -> LayoutId {
-        Self::ID
+        CHUNKED_LAYOUT_ID
     }
 
     fn layout(
