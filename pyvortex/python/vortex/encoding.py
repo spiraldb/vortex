@@ -53,7 +53,7 @@ def _Array_to_arrow_table(self: _encoding.Array) -> pyarrow.Table:
     >>> array.to_arrow_table()
     pyarrow.Table
     age: int64
-    name: string
+    name: string_view
     ----
     age: [[25,31,33,57]]
     name: [["Joseph","Narendra","Angela","Mikhail"]]
@@ -291,7 +291,7 @@ def array(obj: pyarrow.Array | list) -> Array:
 
     >>> arrow = pyarrow.array(['Hello', 'it', 'is', 'me'])
     >>> vortex.encoding.array(arrow).to_arrow_array()
-    <pyarrow.lib.StringArray object at ...>
+    <pyarrow.lib.StringViewArray object at ...>
     [
       "Hello",
       "it",
