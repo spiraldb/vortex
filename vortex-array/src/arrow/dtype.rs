@@ -10,6 +10,8 @@
 //! For this reason, it's recommended to do as much computation as possible within Vortex, and then
 //! materialize an Arrow ArrayRef at the very end of the processing chain.
 
+use std::sync::Arc;
+
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaBuilder, SchemaRef};
 use itertools::Itertools;
 use vortex_datetime_dtype::arrow::{make_arrow_temporal_dtype, make_temporal_ext_dtype};
