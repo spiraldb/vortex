@@ -10,6 +10,7 @@ use vortex_flatbuffers::footer;
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::{
     LayoutDeserializer, LayoutId, LayoutReader, LayoutSpec, Message, ReadResult, Scan,
+    FLAT_LAYOUT_ID,
 };
 use crate::message_reader::ArrayBufferReader;
 use crate::stream_writer::ByteRange;
@@ -18,7 +19,7 @@ use crate::stream_writer::ByteRange;
 pub struct FlatLayoutSpec;
 
 impl FlatLayoutSpec {
-    pub const ID: LayoutId = LayoutId(1);
+    pub const ID: LayoutId = FLAT_LAYOUT_ID;
 }
 
 impl LayoutSpec for FlatLayoutSpec {

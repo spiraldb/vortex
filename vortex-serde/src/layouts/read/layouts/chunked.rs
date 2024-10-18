@@ -6,13 +6,15 @@ use vortex_flatbuffers::footer;
 
 use crate::layouts::read::buffered::BufferedReader;
 use crate::layouts::read::cache::RelativeLayoutCache;
-use crate::layouts::{LayoutDeserializer, LayoutId, LayoutReader, LayoutSpec, ReadResult, Scan};
+use crate::layouts::{
+    LayoutDeserializer, LayoutId, LayoutReader, LayoutSpec, ReadResult, Scan, CHUNKED_LAYOUT_ID,
+};
 
 #[derive(Debug)]
 pub struct ChunkedLayoutSpec;
 
 impl ChunkedLayoutSpec {
-    pub const ID: LayoutId = LayoutId(2);
+    pub const ID: LayoutId = CHUNKED_LAYOUT_ID;
 }
 
 impl LayoutSpec for ChunkedLayoutSpec {

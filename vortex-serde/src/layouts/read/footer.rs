@@ -39,18 +39,18 @@ use crate::FLATBUFFER_SIZE_LENGTH;
 pub struct Footer {
     pub(crate) schema_offset: u64,
     pub(crate) footer_offset: u64,
-    pub(crate) leftovers: Bytes,
-    pub(crate) leftovers_offset: u64,
+    pub(crate) initial_read: Bytes,
+    pub(crate) initial_read_offset: u64,
     pub(crate) layout_serde: LayoutDeserializer,
 }
 
 impl Footer {
     fn leftovers_layout_offset(&self) -> usize {
-        (self.footer_offset - self.leftovers_offset) as usize
+        (self.footer_offset - self.initial_read_offset) as usize
     }
 
     fn leftovers_schema_offset(&self) -> usize {
-        (self.schema_offset - self.leftovers_offset) as usize
+        (self.schema_offset - self.initial_read_offset) as usize
     }
 
     pub fn layout(
@@ -59,9 +59,9 @@ impl Footer {
         message_cache: RelativeLayoutCache,
     ) -> VortexResult<Box<dyn LayoutReader>> {
         let start_offset = self.leftovers_layout_offset();
-        let end_offset = self.leftovers.len() - FILE_POSTSCRIPT_SIZE;
+        let end_offset = self.initial_read.len() - FILE_POSTSCRIPT_SIZE;
         let footer_bytes = self
-            .leftovers
+            .initial_read
             .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset);
         let fb_footer = root::<vortex_flatbuffers::footer::Footer>(&footer_bytes)?;
 
@@ -77,7 +77,7 @@ impl Footer {
         let start_offset = self.leftovers_schema_offset();
         let end_offset = self.leftovers_layout_offset();
         let bytes = self
-            .leftovers
+            .initial_read
             .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset);
         // Run validation on dtype bytes
         self.fb_schema()?;
@@ -104,7 +104,7 @@ impl Footer {
     fn fb_schema(&self) -> VortexResult<fb::Schema> {
         let start_offset = self.leftovers_schema_offset();
         let end_offset = self.leftovers_layout_offset();
-        let dtype_bytes = &self.leftovers[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
+        let dtype_bytes = &self.initial_read[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
 
         root::<fb::Message>(dtype_bytes)
             .map_err(|e| e.into())
@@ -158,8 +158,8 @@ impl FooterReader {
         Ok(Footer {
             schema_offset: ps.schema_offset(),
             footer_offset: ps.footer_offset(),
-            leftovers: buf.freeze(),
-            leftovers_offset: read_offset,
+            initial_read: buf.freeze(),
+            initial_read_offset: read_offset,
             layout_serde: self.layout_serde.clone(),
         })
     }

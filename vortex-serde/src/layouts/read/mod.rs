@@ -28,10 +28,13 @@ pub use vortex_schema::Schema;
 use crate::stream_writer::ByteRange;
 
 // Recommended read-size according to the AWS performance guide
-const INITIAL_READ_SIZE: usize = 8 * 1024 * 1024;
-const DEFAULT_BATCH_SIZE: usize = 65536;
+pub const INITIAL_READ_SIZE: usize = 8 * 1024 * 1024;
+pub const DEFAULT_BATCH_SIZE: usize = 65536;
 // Size of serialize Postscript Flatbuffer + 4 magic bytes
-const FILE_POSTSCRIPT_SIZE: usize = 36;
+pub const FILE_POSTSCRIPT_SIZE: usize = 36;
+pub const FLAT_LAYOUT_ID: LayoutId = LayoutId(1);
+pub const CHUNKED_LAYOUT_ID: LayoutId = LayoutId(2);
+pub const COLUMN_LAYOUT_ID: LayoutId = LayoutId(3);
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
