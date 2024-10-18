@@ -146,7 +146,6 @@ impl PyArray {
     ///     An array with whom to compare elements.
     ///
     /// operator : :class:`str`
-    ///
     ///     One of `eq`, `ne`, `gt`, `ge`, `lt`, or `le` indicating which binary comparison operator
     ///     to apply.
     ///
