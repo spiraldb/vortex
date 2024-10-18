@@ -2,7 +2,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 from substrait.proto import ExtendedExpression
 
-from ._lib import expr
+from .._lib import expr
 from ..substrait import extended_expression
 
 

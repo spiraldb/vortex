@@ -2,16 +2,17 @@ from typing import Any, Iterator
 
 import warnings
 import pyarrow as pa
+import pyarrow.dataset
 import pyarrow.compute as pc
 
-from ._lib import io
+from ._lib import dataset
 from .arrow.expression import arrow_to_vortex as arrow_to_vortex_expr
 
 
-class VortexDataset(pa.dataset.Dataset):
+class VortexDataset(pyarrow.dataset.Dataset):
     def __init__(self, fname: str):
         self._fname = fname
-        self._dataset = io.dataset(fname)
+        self._dataset = dataset.dataset(fname)
 
     @property
     def schema(self) -> pa.Schema:
@@ -81,25 +82,33 @@ class VortexDataset(pa.dataset.Dataset):
     def replace_schema(self, schema: pa.Schema):
         raise NotImplementedError("replace_schema")
 
-    # py:meth reference target not found: Scanner.from_dataset [ref.meth]
-    #
-    # def scanner(
-    #     self,
-    #     columns: list[str] | None = None,
-    #     filter: pc.Expression | None = None,
-    #     batch_size: int | None = None,
-    #     batch_readahead: int | None = None,
-    #     fragment_readahead: int | None = None,
-    #     fragment_scan_options: pa.dataset.FragmentScanOptions | None = None,
-    #     use_threads: bool = True,
-    #     memory_pool: pa.MemoryPool = None,
-    # ) -> pa.dataset.Scanner:
-    #     raise NotImplementedError('scanner')
+    def scanner(
+        self,
+        columns: list[str] | None = None,
+        filter: pc.Expression | None = None,
+        batch_size: int | None = None,
+        batch_readahead: int | None = None,
+        fragment_readahead: int | None = None,
+        fragment_scan_options: pa.dataset.FragmentScanOptions | None = None,
+        use_threads: bool = True,
+        memory_pool: pa.MemoryPool = None,
+    ) -> pa.dataset.Scanner:
+        """Scan the dataset"""
+        return VortexScanner(
+            self,
+            columns,
+            filter,
+            batch_size,
+            batch_readahead,
+            fragment_readahead,
+            fragment_scan_options,
+            use_threads,
+            memory_pool,
+        )
 
-    # Inline strong start-string without end-string. [docutils]
-    #
-    # def sort_by(self, sorting, **kwargs) -> pa.dataset.InMemoryDataset:
-    #     raise NotImplementedError('sort_by')
+    def sort_by(self, sorting, **kwargs) -> pa.dataset.InMemoryDataset:
+        """Sort the dataset"""
+        raise NotImplementedError("sort_by")
 
     def take(
         self,
@@ -130,7 +139,7 @@ class VortexDataset(pa.dataset.Dataset):
 
     def to_table(
         self,
-        columns=None,
+        columns: list[str] | None = None,
         filter: pc.Expression | None = None,
         batch_size: int | None = None,
         batch_readahead: int | None = None,
@@ -158,27 +167,82 @@ class VortexDataset(pa.dataset.Dataset):
 class VortexScanner(pa.dataset.Scanner):
     """A PyArrow Dataset Scanner that reads from a Vortex Array."""
 
-    def __init__(self):
-        pass
+    def __init__(
+        self,
+        dataset: VortexDataset,
+        columns: list[str] | None = None,
+        filter: pc.Expression | None = None,
+        batch_size: int | None = None,
+        batch_readahead: int | None = None,
+        fragment_readahead: int | None = None,
+        fragment_scan_options: pa.dataset.FragmentScanOptions | None = None,
+        use_threads: bool = True,
+        memory_pool: pa.MemoryPool = None,
+    ):
+        self._dataset = dataset
+        self._columns = columns
+        self._filter = filter
+        self._batch_size = batch_size
+        self._batch_readahead = batch_readahead
+        self._fragment_readahead = fragment_readahead
+        self._fragment_scan_options = fragment_scan_options
+        self._use_threads = use_threads
+        self._memory_pool = memory_pool
 
     @property
     def schema(self):
-        return self._schema
+        return self._datset.schema
 
     def count_rows(self):
-        raise NotImplementedError
+        return self._dataset.count_rows(
+            self._filter,
+            self._batch_size,
+            self._batch_readahead,
+            self._fragment_readahead,
+            self._fragment_scan_options,
+            self._use_threads,
+            self._memory_pool,
+        )
 
     def head(self, num_rows: int) -> pa.Table:
-        raise NotImplementedError
+        return self._dataset.head(
+            num_rows,
+            self._columns,
+            self._filter,
+            self._batch_size,
+            self._batch_readahead,
+            self._fragment_readahead,
+            self._fragment_scan_options,
+            self._use_threads,
+            self._memory_pool,
+        )
 
     def scan_batches(self) -> Iterator[pa.dataset.TaggedRecordBatch]:
         raise NotImplementedError
 
     def to_batches(self) -> Iterator[pa.RecordBatch]:
-        raise NotImplementedError
+        return self._dataset.to_batches(
+            self._columns,
+            self._filter,
+            self._batch_size,
+            self._batch_readahead,
+            self._fragment_readahead,
+            self._fragment_scan_options,
+            self._use_threads,
+            self._memory_pool,
+        )
 
     def to_reader(self) -> pa.RecordBatchReader:
         raise NotImplementedError
 
     def to_table(self) -> pa.Table:
-        raise NotImplementedError
+        return self._dataset.to_table(
+            self._columns,
+            self._filter,
+            self._batch_size,
+            self._batch_readahead,
+            self._fragment_readahead,
+            self._fragment_scan_options,
+            self._use_threads,
+            self._memory_pool,
+        )
