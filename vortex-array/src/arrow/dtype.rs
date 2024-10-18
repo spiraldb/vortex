@@ -183,8 +183,6 @@ pub fn infer_data_type(dtype: &DType) -> VortexResult<DataType> {
 
 #[cfg(test)]
 mod test {
-    use std::sync::Arc;
-
     use arrow_schema::{DataType, Field, FieldRef, Fields, Schema};
     use vortex_dtype::{
         DType, ExtDType, ExtID, FieldName, FieldNames, Nullability, PType, StructDType,
