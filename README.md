@@ -56,7 +56,9 @@ about which encodings to use or how to logically chunk data are left up to the `
 
 One of the unique attributes of the (in-progress) Vortex file format is that it encodes the physical layout of the data within the
 file's footer. This allows the file format to be effectively self-describing and to evolve without breaking changes to
-the file format specification. For example, the Compressor implementation can choose to chunk data into a Parquet-like layout with
+the file format specification. 
+
+For example, the Compressor implementation can choose to chunk data into a Parquet-like layout with
 row groups and aligned pages (ChunkedArray of StructArray of ChunkedArrays with equal chunk sizes). Alternatively, it can choose
 to chunk different columns differently based on their compressed size and data distributions (e.g., a column that is constant
 across all rows can be a single chunk, whereas a large string column may be split arbitrarily many times).
