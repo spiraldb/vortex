@@ -8,12 +8,12 @@
 Vortex is an extensible, state-of-the-art columnar file format, with associated tools for working with compressed Apache Arrow arrays 
 in-memory, on-disk, and over-the-wire.
 
-Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster)
-and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput as Parquet with zstd. 
-It will also support very wide tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
+Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster) and scans (2-10x faster), 
+while preserving approximately the same compression ratio and write throughput as Parquet with zstd. 
+It is designed to support very wide tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
 
-Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines: highly extensible,
-extremely fast, batteries-included.
+Vortex is intended to be to columnar file formats what Apache DataFusion is to query engines: highly extensible,
+extremely fast, & batteries-included.
 
 > [!CAUTION]
 > This library is still under rapid development and is a work in progress!
@@ -125,10 +125,10 @@ in-memory array implementation, allowing us to defer decompression. Currently, t
 Vortex's default compression strategy is based on the
 [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
-Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (
-recursively) with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode
-the entire chunk. This sounds like it would be very expensive, but given basic statistics about a chunk, it is
-possible to cheaply prune many encodings and ensure the search space does not explode in size.
+Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted 
+(recursively) with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode
+the entire chunk. This sounds like it would be very expensive, but given the logical types and basic statistics about a
+chunk, it is possible to cheaply prune many encodings and ensure the search space does not explode in size.
 
 ### Compute
 
