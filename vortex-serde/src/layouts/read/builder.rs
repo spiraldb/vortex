@@ -8,7 +8,7 @@ use crate::io::VortexReadAt;
 use crate::layouts::read::cache::{LayoutMessageCache, LazyDeserializedDType, RelativeLayoutCache};
 use crate::layouts::read::context::LayoutDeserializer;
 use crate::layouts::read::filtering::RowFilter;
-use crate::layouts::read::footer::FooterReader;
+use crate::layouts::read::footer::LayoutDescriptorReader;
 use crate::layouts::read::stream::LayoutBatchStream;
 use crate::layouts::read::{Scan, DEFAULT_BATCH_SIZE};
 
@@ -66,7 +66,7 @@ impl<R: VortexReadAt> LayoutReaderBuilder<R> {
     }
 
     pub async fn build(self) -> VortexResult<LayoutBatchStream<R>> {
-        let footer = FooterReader::new(self.layout_serde.clone())
+        let footer = LayoutDescriptorReader::new(self.layout_serde.clone())
             .read_footer(&self.reader, self.size().await as u64)
             .await?;
         let batch_size = self.batch_size.unwrap_or(DEFAULT_BATCH_SIZE);

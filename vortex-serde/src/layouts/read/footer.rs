@@ -29,15 +29,19 @@ use crate::FLATBUFFER_SIZE_LENGTH;
 /// │         Layouts            │
 /// │                            │
 /// ├────────────────────────────┤
-/// │   Schema Offset (8 bytes)  │
+/// │                            │
+/// │        Postscript          │
+/// │  (Schema + Layout offset)  │
+/// │        (32 bytes)          │
+/// │                            │
 /// ├────────────────────────────┤
-/// │   Layout Offset (8 bytes)  │
+/// │      Version (4 bytes)     │
 /// ├────────────────────────────┤
 /// │    Magic bytes (4 bytes)   │
 /// └────────────────────────────┘
 ///
 #[derive(Debug)]
-pub struct Footer {
+pub struct LayoutDescriptor {
     pub(crate) schema_offset: u64,
     pub(crate) footer_offset: u64,
     pub(crate) initial_read: Bytes,
@@ -45,12 +49,12 @@ pub struct Footer {
     pub(crate) layout_serde: LayoutDeserializer,
 }
 
-impl Footer {
-    fn leftovers_layout_offset(&self) -> usize {
+impl LayoutDescriptor {
+    fn initial_read_layout_offset(&self) -> usize {
         (self.footer_offset - self.initial_read_offset) as usize
     }
 
-    fn leftovers_schema_offset(&self) -> usize {
+    fn initial_read_schema_offset(&self) -> usize {
         (self.schema_offset - self.initial_read_offset) as usize
     }
 
@@ -59,7 +63,7 @@ impl Footer {
         scan: Scan,
         message_cache: RelativeLayoutCache,
     ) -> VortexResult<Box<dyn LayoutReader>> {
-        let start_offset = self.leftovers_layout_offset();
+        let start_offset = self.initial_read_layout_offset();
         let end_offset = self.initial_read.len() - FOOTER_POSTSCRIPT_SIZE - EOF_SIZE;
         let footer_bytes = self
             .initial_read
@@ -75,8 +79,8 @@ impl Footer {
     }
 
     pub fn dtype_bytes(&self) -> VortexResult<Bytes> {
-        let start_offset = self.leftovers_schema_offset();
-        let end_offset = self.leftovers_layout_offset();
+        let start_offset = self.initial_read_schema_offset();
+        let end_offset = self.initial_read_layout_offset();
         let bytes = self
             .initial_read
             .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset);
@@ -103,8 +107,8 @@ impl Footer {
     }
 
     fn fb_schema(&self) -> VortexResult<fb::Schema> {
-        let start_offset = self.leftovers_schema_offset();
-        let end_offset = self.leftovers_layout_offset();
+        let start_offset = self.initial_read_schema_offset();
+        let end_offset = self.initial_read_layout_offset();
         let dtype_bytes = &self.initial_read[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
 
         root::<fb::Message>(dtype_bytes)
@@ -116,11 +120,11 @@ impl Footer {
     }
 }
 
-pub struct FooterReader {
+pub struct LayoutDescriptorReader {
     layout_serde: LayoutDeserializer,
 }
 
-impl FooterReader {
+impl LayoutDescriptorReader {
     pub fn new(layout_serde: LayoutDeserializer) -> Self {
         Self { layout_serde }
     }
@@ -129,7 +133,7 @@ impl FooterReader {
         &self,
         read: &R,
         file_size: u64,
-    ) -> VortexResult<Footer> {
+    ) -> VortexResult<LayoutDescriptor> {
         if file_size < EOF_SIZE as u64 {
             vortex_bail!(
                 "Malformed vortex file, size {} must be at least {}",
@@ -166,7 +170,7 @@ impl FooterReader {
 
         let ps = root::<footer::Postscript>(&buf[eof_loc - FOOTER_POSTSCRIPT_SIZE..eof_loc])?;
 
-        Ok(Footer {
+        Ok(LayoutDescriptor {
             schema_offset: ps.schema_offset(),
             footer_offset: ps.footer_offset(),
             initial_read: buf.freeze(),
