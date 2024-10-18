@@ -16,3 +16,5 @@ pub mod offset;
 mod read;
 mod tokio;
 mod write;
+#[cfg(feature = "tokio")]
+pub use tokio::TOKIO_RUNTIME;

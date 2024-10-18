@@ -8,7 +8,7 @@ use vortex::Array;
 use vortex_error::{VortexError, VortexResult};
 
 use super::LayoutBatchStream;
-use crate::io::VortexReadAt;
+use crate::io::{VortexReadAt, TOKIO_RUNTIME};
 
 fn vortex_to_arrow_error(error: VortexError) -> ArrowError {
     ArrowError::ExternalError(Box::new(error))
@@ -23,19 +23,14 @@ fn vortex_to_arrow(result: VortexResult<Array>) -> Result<RecordBatch, ArrowErro
 pub struct VortexRecordBatchReader<R: VortexReadAt + Unpin + Send + 'static> {
     stream: LayoutBatchStream<R>,
     arrow_schema: SchemaRef,
-    runtime: tokio::runtime::Runtime,
 }
 
 impl<R: VortexReadAt + Unpin + Send + 'static> VortexRecordBatchReader<R> {
     pub fn new(stream: LayoutBatchStream<R>) -> VortexResult<VortexRecordBatchReader<R>> {
         let arrow_schema = Arc::new(infer_schema(stream.schema().dtype())?);
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?;
         Ok(VortexRecordBatchReader {
             stream,
             arrow_schema,
-            runtime,
         })
     }
 }
@@ -44,7 +39,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Iterator for VortexRecordBatchRea
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let maybe_result = self.runtime.block_on(self.stream.next());
+        let maybe_result = TOKIO_RUNTIME.block_on(self.stream.next());
         maybe_result.map(vortex_to_arrow)
     }
 }

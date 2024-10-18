@@ -15,6 +15,7 @@ mod context;
 mod filtering;
 mod footer;
 mod layouts;
+#[cfg(feature = "tokio")]
 mod recordbatchreader;
 mod stream;
 
@@ -22,6 +23,7 @@ pub use builder::LayoutReaderBuilder;
 pub use cache::LayoutMessageCache;
 pub use context::*;
 pub use filtering::RowFilter;
+#[cfg(feature = "tokio")]
 pub use recordbatchreader::VortexRecordBatchReader;
 pub use stream::LayoutBatchStream;
 pub use vortex_schema::projection::Projection;

@@ -9,6 +9,7 @@ use vortex::Array;
 use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
+use vortex_serde::io::TOKIO_RUNTIME;
 use vortex_serde::layouts::{
     LayoutBatchStream, LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter,
     Projection, RowFilter,
@@ -162,9 +163,7 @@ pub fn read(
 
     let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
 
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?
+    TOKIO_RUNTIME
         .block_on(async_read(fname, projection, None, row_filter))
         .map_err(PyVortexError::map_err)
         .map(PyArray::new)
@@ -248,9 +247,7 @@ pub fn write(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -> PyResult<()
     let fname = f.to_str()?; // TODO(dk): support file objects
     let array = array.borrow().unwrap().clone();
 
-    tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?
+    TOKIO_RUNTIME
         .block_on(run(&array, fname))
         .map_err(PyVortexError::map_err)
 }
