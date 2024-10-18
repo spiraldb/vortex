@@ -4,7 +4,7 @@ use arrow_array::builder::GenericByteViewBuilder;
 use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
 use arrow_array::ArrayRef;
 use vortex_dtype::DType;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, vortex_panic, VortexExpect, VortexResult};
 
 use crate::array::varbin::VarBinArray;
 use crate::array::{BinaryView, VarBinViewArray};
@@ -19,12 +19,14 @@ impl IntoCanonical for VarBinArray {
             T: ByteViewType,
             F: Fn(&[u8]) -> &T::Native,
         {
+            // TODO(aduffy): handle when a single bytes heap is >= 2GiB.
+            // For now, we just panic in the u32::try_from() below.
             let mut builder = GenericByteViewBuilder::<T>::with_capacity(array.len());
             builder.append_block(
                 array
                     .bytes()
                     .into_buffer()
-                    .expect("VarBinArray::bytes array must have buffer")
+                    .vortex_expect("VarBinArray::bytes array must have buffer")
                     .into_arrow(),
             );
 
@@ -33,12 +35,17 @@ impl IntoCanonical for VarBinArray {
                     builder.append_null();
                     continue;
                 }
-                let start = u32::try_from(array.offset_at(idx)).unwrap();
-                let end = u32::try_from(array.offset_at(idx + 1)).unwrap();
+                let start = i32::try_from(array.offset_at(idx))
+                    .unwrap_or_else(|e| vortex_panic!("VarBin start > i32::MAX: {e}"))
+                    as u32;
+                let end = i32::try_from(array.offset_at(idx + 1))
+                    .unwrap_or_else(|e| vortex_panic!("VarBin end > i32::MAX: {e}"))
+                    as u32;
                 let len = end - start;
                 if (len as usize) <= BinaryView::MAX_INLINED_SIZE {
-                    // Get access to the value using the internal T type here.
-                    let bytes = array.bytes_at(idx).unwrap();
+                    let bytes = array
+                        .bytes_at(idx)
+                        .vortex_expect("VarBinArray::bytes_at should be in-bounds");
                     let value = from_bytes_fn(bytes.as_slice());
                     builder.append_value(value);
                 } else {

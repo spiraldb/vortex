@@ -230,7 +230,7 @@ fn pack_views(
         }
     }
 
-    let views_buffer: Buffer = ScalarBuffer::<u128>::from(views).into_inner().into();
+    let views_buffer: Buffer = ScalarBuffer::<u128>::from(views).into_inner();
     VarBinViewArray::try_new(Array::from(views_buffer), buffers, dtype.clone(), validity)
 }
 

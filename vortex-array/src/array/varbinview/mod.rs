@@ -273,7 +273,7 @@ impl VarBinViewArray {
         unsafe {
             slice::from_raw_parts(
                 PrimitiveArray::try_from(self.views())
-                    .expect("Views must be a primitive array")
+                    .vortex_expect("Views must be a primitive array")
                     .maybe_null_slice::<u8>()
                     .as_ptr() as _,
                 self.views().len() / VIEW_SIZE_BYTES,
@@ -294,7 +294,7 @@ impl VarBinViewArray {
     pub fn views(&self) -> Array {
         self.as_ref()
             .child(0, &DType::BYTES, self.len() * VIEW_SIZE_BYTES)
-            .unwrap()
+            .vortex_expect("VarBinViewArray: views child")
     }
 
     /// Access one of the backing data buffers.
@@ -307,7 +307,7 @@ impl VarBinViewArray {
     pub fn buffer(&self, idx: usize) -> Array {
         self.as_ref()
             .child(idx + 1, &DType::BYTES, self.metadata().buffer_lens[idx])
-            .expect("Missing data buffer")
+            .vortex_expect("VarBinViewArray: buffer child")
     }
 
     /// Retrieve an iterator over the raw data buffers.
@@ -325,7 +325,8 @@ impl VarBinViewArray {
     pub fn buffers(&self) -> Buffers {
         Buffers {
             index: 0,
-            n_buffers: self.buffer_count().try_into().unwrap(),
+            n_buffers: u32::try_from(self.buffer_count())
+                .unwrap_or_else(|e| vortex_panic!("n_buffers exceeds u32::MAX: {e}")),
             array: self,
         }
     }
@@ -388,7 +389,7 @@ impl VarBinViewArray {
             builder.append_value(s);
         }
         let array = Array::from_arrow(&builder.finish(), false);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array).vortex_expect("VarBinViewArray from StringViewBuilder")
     }
 
     pub fn from_iter_nullable_str<T: AsRef<str>, I: IntoIterator<Item = Option<T>>>(
@@ -399,7 +400,7 @@ impl VarBinViewArray {
         builder.extend(iter);
 
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array).vortex_expect("VarBinViewArray from StringViewBuilder")
     }
 
     pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
@@ -409,7 +410,7 @@ impl VarBinViewArray {
             builder.append_value(b);
         }
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array).vortex_expect("VarBinViewArray from StringViewBuilder")
     }
 
     pub fn from_iter_nullable_bin<T: AsRef<[u8]>, I: IntoIterator<Item = Option<T>>>(
@@ -419,7 +420,7 @@ impl VarBinViewArray {
         let mut builder = BinaryViewBuilder::with_capacity(iter.size_hint().0);
         builder.extend(iter);
         let array = Array::from_arrow(&builder.finish(), true);
-        VarBinViewArray::try_from(array).expect("should be var bin view array")
+        VarBinViewArray::try_from(array).vortex_expect("VarBinViewArray from StringViewBuilder")
     }
 
     // TODO(aduffy): do we really need to do this with copying?
@@ -429,7 +430,7 @@ impl VarBinViewArray {
         if !view.is_inlined() {
             let view_ref = view.as_view();
             let data_buf = slice(
-                &self.buffer(view_ref.buffer_index() as usize),
+                self.buffer(view_ref.buffer_index() as usize),
                 view_ref.offset() as usize,
                 (view.len() + view_ref.offset()) as usize,
             )?
@@ -449,7 +450,7 @@ fn generic_byte_view_builder<B, V, F>(
 where
     B: ByteViewType,
     V: AsRef<[u8]>,
-    F: FnMut(&mut GenericByteViewBuilder<B>, Option<V>) -> (),
+    F: FnMut(&mut GenericByteViewBuilder<B>, Option<V>),
 {
     let mut builder = GenericByteViewBuilder::<B>::new();
 
@@ -479,18 +480,18 @@ pub(crate) fn varbinview_as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
     let views = var_bin_view
         .views()
         .into_primitive()
-        .expect("views must be primitive");
+        .vortex_expect("VarBinViewArray: views child must be primitive");
     assert_eq!(views.ptype(), PType::U8);
 
     let nulls = var_bin_view
         .logical_validity()
         .to_null_buffer()
-        .expect("null buffer");
+        .vortex_expect("VarBinViewArray: validity child must be bool");
 
     let data = (0..var_bin_view.buffer_count())
         .map(|i| var_bin_view.buffer(i).into_primitive())
         .collect::<VortexResult<Vec<_>>>()
-        .expect("bytes arrays must be primitive");
+        .vortex_expect("VarBinViewArray: bytes children must be primitive");
     if !data.is_empty() {
         assert_eq!(data[0].ptype(), PType::U8);
         assert!(data.iter().map(|d| d.ptype()).all_equal());
@@ -517,7 +518,7 @@ pub(crate) fn varbinview_as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
                 nulls,
             )
         }),
-        _ => panic!("expected utf8 or binary, got {}", var_bin_view.dtype()),
+        _ => vortex_panic!("expected utf8 or binary, got {}", var_bin_view.dtype()),
     }
 }
 
@@ -592,7 +593,7 @@ mod test {
     #[test]
     pub fn slice_array() {
         let binary_arr = slice(
-            &VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"])
+            VarBinViewArray::from_iter_str(["hello world", "hello world this is a long string"])
                 .into_array(),
             1,
             2,

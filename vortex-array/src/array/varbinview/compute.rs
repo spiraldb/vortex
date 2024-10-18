@@ -6,7 +6,7 @@ use arrow_array::{Datum, GenericByteViewArray};
 use arrow_ord::cmp;
 use arrow_schema::DataType;
 use vortex_buffer::Buffer;
-use vortex_error::{vortex_bail, VortexResult};
+use vortex_error::{vortex_bail, VortexResult, VortexUnwrap};
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
@@ -38,7 +38,7 @@ impl ScalarAtFn for VarBinViewArray {
     }
 
     fn scalar_at_unchecked(&self, index: usize) -> Scalar {
-        <Self as ScalarAtFn>::scalar_at(self, index).unwrap()
+        <Self as ScalarAtFn>::scalar_at(self, index).vortex_unwrap()
     }
 }
 
@@ -46,7 +46,7 @@ impl SliceFn for VarBinViewArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
             slice(
-                &self.views(),
+                self.views(),
                 start * VIEW_SIZE_BYTES,
                 stop * VIEW_SIZE_BYTES,
             )?,

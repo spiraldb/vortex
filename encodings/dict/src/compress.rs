@@ -8,7 +8,7 @@ use vortex::array::{PrimitiveArray, VarBinArray, VarBinViewArray};
 use vortex::validity::Validity;
 use vortex::{ArrayDType, IntoArray, IntoCanonical};
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, ToBytes};
-use vortex_error::VortexExpect as _;
+use vortex_error::{VortexExpect as _, VortexUnwrap};
 
 /// Statically assigned code for a null value.
 pub const NULL_CODE: u64 = 0;
@@ -96,7 +96,7 @@ pub fn dict_encode_varbin(array: &VarBinArray) -> (PrimitiveArray, VarBinArray) 
 pub fn dict_encode_varbinview(array: &VarBinViewArray) -> (PrimitiveArray, VarBinViewArray) {
     let (codes, values) = array
         .with_iterator(|iter| dict_encode_typed_varbin(array.dtype().clone(), iter))
-        .unwrap();
+        .vortex_unwrap();
     (
         codes,
         values
