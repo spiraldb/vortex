@@ -34,7 +34,7 @@ build-backend = "maturin"
 managed = true
 dev-dependencies = [
     "ipython>=8.26.0",
-    "pandas>=2.2.2",
+    "pandas>=2.2.3",
     "pip",
     "pyright>=1.1.385",
 ]

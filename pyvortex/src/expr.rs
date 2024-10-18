@@ -37,7 +37,7 @@ use crate::dtype::PyDType;
 ///   [
 ///     57
 ///   ]
-/// -- child 1 type: string
+/// -- child 1 type: string_view
 ///   [
 ///     "Mikhail"
 ///   ]

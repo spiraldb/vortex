@@ -88,12 +88,11 @@ def _Array_to_pandas(self: _encoding.Array) -> "pandas.DataFrame":
     ...     {'name': 'Angela', 'age': 33},
     ...     {'name': 'Mikhail', 'age': 57},
     ... ])
-    >>> array.to_pandas()
-       age      name
-    0   25    Joseph
-    1   31  Narendra
-    2   33    Angela
-    3   57   Mikhail
+    >>> array.to_pandas().dtypes
+    age           int64[pyarrow]
+    name    string_view[pyarrow]
+    dtype: object
+
 
     Lift the struct fields to the top-level in the dataframe:
 
