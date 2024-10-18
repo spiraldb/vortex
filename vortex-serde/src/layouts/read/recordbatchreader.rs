@@ -20,12 +20,12 @@ fn vortex_to_arrow(result: VortexResult<Array>) -> Result<RecordBatch, ArrowErro
         .map_err(vortex_to_arrow_error)
 }
 
-pub struct VortexRecordBatchReader<R: VortexReadAt + Unpin + Send + 'static> {
+pub struct VortexRecordBatchReader<R: VortexReadAt + Unpin + 'static> {
     stream: LayoutBatchStream<R>,
     arrow_schema: SchemaRef,
 }
 
-impl<R: VortexReadAt + Unpin + Send + 'static> VortexRecordBatchReader<R> {
+impl<R: VortexReadAt + Unpin + 'static> VortexRecordBatchReader<R> {
     pub fn new(stream: LayoutBatchStream<R>) -> VortexResult<VortexRecordBatchReader<R>> {
         let arrow_schema = Arc::new(infer_schema(stream.schema().dtype())?);
         Ok(VortexRecordBatchReader {
@@ -35,7 +35,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> VortexRecordBatchReader<R> {
     }
 }
 
-impl<R: VortexReadAt + Unpin + Send + 'static> Iterator for VortexRecordBatchReader<R> {
+impl<R: VortexReadAt + Unpin + 'static> Iterator for VortexRecordBatchReader<R> {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -44,7 +44,7 @@ impl<R: VortexReadAt + Unpin + Send + 'static> Iterator for VortexRecordBatchRea
     }
 }
 
-impl<R: VortexReadAt + Unpin + Send + 'static> RecordBatchReader for VortexRecordBatchReader<R> {
+impl<R: VortexReadAt + Unpin + 'static> RecordBatchReader for VortexRecordBatchReader<R> {
     fn schema(&self) -> SchemaRef {
         self.arrow_schema.clone()
     }
