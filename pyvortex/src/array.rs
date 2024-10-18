@@ -142,7 +142,7 @@ impl PyArray {
     /// Fill forward non-null values over runs of nulls.
     ///
     /// Leading nulls are replaced with the "zero" for that type. For integral and floating-point
-    /// types, this is null. For the Boolean type, this is `:obj:`False`.
+    /// types, this is zero. For the Boolean type, this is `:obj:`False`.
     ///
     /// Returns
     /// -------
