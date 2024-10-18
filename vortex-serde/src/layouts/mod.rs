@@ -5,8 +5,8 @@ mod pruning;
 #[cfg(test)]
 mod tests;
 
-pub const VERSION: u16 = 1;
-pub const MAGIC_BYTES: [u8; 4] = *b"VRX1";
+pub const VERSION: u32 = 1;
+pub const MAGIC_BYTES: [u8; 4] = *b"VRTX";
 // Size of serialized Postscript Flatbuffer
 pub const FOOTER_POSTSCRIPT_SIZE: usize = 32;
 pub const EOF_SIZE: usize = 8;

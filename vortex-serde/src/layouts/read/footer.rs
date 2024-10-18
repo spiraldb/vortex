@@ -154,8 +154,8 @@ impl FooterReader {
             vortex_bail!("Malformed file, invalid magic bytes, got {magic_number:?}")
         }
 
-        let version = u16::from_le_bytes(
-            buf[eof_loc + 2..eof_loc + 4]
+        let version = u32::from_le_bytes(
+            buf[eof_loc..eof_loc + 4]
                 .try_into()
                 .map_err(|e| vortex_err!("Version was not a u16 {e}"))?,
         );
