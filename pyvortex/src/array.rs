@@ -2,9 +2,9 @@ use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyList};
+use pyo3::types::{IntoPyDict, PyList, PyString};
 use vortex::array::ChunkedArray;
-use vortex::compute::{slice, take};
+use vortex::compute::{compare, slice, take, Operator};
 use vortex::{Array, ArrayDType, IntoCanonical};
 
 use crate::dtype::PyDType;
@@ -136,6 +136,72 @@ impl PyArray {
     #[getter]
     fn dtype(self_: PyRef<Self>) -> PyResult<Py<PyDType>> {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
+    }
+
+    /// Point-wise compare the elements of this array to another array.
+    ///
+    /// Parameters
+    /// ----------
+    /// other : :class:`vortex.encoding.Array`
+    ///     An array with whom to compare elements.
+    ///
+    /// operator : :class:`str`
+    ///
+    ///     One of `eq`, `ne`, `gt`, `ge`, `lt`, or `le` indicating which binary comparison operator
+    ///     to apply.
+    ///
+    /// Returns
+    /// -------
+    /// :class:`vortex.encoding.Array`
+    ///
+    /// Examples
+    /// --------
+    ///
+    /// Compare an array of strings to itself:
+    ///
+    /// >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
+    /// >>> a.compare(a, "eq").to_arrow_array()
+    /// <pyarrow.lib.BooleanArray object at ...>
+    /// [
+    ///   true,
+    ///   true,
+    ///   true,
+    ///   true
+    /// ]
+    ///
+    /// Compare two arrays containing nulls:
+    ///
+    /// >>> a = vortex.encoding.array(['dog', None, 'cat', 'mouse', 'fish'])
+    /// >>> b = vortex.encoding.array(['doug', 'jennifer', 'casper', 'mouse', 'faust'])
+    /// >>> a.compare(b, 'lt').to_arrow_array()
+    /// <pyarrow.lib.BooleanArray object at ...>
+    /// [
+    ///   true,
+    ///   null,
+    ///   false,
+    ///   false,
+    ///   false
+    /// ]
+    fn compare(&self, other: &Bound<PyArray>, operator: &Bound<PyString>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        let operator = match operator.extract()? {
+            "eq" => Operator::Eq,
+            "ne" => Operator::NotEq,
+            "gt" => Operator::Gt,
+            "ge" => Operator::Gte,
+            "lt" => Operator::Lt,
+            "le" => Operator::Lte,
+            op => {
+                return Err(PyValueError::new_err(format!(
+                    "expected eq, ne, gt, ge, lt, or le: {}",
+                    op
+                )))
+            }
+        };
+
+        compare(&self.inner, &other.inner, operator)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
     }
 
     /// Filter, permute, and/or repeat elements by their index.
