@@ -7,6 +7,8 @@ import pandas
 # See https://github.com/pandas-dev/pandas/issues/60068 for more details
 
 _old_ArrowDtype_type = pandas.ArrowDtype.type
+
+
 @property
 def __ArrowDtype_type_patched(self):
     if pyarrow.types.is_string_view(self.pyarrow_dtype):
@@ -14,6 +16,7 @@ def __ArrowDtype_type_patched(self):
     if pyarrow.types.is_binary_view(self.pyarrow_dtype):
         return bytes
     return _old_ArrowDtype_type(self)
+
 
 pandas.ArrowDtype.type = __ArrowDtype_type_patched
 
