@@ -3,66 +3,38 @@ use std::sync::Arc;
 use arrow_array::builder::GenericByteViewBuilder;
 use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
 use arrow_array::ArrayRef;
-use vortex_dtype::DType;
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect, VortexResult};
+use num_traits::AsPrimitive;
+use vortex_dtype::{match_each_integer_ptype, DType};
+use vortex_error::{vortex_bail, VortexResult};
 
 use crate::array::varbin::VarBinArray;
-use crate::array::{BinaryView, VarBinViewArray};
+use crate::array::{BinaryView, PrimitiveArray, VarBinViewArray};
 use crate::arrow::FromArrowArray;
-use crate::validity::ArrayValidity;
-use crate::{Array, ArrayDType, Canonical, IntoCanonical};
+use crate::validity::Validity;
+use crate::{Array, Canonical, IntoArrayVariant, IntoCanonical};
 
 impl IntoCanonical for VarBinArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        fn into_byteview<T, F>(array: &VarBinArray, from_bytes_fn: F) -> ArrayRef
-        where
-            T: ByteViewType,
-            F: Fn(&[u8]) -> &T::Native,
-        {
-            // TODO(aduffy): handle when a single bytes heap is >= 2GiB.
-            // For now, we just panic in the u32::try_from() below.
-            let mut builder = GenericByteViewBuilder::<T>::with_capacity(array.len());
-            builder.append_block(
-                array
-                    .bytes()
-                    .into_buffer()
-                    .vortex_expect("VarBinArray::bytes array must have buffer")
-                    .into_arrow(),
-            );
+        let (dtype, bytes, offsets, validity) = self.into_parts();
+        let bytes = bytes.into_primitive()?;
+        let offsets = offsets.into_primitive()?;
 
-            for idx in 0..array.len() {
-                if !array.is_valid(idx) {
-                    builder.append_null();
-                    continue;
-                }
-                let start = i32::try_from(array.offset_at(idx))
-                    .unwrap_or_else(|e| vortex_panic!("VarBin start > i32::MAX: {e}"))
-                    as u32;
-                let end = i32::try_from(array.offset_at(idx + 1))
-                    .unwrap_or_else(|e| vortex_panic!("VarBin end > i32::MAX: {e}"))
-                    as u32;
-                let len = end - start;
-                if (len as usize) <= BinaryView::MAX_INLINED_SIZE {
-                    let bytes = array
-                        .bytes_at(idx)
-                        .vortex_expect("VarBinArray::bytes_at should be in-bounds");
-                    let value = from_bytes_fn(bytes.as_slice());
-                    builder.append_value(value);
-                } else {
-                    unsafe { builder.append_view_unchecked(0, start, end - start) };
-                }
+        let arrow_array = match dtype {
+            DType::Utf8(_) => {
+                byteview_from_varbin_parts::<StringViewType, _>(
+                    bytes,
+                    offsets,
+                    validity,
+                    |b| unsafe {
+                        // SAFETY: VarBinViewArray values are checked at construction. If DType is Utf8,
+                        //  then all values must be valid UTF-8 bytes.
+                        std::str::from_utf8_unchecked(b)
+                    },
+                )
             }
-
-            Arc::new(builder.finish())
-        }
-
-        let arrow_array = match self.dtype() {
-            DType::Utf8(_) => into_byteview::<StringViewType, _>(&self, |b| unsafe {
-                // SAFETY: VarBinViewArray values are checked at construction. If DType is Utf8,
-                //  then all values must be valid UTF-8 bytes.
-                std::str::from_utf8_unchecked(b)
-            }),
-            DType::Binary(_) => into_byteview::<BinaryViewType, _>(&self, |b| b),
+            DType::Binary(_) => {
+                byteview_from_varbin_parts::<BinaryViewType, _>(bytes, offsets, validity, |b| b)
+            }
             _ => vortex_bail!("invalid DType for VarBinViewArray"),
         };
         let array = Array::from_arrow(arrow_array.clone(), arrow_array.is_nullable());
@@ -70,6 +42,64 @@ impl IntoCanonical for VarBinArray {
 
         Ok(Canonical::VarBinView(varbinview))
     }
+}
+
+fn byteview_from_varbin_parts<T, F>(
+    bytes: PrimitiveArray,
+    offsets: PrimitiveArray,
+    validity: Validity,
+    from_bytes_fn: F,
+) -> ArrayRef
+where
+    T: ByteViewType,
+    F: Fn(&[u8]) -> &T::Native,
+{
+    let array_len = offsets.len() - 1;
+    let mut builder = GenericByteViewBuilder::<T>::with_capacity(array_len);
+
+    // Directly append the buffer from the original VarBin to back the new VarBinView
+    builder.append_block(bytes.clone().into_buffer().into_arrow());
+
+    // Monomorphized `offset_at` accessor.
+    // This is more efficient than going through the `offset_at` method when we are going
+    // to touch the entire array.
+
+    let offset_fn: &dyn Fn(usize) -> usize = match_each_integer_ptype!(offsets.ptype(), |$P| {
+        let offsets_typed: &[$P] = offsets.maybe_null_slice::<$P>();
+        &|idx: usize| -> usize { offsets_typed[idx].as_() }
+    });
+
+    let bytes_buffer = bytes.into_buffer();
+
+    for idx in 0..array_len {
+        if !validity.is_valid(idx) {
+            builder.append_null();
+            continue;
+        }
+        let start = offset_fn(idx);
+        let end = offset_fn(idx + 1);
+        let len = end - start;
+
+        // TODO(aduffy): fix this to overflow into multiple buffers in a slow-path.
+        assert_eq!(
+            start as u32 as usize, start,
+            "VarBinView cannot have buffer >= 2GiB"
+        );
+        assert_eq!(
+            end as u32 as usize, end,
+            "VarBinView cannot have buffer >= 2GiB"
+        );
+
+        if len <= BinaryView::MAX_INLINED_SIZE {
+            let bytes = bytes_buffer.slice(start..end);
+            let value = from_bytes_fn(bytes.as_slice());
+            builder.append_value(value);
+        } else {
+            unsafe { builder.append_view_unchecked(0, start as u32, len as u32) };
+        }
+    }
+
+    Arc::new(builder.finish())
 }
 
 #[cfg(test)]
