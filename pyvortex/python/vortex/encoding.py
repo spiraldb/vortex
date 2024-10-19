@@ -1,7 +1,9 @@
 from typing import TYPE_CHECKING
 
-import pyarrow
 import pandas
+import pyarrow
+
+from ._lib import encoding as _encoding
 
 # HACK: monkey-patch a fixed implementation of the pd.ArrowDtype.type property accessor.
 # See https://github.com/pandas-dev/pandas/issues/60068 for more details
@@ -20,7 +22,6 @@ def __ArrowDtype_type_patched(self):
 
 pandas.ArrowDtype.type = __ArrowDtype_type_patched
 
-from ._lib import encoding as _encoding
 
 if TYPE_CHECKING:
     import numpy
