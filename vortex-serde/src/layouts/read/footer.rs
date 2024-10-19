@@ -1,55 +1,69 @@
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use flatbuffers::root;
 use vortex_dtype::field::Field;
 use vortex_dtype::flatbuffers::deserialize_and_project;
 use vortex_dtype::DType;
-use vortex_error::{vortex_err, VortexResult};
-use vortex_flatbuffers::message as fb;
-use vortex_schema::Schema;
+use vortex_error::{vortex_bail, vortex_err, VortexResult};
+use vortex_flatbuffers::{footer, message as fb};
 
+use crate::io::VortexReadAt;
 use crate::layouts::read::cache::RelativeLayoutCache;
 use crate::layouts::read::context::LayoutDeserializer;
-use crate::layouts::read::{LayoutReader, Scan, FILE_POSTSCRIPT_SIZE};
+use crate::layouts::read::{LayoutReader, Scan, INITIAL_READ_SIZE};
+use crate::layouts::{EOF_SIZE, FOOTER_POSTSCRIPT_SIZE, MAGIC_BYTES, VERSION};
 use crate::FLATBUFFER_SIZE_LENGTH;
 
 /// Wrapper around serialized file footer. Provides handle on file schema and
 /// layout metadata to read the contents.
 ///
-/// # Footer format
+/// # File Format
 /// ┌────────────────────────────┐
 /// │                            │
-///              ...
+/// │            Data            │
+/// │    (Array IPC Messages)    │
+/// │                            │
+/// ├────────────────────────────┤
+/// │                            │
+/// │     Per-Column Metadata    │
+/// │    (Array IPC Messages)    │
+/// │                            │
 /// ├────────────────────────────┤
 /// │                            │
 /// │          Schema            │
 /// │                            │
 /// ├────────────────────────────┤
 /// │                            │
-/// │         Layouts            │
+/// │          Footer            │
+/// │    (Layouts + Row Count)   │
 /// │                            │
 /// ├────────────────────────────┤
-/// │   Schema Offset (8 bytes)  │
+/// │                            │
+/// │        Postscript          │
+/// │  (Schema/Footer Offsets)   │
+/// │        (32 bytes)          │
+/// │                            │
 /// ├────────────────────────────┤
-/// │   Layout Offset (8 bytes)  │
+/// │   Version Info (4 bytes)   │
 /// ├────────────────────────────┤
 /// │    Magic bytes (4 bytes)   │
 /// └────────────────────────────┘
 ///
-pub struct Footer {
+#[derive(Debug)]
+pub struct LayoutDescriptor {
     pub(crate) schema_offset: u64,
-    pub(crate) layout_offset: u64,
-    pub(crate) leftovers: Bytes,
-    pub(crate) leftovers_offset: u64,
+    pub(crate) footer_offset: u64,
+    pub(crate) initial_read: Bytes,
+    pub(crate) initial_read_offset: u64,
     pub(crate) layout_serde: LayoutDeserializer,
 }
 
-impl Footer {
-    fn leftovers_layout_offset(&self) -> usize {
-        (self.layout_offset - self.leftovers_offset) as usize
+impl LayoutDescriptor {
+    fn initial_read_layout_offset(&self) -> usize {
+        (self.footer_offset - self.initial_read_offset) as usize
     }
 
-    fn leftovers_schema_offset(&self) -> usize {
-        (self.schema_offset - self.leftovers_offset) as usize
+    fn initial_read_schema_offset(&self) -> usize {
+        (self.schema_offset - self.initial_read_offset) as usize
     }
 
     pub fn layout(
@@ -57,12 +71,12 @@ impl Footer {
         scan: Scan,
         message_cache: RelativeLayoutCache,
     ) -> VortexResult<Box<dyn LayoutReader>> {
-        let start_offset = self.leftovers_layout_offset();
-        let end_offset = self.leftovers.len() - FILE_POSTSCRIPT_SIZE;
+        let start_offset = self.initial_read_layout_offset();
+        let end_offset = self.initial_read.len() - FOOTER_POSTSCRIPT_SIZE - EOF_SIZE;
         let footer_bytes = self
-            .leftovers
+            .initial_read
             .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset);
-        let fb_footer = root::<vortex_flatbuffers::footer::Footer>(&footer_bytes)?;
+        let fb_footer = root::<footer::Footer>(&footer_bytes)?;
 
         let fb_layout = fb_footer
             .layout()
@@ -73,10 +87,10 @@ impl Footer {
     }
 
     pub fn dtype_bytes(&self) -> VortexResult<Bytes> {
-        let start_offset = self.leftovers_schema_offset();
-        let end_offset = self.leftovers_layout_offset();
+        let start_offset = self.initial_read_schema_offset();
+        let end_offset = self.initial_read_layout_offset();
         let bytes = self
-            .leftovers
+            .initial_read
             .slice(start_offset + FLATBUFFER_SIZE_LENGTH..end_offset);
         // Run validation on dtype bytes
         self.fb_schema()?;
@@ -92,10 +106,6 @@ impl Footer {
         .map_err(|e| vortex_err!(InvalidSerde: "Failed to parse DType: {}", e))
     }
 
-    pub fn schema(&self) -> VortexResult<Schema> {
-        self.dtype().map(Schema::new)
-    }
-
     pub fn projected_dtype(&self, projection: &[Field]) -> VortexResult<DType> {
         let fb_dtype = self
             .fb_schema()?
@@ -105,9 +115,9 @@ impl Footer {
     }
 
     fn fb_schema(&self) -> VortexResult<fb::Schema> {
-        let start_offset = self.leftovers_schema_offset();
-        let end_offset = self.leftovers_layout_offset();
-        let dtype_bytes = &self.leftovers[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
+        let start_offset = self.initial_read_schema_offset();
+        let end_offset = self.initial_read_layout_offset();
+        let dtype_bytes = &self.initial_read[start_offset + FLATBUFFER_SIZE_LENGTH..end_offset];
 
         root::<fb::Message>(dtype_bytes)
             .map_err(|e| e.into())
@@ -115,5 +125,64 @@ impl Footer {
                 m.header_as_schema()
                     .ok_or_else(|| vortex_err!("Message was not a schema"))
             })
+    }
+}
+
+pub struct LayoutDescriptorReader {
+    layout_serde: LayoutDeserializer,
+}
+
+impl LayoutDescriptorReader {
+    pub fn new(layout_serde: LayoutDeserializer) -> Self {
+        Self { layout_serde }
+    }
+
+    pub async fn read_footer<R: VortexReadAt>(
+        &self,
+        read: &R,
+        file_size: u64,
+    ) -> VortexResult<LayoutDescriptor> {
+        if file_size < EOF_SIZE as u64 {
+            vortex_bail!(
+                "Malformed vortex file, size {} must be at least {}",
+                file_size,
+                EOF_SIZE,
+            )
+        }
+
+        let read_size = INITIAL_READ_SIZE.min(file_size as usize);
+        let mut buf = BytesMut::with_capacity(read_size);
+        unsafe { buf.set_len(read_size) }
+
+        let read_offset = file_size - read_size as u64;
+        buf = read.read_at_into(read_offset, buf).await?;
+
+        let eof_loc = read_size - EOF_SIZE;
+
+        let magic_bytes_loc = eof_loc + (EOF_SIZE - MAGIC_BYTES.len());
+        let magic_number = &buf[magic_bytes_loc..];
+        if magic_number != MAGIC_BYTES {
+            vortex_bail!("Malformed file, invalid magic bytes, got {magic_number:?}")
+        }
+
+        let version = u16::from_le_bytes(
+            buf[eof_loc..eof_loc + 2]
+                .try_into()
+                .map_err(|e| vortex_err!("Version was not a u16 {e}"))?,
+        );
+
+        if version != VERSION {
+            vortex_bail!("Malformed file, unsupported version {version}")
+        }
+
+        let ps = root::<footer::Postscript>(&buf[eof_loc - FOOTER_POSTSCRIPT_SIZE..eof_loc])?;
+
+        Ok(LayoutDescriptor {
+            schema_offset: ps.schema_offset(),
+            footer_offset: ps.footer_offset(),
+            initial_read: buf.freeze(),
+            initial_read_offset: read_offset,
+            layout_serde: self.layout_serde.clone(),
+        })
     }
 }
