@@ -15,7 +15,7 @@ use vortex_flatbuffers::WriteFlatBuffer;
 use crate::io::VortexWrite;
 use crate::layouts::write::footer::{Footer, Postscript};
 use crate::layouts::write::layouts::Layout;
-use crate::layouts::{EOF_SIZE, FOOTER_POSTSCRIPT_SIZE, MAGIC_BYTES, VERSION};
+use crate::layouts::{EOF_SIZE, MAGIC_BYTES, VERSION};
 use crate::MessageWriter;
 
 pub struct LayoutWriter<W> {
