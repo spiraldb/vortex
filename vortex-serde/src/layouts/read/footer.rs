@@ -16,26 +16,34 @@ use crate::FLATBUFFER_SIZE_LENGTH;
 /// Wrapper around serialized file footer. Provides handle on file schema and
 /// layout metadata to read the contents.
 ///
-/// # Footer format
+/// # File Format
 /// ┌────────────────────────────┐
 /// │                            │
-///              ...
+/// │            Data            │
+/// │    (Array IPC Messages)    │
+/// │                            │
+/// ├────────────────────────────┤
+/// │                            │
+/// │     Per-Column Metadata    │
+/// │    (Array IPC Messages)    │
+/// │                            │
 /// ├────────────────────────────┤
 /// │                            │
 /// │          Schema            │
 /// │                            │
 /// ├────────────────────────────┤
 /// │                            │
-/// │         Layouts            │
+/// │          Footer            │
+/// │    (Layouts + Row Count)   │
 /// │                            │
 /// ├────────────────────────────┤
 /// │                            │
 /// │        Postscript          │
-/// │  (Schema + Layout offset)  │
+/// │  (Schema/Footer Offsets)   │
 /// │        (32 bytes)          │
 /// │                            │
 /// ├────────────────────────────┤
-/// │      Version (4 bytes)     │
+/// │   Version Info (4 bytes)   │
 /// ├────────────────────────────┤
 /// │    Magic bytes (4 bytes)   │
 /// └────────────────────────────┘
@@ -152,14 +160,13 @@ impl LayoutDescriptorReader {
         let eof_loc = read_size - EOF_SIZE;
 
         let magic_bytes_loc = eof_loc + (EOF_SIZE - MAGIC_BYTES.len());
-
         let magic_number = &buf[magic_bytes_loc..];
         if magic_number != MAGIC_BYTES {
             vortex_bail!("Malformed file, invalid magic bytes, got {magic_number:?}")
         }
 
-        let version = u32::from_le_bytes(
-            buf[eof_loc..eof_loc + 4]
+        let version = u16::from_le_bytes(
+            buf[eof_loc..eof_loc + 2]
                 .try_into()
                 .map_err(|e| vortex_err!("Version was not a u16 {e}"))?,
         );
