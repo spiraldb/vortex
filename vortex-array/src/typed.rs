@@ -7,6 +7,7 @@ use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexResult};
 use crate::stats::StatsSet;
 use crate::{Array, ArrayData, ArrayDef, IntoArray, ToArray, TryDeserializeArrayMetadata};
 
+/// Container for an array with all the associated implementation type information (encoding reference and ID, actual array type, metadata type).
 #[derive(Debug, Clone)]
 pub struct TypedArray<D: ArrayDef> {
     array: Array,

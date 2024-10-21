@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, Formatter};
 use std::sync::Arc;
 
 use ahash::HashMap;
@@ -6,14 +6,19 @@ use bytes::Bytes;
 use vortex::Context;
 use vortex_error::{vortex_err, VortexResult};
 use vortex_flatbuffers::footer as fb;
-use vortex_flatbuffers::footer::LayoutVariant;
 
 use crate::layouts::read::cache::RelativeLayoutCache;
-use crate::layouts::read::layouts::{ChunkedLayoutSpec, ColumnLayoutSpec, FlatLayout};
+use crate::layouts::read::layouts::{ChunkedLayoutSpec, ColumnLayoutSpec, FlatLayoutSpec};
 use crate::layouts::read::{LayoutReader, Scan};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
 pub struct LayoutId(pub u16);
+
+impl Display for LayoutId {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.0, f)
+    }
+}
 
 pub trait LayoutSpec: Debug + Send + Sync {
     fn id(&self) -> LayoutId;
@@ -48,10 +53,14 @@ impl LayoutContext {
 impl Default for LayoutContext {
     fn default() -> Self {
         Self::new(
-            [&ColumnLayoutSpec as LayoutSpecRef, &ChunkedLayoutSpec]
-                .into_iter()
-                .map(|l| (l.id(), l))
-                .collect(),
+            [
+                &ColumnLayoutSpec as LayoutSpecRef,
+                &ChunkedLayoutSpec,
+                &FlatLayoutSpec,
+            ]
+            .into_iter()
+            .map(|l| (l.id(), l))
+            .collect(),
         )
     }
 }
@@ -78,32 +87,15 @@ impl LayoutDeserializer {
             let tab = flatbuffers::Table::new(&fb_bytes, fb_loc);
             fb::Layout::init_from_table(tab)
         };
+        let layout_id = LayoutId(fb_layout.encoding());
+        Ok(self
+            .layout_ctx
+            .lookup_layout(&layout_id)
+            .ok_or_else(|| vortex_err!("Unknown layout definition {layout_id}"))?
+            .layout(fb_bytes, fb_loc, scan, self.clone(), message_cache))
+    }
 
-        match fb_layout.layout_type() {
-            LayoutVariant::FlatLayout => {
-                let flat_layout = fb_layout
-                    .layout_as_flat_layout()
-                    .ok_or_else(|| vortex_err!("Must be flat layout"))?;
-                Ok(Box::new(FlatLayout::new(
-                    flat_layout.begin(),
-                    flat_layout.end(),
-                    self.ctx.clone(),
-                    message_cache,
-                )))
-            }
-            LayoutVariant::NestedLayout => {
-                let nested_layout = fb_layout
-                    .layout_as_nested_layout()
-                    .ok_or_else(|| vortex_err!("Must be nested layout"))?;
-                Ok(self
-                    .layout_ctx
-                    .lookup_layout(&LayoutId(nested_layout.encoding()))
-                    .ok_or_else(|| {
-                        vortex_err!("Unknown layout definition {}", nested_layout.encoding())
-                    })?
-                    .layout(fb_bytes, fb_loc, scan, self.clone(), message_cache))
-            }
-            _ => unreachable!("Unknown flatbuffer layout"),
-        }
+    pub(crate) fn ctx(&self) -> Arc<Context> {
+        self.ctx.clone()
     }
 }

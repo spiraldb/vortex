@@ -1,3 +1,5 @@
+//! Utilities to work with `Arrow` data and types.
+
 use vortex_error::VortexResult;
 
 pub use crate::arrow::dtype::{infer_data_type, infer_schema};

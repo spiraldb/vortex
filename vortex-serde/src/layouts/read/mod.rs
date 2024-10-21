@@ -1,7 +1,6 @@
 use std::fmt::Debug;
 
 use arrow_buffer::BooleanBuffer;
-pub use layouts::{ChunkedLayoutSpec, ColumnLayoutSpec};
 use vortex::array::BoolArray;
 use vortex::validity::Validity;
 use vortex::{Array, IntoArray as _, IntoArrayVariant as _};
@@ -32,9 +31,8 @@ pub use vortex_schema::Schema;
 use crate::stream_writer::ByteRange;
 
 // Recommended read-size according to the AWS performance guide
-const INITIAL_READ_SIZE: usize = 8 * 1024 * 1024;
-const DEFAULT_BATCH_SIZE: usize = 65536;
-const FILE_POSTSCRIPT_SIZE: usize = 20;
+pub const INITIAL_READ_SIZE: usize = 8 * 1024 * 1024;
+pub const DEFAULT_BATCH_SIZE: usize = 65536;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -48,10 +46,11 @@ pub struct Scan {
 /// Unique identifier for a message within a layout
 pub type LayoutPartId = u16;
 pub type MessageId = Vec<LayoutPartId>;
+pub type Message = (MessageId, ByteRange);
 
 #[derive(Debug)]
 pub enum ReadResult {
-    ReadMore(Vec<(MessageId, ByteRange)>),
+    ReadMore(Vec<Message>),
     Batch(Array),
 }
 

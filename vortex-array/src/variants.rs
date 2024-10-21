@@ -87,12 +87,12 @@ pub trait BoolArrayTrait: ArrayTrait {
             .unwrap_or_else(|| self.maybe_null_indices_iter().count())
     }
 
-    // An iterator over the sorted indices of set values in the underlying boolean array
-    // good to array with low number of set values.
+    /// An iterator over the sorted indices of set values in the underlying boolean array
+    /// good to array with low number of set values.
     fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a>;
 
-    // An iterator over the sorted disjoint contiguous range set values in the underlying boolean
-    // array good for arrays with only long runs of set values.
+    /// An iterator over the sorted disjoint contiguous range set values in the underlying boolean
+    /// array good for arrays with only long runs of set values.
     fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a>;
 
     // Other possible iterators include:
@@ -218,8 +218,10 @@ pub trait StructArrayTrait: ArrayTrait {
         self.names().len()
     }
 
+    /// Return a field's array by index
     fn field(&self, idx: usize) -> Option<Array>;
 
+    /// Return a field's array by name
     fn field_by_name(&self, name: &str) -> Option<Array> {
         let field_idx = self
             .names()
@@ -235,6 +237,7 @@ pub trait StructArrayTrait: ArrayTrait {
 pub trait ListArrayTrait: ArrayTrait {}
 
 pub trait ExtensionArrayTrait: ArrayTrait {
+    /// Returns the extension logical [`DType`].
     fn ext_dtype(&self) -> &ExtDType {
         let DType::Extension(ext_dtype, _nullability) = self.dtype() else {
             vortex_panic!("Expected ExtDType")
@@ -242,5 +245,6 @@ pub trait ExtensionArrayTrait: ArrayTrait {
         ext_dtype
     }
 
+    /// Returns the underlying [`Array`], without the [`ExtDType`].
     fn storage_array(&self) -> Array;
 }
