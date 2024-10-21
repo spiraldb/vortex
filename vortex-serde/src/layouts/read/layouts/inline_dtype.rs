@@ -16,7 +16,7 @@ use crate::stream_writer::ByteRange;
 #[derive(Debug)]
 pub struct InlineDTypeLayoutSpec;
 
-impl LayoutSpec for InlineDType LayoutSpec {
+impl LayoutSpec for InlineDTypeLayoutSpec {
     fn id(&self) -> LayoutId {
         INLINE_SCHEMA_LAYOUT_ID
     }
