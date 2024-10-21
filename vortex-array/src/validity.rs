@@ -47,23 +47,22 @@ impl ValidityMetadata {
     }
 }
 
+/// Validity information for an array
 #[derive(Clone, Debug)]
 pub enum Validity {
+    /// Items *can't* be null
     NonNullable,
+    /// All items are valid
     AllValid,
+    /// All items are null
     AllInvalid,
+    /// Specified items are null
     Array(Array),
 }
 
 impl Validity {
+    /// The [`DType`] of the underlying validity array (if it exists).
     pub const DTYPE: DType = DType::Bool(Nullability::NonNullable);
-
-    pub fn into_array(self) -> Option<Array> {
-        match self {
-            Self::Array(a) => Some(a),
-            _ => None,
-        }
-    }
 
     pub fn to_metadata(&self, length: usize) -> VortexResult<ValidityMetadata> {
         match self {
@@ -85,6 +84,15 @@ impl Validity {
         }
     }
 
+    /// If Validity is [`Validity::Array`], returns the array, otherwise returns `None`.
+    pub fn into_array(self) -> Option<Array> {
+        match self {
+            Self::Array(a) => Some(a),
+            _ => None,
+        }
+    }
+
+    /// If Validity is [`Validity::Array`], returns a reference to the array array, otherwise returns `None`.
     pub fn as_array(&self) -> Option<&Array> {
         match self {
             Self::Array(a) => Some(a),
@@ -99,6 +107,7 @@ impl Validity {
         }
     }
 
+    /// Returns whether the `index` item is valid.
     #[inline]
     pub fn is_valid(&self, index: usize) -> bool {
         match self {

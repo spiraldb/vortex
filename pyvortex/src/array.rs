@@ -4,6 +4,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
 use vortex::array::ChunkedArray;
+use vortex::compute::unary::fill_forward;
 use vortex::compute::{slice, take};
 use vortex::{Array, ArrayDType, IntoCanonical};
 
@@ -167,6 +168,50 @@ impl PyArray {
         let filter = filter.borrow();
 
         vortex::compute::filter(&self.inner, &filter.inner)
+            .map_err(PyVortexError::map_err)
+            .map(|arr| PyArray { inner: arr })
+    }
+
+    /// Fill forward non-null values over runs of nulls.
+    ///
+    /// Leading nulls are replaced with the "zero" for that type. For integral and floating-point
+    /// types, this is zero. For the Boolean type, this is `:obj:`False`.
+    ///
+    /// Fill forward sensor values over intermediate missing values. Note that leading nulls are
+    /// replaced with 0.0:
+    ///
+    /// >>> a = vortex.encoding.array([
+    /// ...      None,  None, 30.29, 30.30, 30.30,  None,  None, 30.27, 30.25,
+    /// ...     30.22,  None,  None,  None,  None, 30.12, 30.11, 30.11, 30.11,
+    /// ...     30.10, 30.08,  None, 30.21, 30.03, 30.03, 30.05, 30.07, 30.07,
+    /// ... ])
+    /// >>> a.fill_forward().to_arrow_array()
+    /// <pyarrow.lib.DoubleArray object at ...>
+    /// [
+    ///   0,
+    ///   0,
+    ///   30.29,
+    ///   30.3,
+    ///   30.3,
+    ///   30.3,
+    ///   30.3,
+    ///   30.27,
+    ///   30.25,
+    ///   30.22,
+    ///   ...
+    ///   30.11,
+    ///   30.1,
+    ///   30.08,
+    ///   30.08,
+    ///   30.21,
+    ///   30.03,
+    ///   30.03,
+    ///   30.05,
+    ///   30.07,
+    ///   30.07
+    /// ]
+    fn fill_forward(&self) -> PyResult<PyArray> {
+        fill_forward(&self.inner)
             .map_err(PyVortexError::map_err)
             .map(|arr| PyArray { inner: arr })
     }
