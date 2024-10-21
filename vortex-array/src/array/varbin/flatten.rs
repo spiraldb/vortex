@@ -19,12 +19,20 @@ impl IntoCanonical for VarBinArray {
         let bytes = bytes.into_primitive()?;
         let offsets = offsets.into_primitive()?;
 
+        // Constant validity check function.
+        let validity_check_fn: &dyn Fn(usize) -> bool = match validity {
+            Validity::NonNullable | Validity::AllValid => &|_idx: usize| true,
+            Validity::AllInvalid => &|_idx: usize| false,
+            Validity::Array(_) => &|idx: usize| validity.is_valid(idx),
+        };
+
         let arrow_array = match dtype {
             DType::Utf8(_) => {
-                byteview_from_varbin_parts::<StringViewType, _>(
+                byteview_from_varbin_parts(
+                    StringViewType {},
                     bytes,
                     offsets,
-                    validity,
+                    validity_check_fn,
                     |b| unsafe {
                         // SAFETY: VarBinViewArray values are checked at construction. If DType is Utf8,
                         //  then all values must be valid UTF-8 bytes.
@@ -32,9 +40,13 @@ impl IntoCanonical for VarBinArray {
                     },
                 )
             }
-            DType::Binary(_) => {
-                byteview_from_varbin_parts::<BinaryViewType, _>(bytes, offsets, validity, |b| b)
-            }
+            DType::Binary(_) => byteview_from_varbin_parts(
+                BinaryViewType {},
+                bytes,
+                offsets,
+                validity_check_fn,
+                |b| b,
+            ),
             _ => vortex_bail!("invalid DType for VarBinViewArray"),
         };
         let array = Array::from_arrow(arrow_array.clone(), arrow_array.is_nullable());
@@ -44,15 +56,17 @@ impl IntoCanonical for VarBinArray {
     }
 }
 
-fn byteview_from_varbin_parts<T, F>(
+fn byteview_from_varbin_parts<T, F, ValidFn>(
+    _type: T,
     bytes: PrimitiveArray,
     offsets: PrimitiveArray,
-    validity: Validity,
+    validity_check_fn: ValidFn,
     from_bytes_fn: F,
 ) -> ArrayRef
 where
     T: ByteViewType,
     F: Fn(&[u8]) -> &T::Native,
+    ValidFn: Fn(usize) -> bool,
 {
     let array_len = offsets.len() - 1;
     let mut builder = GenericByteViewBuilder::<T>::with_capacity(array_len);
@@ -71,8 +85,10 @@ where
 
     let bytes_buffer = bytes.into_buffer();
 
+    // Can we factor out the validity check?
     for idx in 0..array_len {
-        if !validity.is_valid(idx) {
+        // This check should be specialized away if the function is false.
+        if !validity_check_fn(idx) {
             builder.append_null();
             continue;
         }
