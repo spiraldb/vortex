@@ -61,7 +61,7 @@ pub mod flatbuffers {
     pub use vortex_flatbuffers::array::*;
 }
 
-/// A central type for all Vortex arrays, which are known length sequences of compressed data.
+/// A central type for all Vortex arrays, which are known length sequences of typed and possibly compressed data.
 ///
 /// This is the main entrypoint for working with in-memory Vortex data, and dispatches work over the underlying encoding or memory representations.
 #[derive(Debug, Clone)]
