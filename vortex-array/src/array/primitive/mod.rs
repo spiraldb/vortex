@@ -12,13 +12,13 @@ use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, NativePType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::elementwise::{dyn_cast_array_iter, BinaryFn, UnaryFn};
 use crate::encoding::ids;
 use crate::iter::{Accessor, AccessorRef, Batch, ITER_BATCH_SIZE};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
-use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray,
 };

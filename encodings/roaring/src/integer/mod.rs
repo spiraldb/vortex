@@ -3,13 +3,13 @@ use std::fmt::{Debug, Display};
 pub use compress::*;
 use croaring::{Bitmap, Portable};
 use serde::{Deserialize, Serialize};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::array::PrimitiveArray;
 use vortex::compute::unary::try_cast;
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
-use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray, IntoCanonical,
     TypedArray,
