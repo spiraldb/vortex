@@ -2,18 +2,16 @@ use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyDict, PyInt, PyList};
+use pyo3::types::{IntoPyDict, PyInt, PyList};
 use vortex::array::ChunkedArray;
 use vortex::compute::unary::{fill_forward, scalar_at};
 use vortex::compute::{slice, take};
 use vortex::{Array, ArrayDType, IntoCanonical};
-use vortex_dtype::DType;
-use vortex_error::vortex_panic;
-use vortex_scalar::{PValue, Scalar, ScalarValue};
 
 use crate::dtype::PyDType;
 use crate::error::PyVortexError;
 use crate::python_repr::PythonRepr;
+use crate::scalar::scalar_into_py;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 /// An array of zero or more *rows* each with the same set of *columns*.
@@ -204,13 +202,16 @@ impl PyArray {
     /// Returns
     /// -------
     /// :class:`Any`
+    ///     If this array contains numbers or Booleans, this array returns the corresponding
+    ///     primitive Python type, i.e. int, float, and bool. For structures and variable-length
+    ///     data types, a zero-copy view of the underlying data is returned.
     ///
     /// Examples
     /// --------
     ///
     /// Retrieve the third element from an array of strings:
     ///
-    /// >>> vortex.encoding.array(["hello", "goodbye", "it", "is"]).scalar_at(2)
+    /// >>> vortex.encoding.array(["hello", "goodbye", "it", "is"]).scalar_at(2).into_python()
     /// 'it'
     ///
     /// Retrieve the last element from an array of integers:
@@ -227,7 +228,7 @@ impl PyArray {
     /// ...     None,
     /// ...     {'name': 'Mikhail', 'age': 57},
     /// ... ])
-    /// >>> array.scalar_at(2)
+    /// >>> array.scalar_at(2).into_python()
     /// {'age': 33, 'name': 'Angela'}
     ///
     /// Retrieve a missing element from an array of structures:
@@ -253,7 +254,7 @@ impl PyArray {
     fn scalar_at(&self, index: &Bound<PyInt>) -> PyResult<PyObject> {
         scalar_at(&self.inner, index.extract()?)
             .map_err(PyVortexError::map_err)
-            .and_then(|scalar| scalar_to_py(index.py(), &scalar))
+            .and_then(|scalar| scalar_into_py(index.py(), scalar, false))
     }
 
     /// Filter, permute, and/or repeat elements by their index.
@@ -395,47 +396,4 @@ impl PyArray {
     fn tree_display(&self) -> String {
         self.inner.tree_display().to_string()
     }
-}
-
-fn scalar_to_py(py: Python, x: &Scalar) -> PyResult<PyObject> {
-    scalar_value_to_py(py, x.value(), x.dtype())
-}
-
-fn scalar_value_to_py(py: Python, x: &ScalarValue, dtype: &DType) -> PyResult<PyObject> {
-    return match x {
-        ScalarValue::Bool(x) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::U8(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::U16(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::U32(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::U64(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::I8(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::I16(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::I32(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::I64(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::F16(x)) => Ok(x.to_f32().into_py(py)),
-        ScalarValue::Primitive(PValue::F32(x)) => Ok(x.into_py(py)),
-        ScalarValue::Primitive(PValue::F64(x)) => Ok(x.into_py(py)),
-        ScalarValue::Buffer(x) => Ok(x.into_py(py)),
-        ScalarValue::BufferString(x) => Ok(x.into_py(py)),
-        ScalarValue::List(x) => match dtype {
-            DType::List(dtype, ..) => Ok(x
-                .iter()
-                .map(|x| scalar_value_to_py(py, x, dtype))
-                .collect::<Result<Vec<_>, _>>()?
-                .into_py(py)),
-            DType::Struct(dtype, ..) => {
-                let dict = PyDict::new_bound(py);
-                for ((child, name), dtype) in x
-                    .iter()
-                    .zip(dtype.names().iter())
-                    .zip(dtype.dtypes().iter())
-                {
-                    dict.set_item(name.to_string(), scalar_value_to_py(py, child, dtype)?)?
-                }
-                Ok(dict.into_py(py))
-            }
-            _ => vortex_panic!("impossible"),
-        },
-        ScalarValue::Null => Ok(py.None()),
-    };
 }
