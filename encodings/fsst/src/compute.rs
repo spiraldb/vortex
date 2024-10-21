@@ -186,3 +186,56 @@ impl FilterFn for FSSTArray {
         .into_array())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use vortex::array::{ConstantArray, VarBinArray};
+    use vortex::compute::{MaybeCompareFn, Operator};
+    use vortex::{IntoArray, IntoArrayVariant};
+    use vortex_dtype::{DType, Nullability};
+
+    use crate::{fsst_compress, fsst_train_compressor};
+
+    #[test]
+    fn test_compare_fsst() {
+        let lhs = VarBinArray::from_iter(
+            [
+                Some("hello"),
+                None,
+                Some("world"),
+                None,
+                Some("this is a very long string"),
+            ],
+            DType::Utf8(Nullability::Nullable),
+        )
+        .into_array();
+        let compressor = fsst_train_compressor(&lhs).unwrap();
+        let lhs = fsst_compress(&lhs, &compressor).unwrap();
+
+        let rhs = ConstantArray::new("world", lhs.len()).into_array();
+
+        // Ensure fastpath for Eq exists, and returns correct answer
+        let equals: Vec<bool> = MaybeCompareFn::maybe_compare(&lhs, &rhs, Operator::Eq)
+            .unwrap()
+            .unwrap()
+            .into_bool()
+            .unwrap()
+            .boolean_buffer()
+            .into_iter()
+            .collect();
+
+        assert_eq!(equals, vec![false, false, true, false, false]);
+
+        // Ensure fastpath for Eq exists, and returns correct answer
+        let not_equals: Vec<bool> = MaybeCompareFn::maybe_compare(&lhs, &rhs, Operator::NotEq)
+            .unwrap()
+            .unwrap()
+            .into_bool()
+            .unwrap()
+            .boolean_buffer()
+            .into_iter()
+            .collect();
+
+        assert_eq!(not_equals, vec![true, true, false, true, true]);
+    }
+}
