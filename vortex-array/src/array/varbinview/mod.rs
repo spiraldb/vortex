@@ -13,12 +13,12 @@ use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexError, VortexExpect as _, VortexResult};
 
 use crate::array::varbin::VarBinArray;
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
 use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArrayVariant, IntoCanonical,
 };

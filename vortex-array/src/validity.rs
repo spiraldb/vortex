@@ -1,3 +1,5 @@
+//! Array validity and nullability behavior, used by arrays and compute functions.
+
 use std::fmt::{Debug, Display};
 use std::ops::BitAnd;
 

@@ -6,12 +6,12 @@ use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::{Scalar, ScalarValue};
 
 use crate::array::constant::ConstantArray;
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::compute::unary::scalar_at;
 use crate::compute::{search_sorted, SearchResult, SearchSortedSide};
 use crate::encoding::ids;
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, Array, ArrayDType, ArrayTrait, IntoArray, IntoArrayVariant};
 
 mod compute;

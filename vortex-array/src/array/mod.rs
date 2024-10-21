@@ -1,3 +1,5 @@
+//! All the built-in encoding schemes and arrays.
+
 #[cfg(test)]
 mod assertions;
 
@@ -12,6 +14,8 @@ mod sparse;
 mod struct_;
 mod varbin;
 mod varbinview;
+
+pub mod visitor;
 
 #[cfg(feature = "arbitrary")]
 pub mod arbitrary;

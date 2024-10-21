@@ -1,4 +1,4 @@
-//! Utilities to work with `Arrow` data and types
+//! Utilities to work with `Arrow` data and types.
 
 use vortex_error::VortexResult;
 

@@ -3,12 +3,12 @@ use std::sync::Arc;
 
 use fsst::{Decompressor, Symbol};
 use serde::{Deserialize, Serialize};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::array::VarBinArray;
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
-use vortex::visitor::AcceptArrayVisitor;
 use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, IntoCanonical};
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexExpect, VortexResult};
@@ -183,7 +183,7 @@ impl FSSTArray {
 }
 
 impl AcceptArrayVisitor for FSSTArray {
-    fn accept(&self, visitor: &mut dyn vortex::visitor::ArrayVisitor) -> VortexResult<()> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("symbols", &self.symbols())?;
         visitor.visit_child("symbol_lengths", &self.symbol_lengths())?;
         visitor.visit_child("codes", &self.codes())?;
