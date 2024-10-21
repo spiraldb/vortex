@@ -1,3 +1,5 @@
+//! Encoding that enable sharing data with Arrow with zero-copy.
+
 use std::sync::Arc;
 
 use arrow_array::types::{
