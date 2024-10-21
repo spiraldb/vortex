@@ -3,17 +3,16 @@ use vortex_scalar::Scalar;
 
 use crate::array::varbin::{varbin_scalar, VarBinArray};
 use crate::compute::unary::ScalarAtFn;
-use crate::compute::{ArrayCompute, MaybeCompareFn, Operator, SliceFn, TakeFn};
-use crate::{Array, ArrayDType};
+use crate::compute::{ArrayCompute, FilterFn, SliceFn, TakeFn};
+use crate::ArrayDType;
 
-mod compare;
 mod filter;
 mod slice;
 mod take;
 
 impl ArrayCompute for VarBinArray {
-    fn compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>> {
-        MaybeCompareFn::maybe_compare(self, other, operator)
+    fn filter(&self) -> Option<&dyn FilterFn> {
+        Some(self)
     }
 
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
