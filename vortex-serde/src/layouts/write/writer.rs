@@ -16,6 +16,7 @@ use crate::io::VortexWrite;
 use crate::layouts::write::footer::{Footer, Postscript};
 use crate::layouts::write::layouts::Layout;
 use crate::layouts::{EOF_SIZE, MAGIC_BYTES, VERSION};
+use crate::stream_writer::ByteRange;
 use crate::MessageWriter;
 
 pub struct LayoutWriter<W> {
@@ -141,10 +142,14 @@ impl<W: VortexWrite> LayoutWriter<W> {
                 Validity::NonNullable,
             )?;
 
-            let metadata_table_begin = self.msgs.tell();
+            let dtype_begin = self.msgs.tell();
             self.msgs.write_dtype(metadata_array.dtype()).await?;
+            let dtype_end = self.msgs.tell();
             self.msgs.write_batch(metadata_array.into_array()).await?;
-            chunks.push_front(Layout::flat(metadata_table_begin, self.msgs.tell()));
+            chunks.push_front(Layout::inlined_schema(
+                vec![Layout::flat(dtype_end, self.msgs.tell())],
+                ByteRange::new(dtype_begin, dtype_end),
+            ));
             column_layouts.push(Layout::chunked(chunks.into(), true));
         }
 
