@@ -1,9 +1,11 @@
 use std::collections::VecDeque;
 use std::{io, mem};
 
+use ahash::{HashMap, HashMapExt};
 use flatbuffers::FlatBufferBuilder;
 use futures::{Stream, TryStreamExt};
 use vortex::array::{ChunkedArray, StructArray};
+use vortex::stats::{ArrayStatistics, Stat};
 use vortex::stream::ArrayStream;
 use vortex::validity::Validity;
 use vortex::{Array, ArrayDType, IntoArray};
@@ -11,9 +13,10 @@ use vortex_buffer::io_buf::IoBuf;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, vortex_err, VortexExpect, VortexResult};
 use vortex_flatbuffers::WriteFlatBuffer;
+use vortex_scalar::{Scalar, ScalarValue};
 
+use super::footer::{Footer, Postscript};
 use crate::io::VortexWrite;
-use crate::layouts::write::footer::{Footer, Postscript};
 use crate::layouts::write::layouts::Layout;
 use crate::layouts::{EOF_SIZE, MAGIC_BYTES, VERSION};
 use crate::MessageWriter;
@@ -23,8 +26,10 @@ pub struct LayoutWriter<W> {
 
     row_count: u64,
     dtype: Option<DType>,
-    column_chunks: Vec<BatchOffsets>,
+    column_chunks: Vec<ColumnChunkAccumulator>,
 }
+
+const PRUNING_STATS: [Stat; 4] = [Stat::Min, Stat::Max, Stat::NullCount, Stat::TrueCount];
 
 impl<W: VortexWrite> LayoutWriter<W> {
     pub fn new(write: W) -> Self {
@@ -84,66 +89,61 @@ impl<W: VortexWrite> LayoutWriter<W> {
     where
         S: Stream<Item = VortexResult<Array>> + Unpin,
     {
-        let mut row_offsets: Vec<u64> = Vec::new();
-        let mut byte_offsets = vec![self.msgs.tell()];
-
-        let mut n_rows_written = match self.column_chunks.get(column_idx) {
+        let size_hint = stream.size_hint().0;
+        let accumulator = match self.column_chunks.get_mut(column_idx) {
             None => {
-                row_offsets.push(0);
-                0
+                self.column_chunks
+                    .push(ColumnChunkAccumulator::new(size_hint));
+
+                assert_eq!(
+                    self.column_chunks.len(),
+                    column_idx + 1,
+                    "write_column_chunks must be called in order by column index! got column index {} but column chunks has {} columns",
+                    column_idx,
+                    self.column_chunks.len()
+                );
+
+                self.column_chunks
+                    .last_mut()
+                    .vortex_expect("column chunks cannot be empty, just pushed")
             }
-            Some(x) => {
-                let last = x.row_offsets.last();
-                *last.vortex_expect("row offsets is non-empty")
-            }
+            Some(x) => x,
         };
+        let mut n_rows_written = *accumulator
+            .row_offsets
+            .last()
+            .vortex_expect("row offsets cannot be empty by construction");
+
+        let mut byte_offsets = Vec::with_capacity(size_hint);
+        byte_offsets.push(self.msgs.tell());
 
         while let Some(chunk) = stream.try_next().await? {
+            for stat in PRUNING_STATS {
+                accumulator.push_stat(stat, chunk.statistics().compute(stat));
+            }
+
             n_rows_written += chunk.len() as u64;
-            row_offsets.push(n_rows_written);
+            accumulator.push_row_offset(n_rows_written);
+
             self.msgs.write_batch(chunk).await?;
             byte_offsets.push(self.msgs.tell());
         }
-
-        if let Some(batches) = self.column_chunks.get_mut(column_idx) {
-            batches.row_offsets.extend(row_offsets);
-            batches.batch_byte_offsets.push(byte_offsets);
-        } else {
-            self.column_chunks
-                .push(BatchOffsets::new(row_offsets, vec![byte_offsets]));
-        }
+        accumulator.push_batch_byte_offsets(byte_offsets);
 
         Ok(())
     }
 
     async fn write_metadata_arrays(&mut self) -> VortexResult<Layout> {
         let mut column_layouts = Vec::with_capacity(self.column_chunks.len());
-        for mut chunk in mem::take(&mut self.column_chunks) {
-            let mut chunks: VecDeque<Layout> = chunk
-                .batch_byte_offsets
-                .iter()
-                .flat_map(|byte_offsets| {
-                    byte_offsets
-                        .iter()
-                        .zip(byte_offsets.iter().skip(1))
-                        .map(|(begin, end)| Layout::flat(*begin, *end))
-                })
-                .collect();
-            let len = chunk.row_offsets.len() - 1;
-            chunk.row_offsets.truncate(len);
-
-            assert_eq!(chunks.len(), chunk.row_offsets.len());
-
-            let metadata_array = StructArray::try_new(
-                ["row_offset".into()].into(),
-                vec![chunk.row_offsets.into_array()],
-                len,
-                Validity::NonNullable,
-            )?;
+        for column_accumulator in mem::take(&mut self.column_chunks) {
+            let (mut chunks, metadata_array) = column_accumulator.into_chunks_and_metadata()?;
 
             let metadata_table_begin = self.msgs.tell();
             self.msgs.write_dtype(metadata_array.dtype()).await?;
-            self.msgs.write_batch(metadata_array.into_array()).await?;
+            self.msgs.write_batch(metadata_array).await?;
+
+            // push the metadata table as the first chunk
+            // NB(wmanning): I hate this so much
             chunks.push_front(Layout::flat(metadata_table_begin, self.msgs.tell()));
             column_layouts.push(Layout::chunked(chunks.into(), true));
         }
@@ -196,17 +196,101 @@ async fn write_fb_raw<W: VortexWrite, F: WriteFlatBuffer>(mut writer: W, fb: F) 
 }
 
 #[derive(Clone, Debug)]
-pub struct BatchOffsets {
+pub struct ColumnChunkAccumulator {
     pub row_offsets: Vec<u64>,
     pub batch_byte_offsets: Vec<Vec<u64>>,
+    pub pruning_stats: HashMap<Stat, Vec<Option<Scalar>>>,
 }
 
-impl BatchOffsets {
-    pub fn new(row_offsets: Vec<u64>, batch_byte_offsets: Vec<Vec<u64>>) -> Self {
+impl ColumnChunkAccumulator {
+    pub fn new(size_hint: usize) -> Self {
+        let mut row_offsets = Vec::with_capacity(size_hint + 1);
+        row_offsets.push(0);
         Self {
             row_offsets,
-            batch_byte_offsets,
+            batch_byte_offsets: Vec::new(),
+            pruning_stats: HashMap::with_capacity(PRUNING_STATS.len()),
         }
+    }
+
+    pub fn push_row_offset(&mut self, row_offset: u64) {
+        self.row_offsets.push(row_offset);
+    }
+
+    pub fn push_batch_byte_offsets(&mut self, batch_byte_offsets: Vec<u64>) {
+        self.batch_byte_offsets.push(batch_byte_offsets);
+    }
+
+    pub fn push_stat(&mut self, stat: Stat, value: Option<Scalar>) {
+        self.pruning_stats.entry(stat).or_default().push(value);
+    }
+
+    pub fn into_chunks_and_metadata(mut self) -> VortexResult<(VecDeque<Layout>, Array)> {
+        // we don't need the last row offset; that's just the total number of rows
+        let length = self.row_offsets.len() - 1;
+        self.row_offsets.truncate(length);
+
+        let chunks: VecDeque<Layout> = self
+            .batch_byte_offsets
+            .iter()
+            .flat_map(|byte_offsets| {
+                byte_offsets
+                    .iter()
+                    .zip(byte_offsets.iter().skip(1))
+                    .map(|(begin, end)| Layout::flat(*begin, *end))
+            })
+            .collect();
+
+        if chunks.len() != self.row_offsets.len() {
+            vortex_bail!(
+                "Expected {} chunks based on row offsets, found {} based on byte offsets",
+                self.row_offsets.len(),
+                chunks.len()
+            );
+        }
+
+        let mut names = vec!["row_offset".into()];
+        let mut fields = vec![self.row_offsets.into_array()];
+
+        for stat in PRUNING_STATS {
+            let values = self.pruning_stats.entry(stat).or_default();
+            if values.len() != length {
+                vortex_bail!(
+                    "Expected {} values for stat {}, found {}",
+                    length,
+                    stat,
+                    values.len()
+                );
+            }
+
+            let Some(dtype) = values
+                .iter()
+                .filter(|v| v.is_some())
+                .flatten()
+                .map(|v| v.dtype())
+                .next()
+            else {
+                // no point in writing all nulls
+                continue;
+            };
+            let dtype = dtype.as_nullable();
+            let values = values
+                .iter()
+                .map(|v| {
+                    v.as_ref()
+                        .map(|s| s.cast(&dtype).map(|s| s.into_value()))
+                        .unwrap_or_else(|| Ok(ScalarValue::Null))
+                })
+                .collect::<VortexResult<Vec<_>>>()?;
+
+            names.push(format!("{stat}").to_lowercase().into());
+            fields.push(Array::from_scalar_values(dtype, values)?);
+        }
+
+        Ok((
+            chunks,
+            StructArray::try_new(names.into(), fields, length, Validity::NonNullable)?.into_array(),
+        ))
     }
 }
 
