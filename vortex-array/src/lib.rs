@@ -12,7 +12,6 @@
 use std::fmt::{Debug, Display, Formatter};
 use std::future::ready;
 
-pub use ::paste;
 pub use canonical::*;
 pub use context::*;
 pub use data::*;
@@ -62,9 +61,14 @@ pub mod flatbuffers {
     pub use vortex_flatbuffers::array::*;
 }
 
+/// A central type for all Vortex arrays, which are known length sequences of compressed data.
+///
+/// This is the main entrypoint for working with in-memory Vortex data, and dispatches work over the underlying encoding or memory representations.
 #[derive(Debug, Clone)]
 pub enum Array {
+    /// Owned [`Array`] with serialized metadata, backed by heap-allocated memory.
     Data(ArrayData),
+    /// Zero-copy view over flatbuffer-encoded [`Array`] data, created without eager serialization.
     View(ArrayView),
 }
 
@@ -76,6 +80,7 @@ impl Array {
         }
     }
 
+    /// Returns the number of logical elements in the array.
     #[allow(clippy::same_name_method)]
     pub fn len(&self) -> usize {
         match self {
@@ -91,6 +96,7 @@ impl Array {
         }
     }
 
+    /// Total size of the array in bytes, including all children and buffers.
     pub fn nbytes(&self) -> usize {
         self.with_dyn(|a| a.nbytes())
     }
@@ -102,6 +108,7 @@ impl Array {
         }
     }
 
+    /// Returns an arrays with all of the array's child arrays.
     pub fn children(&self) -> Vec<Array> {
         match self {
             Array::Data(d) => d.children().iter().cloned().collect_vec(),
@@ -109,6 +116,7 @@ impl Array {
         }
     }
 
+    /// Returns the number of child arrays
     pub fn nchildren(&self) -> usize {
         match self {
             Self::Data(d) => d.nchildren(),
@@ -174,7 +182,7 @@ impl Array {
         )
     }
 
-    /// Checks whether array is of given encoding
+    /// Checks whether array is of a given encoding.
     pub fn is_encoding(&self, id: EncodingId) -> bool {
         self.encoding().id() == id
     }
@@ -270,6 +278,7 @@ pub trait ArrayTrait:
     + ArrayStatisticsCompute
     + ToArrayData
 {
+    /// Total size of the array in bytes, including all children and buffers.
     fn nbytes(&self) -> usize {
         let mut visitor = NBytesVisitor(0);
         self.accept(&mut visitor)

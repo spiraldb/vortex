@@ -131,6 +131,7 @@ pub fn infer_schema(dtype: &DType) -> VortexResult<Schema> {
     Ok(builder.finish())
 }
 
+/// Try and convert a Vortex [`DType`] into an a Arrow [`DataType`]
 pub fn infer_data_type(dtype: &DType) -> VortexResult<DataType> {
     Ok(match dtype {
         DType::Null => DataType::Null,
