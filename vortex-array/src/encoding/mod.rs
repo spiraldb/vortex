@@ -1,4 +1,4 @@
-//! Traits and types to define shared unique encoding identifiers
+//! Traits and types to define shared unique encoding identifiers.
 
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
