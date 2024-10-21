@@ -1,4 +1,6 @@
+#[cfg(test)]
 mod assertions;
+
 mod bool;
 mod chunked;
 mod constant;

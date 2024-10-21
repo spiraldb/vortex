@@ -15,6 +15,7 @@ use crate::stats::{Stat, Statistics, StatsSet};
 use crate::visitor::ArrayVisitor;
 use crate::{flatbuffers as fb, Array, Context, IntoArray, ToArray};
 
+/// Zero-copy view over flatbuffer-encoded array data, created without eager serialization.
 #[derive(Clone)]
 pub struct ArrayView {
     encoding: EncodingRef,

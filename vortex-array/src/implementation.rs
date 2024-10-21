@@ -21,6 +21,10 @@ pub trait ArrayDef {
     type Encoding: ArrayEncoding + ArrayEncodingExt<D = Self>;
 }
 
+/// Macro to generate all the necessary code for a new type of array encoding. Including:
+/// 1. New Array type that implements `AsRef<Array>`, `GetArrayMetadata`, `ToArray`, `IntoArray`, and multiple useful `From`/`TryFrom` implementations.
+/// 1. New Encoding type that implements `ArrayEncoding`.
+/// 1. New metadata type that implements `ArrayMetadata`.
 #[macro_export]
 macro_rules! impl_encoding {
     ($id:literal, $code:expr, $Name:ident) => {
