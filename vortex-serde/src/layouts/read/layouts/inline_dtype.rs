@@ -14,9 +14,9 @@ use crate::layouts::{
 use crate::stream_writer::ByteRange;
 
 #[derive(Debug)]
-pub struct InlineSchemaLayoutSpec;
+pub struct InlineDTypeLayoutSpec;
 
-impl LayoutSpec for InlineSchemaLayoutSpec {
+impl LayoutSpec for InlineDType LayoutSpec {
     fn id(&self) -> LayoutId {
         INLINE_SCHEMA_LAYOUT_ID
     }
@@ -29,7 +29,7 @@ impl LayoutSpec for InlineSchemaLayoutSpec {
         layout_reader: LayoutDeserializer,
         message_cache: RelativeLayoutCache,
     ) -> Box<dyn LayoutReader> {
-        Box::new(InlineSchemaLayout::new(
+        Box::new(InlineDTypeLayout::new(
             fb_bytes,
             fb_loc,
             scan,
@@ -40,7 +40,7 @@ impl LayoutSpec for InlineSchemaLayoutSpec {
 }
 
 #[derive(Debug)]
-pub struct InlineSchemaLayout {
+pub struct InlineDTypeLayout {
     fb_bytes: Bytes,
     fb_loc: usize,
     scan: Scan,
@@ -54,7 +54,7 @@ enum DTypeReadResult {
     DType(DType),
 }
 
-impl InlineSchemaLayout {
+impl InlineDTypeLayout {
     pub fn new(
         fb_bytes: Bytes,
         fb_loc: usize,
@@ -108,7 +108,7 @@ impl InlineSchemaLayout {
     }
 }
 
-impl LayoutReader for InlineSchemaLayout {
+impl LayoutReader for InlineDTypeLayout {
     fn read_next(&mut self) -> VortexResult<Option<ReadResult>> {
         if let Some(cr) = self.child_layout.as_mut() {
             cr.read_next()
@@ -120,7 +120,7 @@ impl LayoutReader for InlineSchemaLayout {
                         .flatbuffer()
                         .children()
                         .ok_or_else(|| vortex_err!("No children"))?
-                        .get(1);
+                        .get(0);
 
                     self.child_layout = Some(
                         self.layout_builder.read_layout(
