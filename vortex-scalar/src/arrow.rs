@@ -3,7 +3,7 @@ use std::sync::Arc;
 use arrow_array::*;
 use vortex_datetime_dtype::{is_temporal_ext_type, TemporalMetadata, TimeUnit};
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, VortexError};
+use vortex_error::{vortex_bail, VortexError, VortexResult};
 
 use crate::{PValue, Scalar};
 
@@ -127,6 +127,21 @@ impl TryFrom<&Scalar> for Arc<dyn Datum> {
 
                 todo!("Non temporal extension scalar conversion")
             }
+        }
+    }
+}
+
+impl Scalar {
+    pub fn to_varbin_datum(self) -> VortexResult<Arc<dyn Datum>> {
+        match self.dtype {
+            DType::Utf8(_) => {
+                value_to_arrow_scalar!(self.value.as_buffer_string()?, StringArray)
+            }
+            DType::Binary(_) => {
+                value_to_arrow_scalar!(self.value.as_buffer()?, BinaryArray)
+            }
+
+            other => vortex_bail!("Expected Utf8 or Binary scalar, found {other}"),
         }
     }
 }

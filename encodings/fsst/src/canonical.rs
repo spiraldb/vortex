@@ -44,7 +44,6 @@ impl IntoCanonical for FSSTArray {
             let offsets_array = PrimitiveArray::from(offsets).into_array();
             let uncompressed_bytes_array = PrimitiveArray::from(uncompressed_bytes).into_array();
 
-            // TODO(aduffy): do this without the intermediate VarBin
             Ok(Canonical::VarBinView(
                 VarBinArray::try_new(
                     offsets_array,

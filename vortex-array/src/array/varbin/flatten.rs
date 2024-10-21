@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use arrow_array::builder::GenericByteViewBuilder;
+use arrow_array::builder::make_view;
 use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
-use arrow_array::ArrayRef;
+use arrow_array::{ArrayRef, GenericByteViewArray};
+use arrow_buffer::{BufferBuilder, NullBufferBuilder, ScalarBuffer};
 use num_traits::AsPrimitive;
 use vortex_dtype::{match_each_integer_ptype, DType};
 use vortex_error::{vortex_bail, VortexResult};
@@ -19,34 +20,9 @@ impl IntoCanonical for VarBinArray {
         let bytes = bytes.into_primitive()?;
         let offsets = offsets.into_primitive()?;
 
-        // Constant validity check function.
-        let validity_check_fn: &dyn Fn(usize) -> bool = match validity {
-            Validity::NonNullable | Validity::AllValid => &|_idx: usize| true,
-            Validity::AllInvalid => &|_idx: usize| false,
-            Validity::Array(_) => &|idx: usize| validity.is_valid(idx),
-        };
-
         let arrow_array = match dtype {
-            DType::Utf8(_) => {
-                byteview_from_varbin_parts(
-                    StringViewType {},
-                    bytes,
-                    offsets,
-                    validity_check_fn,
-                    |b| unsafe {
-                        // SAFETY: VarBinViewArray values are checked at construction. If DType is Utf8,
-                        //  then all values must be valid UTF-8 bytes.
-                        std::str::from_utf8_unchecked(b)
-                    },
-                )
-            }
-            DType::Binary(_) => byteview_from_varbin_parts(
-                BinaryViewType {},
-                bytes,
-                offsets,
-                validity_check_fn,
-                |b| b,
-            ),
+            DType::Utf8(_) => byteview_from_varbin::<StringViewType>(bytes, offsets, validity),
+            DType::Binary(_) => byteview_from_varbin::<BinaryViewType>(bytes, offsets, validity),
             _ => vortex_bail!("invalid DType for VarBinViewArray"),
         };
         let array = Array::from_arrow(arrow_array.clone(), arrow_array.is_nullable());
@@ -56,66 +32,83 @@ impl IntoCanonical for VarBinArray {
     }
 }
 
-fn byteview_from_varbin_parts<T, F, ValidFn>(
-    _type: T,
+// Sentinel indicating that a value being passed to the `make_view` constructor is unused.
+const UNUSED: u32 = u32::MAX;
+
+fn byteview_from_varbin<T: ByteViewType>(
     bytes: PrimitiveArray,
     offsets: PrimitiveArray,
-    validity_check_fn: ValidFn,
-    from_bytes_fn: F,
-) -> ArrayRef
-where
-    T: ByteViewType,
-    F: Fn(&[u8]) -> &T::Native,
-    ValidFn: Fn(usize) -> bool,
-{
+    validity: Validity,
+) -> ArrayRef {
     let array_len = offsets.len() - 1;
-    let mut builder = GenericByteViewBuilder::<T>::with_capacity(array_len);
 
-    // Directly append the buffer from the original VarBin to back the new VarBinView
-    builder.append_block(bytes.clone().into_buffer().into_arrow());
+    let mut views = BufferBuilder::<u128>::new(array_len);
+    let mut nulls = NullBufferBuilder::new(array_len);
+
+    // TODO(aduffy): handle arrays >= 2GiB by splitting into multiple blocks at string boundaries.
+    let buffers = vec![bytes.clone().into_buffer().into_arrow()];
+    assert!(
+        buffers[0].len() <= i32::MAX as usize,
+        "VarBinView cannot support arrays of length >2GiB"
+    );
 
     // Monomorphized `offset_at` accessor.
     // This is more efficient than going through the `offset_at` method when we are going
     // to touch the entire array.
-
     let offset_fn: &dyn Fn(usize) -> usize = match_each_integer_ptype!(offsets.ptype(), |$P| {
         let offsets_typed: &[$P] = offsets.maybe_null_slice::<$P>();
         &|idx: usize| -> usize { offsets_typed[idx].as_() }
     });
 
+    // This specializes validity lookups for the 3 different nullability patterns.
+    // This is faster than matching on the validity each time.
+    let validity_fn: &dyn Fn(usize) -> bool = match validity {
+        // No nulls => use a constant true function
+        Validity::NonNullable | Validity::AllValid => &|_idx: usize| true,
+        // All nulls => use constant false
+        Validity::AllInvalid => &|_idx: usize| false,
+        // Mix of null and non-null, index into the validity map
+        _ => &|idx: usize| validity.is_valid(idx),
+    };
+
     let bytes_buffer = bytes.into_buffer();
 
-    // Can we factor out the validity check?
     for idx in 0..array_len {
-        // This check should be specialized away if the function is false.
-        if !validity_check_fn(idx) {
-            builder.append_null();
+        let is_valid = validity_fn(idx);
+        if !is_valid {
+            nulls.append_null();
+            views.append(0);
             continue;
         }
+
+        // Non-null codepath
+        nulls.append_non_null();
+
+        // Find the index in the buffer.
         let start = offset_fn(idx);
         let end = offset_fn(idx + 1);
         let len = end - start;
 
-        // TODO(aduffy): fix this to overflow into multiple buffers in a slow-path.
-        assert_eq!(
-            start as u32 as usize, start,
-            "VarBinView cannot have buffer >= 2GiB"
-        );
-        assert_eq!(
-            end as u32 as usize, end,
-            "VarBinView cannot have buffer >= 2GiB"
-        );
-
-        if len <= BinaryView::MAX_INLINED_SIZE {
-            let bytes = bytes_buffer.slice(start..end);
-            let value = from_bytes_fn(bytes.as_slice());
-            builder.append_value(value);
+        // Copy the first MAX(len, 12) bytes into the end of the view.
+        let bytes = bytes_buffer.slice(start..end);
+        let view: u128 = if len <= BinaryView::MAX_INLINED_SIZE {
+            make_view(bytes.as_slice(), UNUSED, UNUSED)
         } else {
-            unsafe { builder.append_view_unchecked(0, start as u32, len as u32) };
-        }
+            let block_id = 0u32;
+            make_view(bytes.as_slice(), block_id, start as u32)
+        };
+
+        views.append(view);
     }
 
-    Arc::new(builder.finish())
+    // SAFETY: we enforce in the Vortex type layer that Utf8 data is properly encoded.
+    Arc::new(unsafe {
+        GenericByteViewArray::<T>::new_unchecked(
+            ScalarBuffer::from(views.finish()),
+            buffers,
+            nulls.finish(),
+        )
+    })
 }
 
 #[cfg(test)]
