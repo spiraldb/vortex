@@ -1,3 +1,5 @@
+mod tokio_runtime;
+
 use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
@@ -11,7 +13,7 @@ use bench_vortex::public_bi_data::BenchmarkDatasets;
 use bench_vortex::public_bi_data::PBIDataset::*;
 use bench_vortex::taxi_data::taxi_data_parquet;
 use bench_vortex::tpch::dbgen::{DBGen, DBGenOptions};
-use bench_vortex::{fetch_taxi_data, tpch, TOKIO_RUNTIME};
+use bench_vortex::{fetch_taxi_data, tpch};
 use criterion::{black_box, criterion_group, criterion_main, Criterion, Throughput};
 use futures::TryStreamExt;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -27,6 +29,8 @@ use vortex_error::VortexResult;
 use vortex_sampling_compressor::compressors::fsst::FSSTCompressor;
 use vortex_sampling_compressor::{SamplingCompressor, ALL_COMPRESSORS_CONTEXT};
 use vortex_serde::layouts::{LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter};
+
+use crate::tokio_runtime::TOKIO_RUNTIME;
 
 #[derive(serde::Serialize)]
 struct GenericBenchmarkResults<'a> {
