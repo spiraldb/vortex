@@ -46,7 +46,6 @@ pub mod encoding;
 mod implementation;
 pub mod iter;
 mod metadata;
-pub mod opaque;
 pub mod stats;
 pub mod stream;
 mod tree;
@@ -256,6 +255,9 @@ pub trait ToArray {
     fn to_array(&self) -> Array;
 }
 
+/// Consume `self` and turn it into an [`Array`] infallibly.
+///
+/// Implementation of this array should never fail.
 pub trait IntoArray {
     fn into_array(self) -> Array;
 }
@@ -264,7 +266,7 @@ pub trait ToArrayData {
     fn to_array_data(&self) -> ArrayData;
 }
 
-/// Collects together the behaviour of an array.
+/// Collects together the behavior of an array.
 pub trait ArrayTrait:
     ArrayEncodingRef
     + ArrayCompute
