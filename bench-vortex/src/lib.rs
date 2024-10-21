@@ -52,7 +52,9 @@ lazy_static! {
             .with_encodings(SamplingCompressor::default().used_encodings())
             .with_encoding(&DeltaEncoding)
     );
-    static ref TOKIO_RUNTIME: Runtime = Runtime::new()
+    static ref TOKIO_RUNTIME: Runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
         .map_err(VortexError::IOError)
         .vortex_expect("tokio runtime must not fail to start");
     pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
