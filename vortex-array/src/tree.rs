@@ -5,8 +5,8 @@ use serde::ser::Error;
 use vortex_buffer::Buffer;
 use vortex_error::{VortexError, VortexResult};
 
+use crate::array::visitor::ArrayVisitor;
 use crate::array::ChunkedArray;
-use crate::visitor::ArrayVisitor;
 use crate::{Array, ArrayData};
 
 impl Array {

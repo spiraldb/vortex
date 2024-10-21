@@ -9,6 +9,7 @@ use crate::encoding::EncodingRef;
 use crate::stats::{Stat, Statistics, StatsSet};
 use crate::{Array, ArrayDType, ArrayMetadata, ToArray};
 
+/// Owned [`Array`] with serialized metadata, backed by heap-allocated memory.
 #[derive(Clone, Debug)]
 pub struct ArrayData {
     encoding: EncodingRef,

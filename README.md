@@ -8,12 +8,12 @@
 Vortex is an extensible, state-of-the-art columnar file format, with associated tools for working with compressed Apache Arrow arrays 
 in-memory, on-disk, and over-the-wire.
 
-Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster)
-and scans (2-10x faster), while preserving approximately the same compression ratio and write throughput as Parquet with zstd. 
-It will also support very wide tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
+Vortex is an aspiring successor to Apache Parquet, with dramatically faster random access reads (100-200x faster) and scans (2-10x faster), 
+while preserving approximately the same compression ratio and write throughput as Parquet with zstd. 
+It is designed to support very wide tables (at least 10s of thousands of columns) and (eventually) on-device decompression on GPUs.
 
-Vortex is designed to be to columnar file formats what Apache DataFusion is to query engines: highly extensible,
-extremely fast, batteries-included.
+Vortex is intended to be to columnar file formats what Apache DataFusion is to query engines: highly extensible,
+extremely fast, & batteries-included.
 
 > [!CAUTION]
 > This library is still under rapid development and is a work in progress!
@@ -58,7 +58,12 @@ One of the unique attributes of the (in-progress) Vortex file format is that it 
 file's footer. This allows the file format to be effectively self-describing and to evolve without breaking changes to
 the file format specification.
 
-In fact, the format is designed to support forward compatibility by optionally embedding WASM decoders directly into the files
+For example, the Compressor implementation can choose to chunk data into a Parquet-like layout with
+row groups and aligned pages (ChunkedArray of StructArray of ChunkedArrays with equal chunk sizes). Alternatively, it can choose
+to chunk different columns differently based on their compressed size and data distributions (e.g., a column that is constant
+across all rows can be a single chunk, whereas a large string column may be split arbitrarily many times).
+
+In the same vein, the format is designed to support forward compatibility by optionally embedding WASM decoders directly into the files
 themselves. This should help avoid the rapid calcification that has plagued other columnar file formats.
 
 ## Components
@@ -120,10 +125,10 @@ in-memory array implementation, allowing us to defer decompression. Currently, t
 Vortex's default compression strategy is based on the
 [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) paper.
 
-Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted (
-recursively) with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode
-the entire chunk. This sounds like it would be very expensive, but given basic statistics about a chunk, it is
-possible to cheaply prune many encodings and ensure the search space does not explode in size.
+Roughly, for each chunk of data, a sample of at least ~1% of the data is taken. Compression is then attempted 
+(recursively) with a set of lightweight encodings. The best-performing combination of encodings is then chosen to encode
+the entire chunk. This sounds like it would be very expensive, but given the logical types and basic statistics about a
+chunk, it is possible to cheaply prune many encodings and ensure the search space does not explode in size.
 
 ### Compute
 
@@ -224,7 +229,7 @@ Expect more details on this in Q4 2024.
 This project is inspired by and--in some cases--directly based upon the existing, excellent work of many researchers
 and OSS developers.
 
-In particular, the following academic papers greatly influenced the development:
+In particular, the following academic papers have strongly influenced development:
 
 * Maximilian Kuschewski, David Sauerwein, Adnan Alhomssi, and Viktor Leis.
   [BtrBlocks: Efficient Columnar Compression for Data Lakes](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf).
@@ -240,12 +245,14 @@ In particular, the following academic papers greatly influenced the development:
 * Biswapesh Chattopadhyay, Priyam Dutta, Weiran Liu, Ott Tinn, Andrew Mccormick, Aniket Mokashi, Paul Harvey,
   Hector Gonzalez, David Lomax, Sagar Mittal, et al. [Procella: Unifying serving and analytical
   data at YouTube](https://dl.acm.org/citation.cfm?id=3360438). PVLDB, 12(12): 2022-2034, 2019.
+* Dominik Durner, Viktor Leis, and Thomas Neumann. [Exploiting Cloud Object Storage for High-Performance
+  Analytics](https://www.durner.dev/app/media/papers/anyblob-vldb23.pdf). PVLDB, 16(11): 2769-2782, 2023.
 
 
 Additionally, we benefited greatly from:
 
-* the existence, ideas, & implementation of [Apache Arrow](https://arrow.apache.org).
-* likewise for the excellent [Apache DataFusion](https://github.com/apache/datafusion) project.
+* the existence, ideas, & implementations of both [Apache Arrow](https://arrow.apache.org) and
+  [Apache DataFusion](https://github.com/apache/datafusion).
 * the [parquet2](https://github.com/jorgecarleitao/parquet2) project by [Jorge Leitao](https://github.com/jorgecarleitao).
 * the public discussions around choices of compression codecs, as well as the C++ implementations thereof,
   from [duckdb](https://github.com/duckdb/duckdb).
