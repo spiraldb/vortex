@@ -1,3 +1,5 @@
+//! Physical type definitions and behavior.
+
 use std::cmp::Ordering;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::Hash;
@@ -11,6 +13,7 @@ use crate::nullability::Nullability::NonNullable;
 use crate::DType;
 use crate::DType::*;
 
+/// Physical type enum, represents the in-memory physical layout but might represent a different logical type.
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(rename_all = "lowercase"))]
