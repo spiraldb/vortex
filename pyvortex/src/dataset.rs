@@ -12,7 +12,6 @@ use vortex::arrow::infer_schema;
 use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
-use vortex_serde::io::TOKIO_RUNTIME;
 use vortex_serde::layouts::{
     LayoutContext, LayoutDeserializer, LayoutReaderBuilder, Projection, RowFilter,
     VortexRecordBatchReader,
@@ -20,7 +19,7 @@ use vortex_serde::layouts::{
 
 use crate::error::PyVortexError;
 use crate::expr::PyExpr;
-use crate::{io, PyArray};
+use crate::{io, PyArray, TOKIO_RUNTIME};
 
 #[pyclass(name = "Dataset", module = "io", sequence, subclass)]
 /// An on-disk Vortex dataset for use with an Arrow-compatible query engine.
@@ -112,8 +111,10 @@ impl PyDataset {
             ))
             .map_err(PyVortexError::map_err)?;
 
-        let record_batch_reader: Box<dyn RecordBatchReader + Send> =
-            Box::new(VortexRecordBatchReader::new(layout_reader).map_err(PyVortexError::map_err)?);
+        let record_batch_reader: Box<dyn RecordBatchReader + Send> = Box::new(
+            VortexRecordBatchReader::new(layout_reader, &TOKIO_RUNTIME)
+                .map_err(PyVortexError::map_err)?,
+        );
 
         record_batch_reader.into_pyarrow(self_.py())
     }

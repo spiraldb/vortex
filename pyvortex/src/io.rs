@@ -9,7 +9,6 @@ use vortex::Array;
 use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
-use vortex_serde::io::TOKIO_RUNTIME;
 use vortex_serde::layouts::{
     LayoutBatchStream, LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter,
     Projection, RowFilter,
@@ -17,7 +16,7 @@ use vortex_serde::layouts::{
 
 use crate::error::PyVortexError;
 use crate::expr::PyExpr;
-use crate::PyArray;
+use crate::{PyArray, TOKIO_RUNTIME};
 
 /// Read a vortex struct array from the local filesystem.
 ///

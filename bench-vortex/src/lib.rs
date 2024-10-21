@@ -13,11 +13,13 @@ use lazy_static::lazy_static;
 use log::LevelFilter;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use simplelog::{ColorChoice, Config, TermLogger, TerminalMode};
+use tokio::runtime::Runtime;
 use vortex::array::ChunkedArray;
 use vortex::arrow::FromArrowType;
 use vortex::compress::CompressionStrategy;
 use vortex::{Array, Context, IntoArray};
 use vortex_dtype::DType;
+use vortex_error::{VortexError, VortexExpect};
 use vortex_fastlanes::DeltaEncoding;
 use vortex_sampling_compressor::compressors::alp::ALPCompressor;
 use vortex_sampling_compressor::compressors::alp_rd::ALPRDCompressor;
@@ -50,9 +52,9 @@ lazy_static! {
             .with_encodings(SamplingCompressor::default().used_encodings())
             .with_encoding(&DeltaEncoding)
     );
-}
-
-lazy_static! {
+    static ref TOKIO_RUNTIME: Runtime = Runtime::new()
+        .map_err(VortexError::IOError)
+        .vortex_expect("tokio runtime must not fail to start");
     pub static ref COMPRESSORS: HashSet<CompressorRef<'static>> = [
         &ALPCompressor as CompressorRef<'static>,
         &ALPRDCompressor,

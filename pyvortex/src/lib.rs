@@ -14,8 +14,17 @@ mod error;
 mod expr;
 mod io;
 mod python_repr;
+use lazy_static::lazy_static;
 use log::LevelFilter;
 use pyo3_log::{Caching, Logger};
+use tokio::runtime::Runtime;
+use vortex_error::{VortexError, VortexExpect as _};
+
+lazy_static! {
+    static ref TOKIO_RUNTIME: Runtime = Runtime::new()
+        .map_err(VortexError::IOError)
+        .vortex_expect("tokio runtime must not fail to start");
+}
 
 /// Vortex is an Apache Arrow-compatible toolkit for working with compressed array data.
 #[pymodule]

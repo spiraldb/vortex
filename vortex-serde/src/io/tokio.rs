@@ -4,22 +4,14 @@ use std::io;
 use std::os::unix::prelude::FileExt;
 
 use bytes::BytesMut;
-use lazy_static::lazy_static;
 use tokio::fs::File;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use tokio::runtime::Runtime;
 use vortex_buffer::io_buf::IoBuf;
-use vortex_error::{VortexError, VortexExpect, VortexUnwrap as _};
+use vortex_error::{VortexError, VortexUnwrap as _};
 
 use crate::io::{VortexRead, VortexReadAt, VortexWrite};
 
 pub struct TokioAdapter<IO>(pub IO);
-
-lazy_static! {
-    pub static ref TOKIO_RUNTIME: Runtime = Runtime::new()
-        .map_err(VortexError::IOError)
-        .vortex_expect("tokio runtime must not fail to start");
-}
 
 impl<R: AsyncRead + Unpin> VortexRead for TokioAdapter<R> {
     async fn read_into(&mut self, mut buffer: BytesMut) -> io::Result<BytesMut> {
