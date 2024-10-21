@@ -172,7 +172,7 @@ impl ArrayView {
 }
 
 #[derive(Default, Debug)]
-pub struct ChildrenCollector {
+struct ChildrenCollector {
     children: Vec<Array>,
 }
 
