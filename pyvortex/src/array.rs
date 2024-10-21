@@ -139,10 +139,12 @@ impl PyArray {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
     }
 
-    /// Fill forward non-null values over runs of nulls.
+    /// Filter an Array by another Boolean array.
     ///
-    /// Leading nulls are replaced with the "zero" for that type. For integral and floating-point
-    /// types, this is zero. For the Boolean type, this is `:obj:`False`.
+    /// Parameters
+    /// ----------
+    /// filter : :class:`vortex.encoding.Array`
+    ///     Keep all the rows in ``self`` for which the correspondingly indexed row in `filter` is True.
     ///
     /// Returns
     /// -------
@@ -150,6 +152,30 @@ impl PyArray {
     ///
     /// Examples
     /// --------
+    ///
+    /// Keep only the single digit positive integers.
+    ///
+    /// >>> a = vortex.encoding.array([0, 42, 1_000, -23, 10, 9, 5])
+    /// >>> filter = vortex.array([True, False, False, False, False, True, True])
+    /// >>> a.filter(filter).to_arrow_array()
+    /// <pyarrow.lib.Int64Array object at ...>
+    /// [
+    ///   0,
+    ///   9,
+    ///   5
+    /// ]
+    fn filter(&self, filter: &Bound<PyArray>) -> PyResult<PyArray> {
+        let filter = filter.borrow();
+
+        vortex::compute::filter(&self.inner, &filter.inner)
+            .map_err(PyVortexError::map_err)
+            .map(|arr| PyArray { inner: arr })
+    }
+
+    /// Fill forward non-null values over runs of nulls.
+    ///
+    /// Leading nulls are replaced with the "zero" for that type. For integral and floating-point
+    /// types, this is zero. For the Boolean type, this is `:obj:`False`.
     ///
     /// Fill forward sensor values over intermediate missing values. Note that leading nulls are
     /// replaced with 0.0:
