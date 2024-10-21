@@ -15,6 +15,8 @@ mod struct_;
 mod varbin;
 mod varbinview;
 
+pub mod visitor;
+
 #[cfg(feature = "arbitrary")]
 pub mod arbitrary;
 

@@ -9,10 +9,10 @@ use vortex_dtype::{DType, Nullability};
 use vortex_error::{vortex_err, VortexError, VortexExpect as _, VortexResult};
 use vortex_scalar::{PValue, Scalar, ScalarValue};
 
+use crate::array::visitor::ArrayVisitor;
 use crate::encoding::opaque::OpaqueEncoding;
 use crate::encoding::EncodingRef;
 use crate::stats::{Stat, Statistics, StatsSet};
-use crate::visitor::ArrayVisitor;
 use crate::{flatbuffers as fb, Array, Context, IntoArray, ToArray};
 
 /// Zero-copy view over flatbuffer-encoded array data, created without eager serialization.

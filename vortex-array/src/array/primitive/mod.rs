@@ -18,7 +18,7 @@ use crate::iter::{Accessor, AccessorRef, Batch, ITER_BATCH_SIZE};
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, PrimitiveArrayTrait};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoCanonical, TypedArray,
 };

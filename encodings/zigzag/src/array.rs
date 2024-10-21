@@ -6,7 +6,7 @@ use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
-use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,

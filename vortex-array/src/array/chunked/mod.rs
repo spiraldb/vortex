@@ -20,7 +20,7 @@ use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, Array, ArrayDType, ArrayTrait, IntoArray, IntoCanonical};
 
 mod canonical;

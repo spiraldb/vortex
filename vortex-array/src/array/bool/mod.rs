@@ -12,7 +12,7 @@ use crate::encoding::ids;
 use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, BoolArrayTrait};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayTrait, Canonical, IntoCanonical, TypedArray};
 
 mod accessors;

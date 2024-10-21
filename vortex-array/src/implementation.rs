@@ -4,9 +4,9 @@ use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
 
+use crate::array::visitor::ArrayVisitor;
 use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, EncodingId, EncodingRef};
 use crate::stats::{ArrayStatistics, Statistics};
-use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, GetArrayMetadata, IntoArray,
     ToArrayData, TryDeserializeArrayMetadata,

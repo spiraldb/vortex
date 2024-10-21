@@ -8,7 +8,7 @@ use vortex::encoding::ids;
 use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, BoolArrayTrait};
-use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, ArrayTrait, Canonical, IntoCanonical, TypedArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;

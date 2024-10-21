@@ -8,7 +8,7 @@ use vortex_scalar::{Scalar, ScalarValue};
 use crate::encoding::ids;
 use crate::stats::{Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType, ArrayTrait};
 
 mod canonical;

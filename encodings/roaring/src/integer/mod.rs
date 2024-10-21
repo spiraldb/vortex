@@ -9,7 +9,7 @@ use vortex::encoding::ids;
 use vortex::stats::{ArrayStatistics, ArrayStatisticsCompute, Stat, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
-use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType as _, ArrayTrait, Canonical, IntoArray, IntoCanonical,
     TypedArray,
