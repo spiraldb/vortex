@@ -108,7 +108,7 @@ impl Array {
         }
     }
 
-    /// Returns an arrays with all of the array's child arrays.
+    /// Returns a Vec of Arrays with all of the array's child arrays.
     pub fn children(&self) -> Vec<Array> {
         match self {
             Array::Data(d) => d.children().iter().cloned().collect_vec(),
