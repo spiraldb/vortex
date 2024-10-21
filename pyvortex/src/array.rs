@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyList};
 use vortex::array::ChunkedArray;
 use vortex::compute::unary::fill_forward;
-use vortex::compute::{compare, slice, slice, take, take, Operator};
+use vortex::compute::{compare, slice, take, Operator};
 use vortex::{Array, ArrayDType, IntoCanonical};
 
 use crate::dtype::PyDType;
