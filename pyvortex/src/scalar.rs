@@ -1,4 +1,9 @@
+//! Views into arrays of individual values.
 //!
+//! Vortex, like Arrow, avoids copying data. The classes in this package are returned by
+//! :meth:`.Array.scalar_at`. They represent shared-memory views into individual values of a Vortex
+//! array.
+
 use std::sync::Arc;
 
 use pyo3::prelude::*;
