@@ -237,7 +237,7 @@ pub trait StructArrayTrait: ArrayTrait {
 pub trait ListArrayTrait: ArrayTrait {}
 
 pub trait ExtensionArrayTrait: ArrayTrait {
-    /// Returns the extension logical [`DType`]
+    /// Returns the extension logical [`DType`].
     fn ext_dtype(&self) -> &ExtDType {
         let DType::Extension(ext_dtype, _nullability) = self.dtype() else {
             vortex_panic!("Expected ExtDType")
@@ -245,6 +245,6 @@ pub trait ExtensionArrayTrait: ArrayTrait {
         ext_dtype
     }
 
-    /// Returns the underlying
+    /// Returns the underlying [`Array`], without the [`ExtDType`].
     fn storage_array(&self) -> Array;
 }
