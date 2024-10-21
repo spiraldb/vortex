@@ -12,8 +12,9 @@ use vortex::arrow::infer_schema;
 use vortex_dtype::field::Field;
 use vortex_error::VortexResult;
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
+use vortex_serde::io::VortexReadAt;
 use vortex_serde::layouts::{
-    LayoutContext, LayoutDeserializer, LayoutReaderBuilder, Projection, RowFilter,
+    LayoutContext, LayoutDescriptorReader, LayoutDeserializer, Projection, RowFilter,
     VortexRecordBatchReader,
 };
 
@@ -31,16 +32,15 @@ pub struct PyDataset {
 impl PyDataset {
     async fn new(fname: &str) -> VortexResult<PyDataset> {
         let file = File::open(Path::new(fname)).await?;
-        let mut reader_builder = LayoutReaderBuilder::new(
-            file,
-            LayoutDeserializer::new(
-                ALL_COMPRESSORS_CONTEXT.clone(),
-                LayoutContext::default().into(),
-            ),
-        );
+        let dtype = LayoutDescriptorReader::new(LayoutDeserializer::new(
+            ALL_COMPRESSORS_CONTEXT.clone(),
+            LayoutContext::default().into(),
+        ))
+        .read_footer(&file, file.size().await)
+        .await?
+        .dtype()?;
 
-        let footer = reader_builder.read_footer().await?;
-        let schema = infer_schema(&footer.dtype()?)?;
+        let schema = infer_schema(&dtype)?;
 
         Ok(PyDataset {
             fname: fname.to_string(),

@@ -22,6 +22,7 @@ pub use builder::LayoutReaderBuilder;
 pub use cache::LayoutMessageCache;
 pub use context::*;
 pub use filtering::RowFilter;
+pub use footer::LayoutDescriptorReader;
 #[cfg(feature = "tokio")]
 pub use recordbatchreader::VortexRecordBatchReader;
 pub use stream::LayoutBatchStream;
