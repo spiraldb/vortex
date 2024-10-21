@@ -163,7 +163,7 @@ pub fn read(
     let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
 
     TOKIO_RUNTIME
-        .block_on(async_read(fname, projection, None, row_filter))
+        .block_on(async_read(fname, projection, row_filter))
         .map_err(PyVortexError::map_err)
         .map(PyArray::new)
 }
@@ -171,7 +171,6 @@ pub fn read(
 pub(crate) async fn layout_reader(
     fname: &str,
     projection: Projection,
-    batch_size: Option<usize>,
     row_filter: Option<RowFilter>,
 ) -> VortexResult<LayoutBatchStream<File>> {
     let file = File::open(Path::new(fname)).await?;
@@ -185,10 +184,6 @@ pub(crate) async fn layout_reader(
     )
     .with_projection(projection);
 
-    if let Some(batch_size) = batch_size {
-        builder = builder.with_batch_size(batch_size);
-    }
-
     if let Some(row_filter) = row_filter {
         builder = builder.with_row_filter(row_filter);
     }
@@ -199,10 +194,9 @@ pub(crate) async fn layout_reader(
 pub(crate) async fn async_read(
     fname: &str,
     projection: Projection,
-    batch_size: Option<usize>,
     row_filter: Option<RowFilter>,
 ) -> VortexResult<Array> {
-    layout_reader(fname, projection, batch_size, row_filter)
+    layout_reader(fname, projection, row_filter)
         .await?
         .read_all()
         .await
