@@ -2,7 +2,7 @@ use arrow::array::{Array as ArrowArray, ArrayRef};
 use arrow::pyarrow::ToPyArrow;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{IntoPyDict, PyList, PyString};
+use pyo3::types::{IntoPyDict, PyList};
 use vortex::array::ChunkedArray;
 use vortex::compute::{compare, slice, take, Operator};
 use vortex::{Array, ArrayDType, IntoCanonical};
@@ -13,6 +13,68 @@ use crate::python_repr::PythonRepr;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 /// An array of zero or more *rows* each with the same set of *columns*.
+///
+/// Examples
+/// --------
+///
+/// Arrays support all the standard comparison operations:
+///
+/// >>> a = vortex.encoding.array(['dog', None, 'cat', 'mouse', 'fish'])
+/// >>> b = vortex.encoding.array(['doug', 'jennifer', 'casper', 'mouse', 'faust'])
+/// >>> (a < b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   true,
+///   null,
+///   false,
+///   false,
+///   false
+/// ]
+/// >>> (a <= b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   true,
+///   null,
+///   false,
+///   true,
+///   false
+/// ]
+/// >>> (a == b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   false,
+///   null,
+///   false,
+///   true,
+///   false
+/// ]
+/// >>> (a != b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   true,
+///   null,
+///   true,
+///   false,
+///   true
+/// ]
+/// >>> (a >= b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   false,
+///   null,
+///   true,
+///   true,
+///   true
+/// ]
+/// >>> (a > b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   false,
+///   null,
+///   true,
+///   false,
+///   true
+/// ]
 pub struct PyArray {
     inner: Array,
 }
@@ -138,67 +200,50 @@ impl PyArray {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
     }
 
-    /// Point-wise compare the elements of this array to another array.
-    ///
-    /// Parameters
-    /// ----------
-    /// other : :class:`vortex.encoding.Array`
-    ///     An array with whom to compare elements.
-    ///
-    /// operator : :class:`str`
-    ///     One of `eq`, `ne`, `gt`, `ge`, `lt`, or `le` indicating which binary comparison operator
-    ///     to apply.
-    ///
-    /// Returns
-    /// -------
-    /// :class:`vortex.encoding.Array`
-    ///
-    /// Examples
-    /// --------
-    ///
-    /// Compare an array of strings to itself:
-    ///
-    /// >>> a = vortex.encoding.array(['a', 'b', 'c', 'd'])
-    /// >>> a.compare(a, "eq").to_arrow_array()
-    /// <pyarrow.lib.BooleanArray object at ...>
-    /// [
-    ///   true,
-    ///   true,
-    ///   true,
-    ///   true
-    /// ]
-    ///
-    /// Compare two arrays containing nulls:
-    ///
-    /// >>> a = vortex.encoding.array(['dog', None, 'cat', 'mouse', 'fish'])
-    /// >>> b = vortex.encoding.array(['doug', 'jennifer', 'casper', 'mouse', 'faust'])
-    /// >>> a.compare(b, 'lt').to_arrow_array()
-    /// <pyarrow.lib.BooleanArray object at ...>
-    /// [
-    ///   true,
-    ///   null,
-    ///   false,
-    ///   false,
-    ///   false
-    /// ]
-    fn compare(&self, other: &Bound<PyArray>, operator: &Bound<PyString>) -> PyResult<PyArray> {
+    // Rust docs are *not* copied into Python for __lt__: https://github.com/PyO3/pyo3/issues/4326
+    fn __lt__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
         let other = other.borrow();
-        let operator = match operator.extract()? {
-            "eq" => Operator::Eq,
-            "ne" => Operator::NotEq,
-            "gt" => Operator::Gt,
-            "ge" => Operator::Gte,
-            "lt" => Operator::Lt,
-            "le" => Operator::Lte,
-            op => {
-                return Err(PyValueError::new_err(format!(
-                    "expected eq, ne, gt, ge, lt, or le: {}",
-                    op
-                )))
-            }
-        };
+        compare(&self.inner, &other.inner, Operator::Lt)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
 
-        compare(&self.inner, &other.inner, operator)
+    // Rust docs are *not* copied into Python for __le__: https://github.com/PyO3/pyo3/issues/4326
+    fn __le__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Lte)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __eq__: https://github.com/PyO3/pyo3/issues/4326
+    fn __eq__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Eq)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __ne__: https://github.com/PyO3/pyo3/issues/4326
+    fn __ne__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::NotEq)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __ge__: https://github.com/PyO3/pyo3/issues/4326
+    fn __ge__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Gte)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __gt__: https://github.com/PyO3/pyo3/issues/4326
+    fn __gt__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Gt)
             .map(|arr| PyArray { inner: arr })
             .map_err(PyVortexError::map_err)
     }
