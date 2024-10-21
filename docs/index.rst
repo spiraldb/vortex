@@ -16,3 +16,4 @@ Vortex is an Apache Arrow-compatible toolkit for working with compressed array d
    dtype
    io
    expr
+   scalar

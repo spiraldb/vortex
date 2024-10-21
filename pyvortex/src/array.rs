@@ -345,15 +345,23 @@ impl PyArray {
     /// Examples
     /// --------
     ///
-    /// Retrieve the third element from an array of strings:
-    ///
-    /// >>> vortex.encoding.array(["hello", "goodbye", "it", "is"]).scalar_at(2).into_python()
-    /// 'it'
-    ///
     /// Retrieve the last element from an array of integers:
     ///
     /// >>> vortex.encoding.array([10, 42, 999, 1992]).scalar_at(3)
     /// 1992
+    ///
+    /// Retrieve the third element from an array of strings:
+    ///
+    /// >>> array = vortex.encoding.array(["hello", "goodbye", "it", "is"])
+    /// >>> array.scalar_at(2)
+    /// <vortex.BufferString ...>
+    ///
+    /// Vortex, by default, returns a view into the array's data. This avoids copying the data,
+    /// which can be expensive if done repeatedly. :meth:`.BufferString.into_python` forcibly copies
+    /// the scalar data into a Python data structure.
+    ///
+    /// >>> array.scalar_at(2).into_python()
+    /// 'it'
     ///
     /// Retrieve an element from an array of structures:
     ///
@@ -365,6 +373,13 @@ impl PyArray {
     /// ...     {'name': 'Mikhail', 'age': 57},
     /// ... ])
     /// >>> array.scalar_at(2).into_python()
+    /// {'age': 33, 'name': <vortex.BufferString ...>}
+    ///
+    /// Notice that :meth:`.VortexStruct.into_python` only copies one "layer" of data into
+    /// Python. If we want to ensure the entire structure is recurisvely copied into Python we can
+    /// specify ``recursive=True``:
+    ///
+    /// >>> array.scalar_at(2).into_python(recursive=True)
     /// {'age': 33, 'name': 'Angela'}
     ///
     /// Retrieve a missing element from an array of structures:
