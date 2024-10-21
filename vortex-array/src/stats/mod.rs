@@ -1,3 +1,5 @@
+//! Traits and utilities to compute and access array statistics.
+
 use std::fmt::{Display, Formatter};
 use std::hash::Hash;
 

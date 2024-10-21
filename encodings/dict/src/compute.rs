@@ -1,5 +1,5 @@
 use vortex::compute::unary::{scalar_at, scalar_at_unchecked, ScalarAtFn};
-use vortex::compute::{slice, take, ArrayCompute, SliceFn, TakeFn};
+use vortex::compute::{filter, slice, take, ArrayCompute, FilterFn, SliceFn, TakeFn};
 use vortex::{Array, IntoArray};
 use vortex_error::{VortexExpect, VortexResult};
 use vortex_scalar::Scalar;
@@ -16,6 +16,10 @@ impl ArrayCompute for DictArray {
     }
 
     fn take(&self) -> Option<&dyn TakeFn> {
+        Some(self)
+    }
+
+    fn filter(&self) -> Option<&dyn FilterFn> {
         Some(self)
     }
 }
@@ -42,6 +46,13 @@ impl TakeFn for DictArray {
         //   codes: 0 0 1
         //   dict: a b c d e f g h
         let codes = take(self.codes(), indices)?;
+        Self::try_new(codes, self.values()).map(|a| a.into_array())
+    }
+}
+
+impl FilterFn for DictArray {
+    fn filter(&self, predicate: &Array) -> VortexResult<Array> {
+        let codes = filter(self.codes(), predicate)?;
         Self::try_new(codes, self.values()).map(|a| a.into_array())
     }
 }

@@ -5,7 +5,7 @@ use pyo3::prelude::*;
 use pyo3::types::{IntoPyDict, PyInt, PyList};
 use vortex::array::ChunkedArray;
 use vortex::compute::unary::{fill_forward, scalar_at};
-use vortex::compute::{slice, take};
+use vortex::compute::{compare, slice, take, Operator};
 use vortex::{Array, ArrayDType, IntoCanonical};
 
 use crate::dtype::PyDType;
@@ -15,6 +15,68 @@ use crate::scalar::scalar_into_py;
 
 #[pyclass(name = "Array", module = "vortex", sequence, subclass)]
 /// An array of zero or more *rows* each with the same set of *columns*.
+///
+/// Examples
+/// --------
+///
+/// Arrays support all the standard comparison operations:
+///
+/// >>> a = vortex.encoding.array(['dog', None, 'cat', 'mouse', 'fish'])
+/// >>> b = vortex.encoding.array(['doug', 'jennifer', 'casper', 'mouse', 'faust'])
+/// >>> (a < b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   true,
+///   null,
+///   false,
+///   false,
+///   false
+/// ]
+/// >>> (a <= b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   true,
+///   null,
+///   false,
+///   true,
+///   false
+/// ]
+/// >>> (a == b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   false,
+///   null,
+///   false,
+///   true,
+///   false
+/// ]
+/// >>> (a != b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   true,
+///   null,
+///   true,
+///   false,
+///   true
+/// ]
+/// >>> (a >= b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   false,
+///   null,
+///   true,
+///   true,
+///   true
+/// ]
+/// >>> (a > b).to_arrow_array()
+/// <pyarrow.lib.BooleanArray object at ...>
+/// [
+///   false,
+///   null,
+///   true,
+///   false,
+///   true
+/// ]
 pub struct PyArray {
     inner: Array,
 }
@@ -140,10 +202,60 @@ impl PyArray {
         PyDType::wrap(self_.py(), self_.inner.dtype().clone())
     }
 
-    /// Fill forward non-null values over runs of nulls.
+    // Rust docs are *not* copied into Python for __lt__: https://github.com/PyO3/pyo3/issues/4326
+    fn __lt__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Lt)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __le__: https://github.com/PyO3/pyo3/issues/4326
+    fn __le__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Lte)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __eq__: https://github.com/PyO3/pyo3/issues/4326
+    fn __eq__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Eq)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __ne__: https://github.com/PyO3/pyo3/issues/4326
+    fn __ne__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::NotEq)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __ge__: https://github.com/PyO3/pyo3/issues/4326
+    fn __ge__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Gte)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    // Rust docs are *not* copied into Python for __gt__: https://github.com/PyO3/pyo3/issues/4326
+    fn __gt__(&self, other: &Bound<PyArray>) -> PyResult<PyArray> {
+        let other = other.borrow();
+        compare(&self.inner, &other.inner, Operator::Gt)
+            .map(|arr| PyArray { inner: arr })
+            .map_err(PyVortexError::map_err)
+    }
+
+    /// Filter an Array by another Boolean array.
     ///
-    /// Leading nulls are replaced with the "zero" for that type. For integral and floating-point
-    /// types, this is null. For the Boolean type, this is `:obj:`False`.
+    /// Parameters
+    /// ----------
+    /// filter : :class:`vortex.encoding.Array`
+    ///     Keep all the rows in ``self`` for which the correspondingly indexed row in `filter` is True.
     ///
     /// Returns
     /// -------
@@ -151,6 +263,30 @@ impl PyArray {
     ///
     /// Examples
     /// --------
+    ///
+    /// Keep only the single digit positive integers.
+    ///
+    /// >>> a = vortex.encoding.array([0, 42, 1_000, -23, 10, 9, 5])
+    /// >>> filter = vortex.array([True, False, False, False, False, True, True])
+    /// >>> a.filter(filter).to_arrow_array()
+    /// <pyarrow.lib.Int64Array object at ...>
+    /// [
+    ///   0,
+    ///   9,
+    ///   5
+    /// ]
+    fn filter(&self, filter: &Bound<PyArray>) -> PyResult<PyArray> {
+        let filter = filter.borrow();
+
+        vortex::compute::filter(&self.inner, &filter.inner)
+            .map_err(PyVortexError::map_err)
+            .map(|arr| PyArray { inner: arr })
+    }
+
+    /// Fill forward non-null values over runs of nulls.
+    ///
+    /// Leading nulls are replaced with the "zero" for that type. For integral and floating-point
+    /// types, this is zero. For the Boolean type, this is `:obj:`False`.
     ///
     /// Fill forward sensor values over intermediate missing values. Note that leading nulls are
     /// replaced with 0.0:

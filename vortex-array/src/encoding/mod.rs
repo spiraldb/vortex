@@ -1,3 +1,5 @@
+//! Traits and types to define shared unique encoding identifiers.
+
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::{Hash, Hasher};
 
@@ -6,7 +8,10 @@ use vortex_error::{vortex_panic, VortexResult};
 use crate::canonical::{Canonical, IntoCanonical};
 use crate::{Array, ArrayDef, ArrayTrait};
 
+pub mod opaque;
+
 // TODO(robert): Outline how you create a well known encoding id
+
 /// EncodingId is a unique name and numerical code of the array
 ///
 /// 0x0000 - reserved marker encoding

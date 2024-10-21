@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 use vortex_error::{vortex_panic, VortexResult};
 use vortex_scalar::{Scalar, ScalarValue};
 
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::encoding::ids;
 use crate::stats::{Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayDType, ArrayTrait};
 
 mod canonical;

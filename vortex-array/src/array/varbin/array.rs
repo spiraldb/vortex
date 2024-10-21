@@ -1,8 +1,8 @@
 use vortex_error::VortexResult;
 
 use crate::array::varbin::VarBinArray;
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::validity::{ArrayValidity, LogicalValidity};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 
 impl ArrayValidity for VarBinArray {
     fn is_valid(&self, index: usize) -> bool {
