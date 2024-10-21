@@ -1,4 +1,4 @@
-//! Encoding that enable sharing data with Arrow with zero-copy.
+//! Encodings that enable zero-copy sharing of data with Arrow.
 
 use std::sync::Arc;
 
