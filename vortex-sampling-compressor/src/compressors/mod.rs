@@ -81,7 +81,7 @@ pub trait EncoderMetadata {
 
 impl Display for CompressionTree<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.compressor.id())
+        Display::fmt(self.compressor.id(), f)
     }
 }
 
