@@ -1,3 +1,5 @@
+//! The core Vortex macro to create new encodings and array types.
+
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};

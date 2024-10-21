@@ -1,4 +1,4 @@
-/// All built-in encoding schemes and arrays.
+//! All the built-in encoding schemes and arrays.
 
 #[cfg(test)]
 mod assertions;
