@@ -143,7 +143,7 @@ impl PyBufferString {
 }
 
 #[pyclass(name = "VortexList", module = "vortex", sequence, subclass)]
-/// A view of a slice of data from a Vortex array.
+/// A view of a variable-length list of data from a Vortex array.
 pub struct PyVortexList {
     inner: Arc<[ScalarValue]>,
     dtype: Arc<DType>,
@@ -200,7 +200,7 @@ fn to_python_list(
 }
 
 #[pyclass(name = "VortexStruct", module = "vortex", sequence, subclass)]
-/// A view of a slice of data from a Vortex array.
+/// A view of structured data from a Vortex array.
 pub struct PyVortexStruct {
     inner: Arc<[ScalarValue]>,
     dtype: StructDType,
