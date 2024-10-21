@@ -201,7 +201,7 @@ impl PyArray {
     ///
     /// Returns
     /// -------
-    /// :class:`Any`
+    /// one of :class:`int`, :class:`float`, :class:`bool`, :class:`vortex.scalar.Buffer`, :class:`vortex.scalar.BufferString`, :class:`vortex.scalar.VortexList`, :class:`vortex.scalar.VortexStruct`
     ///     If this array contains numbers or Booleans, this array returns the corresponding
     ///     primitive Python type, i.e. int, float, and bool. For structures and variable-length
     ///     data types, a zero-copy view of the underlying data is returned.
