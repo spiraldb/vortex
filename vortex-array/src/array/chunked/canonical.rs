@@ -196,7 +196,8 @@ fn pack_views(
     dtype: &DType,
     validity: Validity,
 ) -> VortexResult<VarBinViewArray> {
-    let mut views: Vec<u128> = Vec::new();
+    let total_len = chunks.iter().map(|a| a.len()).sum();
+    let mut views: Vec<u128> = Vec::with_capacity(total_len);
     let mut buffers = Vec::new();
     for chunk in chunks {
         // Each chunk's views have buffer IDs that are zero-referenced.

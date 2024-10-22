@@ -83,7 +83,7 @@ fn canonical_byte_view(
             // Create a view to hold the scalar bytes.
             // If the scalar cannot be inlined, allocate a single buffer large enough to hold it.
             let view: u128 = make_view(scalar_bytes, 0, 0);
-            let mut buffers = Vec::with_capacity(1);
+            let mut buffers = Vec::new();
             if scalar_bytes.len() >= BinaryView::MAX_INLINED_SIZE {
                 buffers.push(
                     PrimitiveArray::new(
@@ -96,7 +96,8 @@ fn canonical_byte_view(
             }
 
             // Clone our constant view `len` times.
-            // TODO(aduffy): switch this out for a ConstantArray once we support u128 scalars in Vortex.
+            // TODO(aduffy): switch this out for a ConstantArray once we
+            //   add u128 PType, see https://github.com/spiraldb/vortex/issues/1110
             let mut views = BufferBuilder::<u128>::new(len);
             views.append_n(len, view);
             let views =
