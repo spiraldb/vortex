@@ -2,15 +2,15 @@ use std::fmt::{Debug, Display, Formatter};
 use std::slice;
 use std::sync::Arc;
 
-use ::serde::{Deserialize, Serialize};
 use arrow_array::builder::{BinaryViewBuilder, GenericByteViewBuilder, StringViewBuilder};
 use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
 use arrow_array::{ArrayRef, BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
+use ::serde::{Deserialize, Serialize};
 use static_assertions::{assert_eq_align, assert_eq_size};
 use vortex_dtype::{DType, PType};
-use vortex_error::{vortex_bail, vortex_panic, VortexExpect, VortexResult};
+use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect, VortexResult};
 
 use super::PrimitiveArray;
 use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
@@ -245,9 +245,16 @@ impl VarBinViewArray {
         }
 
         let num_views = views.len() / VIEW_SIZE_BYTES;
+        let buffer_lens: Vec<u32> = buffers
+            .iter()
+            .map(|buffer| -> VortexResult<u32> {
+                u32::try_from(buffer.len())
+                    .map_err(|e| vortex_err!("buffer must be within 32-bit range: {e}"))
+            })
+            .try_collect()?;
         let metadata = VarBinViewMetadata {
             validity: validity.to_metadata(num_views)?,
-            buffer_lens: buffers.iter().map(|a| a.len() as u32).collect_vec(),
+            buffer_lens,
         };
 
         let mut children = Vec::with_capacity(buffers.len() + 2);
