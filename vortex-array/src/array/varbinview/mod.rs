@@ -477,7 +477,7 @@ impl ArrayTrait for VarBinViewArray {}
 impl IntoCanonical for VarBinViewArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
         let nullable = self.dtype().is_nullable();
-        let arrow_self = varbinview_as_arrow(self);
+        let arrow_self = varbinview_as_arrow(&self);
         let vortex_array = Array::from_arrow(arrow_self, nullable);
 
         Ok(Canonical::VarBinView(VarBinViewArray::try_from(
@@ -486,7 +486,7 @@ impl IntoCanonical for VarBinViewArray {
     }
 }
 
-pub(crate) fn varbinview_as_arrow(var_bin_view: VarBinViewArray) -> ArrayRef {
+pub(crate) fn varbinview_as_arrow(var_bin_view: &VarBinViewArray) -> ArrayRef {
     // Views should be buffer of u8
     let views = var_bin_view
         .views()

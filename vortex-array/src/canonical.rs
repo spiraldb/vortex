@@ -74,7 +74,7 @@ impl Canonical {
             Canonical::Bool(a) => bool_to_arrow(a)?,
             Canonical::Primitive(a) => primitive_to_arrow(a)?,
             Canonical::Struct(a) => struct_to_arrow(a)?,
-            Canonical::VarBinView(a) => varbinview_as_arrow(a),
+            Canonical::VarBinView(a) => varbinview_as_arrow(&a),
             Canonical::Extension(a) => {
                 if !is_temporal_ext_type(a.id()) {
                     vortex_bail!("unsupported extension dtype with ID {}", a.id().as_ref())

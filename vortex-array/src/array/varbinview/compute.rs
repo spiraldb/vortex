@@ -11,7 +11,7 @@ use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE_BYTES};
-use crate::array::ConstantArray;
+use crate::array::{varbinview_as_arrow, ConstantArray};
 use crate::arrow::FromArrowArray;
 use crate::compute::unary::ScalarAtFn;
 use crate::compute::{slice, ArrayCompute, MaybeCompareFn, Operator, SliceFn, TakeFn};
@@ -63,10 +63,10 @@ impl SliceFn for VarBinViewArray {
 /// Take involves creating a new array that references the old array, just with the given set of views.
 impl TakeFn for VarBinViewArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let array_arrow = self.clone().into_array().into_canonical()?.into_arrow()?;
+        let array_ref = varbinview_as_arrow(self);
         let indices_arrow = indices.clone().into_canonical()?.into_arrow()?;
 
-        let take_arrow = arrow_select::take::take(&array_arrow, &indices_arrow, None)?;
+        let take_arrow = arrow_select::take::take(&array_ref, &indices_arrow, None)?;
         let nullable = take_arrow.is_nullable();
         Ok(Array::from_arrow(take_arrow, nullable))
     }
