@@ -49,12 +49,9 @@ def test_take(ds):
 def test_to_batches(ds):
     assert sum(len(x) for x in ds.to_batches("float", "bool")) == 1_000_000
 
-    schema = pa.struct([
-        ("bool", pa.bool_()),
-        ("float", pa.float64()),
-        ("index", pa.int64()),
-        ("string", pa.string_view())
-    ])
+    schema = pa.struct(
+        [("bool", pa.bool_()), ("float", pa.float64()), ("index", pa.int64()), ("string", pa.string_view())]
+    )
 
     chunk0 = next(ds.to_batches(columns=["string", "bool"]))
     assert chunk0.to_struct_array() == pa.array([record(x) for x in range(1 << 16)], type=schema)
@@ -68,10 +65,12 @@ def test_to_table(ds):
         pa.array([record(x, columns={"float", "bool"}) for x in range(10001, 10011)])
     )
 
-    assert ds.to_table(columns=["bool", "string"]).schema \
-            == pa.schema([("bool", pa.bool_()), ("string", pa.string_view())])
-    assert ds.to_table(columns=["string", "bool"]).schema \
-            == pa.schema([("string", pa.string_view()), ("bool", pa.bool_())])
+    assert ds.to_table(columns=["bool", "string"]).schema == pa.schema(
+        [("bool", pa.bool_()), ("string", pa.string_view())]
+    )
+    assert ds.to_table(columns=["string", "bool"]).schema == pa.schema(
+        [("string", pa.string_view()), ("bool", pa.bool_())]
+    )
 
 
 def test_to_record_batch_reader_with_polars(ds):
