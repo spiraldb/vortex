@@ -11,7 +11,6 @@ mod compress;
 mod dataset;
 mod dtype;
 mod encode;
-mod error;
 mod expr;
 mod io;
 mod python_repr;

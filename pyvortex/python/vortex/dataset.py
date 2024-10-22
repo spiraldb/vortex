@@ -1,6 +1,6 @@
 import warnings
 from collections.abc import Iterator
-from typing import Any
+from typing import Any, Optional
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -14,9 +14,8 @@ from .arrow.expression import arrow_to_vortex as arrow_to_vortex_expr
 class VortexDataset(pyarrow.dataset.Dataset):
     """Read Vortex files with row filter and column selection pushdown."""
 
-    def __init__(self, fname: str):
-        self._fname = fname
-        self._dataset = dataset.dataset(fname)
+    def __init__(self, *, file: Optional[str] = None, url: Optional[str] = None):
+        self._dataset = dataset.dataset(file=file, url=url)
 
     @property
     def schema(self) -> pa.Schema:

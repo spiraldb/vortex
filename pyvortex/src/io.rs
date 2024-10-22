@@ -7,14 +7,15 @@ use pyo3::types::{PyList, PyLong, PyString};
 use tokio::fs::File;
 use vortex::Array;
 use vortex_dtype::field::Field;
-use vortex_error::VortexResult;
+use vortex_dtype::DType;
+use vortex_error::{vortex_bail, VortexResult};
 use vortex_sampling_compressor::ALL_COMPRESSORS_CONTEXT;
+use vortex_serde::io::{ObjectStoreReadAt, VortexReadAt};
 use vortex_serde::layouts::{
-    LayoutBatchStream, LayoutContext, LayoutDeserializer, LayoutReaderBuilder, LayoutWriter,
-    Projection, RowFilter,
+    LayoutBatchStream, LayoutContext, LayoutDescriptorReader, LayoutDeserializer,
+    LayoutReaderBuilder, LayoutWriter, Projection, RowFilter,
 };
 
-use crate::error::PyVortexError;
 use crate::expr::PyExpr;
 use crate::{PyArray, TOKIO_RUNTIME};
 
@@ -22,8 +23,14 @@ use crate::{PyArray, TOKIO_RUNTIME};
 ///
 /// Parameters
 /// ----------
-/// f : :class:`str`
-///     The file path.
+/// file : :class:`str`, optional
+///     The file path to read from. Only one of `url` and `file` may be specified.
+/// url : :class:`str`, optional
+///     The URL to read from. Only one of `url` and `file` may be specified.
+/// projection : :class:`list`[:class:`str` ``|`` :class:`int`]
+///     The columns to read identified either by their index or name.
+/// row_filter : :class:`.Expr`
+///     Keep only the rows for which this expression evaluates to true.
 ///
 /// Examples
 /// --------
@@ -127,14 +134,13 @@ use crate::{PyArray, TOKIO_RUNTIME};
 /// >>> # b.to_arrow_array()
 ///
 #[pyfunction]
-#[pyo3(signature = (f, projection = None, row_filter = None))]
+#[pyo3(signature = (*, file = None, url = None, projection = None, row_filter = None))]
 pub fn read(
-    f: &Bound<PyString>,
+    file: Option<&Bound<PyString>>,
+    url: Option<&Bound<PyString>>,
     projection: Option<&Bound<PyAny>>,
     row_filter: Option<&Bound<PyExpr>>,
 ) -> PyResult<PyArray> {
-    let fname = f.to_str()?; // TODO(dk): support file objects
-
     let projection = match projection {
         None => Projection::All,
         Some(projection) => {
@@ -162,22 +168,26 @@ pub fn read(
 
     let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
 
-    TOKIO_RUNTIME
-        .block_on(async_read(fname, projection, None, row_filter))
-        .map_err(PyVortexError::map_err)
-        .map(PyArray::new)
+    let file = file.map(|x| x.extract()).transpose()?;
+    let url = url.map(|x| x.extract()).transpose()?;
+
+    let inner = TOKIO_RUNTIME.block_on(read_array(
+        &FileOrUrl::try_new(file, url)?,
+        projection,
+        None,
+        row_filter,
+    ))?;
+    Ok(PyArray::new(inner))
 }
 
-pub(crate) async fn layout_reader(
-    fname: &str,
+pub(crate) async fn layout_stream_from_reader<T: VortexReadAt + Unpin>(
+    reader: T,
     projection: Projection,
     batch_size: Option<usize>,
     row_filter: Option<RowFilter>,
-) -> VortexResult<LayoutBatchStream<File>> {
-    let file = File::open(Path::new(fname)).await?;
-
-    let mut builder: LayoutReaderBuilder<File> = LayoutReaderBuilder::new(
-        file,
+) -> VortexResult<LayoutBatchStream<T>> {
+    let mut builder = LayoutReaderBuilder::new(
+        reader,
         LayoutDeserializer::new(
             ALL_COMPRESSORS_CONTEXT.clone(),
             LayoutContext::default().into(),
@@ -196,16 +206,72 @@ pub(crate) async fn layout_reader(
     builder.build().await
 }
 
-pub(crate) async fn async_read(
-    fname: &str,
+pub(crate) async fn read_array_from_reader<T: VortexReadAt + Unpin + 'static>(
+    reader: T,
     projection: Projection,
     batch_size: Option<usize>,
     row_filter: Option<RowFilter>,
 ) -> VortexResult<Array> {
-    layout_reader(fname, projection, batch_size, row_filter)
+    layout_stream_from_reader(reader, projection, batch_size, row_filter)
         .await?
         .read_all()
         .await
+}
+
+pub(crate) async fn read_dtype_from_reader<T: VortexReadAt + Unpin + 'static>(
+    reader: T,
+) -> VortexResult<DType> {
+    LayoutDescriptorReader::new(LayoutDeserializer::new(
+        ALL_COMPRESSORS_CONTEXT.clone(),
+        LayoutContext::default().into(),
+    ))
+    .read_footer(&reader, reader.size().await)
+    .await?
+    .dtype()
+}
+
+pub enum FileOrUrl {
+    File(String),
+    Url(String),
+}
+
+impl FileOrUrl {
+    pub fn try_new(file: Option<&str>, url: Option<&str>) -> VortexResult<FileOrUrl> {
+        match (file, url) {
+            (None, None) | (Some(_), Some(_)) => {
+                vortex_bail!("Exactly one of file and url must be specified.",)
+            }
+            (Some(file), _) => Ok(FileOrUrl::File(file.to_string())),
+            (_, Some(url)) => Ok(FileOrUrl::Url(url.to_string())),
+        }
+    }
+}
+
+pub(crate) async fn read_dtype(file_or_url: &FileOrUrl) -> VortexResult<DType> {
+    match file_or_url {
+        FileOrUrl::File(file) => read_dtype_from_reader(File::open(Path::new(file)).await?).await,
+        FileOrUrl::Url(url) => {
+            read_dtype_from_reader(ObjectStoreReadAt::try_new_from_url(url).await?).await
+        }
+    }
+}
+
+pub(crate) async fn read_array(
+    file_or_url: &FileOrUrl,
+    projection: Projection,
+    batch_size: Option<usize>,
+    row_filter: Option<RowFilter>,
+) -> VortexResult<Array> {
+    match file_or_url {
+        FileOrUrl::File(file) => {
+            let reader = File::open(Path::new(file)).await?;
+            read_array_from_reader(reader, projection, batch_size, row_filter).await
+        }
+        FileOrUrl::Url(url) => {
+            let reader = ObjectStoreReadAt::try_new_from_url(url).await?;
+            read_array_from_reader(reader, projection, batch_size, row_filter).await
+        }
+    }
 }
 
 #[pyfunction]
@@ -234,7 +300,7 @@ pub(crate) async fn async_read(
 /// >>> vortex.io.write(a, "a.vortex")
 ///
 pub fn write(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -> PyResult<()> {
-    async fn run(array: &Array, fname: &str) -> VortexResult<()> {
+    async fn run(array: &Array, fname: &str) -> PyResult<()> {
         let file = File::create(Path::new(fname)).await?;
         let mut writer = LayoutWriter::new(file);
 
@@ -246,7 +312,5 @@ pub fn write(array: &Bound<'_, PyArray>, f: &Bound<'_, PyString>) -> PyResult<()
     let fname = f.to_str()?; // TODO(dk): support file objects
     let array = array.borrow().unwrap().clone();
 
-    TOKIO_RUNTIME
-        .block_on(run(&array, fname))
-        .map_err(PyVortexError::map_err)
+    TOKIO_RUNTIME.block_on(run(&array, fname))
 }
