@@ -2,18 +2,18 @@ use std::fmt::{Debug, Display, Formatter};
 use std::slice;
 use std::sync::Arc;
 
-use ::serde::{Deserialize, Serialize};
 use arrow_array::builder::{BinaryViewBuilder, GenericByteViewBuilder, StringViewBuilder};
 use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
 use arrow_array::{ArrayRef, BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
+use ::serde::{Deserialize, Serialize};
 use static_assertions::{assert_eq_align, assert_eq_size};
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect, VortexResult};
 
-use super::PrimitiveArray;
 use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use crate::array::PrimitiveArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
 use crate::encoding::ids;
@@ -435,7 +435,7 @@ impl VarBinViewArray {
     }
 
     // TODO(aduffy): do we really need to do this with copying?
-    pub fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
+    pub(crate) fn bytes_at(&self, index: usize) -> VortexResult<Vec<u8>> {
         let view = self.view_at(index);
         // Expect this to be the common case: strings > 12 bytes.
         if !view.is_inlined() {
@@ -448,6 +448,7 @@ impl VarBinViewArray {
             .into_primitive()?;
             Ok(data_buf.maybe_null_slice::<u8>().to_vec())
         } else {
+            // Return access to the range of bytes around it.
             Ok(view.as_inlined().value().to_vec())
         }
     }
