@@ -42,14 +42,14 @@ use crate::{Array, ArrayDType, IntoArray};
 /// decompress it later to pass to a compute kernel, there are multiple suitable Arrow array
 /// variants to hold the data.
 ///
-/// To disambiguate, we choose a canonical physical encoding for every Vortex `DType`, which
+/// To disambiguate, we choose a canonical physical encoding for every Vortex [`DType`], which
 /// will correspond to an arrow-rs [`arrow_schema::DataType`].
 ///
 /// # Views support
 ///
 /// Binary and String views, also known as "German strings" are a better encoding format for
 /// nearly all use-cases. Variable-length binary views are part of the Apache Arrow spec, and are
-/// fully supported by the Datafusio query engine. We use them as our canonical string encoding
+/// fully supported by the Datafusion query engine. We use them as our canonical string encoding
 /// for all `Utf8` and `Binary` typed arrays in Vortex.
 ///
 #[derive(Debug, Clone)]

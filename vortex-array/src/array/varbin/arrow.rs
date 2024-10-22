@@ -35,7 +35,7 @@ pub(crate) fn varbin_to_arrow(varbin_array: &VarBinArray) -> VortexResult<ArrayR
         .bytes()
         .into_primitive()
         .map_err(|err| err.with_context("Failed to canonicalize bytes"))?;
-    if data.ptype() != PType::U8 {
+    if data.dtype() != &DType::BYTES {
         vortex_bail!("Expected bytes to be of type U8, got {}", data.ptype());
     }
     let data = data.buffer();
