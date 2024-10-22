@@ -4325,6 +4325,7 @@ dependencies = [
  "rand",
  "rstest",
  "serde",
+ "static_assertions",
  "tokio",
  "vortex-buffer",
  "vortex-datetime-dtype",
@@ -4424,6 +4425,7 @@ dependencies = [
 name = "vortex-dict"
 version = "0.12.0"
 dependencies = [
+ "arrow-array",
  "arrow-buffer",
  "criterion",
  "hashbrown 0.15.0",
