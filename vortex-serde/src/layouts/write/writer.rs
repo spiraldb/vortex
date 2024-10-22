@@ -127,7 +127,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
                     byte_offsets
                         .iter()
                         .zip(byte_offsets.iter().skip(1))
-                        .map(|(begin, end)| Layout::flat(*begin, *end))
+                        .map(|(begin, end)| Layout::flat(ByteRange::new(*begin, *end)))
                 })
                 .collect();
             let len = chunk.row_offsets.len() - 1;
@@ -147,7 +147,7 @@ impl<W: VortexWrite> LayoutWriter<W> {
             let dtype_end = self.msgs.tell();
             self.msgs.write_batch(metadata_array.into_array()).await?;
             chunks.push_front(Layout::inlined_schema(
-                vec![Layout::flat(dtype_end, self.msgs.tell())],
+                vec![Layout::flat(ByteRange::new(dtype_end, self.msgs.tell()))],
                 ByteRange::new(dtype_begin, dtype_end),
             ));
             column_layouts.push(Layout::chunked(chunks.into(), true));
