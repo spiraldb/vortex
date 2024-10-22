@@ -217,6 +217,7 @@ impl<'a> CompressedArray<'a> {
         (self.array, self.path)
     }
 
+    /// Total size of the array in bytes, including all children and buffers.
     #[inline]
     pub fn nbytes(&self) -> usize {
         self.array.nbytes()

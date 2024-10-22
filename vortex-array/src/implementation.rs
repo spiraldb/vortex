@@ -1,10 +1,12 @@
+//! The core Vortex macro to create new encodings and array types.
+
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
 use vortex_error::{vortex_bail, VortexError, VortexExpect as _, VortexResult};
 
+use crate::array::visitor::ArrayVisitor;
 use crate::encoding::{ArrayEncoding, ArrayEncodingExt, ArrayEncodingRef, EncodingId, EncodingRef};
 use crate::stats::{ArrayStatistics, Statistics};
-use crate::visitor::ArrayVisitor;
 use crate::{
     Array, ArrayDType, ArrayData, ArrayLen, ArrayMetadata, ArrayTrait, GetArrayMetadata, IntoArray,
     ToArrayData, TryDeserializeArrayMetadata,
@@ -21,10 +23,14 @@ pub trait ArrayDef {
     type Encoding: ArrayEncoding + ArrayEncodingExt<D = Self>;
 }
 
+/// Macro to generate all the necessary code for a new type of array encoding. Including:
+/// 1. New Array type that implements `AsRef<Array>`, `GetArrayMetadata`, `ToArray`, `IntoArray`, and multiple useful `From`/`TryFrom` implementations.
+/// 1. New Encoding type that implements `ArrayEncoding`.
+/// 1. New metadata type that implements `ArrayMetadata`.
 #[macro_export]
 macro_rules! impl_encoding {
     ($id:literal, $code:expr, $Name:ident) => {
-        $crate::vendored::paste::paste! {
+        $crate::paste::paste! {
             /// The array definition trait
             #[derive(std::fmt::Debug, Clone)]
             pub struct $Name;
