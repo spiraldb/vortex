@@ -52,7 +52,7 @@ pub fn dict_encode_typed_primitive<T: NativePType>(
     ArrayAccessor::<T>::with_iterator(array, |iter| {
         for ov in iter {
             match ov {
-                None => codes.push(0),
+                None => codes.push(NULL_CODE),
                 Some(&v) => {
                     let code = match lookup_dict.entry(Value(v)) {
                         Entry::Occupied(o) => *o.get(),
