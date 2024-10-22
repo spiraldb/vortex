@@ -3,6 +3,7 @@
 use array::PyArray;
 use expr::PyExpr;
 use pyo3::prelude::*;
+use scalar::{PyBuffer, PyBufferString, PyVortexList, PyVortexStruct};
 
 mod array;
 mod compress;
@@ -12,6 +13,7 @@ mod error;
 mod expr;
 mod io;
 mod python_repr;
+mod scalar;
 
 /// Vortex is an Apache Arrow-compatible toolkit for working with compressed array data.
 #[pymodule]
@@ -49,6 +51,14 @@ fn _lib(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
 
     expr.add_function(wrap_pyfunction!(expr::column, m)?)?;
     expr.add_class::<PyExpr>()?;
+
+    let scalar = PyModule::new_bound(py, "scalar")?;
+    m.add_submodule(&scalar)?;
+
+    scalar.add_class::<PyBuffer>()?;
+    scalar.add_class::<PyBufferString>()?;
+    scalar.add_class::<PyVortexList>()?;
+    scalar.add_class::<PyVortexStruct>()?;
 
     Ok(())
 }

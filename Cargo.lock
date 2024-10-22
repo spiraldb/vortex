@@ -3145,6 +3145,7 @@ dependencies = [
  "tokio",
  "vortex-alp",
  "vortex-array",
+ "vortex-buffer",
  "vortex-bytebool",
  "vortex-datetime-parts",
  "vortex-dict",
