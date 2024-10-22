@@ -22,6 +22,10 @@ impl EncodingCompressor for DictCompressor {
         constants::DICT_COST
     }
 
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::DICT_GIB_PER_S
+    }
+
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
         // TODO(robert): Add support for VarBinView
         if array.encoding().id() != Primitive::ID && array.encoding().id() != VarBin::ID {

@@ -8,7 +8,7 @@ use vortex::{Array, ArrayDef, IntoArray};
 use vortex_error::VortexResult;
 
 use crate::compressors::{CompressedArray, CompressionTree, EncodingCompressor};
-use crate::SamplingCompressor;
+use crate::{constants, SamplingCompressor};
 
 #[derive(Debug)]
 pub struct StructCompressor;
@@ -19,7 +19,11 @@ impl EncodingCompressor for StructCompressor {
     }
 
     fn cost(&self) -> u8 {
-        0
+        constants::STRUCT_COST
+    }
+
+    fn decompression_gib_per_second(&self) -> f64 {
+        constants::STRUCT_GIB_PER_S
     }
 
     fn can_compress(&self, array: &Array) -> Option<&dyn EncodingCompressor> {
