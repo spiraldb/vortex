@@ -4677,6 +4677,7 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "itertools 0.13.0",
+ "lazy_static",
  "monoio",
  "object_store",
  "once_cell",
