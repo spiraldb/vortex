@@ -670,7 +670,7 @@ specify <code class="docutils literal notranslate"><span class="pre">recursive=T
 <p>Keep only the second through third elements:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
+<span class="go">&lt;pyarrow.lib.StringViewArray object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  &quot;b&quot;,</span>
 <span class="go">  &quot;c&quot;</span>
@@ -680,7 +680,7 @@ specify <code class="docutils literal notranslate"><span class="pre">recursive=T
 <p>Keep none of the elements:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">slice</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
+<span class="go">&lt;pyarrow.lib.StringViewArray object at ...&gt;</span>
 <span class="go">[]</span>
 </pre></div>
 </div>
@@ -724,7 +724,7 @@ specify <code class="docutils literal notranslate"><span class="pre">recursive=T
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
+<span class="go">&lt;pyarrow.lib.StringViewArray object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  &quot;a&quot;,</span>
 <span class="go">  &quot;c&quot;</span>
@@ -735,7 +735,7 @@ specify <code class="docutils literal notranslate"><span class="pre">recursive=T
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">a</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;a&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="s1">&#39;c&#39;</span><span class="p">,</span> <span class="s1">&#39;d&#39;</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">indices</span> <span class="o">=</span> <span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">a</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">indices</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
+<span class="go">&lt;pyarrow.lib.StringViewArray object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  &quot;a&quot;,</span>
 <span class="go">  &quot;b&quot;,</span>
@@ -801,7 +801,7 @@ specify <code class="docutils literal notranslate"><span class="pre">recursive=T
 <span class="gp">&gt;&gt;&gt; </span><span class="n">array</span><span class="o">.</span><span class="n">to_arrow_table</span><span class="p">()</span>
 <span class="go">pyarrow.Table</span>
 <span class="go">age: int64</span>
-<span class="go">name: string</span>
+<span class="go">name: string_view</span>
 <span class="go">----</span>
 <span class="go">age: [[25,31,33,57]]</span>
 <span class="go">name: [[&quot;Joseph&quot;,&quot;Narendra&quot;,&quot;Angela&quot;,&quot;Mikhail&quot;]]</span>
@@ -1045,7 +1045,7 @@ copying the data. This is only possible when the array is a primitive array with
 <p>Initialize a Vortex array from an Arrow array:</p>
 <div class="doctest highlight-default notranslate"><div class="highlight"><pre><span></span><span class="gp">&gt;&gt;&gt; </span><span class="n">arrow</span> <span class="o">=</span> <span class="n">pyarrow</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s1">&#39;Hello&#39;</span><span class="p">,</span> <span class="s1">&#39;it&#39;</span><span class="p">,</span> <span class="s1">&#39;is&#39;</span><span class="p">,</span> <span class="s1">&#39;me&#39;</span><span class="p">])</span>
 <span class="gp">&gt;&gt;&gt; </span><span class="n">vortex</span><span class="o">.</span><span class="n">encoding</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">arrow</span><span class="p">)</span><span class="o">.</span><span class="n">to_arrow_array</span><span class="p">()</span>
-<span class="go">&lt;pyarrow.lib.StringArray object at ...&gt;</span>
+<span class="go">&lt;pyarrow.lib.StringViewArray object at ...&gt;</span>
 <span class="go">[</span>
 <span class="go">  &quot;Hello&quot;,</span>
 <span class="go">  &quot;it&quot;,</span>
