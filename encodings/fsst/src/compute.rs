@@ -4,8 +4,6 @@ use vortex::compute::unary::{scalar_at_unchecked, ScalarAtFn};
 use vortex::compute::{
     compare, filter, slice, take, ArrayCompute, FilterFn, MaybeCompareFn, Operator, SliceFn, TakeFn,
 };
-use vortex::validity::Validity;
-use vortex::variants::BoolArrayTrait;
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant};
 use vortex_buffer::Buffer;
 use vortex_dtype::DType;
@@ -49,29 +47,6 @@ impl MaybeCompareFn for FSSTArray {
     }
 }
 
-/// Return an array where true means the value is null and false indicates non-null.
-///
-/// This is the inverse of the normal validity buffer.
-fn is_null(array: &FSSTArray) -> VortexResult<Array> {
-    match array.validity() {
-        Validity::NonNullable | Validity::AllValid => {
-            Ok(ConstantArray::new(false, array.len()).into_array())
-        }
-        Validity::AllInvalid => Ok(ConstantArray::new(true, array.len()).into_array()),
-        Validity::Array(validity_array) => validity_array.into_bool()?.invert(),
-    }
-}
-
-fn is_non_null(array: &FSSTArray) -> VortexResult<Array> {
-    match array.validity() {
-        Validity::NonNullable | Validity::AllValid => {
-            Ok(ConstantArray::new(true, array.len()).into_array())
-        }
-        Validity::AllInvalid => Ok(ConstantArray::new(false, array.len()).into_array()),
-        Validity::Array(validity_array) => Ok(validity_array),
-    }
-}
-
 /// Specialized compare function implementation used when performing equals or not equals against
 /// a constant.
 fn compare_fsst_constant(
@@ -106,12 +81,8 @@ fn compare_fsst_constant(
 
     match encoded_scalar {
         None => {
-            if equal {
-                // Equality comparison to null scalar becomes is_null
-                is_null(left)
-            } else {
-                is_non_null(left)
-            }
+            // Eq and NotEq on null values yield nulls, per the Arrow behavior.
+            Ok(right.clone().into_array())
         }
         Some(encoded_scalar) => {
             let rhs = ConstantArray::new(encoded_scalar, left.len());
@@ -190,9 +161,11 @@ impl FilterFn for FSSTArray {
 #[cfg(test)]
 mod tests {
     use vortex::array::{ConstantArray, VarBinArray};
+    use vortex::compute::unary::scalar_at_unchecked;
     use vortex::compute::{MaybeCompareFn, Operator};
     use vortex::{IntoArray, IntoArrayVariant};
     use vortex_dtype::{DType, Nullability};
+    use vortex_scalar::Scalar;
 
     use crate::{fsst_compress, fsst_train_compressor};
 
@@ -237,5 +210,22 @@ mod tests {
             .collect();
 
         assert_eq!(not_equals, vec![true, true, false, true, true]);
+
+        // Ensure null constants are handled correctly.
+        let null_rhs =
+            ConstantArray::new(Scalar::null(DType::Utf8(Nullability::Nullable)), lhs.len());
+        let equals_null = MaybeCompareFn::maybe_compare(&lhs, null_rhs.as_ref(), Operator::Eq)
+            .unwrap()
+            .unwrap();
+        for idx in 0..lhs.len() {
+            assert!(scalar_at_unchecked(&equals_null, idx).is_null());
+        }
+
+        let noteq_null = MaybeCompareFn::maybe_compare(&lhs, null_rhs.as_ref(), Operator::NotEq)
+            .unwrap()
+            .unwrap();
+        for idx in 0..lhs.len() {
+            assert!(scalar_at_unchecked(&noteq_null, idx).is_null());
+        }
     }
 }
