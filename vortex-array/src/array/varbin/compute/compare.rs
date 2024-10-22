@@ -7,7 +7,7 @@ use arrow_ord::cmp;
 use arrow_schema::DataType;
 use vortex_error::{vortex_bail, VortexResult};
 
-use crate::array::varbin::compute::varbin_to_arrow;
+use crate::array::varbin::arrow::{varbin_datum, varbin_to_arrow};
 use crate::array::{ConstantArray, VarBinArray};
 use crate::arrow::FromArrowArray;
 use crate::compute::{MaybeCompareFn, Operator};
@@ -30,7 +30,7 @@ fn compare_constant(
 ) -> VortexResult<Array> {
     // Compare using the arrow kernels directly.
     let arrow_lhs = varbin_to_arrow(lhs)?;
-    let constant = rhs.owned_scalar().to_varbin_datum()?;
+    let constant = varbin_datum(rhs.owned_scalar())?;
 
     match arrow_lhs.data_type() {
         DataType::Binary => {

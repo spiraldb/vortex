@@ -22,6 +22,7 @@ use crate::{impl_encoding, Array, ArrayDType, ArrayTrait, IntoArrayVariant};
 
 mod accessor;
 mod array;
+mod arrow;
 pub mod builder;
 mod compute;
 mod flatten;
