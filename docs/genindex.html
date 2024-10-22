@@ -151,18 +151,33 @@
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="expr.html">
-    Row Filter Expressions
+  <a class="nav-link nav-internal" href="dataset.html">
+    Dataset
   </a>
 </li>
 
 
 <li class="nav-item ">
-  <a class="nav-link nav-internal" href="scalar.html">
+  <a class="nav-link nav-internal" href="expr.html">
+    Row Filter Expressions
+  </a>
+</li>
+
+            <li class="nav-item dropdown">
+                <button class="btn dropdown-toggle nav-item" type="button" data-bs-toggle="dropdown" aria-expanded="false" aria-controls="pst-nav-more-links">
+                    More
+                </button>
+                <ul id="pst-nav-more-links" class="dropdown-menu">
+                    
+<li class=" ">
+  <a class="nav-link dropdown-item nav-internal" href="scalar.html">
     Scalar Values
   </a>
 </li>
 
+                </ul>
+            </li>
+            
   </ul>
 </nav></div>
       
@@ -267,6 +282,13 @@ document.write(`
 
 
 <li class="nav-item ">
+  <a class="nav-link nav-internal" href="dataset.html">
+    Dataset
+  </a>
+</li>
+
+
+<li class="nav-item ">
   <a class="nav-link nav-internal" href="expr.html">
     Row Filter Expressions
   </a>
@@ -339,7 +361,10 @@ document.write(`
  | <a href="#D"><strong>D</strong></a>
  | <a href="#E"><strong>E</strong></a>
  | <a href="#F"><strong>F</strong></a>
+ | <a href="#G"><strong>G</strong></a>
+ | <a href="#H"><strong>H</strong></a>
  | <a href="#I"><strong>I</strong></a>
+ | <a href="#J"><strong>J</strong></a>
  | <a href="#M"><strong>M</strong></a>
  | <a href="#N"><strong>N</strong></a>
  | <a href="#R"><strong>R</strong></a>
@@ -391,10 +416,16 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="expr.html#vortex.expr.column">column() (in module vortex.expr)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="encoding.html#vortex.encoding.compress">compress() (in module vortex.encoding)</a>
 </li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.count_rows">count_rows() (vortex.dataset.VortexDataset method)</a>
+
+      <ul>
+        <li><a href="dataset.html#vortex.dataset.VortexScanner.count_rows">(vortex.dataset.VortexScanner method)</a>
+</li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -423,12 +454,36 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="encoding.html#vortex.encoding.Array.fill_forward">fill_forward() (vortex.encoding.Array method)</a>
 </li>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.filter">filter() (vortex.dataset.VortexDataset method)</a>
+
+      <ul>
+        <li><a href="encoding.html#vortex.encoding.Array.filter">(vortex.encoding.Array method)</a>
+</li>
+      </ul></li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="encoding.html#vortex.encoding.Array.filter">filter() (vortex.encoding.Array method)</a>
-</li>
       <li><a href="dtype.html#vortex.dtype.float">float() (in module vortex.dtype)</a>
 </li>
+  </ul></td>
+</tr></table>
+
+<h2 id="G">G</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.get_fragments">get_fragments() (vortex.dataset.VortexDataset method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
+<h2 id="H">H</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.head">head() (vortex.dataset.VortexDataset method)</a>
+
+      <ul>
+        <li><a href="dataset.html#vortex.dataset.VortexScanner.head">(vortex.dataset.VortexScanner method)</a>
+</li>
+      </ul></li>
   </ul></td>
 </tr></table>
 
@@ -450,6 +505,18 @@ document.write(`
   </ul></td>
 </tr></table>
 
+<h2 id="J">J</h2>
+<table style="width: 100%" class="indextable genindextable"><tr>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.join">join() (vortex.dataset.VortexDataset method)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.join_asof">join_asof() (vortex.dataset.VortexDataset method)</a>
+</li>
+  </ul></td>
+</tr></table>
+
 <h2 id="M">M</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
@@ -457,6 +524,8 @@ document.write(`
     module
 
       <ul>
+        <li><a href="dataset.html#module-vortex.dataset">vortex.dataset</a>
+</li>
         <li><a href="dtype.html#module-vortex.dtype">vortex.dtype</a>
 </li>
         <li><a href="encoding.html#module-vortex.encoding">vortex.encoding</a>
@@ -485,6 +554,10 @@ document.write(`
       <li><a href="io.html#vortex.io.read">read() (in module vortex.io)</a>
 </li>
   </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.replace_schema">replace_schema() (vortex.dataset.VortexDataset method)</a>
+</li>
+  </ul></td>
 </tr></table>
 
 <h2 id="S">S</h2>
@@ -492,9 +565,17 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="encoding.html#vortex.encoding.Array.scalar_at">scalar_at() (vortex.encoding.Array method)</a>
 </li>
+      <li><a href="dataset.html#vortex.dataset.VortexScanner.scan_batches">scan_batches() (vortex.dataset.VortexScanner method)</a>
+</li>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.scanner">scanner() (vortex.dataset.VortexDataset method)</a>
+</li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.schema">schema (vortex.dataset.VortexDataset property)</a>
+</li>
       <li><a href="encoding.html#vortex.encoding.Array.slice">slice() (vortex.encoding.Array method)</a>
+</li>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.sort_by">sort_by() (vortex.dataset.VortexDataset method)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -502,12 +583,22 @@ document.write(`
 <h2 id="T">T</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="encoding.html#vortex.encoding.Array.take">take() (vortex.encoding.Array method)</a>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.take">take() (vortex.dataset.VortexDataset method)</a>
+
+      <ul>
+        <li><a href="encoding.html#vortex.encoding.Array.take">(vortex.encoding.Array method)</a>
 </li>
+      </ul></li>
       <li><a href="encoding.html#vortex.encoding.Array.to_arrow_array">to_arrow_array() (vortex.encoding.Array method)</a>
 </li>
       <li><a href="encoding.html#vortex.encoding.Array.to_arrow_table">to_arrow_table() (vortex.encoding.Array method)</a>
 </li>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.to_batches">to_batches() (vortex.dataset.VortexDataset method)</a>
+
+      <ul>
+        <li><a href="dataset.html#vortex.dataset.VortexScanner.to_batches">(vortex.dataset.VortexScanner method)</a>
+</li>
+      </ul></li>
       <li><a href="encoding.html#vortex.encoding.Array.to_numpy">to_numpy() (vortex.encoding.Array method)</a>
 </li>
   </ul></td>
@@ -518,6 +609,14 @@ document.write(`
 </li>
       <li><a href="encoding.html#vortex.encoding.Array.to_polars_series">to_polars_series() (vortex.encoding.Array method)</a>
 </li>
+      <li><a href="dataset.html#vortex.dataset.VortexScanner.to_reader">to_reader() (vortex.dataset.VortexScanner method)</a>
+</li>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset.to_table">to_table() (vortex.dataset.VortexDataset method)</a>
+
+      <ul>
+        <li><a href="dataset.html#vortex.dataset.VortexScanner.to_table">(vortex.dataset.VortexScanner method)</a>
+</li>
+      </ul></li>
       <li><a href="encoding.html#vortex.encoding.Array.tree_display">tree_display() (vortex.encoding.Array method)</a>
 </li>
   </ul></td>
@@ -538,6 +637,13 @@ document.write(`
 <h2 id="V">V</h2>
 <table style="width: 100%" class="indextable genindextable"><tr>
   <td style="width: 33%; vertical-align: top;"><ul>
+      <li>
+    vortex.dataset
+
+      <ul>
+        <li><a href="dataset.html#module-vortex.dataset">module</a>
+</li>
+      </ul></li>
       <li>
     vortex.dtype
 
@@ -575,7 +681,11 @@ document.write(`
         <li><a href="scalar.html#module-vortex.scalar">module</a>
 </li>
       </ul></li>
+      <li><a href="dataset.html#vortex.dataset.VortexDataset">VortexDataset (class in vortex.dataset)</a>
+</li>
       <li><a href="scalar.html#vortex.scalar.VortexList">VortexList (class in vortex.scalar)</a>
+</li>
+      <li><a href="dataset.html#vortex.dataset.VortexScanner">VortexScanner (class in vortex.dataset)</a>
 </li>
       <li><a href="scalar.html#vortex.scalar.VortexStruct">VortexStruct (class in vortex.scalar)</a>
 </li>
