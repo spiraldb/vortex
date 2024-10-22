@@ -188,7 +188,7 @@ pub struct VarBinViewMetadata {
 
     // Length of each buffer. The buffers are primitive byte arrays containing the raw string/binary
     // data referenced by views.
-    buffer_lens: Vec<usize>,
+    buffer_lens: Vec<u32>,
 }
 
 impl Display for VarBinViewMetadata {
@@ -247,7 +247,7 @@ impl VarBinViewArray {
         let num_views = views.len() / VIEW_SIZE_BYTES;
         let metadata = VarBinViewMetadata {
             validity: validity.to_metadata(num_views)?,
-            buffer_lens: buffers.iter().map(|a| a.len()).collect_vec(),
+            buffer_lens: buffers.iter().map(|a| a.len() as u32).collect_vec(),
         };
 
         let mut children = Vec::with_capacity(buffers.len() + 2);
@@ -306,7 +306,11 @@ impl VarBinViewArray {
     #[inline]
     pub fn buffer(&self, idx: usize) -> Array {
         self.as_ref()
-            .child(idx + 1, &DType::BYTES, self.metadata().buffer_lens[idx])
+            .child(
+                idx + 1,
+                &DType::BYTES,
+                self.metadata().buffer_lens[idx] as usize,
+            )
             .vortex_expect("VarBinViewArray: buffer child")
     }
 
@@ -335,7 +339,7 @@ impl VarBinViewArray {
         self.metadata().validity.to_validity(|| {
             self.as_ref()
                 .child(
-                    self.metadata().buffer_lens.len() + 1,
+                    (self.metadata().buffer_lens.len() + 1) as _,
                     &Validity::DTYPE,
                     self.len(),
                 )
