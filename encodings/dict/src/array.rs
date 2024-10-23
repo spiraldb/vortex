@@ -92,7 +92,7 @@ fn canonicalize_string(array: DictArray) -> VortexResult<Canonical> {
     VarBinViewArray::try_new(
         full_views.into(),
         values.buffers().collect(),
-        values.dtype().clone(),
+        array.dtype().clone(),
         array.logical_validity().into_validity(),
     )
     .map(Canonical::VarBinView)
