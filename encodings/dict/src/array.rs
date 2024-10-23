@@ -3,12 +3,12 @@ use std::fmt::{Debug, Display};
 use arrow_buffer::{BooleanBuffer, ScalarBuffer};
 use serde::{Deserialize, Serialize};
 use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::array::{BoolArray, VarBinViewArray};
-use vortex::compute::take;
+use vortex::array::{BoolArray, ConstantArray, VarBinViewArray};
 use vortex::compute::unary::{scalar_at, try_cast};
+use vortex::compute::{compare, take, Operator};
 use vortex::encoding::ids;
 use vortex::stats::StatsSet;
-use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
@@ -89,11 +89,22 @@ fn canonicalize_string(array: DictArray) -> VortexResult<Canonical> {
         .map(|code| value_views[*code as usize])
         .collect();
 
+    let validity = if array.dtype().is_nullable() {
+        // For nullable arrays, a code of 0 indicates null value.
+        Validity::Array(compare(
+            codes.as_ref(),
+            ConstantArray::new(0u64, codes.len()).as_ref(),
+            Operator::Eq,
+        )?)
+    } else {
+        Validity::NonNullable
+    };
+
     VarBinViewArray::try_new(
         full_views.into(),
         values.buffers().collect(),
         array.dtype().clone(),
-        array.logical_validity().into_validity(),
+        validity,
     )
     .map(Canonical::VarBinView)
 }

@@ -238,7 +238,7 @@ impl VarBinViewArray {
         }
 
         if dtype.is_nullable() == (validity == Validity::NonNullable) {
-            vortex_bail!("incorrect validity {:?}", validity);
+            vortex_bail!("incorrect validity {:?} for {}", validity, dtype);
         }
 
         let num_views = views.len() / VIEW_SIZE_BYTES;

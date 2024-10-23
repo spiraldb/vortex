@@ -3,19 +3,21 @@ use std::sync::Arc;
 use arrow_array::cast::AsArray;
 use arrow_array::types::ByteViewType;
 use arrow_array::{Datum, GenericByteViewArray};
+use arrow_buffer::ScalarBuffer;
 use arrow_ord::cmp;
 use arrow_schema::DataType;
 use vortex_buffer::Buffer;
+use vortex_dtype::PType;
 use vortex_error::{vortex_bail, VortexResult, VortexUnwrap};
 use vortex_scalar::Scalar;
 
 use crate::array::varbin::varbin_scalar;
 use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE_BYTES};
-use crate::array::{varbinview_as_arrow, ConstantArray};
+use crate::array::ConstantArray;
 use crate::arrow::FromArrowArray;
-use crate::compute::unary::ScalarAtFn;
+use crate::compute::unary::{try_cast, ScalarAtFn};
 use crate::compute::{ArrayCompute, MaybeCompareFn, Operator, SliceFn, TakeFn};
-use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
+use crate::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
 
 impl ArrayCompute for VarBinViewArray {
     fn scalar_at(&self) -> Option<&dyn ScalarAtFn> {
@@ -60,12 +62,21 @@ impl SliceFn for VarBinViewArray {
 /// Take involves creating a new array that references the old array, just with the given set of views.
 impl TakeFn for VarBinViewArray {
     fn take(&self, indices: &Array) -> VortexResult<Array> {
-        let array_ref = varbinview_as_arrow(self);
-        let indices_arrow = indices.clone().into_canonical()?.into_arrow()?;
+        let views = ScalarBuffer::<u128>::from(self.views().clone().into_arrow());
 
-        let take_arrow = arrow_select::take::take(&array_ref, &indices_arrow, None)?;
-        let nullable = take_arrow.is_nullable();
-        Ok(Array::from_arrow(take_arrow, nullable))
+        let taken: Vec<u128> = try_cast(indices, PType::U64.into())?
+            .into_primitive()?
+            .maybe_null_slice::<u64>()
+            .iter()
+            .map(|idx| views[*idx as usize])
+            .collect();
+        VarBinViewArray::try_new(
+            ScalarBuffer::from(taken).into_inner().into(),
+            self.buffers().collect(),
+            self.dtype().clone(),
+            self.validity().take(indices)?,
+        )
+        .map(|a| a.into_array())
     }
 }
 

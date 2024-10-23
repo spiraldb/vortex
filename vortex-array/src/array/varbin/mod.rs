@@ -62,7 +62,7 @@ impl VarBinArray {
             vortex_bail!(MismatchedTypes: "utf8 or binary", dtype);
         }
         if dtype.is_nullable() == (validity == Validity::NonNullable) {
-            vortex_bail!("incorrect validity {:?}", validity);
+            vortex_bail!("incorrect validity {:?} for {}", validity, dtype);
         }
 
         let length = offsets.len() - 1;
