@@ -12,7 +12,7 @@ use vortex_buffer::io_buf::IoBuf;
 use vortex_error::{VortexError, VortexUnwrap as _};
 
 use crate::io::{VortexRead, VortexReadAt, VortexWrite};
-use crate::layouts::Spawn;
+use crate::layouts::AsyncRuntime;
 
 pub struct TokioAdapter<IO>(pub IO);
 
@@ -76,7 +76,7 @@ impl VortexWrite for File {
     }
 }
 
-impl Spawn for Runtime {
+impl AsyncRuntime for Runtime {
     fn block_on<F: Future>(&self, fut: F) -> F::Output {
         self.block_on(fut)
     }

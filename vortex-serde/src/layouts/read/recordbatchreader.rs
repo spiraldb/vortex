@@ -21,13 +21,13 @@ fn vortex_to_arrow(result: VortexResult<Array>) -> Result<RecordBatch, ArrowErro
         .map_err(vortex_to_arrow_error)
 }
 
-pub trait Spawn {
+pub trait AsyncRuntime {
     fn block_on<F: Future>(&self, fut: F) -> F::Output;
 }
 
 pub struct VortexRecordBatchReader<'a, R, S>
 where
-    S: Spawn,
+    S: AsyncRuntime,
 {
     stream: LayoutBatchStream<R>,
     arrow_schema: SchemaRef,
@@ -37,7 +37,7 @@ where
 impl<'a, R, S> VortexRecordBatchReader<'a, R, S>
 where
     R: VortexReadAt + Unpin + 'static,
-    S: Spawn,
+    S: AsyncRuntime,
 {
     pub fn new(
         stream: LayoutBatchStream<R>,
@@ -55,7 +55,7 @@ where
 impl<'a, R, S> Iterator for VortexRecordBatchReader<'a, R, S>
 where
     R: VortexReadAt + Unpin + 'static,
-    S: Spawn,
+    S: AsyncRuntime,
 {
     type Item = Result<RecordBatch, ArrowError>;
 
@@ -68,7 +68,7 @@ where
 impl<'a, R, S> RecordBatchReader for VortexRecordBatchReader<'a, R, S>
 where
     R: VortexReadAt + Unpin + 'static,
-    S: Spawn,
+    S: AsyncRuntime,
 {
     fn schema(&self) -> SchemaRef {
         self.arrow_schema.clone()
