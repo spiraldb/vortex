@@ -14,9 +14,8 @@ from .arrow.expression import arrow_to_vortex as arrow_to_vortex_expr
 class VortexDataset(pyarrow.dataset.Dataset):
     """Read Vortex files with row filter and column selection pushdown."""
 
-    def __init__(self, fname: str):
-        self._fname = fname
-        self._dataset = dataset.dataset(fname)
+    def __init__(self, *, file: str | None = None, url: str | None = None):
+        self._dataset = dataset.dataset(file=file, url=url)
 
     @property
     def schema(self) -> pa.Schema:
