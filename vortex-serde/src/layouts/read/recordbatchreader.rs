@@ -25,50 +25,47 @@ pub trait AsyncRuntime {
     fn block_on<F: Future>(&self, fut: F) -> F::Output;
 }
 
-pub struct VortexRecordBatchReader<'a, R, S>
-where
-    S: AsyncRuntime,
-{
+pub struct VortexRecordBatchReader<'a, R, AR> {
     stream: LayoutBatchStream<R>,
     arrow_schema: SchemaRef,
-    spawn: &'a S,
+    runtime: &'a AR,
 }
 
-impl<'a, R, S> VortexRecordBatchReader<'a, R, S>
+impl<'a, R, AR> VortexRecordBatchReader<'a, R, AR>
 where
     R: VortexReadAt + Unpin + 'static,
-    S: AsyncRuntime,
+    AR: AsyncRuntime,
 {
     pub fn new(
         stream: LayoutBatchStream<R>,
-        spawn: &'a S,
-    ) -> VortexResult<VortexRecordBatchReader<'a, R, S>> {
+        spawn: &'a AR,
+    ) -> VortexResult<VortexRecordBatchReader<'a, R, AR>> {
         let arrow_schema = Arc::new(infer_schema(stream.schema().dtype())?);
         Ok(VortexRecordBatchReader {
             stream,
             arrow_schema,
-            spawn,
+            runtime: spawn,
         })
     }
 }
 
-impl<'a, R, S> Iterator for VortexRecordBatchReader<'a, R, S>
+impl<'a, R, AR> Iterator for VortexRecordBatchReader<'a, R, AR>
 where
     R: VortexReadAt + Unpin + 'static,
-    S: AsyncRuntime,
+    AR: AsyncRuntime,
 {
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let maybe_result = self.spawn.block_on(self.stream.next());
+        let maybe_result = self.runtime.block_on(self.stream.next());
         maybe_result.map(vortex_to_arrow)
     }
 }
 
-impl<'a, R, S> RecordBatchReader for VortexRecordBatchReader<'a, R, S>
+impl<'a, R, AR> RecordBatchReader for VortexRecordBatchReader<'a, R, AR>
 where
     R: VortexReadAt + Unpin + 'static,
-    S: AsyncRuntime,
+    AR: AsyncRuntime,
 {
     fn schema(&self) -> SchemaRef {
         self.arrow_schema.clone()
