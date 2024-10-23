@@ -9,11 +9,11 @@ use arrow_array::{ArrayRef, BinaryViewArray, GenericByteViewArray, StringViewArr
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
 use static_assertions::{assert_eq_align, assert_eq_size};
+use vortex_buffer::Buffer;
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect, VortexResult};
 
 use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use crate::array::PrimitiveArray;
 use crate::arrow::FromArrowArray;
 use crate::compute::slice;
 use crate::encoding::ids;
@@ -21,6 +21,7 @@ use crate::stats::StatsSet;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArrayVariant, IntoCanonical,
+    TypedArray,
 };
 
 mod accessor;
@@ -221,15 +222,11 @@ impl_encoding!("vortex.varbinview", ids::VAR_BIN_VIEW, VarBinView);
 
 impl VarBinViewArray {
     pub fn try_new(
-        views: Array,
+        views: Buffer,
         buffers: Vec<Array>,
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
-        if !matches!(views.dtype(), &DType::BYTES) {
-            vortex_bail!(MismatchedTypes: "u8", views.dtype());
-        }
-
         for d in buffers.iter() {
             if !matches!(d.dtype(), &DType::BYTES) {
                 vortex_bail!(MismatchedTypes: "u8", d.dtype());
@@ -258,13 +255,21 @@ impl VarBinViewArray {
         };
 
         let mut children = Vec::with_capacity(buffers.len() + 2);
-        children.push(views);
         children.extend(buffers);
         if let Some(a) = validity.into_array() {
             children.push(a)
         }
 
-        Self::try_from_parts(dtype, num_views, metadata, children.into(), StatsSet::new())
+        Ok(Self {
+            typed: TypedArray::try_from_parts(
+                dtype,
+                num_views,
+                metadata,
+                Some(views),
+                children.into(),
+                StatsSet::new(),
+            )?,
+        })
     }
 
     /// Number of raw string data buffers held by this array.
@@ -279,10 +284,7 @@ impl VarBinViewArray {
     pub fn view_slice(&self) -> &[BinaryView] {
         unsafe {
             slice::from_raw_parts(
-                PrimitiveArray::try_from(self.views())
-                    .vortex_expect("Views must be a primitive array")
-                    .maybe_null_slice::<u8>()
-                    .as_ptr() as _,
+                self.views().as_ptr() as _,
                 self.views().len() / VIEW_SIZE_BYTES,
             )
         }
@@ -298,10 +300,8 @@ impl VarBinViewArray {
     /// contain either a pointer into one of the array's owned `buffer`s OR an inlined copy of
     /// the string (if the string has 12 bytes or fewer).
     #[inline]
-    pub fn views(&self) -> Array {
-        self.as_ref()
-            .child(0, &DType::BYTES, self.len() * VIEW_SIZE_BYTES)
-            .vortex_expect("VarBinViewArray: views child")
+    pub fn views(&self) -> &Buffer {
+        self.as_ref().buffer().vortex_expect("views buffer")
     }
 
     /// Access one of the backing data buffers.
@@ -314,7 +314,7 @@ impl VarBinViewArray {
     pub fn buffer(&self, idx: usize) -> Array {
         self.as_ref()
             .child(
-                idx + 1,
+                idx,
                 &DType::BYTES,
                 self.metadata().buffer_lens[idx] as usize,
             )
@@ -346,7 +346,7 @@ impl VarBinViewArray {
         self.metadata().validity.to_validity(|| {
             self.as_ref()
                 .child(
-                    (self.metadata().buffer_lens.len() + 1) as _,
+                    self.metadata().buffer_lens.len(),
                     &Validity::DTYPE,
                     self.len(),
                 )
@@ -488,13 +488,6 @@ impl IntoCanonical for VarBinViewArray {
 }
 
 pub(crate) fn varbinview_as_arrow(var_bin_view: &VarBinViewArray) -> ArrayRef {
-    // Views should be buffer of u8
-    let views = var_bin_view
-        .views()
-        .into_primitive()
-        .vortex_expect("VarBinViewArray: views child must be primitive");
-    assert_eq!(views.ptype(), PType::U8);
-
     let nulls = var_bin_view
         .logical_validity()
         .to_null_buffer()
@@ -518,14 +511,14 @@ pub(crate) fn varbinview_as_arrow(var_bin_view: &VarBinViewArray) -> ArrayRef {
     match var_bin_view.dtype() {
         DType::Binary(_) => Arc::new(unsafe {
             BinaryViewArray::new_unchecked(
-                ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
+                ScalarBuffer::<u128>::from(var_bin_view.views().clone().into_arrow()),
                 data,
                 nulls,
             )
         }),
         DType::Utf8(_) => Arc::new(unsafe {
             StringViewArray::new_unchecked(
-                ScalarBuffer::<u128>::from(views.buffer().clone().into_arrow()),
+                ScalarBuffer::<u128>::from(var_bin_view.views().clone().into_arrow()),
                 data,
                 nulls,
             )
@@ -546,7 +539,7 @@ impl ArrayValidity for VarBinViewArray {
 
 impl AcceptArrayVisitor for VarBinViewArray {
     fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
-        visitor.visit_child("views", &self.views())?;
+        visitor.visit_buffer(self.views())?;
         for i in 0..self.metadata().buffer_lens.len() {
             visitor.visit_child(format!("bytes_{i}").as_str(), &self.buffer(i))?;
         }

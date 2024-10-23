@@ -1,9 +1,9 @@
 use arrow_array::builder::make_view;
-use arrow_buffer::{BooleanBuffer, BufferBuilder};
+use arrow_buffer::{BooleanBuffer, BufferBuilder, MutableBuffer};
 use vortex_buffer::Buffer;
 use vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexResult};
-use vortex_scalar::{BinaryScalar, BoolScalar, Scalar, Utf8Scalar};
+use vortex_scalar::{BinaryScalar, BoolScalar, Utf8Scalar};
 
 use crate::array::constant::ConstantArray;
 use crate::array::primitive::PrimitiveArray;
@@ -70,10 +70,10 @@ fn canonical_byte_view(
 ) -> VortexResult<VarBinViewArray> {
     match scalar_bytes {
         None => {
-            let views = ConstantArray::new(Scalar::null(dtype.clone()), len);
+            let views = MutableBuffer::from(Vec::<u128>::with_capacity(1));
 
             VarBinViewArray::try_new(
-                views.into_array(),
+                views.into(),
                 Vec::new(),
                 dtype.clone(),
                 Validity::AllInvalid,
@@ -100,9 +100,7 @@ fn canonical_byte_view(
             //   add u128 PType, see https://github.com/spiraldb/vortex/issues/1110
             let mut views = BufferBuilder::<u128>::new(len);
             views.append_n(len, view);
-            let views =
-                PrimitiveArray::new(views.finish().into(), PType::U8, Validity::NonNullable)
-                    .into_array();
+            let views = views.finish().into();
 
             let validity = if dtype.nullability() == Nullability::NonNullable {
                 Validity::NonNullable

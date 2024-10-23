@@ -1,4 +1,4 @@
-use arrow_buffer::{BooleanBufferBuilder, Buffer, MutableBuffer, ScalarBuffer};
+use arrow_buffer::{BooleanBufferBuilder, MutableBuffer, ScalarBuffer};
 use vortex_dtype::{DType, PType, StructDType};
 use vortex_error::{vortex_bail, vortex_err, ErrString, VortexResult};
 
@@ -179,11 +179,7 @@ fn pack_primitives(
         buffer.extend_from_slice(chunk.buffer());
     }
 
-    Ok(PrimitiveArray::new(
-        Buffer::from(buffer).into(),
-        ptype,
-        validity,
-    ))
+    Ok(PrimitiveArray::new(buffer.into(), ptype, validity))
 }
 
 /// Builds a new [VarBinViewArray] by repacking the values from the chunks into a single
@@ -231,8 +227,8 @@ fn pack_views(
         }
     }
 
-    let views_buffer: Buffer = ScalarBuffer::<u128>::from(views).into_inner();
-    VarBinViewArray::try_new(Array::from(views_buffer), buffers, dtype.clone(), validity)
+    let views_buffer = ScalarBuffer::<u128>::from(views).into_inner();
+    VarBinViewArray::try_new(views_buffer.into(), buffers, dtype.clone(), validity)
 }
 
 #[cfg(test)]

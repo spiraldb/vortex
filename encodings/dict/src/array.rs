@@ -1,19 +1,19 @@
 use std::fmt::{Debug, Display};
 
-use arrow_buffer::BooleanBuffer;
+use arrow_buffer::{BooleanBuffer, ScalarBuffer};
 use serde::{Deserialize, Serialize};
 use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::array::BoolArray;
+use vortex::array::{BoolArray, VarBinViewArray};
 use vortex::compute::take;
-use vortex::compute::unary::scalar_at;
+use vortex::compute::unary::{scalar_at, try_cast};
 use vortex::encoding::ids;
 use vortex::stats::StatsSet;
-use vortex::validity::{ArrayValidity, LogicalValidity};
+use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
 };
-use vortex_dtype::{match_each_integer_ptype, DType, PType};
+use vortex_dtype::{match_each_integer_ptype, DType, Nullability, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 
 impl_encoding!("vortex.dict", ids::DICT, Dict);
@@ -41,6 +41,7 @@ impl DictArray {
             DictMetadata {
                 codes_ptype: PType::try_from(codes.dtype())
                     .vortex_expect("codes dtype must be uint"),
+
                 values_len: values.len(),
             },
             [values, codes].into(),
@@ -67,9 +68,77 @@ impl ArrayTrait for DictArray {}
 
 impl IntoCanonical for DictArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        let canonical_values: Array = self.values().into_canonical()?.into();
-        take(canonical_values, self.codes())?.into_canonical()
+        match self.dtype() {
+            DType::Utf8(nullability) | DType::Binary(nullability) => {
+                let values = self.values().into_varbinview()?;
+                let codes = try_cast(self.codes(), PType::U64.into())?.into_primitive()?;
+                let codes_u64 = codes.maybe_null_slice::<u64>();
+
+                if *nullability == Nullability::NonNullable {
+                    canonicalize_string_nonnull(codes_u64, values)
+                } else {
+                    canonicalize_string_nullable(
+                        codes_u64,
+                        values,
+                        self.logical_validity().into_validity(),
+                    )
+                }
+            }
+            _ => canonicalize_primitive(self),
+        }
     }
+}
+
+/// Canonicalize a set of codes and values.
+fn canonicalize_string_nonnull(codes: &[u64], values: VarBinViewArray) -> VortexResult<Canonical> {
+    let value_views = ScalarBuffer::<u128>::from(values.views().clone().into_arrow());
+
+    // Gather the views from value_views into full_views using the dictionary codes.
+    let full_views: Vec<u128> = codes
+        .iter()
+        .map(|code| value_views[*code as usize])
+        .collect();
+
+    VarBinViewArray::try_new(
+        full_views.into(),
+        values.buffers().collect(),
+        values.dtype().clone(),
+        Validity::NonNullable,
+    )
+    .map(Canonical::VarBinView)
+}
+
+fn canonicalize_string_nullable(
+    codes: &[u64],
+    values: VarBinViewArray,
+    validity: Validity,
+) -> VortexResult<Canonical> {
+    let value_views = ScalarBuffer::<u128>::from(values.views().clone().into_arrow());
+
+    // Gather the views from value_views into full_views using the dictionary codes.
+    let full_views: Vec<u128> = codes
+        .iter()
+        .map(|code| {
+            if *code == 0 {
+                0u128
+            } else {
+                value_views[(*code - 1) as usize]
+            }
+        })
+        .collect();
+
+    VarBinViewArray::try_new(
+        full_views.into(),
+        values.buffers().collect(),
+        values.dtype().clone(),
+        validity,
+    )
+    .map(Canonical::VarBinView)
+}
+
+fn canonicalize_primitive(array: DictArray) -> VortexResult<Canonical> {
+    let canonical_values: Array = array.values().into_canonical()?.into();
+    take(canonical_values, array.codes())?.into_canonical()
 }
 
 impl ArrayValidity for DictArray {

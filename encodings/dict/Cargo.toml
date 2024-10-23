@@ -36,3 +36,7 @@ simplelog = { workspace = true }
 [[bench]]
 name = "dict_compress"
 harness = false
+
+[[bench]]
+name = "dict_canonical"
+harness = false

@@ -14,7 +14,7 @@ use crate::array::varbinview::{VarBinViewArray, VIEW_SIZE_BYTES};
 use crate::array::{varbinview_as_arrow, ConstantArray};
 use crate::arrow::FromArrowArray;
 use crate::compute::unary::ScalarAtFn;
-use crate::compute::{slice, ArrayCompute, MaybeCompareFn, Operator, SliceFn, TakeFn};
+use crate::compute::{ArrayCompute, MaybeCompareFn, Operator, SliceFn, TakeFn};
 use crate::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 impl ArrayCompute for VarBinViewArray {
@@ -45,11 +45,8 @@ impl ScalarAtFn for VarBinViewArray {
 impl SliceFn for VarBinViewArray {
     fn slice(&self, start: usize, stop: usize) -> VortexResult<Array> {
         Ok(Self::try_new(
-            slice(
-                self.views(),
-                start * VIEW_SIZE_BYTES,
-                stop * VIEW_SIZE_BYTES,
-            )?,
+            self.views()
+                .slice(start * VIEW_SIZE_BYTES..stop * VIEW_SIZE_BYTES),
             (0..self.metadata().buffer_lens.len())
                 .map(|i| self.buffer(i))
                 .collect::<Vec<_>>(),
