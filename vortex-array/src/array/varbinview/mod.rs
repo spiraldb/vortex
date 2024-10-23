@@ -284,7 +284,7 @@ impl VarBinViewArray {
     /// iterator provided by [`binary_views`][Self::binary_views].
     pub fn view_at(&self, index: usize) -> VortexResult<BinaryView> {
         let start = index * VIEW_SIZE_BYTES;
-        let stop = (index + 1) + VIEW_SIZE_BYTES;
+        let stop = (index + 1) * VIEW_SIZE_BYTES;
         let view_bytes = slice(self.views(), start, stop)?
             .into_primitive()?
             .into_buffer();
