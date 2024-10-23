@@ -38,13 +38,13 @@ where
 {
     pub fn new(
         stream: LayoutBatchStream<R>,
-        spawn: &'a AR,
+        runtime: &'a AR,
     ) -> VortexResult<VortexRecordBatchReader<'a, R, AR>> {
         let arrow_schema = Arc::new(infer_schema(stream.schema().dtype())?);
         Ok(VortexRecordBatchReader {
             stream,
             arrow_schema,
-            runtime: spawn,
+            runtime,
         })
     }
 }
