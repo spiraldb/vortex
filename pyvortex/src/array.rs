@@ -431,7 +431,7 @@ impl PyArray {
     ///       "b",
     ///       "a"
     ///     ]
-    fn take<'py>(&self, indices: &Bound<'py, PyArray>) -> PyResult<PyArray> {
+    fn take(&self, indices: &Bound<PyArray>) -> PyResult<PyArray> {
         let indices = &indices.borrow().inner;
 
         if !indices.dtype().is_int() {
