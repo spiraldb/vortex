@@ -2,12 +2,12 @@ use std::fmt::{Debug, Display, Formatter};
 use std::slice;
 use std::sync::Arc;
 
-use ::serde::{Deserialize, Serialize};
 use arrow_array::builder::{BinaryViewBuilder, GenericByteViewBuilder, StringViewBuilder};
 use arrow_array::types::{BinaryViewType, ByteViewType, StringViewType};
 use arrow_array::{ArrayRef, BinaryViewArray, GenericByteViewArray, StringViewArray};
 use arrow_buffer::ScalarBuffer;
 use itertools::Itertools;
+use ::serde::{Deserialize, Serialize};
 use static_assertions::{assert_eq_align, assert_eq_size};
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, PType};
@@ -227,6 +227,10 @@ impl VarBinViewArray {
         dtype: DType,
         validity: Validity,
     ) -> VortexResult<Self> {
+        if views.as_ptr().align_offset(VIEW_SIZE_BYTES) != 0 {
+            vortex_bail!("views buffer must be aligned to 16 bytes");
+        }
+
         for d in buffers.iter() {
             if !matches!(d.dtype(), &DType::BYTES) {
                 vortex_bail!(MismatchedTypes: "u8", d.dtype());
