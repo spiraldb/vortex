@@ -227,12 +227,12 @@ impl VarBinViewArray {
         validity: Validity,
     ) -> VortexResult<Self> {
         if !matches!(views.dtype(), &DType::BYTES) {
-            vortex_bail!(MismatchedTypes: "u8", views.dtype());
+            vortex_bail!(MismatchedTypes: "views u8", views.dtype());
         }
 
         for d in buffers.iter() {
             if !matches!(d.dtype(), &DType::BYTES) {
-                vortex_bail!(MismatchedTypes: "u8", d.dtype());
+                vortex_bail!(MismatchedTypes: "buffers u8", d.dtype());
             }
         }
 
