@@ -1,14 +1,14 @@
 use std::fmt::{Debug, Display};
 
-use arrow_buffer::{BooleanBuffer, ScalarBuffer};
+use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
 use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
-use vortex::array::{BoolArray, ConstantArray, VarBinViewArray};
-use vortex::compute::unary::{scalar_at, try_cast};
-use vortex::compute::{compare, take, Operator};
+use vortex::array::BoolArray;
+use vortex::compute::take;
+use vortex::compute::unary::scalar_at;
 use vortex::encoding::ids;
 use vortex::stats::StatsSet;
-use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
+use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
@@ -68,50 +68,9 @@ impl ArrayTrait for DictArray {}
 
 impl IntoCanonical for DictArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        match self.dtype() {
-            DType::Utf8(_) | DType::Binary(_) => canonicalize_string(self),
-            _ => canonicalize_primitive(self),
-        }
+        let canonical_values: Array = self.values().into_canonical()?.into();
+        take(canonical_values, self.codes())?.into_canonical()
     }
-}
-
-/// Canonicalize a set of codes and values.
-fn canonicalize_string(array: DictArray) -> VortexResult<Canonical> {
-    let values = array.values().into_varbinview()?;
-    let codes = try_cast(array.codes(), PType::U64.into())?.into_primitive()?;
-
-    let value_views = ScalarBuffer::<u128>::from(values.views().clone().into_arrow());
-
-    // Gather the views from value_views into full_views using the dictionary codes.
-    let full_views: Vec<u128> = codes
-        .maybe_null_slice::<u64>()
-        .iter()
-        .map(|code| value_views[*code as usize])
-        .collect();
-
-    let validity = if array.dtype().is_nullable() {
-        // For nullable arrays, a code of 0 indicates null value.
-        Validity::Array(compare(
-            codes.as_ref(),
-            ConstantArray::new(0u64, codes.len()).as_ref(),
-            Operator::Eq,
-        )?)
-    } else {
-        Validity::NonNullable
-    };
-
-    VarBinViewArray::try_new(
-        full_views.into(),
-        values.buffers().collect(),
-        array.dtype().clone(),
-        validity,
-    )
-    .map(Canonical::VarBinView)
-}
-
-fn canonicalize_primitive(array: DictArray) -> VortexResult<Canonical> {
-    let canonical_values: Array = array.values().into_canonical()?.into();
-    take(canonical_values, array.codes())?.into_canonical()
 }
 
 impl ArrayValidity for DictArray {

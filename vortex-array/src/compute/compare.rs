@@ -78,6 +78,21 @@ pub trait MaybeCompareFn {
     fn maybe_compare(&self, other: &Array, operator: Operator) -> Option<VortexResult<Array>>;
 }
 
+/// Binary comparison operation between two arrays.
+///
+/// The result of comparison is a `Bool` typed Array holding `true` where both of the operands
+/// satisfy the operation, `false` otherwise.
+///
+/// Nullability of the result is the union of the nullabilities of the operands.
+///
+/// ## Null semantics
+///
+/// All binary comparison operations where one of the operands is `NULL` will result in a `NULL`
+/// value being placed in the output.
+///
+/// This semantic is derived from [Apache Arrow's handling of nulls].
+///
+/// [Apache Arrow's handling of nulls]: https://arrow.apache.org/rust/arrow/compute/kernels/cmp/fn.eq.html
 pub fn compare(
     left: impl AsRef<Array>,
     right: impl AsRef<Array>,

@@ -23,10 +23,10 @@ fn fixture(len: usize) -> DictArray {
 }
 
 fn bench_canonical(c: &mut Criterion) {
-    let dict_array = fixture(1024).into_array();
+    let dict_array = fixture(1024 * 1024).into_array();
 
     c.bench_function("canonical", |b| {
-        b.iter(|| dict_array.clone().into_canonical().unwrap())
+        b.iter(|| dict_array.clone().into_canonical())
     });
 }
 
