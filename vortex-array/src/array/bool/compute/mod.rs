@@ -1,9 +1,10 @@
 use crate::array::BoolArray;
-use crate::compute::unary::{FillForwardFn, ScalarAtFn};
+use crate::compute::unary::{CastFn, FillForwardFn, ScalarAtFn};
 use crate::compute::{AndFn, ArrayCompute, OrFn, SliceFn, TakeFn};
 
 mod boolean;
 
+mod cast;
 mod fill;
 mod filter;
 mod flatten;
@@ -12,6 +13,10 @@ mod slice;
 mod take;
 
 impl ArrayCompute for BoolArray {
+    fn cast(&self) -> Option<&dyn CastFn> {
+        Some(self)
+    }
+
     fn fill_forward(&self) -> Option<&dyn FillForwardFn> {
         Some(self)
     }
