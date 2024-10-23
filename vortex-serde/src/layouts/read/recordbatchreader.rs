@@ -1,9 +1,9 @@
+use std::future::Future;
 use std::sync::Arc;
 
 use arrow_array::{RecordBatch, RecordBatchReader};
 use arrow_schema::{ArrowError, SchemaRef};
 use futures::StreamExt;
-use tokio::runtime::Runtime;
 use vortex::arrow::infer_schema;
 use vortex::Array;
 use vortex_error::{VortexError, VortexResult};
@@ -21,36 +21,55 @@ fn vortex_to_arrow(result: VortexResult<Array>) -> Result<RecordBatch, ArrowErro
         .map_err(vortex_to_arrow_error)
 }
 
-pub struct VortexRecordBatchReader<'a, R: VortexReadAt + Unpin + 'static> {
-    stream: LayoutBatchStream<R>,
-    arrow_schema: SchemaRef,
-    runtime: &'a Runtime,
+pub trait Spawn {
+    fn block_on<F: Future>(&self, fut: F) -> F::Output;
 }
 
-impl<'a, R: VortexReadAt + Unpin + 'static> VortexRecordBatchReader<'a, R> {
+pub struct VortexRecordBatchReader<'a, R, S>
+where
+    S: Spawn,
+{
+    stream: LayoutBatchStream<R>,
+    arrow_schema: SchemaRef,
+    spawn: &'a S,
+}
+
+impl<'a, R, S> VortexRecordBatchReader<'a, R, S>
+where
+    R: VortexReadAt + Unpin + 'static,
+    S: Spawn,
+{
     pub fn new(
         stream: LayoutBatchStream<R>,
-        runtime: &Runtime,
-    ) -> VortexResult<VortexRecordBatchReader<R>> {
+        spawn: &'a S,
+    ) -> VortexResult<VortexRecordBatchReader<'a, R, S>> {
         let arrow_schema = Arc::new(infer_schema(stream.schema().dtype())?);
         Ok(VortexRecordBatchReader {
             stream,
             arrow_schema,
-            runtime,
+            spawn,
         })
     }
 }
 
-impl<'a, R: VortexReadAt + Unpin + 'static> Iterator for VortexRecordBatchReader<'a, R> {
+impl<'a, R, S> Iterator for VortexRecordBatchReader<'a, R, S>
+where
+    R: VortexReadAt + Unpin + 'static,
+    S: Spawn,
+{
     type Item = Result<RecordBatch, ArrowError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let maybe_result = self.runtime.block_on(self.stream.next());
+        let maybe_result = self.spawn.block_on(self.stream.next());
         maybe_result.map(vortex_to_arrow)
     }
 }
 
-impl<'a, R: VortexReadAt + Unpin + 'static> RecordBatchReader for VortexRecordBatchReader<'a, R> {
+impl<'a, R, S> RecordBatchReader for VortexRecordBatchReader<'a, R, S>
+where
+    R: VortexReadAt + Unpin + 'static,
+    S: Spawn,
+{
     fn schema(&self) -> SchemaRef {
         self.arrow_schema.clone()
     }
