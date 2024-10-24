@@ -72,18 +72,30 @@
 <a href="#72" id="72">72</a>
 <a href="#73" id="73">73</a>
 <a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+<a href="#78" id="78">78</a>
+<a href="#79" id="79">79</a>
+<a href="#80" id="80">80</a>
+<a href="#81" id="81">81</a>
+<a href="#82" id="82">82</a>
+<a href="#83" id="83">83</a>
 </pre></div><pre class="rust"><code><span class="attr">#![cfg(feature = <span class="string">"tokio"</span>)]
 
-</span><span class="kw">use </span>std::io;
+</span><span class="kw">use </span>std::future::Future;
+<span class="kw">use </span>std::io;
 <span class="kw">use </span>std::os::unix::prelude::FileExt;
 
 <span class="kw">use </span>bytes::BytesMut;
 <span class="kw">use </span>tokio::fs::File;
 <span class="kw">use </span>tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+<span class="kw">use </span>tokio::runtime::Runtime;
 <span class="kw">use </span>vortex_buffer::io_buf::IoBuf;
 <span class="kw">use </span>vortex_error::{VortexError, VortexUnwrap <span class="kw">as _</span>};
 
 <span class="kw">use </span><span class="kw">crate</span>::io::{VortexRead, VortexReadAt, VortexWrite};
+<span class="kw">use </span><span class="kw">crate</span>::layouts::AsyncRuntime;
 
 <span class="kw">pub struct </span>TokioAdapter&lt;IO&gt;(<span class="kw">pub </span>IO);
 
@@ -145,5 +157,11 @@
     <span class="kw">async fn </span>shutdown(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; io::Result&lt;()&gt; {
         AsyncWriteExt::shutdown(<span class="self">self</span>).<span class="kw">await
     </span>}
+}
+
+<span class="kw">impl </span>AsyncRuntime <span class="kw">for </span>Runtime {
+    <span class="kw">fn </span>block_on&lt;F: Future&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, fut: F) -&gt; F::Output {
+        <span class="self">self</span>.block_on(fut)
+    }
 }
 </code></pre></div></section></main></body></html>

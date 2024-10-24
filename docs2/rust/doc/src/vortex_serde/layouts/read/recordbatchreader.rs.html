@@ -59,12 +59,28 @@
 <a href="#59" id="59">59</a>
 <a href="#60" id="60">60</a>
 <a href="#61" id="61">61</a>
-</pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
+<a href="#62" id="62">62</a>
+<a href="#63" id="63">63</a>
+<a href="#64" id="64">64</a>
+<a href="#65" id="65">65</a>
+<a href="#66" id="66">66</a>
+<a href="#67" id="67">67</a>
+<a href="#68" id="68">68</a>
+<a href="#69" id="69">69</a>
+<a href="#70" id="70">70</a>
+<a href="#71" id="71">71</a>
+<a href="#72" id="72">72</a>
+<a href="#73" id="73">73</a>
+<a href="#74" id="74">74</a>
+<a href="#75" id="75">75</a>
+<a href="#76" id="76">76</a>
+<a href="#77" id="77">77</a>
+</pre></div><pre class="rust"><code><span class="kw">use </span>std::future::Future;
+<span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>arrow_array::{RecordBatch, RecordBatchReader};
 <span class="kw">use </span>arrow_schema::{ArrowError, SchemaRef};
 <span class="kw">use </span>futures::StreamExt;
-<span class="kw">use </span>tokio::runtime::Runtime;
 <span class="kw">use </span>vortex::arrow::infer_schema;
 <span class="kw">use </span>vortex::Array;
 <span class="kw">use </span>vortex_error::{VortexError, VortexResult};
@@ -82,17 +98,25 @@
         .map_err(vortex_to_arrow_error)
 }
 
-<span class="kw">pub struct </span>VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R: VortexReadAt + Unpin + <span class="lifetime">'static</span>&gt; {
-    stream: LayoutBatchStream&lt;R&gt;,
-    arrow_schema: SchemaRef,
-    runtime: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Runtime,
+<span class="kw">pub trait </span>AsyncRuntime {
+    <span class="kw">fn </span>block_on&lt;F: Future&gt;(<span class="kw-2">&amp;</span><span class="self">self</span>, fut: F) -&gt; F::Output;
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, R: VortexReadAt + Unpin + <span class="lifetime">'static</span>&gt; VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R&gt; {
+<span class="kw">pub struct </span>VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R, AR&gt; {
+    stream: LayoutBatchStream&lt;R&gt;,
+    arrow_schema: SchemaRef,
+    runtime: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>AR,
+}
+
+<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, R, AR&gt; VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R, AR&gt;
+<span class="kw">where
+    </span>R: VortexReadAt + Unpin + <span class="lifetime">'static</span>,
+    AR: AsyncRuntime,
+{
     <span class="kw">pub fn </span>new(
         stream: LayoutBatchStream&lt;R&gt;,
-        runtime: <span class="kw-2">&amp;</span>Runtime,
-    ) -&gt; VortexResult&lt;VortexRecordBatchReader&lt;R&gt;&gt; {
+        runtime: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>AR,
+    ) -&gt; VortexResult&lt;VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R, AR&gt;&gt; {
         <span class="kw">let </span>arrow_schema = Arc::new(infer_schema(stream.schema().dtype())<span class="question-mark">?</span>);
         <span class="prelude-val">Ok</span>(VortexRecordBatchReader {
             stream,
@@ -102,7 +126,11 @@
     }
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, R: VortexReadAt + Unpin + <span class="lifetime">'static</span>&gt; Iterator <span class="kw">for </span>VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R&gt; {
+<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, R, AR&gt; Iterator <span class="kw">for </span>VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R, AR&gt;
+<span class="kw">where
+    </span>R: VortexReadAt + Unpin + <span class="lifetime">'static</span>,
+    AR: AsyncRuntime,
+{
     <span class="kw">type </span>Item = <span class="prelude-ty">Result</span>&lt;RecordBatch, ArrowError&gt;;
 
     <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Item&gt; {
@@ -111,7 +139,11 @@
     }
 }
 
-<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, R: VortexReadAt + Unpin + <span class="lifetime">'static</span>&gt; RecordBatchReader <span class="kw">for </span>VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R&gt; {
+<span class="kw">impl</span>&lt;<span class="lifetime">'a</span>, R, AR&gt; RecordBatchReader <span class="kw">for </span>VortexRecordBatchReader&lt;<span class="lifetime">'a</span>, R, AR&gt;
+<span class="kw">where
+    </span>R: VortexReadAt + Unpin + <span class="lifetime">'static</span>,
+    AR: AsyncRuntime,
+{
     <span class="kw">fn </span>schema(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; SchemaRef {
         <span class="self">self</span>.arrow_schema.clone()
     }

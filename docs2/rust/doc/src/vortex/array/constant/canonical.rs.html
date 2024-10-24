@@ -144,11 +144,11 @@
 <span class="kw">use </span>vortex_buffer::Buffer;
 <span class="kw">use </span>vortex_dtype::{match_each_native_ptype, DType, Nullability, PType};
 <span class="kw">use </span>vortex_error::{vortex_bail, VortexResult};
-<span class="kw">use </span>vortex_scalar::{BinaryScalar, BoolScalar, Scalar, Utf8Scalar};
+<span class="kw">use </span>vortex_scalar::{BinaryScalar, BoolScalar, Utf8Scalar};
 
 <span class="kw">use </span><span class="kw">crate</span>::array::constant::ConstantArray;
 <span class="kw">use </span><span class="kw">crate</span>::array::primitive::PrimitiveArray;
-<span class="kw">use </span><span class="kw">crate</span>::array::{BinaryView, BoolArray, VarBinViewArray};
+<span class="kw">use </span><span class="kw">crate</span>::array::{BinaryView, BoolArray, VarBinViewArray, VIEW_SIZE_BYTES};
 <span class="kw">use </span><span class="kw">crate</span>::validity::Validity;
 <span class="kw">use crate</span>::{ArrayDType, Canonical, IntoArray, IntoCanonical};
 
@@ -211,7 +211,7 @@
 ) -&gt; VortexResult&lt;VarBinViewArray&gt; {
     <span class="kw">match </span>scalar_bytes {
         <span class="prelude-val">None </span>=&gt; {
-            <span class="kw">let </span>views = ConstantArray::new(Scalar::null(dtype.clone()), len);
+            <span class="kw">let </span>views = ConstantArray::new(<span class="number">0u8</span>, len * VIEW_SIZE_BYTES);
 
             VarBinViewArray::try_new(
                 views.into_array(),

@@ -106,8 +106,6 @@
 <a href="#106" id="106">106</a>
 <a href="#107" id="107">107</a>
 <a href="#108" id="108">108</a>
-<a href="#109" id="109">109</a>
-<a href="#110" id="110">110</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::Debug;
 
 <span class="kw">use </span>arrow_buffer::BooleanBuffer;
@@ -124,8 +122,7 @@
 <span class="kw">mod </span>filtering;
 <span class="kw">mod </span>footer;
 <span class="kw">mod </span>layouts;
-<span class="attr">#[cfg(feature = <span class="string">"tokio"</span>)]
-</span><span class="kw">mod </span>recordbatchreader;
+<span class="kw">mod </span>recordbatchreader;
 <span class="kw">mod </span>stream;
 
 <span class="kw">pub use </span>builder::LayoutReaderBuilder;
@@ -133,8 +130,7 @@
 <span class="kw">pub use </span>context::<span class="kw-2">*</span>;
 <span class="kw">pub use </span>filtering::RowFilter;
 <span class="kw">pub use </span>footer::LayoutDescriptorReader;
-<span class="attr">#[cfg(feature = <span class="string">"tokio"</span>)]
-</span><span class="kw">pub use </span>recordbatchreader::VortexRecordBatchReader;
+<span class="kw">pub use </span>recordbatchreader::{AsyncRuntime, VortexRecordBatchReader};
 <span class="kw">pub use </span>stream::LayoutBatchStream;
 <span class="kw">pub use </span>vortex_schema::projection::Projection;
 <span class="kw">pub use </span>vortex_schema::Schema;

@@ -636,8 +636,35 @@
 <a href="#636" id="636">636</a>
 <a href="#637" id="637">637</a>
 <a href="#638" id="638">638</a>
+<a href="#639" id="639">639</a>
+<a href="#640" id="640">640</a>
+<a href="#641" id="641">641</a>
+<a href="#642" id="642">642</a>
+<a href="#643" id="643">643</a>
+<a href="#644" id="644">644</a>
+<a href="#645" id="645">645</a>
+<a href="#646" id="646">646</a>
+<a href="#647" id="647">647</a>
+<a href="#648" id="648">648</a>
+<a href="#649" id="649">649</a>
+<a href="#650" id="650">650</a>
+<a href="#651" id="651">651</a>
+<a href="#652" id="652">652</a>
+<a href="#653" id="653">653</a>
+<a href="#654" id="654">654</a>
+<a href="#655" id="655">655</a>
+<a href="#656" id="656">656</a>
+<a href="#657" id="657">657</a>
+<a href="#658" id="658">658</a>
+<a href="#659" id="659">659</a>
+<a href="#660" id="660">660</a>
+<a href="#661" id="661">661</a>
+<a href="#662" id="662">662</a>
+<a href="#663" id="663">663</a>
+<a href="#664" id="664">664</a>
+<a href="#665" id="665">665</a>
+<a href="#666" id="666">666</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::fmt::{Debug, Display, Formatter};
-<span class="kw">use </span>std::slice;
 <span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>::serde::{Deserialize, Serialize};
@@ -647,11 +674,11 @@
 <span class="kw">use </span>arrow_buffer::ScalarBuffer;
 <span class="kw">use </span>itertools::Itertools;
 <span class="kw">use </span>static_assertions::{assert_eq_align, assert_eq_size};
+<span class="kw">use </span>vortex_buffer::Buffer;
 <span class="kw">use </span>vortex_dtype::{DType, PType};
 <span class="kw">use </span>vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect, VortexResult};
 
 <span class="kw">use </span><span class="kw">crate</span>::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
-<span class="kw">use </span><span class="kw">crate</span>::array::PrimitiveArray;
 <span class="kw">use </span><span class="kw">crate</span>::arrow::FromArrowArray;
 <span class="kw">use </span><span class="kw">crate</span>::compute::slice;
 <span class="kw">use </span><span class="kw">crate</span>::encoding::ids;
@@ -734,7 +761,7 @@
 </span><span class="kw">pub union </span>BinaryView {
     <span class="comment">// Numeric representation. This is logically `u128`, but we split it into the high and low
     // bits to preserve the alignment.
-    </span>num: [u64; <span class="number">2</span>],
+    </span>le_bytes: [u8; <span class="number">16</span>],
 
     <span class="comment">// Inlined representation: strings &lt;= 12 bytes
     </span>inlined: Inlined,
@@ -794,13 +821,8 @@
     }
 
     <span class="kw">pub fn </span>as_u128(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u128 {
-        <span class="kw">let </span><span class="kw-2">mut </span>tmp = <span class="number">0u128</span>;
-        <span class="kw">unsafe </span>{
-            tmp |= <span class="self">self</span>.num[<span class="number">0</span>] <span class="kw">as </span>u128;
-            tmp |= (<span class="self">self</span>.num[<span class="number">1</span>] <span class="kw">as </span>u128) &lt;&lt; <span class="number">64</span>;
-        }
-
-        tmp
+        <span class="comment">// SAFETY: binary view always safe to read as u128 LE bytes
+        </span><span class="kw">unsafe </span>{ u128::from_le_bytes(<span class="self">self</span>.le_bytes) }
     }
 }
 
@@ -865,12 +887,12 @@
         validity: Validity,
     ) -&gt; VortexResult&lt;<span class="self">Self</span>&gt; {
         <span class="kw">if </span>!<span class="macro">matches!</span>(views.dtype(), <span class="kw-2">&amp;</span>DType::BYTES) {
-            <span class="macro">vortex_bail!</span>(MismatchedTypes: <span class="string">"u8"</span>, views.dtype());
+            <span class="macro">vortex_bail!</span>(MismatchedTypes: <span class="string">"views u8"</span>, views.dtype());
         }
 
         <span class="kw">for </span>d <span class="kw">in </span>buffers.iter() {
             <span class="kw">if </span>!<span class="macro">matches!</span>(d.dtype(), <span class="kw-2">&amp;</span>DType::BYTES) {
-                <span class="macro">vortex_bail!</span>(MismatchedTypes: <span class="string">"u8"</span>, d.dtype());
+                <span class="macro">vortex_bail!</span>(MismatchedTypes: <span class="string">"buffers u8"</span>, d.dtype());
             }
         }
 
@@ -914,20 +936,29 @@
     ///
     /// This is useful for iteration over the values, as well as for applying filters that may
     /// only require hitting the prefixes or inline strings.
-    </span><span class="kw">pub fn </span>view_slice(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[BinaryView] {
-        <span class="kw">unsafe </span>{
-            slice::from_raw_parts(
-                PrimitiveArray::try_from(<span class="self">self</span>.views())
-                    .vortex_expect(<span class="string">"Views must be a primitive array"</span>)
-                    .maybe_null_slice::&lt;u8&gt;()
-                    .as_ptr() <span class="kw">as _</span>,
-                <span class="self">self</span>.views().len() / VIEW_SIZE_BYTES,
-            )
-        }
+    </span><span class="kw">pub fn </span>binary_views(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; VortexResult&lt;Views&gt; {
+        <span class="prelude-val">Ok</span>(Views {
+            inner: <span class="self">self</span>.views().into_primitive()<span class="question-mark">?</span>.into_buffer(),
+            idx: <span class="number">0</span>,
+            len: <span class="self">self</span>.len(),
+        })
     }
 
-    <span class="kw">pub fn </span>view_at(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; BinaryView {
-        <span class="self">self</span>.view_slice()[index]
+    <span class="doccomment">/// Retrieve a binary view at a specific index.
+    ///
+    /// If you will be calling this method many times, it's recommended that you instead use the
+    /// iterator provided by [`binary_views`][Self::binary_views].
+    </span><span class="kw">pub fn </span>view_at(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; VortexResult&lt;BinaryView&gt; {
+        <span class="kw">let </span>start = index * VIEW_SIZE_BYTES;
+        <span class="kw">let </span>stop = (index + <span class="number">1</span>) * VIEW_SIZE_BYTES;
+        <span class="kw">let </span>view_bytes = slice(<span class="self">self</span>.views(), start, stop)<span class="question-mark">?
+            </span>.into_primitive()<span class="question-mark">?
+            </span>.into_buffer();
+
+        <span class="kw">let </span><span class="kw-2">mut </span>le_bytes: [u8; <span class="number">16</span>] = [<span class="number">0u8</span>; <span class="number">16</span>];
+        le_bytes.copy_from_slice(view_bytes.as_slice());
+
+        <span class="prelude-val">Ok</span>(BinaryView { le_bytes })
     }
 
     <span class="doccomment">/// Access to the primitive views array.
@@ -1074,7 +1105,7 @@
 
     <span class="comment">// TODO(aduffy): do we really need to do this with copying?
     </span><span class="kw">pub fn </span>bytes_at(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; VortexResult&lt;Vec&lt;u8&gt;&gt; {
-        <span class="kw">let </span>view = <span class="self">self</span>.view_at(index);
+        <span class="kw">let </span>view = <span class="self">self</span>.view_at(index)<span class="question-mark">?</span>;
         <span class="comment">// Expect this to be the common case: strings &gt; 12 bytes.
         </span><span class="kw">if </span>!view.is_inlined() {
             <span class="kw">let </span>view_ref = view.as_view();
@@ -1088,6 +1119,31 @@
         } <span class="kw">else </span>{
             <span class="comment">// Return access to the range of bytes around it.
             </span><span class="prelude-val">Ok</span>(view.as_inlined().value().to_vec())
+        }
+    }
+}
+
+<span class="kw">pub struct </span>Views {
+    inner: Buffer,
+    len: usize,
+    idx: usize,
+}
+
+<span class="kw">impl </span>Iterator <span class="kw">for </span>Views {
+    <span class="kw">type </span>Item = BinaryView;
+
+    <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="self">Self</span>::Item&gt; {
+        <span class="kw">if </span><span class="self">self</span>.idx &gt;= <span class="self">self</span>.len {
+            <span class="prelude-val">None
+        </span>} <span class="kw">else </span>{
+            <span class="comment">// SAFETY: constructing the BinaryView against u128 value
+            </span><span class="kw">let </span><span class="kw-2">mut </span>le_bytes = [<span class="number">0u8</span>; <span class="number">16</span>];
+            <span class="kw">let </span>start = <span class="self">self</span>.idx * VIEW_SIZE_BYTES;
+            <span class="kw">let </span>stop = start + VIEW_SIZE_BYTES;
+            le_bytes.copy_from_slice(<span class="kw-2">&amp;</span><span class="self">self</span>.inner[start..stop]);
+
+            <span class="self">self</span>.idx += <span class="number">1</span>;
+            <span class="prelude-val">Some</span>(BinaryView { le_bytes })
         }
     }
 }

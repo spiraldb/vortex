@@ -126,6 +126,8 @@
 <a href="#126" id="126">126</a>
 <a href="#127" id="127">127</a>
 <a href="#128" id="128">128</a>
+<a href="#129" id="129">129</a>
+<a href="#130" id="130">130</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::path::Path;
 <span class="kw">use </span>std::sync::Arc;
 
@@ -136,6 +138,7 @@
 <span class="kw">use </span>pyo3::pyfunction;
 <span class="kw">use </span>pyo3::types::PyString;
 <span class="kw">use </span>tokio::fs::File;
+<span class="kw">use </span>tokio::runtime::Runtime;
 <span class="kw">use </span>vortex::arrow::infer_schema;
 <span class="kw">use </span>vortex_dtype::field::Field;
 <span class="kw">use </span>vortex_error::VortexResult;
@@ -239,9 +242,10 @@
             ))
             .map_err(PyVortexError::map_err)<span class="question-mark">?</span>;
 
+        <span class="kw">let </span>runtime: <span class="kw-2">&amp;</span>Runtime = <span class="kw-2">&amp;</span>TOKIO_RUNTIME;
+
         <span class="kw">let </span>record_batch_reader: Box&lt;<span class="kw">dyn </span>RecordBatchReader + Send&gt; = Box::new(
-            VortexRecordBatchReader::new(layout_reader, <span class="kw-2">&amp;</span>TOKIO_RUNTIME)
-                .map_err(PyVortexError::map_err)<span class="question-mark">?</span>,
+            VortexRecordBatchReader::new(layout_reader, runtime).map_err(PyVortexError::map_err)<span class="question-mark">?</span>,
         );
 
         record_batch_reader.into_pyarrow(self_.py())

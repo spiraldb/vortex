@@ -100,14 +100,14 @@
         <span class="macro">assert!</span>(!canonical.is_valid(<span class="number">1</span>));
 
         <span class="comment">// First value is inlined (12 bytes)
-        </span><span class="macro">assert!</span>(canonical.view_at(<span class="number">2</span>).is_inlined());
+        </span><span class="macro">assert!</span>(canonical.view_at(<span class="number">2</span>).unwrap().is_inlined());
         <span class="macro">assert_eq!</span>(
             canonical.bytes_at(<span class="number">2</span>).unwrap().as_slice(),
             <span class="string">"123456789012"</span>.as_bytes()
         );
 
         <span class="comment">// Second value is not inlined (13 bytes)
-        </span><span class="macro">assert!</span>(!canonical.view_at(<span class="number">3</span>).is_inlined());
+        </span><span class="macro">assert!</span>(!canonical.view_at(<span class="number">3</span>).unwrap().is_inlined());
         <span class="macro">assert_eq!</span>(
             canonical.bytes_at(<span class="number">3</span>).unwrap().as_slice(),
             <span class="string">"1234567890123"</span>.as_bytes()

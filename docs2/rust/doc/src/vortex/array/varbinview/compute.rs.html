@@ -153,6 +153,10 @@
 <a href="#153" id="153">153</a>
 <a href="#154" id="154">154</a>
 <a href="#155" id="155">155</a>
+<a href="#156" id="156">156</a>
+<a href="#157" id="157">157</a>
+<a href="#158" id="158">158</a>
+<a href="#159" id="159">159</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>std::sync::Arc;
 
 <span class="kw">use </span>arrow_array::cast::AsArray;
@@ -173,6 +177,10 @@
 <span class="kw">use crate</span>::{Array, ArrayDType, IntoArray, IntoCanonical};
 
 <span class="kw">impl </span>ArrayCompute <span class="kw">for </span>VarBinViewArray {
+    <span class="kw">fn </span>compare(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span>Array, operator: Operator) -&gt; <span class="prelude-ty">Option</span>&lt;VortexResult&lt;Array&gt;&gt; {
+        MaybeCompareFn::maybe_compare(<span class="self">self</span>, other, operator)
+    }
+
     <span class="kw">fn </span>scalar_at(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span><span class="kw">dyn </span>ScalarAtFn&gt; {
         <span class="prelude-val">Some</span>(<span class="self">self</span>)
     }

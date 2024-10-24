@@ -521,7 +521,7 @@
             buffers.push(canonical_buffer);
         }
 
-        <span class="kw">for </span>view <span class="kw">in </span>canonical_chunk.view_slice() {
+        <span class="kw">for </span>view <span class="kw">in </span>canonical_chunk.binary_views()<span class="question-mark">? </span>{
             <span class="kw">if </span>view.is_inlined() {
                 <span class="comment">// Inlined views can be copied directly into the output
                 </span>views.push(view.as_u128());

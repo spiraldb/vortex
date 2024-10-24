@@ -56,12 +56,14 @@
 <a href="#56" id="56">56</a>
 <a href="#57" id="57">57</a>
 <a href="#58" id="58">58</a>
+<a href="#59" id="59">59</a>
 </pre></div><pre class="rust"><code><span class="kw">use </span>itertools::Itertools;
 <span class="kw">use </span>vortex_error::VortexResult;
 
 <span class="kw">use </span><span class="kw">crate</span>::accessor::ArrayAccessor;
 <span class="kw">use </span><span class="kw">crate</span>::array::primitive::PrimitiveArray;
 <span class="kw">use </span><span class="kw">crate</span>::array::varbinview::VarBinViewArray;
+<span class="kw">use </span><span class="kw">crate</span>::array::BinaryView;
 <span class="kw">use </span><span class="kw">crate</span>::validity::ArrayValidity;
 <span class="kw">use </span><span class="kw">crate</span>::IntoCanonical;
 
@@ -70,10 +72,10 @@
         <span class="kw-2">&amp;</span><span class="self">self</span>,
         f: F,
     ) -&gt; VortexResult&lt;R&gt; {
-        <span class="kw">let </span>views = <span class="self">self</span>.view_slice();
         <span class="kw">let </span>bytes: Vec&lt;PrimitiveArray&gt; = (<span class="number">0</span>..<span class="self">self</span>.metadata().buffer_lens.len())
             .map(|i| <span class="self">self</span>.buffer(i).into_canonical()<span class="question-mark">?</span>.into_primitive())
             .try_collect()<span class="question-mark">?</span>;
+        <span class="kw">let </span>views: Vec&lt;BinaryView&gt; = <span class="self">self</span>.binary_views()<span class="question-mark">?</span>.collect();
         <span class="kw">let </span>validity = <span class="self">self</span>.logical_validity().to_null_buffer()<span class="question-mark">?</span>;
 
         <span class="kw">match </span>validity {
