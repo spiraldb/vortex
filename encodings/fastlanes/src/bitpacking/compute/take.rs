@@ -2,7 +2,6 @@ use std::cmp::min;
 
 use fastlanes::BitPacking;
 use itertools::Itertools;
-use rand::seq::IteratorRandom;
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::compute::{slice, take, TakeFn};
 use vortex::{Array, ArrayDType, IntoArray, IntoArrayVariant, IntoCanonical};
@@ -44,6 +43,8 @@ impl TakeFn for BitPackedArray {
     }
 }
 
+// array_chunks must use while let so that we can get the remainder
+#[allow(clippy::while_let_on_iterator)]
 fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
@@ -63,24 +64,23 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
         .maybe_null_slice::<I>()
         .iter()
         .map(|i| {
-            let adjusted = i.to_usize()
+            i.to_usize()
                 .vortex_expect("index must be expressible as usize")
-                + offset;
-            (adjusted / 1024, adjusted % 1024)
+                + offset
         })
-        .chunk_by(|(chunk, _)| chunk);
+        .chunk_by(|idx| idx / 1024);
 
     let mut output = Vec::with_capacity(indices.len());
     let mut unpacked = [T::zero(); 1024];
 
-    let mut iter_count = 0_usize;
+    let mut batch_count = 0_usize;
     for (chunk, offsets) in chunked_indices {
-        iter_count += 1;
+        batch_count += 1;
         let chunk_size = 128 * bit_width / size_of::<T>();
         let packed_chunk = &packed[chunk * chunk_size..][..chunk_size];
 
         let mut have_unpacked = false;
-        let mut offset_chunk_iter = offsets.map(|(_, o)| o).array_chunks::<UNPACK_CHUNK_THRESHOLD>();
+        let mut offset_chunk_iter = offsets.map(|i| i % 1024).array_chunks::<UNPACK_CHUNK_THRESHOLD>();
         while let Some(offset_chunk) = offset_chunk_iter.next() {
             if !have_unpacked {
                 unsafe {
@@ -90,7 +90,7 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
             }
 
             for index in offset_chunk {
-                output.push(unpacked[index as usize]);
+                output.push(unpacked[index]);
             }
         }
 
@@ -98,7 +98,7 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
             if have_unpacked {
                 // we already bulk unpacked this chunk, so we can just push the remaining elements
                 for index in remainder {
-                    output.push(unpacked[index as usize]);
+                    output.push(unpacked[index]);
                 }
             } else {
                 // we had fewer than UNPACK_CHUNK_THRESHOLD offsets, so we just unpack each one individually
@@ -112,19 +112,20 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
     }
 
     if let Some(ref patches) = patches {
-        patch_for_take_primitive(patches, indices, iter_count, &mut output)?;
+        patch_for_take_primitive::<T, I>(patches, indices, offset, batch_count, &mut output)?;
     }
 
     Ok(output)
 }
 
-fn patch_for_take_primitive<T: NativePType>(
+fn patch_for_take_primitive<T: NativePType, I: NativePType>(
     patches: &SparseArray,
     indices: &PrimitiveArray,
     offset: usize,
-    chunk_count: usize,
+    batch_count: usize,
     output: &mut [T],
 ) -> VortexResult<()> {
+    #[inline]
     fn inner_patch<T: NativePType>(
         patches: &SparseArray,
         indices: &PrimitiveArray,
@@ -153,9 +154,9 @@ fn patch_for_take_primitive<T: NativePType>(
     // if we have a small number of relatively large batches, we gain by slicing and then patching inside the loop
     // if we have a large number of relatively small batches, the overhead isn't worth it, and we're better off with a bulk patch
     // roughly, if we have an average of less than 64 elements per batch, we prefer bulk patching
-    let prefer_bulk_patch = chunk_count * BULK_PATCH_THRESHOLD > indices.len();
+    let prefer_bulk_patch = batch_count * BULK_PATCH_THRESHOLD > indices.len();
     if prefer_bulk_patch {
-        return inner_patch(patches, indices, &mut output);
+        return inner_patch(patches, indices, output);
     }
 
     // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
@@ -181,13 +182,13 @@ fn patch_for_take_primitive<T: NativePType>(
         let patches_end = min((chunk + 1) * 1024 - offset, patches.len());
         let patches_slice = slice(patches.as_ref(), patches_start, patches_end)?;
         let patches_slice = SparseArray::try_from(patches_slice)?;
-        let offsets = PrimitiveArray::from(offsets);
-        inner_patch(&patches_slice, &offsets, &mut output)?;
+        let offsets = PrimitiveArray::from(offsets.map(|i| (i % 1024) as u16).collect_vec());
+
+        inner_patch(&patches_slice, &offsets, output)?;
     }
 
+    Ok(())
 }
-
-
 
 #[cfg(test)]
 mod test {
