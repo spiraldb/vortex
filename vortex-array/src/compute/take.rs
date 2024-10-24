@@ -1,7 +1,6 @@
 use log::info;
 use vortex_error::{vortex_bail, vortex_err, VortexResult};
 
-use crate::array::SparseArray;
 use crate::{Array, ArrayDType as _, IntoCanonical as _};
 
 pub trait TakeFn {
