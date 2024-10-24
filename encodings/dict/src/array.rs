@@ -67,8 +67,7 @@ impl ArrayTrait for DictArray {}
 
 impl IntoCanonical for DictArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        let canonical_values: Array = self.values().into_canonical()?.into();
-        take(canonical_values, self.codes())?.into_canonical()
+        take(self.values(), self.codes())?.into_canonical()
     }
 }
 
