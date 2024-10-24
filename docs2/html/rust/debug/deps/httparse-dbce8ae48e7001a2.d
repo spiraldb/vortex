@@ -1,0 +1,10 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libhttparse-dbce8ae48e7001a2.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/iter.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/macros.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/swar.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/neon.rs
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/httparse-dbce8ae48e7001a2.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/iter.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/macros.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/swar.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/neon.rs
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/iter.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/macros.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/mod.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/swar.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/httparse-1.9.5/src/simd/neon.rs:

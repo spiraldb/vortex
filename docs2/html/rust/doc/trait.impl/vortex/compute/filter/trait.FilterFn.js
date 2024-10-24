@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["vortex",[]],["vortex_alp",[["impl <a class=\"trait\" href=\"vortex/compute/filter/trait.FilterFn.html\" title=\"trait vortex::compute::filter::FilterFn\">FilterFn</a> for <a class=\"struct\" href=\"vortex_alp/struct.ALPArray.html\" title=\"struct vortex_alp::ALPArray\">ALPArray</a>"],["impl <a class=\"trait\" href=\"vortex/compute/filter/trait.FilterFn.html\" title=\"trait vortex::compute::filter::FilterFn\">FilterFn</a> for <a class=\"struct\" href=\"vortex_alp/struct.ALPRDArray.html\" title=\"struct vortex_alp::ALPRDArray\">ALPRDArray</a>"]]],["vortex_dict",[["impl <a class=\"trait\" href=\"vortex/compute/filter/trait.FilterFn.html\" title=\"trait vortex::compute::filter::FilterFn\">FilterFn</a> for <a class=\"struct\" href=\"vortex_dict/struct.DictArray.html\" title=\"struct vortex_dict::DictArray\">DictArray</a>"]]],["vortex_fastlanes",[["impl <a class=\"trait\" href=\"vortex/compute/filter/trait.FilterFn.html\" title=\"trait vortex::compute::filter::FilterFn\">FilterFn</a> for <a class=\"struct\" href=\"vortex_fastlanes/struct.FoRArray.html\" title=\"struct vortex_fastlanes::FoRArray\">FoRArray</a>"]]],["vortex_fsst",[["impl <a class=\"trait\" href=\"vortex/compute/filter/trait.FilterFn.html\" title=\"trait vortex::compute::filter::FilterFn\">FilterFn</a> for <a class=\"struct\" href=\"vortex_fsst/struct.FSSTArray.html\" title=\"struct vortex_fsst::FSSTArray\">FSSTArray</a>"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[13,539,281,293,281]}

@@ -1,0 +1,10 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libterm-769686dc849a1a72.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/searcher.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parser/compiled.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parser/names.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parm.rs
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/term-769686dc849a1a72.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/searcher.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parser/compiled.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parser/names.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parm.rs
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/mod.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/searcher.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parser/compiled.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parser/names.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/term-0.7.0/src/terminfo/parm.rs:

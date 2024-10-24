@@ -1,0 +1,11 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libblake3-681b9ba30c188fa6.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/guts.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/platform.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/ffi_neon.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/portable.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/io.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/join.rs
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/blake3-681b9ba30c188fa6.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/guts.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/platform.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/ffi_neon.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/portable.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/io.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/join.rs
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/guts.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/platform.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/ffi_neon.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/portable.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/io.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/blake3-1.5.4/src/join.rs:

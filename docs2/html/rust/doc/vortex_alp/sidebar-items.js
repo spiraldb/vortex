@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["alp_encode","alp_encode_components","alp_rd_decode","decompress"],"macro":["match_each_alp_float_ptype"],"struct":["ALP","ALPArray","ALPEncoding","ALPMetadata","ALPRD","ALPRDArray","ALPRDEncoding","ALPRDMetadata","Exponents","RDEncoder"],"trait":["ALPFloat","ALPRDFloat"]};

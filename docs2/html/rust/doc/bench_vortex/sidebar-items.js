@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["compress_taxi_data","fetch_taxi_data","idempotent","idempotent_async","setup_logger"],"mod":["data_downloads","parquet_utils","public_bi_data","reader","taxi_data","tpch","vortex_utils"],"struct":["COMPRESSORS","CTX","CompressionRunResults","CompressionRunStats"],"trait":["IdempotentPath"]};

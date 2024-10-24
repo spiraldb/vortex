@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"trait":["ArrayVariants","BinaryArrayTrait","BoolArrayTrait","ExtensionArrayTrait","ListArrayTrait","NullArrayTrait","PrimitiveArrayTrait","StructArrayTrait","Utf8ArrayTrait"]};

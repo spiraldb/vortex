@@ -1,0 +1,11 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libsnafu-355926425202c663.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/backtrace_impl_inert.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/once_bool.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/error_chain.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/report.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/Snafu.md /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/report.md
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/snafu-355926425202c663.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/backtrace_impl_inert.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/once_bool.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/error_chain.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/report.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/Snafu.md /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/report.md
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/backtrace_impl_inert.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/once_bool.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/error_chain.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/report.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/Snafu.md:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/snafu-0.8.5/src/report.md:

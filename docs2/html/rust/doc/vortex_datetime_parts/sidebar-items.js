@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["split_temporal"],"struct":["DateTimeParts","DateTimePartsArray","DateTimePartsEncoding","DateTimePartsMetadata","TemporalParts"]};

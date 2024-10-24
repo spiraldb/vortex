@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["FileType"],"fn":["data_vortex_uncompressed","decompress_bz2","download_data"],"trait":["BenchmarkDataset"]};

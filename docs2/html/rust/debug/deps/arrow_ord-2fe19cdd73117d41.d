@@ -1,0 +1,11 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libarrow_ord-2fe19cdd73117d41.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/cmp.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/comparison.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/ord.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/partition.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/rank.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/sort.rs
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/arrow_ord-2fe19cdd73117d41.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/cmp.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/comparison.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/ord.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/partition.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/rank.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/sort.rs
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/cmp.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/comparison.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/ord.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/partition.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/rank.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-ord-53.1.0/src/sort.rs:

@@ -1,0 +1,16 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libarrow-693513a47f1bda16.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/array/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/compute/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/compute/kernels.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/datatypes/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/error.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/pyarrow.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/tensor.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/util/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/util/string_writer.rs
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/arrow-693513a47f1bda16.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/array/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/compute/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/compute/kernels.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/datatypes/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/error.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/pyarrow.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/tensor.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/util/mod.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/util/string_writer.rs
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/array/mod.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/compute/mod.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/compute/kernels.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/datatypes/mod.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/error.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/pyarrow.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/tensor.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/util/mod.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/arrow-53.1.0/src/util/string_writer.rs:
+
+# env-dep:CARGO_PKG_VERSION=53.1.0

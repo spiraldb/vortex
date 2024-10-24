@@ -1,0 +1,12 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libtar-bad1198b93e98bc9.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/archive.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/builder.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/entry.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/entry_type.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/error.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/header.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/pax.rs
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/tar-bad1198b93e98bc9.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/archive.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/builder.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/entry.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/entry_type.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/error.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/header.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/pax.rs
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/archive.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/builder.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/entry.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/entry_type.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/error.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/header.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/tar-0.4.42/src/pax.rs:

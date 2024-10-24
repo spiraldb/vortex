@@ -1,0 +1,14 @@
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libpyo3_build_config-38faf064c6d4410c.rmeta: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/errors.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/impl_.rs /Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config-file.txt /Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config.txt
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/libpyo3_build_config-38faf064c6d4410c.rlib: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/errors.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/impl_.rs /Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config-file.txt /Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config.txt
+
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/deps/pyo3_build_config-38faf064c6d4410c.d: /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/lib.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/errors.rs /Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/impl_.rs /Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config-file.txt /Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config.txt
+
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/lib.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/errors.rs:
+/Users/danielking/.cargo/registry/src/index.crates.io-6f17d22bba15001f/pyo3-build-config-0.22.5/src/impl_.rs:
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config-file.txt:
+/Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out/pyo3-build-config.txt:
+
+# env-dep:CARGO_PKG_VERSION=0.22.5
+# env-dep:OUT_DIR=/Users/danielking/projects/vortex/docs/_build/html/rust/debug/build/pyo3-build-config-4de7496f908075b6/out

@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["alp","alp_rd","bitpacked","chunked","constant","date_time_parts","delta","dict","for","fsst","roaring_bool","roaring_int","runend","sparse","struct_","zigzag"],"struct":["CompressedArray","CompressionTree"],"trait":["EncoderMetadata","EncodingCompressor"],"type":["CompressorRef"]};
