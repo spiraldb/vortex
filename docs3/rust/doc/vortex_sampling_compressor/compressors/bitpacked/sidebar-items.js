@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BITPACK_NO_PATCHES","BITPACK_WITH_PATCHES"],"struct":["BitPackedCompressor"]};

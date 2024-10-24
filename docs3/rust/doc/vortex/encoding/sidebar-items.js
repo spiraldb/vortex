@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["ids","opaque"],"struct":["EncodingId"],"trait":["ArrayEncoding","ArrayEncodingExt","ArrayEncodingRef"],"type":["EncodingRef"]};

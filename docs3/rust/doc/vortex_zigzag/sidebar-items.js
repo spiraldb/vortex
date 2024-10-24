@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["zigzag_decode","zigzag_encode"],"struct":["ZigZag","ZigZagArray","ZigZagEncoding","ZigZagMetadata"]};

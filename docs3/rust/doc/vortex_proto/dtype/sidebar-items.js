@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["PType"],"mod":["d_type","field"],"struct":["Binary","Bool","DType","Decimal","Extension","Field","FieldPath","List","Null","Primitive","Struct","Utf8"]};

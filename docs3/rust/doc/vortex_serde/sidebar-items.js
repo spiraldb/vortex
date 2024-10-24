@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ALIGNMENT"],"mod":["chunked_reader","io","layouts","stream_reader","stream_writer"],"struct":["DTypeReader"]};

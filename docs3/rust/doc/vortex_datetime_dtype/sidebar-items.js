@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["TemporalJiff","TemporalMetadata","TimeUnit"],"fn":["is_temporal_ext_type"],"mod":["arrow"],"struct":["DATE_ID","TIMESTAMP_ID","TIME_ID"]};

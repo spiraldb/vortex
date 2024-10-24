@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["Operator"],"mod":["predicate"],"struct":["Conjunction","Disjunction","Predicate"]};

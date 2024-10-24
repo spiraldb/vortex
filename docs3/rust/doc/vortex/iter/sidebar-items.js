@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["ITER_BATCH_SIZE"],"struct":["ArrayIteratorAdapter","Batch","FlattenedBatch","VectorizedArrayIter"],"trait":["Accessor","ArrayIterator","ArrayIteratorExt"],"type":["AccessorRef"]};

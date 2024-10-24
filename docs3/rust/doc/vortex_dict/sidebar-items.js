@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["NULL_CODE"],"fn":["dict_encode_primitive","dict_encode_typed_primitive","dict_encode_varbin","dict_encode_varbinview"],"struct":["Dict","DictArray","DictEncoding","DictMetadata"]};
