@@ -163,6 +163,9 @@ fn patch_for_take_primitive<T: NativePType, I: NativePType>(
         return inner_patch(patches, indices, output);
     }
 
+    let min_index = patches.min_index().unwrap_or_default();
+    let max_index = patches.max_index().unwrap_or_default();
+
     // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
     let chunked_indices = &indices
         .maybe_null_slice::<I>()
@@ -172,6 +175,7 @@ fn patch_for_take_primitive<T: NativePType, I: NativePType>(
                 .vortex_expect("index must be expressible as usize")
                 + offset
         })
+        .filter(|i| *i >= min_index && *i <= max_index) // short-circuit
         .chunk_by(|idx| idx / 1024);
 
     for (chunk, offsets) in chunked_indices {
