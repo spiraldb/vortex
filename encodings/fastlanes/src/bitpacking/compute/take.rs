@@ -43,8 +43,11 @@ impl TakeFn for BitPackedArray {
     }
 }
 
+<<<<<<< HEAD
 // array_chunks must use while-let so that we can get the remainder
 #[allow(clippy::while_let_on_iterator)]
+=======
+>>>>>>> 41a62323 (Resolve suppressed clippy warning in BitPacked::take)
 fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
     array: &BitPackedArray,
     indices: &PrimitiveArray,
@@ -87,8 +90,7 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
             .array_chunks::<UNPACK_CHUNK_THRESHOLD>();
 
         // this loop only runs if we have at least UNPACK_CHUNK_THRESHOLD offsets
-        // NB: must use while-let instead of for-in loop so that we can get the remainder
-        while let Some(offset_chunk) = offset_chunk_iter.next() {
+        for offset_chunk in &mut offset_chunk_iter {
             if !have_unpacked {
                 unsafe {
                     BitPacking::unchecked_unpack(bit_width, packed_chunk, &mut unpacked);
