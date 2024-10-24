@@ -43,7 +43,7 @@ impl TakeFn for BitPackedArray {
     }
 }
 
-// array_chunks must use while let so that we can get the remainder
+// array_chunks must use while-let so that we can get the remainder
 #[allow(clippy::while_let_on_iterator)]
 fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
     array: &BitPackedArray,
@@ -59,8 +59,7 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
     let packed = array.packed_slice::<T>();
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
 
-    // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
-    // *without* allocating on the heap
+    // Group indices by 1024-element chunk, *without* allocating on the heap
     let chunked_indices = &indices
         .maybe_null_slice::<I>()
         .iter()
@@ -83,8 +82,12 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
         // array_chunks produced a fixed size array, doesn't heap allocate
         let mut have_unpacked = false;
         let mut offset_chunk_iter = offsets
+            // relativize indices to the start of the chunk
             .map(|i| i % 1024)
             .array_chunks::<UNPACK_CHUNK_THRESHOLD>();
+
+        // this loop only runs if we have at least UNPACK_CHUNK_THRESHOLD offsets
+        // NB: must use while-let instead of for-in loop so that we can get the remainder
         while let Some(offset_chunk) = offset_chunk_iter.next() {
             if !have_unpacked {
                 unsafe {
@@ -98,6 +101,7 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
             }
         }
 
+        // if we have a remainder (i.e., < UNPACK_CHUNK_THRESHOLD leftover offsets), we need to handle it
         if let Some(remainder) = offset_chunk_iter.into_remainder() {
             if have_unpacked {
                 // we already bulk unpacked this chunk, so we can just push the remaining elements
@@ -105,7 +109,8 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
                     output.push(unpacked[index]);
                 }
             } else {
-                // we had fewer than UNPACK_CHUNK_THRESHOLD offsets, so we just unpack each one individually
+                // we had fewer than UNPACK_CHUNK_THRESHOLD offsets in the first place,
+                // so we need to unpack each one individually
                 for index in remainder {
                     output.push(unsafe {
                         unpack_single_primitive::<T>(packed_chunk, bit_width, index)
