@@ -63,14 +63,14 @@ impl<'a, T: NativePType> SearchSortedPrimitive<'a, T> {
     }
 }
 
-impl<'a, T: NativePType> IndexOrd<T> for SearchSortedPrimitive<'a, T> {
+impl<T: NativePType> IndexOrd<T> for SearchSortedPrimitive<'_, T> {
     fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
         // SAFETY: Used in search_sorted_by same as the standard library. The search_sorted ensures idx is in bounds
         Some(unsafe { self.values.get_unchecked(idx) }.compare(*elem))
     }
 }
 
-impl<'a, T> Len for SearchSortedPrimitive<'a, T> {
+impl<T> Len for SearchSortedPrimitive<'_, T> {
     fn len(&self) -> usize {
         self.values.len()
     }
@@ -90,7 +90,7 @@ impl<'a, T: NativePType> SearchSortedNullsLast<'a, T> {
     }
 }
 
-impl<'a, T: NativePType> IndexOrd<T> for SearchSortedNullsLast<'a, T> {
+impl<T: NativePType> IndexOrd<T> for SearchSortedNullsLast<'_, T> {
     fn index_cmp(&self, idx: usize, elem: &T) -> Option<Ordering> {
         if self.validity.is_null(idx) {
             return Some(Greater);
@@ -100,7 +100,7 @@ impl<'a, T: NativePType> IndexOrd<T> for SearchSortedNullsLast<'a, T> {
     }
 }
 
-impl<'a, T> Len for SearchSortedNullsLast<'a, T> {
+impl<T> Len for SearchSortedNullsLast<'_, T> {
     fn len(&self) -> usize {
         self.values.len()
     }

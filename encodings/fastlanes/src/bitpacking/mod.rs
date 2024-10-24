@@ -3,12 +3,12 @@ use std::fmt::{Debug, Display};
 use ::serde::{Deserialize, Serialize};
 pub use compress::*;
 use fastlanes::BitPacking;
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::array::{PrimitiveArray, SparseArray};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
-use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoCanonical, TypedArray};
 use vortex_buffer::Buffer;
 use vortex_dtype::{DType, NativePType, Nullability, PType};
@@ -23,11 +23,9 @@ impl_encoding!("fastlanes.bitpacked", ids::FL_BITPACKED, BitPacked);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BitPackedMetadata {
-    // TODO(ngates): serialize into compact form
     validity: ValidityMetadata,
-    bit_width: usize,
-    offset: usize, // Know to be <1024
-    length: usize, // Store end padding instead <1024
+    bit_width: u8,
+    offset: u16, // must be <1024
     has_patches: bool,
 }
 
@@ -47,7 +45,7 @@ impl BitPackedArray {
         ptype: PType,
         validity: Validity,
         patches: Option<Array>,
-        bit_width: usize,
+        bit_width: u8,
         len: usize,
     ) -> VortexResult<Self> {
         Self::try_new_from_offset(packed, ptype, validity, patches, bit_width, len, 0)
@@ -58,9 +56,9 @@ impl BitPackedArray {
         ptype: PType,
         validity: Validity,
         patches: Option<Array>,
-        bit_width: usize,
+        bit_width: u8,
         length: usize,
-        offset: usize,
+        offset: u16,
     ) -> VortexResult<Self> {
         let dtype = DType::Primitive(ptype, validity.nullability());
 
@@ -68,7 +66,7 @@ impl BitPackedArray {
             vortex_bail!(MismatchedTypes: "uint", &dtype);
         }
 
-        if bit_width > u64::BITS as usize {
+        if bit_width > u64::BITS as u8 {
             vortex_bail!("Unsupported bit width {}", bit_width);
         }
         if offset > 1023 {
@@ -79,7 +77,8 @@ impl BitPackedArray {
         }
 
         // expected packed size is in bytes
-        let expected_packed_size = ((length + offset + 1023) / 1024) * (128 * bit_width);
+        let expected_packed_size =
+            ((length + offset as usize + 1023) / 1024) * (128 * bit_width as usize);
         if packed.len() != expected_packed_size {
             return Err(vortex_err!(
                 "Expected {} packed bytes, got {}",
@@ -106,7 +105,6 @@ impl BitPackedArray {
         let metadata = BitPackedMetadata {
             validity: validity.to_metadata(length)?,
             offset,
-            length,
             bit_width,
             has_patches: patches.is_some(),
         };
@@ -153,7 +151,7 @@ impl BitPackedArray {
     }
 
     #[inline]
-    pub fn bit_width(&self) -> usize {
+    pub fn bit_width(&self) -> u8 {
         self.metadata().bit_width
     }
 
@@ -175,7 +173,7 @@ impl BitPackedArray {
     }
 
     #[inline]
-    pub fn offset(&self) -> usize {
+    pub fn offset(&self) -> u16 {
         self.metadata().offset
     }
 
@@ -189,7 +187,7 @@ impl BitPackedArray {
         })
     }
 
-    pub fn encode(array: &Array, bit_width: usize) -> VortexResult<Self> {
+    pub fn encode(array: &Array, bit_width: u8) -> VortexResult<Self> {
         if let Ok(parray) = PrimitiveArray::try_from(array) {
             bitpack_encode(parray, bit_width)
         } else {
@@ -245,7 +243,7 @@ impl ArrayStatisticsCompute for BitPackedArray {}
 impl ArrayTrait for BitPackedArray {
     fn nbytes(&self) -> usize {
         // Ignore any overheads like padding or the bit-width flag.
-        let packed_size = ((self.bit_width() * self.len()) + 7) / 8;
+        let packed_size = ((self.bit_width() as usize * self.len()) + 7) / 8;
         packed_size + self.patches().map(|p| p.nbytes()).unwrap_or(0)
     }
 }

@@ -32,6 +32,7 @@ pub use utf8::*;
 pub use value::*;
 use vortex_error::{vortex_bail, VortexResult};
 
+/// A single logical item, composed of both a [`ScalarValue`] and a logical [`DType`].
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 pub struct Scalar {
@@ -57,6 +58,11 @@ impl Scalar {
     #[inline]
     pub fn into_value(self) -> ScalarValue {
         self.value
+    }
+
+    #[inline]
+    pub fn into_parts(self) -> (ScalarValue, DType) {
+        (self.value, self.dtype)
     }
 
     pub fn is_valid(&self) -> bool {

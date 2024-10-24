@@ -2,15 +2,15 @@ use std::fmt::{Debug, Display};
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
-use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoCanonical};
 use vortex_dtype::{DType, PType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
-use vortex_scalar::Scalar;
+use vortex_scalar::{Scalar, ScalarValue};
 
 mod compress;
 mod compute;
@@ -19,7 +19,7 @@ impl_encoding!("fastlanes.for", ids::FL_FOR, FoR);
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FoRMetadata {
-    reference: Scalar,
+    reference: ScalarValue,
     shift: u8,
 }
 
@@ -32,17 +32,22 @@ impl Display for FoRMetadata {
 impl FoRArray {
     pub fn try_new(child: Array, reference: Scalar, shift: u8) -> VortexResult<Self> {
         if reference.is_null() {
-            vortex_bail!("Reference value cannot be null",);
+            vortex_bail!("Reference value cannot be null");
         }
+
         let reference = reference.cast(
             &reference
                 .dtype()
                 .with_nullability(child.dtype().nullability()),
         )?;
+
         Self::try_from_parts(
             reference.dtype().clone(),
             child.len(),
-            FoRMetadata { reference, shift },
+            FoRMetadata {
+                reference: reference.into_value(),
+                shift,
+            },
             [child].into(),
             StatsSet::new(),
         )
@@ -61,8 +66,13 @@ impl FoRArray {
     }
 
     #[inline]
-    pub fn reference(&self) -> &Scalar {
+    pub fn reference(&self) -> &ScalarValue {
         &self.metadata().reference
+    }
+
+    #[inline]
+    pub fn owned_reference_scalar(&self) -> Scalar {
+        Scalar::new(self.dtype().clone(), self.reference().clone())
     }
 
     #[inline]

@@ -2,12 +2,12 @@ use std::fmt::{Debug, Display};
 
 pub use compress::*;
 use serde::{Deserialize, Serialize};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::array::PrimitiveArray;
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use vortex::variants::{ArrayVariants, PrimitiveArrayTrait};
-use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoCanonical};
 use vortex_dtype::{match_each_unsigned_integer_ptype, NativePType};
 use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
@@ -20,8 +20,8 @@ impl_encoding!("fastlanes.delta", ids::FL_DELTA, Delta);
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeltaMetadata {
     validity: ValidityMetadata,
-    deltas_len: usize,
-    offset: usize, // must be <1024
+    deltas_len: u64,
+    offset: u16, // must be <1024
 }
 
 impl Display for DeltaMetadata {
@@ -117,8 +117,8 @@ impl DeltaArray {
         let dtype = bases.dtype().clone();
         let metadata = DeltaMetadata {
             validity: validity.to_metadata(logical_len)?,
-            deltas_len: deltas.len(),
-            offset,
+            deltas_len: deltas.len() as u64,
+            offset: offset as u16,
         };
 
         let mut children = vec![bases, deltas];
@@ -187,7 +187,7 @@ impl DeltaArray {
     #[inline]
     /// The logical offset into the first chunk of [`Self::deltas`].
     pub fn offset(&self) -> usize {
-        self.metadata().offset
+        self.metadata().offset as usize
     }
 
     pub fn validity(&self) -> Validity {
@@ -205,7 +205,7 @@ impl DeltaArray {
     }
 
     fn deltas_len(&self) -> usize {
-        self.metadata().deltas_len
+        self.metadata().deltas_len as usize
     }
 }
 

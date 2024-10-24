@@ -3,13 +3,13 @@ use std::sync::Arc;
 
 use fsst::{Decompressor, Symbol};
 use serde::{Deserialize, Serialize};
-use vortex::array::VarBinArray;
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
+use vortex::array::{VarBin, VarBinArray};
 use vortex::encoding::ids;
 use vortex::stats::{ArrayStatisticsCompute, StatsSet};
 use vortex::validity::{ArrayValidity, LogicalValidity, Validity};
 use vortex::variants::{ArrayVariants, BinaryArrayTrait, Utf8ArrayTrait};
-use vortex::visitor::AcceptArrayVisitor;
-use vortex::{impl_encoding, Array, ArrayDType, ArrayTrait, IntoCanonical};
+use vortex::{impl_encoding, Array, ArrayDType, ArrayDef, ArrayTrait, IntoCanonical};
 use vortex_dtype::{DType, Nullability, PType};
 use vortex_error::{vortex_bail, VortexExpect, VortexResult};
 
@@ -21,8 +21,8 @@ static SYMBOL_LENS_DTYPE: DType = DType::Primitive(PType::U8, Nullability::NonNu
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FSSTMetadata {
     symbols_len: usize,
-    codes_dtype: DType,
-    uncompressed_lengths_dtype: DType,
+    codes_nullability: Nullability,
+    uncompressed_lengths_ptype: PType,
 }
 
 impl Display for FSSTMetadata {
@@ -69,8 +69,15 @@ impl FSSTArray {
             vortex_bail!(InvalidArgument: "uncompressed_lengths must be same len as codes");
         }
 
-        if !uncompressed_lengths.dtype().is_int() {
-            vortex_bail!(InvalidArgument: "uncompressed_lengths must have integer type");
+        if !uncompressed_lengths.dtype().is_int() || uncompressed_lengths.dtype().is_nullable() {
+            vortex_bail!(InvalidArgument: "uncompressed_lengths must have integer type and cannot be nullable");
+        }
+
+        if codes.encoding().id() != VarBin::ID {
+            vortex_bail!(
+                InvalidArgument: "codes must have varbin encoding, was {}",
+                codes.encoding().id()
+            );
         }
 
         // Check: strings must be a Binary array.
@@ -80,8 +87,8 @@ impl FSSTArray {
 
         let symbols_len = symbols.len();
         let len = codes.len();
-        let strings_dtype = codes.dtype().clone();
-        let uncompressed_lengths_dtype = uncompressed_lengths.dtype().clone();
+        let uncompressed_lengths_ptype = PType::try_from(uncompressed_lengths.dtype())?;
+        let codes_nullability = codes.dtype().nullability();
         let children = Arc::new([symbols, symbol_lengths, codes, uncompressed_lengths]);
 
         Self::try_from_parts(
@@ -89,8 +96,8 @@ impl FSSTArray {
             len,
             FSSTMetadata {
                 symbols_len,
-                codes_dtype: strings_dtype,
-                uncompressed_lengths_dtype,
+                codes_nullability,
+                uncompressed_lengths_ptype,
             },
             children,
             StatsSet::new(),
@@ -114,15 +121,30 @@ impl FSSTArray {
     /// Access the codes array
     pub fn codes(&self) -> Array {
         self.as_ref()
-            .child(2, &self.metadata().codes_dtype, self.len())
+            .child(2, &self.codes_dtype(), self.len())
             .vortex_expect("FSSTArray codes child")
+    }
+
+    /// Get the DType of the codes array
+    #[inline]
+    pub fn codes_dtype(&self) -> DType {
+        DType::Binary(self.metadata().codes_nullability)
     }
 
     /// Get the uncompressed length for each element in the array.
     pub fn uncompressed_lengths(&self) -> Array {
         self.as_ref()
-            .child(3, &self.metadata().uncompressed_lengths_dtype, self.len())
+            .child(3, &self.uncompressed_lengths_dtype(), self.len())
             .vortex_expect("FSST uncompressed_lengths child")
+    }
+
+    /// Get the DType of the uncompressed lengths array
+    #[inline]
+    pub fn uncompressed_lengths_dtype(&self) -> DType {
+        DType::Primitive(
+            self.metadata().uncompressed_lengths_ptype,
+            Nullability::NonNullable,
+        )
     }
 
     /// Get the validity for this array.
@@ -168,7 +190,7 @@ impl FSSTArray {
 }
 
 impl AcceptArrayVisitor for FSSTArray {
-    fn accept(&self, visitor: &mut dyn vortex::visitor::ArrayVisitor) -> VortexResult<()> {
+    fn accept(&self, visitor: &mut dyn ArrayVisitor) -> VortexResult<()> {
         visitor.visit_child("symbols", &self.symbols())?;
         visitor.visit_child("symbol_lengths", &self.symbol_lengths())?;
         visitor.visit_child("codes", &self.codes())?;

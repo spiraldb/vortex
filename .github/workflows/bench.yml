@@ -24,7 +24,7 @@ jobs:
             name: Vortex Compression
           - id: bytes_at
             name: Vortex bytes_at
-    runs-on: ubuntu-latest-large
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/cleanup
@@ -34,15 +34,24 @@ jobs:
       # The compression benchmarks rely on DuckDB being installed to convert CSV to Parquet
       - name: Install DuckDB
         uses: opt-nc/setup-duckdb-action@v1.0.9
+        if: runner.environment != 'self-hosted'
         with:
           version: v1.0.0
 
+      - name: Set tempdir
+        if: runner.environment == 'self-hosted'
+        run: |
+            echo "TMPDIR=/work" >> $GITHUB_ENV
+
       - name: Run benchmark
         shell: bash
+        env:
+          BENCH_VORTEX_RATIOS: '.*'
+          RUSTFLAGS: '-C target-cpu=native'
         run: |
           cargo install cargo-criterion
 
-          BENCH_VORTEX_RATIOS='.*' cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
+          cargo criterion --bench ${{ matrix.benchmark.id }} --message-format=json 2>&1 | tee out.json
 
           cat out.json
 

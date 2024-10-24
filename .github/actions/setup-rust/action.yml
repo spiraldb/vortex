@@ -1,5 +1,5 @@
-name: 'Setup Rust'
-description: 'Toolchain setup and Initial compilation'
+name: "Setup Rust"
+description: "Toolchain setup and Initial compilation"
 runs:
   using: "composite"
   steps:
@@ -20,7 +20,7 @@ runs:
       uses: Swatinem/rust-cache@v2
       with:
         save-if: ${{ github.ref_name == 'develop' }}
-        shared-key: "shared" # To allow reuse across jobs
+        shared-key: "rust-cache-${{ runner.os }}-${{ runner.environment }}" # To allow reuse across jobs
 
     - name: Rust Compile Cache
       uses: mozilla-actions/sccache-action@v0.0.6
@@ -30,8 +30,6 @@ runs:
         echo "SCCACHE_GHA_ENABLED=true" >> $GITHUB_ENV
         echo "RUSTC_WRAPPER=sccache" >> $GITHUB_ENV
         echo "CARGO_INCREMENTAL=0" >> $GITHUB_ENV
-    #        echo "CARGO_LOG=cargo::core::compiler::fingerprint=info" >> $GITHUB_ENV
-
     - name: Export Path
       shell: bash
       run: echo "PATH=$PATH" >> $GITHUB_ENV

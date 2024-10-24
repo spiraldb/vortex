@@ -30,14 +30,14 @@ use crate::dtype::PyDType;
 /// Read only those rows whose age column is greater than 35:
 ///
 /// >>> e = vortex.io.read("a.vortex", row_filter = vortex.expr.column("age") > 35)
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
 ///   [
 ///     57
 ///   ]
-/// -- child 1 type: string
+/// -- child 1 type: string_view
 ///   [
 ///     "Mikhail"
 ///   ]
@@ -47,7 +47,7 @@ use crate::dtype::PyDType;
 ///
 /// >>> age = vortex.expr.column("age")
 /// >>> e = vortex.io.read("a.vortex", row_filter = (age > 21) & (age <= 33))
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
@@ -55,7 +55,7 @@ use crate::dtype::PyDType;
 ///     25,
 ///     31
 ///   ]
-/// -- child 1 type: string
+/// -- child 1 type: string_view
 ///   [
 ///     "Joseph",
 ///     null
@@ -65,14 +65,14 @@ use crate::dtype::PyDType;
 ///
 /// >>> name = vortex.expr.column("name")
 /// >>> e = vortex.io.read("a.vortex", row_filter = name == "Joseph")
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
 ///   [
 ///     25
 ///   ]
-/// -- child 1 type: string
+/// -- child 1 type: string_view
 ///   [
 ///     "Joseph"
 ///   ]
@@ -83,14 +83,14 @@ use crate::dtype::PyDType;
 ///
 /// >>> name = vortex.expr.column("name")
 /// >>> e = vortex.io.read("a.vortex", row_filter = (name == "Angela") | ((age >= 20) & (age <= 30)))
-/// >>> e.to_arrow()
+/// >>> e.to_arrow_array()
 /// <pyarrow.lib.StructArray object at ...>
 /// -- is_valid: all not null
 /// -- child 0 type: int64
 ///   [
 ///     25
 ///   ]
-/// -- child 1 type: string
+/// -- child 1 type: string_view
 ///   [
 ///     "Joseph"
 ///   ]
@@ -146,6 +146,10 @@ fn coerce_expr<'py>(value: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyExpr>> {
 
 #[pymethods]
 impl PyExpr {
+    pub fn __str__(&self) -> String {
+        format!("{:?}", self.inner)
+    }
+
     fn __eq__<'py>(
         self_: PyRef<'py, Self>,
         right: &Bound<'py, PyAny>,
@@ -228,7 +232,7 @@ pub fn column<'py>(name: &Bound<'py, PyString>) -> PyResult<Bound<'py, PyExpr>> 
 }
 
 #[pyfunction]
-pub fn _literal<'py>(
+pub fn literal<'py>(
     dtype: &Bound<'py, PyDType>,
     value: &Bound<'py, PyAny>,
 ) -> PyResult<Bound<'py, PyExpr>> {

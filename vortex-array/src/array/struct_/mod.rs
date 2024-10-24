@@ -5,11 +5,11 @@ use vortex_dtype::field::Field;
 use vortex_dtype::{DType, FieldName, FieldNames, StructDType};
 use vortex_error::{vortex_bail, vortex_err, vortex_panic, VortexExpect as _, VortexResult};
 
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::encoding::ids;
 use crate::stats::{ArrayStatisticsCompute, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity, ValidityMetadata};
 use crate::variants::{ArrayVariants, StructArrayTrait};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoCanonical};
 
 mod compute;
@@ -86,16 +86,18 @@ impl StructArray {
         )
     }
 
-    pub fn from_fields<N: AsRef<str>>(items: &[(N, Array)]) -> Self {
+    pub fn from_fields<N: AsRef<str>>(items: &[(N, Array)]) -> VortexResult<Self> {
         let names: Vec<FieldName> = items
             .iter()
             .map(|(name, _)| FieldName::from(name.as_ref()))
             .collect();
         let fields: Vec<Array> = items.iter().map(|(_, array)| array.clone()).collect();
-        let len = fields.first().map(|f| f.len()).unwrap_or(0);
+        let len = fields
+            .first()
+            .map(|f| f.len())
+            .ok_or_else(|| vortex_err!("StructArray cannot be constructed from an empty slice of arrays because the length is unspecified"))?;
 
         Self::try_new(FieldNames::from(names), fields, len, Validity::NonNullable)
-            .vortex_expect("Unexpected error while building StructArray from fields")
     }
 
     // TODO(aduffy): Add equivalent function to support field masks for nested column access.

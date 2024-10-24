@@ -1,6 +1,6 @@
+pub use array::*;
 pub use compress::*;
-pub use zigzag::*;
 
+mod array;
 mod compress;
 mod compute;
-mod zigzag;

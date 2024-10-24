@@ -287,7 +287,7 @@ async fn register_vortex_file(
             })
             .collect::<Vec<_>>();
 
-        let data = StructArray::from_fields(&fields).into_array();
+        let data = StructArray::from_fields(&fields)?.into_array();
 
         let data = if enable_compression {
             let compressor = SamplingCompressor::default();

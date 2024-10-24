@@ -3,12 +3,15 @@
 //! When callers only want to make assumptions about the DType, and not about any specific
 //! encoding, they can use these traits to write encoding-agnostic code.
 
+use std::ops::Not;
+
 use vortex_dtype::field::Field;
 use vortex_dtype::{DType, ExtDType, FieldNames};
 use vortex_error::{vortex_panic, VortexExpect as _, VortexResult};
 
+use crate::array::BoolArray;
 use crate::iter::{AccessorRef, VectorizedArrayIter};
-use crate::{Array, ArrayTrait};
+use crate::{Array, ArrayTrait, IntoArray, IntoArrayVariant};
 
 pub trait ArrayVariants {
     fn as_null_array(&self) -> Option<&dyn NullArrayTrait> {
@@ -81,18 +84,33 @@ pub trait ArrayVariants {
 pub trait NullArrayTrait: ArrayTrait {}
 
 pub trait BoolArrayTrait: ArrayTrait {
+    /// Return a new inverted version of this array.
+    ///
+    /// True -> False
+    /// False -> True
+    /// Null -> Null
+    fn invert(&self) -> VortexResult<Array>
+    where
+        Self: Clone,
+    {
+        let bool_array = self.clone().into_bool()?;
+        let validity = bool_array.validity();
+
+        BoolArray::try_new(bool_array.boolean_buffer().not(), validity).map(|a| a.into_array())
+    }
+
     fn true_count(&self) -> usize {
         self.statistics()
             .compute_true_count()
             .unwrap_or_else(|| self.maybe_null_indices_iter().count())
     }
 
-    // An iterator over the sorted indices of set values in the underlying boolean array
-    // good to array with low number of set values.
+    /// An iterator over the sorted indices of set values in the underlying boolean array
+    /// good to array with low number of set values.
     fn maybe_null_indices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = usize> + 'a>;
 
-    // An iterator over the sorted disjoint contiguous range set values in the underlying boolean
-    // array good for arrays with only long runs of set values.
+    /// An iterator over the sorted disjoint contiguous range set values in the underlying boolean
+    /// array good for arrays with only long runs of set values.
     fn maybe_null_slices_iter<'a>(&'a self) -> Box<dyn Iterator<Item = (usize, usize)> + 'a>;
 
     // Other possible iterators include:
@@ -218,8 +236,10 @@ pub trait StructArrayTrait: ArrayTrait {
         self.names().len()
     }
 
+    /// Return a field's array by index
     fn field(&self, idx: usize) -> Option<Array>;
 
+    /// Return a field's array by name
     fn field_by_name(&self, name: &str) -> Option<Array> {
         let field_idx = self
             .names()
@@ -235,6 +255,7 @@ pub trait StructArrayTrait: ArrayTrait {
 pub trait ListArrayTrait: ArrayTrait {}
 
 pub trait ExtensionArrayTrait: ArrayTrait {
+    /// Returns the extension logical [`DType`].
     fn ext_dtype(&self) -> &ExtDType {
         let DType::Extension(ext_dtype, _nullability) = self.dtype() else {
             vortex_panic!("Expected ExtDType")
@@ -242,5 +263,6 @@ pub trait ExtensionArrayTrait: ArrayTrait {
         ext_dtype
     }
 
+    /// Returns the underlying [`Array`], without the [`ExtDType`].
     fn storage_array(&self) -> Array;
 }

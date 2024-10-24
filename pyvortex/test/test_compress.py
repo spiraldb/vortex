@@ -59,19 +59,22 @@ def test_zigzag_encode():
 def test_chunked_encode():
     chunked = pa.chunked_array([pa.array([0, 1, 2]), pa.array([3, 4, 5])])
     encoded = vortex.array(chunked)
-    assert encoded.to_arrow().combine_chunks() == pa.array([0, 1, 2, 3, 4, 5])
+    assert encoded.to_arrow_array().combine_chunks() == pa.array([0, 1, 2, 3, 4, 5])
 
 
 def test_table_encode():
     table = pa.table(
         {
             "number": pa.chunked_array([pa.array([0, 1, 2]), pa.array([3, 4, 5])]),
-            "string": pa.chunked_array([pa.array(["a", "b", "c"]), pa.array(["d", "e", "f"])]),
+            "string": pa.chunked_array(
+                [pa.array(["a", "b", "c"], type=pa.string_view()), pa.array(["d", "e", "f"], type=pa.string_view())]
+            ),
         }
     )
     encoded = vortex.array(table)
-    assert encoded.to_arrow().combine_chunks() == pa.StructArray.from_arrays(
-        [pa.array([0, 1, 2, 3, 4, 5]), pa.array(["a", "b", "c", "d", "e", "f"])], names=["number", "string"]
+    assert encoded.to_arrow_array().combine_chunks() == pa.StructArray.from_arrays(
+        [pa.array([0, 1, 2, 3, 4, 5]), pa.array(["a", "b", "c", "d", "e", "f"], type=pa.string_view())],
+        names=["number", "string"],
     )
 
 
@@ -80,5 +83,5 @@ def test_taxi():
     curdir = Path(os.path.dirname(__file__)).parent.parent
     table = pq.read_table(curdir / "bench-vortex/data/yellow-tripdata-2023-11.parquet")
     compressed = vortex.compress(vortex.array(table[:100]))
-    decompressed = compressed.to_arrow()
+    decompressed = compressed.to_arrow_array()
     assert not decompressed

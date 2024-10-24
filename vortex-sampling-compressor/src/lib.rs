@@ -7,7 +7,7 @@ use compressors::chunked::DEFAULT_CHUNKED_COMPRESSOR;
 use compressors::fsst::FSSTCompressor;
 use compressors::struct_::StructCompressor;
 use lazy_static::lazy_static;
-use log::{debug, info, warn};
+use log::{debug, warn};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use vortex::array::{ChunkedArray, Constant};
@@ -33,8 +33,6 @@ use crate::compressors::constant::ConstantCompressor;
 use crate::compressors::date_time_parts::DateTimePartsCompressor;
 use crate::compressors::dict::DictCompressor;
 use crate::compressors::r#for::FoRCompressor;
-use crate::compressors::roaring_bool::RoaringBoolCompressor;
-use crate::compressors::roaring_int::RoaringIntCompressor;
 use crate::compressors::runend::DEFAULT_RUN_END_COMPRESSOR;
 use crate::compressors::sparse::SparseCompressor;
 use crate::compressors::zigzag::ZigZagCompressor;
@@ -48,7 +46,7 @@ mod constants;
 mod sampling;
 
 lazy_static! {
-    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 11] = [
+    pub static ref DEFAULT_COMPRESSORS: [CompressorRef<'static>; 9] = [
         &ALPCompressor as CompressorRef,
         &BITPACK_WITH_PATCHES,
         &DateTimePartsCompressor,
@@ -57,8 +55,8 @@ lazy_static! {
         &DictCompressor,
         &FoRCompressor,
         &FSSTCompressor,
-        &RoaringBoolCompressor,
-        &RoaringIntCompressor,
+        // &RoaringBoolCompressor,
+        // &RoaringIntCompressor,
         &SparseCompressor,
         &ZigZagCompressor,
     ];
@@ -311,7 +309,7 @@ impl<'a> SamplingCompressor<'a> {
             );
         }
 
-        info!("{} candidates for {}: {:?}", self, array, candidates);
+        debug!("{} candidates for {}: {:?}", self, array, candidates);
 
         if candidates.is_empty() {
             debug!(
@@ -358,7 +356,7 @@ impl<'a> SamplingCompressor<'a> {
         let best = find_best_compression(candidates, &sample, self)?
             .into_path()
             .map(|best_compressor| {
-                info!(
+                debug!(
                     "{} Compressing array {} with {}",
                     self, array, best_compressor
                 );

@@ -4,11 +4,11 @@ use serde::{Deserialize, Serialize};
 use vortex_dtype::DType;
 use vortex_error::{VortexExpect as _, VortexResult};
 
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::encoding::ids;
 use crate::stats::{ArrayStatisticsCompute, Stat, StatsSet};
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
 use crate::variants::{ArrayVariants, NullArrayTrait};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, ArrayTrait, Canonical, IntoCanonical};
 
 mod compute;

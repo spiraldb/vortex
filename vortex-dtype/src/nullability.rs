@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 
+/// Whether an item can contain a null value or not
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Ord, PartialOrd)]
 pub enum Nullability {
     #[default]

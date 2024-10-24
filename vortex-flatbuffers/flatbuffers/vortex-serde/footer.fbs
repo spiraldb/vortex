@@ -1,24 +1,24 @@
-table FlatLayout {
+struct Buffer {
     begin: uint64;
     end: uint64;
 }
 
-table NestedLayout {
-    children: [Layout];
-    encoding: uint16;
-}
-
-union LayoutVariant {
-    FlatLayout,
-    NestedLayout,
-}
-
 table Layout {
-    layout: LayoutVariant;
+    encoding: uint16;
+    buffers: [Buffer];
+    children: [Layout];
+    metadata: [ubyte];
 }
 
 table Footer {
     layout: Layout;
+    row_count: uint64;
 }
 
+table Postscript {
+    schema_offset: uint64;
+    footer_offset: uint64;
+}
+
+root_type Postscript;
 root_type Footer;

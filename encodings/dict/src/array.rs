@@ -2,13 +2,13 @@ use std::fmt::{Debug, Display};
 
 use arrow_buffer::BooleanBuffer;
 use serde::{Deserialize, Serialize};
+use vortex::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::array::BoolArray;
 use vortex::compute::take;
 use vortex::compute::unary::scalar_at;
 use vortex::encoding::ids;
 use vortex::stats::StatsSet;
 use vortex::validity::{ArrayValidity, LogicalValidity};
-use vortex::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use vortex::{
     impl_encoding, Array, ArrayDType, ArrayTrait, Canonical, IntoArray, IntoArrayVariant,
     IntoCanonical,
@@ -67,7 +67,8 @@ impl ArrayTrait for DictArray {}
 
 impl IntoCanonical for DictArray {
     fn into_canonical(self) -> VortexResult<Canonical> {
-        take(self.values(), self.codes())?.into_canonical()
+        let canonical_values: Array = self.values().into_canonical()?.into();
+        take(canonical_values, self.codes())?.into_canonical()
     }
 }
 

@@ -12,6 +12,7 @@ use vortex_error::{vortex_bail, vortex_panic, VortexExpect as _, VortexResult};
 use vortex_scalar::Scalar;
 
 use crate::array::primitive::PrimitiveArray;
+use crate::array::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::compute::unary::{scalar_at, scalar_at_unchecked, subtract_scalar, SubtractScalarFn};
 use crate::compute::{search_sorted, SearchSortedSide};
 use crate::encoding::ids;
@@ -20,7 +21,6 @@ use crate::stats::StatsSet;
 use crate::stream::{ArrayStream, ArrayStreamAdapter};
 use crate::validity::Validity::NonNullable;
 use crate::validity::{ArrayValidity, LogicalValidity, Validity};
-use crate::visitor::{AcceptArrayVisitor, ArrayVisitor};
 use crate::{impl_encoding, Array, ArrayDType, ArrayTrait, IntoArray, IntoCanonical};
 
 mod canonical;

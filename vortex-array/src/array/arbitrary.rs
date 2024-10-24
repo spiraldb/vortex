@@ -30,7 +30,7 @@ fn random_array(u: &mut Unstructured, dtype: &DType, len: Option<usize>) -> Resu
                 )
                 .into_array()),
                 DType::Bool(n) => random_bool(u, *n, chunk_len),
-                DType::Primitive(p, n) => match p {
+                DType::Primitive(ptype, n) => match ptype {
                     PType::U8 => random_primitive::<u8>(u, *n, chunk_len),
                     PType::U16 => random_primitive::<u16>(u, *n, chunk_len),
                     PType::U32 => random_primitive::<u32>(u, *n, chunk_len),
@@ -49,8 +49,8 @@ fn random_array(u: &mut Unstructured, dtype: &DType, len: Option<usize>) -> Resu
                 },
                 DType::Utf8(n) => random_string(u, *n, chunk_len),
                 DType::Binary(n) => random_bytes(u, *n, chunk_len),
-                DType::Struct(s, n) => {
-                    let first_array = s
+                DType::Struct(sdt, n) => {
+                    let first_array = sdt
                         .dtypes()
                         .first()
                         .map(|d| random_array(u, d, chunk_len))
@@ -65,14 +65,14 @@ fn random_array(u: &mut Unstructured, dtype: &DType, len: Option<usize>) -> Resu
                         .into_iter()
                         .map(Ok)
                         .chain(
-                            s.dtypes()
+                            sdt.dtypes()
                                 .iter()
                                 .skip(1)
                                 .map(|d| random_array(u, d, Some(resolved_len))),
                         )
                         .collect::<Result<Vec<_>>>()?;
                     Ok(StructArray::try_new(
-                        s.names().clone(),
+                        sdt.names().clone(),
                         children,
                         resolved_len,
                         random_validity(u, *n, resolved_len)?,

@@ -5,8 +5,8 @@ use serde::ser::Error;
 use vortex_buffer::Buffer;
 use vortex_error::{VortexError, VortexResult};
 
+use crate::array::visitor::ArrayVisitor;
 use crate::array::ChunkedArray;
-use crate::visitor::ArrayVisitor;
 use crate::{Array, ArrayData};
 
 impl Array {
@@ -22,7 +22,7 @@ impl<'a> TreeDisplayWrapper<'a> {
     }
 }
 
-impl<'a, 'fmt: 'a> fmt::Display for TreeDisplayWrapper<'a> {
+impl<'a> fmt::Display for TreeDisplayWrapper<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let array = self.0;
         let mut array_fmt = TreeFormatter::new(f, "".to_string());

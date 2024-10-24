@@ -6,6 +6,7 @@ use crate::array::{
 };
 use crate::encoding::EncodingRef;
 
+/// A mapping between an encoding's ID to an [`EncodingRef`], used to have a shared view of all available encoding schemes.
 #[derive(Debug, Clone)]
 pub struct Context {
     encodings: HashMap<u16, EncodingRef>,
