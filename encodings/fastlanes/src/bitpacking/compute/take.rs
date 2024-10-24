@@ -187,15 +187,22 @@ fn patch_for_take_primitive<T: NativePType, I: NativePType>(
         let patches_end = min((chunk + 1) * 1024 - offset, patches.len());
         let patches_slice = slice(patches.as_ref(), patches_start, patches_end)?;
         let patches_slice = SparseArray::try_from(patches_slice)?;
+        if patches_slice.is_empty() {
+            continue;
+        }
+
         let min_index = patches_slice.min_index().unwrap_or_default();
-        let offsets = PrimitiveArray::from(
+        let max_index = patches_slice.max_index().unwrap_or_default();
+        let offsets = 
             offsets
                 .map(|i| (i % 1024) as u16)
                 .filter(|i| *i as usize >= min_index)
-                .collect_vec(),
-        );
+                .collect_vec();
+        if offsets.is_empty() {
+            continue;
+        }
 
-        inner_patch(&patches_slice, &offsets, output)?;
+        inner_patch(&patches_slice, &PrimitiveArray::from(offsets), output)?;
     }
 
     Ok(())

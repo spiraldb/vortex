@@ -43,12 +43,13 @@ fn take_map(
         .map(|(i, r)| (*r as u64, i as u64))
         .collect();
     let min_index = array.min_index().unwrap_or_default() as u64;
+    let max_index = array.max_index().unwrap_or_default() as u64;
     let (positions, patch_indices): (Vec<u64>, Vec<u64>) = match_each_integer_ptype!(indices.ptype(), |$P| {
         indices.maybe_null_slice::<$P>()
             .iter()
             .map(|pi| *pi as u64)
             .enumerate()
-            .filter(|(_, pi)| *pi >= min_index) // short-circuit, we know that indices below min are not present
+            .filter(|(_, pi)| *pi >= min_index && *pi <= max_index) // short-circuit
             .filter_map(|(i, pi)| indices_map.get(&pi).map(|phy_idx| (i as u64, phy_idx)))
             .unzip()
     });
@@ -62,13 +63,14 @@ fn take_search_sorted(
     array: &SparseArray,
     indices: &PrimitiveArray,
 ) -> VortexResult<(PrimitiveArray, PrimitiveArray)> {
+    let min_index = array.min_index().unwrap_or_default() as u64;
+    let max_index = array.max_index().unwrap_or_default() as u64;
     let resolved = match_each_integer_ptype!(indices.ptype(), |$P| {
-        let min_index: $P = array.min_index().unwrap_or_default() as $P;
         indices
             .maybe_null_slice::<$P>()
             .iter()
             .enumerate()
-            .filter(|(_, i)| **i >= min_index) // short-circuit, we know that indices below min are not present
+            .filter(|(_, i)| **i as u64 >= min_index && **i as u64 <= max_index) // short-circuit
             .map(|(pos, i)| {
                 array
                     .search_index(*i as usize)
