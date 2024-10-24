@@ -19,17 +19,6 @@ pub fn take(array: impl AsRef<Array>, indices: impl AsRef<Array>) -> VortexResul
         );
     }
 
-    // If the indices are large enough, it's faster to canonicalize the array and then take
-    // except for sparse arrays, where patching is faster in that form.
-    if indices.len() < array.len() || SparseArray::try_from(array).is_ok() {
-        do_take(array, indices)
-    } else {
-        do_take(&Array::from(array.clone().into_canonical()?), indices)
-    }
-}
-
-#[inline]
-fn do_take(array: &Array, indices: &Array) -> VortexResult<Array> {
     array.with_dyn(|a| {
         if let Some(take) = a.take() {
             return take.take(indices);
