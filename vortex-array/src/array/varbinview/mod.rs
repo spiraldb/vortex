@@ -197,7 +197,7 @@ pub struct Buffers<'a> {
     array: &'a VarBinViewArray,
 }
 
-impl<'a> Iterator for Buffers<'a> {
+impl Iterator for Buffers<'_> {
     type Item = Array;
 
     fn next(&mut self) -> Option<Self::Item> {
