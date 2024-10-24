@@ -49,7 +49,7 @@ where
     }
 }
 
-impl<'a, R, AR> Iterator for VortexRecordBatchReader<'a, R, AR>
+impl<R, AR> Iterator for VortexRecordBatchReader<'_, R, AR>
 where
     R: VortexReadAt + Unpin + 'static,
     AR: AsyncRuntime,
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<'a, R, AR> RecordBatchReader for VortexRecordBatchReader<'a, R, AR>
+impl<R, AR> RecordBatchReader for VortexRecordBatchReader<'_, R, AR>
 where
     R: VortexReadAt + Unpin + 'static,
     AR: AsyncRuntime,

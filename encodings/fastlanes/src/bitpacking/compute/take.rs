@@ -1,6 +1,3 @@
-#![allow(unused_variables)]
-#![allow(dead_code)]
-
 use std::cmp::min;
 
 use fastlanes::BitPacking;
@@ -63,6 +60,7 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
     let patches = array.patches().map(SparseArray::try_from).transpose()?;
 
     // Group indices into 1024-element chunks and relativise them to the beginning of each chunk
+    // *without* allocating on the heap
     let chunked_indices = &indices
         .maybe_null_slice::<I>()
         .iter()
@@ -82,6 +80,7 @@ fn take_primitive<T: NativePType + BitPacking, I: NativePType>(
         let chunk_size = 128 * bit_width / size_of::<T>();
         let packed_chunk = &packed[chunk * chunk_size..][..chunk_size];
 
+        // array_chunks produced a fixed size array, doesn't heap allocate
         let mut have_unpacked = false;
         let mut offset_chunk_iter = offsets
             .map(|i| i % 1024)
@@ -193,11 +192,10 @@ fn patch_for_take_primitive<T: NativePType, I: NativePType>(
 
         let min_index = patches_slice.min_index().unwrap_or_default();
         let max_index = patches_slice.max_index().unwrap_or_default();
-        let offsets = 
-            offsets
-                .map(|i| (i % 1024) as u16)
-                .filter(|i| *i as usize >= min_index)
-                .collect_vec();
+        let offsets = offsets
+            .map(|i| (i % 1024) as u16)
+            .filter(|i| *i as usize >= min_index && *i as usize <= max_index)
+            .collect_vec();
         if offsets.is_empty() {
             continue;
         }
