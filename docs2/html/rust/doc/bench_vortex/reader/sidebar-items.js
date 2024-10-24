@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"constant":["BATCH_SIZE"],"fn":["compress_parquet_to_vortex","open_vortex","read_parquet_to_vortex","read_vortex_footer_format","rewrite_parquet_as_vortex","take_parquet","take_parquet_object_store","take_vortex_object_store","take_vortex_tokio","write_csv_as_parquet"],"struct":["VortexFooter"]};

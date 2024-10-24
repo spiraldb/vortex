@@ -1,0 +1,1 @@
+searchState.loadedDescShard("vortex_runend_bool", 0, "The array definition trait\nThe array encoding\nReturns the argument unchanged.\nReturns the argument unchanged.\nReturns the argument unchanged.\nReturns the argument unchanged.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.\nCalls <code>U::from(self)</code>.")

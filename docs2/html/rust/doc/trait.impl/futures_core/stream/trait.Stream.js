@@ -1,0 +1,9 @@
+(function() {
+    var implementors = Object.fromEntries([["vortex",[["impl&lt;R: <a class=\"trait\" href=\"vortex/stream/trait.ArrayStream.html\" title=\"trait vortex::stream::ArrayStream\">ArrayStream</a>&gt; Stream for <a class=\"struct\" href=\"vortex/stream/struct.TakeRows.html\" title=\"struct vortex::stream::TakeRows\">TakeRows</a>&lt;R&gt;"],["impl&lt;S&gt; Stream for <a class=\"struct\" href=\"vortex/stream/struct.ArrayStreamAdapter.html\" title=\"struct vortex::stream::ArrayStreamAdapter\">ArrayStreamAdapter</a>&lt;S&gt;<div class=\"where\">where\n    S: Stream&lt;Item = <a class=\"type\" href=\"vortex_error/type.VortexResult.html\" title=\"type vortex_error::VortexResult\">VortexResult</a>&lt;<a class=\"enum\" href=\"vortex/enum.Array.html\" title=\"enum vortex::Array\">Array</a>&gt;&gt;,</div>"]]],["vortex_serde",[["impl&lt;R: <a class=\"trait\" href=\"vortex_serde/io/trait.VortexReadAt.html\" title=\"trait vortex_serde::io::VortexReadAt\">VortexReadAt</a> + <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/marker/trait.Unpin.html\" title=\"trait core::marker::Unpin\">Unpin</a> + <a class=\"trait\" href=\"https://doc.rust-lang.org/nightly/core/marker/trait.Send.html\" title=\"trait core::marker::Send\">Send</a> + 'static&gt; Stream for <a class=\"struct\" href=\"vortex_serde/layouts/struct.LayoutBatchStream.html\" title=\"struct vortex_serde::layouts::LayoutBatchStream\">LayoutBatchStream</a>&lt;R&gt;"]]]]);
+    if (window.register_implementors) {
+        window.register_implementors(implementors);
+    } else {
+        window.pending_implementors = implementors;
+    }
+})()
+//{"start":57,"fragment_lengths":[762,635]}

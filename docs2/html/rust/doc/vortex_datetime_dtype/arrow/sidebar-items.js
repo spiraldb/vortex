@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["make_arrow_temporal_dtype","make_temporal_ext_dtype"]};

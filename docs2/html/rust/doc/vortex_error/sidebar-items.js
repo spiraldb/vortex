@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"enum":["VortexError"],"macro":["vortex_bail","vortex_err","vortex_panic"],"struct":["ErrString"],"trait":["VortexExpect","VortexUnwrap"],"type":["VortexResult"]};

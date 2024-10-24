@@ -1,0 +1,6 @@
+:root {
+  --bs-breakpoint-lg: 1160px;
+}
+html .pst-navbar-icon  {
+  font-size: 1.5rem;
+}

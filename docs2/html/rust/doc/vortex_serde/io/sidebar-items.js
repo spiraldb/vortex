@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"mod":["offset"],"struct":["FuturesAdapter","MonoAdapter","ObjectStoreReadAt","ObjectStoreWriter","TokioAdapter"],"trait":["ObjectStoreExt","VortexRead","VortexReadAt","VortexWrite"]};

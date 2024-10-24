@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["vortex_chunk_sizes"]};

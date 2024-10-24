@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["infer_data_type","infer_schema"],"mod":["wrappers"],"trait":["FromArrowArray","FromArrowType","TryFromArrowType"]};
