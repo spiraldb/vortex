@@ -60,11 +60,10 @@ impl PyDataset {
         self_.schema.to_pyarrow(self_.py())
     }
 
-    #[pyo3(signature = (columns, batch_size, row_filter))]
+    #[pyo3(signature = (columns, row_filter))]
     pub fn to_array(
         &self,
         columns: Option<Vec<String>>,
-        batch_size: Option<usize>,
         row_filter: Option<&Bound<PyExpr>>,
     ) -> PyResult<PyArray> {
         let projection = match columns {
@@ -77,21 +76,15 @@ impl PyDataset {
         let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
 
         TOKIO_RUNTIME
-            .block_on(io::async_read(
-                self.fname(),
-                projection,
-                batch_size,
-                row_filter,
-            ))
+            .block_on(io::async_read(self.fname(), projection, row_filter))
             .map_err(PyVortexError::map_err)
             .map(PyArray::new)
     }
 
-    #[pyo3(signature = (columns, batch_size, row_filter))]
+    #[pyo3(signature = (columns, row_filter))]
     pub fn to_record_batch_reader(
         self_: PyRef<Self>,
         columns: Option<Vec<String>>,
-        batch_size: Option<usize>,
         row_filter: Option<&Bound<PyExpr>>,
     ) -> PyResult<PyObject> {
         let projection = match columns {
@@ -104,12 +97,7 @@ impl PyDataset {
         let row_filter = row_filter.map(|x| RowFilter::new(x.borrow().unwrap().clone()));
 
         let layout_reader = TOKIO_RUNTIME
-            .block_on(io::layout_reader(
-                self_.fname(),
-                projection,
-                batch_size,
-                row_filter,
-            ))
+            .block_on(io::layout_reader(self_.fname(), projection, row_filter))
             .map_err(PyVortexError::map_err)?;
 
         let runtime: &Runtime = &TOKIO_RUNTIME;
