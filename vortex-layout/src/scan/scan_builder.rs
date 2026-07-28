@@ -98,7 +98,7 @@ impl ScanBuilder<ArrayRef> {
             ordered: true,
             row_range: None,
             selection: Default::default(),
-            split_by: SplitBy::Layout,
+            split_by: SplitBy::LayoutSubSplitting,
             natural_splits: None,
             // We default to four tasks per worker thread, which allows for some I/O lookahead
             // without too much impact on work-stealing.
@@ -223,6 +223,16 @@ impl<A: 'static + Send> ScanBuilder<A> {
             &(0..self.layout_reader.row_count()),
             &field_mask,
         )
+    }
+
+    /// Split only at the layout's own chunk boundaries, without sub-dividing wide chunk spans.
+    ///
+    /// By default ([`SplitBy::LayoutSubSplitting`]) spans between adjacent chunk boundaries that
+    /// are wider than the ideal split size are sub-divided, so a file with few, large chunks
+    /// decodes across multiple cores. This shorthand for `with_split_by(SplitBy::Layout)` disables
+    /// that sub-division, yielding fewer, larger splits that follow the file's chunking exactly.
+    pub fn with_no_sub_splitting(self) -> Self {
+        self.with_split_by(SplitBy::Layout)
     }
 
     /// Returns the per-worker row-split concurrency.
