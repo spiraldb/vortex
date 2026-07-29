@@ -178,28 +178,28 @@ impl FileOpener for VortexOpener {
                 .transpose()?;
         }
 
+        // FilePruner requires a statistics object even when the rewritten predicate
+        // only contains partition literals. Supply unknown file-column statistics in
+        // that case so static and dynamic partition predicates can still prune.
+        let synthetic_statistics = (!file.has_statistics() && predicate_uses_partition_columns)
+            .then(|| {
+                file.clone()
+                    .with_statistics(Arc::new(Statistics::new_unknown(&unified_file_schema)))
+            });
+        let pruning_file = synthetic_statistics.as_ref().unwrap_or(&file);
+
+        let mut file_pruner = file_pruning_predicate
+            .filter(|_| file.has_statistics() || predicate_uses_partition_columns)
+            .and_then(|predicate| {
+                FilePruner::try_new(
+                    Arc::clone(&predicate),
+                    &unified_file_schema,
+                    pruning_file,
+                    predicate_creation_errors,
+                )
+            });
+
         Ok(async move {
-            // FilePruner requires a statistics object even when the rewritten predicate
-            // only contains partition literals. Supply unknown file-column statistics in
-            // that case so static and dynamic partition predicates can still prune.
-            let synthetic_statistics = (!file.has_statistics() && predicate_uses_partition_columns)
-                .then(|| {
-                    file.clone()
-                        .with_statistics(Arc::new(Statistics::new_unknown(&unified_file_schema)))
-                });
-            let pruning_file = synthetic_statistics.as_ref().unwrap_or(&file);
-
-            let mut file_pruner = file_pruning_predicate
-                .filter(|_| file.has_statistics() || predicate_uses_partition_columns)
-                .and_then(|predicate| {
-                    FilePruner::try_new(
-                        Arc::clone(&predicate),
-                        &unified_file_schema,
-                        pruning_file,
-                        predicate_creation_errors,
-                    )
-                });
-
             // Check if this file should be pruned based on statistics/partition values.
             // Returns empty stream if file can be skipped entirely.
             if let Some(file_pruner) = file_pruner.as_mut()

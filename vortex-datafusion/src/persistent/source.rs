@@ -36,6 +36,7 @@ use vortex::metrics::MetricsRegistry;
 use vortex::session::VortexSession;
 use vortex_utils::aliases::dash_map::DashMap;
 
+use super::morsel::VortexMorselizer;
 use super::opener::NaturalSplits;
 use super::opener::VortexOpener;
 use crate::VortexTableOptions;
@@ -383,6 +384,36 @@ impl FileSource for VortexSource {
     fn with_batch_size(&self, _batch_size: usize) -> Arc<dyn FileSource> {
         // DataSourceExec applies BatchSplitStream after the FileSource stream.
         Arc::new(self.clone())
+    }
+
+    fn create_morselizer(
+        &self,
+        object_store: Arc<dyn ObjectStore>,
+        base_config: &FileScanConfig,
+        partition: usize,
+    ) -> DFResult<Box<dyn datafusion_datasource::morsel::Morselizer>> {
+        let opener = self.create_vortex_opener(object_store, base_config, partition)?;
+
+        Ok(Box::new(VortexMorselizer {
+            partition: opener.partition,
+            session: opener.session,
+            vortex_reader_factory: opener.vortex_reader_factory,
+            projection: opener.projection,
+            filter: opener.filter,
+            file_pruning_predicate: opener.file_pruning_predicate,
+            expr_adapter_factory: opener.expr_adapter_factory,
+            table_schema: opener.table_schema,
+            limit: opener.limit,
+            metrics_registry: opener.metrics_registry,
+            df_metrics: opener.df_metrics,
+            layout_readers: opener.layout_readers,
+            natural_split_ranges: opener.natural_split_ranges,
+            has_output_ordering: opener.has_output_ordering,
+            expression_convertor: opener.expression_convertor,
+            file_metadata_cache: opener.file_metadata_cache,
+            projection_pushdown: opener.projection_pushdown,
+            scan_concurrency: opener.scan_concurrency,
+        }))
     }
 
     fn filter(&self) -> Option<Arc<dyn PhysicalExpr>> {
