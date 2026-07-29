@@ -175,17 +175,17 @@ impl FileOpener for VortexOpener {
                 .transpose()?;
         }
 
-        Ok(async move {
-            // FilePruner now has all the logic to figure out if its worthwhile, and will return `None` if not.
-            let mut file_pruner = file_pruning_predicate.and_then(|predicate| {
-                FilePruner::try_new(
-                    Arc::clone(&predicate),
-                    &unified_file_schema,
-                    &file,
-                    predicate_creation_errors,
-                )
-            });
+        // FilePruner now has all the logic to figure out if its worthwhile, and will return `None` if not.
+        let mut file_pruner = file_pruning_predicate.and_then(|predicate| {
+            FilePruner::try_new(
+                Arc::clone(&predicate),
+                &unified_file_schema,
+                &file,
+                predicate_creation_errors,
+            )
+        });
 
+        Ok(async move {
             // Check if this file should be pruned based on statistics/partition values.
             // Returns empty stream if file can be skipped entirely.
             if let Some(file_pruner) = file_pruner.as_mut()
