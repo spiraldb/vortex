@@ -27,7 +27,6 @@ mod cache;
 mod format;
 pub mod metrics;
 pub mod morsel;
-mod opener;
 pub mod reader;
 mod sink;
 mod source;
