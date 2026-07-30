@@ -46,6 +46,7 @@ use futures::TryStreamExt;
 use futures::stream::BoxStream;
 use itertools::Itertools;
 use object_store::path::Path;
+use tokio::sync::OnceCell;
 use tracing::Instrument;
 use vortex::array::VortexSessionExecute;
 use vortex::dtype::FieldMask;
@@ -78,6 +79,9 @@ use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::stream::PrunableStream;
 use crate::reader::VortexReaderFactory;
 
+pub(crate) type NaturalSplitRanges = Arc<[Range<u64>]>;
+pub(crate) type NaturalSplitCache = DashMap<Path, Arc<OnceCell<NaturalSplitRanges>>>;
+
 /// Creates morsel planners for Vortex files.
 pub struct VortexMorselizer {
     pub partition: usize,
@@ -97,6 +101,7 @@ pub struct VortexMorselizer {
     /// This is the table's schema without partition columns. It may contain fields which do
     /// not exist in the file, and are supplied by the `schema_adapter_factory`.
     pub table_schema: TableSchema,
+    /// Desired row count for record batches returned from the scan.
     /// If provided, the scan will not return more than this many rows.
     pub limit: Option<u64>,
     /// A metrics object for tracking performance of the scan.
@@ -109,12 +114,12 @@ pub struct VortexMorselizer {
     /// a file reader the first time we read a file.
     pub layout_readers: Arc<DashMap<Path, Weak<dyn LayoutReader>>>,
     /// Shared full-file natural split ranges keyed by file path.
-    pub natural_split_ranges: Arc<DashMap<Path, Arc<[Range<u64>]>>>,
+    pub natural_split_ranges: Arc<NaturalSplitCache>,
     /// Whether the query has output ordering specified
     pub has_output_ordering: bool,
 
     pub expression_convertor: Arc<dyn ExpressionConvertor>,
-    pub file_metadata_cache: Option<Arc<dyn FileMetadataCache>>,
+    pub file_metadata_cache: Option<Arc<FileMetadataCache>>,
     /// Whether to enable expression pushdown into the underlying Vortex scan.
     pub projection_pushdown: bool,
     pub scan_concurrency: Option<usize>,
@@ -152,7 +157,6 @@ impl Morselizer for VortexMorselizer {
 /// Plans morsels for a Vortex file.
 #[derive(Debug)]
 pub struct VortexMorselPlanner {
-    #[allow(dead_code)]
     state: State,
 }
 
@@ -280,7 +284,6 @@ impl VortexMorselPlanner {
     }
 }
 
-#[allow(dead_code)]
 struct FileOpenState {
     file: PartitionedFile,
     output_schema: SchemaRef,
@@ -292,11 +295,11 @@ struct FileOpenState {
     reader: InstrumentedReadAt<Arc<dyn VortexReadAt>>,
     file_pruner: Option<FilePruner>,
     expr_adapter_factory: Arc<dyn PhysicalExprAdapterFactory>,
-    file_metadata_cache: Option<Arc<dyn FileMetadataCache>>,
+    file_metadata_cache: Option<Arc<FileMetadataCache>>,
     unified_file_schema: SchemaRef,
     limit: Option<u64>,
     layout_readers: Arc<DashMap<Path, Weak<dyn LayoutReader>>>,
-    natural_split_ranges: Arc<DashMap<Path, Arc<[Range<u64>]>>>,
+    natural_split_ranges: Arc<NaturalSplitCache>,
     has_output_ordering: bool,
     expr_convertor: Arc<dyn ExpressionConvertor>,
     projection_pushdown: bool,
@@ -317,6 +320,19 @@ enum State {
     BuildScan {
         state: FileOpenState,
         vxf: VortexFile,
+    },
+    CalculateLayoutSplits {
+        state: FileOpenState,
+        vxf: VortexFile,
+        layout_reader: Arc<dyn LayoutReader>,
+        byte_range: Range<u64>,
+        split_ranges: Arc<OnceCell<NaturalSplitRanges>>,
+    },
+    PrepareScan {
+        state: FileOpenState,
+        vxf: VortexFile,
+        layout_reader: Arc<dyn LayoutReader>,
+        row_range: Option<Range<u64>>,
     },
     PreparedScan {
         scan: RepeatedScan,
@@ -358,26 +374,7 @@ impl State {
 
                 Ok(State::OpenFile { state, footer })
             }
-            State::OpenFile { state, footer } => Ok(State::OpenFile { state, footer }),
-            State::BuildScan { state, vxf } => Ok(State::BuildScan { state, vxf }),
-            State::PreparedScan {
-                scan,
-                file_pruner,
-                output_schema,
-                session,
-                stream_target_field,
-                file_location,
-                projector,
-            } => Ok(State::PreparedScan {
-                scan,
-                file_pruner,
-                output_schema,
-                session,
-                stream_target_field,
-                file_location,
-                projector,
-            }),
-            State::Done => Ok(State::Done),
+            state => Ok(state),
         }
     }
 }
@@ -398,6 +395,25 @@ impl std::fmt::Debug for State {
                 .debug_struct("BuildScan")
                 .field("state", state)
                 .field("vxf", &"<vortex_file>")
+                .finish(),
+            Self::CalculateLayoutSplits {
+                state, byte_range, ..
+            } => f
+                .debug_struct("CalculateLayoutSplits")
+                .field("state", state)
+                .field("vxf", &"<vortex_file>")
+                .field("layout_reader", &"<layout_reader>")
+                .field("byte_range", byte_range)
+                .field("split_ranges", &"<once_cell>")
+                .finish(),
+            Self::PrepareScan {
+                state, row_range, ..
+            } => f
+                .debug_struct("PrepareScan")
+                .field("state", state)
+                .field("vxf", &"<vortex_file>")
+                .field("layout_reader", &"<layout_reader>")
+                .field("row_range", row_range)
                 .finish(),
             Self::PreparedScan {
                 file_pruner,
@@ -527,6 +543,88 @@ impl MorselPlanner for VortexMorselPlanner {
                 ))
             }
             State::BuildScan { state, vxf } => {
+                let layout_reader = layout_reader_for_file(
+                    state.layout_readers.as_ref(),
+                    &state.file.object_meta.location,
+                    &vxf,
+                )?;
+
+                let Some(byte_range) = partial_file_byte_range(&state.file)? else {
+                    return Ok(Some(MorselPlan::new().with_planners(vec![Box::new(
+                        Self {
+                            state: State::PrepareScan {
+                                state,
+                                vxf,
+                                layout_reader,
+                                row_range: None,
+                            },
+                        },
+                    )])));
+                };
+
+                let split_ranges = natural_split_cell_for_file(
+                    state.natural_split_ranges.as_ref(),
+                    &state.file.object_meta.location,
+                );
+
+                Ok(Some(MorselPlan::new().with_planners(vec![Box::new(
+                    Self {
+                        state: State::CalculateLayoutSplits {
+                            state,
+                            vxf,
+                            layout_reader,
+                            byte_range,
+                            split_ranges,
+                        },
+                    },
+                )])))
+            }
+            State::CalculateLayoutSplits {
+                state,
+                vxf,
+                layout_reader,
+                byte_range,
+                split_ranges,
+            } => {
+                let total_size = state.file.object_meta.size;
+                let compute_layout_reader = Arc::clone(&layout_reader);
+
+                Ok(Some(
+                    MorselPlan::new().with_pending_planner(
+                        async move {
+                            let split_ranges = split_ranges
+                                .get_or_try_init(|| {
+                                    compute_natural_split_ranges_async(compute_layout_reader)
+                                })
+                                .await?;
+
+                            let new_state = match split_aligned_row_range(
+                                byte_range,
+                                total_size,
+                                split_ranges.as_ref(),
+                            ) {
+                                Some(row_range) => State::PrepareScan {
+                                    state,
+                                    vxf,
+                                    layout_reader,
+                                    row_range: Some(row_range),
+                                },
+                                None => State::Done,
+                            };
+
+                            Ok(Box::new(VortexMorselPlanner { state: new_state })
+                                as Box<dyn MorselPlanner>)
+                        }
+                        .in_current_span(),
+                    ),
+                ))
+            }
+            State::PrepareScan {
+                state,
+                vxf,
+                layout_reader,
+                row_range,
+            } => {
                 let FileOpenState {
                     file,
                     output_schema,
@@ -538,8 +636,6 @@ impl MorselPlanner for VortexMorselPlanner {
                     expr_adapter_factory,
                     unified_file_schema,
                     limit,
-                    layout_readers,
-                    natural_split_ranges,
                     has_output_ordering,
                     expr_convertor,
                     projection_pushdown,
@@ -591,9 +687,13 @@ impl MorselPlanner for VortexMorselPlanner {
 
                 // The schema of the stream returned from the vortex scan.
                 // We use a reference schema for types that don't roundtrip (Dictionary, Utf8, etc.).
-                let scan_dtype = scan_projection.return_dtype(vxf.dtype()).map_err(|_e| {
-                    exec_datafusion_err!("Couldn't get the dtype for the underlying Vortex scan")
-                })?;
+                let scan_projection = scan_projection
+                    .optimize_recursive(vxf.dtype())
+                    .and_then(|projection| projection.bind(vxf.dtype()))
+                    .map_err(|_e| {
+                        exec_datafusion_err!("Couldn't get the dtype for the underlying Vortex scan")
+                    })?;
+                let scan_dtype = scan_projection.dtype().clone();
 
                 // When projection pushdown is enabled, the scan outputs the projected columns.
                 // When disabled, the scan outputs raw columns and the projection is applied after.
@@ -618,36 +718,6 @@ impl MorselPlanner for VortexMorselPlanner {
                     .try_map_exprs(|expr| reassign_expr_columns(expr, &stream_schema))?;
                 let projector = leftover_projection.make_projector(&stream_schema)?;
 
-                // We share our layout readers with others partitions in the scan, so we can only need to read each layout in each file once.
-                let layout_reader = match layout_readers.entry(file.object_meta.location.clone()) {
-                    Entry::Occupied(mut occupied_entry) => {
-                        if let Some(reader) = occupied_entry.get().upgrade() {
-                            tracing::trace!("reusing layout reader for {}", occupied_entry.key());
-                            reader
-                        } else {
-                            tracing::trace!("creating layout reader for {}", occupied_entry.key());
-                            let reader = vxf.layout_reader().map_err(|e| {
-                                DataFusionError::Execution(format!(
-                                    "Failed to create layout reader: {e}"
-                                ))
-                            })?;
-                            occupied_entry.insert(Arc::downgrade(&reader));
-                            reader
-                        }
-                    }
-                    Entry::Vacant(vacant_entry) => {
-                        tracing::trace!("creating layout reader for {}", vacant_entry.key());
-                        let reader = vxf.layout_reader().map_err(|e| {
-                            DataFusionError::Execution(format!(
-                                "Failed to create layout reader: {e}"
-                            ))
-                        })?;
-                        vacant_entry.insert(Arc::downgrade(&reader));
-
-                        reader
-                    }
-                };
-
                 let mut scan_builder =
                     ScanBuilder::new(session.clone(), Arc::clone(&layout_reader));
 
@@ -655,34 +725,8 @@ impl MorselPlanner for VortexMorselPlanner {
                     scan_builder = vortex_plan.apply_to_builder(scan_builder);
                 }
 
-                if let Some(file_range) = file.range {
-                    let byte_range = Range {
-                        start: u64::try_from(file_range.start).map_err(|_| {
-                            exec_datafusion_err!("Vortex file range start is negative")
-                        })?,
-                        end: u64::try_from(file_range.end).map_err(|_| {
-                            exec_datafusion_err!("Vortex file range end is negative")
-                        })?,
-                    };
-                    if byte_range.start != 0 || byte_range.end != file.object_meta.size {
-                        // Full-file scans already cover every natural split. Only translate the
-                        // byte range back into row boundaries when DataFusion has trimmed the file.
-                        let natural_split_ranges = natural_split_ranges_for_file(
-                            natural_split_ranges.as_ref(),
-                            &file.object_meta.location,
-                            &layout_reader,
-                        )?;
-
-                        let Some(row_range) = split_aligned_row_range(
-                            byte_range,
-                            file.object_meta.size,
-                            natural_split_ranges.as_ref(),
-                        ) else {
-                            return Ok(None);
-                        };
-
-                        scan_builder = scan_builder.with_row_range(row_range);
-                    }
+                if let Some(row_range) = row_range {
+                    scan_builder = scan_builder.with_row_range(row_range);
                 }
 
                 let filter = filter
@@ -716,6 +760,10 @@ impl MorselPlanner for VortexMorselPlanner {
                         make_vortex_predicate(expr_convertor.as_ref(), &pushed).transpose()
                     })
                     .transpose()?;
+                let filter = filter
+                    .map(|filter| filter.optimize_recursive(vxf.dtype())?.bind(vxf.dtype()))
+                    .transpose()
+                    .map_err(|e| exec_datafusion_err!("Couldn't bind Vortex scan filter: {e}"))?;
 
                 if let Some(limit) = limit {
                     scan_builder = scan_builder.with_limit(limit);
@@ -779,7 +827,7 @@ impl MorselPlanner for VortexMorselPlanner {
                         })
                     })
                     .map_err(move |e: VortexError| vortex_file_read_error(&file_location, e))
-                    .map(move |batch| {
+                    .map(move |batch| -> DFResult<RecordBatch> {
                         let batch = if projector.projection().as_ref().is_empty() {
                             batch
                         } else {
@@ -796,7 +844,9 @@ impl MorselPlanner for VortexMorselPlanner {
                     })
                     .boxed();
 
-                let stream = if let Some(file_pruner) = file_pruner {
+                let stream = if let Some(file_pruner) = file_pruner
+                    && file_pruner.is_watching()
+                {
                     PrunableStream::new(file_pruner, stream).boxed()
                 } else {
                     stream
@@ -814,27 +864,76 @@ impl MorselPlanner for VortexMorselPlanner {
     }
 }
 
-fn natural_split_ranges_for_file(
-    natural_split_ranges: &DashMap<Path, Arc<[Range<u64>]>>,
+fn layout_reader_for_file(
+    layout_readers: &DashMap<Path, Weak<dyn LayoutReader>>,
     path: &Path,
-    layout_reader: &Arc<dyn LayoutReader>,
-) -> DFResult<Arc<[Range<u64>]>> {
-    if let Some(split_ranges) = natural_split_ranges.get(path) {
-        return Ok(Arc::clone(split_ranges.value()));
-    }
-
-    let split_ranges = compute_natural_split_ranges(layout_reader.as_ref())?;
-
-    match natural_split_ranges.entry(path.clone()) {
-        Entry::Occupied(entry) => Ok(Arc::clone(entry.get())),
+    vxf: &VortexFile,
+) -> DFResult<Arc<dyn LayoutReader>> {
+    match layout_readers.entry(path.clone()) {
+        Entry::Occupied(mut entry) => {
+            if let Some(reader) = entry.get().upgrade() {
+                tracing::trace!("reusing layout reader for {}", entry.key());
+                Ok(reader)
+            } else {
+                tracing::trace!("creating layout reader for {}", entry.key());
+                let reader = vxf.layout_reader().map_err(|error| {
+                    DataFusionError::Execution(format!("Failed to create layout reader: {error}"))
+                })?;
+                entry.insert(Arc::downgrade(&reader));
+                Ok(reader)
+            }
+        }
         Entry::Vacant(entry) => {
-            entry.insert(Arc::clone(&split_ranges));
-            Ok(split_ranges)
+            tracing::trace!("creating layout reader for {}", entry.key());
+            let reader = vxf.layout_reader().map_err(|error| {
+                DataFusionError::Execution(format!("Failed to create layout reader: {error}"))
+            })?;
+            entry.insert(Arc::downgrade(&reader));
+            Ok(reader)
         }
     }
 }
 
-fn compute_natural_split_ranges(layout_reader: &dyn LayoutReader) -> DFResult<Arc<[Range<u64>]>> {
+fn partial_file_byte_range(file: &PartitionedFile) -> DFResult<Option<Range<u64>>> {
+    let Some(file_range) = file.range.as_ref() else {
+        return Ok(None);
+    };
+
+    let byte_range = Range {
+        start: u64::try_from(file_range.start)
+            .map_err(|_| exec_datafusion_err!("Vortex file range start is negative"))?,
+        end: u64::try_from(file_range.end)
+            .map_err(|_| exec_datafusion_err!("Vortex file range end is negative"))?,
+    };
+
+    Ok((byte_range.start != 0 || byte_range.end != file.object_meta.size).then_some(byte_range))
+}
+
+fn natural_split_cell_for_file(
+    natural_split_ranges: &NaturalSplitCache,
+    path: &Path,
+) -> Arc<OnceCell<NaturalSplitRanges>> {
+    match natural_split_ranges.entry(path.clone()) {
+        Entry::Occupied(entry) => Arc::clone(entry.get()),
+        Entry::Vacant(entry) => {
+            let split_ranges = Arc::new(OnceCell::new());
+            entry.insert(Arc::clone(&split_ranges));
+            split_ranges
+        }
+    }
+}
+
+async fn compute_natural_split_ranges_async(
+    layout_reader: Arc<dyn LayoutReader>,
+) -> DFResult<NaturalSplitRanges> {
+    tokio::task::spawn_blocking(move || compute_natural_split_ranges(layout_reader.as_ref()))
+        .await
+        .map_err(|error| {
+            exec_datafusion_err!("Vortex natural split calculation task failed: {error}")
+        })?
+}
+
+fn compute_natural_split_ranges(layout_reader: &dyn LayoutReader) -> DFResult<NaturalSplitRanges> {
     let row_count = layout_reader.row_count();
     let row_range = 0..row_count;
     let split_points: Vec<_> = SplitBy::Layout
@@ -909,3 +1008,6 @@ fn vortex_file_read_error(path: &Path, error: VortexError) -> DataFusionError {
         error.with_context(format!("Failed to read Vortex file: {path}")),
     ))
 }
+
+#[cfg(test)]
+mod tests;
