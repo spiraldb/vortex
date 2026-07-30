@@ -587,14 +587,13 @@ impl MorselPlanner for VortexMorselPlanner {
                 split_ranges,
             } => {
                 let total_size = state.file.object_meta.size;
-                let compute_layout_reader = Arc::clone(&layout_reader);
 
                 Ok(Some(
                     MorselPlan::new().with_pending_planner(
                         async move {
                             let split_ranges = split_ranges
-                                .get_or_try_init(|| {
-                                    compute_natural_split_ranges_async(compute_layout_reader)
+                                .get_or_try_init(|| async {
+                                    compute_natural_split_ranges(layout_reader.as_ref())
                                 })
                                 .await?;
 
@@ -921,16 +920,6 @@ fn natural_split_cell_for_file(
             split_ranges
         }
     }
-}
-
-async fn compute_natural_split_ranges_async(
-    layout_reader: Arc<dyn LayoutReader>,
-) -> DFResult<NaturalSplitRanges> {
-    tokio::task::spawn_blocking(move || compute_natural_split_ranges(layout_reader.as_ref()))
-        .await
-        .map_err(|error| {
-            exec_datafusion_err!("Vortex natural split calculation task failed: {error}")
-        })?
 }
 
 fn compute_natural_split_ranges(layout_reader: &dyn LayoutReader) -> DFResult<NaturalSplitRanges> {
