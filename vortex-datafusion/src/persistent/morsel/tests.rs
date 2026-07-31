@@ -145,12 +145,23 @@ impl PhysicalExpr for SnapshotErrorExpr {
     }
 }
 
+/// Build [`NaturalSplits`] from contiguous split ranges, the shape the layout walk produces.
+fn natural_splits(total_size: u64, split_ranges: &[Range<u64>]) -> NaturalSplits {
+    let mut row_boundaries = Vec::with_capacity(split_ranges.len() + 1);
+    if let Some(first) = split_ranges.first() {
+        row_boundaries.push(first.start);
+        row_boundaries.extend(split_ranges.iter().map(|range| range.end));
+    }
+    NaturalSplits::new(row_boundaries.into(), total_size)
+}
+
 #[rstest]
 #[case(0..3, 10, vec![0..2, 2..5, 5..10], Some(0..2))]
 #[case(3..7, 10, vec![0..2, 2..5, 5..10], Some(2..5))]
 #[case(1..8, 10, vec![0..1, 1..9, 9..10], Some(1..9))]
 #[case(1..4, 16, vec![0..1, 1..2, 2..3, 3..4], None)]
 #[case(0..1, 10, vec![0..2, 2..10], Some(0..2))]
+#[case(0..2, 2, vec![], None)]
 fn test_split_aligned_row_range(
     #[case] byte_range: Range<u64>,
     #[case] total_size: u64,
@@ -158,7 +169,7 @@ fn test_split_aligned_row_range(
     #[case] expected: Option<Range<u64>>,
 ) {
     assert_eq!(
-        split_aligned_row_range(byte_range, total_size, &split_ranges),
+        split_aligned_row_range(byte_range, &natural_splits(total_size, &split_ranges)),
         expected
     );
 }
@@ -167,10 +178,11 @@ fn test_split_aligned_row_range(
 fn test_split_aligned_ranges_cover_splits_exactly_once() {
     let split_ranges = vec![0..1, 1..4, 4..10, 10..13];
     let byte_ranges = [0..4, 4..8, 8..12, 12..16];
+    let natural_splits = natural_splits(16, &split_ranges);
 
     let assigned = byte_ranges
         .into_iter()
-        .filter_map(|byte_range| split_aligned_row_range(byte_range, 16, &split_ranges))
+        .filter_map(|byte_range| split_aligned_row_range(byte_range, &natural_splits))
         .collect::<Vec<_>>();
 
     assert_eq!(assigned, vec![0..4, 4..10, 10..13]);
@@ -201,6 +213,29 @@ fn test_split_aligned_ranges_cover_splits_exactly_once() {
     }
 }
 
+#[rstest]
+#[case(vec![], 10)]
+#[case(vec![0], 10)]
+#[case(vec![], 0)]
+#[case(vec![0], 0)]
+fn test_natural_splits_empty_file(#[case] row_boundaries: Vec<u64>, #[case] total_size: u64) {
+    let splits = NaturalSplits::new(row_boundaries.clone().into(), total_size);
+
+    assert!(splits.assignment_bytes.is_empty());
+    assert_eq!(splits.row_boundaries.as_ref(), row_boundaries.as_slice());
+    assert_eq!(split_aligned_row_range(0..u64::MAX, &splits), None);
+}
+
+/// Splits whose assignment bytes collide must stay with a single byte range.
+#[test]
+fn test_split_aligned_row_range_keeps_colliding_assignments_together() {
+    let natural_splits = natural_splits(2, &[0..1, 1..2, 2..3, 3..4]);
+
+    assert_eq!(natural_splits.assignment_bytes.as_ref(), [0, 0, 1, 1]);
+    assert_eq!(split_aligned_row_range(0..1, &natural_splits), Some(0..2));
+    assert_eq!(split_aligned_row_range(1..2, &natural_splits), Some(2..4));
+}
+
 #[tokio::test]
 async fn test_natural_split_cell_is_shared_by_file_path() {
     let cache = NaturalSplitCache::default();
@@ -219,17 +254,17 @@ async fn test_natural_split_cell_is_shared_by_file_path() {
         first_cell.get_or_init(|| async move {
             first_initializations.fetch_add(1, Ordering::Relaxed);
             tokio::task::yield_now().await;
-            Arc::from([0..5, 5..10])
+            Arc::new(natural_splits(10, &[0..5, 5..10]))
         }),
         second_cell.get_or_init(|| async move {
             second_initializations.fetch_add(1, Ordering::Relaxed);
-            Arc::from([10..15, 15..20])
+            Arc::new(natural_splits(20, &[10..15, 15..20]))
         }),
     );
 
     assert_eq!(initializations.load(Ordering::Relaxed), 1);
     assert!(Arc::ptr_eq(first_ranges, second_ranges));
-    assert_eq!(first_ranges.as_ref(), [0..5, 5..10]);
+    assert_eq!(first_ranges.row_boundaries.as_ref(), [0, 5, 10]);
 }
 
 async fn write_arrow_to_vortex(
@@ -269,7 +304,7 @@ fn make_morselizer(
         metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
-        natural_split_ranges: Default::default(),
+        natural_splits: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -657,7 +692,7 @@ async fn test_open_files_different_table_schema() -> anyhow::Result<()> {
         metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
-        natural_split_ranges: Default::default(),
+        natural_splits: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -744,7 +779,7 @@ async fn test_schema_different_column_order() -> anyhow::Result<()> {
         metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
-        natural_split_ranges: Default::default(),
+        natural_splits: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -893,7 +928,7 @@ async fn test_projection_bug_minimal_repro() -> anyhow::Result<()> {
         metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
-        natural_split_ranges: Default::default(),
+        natural_splits: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -953,7 +988,7 @@ fn make_test_morselizer(
         metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
-        natural_split_ranges: Default::default(),
+        natural_splits: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
@@ -1158,7 +1193,7 @@ async fn test_projection_expr_pushdown() -> anyhow::Result<()> {
         metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
         df_metrics: ExecutionPlanMetricsSet::new(),
         layout_readers: Default::default(),
-        natural_split_ranges: Default::default(),
+        natural_splits: Default::default(),
         has_output_ordering: false,
         expression_convertor: Arc::new(DefaultExpressionConvertor::default()),
         file_metadata_cache: None,
