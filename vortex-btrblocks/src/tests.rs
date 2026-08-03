@@ -20,6 +20,7 @@ use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::fns::sum::sum;
+use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::ListArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -32,6 +33,7 @@ use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::Nullability;
 use vortex_array::extension::datetime::TimeUnit;
 use vortex_array::validity::Validity;
+use vortex_buffer::BitBuffer;
 #[cfg(feature = "zstd")]
 use vortex_edition::EDITION_DECLARATIONS;
 #[cfg(feature = "zstd")]
@@ -44,6 +46,7 @@ use vortex_edition::EditionSessionExt;
 use vortex_edition::declarations::core::CORE_2026_08_3;
 use vortex_error::VortexResult;
 use vortex_fastlanes::Delta;
+use vortex_runend::RunEnd;
 
 use crate::BtrBlocksCompressor;
 use crate::BtrBlocksCompressorBuilder;
@@ -104,6 +107,34 @@ fn test_default_compressor_roundtrip() -> VortexResult<()> {
         .build();
     let compressed = assert_roundtrip(&compressor, &input)?;
     assert!(compressed.nbytes() < input.nbytes());
+
+    Ok(())
+}
+
+/// A run-heavy boolean column encodes to `RunEnd` and round-trips through the compressor.
+///
+/// This asserts the encode path, not scheme selection. `BoolRunEndScheme` defers its estimate to
+/// [`DeferredEstimate::Sample`](vortex_compressor::scheme::DeferredEstimate::Sample), and the
+/// sample is 16 chunks of 64 values — 1024 bools, or 128 bytes raw. A two-child `RunEnd` array
+/// cannot beat 128 bytes once its metadata is counted, and the 64-value chunking caps the
+/// sample's apparent run length at 64 regardless of the real runs. So the compressor keeps
+/// run-heavy bool columns canonical today; making the scheme fire needs a computed
+/// [`EstimateVerdict::Ratio`](vortex_compressor::scheme::EstimateVerdict::Ratio) over the whole
+/// column instead, which is a size-model change this test deliberately does not presume.
+#[test]
+fn test_run_heavy_bool_encodes_to_runend() -> VortexResult<()> {
+    let bits: Vec<bool> = (0..65_536).map(|i| (i / 1024) % 2 == 0).collect();
+    let array = BoolArray::new(BitBuffer::from(bits), Validity::NonNullable);
+    let input = array.into_array();
+
+    let mut ctx = SESSION.create_execution_ctx();
+    let encoded = RunEnd::encode(input.clone(), &mut ctx)?.into_array();
+    assert!(encoded.is::<RunEnd>());
+    assert_arrays_eq!(&encoded, &input, &mut ctx);
+    assert!(encoded.nbytes() < input.nbytes());
+
+    let compressor = BtrBlocksCompressorBuilder::from_session(&SESSION).build();
+    assert_roundtrip(&compressor, &input)?;
 
     Ok(())
 }
