@@ -201,17 +201,16 @@ async fn write_serialized_file(
 }
 
 /// Time one complete read of a serialized Vortex buffer: open the file, then run
-/// the scan and decode each emitted chunk before polling the next one.
+/// the scan with minimal read-ahead and decode each yielded chunk to canonical
+/// form before consuming the next one.
 async fn read_serialized_buffer(session: &VortexSession, data: Bytes) -> Result<Duration> {
-    let decode_session = session.clone();
-
     let start = Instant::now();
     let file = session.open_options().open_buffer(data)?;
-    let mut chunks = file.scan()?.into_stream()?;
+    let mut chunks = file.scan()?.with_concurrency(1).into_array_stream()?;
 
     let mut rows = 0usize;
+    let mut ctx = session.create_execution_ctx();
     while let Some(chunk) = chunks.try_next().await? {
-        let mut ctx = decode_session.create_execution_ctx();
         let canonical = chunk.execute::<VarBinViewArray>(&mut ctx)?;
         rows += canonical.len();
         drop(black_box(canonical));
