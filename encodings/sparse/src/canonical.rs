@@ -402,7 +402,6 @@ fn execute_sparse_lists(
                 fill_value,
                 values_dtype,
                 len,
-                total_canonical_values,
                 nullability,
                 ctx,
             )
@@ -410,14 +409,12 @@ fn execute_sparse_lists(
     }))
 }
 
-#[expect(clippy::too_many_arguments)]
 fn execute_sparse_lists_inner<I: IntegerPType, O: OffsetBuilderPType>(
     patch_indices: &[I],
     patch_values: ListViewArray,
     fill_value: &Scalar,
     values_dtype: Arc<DType>,
     len: usize,
-    total_canonical_values: usize,
     nullability: Nullability,
     ctx: &mut ExecutionCtx,
 ) -> ArrayRef {
@@ -426,7 +423,6 @@ fn execute_sparse_lists_inner<I: IntegerPType, O: OffsetBuilderPType>(
     let mut builder = ListViewBuilder::<O, O>::with_capacity_in(
         values_dtype,
         nullability,
-        total_canonical_values,
         len,
         ctx.allocator(),
     );

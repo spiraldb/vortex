@@ -103,10 +103,6 @@ impl<O: OffsetBuilderPType, S: OffsetBuilderPType> ListViewBuilder<O, S> {
 
     /// Create a new [`ListViewArray`] builder with the given `capacity`.
     ///
-    /// The `elements` builder is left to size itself: how many elements the lists hold is not
-    /// something the outer `capacity` says, and an appended array becomes a chunk of the elements
-    /// rather than a copy into them.
-    ///
     /// # Panics
     ///
     /// Panics if the size type `S` cannot fit within the offset type `O`.
@@ -686,7 +682,6 @@ mod tests {
             Arc::new(I32.into()),
             NonNullable,
             0,
-            0,
             BufferAllocatorRef::static_ref(),
         );
 
@@ -705,7 +700,6 @@ mod tests {
         let mut builder = ListViewBuilder::<u32, u32>::with_capacity_in(
             Arc::clone(&dtype),
             Nullable,
-            0,
             0,
             BufferAllocatorRef::static_ref(),
         );
@@ -783,7 +777,6 @@ mod tests {
             Arc::clone(&dtype),
             NonNullable,
             0,
-            0,
             BufferAllocatorRef::static_ref(),
         );
 
@@ -832,7 +825,6 @@ mod tests {
             Arc::clone(&dtype2),
             NonNullable,
             0,
-            0,
             BufferAllocatorRef::static_ref(),
         );
 
@@ -864,7 +856,6 @@ mod tests {
         let mut builder = ListViewBuilder::<u32, u32>::with_capacity_in(
             Arc::clone(&dtype),
             Nullable,
-            0,
             0,
             BufferAllocatorRef::static_ref(),
         );
@@ -937,7 +928,6 @@ mod tests {
         let mut builder = ListViewBuilder::<u32, u32>::with_capacity_in(
             Arc::clone(&dtype),
             Nullable,
-            0,
             0,
             BufferAllocatorRef::static_ref(),
         );
@@ -1027,7 +1017,6 @@ mod tests {
             Arc::clone(&dtype),
             Nullable,
             0,
-            0,
             BufferAllocatorRef::static_ref(),
         );
         builder.append_list_array(source.as_view(), &mut ctx)?;
@@ -1065,7 +1054,6 @@ mod tests {
             element_dtype,
             NonNullable,
             0,
-            0,
             BufferAllocatorRef::static_ref(),
         );
         constant.append_to_builder(&mut builder, &mut ctx)?;
@@ -1102,7 +1090,6 @@ mod tests {
         let mut builder = ListViewBuilder::<u32, u32>::with_capacity_in(
             Arc::clone(&dtype),
             NonNullable,
-            0,
             0,
             BufferAllocatorRef::static_ref(),
         );
@@ -1153,7 +1140,6 @@ mod tests {
             Arc::clone(&dtype),
             Nullable,
             0,
-            0,
             BufferAllocatorRef::static_ref(),
         );
         builder
@@ -1200,7 +1186,6 @@ mod tests {
             Arc::clone(&dtype),
             NonNullable,
             0,
-            0,
             BufferAllocatorRef::static_ref(),
         );
 
@@ -1226,7 +1211,6 @@ mod tests {
         let mut builder = ListViewBuilder::<u32, u32>::with_capacity_in(
             Arc::clone(&dtype),
             NonNullable,
-            20,
             10,
             BufferAllocatorRef::static_ref(),
         );
@@ -1288,7 +1272,6 @@ mod tests {
         let mut builder = ListViewBuilder::<u32, u32>::with_capacity_in(
             dtype,
             NonNullable,
-            20,
             10,
             BufferAllocatorRef::static_ref(),
         );
