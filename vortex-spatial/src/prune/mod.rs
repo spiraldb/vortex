@@ -68,7 +68,7 @@ fn geometry_and_constant<'a>(
 
     // A `GeometryAabb` stat reference only binds for dtypes it supports; anything else (e.g. a
     // WKB column) must fall through to the scan.
-    if !is_native_geometry(&ctx.return_dtype(geom)?) {
+    if !is_native_geometry(geom.dtype()) {
         return Ok(None);
     }
 
