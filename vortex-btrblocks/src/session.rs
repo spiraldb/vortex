@@ -74,7 +74,7 @@ impl Default for CompressionSession {
                 // Both string-fragmentation schemes are registered; the sample-based
                 // selector keeps whichever is smaller per column.
                 &string::FSSTScheme,
-                &string::OnPairScheme,
+                &string::OnPairScheme::new(),
                 &string::NullDominatedSparseScheme,
                 #[cfg(feature = "zstd")]
                 &string::ZstdScheme,
