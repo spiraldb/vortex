@@ -9,8 +9,8 @@ use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 
 use crate::expr::Expression;
-use crate::proto::expr as pb;
 use crate::expr::Variable;
+use crate::proto::expr as pb;
 use crate::scalar_fn::ForeignScalarFnVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnRef;
