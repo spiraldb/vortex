@@ -11,7 +11,7 @@
 //! | ---------------------------------- | ------------------------------------------------- |
 //! | none                               | skip the chunk                                    |
 //! | all                                | decode the chunk straight to the output           |
-//! | at most 16 per byte of value width | decode only the selected values                   |
+//! | at most [`max_sparse_values`]      | decode only the selected values                   |
 //! | otherwise                          | decode to scratch, then compact the scratch       |
 //!
 //! The scratch buffer stays in cache. It is compacted by copying the slices, or with the same
@@ -42,13 +42,20 @@ pub const FILTER_CHUNK_LEN: usize = 1024;
 /// Number of 64-bit mask words that cover a chunk.
 const CHUNK_WORDS: usize = FILTER_CHUNK_LEN / 64;
 
-/// Chunks with at most this many selected values per byte of value width decode only those
-/// values rather than the whole chunk. Wider values make a whole chunk more expensive to decode,
-/// so the threshold grows with the width.
-const SPARSE_VALUES_PER_BYTE: usize = 16;
-
 /// The largest number of selected values for which a chunk decodes only those values.
-const MAX_SPARSE_VALUES: usize = SPARSE_VALUES_PER_BYTE * 8;
+const MAX_SPARSE_VALUES: usize = 160;
+
+/// Chunks with at most this many selected values decode only those values rather than the whole
+/// chunk. Wider values make a whole chunk more expensive to decode, so the threshold grows with
+/// the width. FastLanes and Vortex benchmarks set conservative crossovers for each width.
+const fn max_sparse_values<T>() -> usize {
+    match size_of::<T>() {
+        1 => 16,
+        2 => 32,
+        4 => 64,
+        _ => MAX_SPARSE_VALUES,
+    }
+}
 
 /// Chunks without a SIMD kernel whose runs of selected values average at least this many bytes
 /// copy each run. Shorter runs are faster to compact with byte compress.
@@ -124,7 +131,7 @@ impl<'a, T: NativePType, D: ChunkDecoder<T>> ChunkedFilter<'a, T, D> {
             values: BufferMut::with_capacity(true_count + SLACK_BYTES / size_of::<T>()),
             true_count,
             written: 0,
-            max_sparse: (SPARSE_VALUES_PER_BYTE * size_of::<T>()).min(MAX_SPARSE_VALUES),
+            max_sparse: max_sparse_values::<T>(),
             scratch: Scratch([const { MaybeUninit::uninit() }; FILTER_CHUNK_LEN]),
             indices: [0; MAX_SPARSE_VALUES],
         }

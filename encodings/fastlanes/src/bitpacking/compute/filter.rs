@@ -164,6 +164,78 @@ mod tests {
         session
     });
 
+    /// Selects `threshold` and `threshold + 1` values of a chunk, around the largest count for
+    /// which the chunk unpacks only the selected values.
+    #[rstest]
+    #[case::u8(16)]
+    #[case::u16(32)]
+    #[case::u32(64)]
+    #[case::u64(160)]
+    fn sparse_extraction_covers_batch_and_full_chunk_paths(
+        #[case] threshold: usize,
+    ) -> VortexResult<()> {
+        match threshold {
+            16 => check_sparse_extraction::<u8>(7, threshold),
+            32 => check_sparse_extraction::<u16>(15, threshold),
+            64 => check_sparse_extraction::<u32>(31, threshold),
+            _ => check_sparse_extraction::<u64>(63, threshold),
+        }
+    }
+
+    fn check_sparse_extraction<T: NativePType + BitPacking + From<u8>>(
+        bit_width: u8,
+        threshold: usize,
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let values = (0..2_048)
+            .map(|index| <T as From<u8>>::from((index % 127) as u8))
+            .collect::<Vec<_>>();
+        let packed = BitPackedData::encode(
+            &PrimitiveArray::from_iter(values.iter().copied()).into_array(),
+            bit_width,
+            &mut ctx,
+        )?
+        .into_array();
+        let packed = packed.as_::<BitPacked>();
+
+        for selected in [threshold, threshold + 1] {
+            let indices = (0..selected)
+                .map(|index| index * 1_024 / selected)
+                .collect::<Vec<_>>();
+            let expected = indices.iter().map(|&index| values[index]).collect::<Vec<_>>();
+
+            let Mask::Values(mask) = Mask::from_indices(values.len(), indices) else {
+                unreachable!("the indices select some but not all values")
+            };
+            assert_eq!(
+                filter_values::<T>(packed.data(), bit_width, &mask).as_slice(),
+                expected
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn sparse_extraction_supports_zero_width() -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let packed = BitPackedData::encode(
+            &PrimitiveArray::from_iter([0u32; 2_048]).into_array(),
+            0,
+            &mut ctx,
+        )?
+        .into_array();
+        let packed = packed.as_::<BitPacked>();
+
+        let Mask::Values(mask) = Mask::from_indices(2_048, [0, 17, 1_023, 1_024, 2_047]) else {
+            unreachable!("the indices select some but not all values")
+        };
+        assert_eq!(
+            filter_values::<u32>(packed.data(), 0, &mask).as_slice(),
+            &[0; 5]
+        );
+        Ok(())
+    }
+
     #[test]
     fn take_indices() {
         let mut ctx = SESSION.create_execution_ctx();
