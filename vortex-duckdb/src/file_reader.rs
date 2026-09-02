@@ -17,20 +17,23 @@ use vortex::dtype::DType;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_panic;
+use vortex::expr::BoundExpression;
+use vortex::expr::Expression;
+use vortex::file::VortexFile;
 use vortex::file::multi::open_cached;
 use vortex::file::multi::parse_uri_or_path;
-use vortex::file::v2::FileStatsLayoutReader;
 use vortex::io::compat::Compat;
 use vortex::io::filesystem::FileSystemRef;
 use vortex::io::object_store::ObjectStoreFileSystem;
 use vortex::io::runtime::BlockingRuntime as _;
 use vortex::layout::LayoutReaderRef;
 use vortex::layout::scan::scan_builder::ScanBuilder;
-use vortex::layout::scan::scan_builder::ScanExecutor;
 use vortex::mask::Mask;
+use vortex_morsel_scan::MorselScanBuilder;
+use vortex_morsel_scan::ScanBackend;
 use vortex_morsel_scan::ScanExecutorOptions;
 use vortex_morsel_scan::scan_backend_from_env;
-use vortex_morsel_scan::scan_executor;
+use vortex_utils::parallelism::get_available_parallelism;
 
 use crate::RUNTIME;
 use crate::SESSION;
@@ -109,8 +112,10 @@ fn drive_runtime_once() {
 }
 
 pub struct OpenFileReader {
-    pub reader: LayoutReaderRef,
-    morsel_executor: Option<Arc<dyn ScanExecutor>>,
+    file: VortexFile,
+    reader: Option<LayoutReaderRef>,
+    backend: ScanBackend,
+    morsel_options: ScanExecutorOptions,
     /// File splits stored in inverse order
     pub splits: Vec<Split>,
     pub cache: ConversionCache,
@@ -124,16 +129,16 @@ impl OpenFileReader {
         let (fs, path) = resolve_filesystem(&url)?;
         let file = fs.open_read(&path).await?;
         let file = open_cached(&SESSION, file, &path, None, &|options| options).await?;
-        let reader = file.layout_reader()?;
-        let options = ScanExecutorOptions::default().with_external_threads(drive_runtime_once);
-        let morsel_executor = scan_executor(
-            backend,
-            || (Arc::clone(file.footer().layout()), file.segment_source()),
-            &options,
-        );
+        let reader = (backend == ScanBackend::V1)
+            .then(|| file.layout_reader())
+            .transpose()?;
         Ok(OpenFileReader {
+            file,
             reader,
-            morsel_executor,
+            backend,
+            morsel_options: ScanExecutorOptions::default()
+                .with_threads(get_available_parallelism().unwrap_or(1))
+                .with_external_threads(drive_runtime_once),
             cache: ConversionCache::default(),
             splits: vec![],
             total_splits: 0,
@@ -144,15 +149,32 @@ impl OpenFileReader {
         let Some(filter) = &filter.filter else {
             return Ok(false);
         };
-        let row_count = self.reader.row_count();
-        let row_range = 0..row_count;
-        let mask = Mask::new_true(usize::try_from(row_count).unwrap_or(usize::MAX));
-        let evaluation = self.reader.pruning_evaluation(&row_range, filter, mask)?;
-        match evaluation.now_or_never() {
-            Some(mask) => mask.map(|mask| mask.all_false()),
-            None => Ok(false),
+        if let Some(reader) = &self.reader {
+            let row_count = reader.row_count();
+            let row_range = 0..row_count;
+            let mask = Mask::new_true(usize::try_from(row_count).unwrap_or(usize::MAX));
+            let evaluation = reader.pruning_evaluation(&row_range, filter, mask)?;
+            match evaluation.now_or_never() {
+                Some(mask) => mask.map(|mask| mask.all_false()),
+                None => Ok(false),
+            }
+        } else {
+            self.file.can_prune(&unbind(filter)?)
         }
     }
+}
+
+fn unbind(expr: &BoundExpression) -> VortexResult<Expression> {
+    let Some(scalar_fn) = expr.as_scalar() else {
+        return Ok(Expression::Root);
+    };
+    Expression::try_new(
+        scalar_fn.clone(),
+        expr.children()
+            .iter()
+            .map(unbind)
+            .collect::<VortexResult<Vec<_>>>()?,
+    )
 }
 
 /// Called once per file while initializing the scan under file-local lock.
@@ -166,7 +188,7 @@ pub fn reader_open(file_path: &str) -> VortexResult<OpenFileReader> {
 /// support schema evolution, so if any file schema doesn't match first schema,
 /// we break.
 pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexResult<BindState> {
-    let dtype = file.reader.dtype().clone();
+    let dtype = file.file.dtype().clone();
     let columns = extract_schema_from_dtype(&dtype)?;
 
     for column in &columns {
@@ -175,7 +197,7 @@ pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexR
 
     Ok(BindState {
         dtype,
-        first_file_row_count: file.reader.row_count(),
+        first_file_row_count: file.file.row_count(),
         filters: vec![],
         columns,
         has_non_optional_filter: AtomicBool::new(false),
@@ -194,20 +216,41 @@ pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> Vor
     // Getting splits is non-trivial work so we prefer doing it here under file
     // lock and not in reader_try_initialize_scan under global lock.
     let ordered = global.file_row_number_column_pos.is_some();
-    let reader = Arc::clone(&file.reader);
     let filter = &global.filter;
-    let mut builder = ScanBuilder::new(SESSION.clone(), reader)
-        .with_projection(global.projection.clone())
-        .with_ordered(ordered)
-        .with_some_filter(filter.filter.clone())
-        .with_selection(filter.row_selection.clone());
-    if let Some(executor) = &file.morsel_executor {
-        builder = builder.with_executor(Arc::clone(executor));
-    }
-    if let Some(row_range) = filter.row_range.as_ref() {
-        builder = builder.with_row_range(row_range.clone());
-    }
-    let mut splits = builder.build()?;
+    let mut splits = match file.backend {
+        ScanBackend::V1 => {
+            let reader = file
+                .reader
+                .as_ref()
+                .vortex_expect("V1 file is missing its layout reader");
+            let mut builder = ScanBuilder::new(SESSION.clone(), Arc::clone(reader))
+                .with_projection(global.projection.clone())
+                .with_ordered(ordered)
+                .with_some_filter(filter.filter.clone())
+                .with_selection(filter.row_selection.clone());
+            if let Some(row_range) = filter.row_range.as_ref() {
+                builder = builder.with_row_range(row_range.clone());
+            }
+            builder.build()?
+        }
+        ScanBackend::Pull | ScanBackend::Push => {
+            let mut builder = MorselScanBuilder::new(
+                SESSION.clone(),
+                file.backend,
+                Arc::clone(file.file.footer().layout()),
+                file.file.segment_source(),
+                &file.morsel_options,
+            )?
+            .with_projection(global.projection.clone())
+            .with_ordered(ordered)
+            .with_some_filter(filter.filter.clone())
+            .with_selection(filter.row_selection.clone());
+            if let Some(row_range) = filter.row_range.as_ref() {
+                builder = builder.with_row_range(row_range.clone());
+            }
+            builder.build()?
+        }
+    };
 
     // threads take last element of file.splits so we need to reverse
     splits.reverse();
@@ -297,13 +340,9 @@ pub fn reader_get_statistics(
         return None;
     }
 
-    let reader = file
-        .reader
-        .as_any()
-        .downcast_ref::<FileStatsLayoutReader>()?;
-    let stats_sets = reader.file_stats().stats_sets();
+    let stats_sets = file.file.file_stats()?.stats_sets();
 
-    let DType::Struct(fields, _) = &file.reader.dtype() else {
+    let DType::Struct(fields, _) = file.file.dtype() else {
         return None;
     };
     let index = fields.find(column)?;

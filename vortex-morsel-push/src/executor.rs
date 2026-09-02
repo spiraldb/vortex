@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! [`ScanBuilder`](vortex_layout::scan::scan_builder::ScanBuilder) integration.
+//! Integration with the dedicated morsel scan builder.
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -10,7 +10,6 @@ use std::sync::atomic::Ordering;
 
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
-use futures::future::join_all;
 use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
@@ -23,11 +22,10 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_layout::LayoutRef;
-use vortex_layout::scan::scan_builder::ScanExecutor;
-use vortex_layout::scan::scan_builder::ScanRequest;
 use vortex_layout::segments::SegmentSource;
 use vortex_mask::AllOr;
 use vortex_mask::Mask;
+use vortex_session::VortexSession;
 use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::MorselScan;
@@ -40,7 +38,11 @@ use crate::nodes::ConjunctMode;
 
 type PlanCacheKey = (String, Option<String>, ConjunctMode);
 
-/// Morsel-driven execution backend for a layout scan builder.
+/// Morsels kept visible to background I/O ahead of the active workers in shared scans, so the
+/// file driver sees enough adjacent segments to coalesce and cold reads overlap execution.
+const SHARED_LOOKAHEAD_MORSELS: usize = 16;
+
+/// Push-morsel execution backend over a raw layout and segment source.
 pub struct PushMorselScanExecutor {
     layout: LayoutRef,
     segments: Arc<dyn SegmentSource>,
@@ -88,57 +90,51 @@ impl PushMorselScanExecutor {
         self.external_driver = Some(driver);
         self
     }
-}
 
-impl ScanExecutor for PushMorselScanExecutor {
-    fn build(
+    /// Return the natural full-file row boundaries for this projection and filter.
+    pub fn full_file_splits(
         &self,
-        request: ScanRequest,
+        projection: &BoundExpression,
+        filter: Option<&BoundExpression>,
+    ) -> VortexResult<Vec<u64>> {
+        let plan = self.plan(projection, filter)?;
+        let mut boundaries = Vec::with_capacity(plan.natural_splits().len() + 1);
+        boundaries.push(0);
+        boundaries.extend(
+            plan.natural_splits()
+                .iter()
+                .copied()
+                .filter(|boundary| *boundary != 0),
+        );
+        Ok(boundaries)
+    }
+
+    /// Build independently awaitable output tasks without constructing a layout reader.
+    #[expect(clippy::too_many_arguments)]
+    pub fn build(
+        &self,
+        session: VortexSession,
+        projection: BoundExpression,
+        filter: Option<BoundExpression>,
+        row_range: Option<Range<u64>>,
+        selection: vortex_scan::selection::Selection,
+        limit: Option<u64>,
+        row_offset: u64,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
-        if request.limit.is_some() {
+        if limit.is_some() {
             vortex_bail!("the morsel scan executor does not support limits");
         }
-        if request.row_offset != 0 {
+        if row_offset != 0 {
             vortex_bail!("the morsel scan executor does not support row offsets");
         }
 
-        let projection = unbind(&request.projection)?;
-        let filter = request.filter.as_ref().map(unbind).transpose()?;
-        let plan_key = (
-            projection.to_string(),
-            filter.as_ref().map(ToString::to_string),
-            self.conjunct_mode,
-        );
-        let plan = {
-            let mut cache = self.plan_cache.lock();
-            match cache.get(&plan_key) {
-                Some(plan) => Arc::clone(plan),
-                None => {
-                    let plan = Arc::new(build_plan(
-                        &self.layout,
-                        &projection,
-                        filter.as_ref(),
-                        self.conjunct_mode,
-                    )?);
-                    cache.insert(plan_key, Arc::clone(&plan));
-                    plan
-                }
-            }
-        };
-
-        let full_range = request
-            .row_range
-            .clone()
-            .unwrap_or_else(|| 0..plan.row_count());
-        let morsels = selected_morsels(
-            morsels(&plan, self.target_rows),
-            &full_range,
-            &request.selection,
-        );
+        let plan = self.plan(&projection, filter.as_ref())?;
+        let full_range = row_range.unwrap_or_else(|| 0..plan.row_count());
+        let morsels = selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
 
         if let Some(driver) = &self.external_driver {
             return build_external_outputs(
-                request,
+                session,
                 plan,
                 Arc::clone(&self.segments),
                 morsels,
@@ -146,22 +142,25 @@ impl ScanExecutor for PushMorselScanExecutor {
             );
         }
 
-        let mut work = Vec::with_capacity(morsels.len());
+        let mut ranges = Vec::new();
+        let mut targets = Vec::new();
+        let mut groups = Vec::with_capacity(morsels.len());
         let mut outputs = Vec::with_capacity(morsels.len());
         for morsel in morsels {
-            let pruning = request
-                .filter
-                .as_ref()
-                .map(|filter| {
-                    request.layout_reader.pruning_evaluation(
-                        &morsel.range,
-                        filter,
-                        morsel.selection_mask.clone(),
-                    )
-                })
-                .transpose()?;
             let (sender, receiver) = oneshot::channel();
-            work.push((morsel, pruning, sender));
+            let group = Arc::new(OutputGroup::new(
+                morsel.selected_ranges.len(),
+                plan.output_dtype().clone(),
+                sender,
+            ));
+            for (local_index, range) in morsel.selected_ranges.into_iter().enumerate() {
+                ranges.push(range);
+                targets.push(CompletionTarget {
+                    group: Arc::clone(&group),
+                    local_index,
+                });
+            }
+            groups.push(group);
             outputs.push(Box::pin(async move {
                 receiver
                     .await
@@ -170,67 +169,24 @@ impl ScanExecutor for PushMorselScanExecutor {
                 as BoxFuture<'static, VortexResult<Option<ArrayRef>>>);
         }
 
+        if ranges.is_empty() {
+            return Ok(outputs);
+        }
+
         let segments = Arc::clone(&self.segments);
-        let session = request.session.clone();
-        let handle = request.session.handle();
+        let handle = session.handle();
         let coordinator_handle = handle.clone();
-        let output_dtype = plan.output_dtype().clone();
-        let threads = self.threads;
+        let threads = ranges.len().min(self.threads);
         handle
             .spawn(async move {
-                let prepared = join_all(work.into_iter().map(
-                    |(morsel, pruning, sender)| async move {
-                        let ranges = match pruning {
-                            Some(pruning) => pruning.await.map(|mask| {
-                                pruned_ranges(&morsel.range, &morsel.selection_mask, mask)
-                            }),
-                            None => Ok(morsel.selected_ranges),
-                        };
-                        (ranges, sender)
-                    },
-                ))
-                .await;
-
-                let mut ranges = Vec::new();
-                let mut targets = Vec::new();
-                let mut groups = Vec::new();
-                for (selected_ranges, sender) in prepared {
-                    let selected_ranges = match selected_ranges {
-                        Ok(selected_ranges) => selected_ranges,
-                        Err(err) => {
-                            drop(sender.send(Err(err)));
-                            continue;
-                        }
-                    };
-                    if selected_ranges.is_empty() {
-                        drop(sender.send(Ok(None)));
-                        continue;
-                    }
-                    let group = Arc::new(OutputGroup::new(
-                        selected_ranges.len(),
-                        output_dtype.clone(),
-                        sender,
-                    ));
-                    for (local_index, range) in selected_ranges.into_iter().enumerate() {
-                        ranges.push(range);
-                        targets.push(CompletionTarget {
-                            group: Arc::clone(&group),
-                            local_index,
-                        });
-                    }
-                    groups.push(group);
-                }
-
-                if ranges.is_empty() {
-                    return;
-                }
-                let threads = ranges.len().min(threads);
                 let result = coordinator_handle
                     .spawn_blocking(move || {
                         MorselScan::new(plan, segments, session)
                             .with_threads(threads)
                             .with_morsels(ranges)
                             .with_sparse_morsels(true)
+                            .with_lookahead_morsels(SHARED_LOOKAHEAD_MORSELS)
+                            .with_eager_lookahead(true)
                             .with_execution_mode(ExecutionMode::Push)
                             .with_completion_sink(move |index, batch| {
                                 targets[index].complete(batch);
@@ -250,10 +206,38 @@ impl ScanExecutor for PushMorselScanExecutor {
 
         Ok(outputs)
     }
+
+    fn plan(
+        &self,
+        projection: &BoundExpression,
+        filter: Option<&BoundExpression>,
+    ) -> VortexResult<Arc<ExecPlan>> {
+        let projection = unbind(projection)?;
+        let filter = filter.map(unbind).transpose()?;
+        let plan_key = (
+            projection.to_string(),
+            filter.as_ref().map(ToString::to_string),
+            self.conjunct_mode,
+        );
+        let mut cache = self.plan_cache.lock();
+        match cache.get(&plan_key) {
+            Some(plan) => Ok(Arc::clone(plan)),
+            None => {
+                let plan = Arc::new(build_plan(
+                    &self.layout,
+                    &projection,
+                    filter.as_ref(),
+                    self.conjunct_mode,
+                )?);
+                cache.insert(plan_key, Arc::clone(&plan));
+                Ok(plan)
+            }
+        }
+    }
 }
 
 fn build_external_outputs(
-    request: ScanRequest,
+    session: VortexSession,
     plan: Arc<ExecPlan>,
     segments: Arc<dyn SegmentSource>,
     morsels: Vec<SelectedMorsel>,
@@ -262,29 +246,13 @@ fn build_external_outputs(
     let io = IoService::new(Arc::clone(&segments));
     let mut outputs = Vec::with_capacity(morsels.len());
     for morsel in morsels {
-        let pruning = request
-            .filter
-            .as_ref()
-            .map(|filter| {
-                request.layout_reader.pruning_evaluation(
-                    &morsel.range,
-                    filter,
-                    morsel.selection_mask.clone(),
-                )
-            })
-            .transpose()?;
         let plan = Arc::clone(&plan);
         let segments = Arc::clone(&segments);
         let io = Arc::clone(&io);
         let driver = Arc::clone(&driver);
-        let session = request.session.clone();
+        let session = session.clone();
         outputs.push(Box::pin(async move {
-            let ranges = match pruning {
-                Some(pruning) => {
-                    pruned_ranges(&morsel.range, &morsel.selection_mask, pruning.await?)
-                }
-                None => morsel.selected_ranges,
-            };
+            let ranges = morsel.selected_ranges;
             if ranges.is_empty() {
                 return Ok(None);
             }
@@ -293,6 +261,7 @@ fn build_external_outputs(
                 .with_external_driver(driver)
                 .with_share_decodes(false)
                 .with_sparse_morsels(true)
+                .with_eager_lookahead(true)
                 .with_execution_mode(ExecutionMode::Push)
                 .run_on_current_thread()?;
             combine_batches(batches)
@@ -389,20 +358,6 @@ fn mask_ranges(range: &Range<u64>, mask: &Mask) -> Vec<Range<u64>> {
     }
 }
 
-fn pruned_ranges(range: &Range<u64>, selection: &Mask, pruning: Mask) -> Vec<Range<u64>> {
-    if selection.all_true() {
-        return mask_ranges(range, &pruning);
-    }
-    if pruning.all_true() {
-        return mask_ranges(range, selection);
-    }
-    if selection.all_false() || pruning.all_false() {
-        return Vec::new();
-    }
-    let mask = pruning & selection;
-    mask_ranges(range, &mask)
-}
-
 fn unbind(expr: &BoundExpression) -> VortexResult<Expression> {
     let Some(scalar_fn) = expr.as_scalar() else {
         return Ok(Expression::Root);
@@ -417,8 +372,6 @@ fn unbind(expr: &BoundExpression) -> VortexResult<Expression> {
 }
 
 struct SelectedMorsel {
-    range: Range<u64>,
-    selection_mask: Mask,
     selected_ranges: Vec<Range<u64>>,
 }
 
@@ -437,41 +390,8 @@ fn selected_morsels(
         .filter_map(|range| {
             let mask = selection.row_mask(&range);
             let selection_mask = mask.mask().clone();
-            let selected_ranges = match selection_mask.slices() {
-                AllOr::All => vec![range.clone()],
-                AllOr::None => Vec::new(),
-                AllOr::Some(slices) => slices
-                    .iter()
-                    .map(|&(start, end)| range.start + start as u64..range.start + end as u64)
-                    .collect(),
-            };
-            (!selected_ranges.is_empty()).then_some(SelectedMorsel {
-                range,
-                selection_mask,
-                selected_ranges,
-            })
+            let selected_ranges = mask_ranges(&range, &selection_mask);
+            (!selected_ranges.is_empty()).then_some(SelectedMorsel { selected_ranges })
         })
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use vortex_mask::Mask;
-
-    use super::pruned_ranges;
-
-    #[test]
-    fn pruning_cannot_reintroduce_unselected_rows() {
-        let range = 100..108;
-        let selection = Mask::from_indices(8, [0, 2, 5]);
-
-        assert_eq!(
-            pruned_ranges(&range, &selection, Mask::new_true(8)),
-            vec![100..101, 102..103, 105..106]
-        );
-        assert_eq!(
-            pruned_ranges(&range, &selection, Mask::from_indices(8, [2, 3, 5, 7])),
-            vec![102..103, 105..106]
-        );
-    }
 }

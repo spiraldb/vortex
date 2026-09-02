@@ -31,6 +31,7 @@ use vortex_buffer::Alignment;
 use vortex_error::VortexResult;
 
 use crate::CoalesceConfig;
+#[cfg(target_os = "linux")]
 use crate::ReadAtNowait;
 use crate::VortexReadAt;
 use crate::runtime::Handle;

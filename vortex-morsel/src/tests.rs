@@ -62,6 +62,7 @@ use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
 use vortex_layout::session::LayoutSession;
+use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
 use crate::MorselScanExecutor;
@@ -171,37 +172,46 @@ fn scan_builder_batches(
     query: &Query,
     pull: bool,
 ) -> VortexResult<Vec<ArrayRef>> {
-    let reader = fixture.layout.new_reader(
-        "morsel-scan-builder-test".into(),
-        Arc::clone(&fixture.segments),
-        session,
-        &Default::default(),
-    )?;
-    let projection = query.projection.bind(reader.dtype())?;
+    let projection = query.projection.bind(fixture.layout.dtype())?;
     let filter = query
         .filter
         .as_ref()
-        .map(|filter| filter.bind(reader.dtype()))
+        .map(|filter| filter.bind(fixture.layout.dtype()))
         .transpose()?;
-    let executor = pull.then(|| {
-        Arc::new(
-            MorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments))
-                .with_threads(2)
-                .with_target_rows(3),
-        ) as Arc<_>
-    });
+    let layout = Arc::clone(&fixture.layout);
+    let segments = Arc::clone(&fixture.segments);
 
     let session = session.clone();
     block_on(move |handle| async move {
         let session = session.with_handle(handle);
-        let mut builder = ScanBuilder::new(session, reader)
-            .with_projection(projection)
-            .with_some_filter(filter)
-            .with_ordered(true);
-        if let Some(executor) = executor {
-            builder = builder.with_executor(executor);
+        if pull {
+            let executor = MorselScanExecutor::new(layout, segments)
+                .with_threads(2)
+                .with_target_rows(3);
+            let tasks =
+                executor.build(session, projection, filter, None, Selection::All, None, 0)?;
+            let mut batches = Vec::new();
+            for task in tasks {
+                if let Some(batch) = task.await? {
+                    batches.push(batch);
+                }
+            }
+            Ok(batches)
+        } else {
+            let reader = layout.new_reader(
+                "v1-scan-builder-test".into(),
+                segments,
+                &session,
+                &Default::default(),
+            )?;
+            ScanBuilder::new(session, reader)
+                .with_projection(projection)
+                .with_some_filter(filter)
+                .with_ordered(true)
+                .into_stream()?
+                .try_collect()
+                .await
         }
-        builder.into_stream()?.try_collect().await
     })
 }
 
@@ -398,6 +408,18 @@ fn document_misalignment_case() -> VortexResult<()> {
         ConjunctMode::Cascade,
     )?;
     assert_eq!(plan.natural_splits(), &[3, 6, 10]);
+
+    let projection = query.projection.bind(fixture.layout.dtype())?;
+    let filter = query
+        .filter
+        .as_ref()
+        .map(|filter| filter.bind(fixture.layout.dtype()))
+        .transpose()?;
+    let executor = MorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&segments));
+    assert_eq!(
+        executor.full_file_splits(&projection, filter.as_ref())?,
+        [0, 3, 6, 10]
+    );
     Ok(())
 }
 

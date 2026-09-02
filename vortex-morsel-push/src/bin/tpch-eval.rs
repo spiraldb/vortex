@@ -32,7 +32,9 @@ use std::time::Duration;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
+#[cfg(not(target_vendor = "apple"))]
 use rustix::fs::Advice;
+#[cfg(not(target_vendor = "apple"))]
 use rustix::fs::fadvise;
 use vortex::VortexSessionDefault;
 use vortex::file::SegmentSpec;
@@ -285,11 +287,22 @@ impl SegmentBackend {
             Self::Memory(source) => Ok((Arc::clone(source), None)),
             Self::Disk(disk) => {
                 if disk.evict_before_run {
-                    let file = File::open(&disk.path)?;
-                    fadvise(&file, 0, None, Advice::DontNeed).map_err(|err| {
-                        vortex_error::vortex_err!("failed to evict {}: {err}", disk.path.display())
-                    })?;
-                    drop(file);
+                    #[cfg(target_vendor = "apple")]
+                    vortex_bail!(
+                        "cold-cache disk scans are not supported on Apple targets; set \
+                         TPCH_CACHE_MODE=hot"
+                    );
+                    #[cfg(not(target_vendor = "apple"))]
+                    {
+                        let file = File::open(&disk.path)?;
+                        fadvise(&file, 0, None, Advice::DontNeed).map_err(|err| {
+                            vortex_error::vortex_err!(
+                                "failed to evict {}: {err}",
+                                disk.path.display()
+                            )
+                        })?;
+                        drop(file);
+                    }
                 }
 
                 let read: Arc<dyn VortexReadAt> =
@@ -546,26 +559,33 @@ fn main() -> VortexResult<()> {
         .unwrap_or(0);
     let morsel_only = std::env::var("TPCH_MORSEL_ONLY").is_ok_and(|value| value == "1")
         || std::env::var_os("TPCH_MORSEL_ROWS").is_some();
+    let include_v1 = std::env::var("TPCH_INCLUDE_V1").is_ok_and(|value| value == "1");
     let configs = |threads: usize| {
         if morsel_only {
-            return selected_morsel_rows
-                .iter()
-                .copied()
-                .flat_map(|morsel_rows| {
-                    selected_execution_modes
-                        .iter()
-                        .copied()
-                        .map(move |execution_mode| {
-                            Row::Morsel(MorselConfig {
-                                threads,
-                                morsel_rows,
-                                execution_mode,
-                                lookahead_morsels: selected_lookahead,
-                                ..Default::default()
+            let mut rows = Vec::new();
+            if include_v1 {
+                rows.extend([Row::V1Single, Row::V1Tokio(threads)]);
+            }
+            rows.extend(
+                selected_morsel_rows
+                    .iter()
+                    .copied()
+                    .flat_map(|morsel_rows| {
+                        selected_execution_modes
+                            .iter()
+                            .copied()
+                            .map(move |execution_mode| {
+                                Row::Morsel(MorselConfig {
+                                    threads,
+                                    morsel_rows,
+                                    execution_mode,
+                                    lookahead_morsels: selected_lookahead,
+                                    ..Default::default()
+                                })
                             })
-                        })
-                })
-                .collect();
+                    }),
+            );
+            return rows;
         }
         vec![
             Row::V1Single,

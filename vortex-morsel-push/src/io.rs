@@ -34,6 +34,7 @@ use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
 use vortex_utils::aliases::hash_map::HashMap;
+use vortex_utils::aliases::hash_set::HashSet;
 
 use crate::stats::ScanStats;
 
@@ -192,6 +193,48 @@ impl IoService {
                 (!cell.submitted.swap(true, Ordering::AcqRel)).then_some(IoRead { cell })
             })
             .collect()
+    }
+
+    /// Issue a set of registered reads, returning how many source futures this call created.
+    ///
+    /// Sources that prefer background reads receive the whole set as one batch so the file
+    /// driver can coalesce adjacent segments before any member becomes eligible.
+    pub(crate) fn issue_batch(&self, reads: &[IoRead]) -> usize {
+        if !self.prefers_background_reads {
+            return reads.iter().filter(|read| self.issue(read)).count();
+        }
+        let mut seen = HashSet::with_capacity(reads.len());
+        let mut states = Vec::with_capacity(reads.len());
+        let mut ids = Vec::with_capacity(reads.len());
+        for read in reads {
+            if !seen.insert(read.key()) {
+                continue;
+            }
+            let state = read.cell.state.lock();
+            if matches!(*state, CellState::Unissued) {
+                ids.push(match read.key() {
+                    IoKey::Segment(id) => id,
+                });
+                states.push(state);
+            }
+        }
+        if ids.is_empty() {
+            return 0;
+        }
+        let futures = self.source.request_background_batch(&ids);
+        assert_eq!(
+            futures.len(),
+            states.len(),
+            "SegmentSource::request_background_batch must return one future per ID"
+        );
+        let issued = states.len();
+        for (mut state, future) in states.into_iter().zip(futures) {
+            *state = CellState::Pending {
+                future,
+                wait_started: None,
+            };
+        }
+        issued
     }
 
     /// Issue a registered read, returning whether this call created its source future.

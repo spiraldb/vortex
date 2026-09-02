@@ -32,7 +32,9 @@ use std::time::Duration;
 use std::time::Instant;
 
 use futures::future::BoxFuture;
+#[cfg(not(target_vendor = "apple"))]
 use rustix::fs::Advice;
+#[cfg(not(target_vendor = "apple"))]
 use rustix::fs::fadvise;
 use vortex::VortexSessionDefault;
 use vortex::file::SegmentSpec;
@@ -73,6 +75,8 @@ use vortex_utils::parallelism::get_available_parallelism;
 
 const DEFAULT_ITERATIONS: usize = 5;
 const PRIMARY_MORSEL_ROWS: u64 = 131_072;
+/// Default filtered-scan lookahead window, matching the engine integrations.
+const DEFAULT_LOOKAHEAD_MORSELS: usize = 16;
 
 #[derive(Clone, Copy)]
 enum Row {
@@ -236,11 +240,22 @@ impl SegmentBackend {
             Self::Memory(source) => Ok((Arc::clone(source), None)),
             Self::Disk(disk) => {
                 if disk.evict_before_run {
-                    let file = File::open(&disk.path)?;
-                    fadvise(&file, 0, None, Advice::DontNeed).map_err(|err| {
-                        vortex_error::vortex_err!("failed to evict {}: {err}", disk.path.display())
-                    })?;
-                    drop(file);
+                    #[cfg(target_vendor = "apple")]
+                    vortex_bail!(
+                        "cold-cache disk scans are not supported on Apple targets; set \
+                         TPCH_CACHE_MODE=hot"
+                    );
+                    #[cfg(not(target_vendor = "apple"))]
+                    {
+                        let file = File::open(&disk.path)?;
+                        fadvise(&file, 0, None, Advice::DontNeed).map_err(|err| {
+                            vortex_error::vortex_err!(
+                                "failed to evict {}: {err}",
+                                disk.path.display()
+                            )
+                        })?;
+                        drop(file);
+                    }
                 }
 
                 let read: Arc<dyn VortexReadAt> =
@@ -498,6 +513,17 @@ fn main() -> VortexResult<()> {
             &runtime, &session, &fixture, &segments, &queries, threads, iterations,
         );
     }
+
+    // Lookahead window for filtered scans; `TPCH_LOOKAHEAD=0` restores demand-driven reads.
+    let lookahead_morsels = match std::env::var("TPCH_LOOKAHEAD") {
+        Ok(value) => value
+            .trim()
+            .parse::<usize>()
+            .map_err(|err| vortex_error::vortex_err!("invalid TPCH_LOOKAHEAD: {err}"))?,
+        Err(_) => DEFAULT_LOOKAHEAD_MORSELS,
+    };
+    vortex_morsel::harness::set_default_lookahead_morsels(lookahead_morsels);
+    println!("morsel lookahead: {lookahead_morsels} morsels (TPCH_LOOKAHEAD)");
 
     let selected_morsel_rows = std::env::var("TPCH_MORSEL_ROWS")
         .ok()

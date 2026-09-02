@@ -37,22 +37,26 @@ use futures::FutureExt;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use futures::stream;
+use futures::stream::BoxStream;
 use object_store::path::Path;
 use tracing::Instrument;
 use vortex::array::VortexSessionExecute;
 use vortex::error::VortexError;
 use vortex::error::VortexExpect;
+use vortex::expr::BoundExpression;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
+use vortex::scan::selection::Selection;
 use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
+use vortex_morsel_scan::MorselScanBuilder;
+use vortex_morsel_scan::ScanBackend;
 use vortex_morsel_scan::ScanExecutorOptions;
 use vortex_morsel_scan::scan_backend_from_env;
-use vortex_morsel_scan::scan_executor;
 use vortex_utils::aliases::dash_map::DashMap;
 use vortex_utils::aliases::dash_map::Entry;
 
@@ -66,6 +70,103 @@ use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::reader::VortexReaderFactory;
 use crate::persistent::stream::PrunableStream;
+
+enum FileScanBuilder<A> {
+    V1(ScanBuilder<A>),
+    Morsel(MorselScanBuilder<A>),
+}
+
+impl<A: 'static + Send> FileScanBuilder<A> {
+    fn with_projection(self, projection: BoundExpression) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_projection(projection)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_projection(projection)),
+        }
+    }
+
+    fn with_some_filter(self, filter: Option<BoundExpression>) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_some_filter(filter)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_some_filter(filter)),
+        }
+    }
+
+    fn with_selection(self, selection: Selection) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_selection(selection)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_selection(selection)),
+        }
+    }
+
+    fn with_limit(self, limit: u64) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_limit(limit)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_limit(limit)),
+        }
+    }
+
+    fn with_concurrency(self, concurrency: usize) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_concurrency(concurrency)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_concurrency(concurrency)),
+        }
+    }
+
+    fn with_row_range(self, row_range: Range<u64>) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_row_range(row_range)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_row_range(row_range)),
+        }
+    }
+
+    fn with_natural_splits(self, boundaries: Arc<[u64]>) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_natural_splits(boundaries)),
+            // Morsel plans already own these boundaries and do not need a reader-side hint.
+            Self::Morsel(builder) => Self::Morsel(builder),
+        }
+    }
+
+    fn with_metrics_registry(self, metrics: Arc<dyn MetricsRegistry>) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_metrics_registry(metrics)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_metrics_registry(metrics)),
+        }
+    }
+
+    fn with_ordered(self, ordered: bool) -> Self {
+        match self {
+            Self::V1(builder) => Self::V1(builder.with_ordered(ordered)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_ordered(ordered)),
+        }
+    }
+
+    fn full_file_splits(&self) -> vortex::error::VortexResult<Vec<u64>> {
+        match self {
+            Self::V1(builder) => builder.full_file_splits(),
+            Self::Morsel(builder) => builder.full_file_splits(),
+        }
+    }
+
+    fn map<B: 'static + Send>(
+        self,
+        map_fn: impl Fn(A) -> vortex::error::VortexResult<B> + 'static + Send + Sync,
+    ) -> FileScanBuilder<B> {
+        match self {
+            Self::V1(builder) => FileScanBuilder::V1(builder.map(map_fn)),
+            Self::Morsel(builder) => FileScanBuilder::Morsel(builder.map(map_fn)),
+        }
+    }
+
+    fn into_stream(
+        self,
+    ) -> vortex::error::VortexResult<BoxStream<'static, vortex::error::VortexResult<A>>> {
+        match self {
+            Self::V1(builder) => Ok(builder.into_stream()?.boxed()),
+            Self::Morsel(builder) => builder.into_stream(),
+        }
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct VortexOpener {
@@ -330,48 +431,65 @@ impl FileOpener for VortexOpener {
                 .try_map_exprs(|expr| reassign_expr_columns(expr, &stream_schema))?;
             let projector = leftover_projection.make_projector(&stream_schema)?;
 
-            // We share our layout readers with others partitions in the scan, so we can only need to read each layout in each file once.
-            let layout_reader = match layout_readers.entry(file.object_meta.location.clone()) {
-                Entry::Occupied(mut occupied_entry) => {
-                    if let Some(reader) = occupied_entry.get().upgrade() {
-                        tracing::trace!("reusing layout reader for {}", occupied_entry.key());
-                        reader
-                    } else {
-                        tracing::trace!("creating layout reader for {}", occupied_entry.key());
-                        let reader = vxf.layout_reader().map_err(|e| {
-                            DataFusionError::Execution(format!(
-                                "Failed to create layout reader: {e}"
-                            ))
-                        })?;
-                        occupied_entry.insert(Arc::downgrade(&reader));
-                        reader
-                    }
-                }
-                Entry::Vacant(vacant_entry) => {
-                    tracing::trace!("creating layout reader for {}", vacant_entry.key());
-                    let reader = vxf.layout_reader().map_err(|e| {
-                        DataFusionError::Execution(format!("Failed to create layout reader: {e}"))
-                    })?;
-                    vacant_entry.insert(Arc::downgrade(&reader));
-
-                    reader
-                }
-            };
-
-            let mut scan_builder = ScanBuilder::new(session.clone(), Arc::clone(&layout_reader));
             let backend = scan_backend_from_env()
                 .map_err(|err| exec_datafusion_err!("Invalid scan backend: {err}"))?;
             let options = ScanExecutorOptions::default().with_threads(1);
-            if let Some(executor) = scan_executor(
-                backend,
-                || (Arc::clone(vxf.footer().layout()), vxf.segment_source()),
-                &options,
-            ) {
-                scan_builder = scan_builder.with_executor(executor);
-            }
+            let mut scan_builder = match backend {
+                ScanBackend::V1 => {
+                    // Only V1 constructs and caches a LayoutReader tree.
+                    let layout_reader = match layout_readers
+                        .entry(file.object_meta.location.clone())
+                    {
+                        Entry::Occupied(mut occupied_entry) => {
+                            if let Some(reader) = occupied_entry.get().upgrade() {
+                                tracing::trace!(
+                                    "reusing layout reader for {}",
+                                    occupied_entry.key()
+                                );
+                                reader
+                            } else {
+                                tracing::trace!(
+                                    "creating layout reader for {}",
+                                    occupied_entry.key()
+                                );
+                                let reader = vxf.layout_reader().map_err(|e| {
+                                    DataFusionError::Execution(format!(
+                                        "Failed to create layout reader: {e}"
+                                    ))
+                                })?;
+                                occupied_entry.insert(Arc::downgrade(&reader));
+                                reader
+                            }
+                        }
+                        Entry::Vacant(vacant_entry) => {
+                            tracing::trace!("creating layout reader for {}", vacant_entry.key());
+                            let reader = vxf.layout_reader().map_err(|e| {
+                                DataFusionError::Execution(format!(
+                                    "Failed to create layout reader: {e}"
+                                ))
+                            })?;
+                            vacant_entry.insert(Arc::downgrade(&reader));
+                            reader
+                        }
+                    };
+                    FileScanBuilder::V1(ScanBuilder::new(session.clone(), layout_reader))
+                }
+                ScanBackend::Pull | ScanBackend::Push => FileScanBuilder::Morsel(
+                    MorselScanBuilder::new(
+                        session.clone(),
+                        backend,
+                        Arc::clone(vxf.footer().layout()),
+                        vxf.segment_source(),
+                        &options,
+                    )
+                    .map_err(|err| exec_datafusion_err!("Failed to create morsel scan: {err}"))?,
+                ),
+            };
 
-            if let Some(vortex_plan) = file.extensions.get::<VortexAccessPlan>() {
-                scan_builder = vortex_plan.apply_to_builder(scan_builder);
+            if let Some(vortex_plan) = file.extensions.get::<VortexAccessPlan>()
+                && let Some(selection) = vortex_plan.selection()
+            {
+                scan_builder = scan_builder.with_selection(selection.clone());
             }
 
             let filter = filter
@@ -519,8 +637,7 @@ impl FileOpener for VortexOpener {
 pub(crate) struct NaturalSplits {
     /// Sorted row boundaries of the natural splits; split `i` covers
     /// `row_boundaries[i]..row_boundaries[i + 1]`. Shared so partitions can hand the
-    /// boundaries back to the scan via [`ScanBuilder::with_natural_splits`], skipping the
-    /// per-partition layout walk in `prepare`.
+    /// boundaries back to the V1 scan builder, skipping its per-partition layout walk.
     row_boundaries: Arc<[u64]>,
     /// For each split, the byte a DataFusion byte range must contain to own it (see
     /// [`split_assignment_byte`]); one entry per split, sorted because split midpoints
@@ -565,7 +682,7 @@ impl NaturalSplits {
 fn natural_splits_for_file<A: 'static + Send>(
     natural_splits: &DashMap<Path, Arc<NaturalSplits>>,
     path: &Path,
-    scan_builder: &ScanBuilder<A>,
+    scan_builder: &FileScanBuilder<A>,
     total_size: u64,
 ) -> DFResult<Arc<NaturalSplits>> {
     if let Some(splits) = natural_splits.get(path) {
@@ -588,7 +705,7 @@ fn natural_splits_for_file<A: 'static + Send>(
 /// Walk the layout tree to compute the file's full natural split boundaries for the fields
 /// referenced by the scan's projection and filter.
 fn compute_natural_splits<A: 'static + Send>(
-    scan_builder: &ScanBuilder<A>,
+    scan_builder: &FileScanBuilder<A>,
     total_size: u64,
 ) -> DFResult<Arc<NaturalSplits>> {
     let row_boundaries = scan_builder

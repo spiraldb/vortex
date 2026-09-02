@@ -61,6 +61,7 @@ use vortex_session::VortexSession;
 
 use crate::DemandHintDelivery;
 use crate::ExecutionMode;
+use crate::PushMorselScanExecutor;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
@@ -724,6 +725,18 @@ fn document_misalignment_case() -> VortexResult<()> {
         ConjunctMode::Cascade,
     )?;
     assert_eq!(plan.natural_splits(), &[3, 6, 10]);
+
+    let projection = query.projection.bind(fixture.layout.dtype())?;
+    let filter = query
+        .filter
+        .as_ref()
+        .map(|filter| filter.bind(fixture.layout.dtype()))
+        .transpose()?;
+    let executor = PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&segments));
+    assert_eq!(
+        executor.full_file_splits(&projection, filter.as_ref())?,
+        [0, 3, 6, 10]
+    );
     Ok(())
 }
 

@@ -9,6 +9,8 @@
 //! it dropped rows can never be reported as a win.
 
 use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -212,6 +214,16 @@ pub struct MorselConfig {
     pub mode: ConjunctMode,
     /// Whether the leased shared decoded cells are enabled.
     pub share_decodes: bool,
+    /// Morsels kept visible to background I/O beyond the active window on filtered scans.
+    pub lookahead_morsels: usize,
+}
+
+/// Process-wide default for [`MorselConfig::lookahead_morsels`], settable by evaluation binaries.
+static DEFAULT_LOOKAHEAD_MORSELS: AtomicUsize = AtomicUsize::new(0);
+
+/// Set the lookahead window that [`MorselConfig::default`] hands to later configurations.
+pub fn set_default_lookahead_morsels(morsels: usize) {
+    DEFAULT_LOOKAHEAD_MORSELS.store(morsels, Ordering::Relaxed);
 }
 
 impl Default for MorselConfig {
@@ -221,6 +233,7 @@ impl Default for MorselConfig {
             morsel_rows: 0,
             mode: ConjunctMode::Cascade,
             share_decodes: true,
+            lookahead_morsels: DEFAULT_LOOKAHEAD_MORSELS.load(Ordering::Relaxed),
         }
     }
 }
@@ -248,7 +261,8 @@ pub fn run_morsel(
     let scan = MorselScan::new(plan, Arc::clone(segments), session.clone())
         .with_threads(config.threads)
         .with_morsels(cut)
-        .with_share_decodes(config.share_decodes);
+        .with_share_decodes(config.share_decodes)
+        .with_lookahead_morsels(config.lookahead_morsels);
 
     let (batches, stats, wall) = scan.run_timed()?;
 

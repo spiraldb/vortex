@@ -3825,6 +3825,7 @@ dependencies = [
  "vortex",
  "vortex-bench",
  "vortex-cuda",
+ "vortex-duckdb",
 ]
 
 [[package]]
@@ -11370,10 +11371,17 @@ dependencies = [
 name = "vortex-morsel-scan"
 version = "0.1.0"
 dependencies = [
+ "futures",
+ "vortex-array",
  "vortex-error",
+ "vortex-io",
  "vortex-layout",
+ "vortex-metrics",
  "vortex-morsel",
  "vortex-morsel-push",
+ "vortex-scan",
+ "vortex-session",
+ "vortex-utils",
 ]
 
 [[package]]

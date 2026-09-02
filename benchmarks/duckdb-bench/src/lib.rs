@@ -177,12 +177,16 @@ impl DuckClient {
             unsafe { duckdb_close(&raw mut db) };
             anyhow::bail!("failed to connect to DuckDB");
         }
-        let extension = std::env::var("VORTEX_DUCKDB_EXTENSION")
-            .context("VORTEX_DUCKDB_EXTENSION must point at the loadable extension")?;
-        query_raw(
-            connection,
-            &format!("LOAD '{}'", extension.replace('\'', "''")),
-        )?;
+        if let Ok(extension) = std::env::var("VORTEX_DUCKDB_EXTENSION") {
+            query_raw(
+                connection,
+                &format!("LOAD '{}'", extension.replace('\'', "''")),
+            )?;
+        } else {
+            // Link the workspace extension into this benchmark so local runs exercise the
+            // implementation under test. An explicitly supplied loadable extension still wins.
+            unsafe { vortex_duckdb::initialize_extension_from_raw(db) };
+        }
         if let Some(thread_count) = threads {
             query_raw(connection, &format!("SET threads = {thread_count}"))?;
         }
@@ -310,7 +314,7 @@ fn result_error(result: &mut DuckResult) -> String {
 pub struct DuckQueryResult(DuckResult);
 
 impl DuckQueryResult {
-    fn row_count(&self) -> usize {
+    fn result_row_count(&self) -> usize {
         let result = (&raw const self.0).cast_mut();
         let changed = unsafe { duckdb_rows_changed(result) };
         usize::try_from(if changed == 0 {
@@ -330,10 +334,10 @@ impl Drop for DuckQueryResult {
 
 impl BenchmarkQueryResult for DuckQueryResult {
     fn row_count(&self) -> usize {
-        self.row_count()
+        self.result_row_count()
     }
 
     fn display(self) -> String {
-        format!("{} rows", self.row_count())
+        format!("{} rows", self.result_row_count())
     }
 }

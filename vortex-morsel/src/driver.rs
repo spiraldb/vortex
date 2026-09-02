@@ -110,6 +110,8 @@ pub struct MorselScan {
     threads: usize,
     share_decodes: bool,
     observe: bool,
+    lookahead_morsels: usize,
+    completion: Option<CompletionSink>,
 }
 
 /// A reusable worker pool for scans that share one execution plan.
@@ -124,6 +126,9 @@ enum ExecutorWorkers {
     Pool(Arc<MorselWorkerPool>),
 }
 
+/// Receives each completed morsel's output as soon as it is retired, in completion order.
+pub type CompletionSink = Arc<dyn Fn(usize, Option<ArrayRef>) + Send + Sync>;
+
 struct WorkerRun {
     plan: Arc<ExecPlan>,
     session: VortexSession,
@@ -135,6 +140,8 @@ struct WorkerRun {
     start: Instant,
     observe_timing: bool,
     observe_morsels: bool,
+    lookahead_morsels: usize,
+    completion: Option<CompletionSink>,
 }
 
 #[derive(Clone, Copy)]
@@ -172,6 +179,11 @@ struct Scheduler {
     error: Mutex<Option<VortexError>>,
     next_morsel: AtomicUsize,
     remaining: AtomicUsize,
+    /// Morsels whose reads have been registered with the IO plane as lookahead.
+    lookahead_cursor: AtomicUsize,
+    completed: AtomicUsize,
+    /// Whether filtered-scan lookahead refills apply; sparse random-access demand opts out.
+    lookahead_enabled: bool,
     stopped: AtomicBool,
     io_bytes: AtomicU64,
     io_waits: AtomicU64,
@@ -323,6 +335,13 @@ impl Drop for MorselWorkerPool {
 impl Scheduler {
     fn new(run: Arc<WorkerRun>, workers: usize) -> Arc<Self> {
         let sort_reads_by_segment = should_sort_reads_by_segment(run.demands.as_deref());
+        let lookahead_enabled = run.lookahead_morsels > 0
+            && run.plan.has_filter()
+            && run.io.prefers_background_reads()
+            && run
+                .plan
+                .initial_lookahead_len(&run.morsels, run.demands.as_deref(), workers)
+                > 0;
         let scheduler = Arc::new(Self {
             remaining: AtomicUsize::new(run.morsels.len()),
             run,
@@ -335,6 +354,9 @@ impl Scheduler {
             results: Mutex::new(Vec::new()),
             error: Mutex::new(None),
             next_morsel: AtomicUsize::new(0),
+            lookahead_cursor: AtomicUsize::new(0),
+            completed: AtomicUsize::new(0),
+            lookahead_enabled,
             stopped: AtomicBool::new(false),
             io_bytes: AtomicU64::new(0),
             io_waits: AtomicU64::new(0),
@@ -444,11 +466,21 @@ impl Scheduler {
         } else {
             IoPriority::Required
         };
+        let initial_end = self.run.plan.initial_lookahead_len(
+            &self.run.morsels,
+            self.run.demands.as_deref(),
+            self.workers,
+        );
+        let end = if initial_end == 0 || !self.run.plan.has_filter() {
+            initial_end
+        } else {
+            (initial_end + self.run.lookahead_morsels).min(self.run.morsels.len())
+        };
+        self.lookahead_cursor.store(end, Ordering::Release);
         let mut reads = self.run.io.register_reads(
-            self.run.plan.initial_lookahead_keys(
-                &self.run.morsels,
-                self.run.demands.as_deref(),
-                self.workers,
+            self.run.plan.lookahead_keys(
+                &self.run.morsels[..end],
+                self.run.demands.as_deref().map(|demands| &demands[..end]),
             ),
             priority,
         );
@@ -645,12 +677,70 @@ impl Scheduler {
         morsel.stats
     }
 
-    fn complete(&self, index: usize, batch: Option<ArrayRef>) {
-        if let Some(batch) = batch {
-            self.results.lock().push((index, batch));
+    fn complete(self: &Arc<Self>, index: usize, batch: Option<ArrayRef>) {
+        match &self.run.completion {
+            Some(sink) => sink(index, batch),
+            None => {
+                if let Some(batch) = batch {
+                    self.results.lock().push((index, batch));
+                }
+            }
         }
+        let completed = self.completed.fetch_add(1, Ordering::AcqRel) + 1;
         if self.remaining.fetch_sub(1, Ordering::AcqRel) == 1 {
             self.stop();
+            return;
+        }
+        self.refill_lookahead(completed);
+    }
+
+    /// Keep the lookahead window ahead of the active workers on filtered scans so background
+    /// reads of later morsels overlap the current morsels' execution and coalesce together.
+    fn refill_lookahead(self: &Arc<Self>, completed: usize) {
+        if !self.lookahead_enabled {
+            return;
+        }
+        let target = (completed + self.workers.saturating_mul(2) + self.run.lookahead_morsels)
+            .min(self.run.morsels.len());
+        let start = self.lookahead_cursor.load(Ordering::Acquire);
+        if target <= start
+            || self
+                .lookahead_cursor
+                .compare_exchange(start, target, Ordering::AcqRel, Ordering::Acquire)
+                .is_err()
+        {
+            return;
+        }
+        self.submit_lookahead_window(start, target);
+    }
+
+    fn submit_lookahead_window(self: &Arc<Self>, start: usize, end: usize) {
+        const BATCH_READS: usize = 64;
+        if start >= end {
+            return;
+        }
+        let priority = if self.run.plan.has_filter() {
+            IoPriority::Speculative
+        } else {
+            IoPriority::Required
+        };
+        let keys = self.run.plan.lookahead_keys(
+            &self.run.morsels[start..end],
+            self.run
+                .demands
+                .as_deref()
+                .map(|demands| &demands[start..end]),
+        );
+        let mut reads = self.run.io.register_reads(keys, priority);
+        if self.sort_reads_by_segment {
+            sort_reads_by_segment(&mut reads);
+        }
+        self.lookahead_requests
+            .fetch_add(reads.len() as u64, Ordering::Relaxed);
+        for batch in reads.chunks(BATCH_READS) {
+            let submitted = self.submit_reads_now(batch.to_vec());
+            self.lookahead_batches
+                .fetch_add(submitted, Ordering::Relaxed);
         }
     }
 
@@ -911,7 +1001,25 @@ impl MorselScan {
             threads: 1,
             share_decodes: true,
             observe: false,
+            lookahead_morsels: 0,
+            completion: None,
         }
+    }
+
+    /// Keep this many morsels beyond the active window visible to background I/O on filtered
+    /// scans, refilled as morsels retire. Unfiltered scans already register the whole plan.
+    pub fn with_lookahead_morsels(mut self, morsels: usize) -> Self {
+        self.lookahead_morsels = morsels;
+        self
+    }
+
+    /// Deliver each morsel's output through `sink` as it completes instead of collecting it.
+    pub fn with_completion_sink(
+        mut self,
+        sink: impl Fn(usize, Option<ArrayRef>) + Send + Sync + 'static,
+    ) -> Self {
+        self.completion = Some(Arc::new(sink));
+        self
     }
 
     /// Set the number of driving threads and affinity-owned active morsels.
@@ -1072,6 +1180,7 @@ impl MorselExecutor {
         Ok((batches, stats))
     }
 
+    #[allow(clippy::cognitive_complexity)]
     fn run_timed(&self, scan: &MorselScan) -> VortexResult<(Vec<ArrayRef>, ScanStats, Duration)> {
         if !Arc::ptr_eq(&self.plan, &scan.plan) {
             return Err(vortex_err!(
@@ -1119,6 +1228,8 @@ impl MorselExecutor {
             start,
             observe_timing,
             observe_morsels,
+            lookahead_morsels: scan.lookahead_morsels,
+            completion: scan.completion.clone(),
         });
 
         let scheduler = Scheduler::new(Arc::clone(&run), threads);

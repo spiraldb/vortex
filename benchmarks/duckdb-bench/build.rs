@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-#![expect(clippy::unwrap_used)]
+#![expect(clippy::expect_used)]
 
 /// Adds a dynamic linker runtime path pointing to the DuckDB dylib dir.
 ///
@@ -19,9 +19,11 @@
 /// static lib is not self-contained. This means that it includes symbols which
 /// are not defined as part of the static library.
 fn main() {
-    let duckdb_lib = std::env::var("DUCKDB_LIB_DIR")
-        .expect("DUCKDB_LIB_DIR must point at the DuckDB shared-library directory");
+    // An explicit DUCKDB_LIB_DIR wins; otherwise use the library vortex-duckdb built.
     println!("cargo:rerun-if-env-changed=DUCKDB_LIB_DIR");
+    let duckdb_lib = std::env::var("DUCKDB_LIB_DIR")
+        .or_else(|_| std::env::var("DEP_DUCKDB_LIB_DIR"))
+        .expect("DUCKDB_LIB_DIR or DEP_DUCKDB_LIB_DIR must point at the DuckDB library directory");
     println!("cargo:rustc-link-search=native={duckdb_lib}");
     println!("cargo:rustc-link-lib=dylib=duckdb");
 

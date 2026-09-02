@@ -13,11 +13,9 @@ use std::sync::Arc;
 
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
-use vortex_layout::LayoutRef;
-use vortex_layout::scan::scan_builder::ScanExecutor;
-use vortex_layout::segments::SegmentSource;
-use vortex_morsel::MorselScanExecutor;
-use vortex_morsel_push::PushMorselScanExecutor;
+mod scan_builder;
+
+pub use scan_builder::MorselScanBuilder;
 
 const DEFAULT_THREADS: usize = 4;
 
@@ -25,9 +23,9 @@ const DEFAULT_THREADS: usize = 4;
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum ScanBackend {
     /// The original asynchronous `LayoutReader` implementation.
+    #[default]
     V1,
     /// The optimized recursive pull-morsel implementation.
-    #[default]
     Pull,
     /// The independently imported physical push-morsel implementation.
     Push,
@@ -46,7 +44,7 @@ impl FromStr for ScanBackend {
     }
 }
 
-/// Read [`ScanBackend`] from `VORTEX_SCAN_BACKEND`, defaulting to pull morsels.
+/// Read [`ScanBackend`] from `VORTEX_SCAN_BACKEND`, defaulting to the established V1 path.
 pub fn scan_backend_from_env() -> VortexResult<ScanBackend> {
     match std::env::var("VORTEX_SCAN_BACKEND") {
         Ok(value) => value.parse(),
@@ -100,38 +98,6 @@ impl ScanExecutorOptions {
     }
 }
 
-/// Construct the selected alternative scan executor.
-///
-/// V1 is represented by `None`, leaving [`vortex_layout::scan::scan_builder::ScanBuilder`] on its
-/// original executor path.
-pub fn scan_executor<F>(
-    backend: ScanBackend,
-    source: F,
-    options: &ScanExecutorOptions,
-) -> Option<Arc<dyn ScanExecutor>>
-where
-    F: FnOnce() -> (LayoutRef, Arc<dyn SegmentSource>),
-{
-    match backend {
-        ScanBackend::V1 => None,
-        ScanBackend::Pull => {
-            let (layout, segments) = source();
-            Some(Arc::new(
-                MorselScanExecutor::new(layout, segments).with_threads(options.threads),
-            ))
-        }
-        ScanBackend::Push => {
-            let (layout, segments) = source();
-            let mut executor =
-                PushMorselScanExecutor::new(layout, segments).with_threads(options.threads);
-            if let Some(driver) = &options.external_driver {
-                executor = executor.with_external_threads(Arc::clone(driver));
-            }
-            Some(Arc::new(executor))
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -140,7 +106,6 @@ mod tests {
 
     use super::ScanBackend;
     use super::ScanExecutorOptions;
-    use super::scan_executor;
 
     #[test]
     fn parses_stable_backend_labels() -> VortexResult<()> {
@@ -168,12 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn v1_does_not_resolve_morsel_sources() {
-        let executor = scan_executor(
-            ScanBackend::V1,
-            || panic!("V1 must not resolve morsel-only sources"),
-            &ScanExecutorOptions::default(),
-        );
-        assert!(executor.is_none());
+    fn defaults_to_v1() {
+        assert_eq!(ScanBackend::default(), ScanBackend::V1);
     }
 }

@@ -171,12 +171,13 @@ impl ExecPlan {
     /// An unfiltered dense or exact-demand scan can expose its complete exact set. A filtered scan
     /// exposes two morsels per worker. Known sparse demand is left to mask-aware node planning:
     /// putting its full read set on the serial startup path delays useful CPU work.
-    pub(crate) fn initial_lookahead_keys(
+    /// How many leading morsels the initial lookahead window covers.
+    pub(crate) fn initial_lookahead_len(
         &self,
         morsels: &[Range<u64>],
         demands: Option<&[Mask]>,
         workers: usize,
-    ) -> Vec<IoKey> {
+    ) -> usize {
         debug_assert!(demands.is_none_or(|demands| demands.len() == morsels.len()));
         let NodeSpec::Filter { predicate, .. } = &self.nodes[self.root as usize] else {
             unreachable!("the plan root is always a filter node")
@@ -186,17 +187,24 @@ impl ExecPlan {
                 .iter()
                 .any(|demand| !demand.all_true() && !demand.all_false())
         });
-        let active_len = if sparse_demands {
+        if sparse_demands {
             0
         } else if predicate.is_some() {
             morsels.len().min(workers.saturating_mul(2))
         } else {
             morsels.len()
-        };
-        let active_morsels = &morsels[..active_len];
-        let active_demands = demands.map(|demands| &demands[..active_len]);
+        }
+    }
+
+    /// The stored units any of `morsels` will use, for registering lookahead reads.
+    pub(crate) fn lookahead_keys(
+        &self,
+        morsels: &[Range<u64>],
+        demands: Option<&[Mask]>,
+    ) -> Vec<IoKey> {
+        debug_assert!(demands.is_none_or(|demands| demands.len() == morsels.len()));
         self.flat_uses()
-            .filter(|(_, range)| range_has_demand(range, active_morsels, active_demands))
+            .filter(|(_, range)| range_has_demand(range, morsels, demands))
             .map(|(key, _)| key)
             .collect()
     }

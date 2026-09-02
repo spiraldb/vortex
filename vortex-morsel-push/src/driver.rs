@@ -109,6 +109,8 @@ pub struct MorselScan {
     demand_hints: DemandHintDelivery,
     completion: Option<CompletionSink>,
     sparse_morsels: bool,
+    /// Issue every source in the lookahead window, not only the first predicate column.
+    eager_lookahead: bool,
     external_driver: Option<ExternalDriver>,
 }
 
@@ -226,6 +228,7 @@ struct WorkerRun {
     output_rows: usize,
     output_bytes: u64,
     demand_hints: DemandHintDelivery,
+    eager_lookahead: bool,
     external_driver: Option<ExternalDriver>,
 }
 
@@ -2190,7 +2193,7 @@ impl Scheduler {
     }
 
     fn issue_batch(&self, reads: &[IoRead]) -> bool {
-        let issued = reads.iter().filter(|read| self.run.io.issue(read)).count();
+        let issued = self.run.io.issue_batch(reads);
         if issued == 0 {
             return false;
         }
@@ -2254,6 +2257,7 @@ impl Scheduler {
                 continue;
             };
             let eager = !filtered
+                || self.run.eager_lookahead
                 || matches!(
                     role,
                     SourceRole::Predicate {
@@ -3491,45 +3495,44 @@ fn activate_pending_sources_into(
             .get_mut(node as usize)
             .and_then(Option::take)
             .ok_or_else(|| vortex_err!("ready push source disappeared"))?;
-        let total = usize::try_from(source.span.end - source.span.start)
-            .map_err(|_| vortex_err!("source span length exceeds usize"))?;
         let rows = if let Some(rows) = source.direct_rows.take() {
             rows
         } else {
             source
                 .parts
                 .sort_unstable_by_key(|(coverage, _)| coverage.start);
-            let mut selected_slices = Vec::new();
-            let mut materialized_slices = Vec::new();
             let mut cursor = source.span.start;
-            for (part, rows) in source.parts.drain(..) {
+            for (part, _) in &source.parts {
                 if part.start != cursor {
                     return Err(vortex_err!("demand updates left a gap at row {cursor}"));
                 }
-                let offset = usize::try_from(part.start - source.span.start)
-                    .map_err(|_| vortex_err!("demand part offset exceeds usize"))?;
-                for (mask, slices) in [
-                    (rows.logical(), &mut selected_slices),
-                    (rows.materialized(), &mut materialized_slices),
-                ] {
-                    match mask.slices() {
-                        vortex_mask::AllOr::All => {
-                            slices.push((offset, offset + mask.len()));
-                        }
-                        vortex_mask::AllOr::None => {}
-                        vortex_mask::AllOr::Some(part_slices) => slices.extend(
-                            part_slices
-                                .iter()
-                                .map(|(start, end)| (offset + start, offset + end)),
-                        ),
-                    }
-                }
                 cursor = part.end;
             }
-            ActivationRows::try_new(
-                vortex_mask::Mask::from_slices(total, selected_slices),
-                vortex_mask::Mask::from_slices(total, materialized_slices),
-            )?
+            if cursor != source.span.end {
+                return Err(vortex_err!(
+                    "demand updates stop at row {cursor}, before the source span ends at {}",
+                    source.span.end
+                ));
+            }
+            // Join the parts' masks directly. Consecutive slices of one demand mask are
+            // recovered without copying, and anything else is a bit-buffer append, rather than
+            // re-deriving slice lists and rebuilding every run bit by bit.
+            let selected =
+                vortex_mask::Mask::concat(source.parts.iter().map(|(_, rows)| rows.logical()))?;
+            let exact = source
+                .parts
+                .iter()
+                .all(|(_, rows)| rows.logical().true_count() == rows.materialized().true_count());
+            let rows = if exact {
+                ActivationRows::selected(selected)
+            } else {
+                let materialized = vortex_mask::Mask::concat(
+                    source.parts.iter().map(|(_, rows)| rows.materialized()),
+                )?;
+                ActivationRows::try_new(selected, materialized)?
+            };
+            source.parts.clear();
+            rows
         };
         ready.push((node, source.span, rows));
         let pooled = scratch
@@ -3573,8 +3576,19 @@ impl MorselScan {
             demand_hints: DemandHintDelivery::Immediate,
             completion: None,
             sparse_morsels: false,
+            eager_lookahead: false,
             external_driver: None,
         }
+    }
+
+    /// Issue every source of the lookahead window as background I/O instead of deferring
+    /// non-leading predicate and projection columns until a morsel's mask proves demand.
+    ///
+    /// Engines that already read whole row groups gain coalesced, overlapped reads; the deferral
+    /// only pays off when entire morsels are eliminated by the leading conjunct.
+    pub fn with_eager_lookahead(mut self, eager: bool) -> Self {
+        self.eager_lookahead = eager;
+        self
     }
 
     /// Set the number of driving threads and affinity-owned active morsels.
@@ -3746,6 +3760,7 @@ impl MorselScan {
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
             demand_hints: self.demand_hints,
+            eager_lookahead: self.eager_lookahead,
             external_driver: self.external_driver.clone(),
         });
         let (scheduler, signals) = Scheduler::new(Arc::clone(&run), 1);
@@ -3847,6 +3862,7 @@ impl MorselScan {
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
             demand_hints: self.demand_hints,
+            eager_lookahead: self.eager_lookahead,
             external_driver: self.external_driver.clone(),
         });
 
