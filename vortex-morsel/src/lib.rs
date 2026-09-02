@@ -71,6 +71,7 @@ pub use build::build_plan_for_ranges;
 pub use build::natural_morsels_for;
 pub use driver::MorselExecutor;
 pub use driver::MorselScan;
+pub use driver::ScanCancellation;
 pub use driver::morsels;
 pub use executor::MorselScanExecutor;
 pub use io::IoCompletions;

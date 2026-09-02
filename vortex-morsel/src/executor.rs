@@ -5,7 +5,7 @@
 
 use std::ops::Range;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 use futures::channel::oneshot;
@@ -29,6 +29,7 @@ use crate::ExecPlan;
 use crate::MorselExecutor;
 use crate::MorselScan;
 use crate::build_plan;
+use crate::driver::ScanCancellation;
 use crate::morsels;
 use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
@@ -108,6 +109,10 @@ impl MorselScanExecutor {
     }
 
     /// Build independently awaitable output tasks without constructing a layout reader.
+    ///
+    /// `limit` is honoured exactly on unfiltered scans: morsels past it are never read and the
+    /// last one is capped. A filtered scan cannot know where the limit falls, so it returns every
+    /// matching row and the caller trims. Dropping every returned future stops the scan.
     #[expect(clippy::too_many_arguments)]
     pub fn build(
         &self,
@@ -122,25 +127,33 @@ impl MorselScanExecutor {
         if row_offset != 0 {
             vortex_bail!("the morsel scan executor does not support row offsets");
         }
+        if limit == Some(0) {
+            return Ok(Vec::new());
+        }
 
         let plan = self.plan(&projection, filter.as_ref())?;
         let full_range = row_range.unwrap_or_else(|| 0..plan.row_count());
         let mut demands =
             selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
         // Without a filter every selected row is an output row, so the morsels past the limit
-        // can be dropped before any I/O. A filtered scan cannot know where the limit falls.
+        // can be dropped before any I/O and the last one capped exactly. A filtered scan cannot
+        // know where the limit falls.
+        let mut row_caps = None;
         if let Some(limit) = limit
             && filter.is_none()
         {
-            let mut rows = 0u64;
-            let keep = demands
-                .iter()
-                .position(|(_, demand)| {
-                    rows += demand.true_count() as u64;
-                    rows >= limit
-                })
-                .map_or(demands.len(), |index| index + 1);
-            demands.truncate(keep);
+            let mut remaining = limit;
+            let mut caps = Vec::with_capacity(demands.len());
+            for (_, demand) in &demands {
+                if remaining == 0 {
+                    break;
+                }
+                let rows = demand.true_count() as u64;
+                caps.push(usize::try_from(rows.min(remaining)).unwrap_or(usize::MAX));
+                remaining = remaining.saturating_sub(rows);
+            }
+            demands.truncate(caps.len());
+            row_caps = Some(caps);
         }
         if demands.is_empty() {
             return Ok(Vec::new());
@@ -148,12 +161,21 @@ impl MorselScanExecutor {
 
         // One output future per morsel, completed by the scan as soon as that morsel retires, so
         // the engine can consume and parallelize over morsels instead of one whole-file result.
+        // Each future carries a guard; when the last guard drops, whether because its future was
+        // consumed or discarded, there is nobody left to deliver to and the scan is cancelled.
+        let cancellation = ScanCancellation::new();
+        let undelivered = Arc::new(AtomicUsize::new(demands.len()));
         let mut senders = Vec::with_capacity(demands.len());
         let mut outputs = Vec::with_capacity(demands.len());
         for _ in 0..demands.len() {
             let (sender, receiver) = oneshot::channel();
             senders.push(Mutex::new(Some(sender)));
+            let guard = DeliveryGuard {
+                undelivered: Arc::clone(&undelivered),
+                cancellation: Arc::clone(&cancellation),
+            };
             outputs.push(Box::pin(async move {
+                let _guard = guard;
                 receiver
                     .await
                     .map_err(|_| vortex_err!("morsel scan coordinator stopped"))?
@@ -161,9 +183,6 @@ impl MorselScanExecutor {
                 as BoxFuture<'static, VortexResult<Option<ArrayRef>>>);
         }
         let senders: Arc<[OutputSender]> = Arc::from(senders);
-        // Once every consumer has dropped its future there is nobody left to deliver to.
-        let cancel = Arc::new(AtomicBool::new(false));
-        let cancel_flag = Arc::clone(&cancel);
 
         let driver = SegmentSourceDriver::new(Arc::clone(&self.segments));
         let handle = session.handle();
@@ -180,7 +199,7 @@ impl MorselScanExecutor {
                         let scan = MorselScan::new(plan, session)
                             .with_threads(threads)
                             .with_lookahead_morsels(lookahead_morsels)
-                            .with_cancel_flag(cancel_flag);
+                            .with_cancellation(cancellation);
                         let scan = driver.connect(scan, &driver_handle)?;
                         // All-true demands are a dense scan; keep them off the sparse
                         // random-access path, which localizes I/O polling per worker.
@@ -190,18 +209,16 @@ impl MorselScanExecutor {
                             scan.with_morsel_demands(demands)?
                         };
                         let scan = scan.with_completion_sink(move |index, batch| {
-                            if let Some(sender) = sink_senders[index].lock().take() {
-                                drop(sender.send(Ok(batch)));
-                            }
-                            let abandoned = sink_senders.iter().all(|sender| {
-                                sender
-                                    .lock()
-                                    .as_ref()
-                                    .is_none_or(oneshot::Sender::is_canceled)
-                            });
-                            if abandoned {
-                                cancel.store(true, Ordering::Release);
-                            }
+                            let Some(sender) = sink_senders[index].lock().take() else {
+                                return;
+                            };
+                            let batch = match (batch, row_caps.as_ref().map(|caps| caps[index])) {
+                                (Some(batch), Some(cap)) if batch.len() > cap => {
+                                    batch.slice(0..cap).map(Some)
+                                }
+                                (batch, _) => Ok(batch),
+                            };
+                            drop(sender.send(batch));
                         });
                         executor.run(&scan).map(|_| ())
                     })
@@ -265,6 +282,20 @@ fn selected_morsels(
             (!matches!(mask.slices(), AllOr::None)).then_some((range, mask))
         })
         .collect()
+}
+
+/// Cancels the scan when the last output future is consumed or dropped.
+struct DeliveryGuard {
+    undelivered: Arc<AtomicUsize>,
+    cancellation: Arc<ScanCancellation>,
+}
+
+impl Drop for DeliveryGuard {
+    fn drop(&mut self) {
+        if self.undelivered.fetch_sub(1, Ordering::AcqRel) == 1 {
+            self.cancellation.cancel();
+        }
+    }
 }
 
 fn unbind(expr: &BoundExpression) -> VortexResult<Expression> {

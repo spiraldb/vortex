@@ -12,6 +12,7 @@ use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::Weak;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
@@ -114,7 +115,48 @@ pub struct MorselScan {
     observe: bool,
     lookahead_morsels: usize,
     completion: Option<CompletionSink>,
-    cancel: Option<Arc<AtomicBool>>,
+    cancellation: Option<Arc<ScanCancellation>>,
+}
+
+/// Stops a scan early once nobody needs its output any more.
+///
+/// Cancelling stops the scheduler: no further morsel is assigned and parked workers are woken so
+/// they can exit. Morsels already executing finish their current step first.
+pub struct ScanCancellation {
+    cancelled: AtomicBool,
+    scheduler: Mutex<Option<Weak<Scheduler>>>,
+}
+
+impl ScanCancellation {
+    /// A cancellation handle not yet attached to a running scan.
+    pub fn new() -> Arc<Self> {
+        Arc::new(Self {
+            cancelled: AtomicBool::new(false),
+            scheduler: Mutex::new(None),
+        })
+    }
+
+    fn install(&self, scheduler: &Arc<Scheduler>) {
+        let mut slot = self.scheduler.lock();
+        if self.cancelled.load(Ordering::Acquire) {
+            scheduler.stop();
+        } else {
+            *slot = Some(Arc::downgrade(scheduler));
+        }
+    }
+
+    /// Stop the scan this handle is attached to, now or as soon as it starts.
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::Release);
+        if let Some(scheduler) = self.scheduler.lock().as_ref().and_then(Weak::upgrade) {
+            scheduler.stop();
+        }
+    }
+
+    /// Whether `cancel` has been called.
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::Acquire)
+    }
 }
 
 /// A reusable worker pool for scans that share one execution plan.
@@ -145,7 +187,7 @@ struct WorkerRun {
     observe_morsels: bool,
     lookahead_morsels: usize,
     completion: Option<CompletionSink>,
-    cancel: Option<Arc<AtomicBool>>,
+    cancellation: Option<Arc<ScanCancellation>>,
 }
 
 #[derive(Clone, Copy)]
@@ -770,9 +812,9 @@ impl<'a> LocalMorsel<'a> {
     fn assign_next(&mut self, scheduler: &Scheduler) -> bool {
         if scheduler
             .run
-            .cancel
+            .cancellation
             .as_ref()
-            .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+            .is_some_and(|cancellation| cancellation.is_cancelled())
         {
             scheduler.stop();
             self.active = false;
@@ -946,7 +988,7 @@ impl MorselScan {
             observe: false,
             lookahead_morsels: 0,
             completion: None,
-            cancel: None,
+            cancellation: None,
         }
     }
 
@@ -997,10 +1039,10 @@ impl MorselScan {
         self
     }
 
-    /// Stop assigning morsels once `flag` is set, for example when every consumer of the output
-    /// has gone away. Morsels already running finish normally.
-    pub fn with_cancel_flag(mut self, flag: Arc<AtomicBool>) -> Self {
-        self.cancel = Some(flag);
+    /// Let `cancellation` stop this scan early, for example when every consumer of the output
+    /// has gone away.
+    pub fn with_cancellation(mut self, cancellation: Arc<ScanCancellation>) -> Self {
+        self.cancellation = Some(cancellation);
         self
     }
 
@@ -1222,10 +1264,13 @@ impl MorselExecutor {
             observe_morsels,
             lookahead_morsels: scan.lookahead_morsels,
             completion: scan.completion.clone(),
-            cancel: scan.cancel.clone(),
+            cancellation: scan.cancellation.clone(),
         });
 
         let scheduler = Scheduler::new(Arc::clone(&run), threads);
+        if let Some(cancellation) = &scan.cancellation {
+            cancellation.install(&scheduler);
+        }
         scheduler.submit_exact_lookahead();
         let setup_time = if observe_timing {
             start.elapsed()

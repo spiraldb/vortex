@@ -239,7 +239,10 @@ row_offset)` returns one future per morsel, completed through a sink as that mor
 caches plans by projection and filter, connects a `SegmentSourceDriver` on the session runtime,
 and runs the scan on a blocking task.
 
-**Rule:** limits and row offsets are rejected here; the builder above handles limits.
+**Rule:** row offsets are rejected. A limit is exact on unfiltered scans, where morsels past it
+are never read and the last one is capped; a filtered scan cannot know where the limit falls, so
+it returns every matching row and `MorselScanBuilder` trims. Dropping every returned future
+cancels the scan.
 
 ### `MorselScanBuilder`, `ScanBackend`, `ScanExecutorOptions` (`vortex-morsel-scan`)
 
@@ -359,7 +362,8 @@ thread (DuckDB) drive morsels itself, ticking its own runtime while it waits.
   and made the executor testable against any demand answerer. The costs: a scan needs an
   answerer, so running one whose demand was never taken is refused; runtime-less callers need a
   thread; `io_waits` now counts reads answered through completions rather than worker poll
-  attempts; a scan stops assigning morsels once every consumer has dropped its output future.
+  attempts; a scan is cancelled, parked workers included, once every consumer has dropped its
+  output future.
 - Polling is promotion in V1's file driver. A driver that polls everything immediately promotes
   everything, which is why the driver windows speculative reads.
 - Several global defaults changed for V1 as well and need their own benchmarks: the file

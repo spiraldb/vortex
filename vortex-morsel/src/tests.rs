@@ -15,6 +15,7 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::sync::mpsc;
 use std::task::Poll;
 use std::task::Waker;
 use std::time::Duration;
@@ -65,7 +66,11 @@ use vortex_layout::session::LayoutSession;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
+use crate::MorselScan;
 use crate::MorselScanExecutor;
+use crate::ScanCancellation;
+use crate::SegmentSourceDriver;
+use crate::build_plan;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
@@ -75,6 +80,7 @@ use crate::harness::Query;
 use crate::harness::assert_same_rows;
 use crate::harness::run_morsel;
 use crate::harness::run_v1;
+use crate::morsels;
 use crate::nodes::ConjunctMode;
 
 fn session() -> VortexSession {
@@ -401,7 +407,7 @@ fn document_misalignment_case() -> VortexResult<()> {
     assert_same_rows(&session, &dtype, &left, &v1)?;
 
     // The morsel cut must be the union of both columns' boundaries.
-    let plan = crate::build_plan(
+    let plan = build_plan(
         &fixture.layout,
         &query.projection,
         query.filter.as_ref(),
@@ -1182,7 +1188,7 @@ fn rejects_unsupported_layouts() -> VortexResult<()> {
         .layout
         .slot(1)?
         .expect("the fixture root has a first field");
-    let err = crate::build_plan(
+    let err = build_plan(
         &column,
         &select(vec!["a"], root()),
         None,
@@ -1206,7 +1212,7 @@ fn v1_dtype(layout: &LayoutRef, query: &Query) -> VortexResult<DType> {
 fn fixture_is_actually_misaligned() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
-    let plan = crate::build_plan(
+    let plan = build_plan(
         &fixture.layout,
         &select(vec!["a", "b", "c"], root()),
         None,
@@ -1218,5 +1224,100 @@ fn fixture_is_actually_misaligned() -> VortexResult<()> {
         "expected the union of three chunkings, got {:?}",
         plan.natural_splits()
     );
+    Ok(())
+}
+
+/// An unfiltered limit never reads the morsels past it and returns exactly the limit.
+#[rstest]
+fn unfiltered_limit_reads_only_the_morsels_it_needs() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let projection = select(vec!["a", "b"], root()).bind(fixture.layout.dtype())?;
+    let layout = Arc::clone(&fixture.layout);
+    let segments = Arc::clone(&fixture.segments);
+
+    let (all_tasks, limited_tasks, rows) = block_on(move |handle| async move {
+        let session = session.with_handle(handle);
+        let executor = MorselScanExecutor::new(layout, segments)
+            .with_threads(2)
+            .with_target_rows(64);
+        let all_tasks = executor
+            .build(
+                session.clone(),
+                projection.clone(),
+                None,
+                None,
+                Selection::All,
+                None,
+                0,
+            )?
+            .len();
+        let tasks = executor.build(
+            session,
+            projection,
+            None,
+            None,
+            Selection::All,
+            Some(100),
+            0,
+        )?;
+        let limited_tasks = tasks.len();
+        let mut rows = 0;
+        for task in tasks {
+            if let Some(batch) = task.await? {
+                rows += batch.len();
+            }
+        }
+        VortexResult::Ok((all_tasks, limited_tasks, rows))
+    })?;
+
+    assert!(limited_tasks < all_tasks);
+    assert_eq!(rows, 100);
+    Ok(())
+}
+
+struct NeverReadySource;
+
+impl SegmentSource for NeverReadySource {
+    fn request(&self, _id: SegmentId) -> SegmentFuture {
+        futures::future::pending().boxed()
+    }
+
+    fn prefers_background_reads(&self) -> bool {
+        true
+    }
+}
+
+/// Cancelling a scan whose reads never complete wakes its parked workers and ends the run.
+#[rstest]
+fn cancelling_a_stalled_scan_releases_its_workers() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let plan = Arc::new(build_plan(
+        &fixture.layout,
+        &select(vec!["a", "b", "c"], root()),
+        None,
+        ConjunctMode::Cascade,
+    )?);
+    let cut = morsels(&plan, 0);
+    let cancellation = ScanCancellation::new();
+    let scan = MorselScan::new(plan, session)
+        .with_threads(2)
+        .with_morsels(cut)
+        .with_share_decodes(false)
+        .with_cancellation(Arc::clone(&cancellation));
+    let scan = SegmentSourceDriver::new(Arc::new(NeverReadySource)).connect_on_thread(scan)?;
+
+    let (done_tx, done_rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        drop(done_tx.send(scan.run().map(|(batches, _)| batches.len())));
+    });
+    std::thread::sleep(Duration::from_millis(50));
+    cancellation.cancel();
+
+    let batches = done_rx
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|_| vortex_err!("the cancelled scan did not stop"))??;
+    assert_eq!(batches, 0);
     Ok(())
 }
