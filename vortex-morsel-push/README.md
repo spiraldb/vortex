@@ -6,8 +6,13 @@ An experimental morsel-driven scan executor for Vortex layouts — the P1 spine 
 A scan is cut into *morsels* (contiguous root row ranges). Each morsel is driven by a tree of
 stateful `ExecNode` state machines, inline and depth-first, by one affinity-owning worker.
 `next_plan` *names* reads by registering keyed uses against the IO plane. `execute` can try a
-source-provided non-blocking inline read for a required ticket; on a miss it suspends on that exact
-ticket while workers service the background IO queues.
+caller-provided non-blocking probe for a required ticket; on a miss the read is handed out as
+required demand and the morsel suspends on that exact ticket until it is completed.
+
+The executor never touches storage. Reads the scheduler wants started leave a `MorselScan` as an
+`IoDemand` stream (`MorselScan::take_io`) and are answered through `IoCompletions`;
+`SegmentSourceDriver` serves that demand from any `SegmentSource` as one task on the caller's
+runtime or a dedicated thread.
 
 The crate is a prototype and is not part of the public API. It supports flat, chunked and
 struct layouts only; anything else is a build error rather than a fallback.

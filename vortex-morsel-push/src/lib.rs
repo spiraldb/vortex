@@ -20,16 +20,18 @@
 //! * [`ExecNode::execute`] — value production. When a named required cell is still unissued,
 //!   [`ExecCx::ready`](node::ExecCx::ready) may attempt one source-provided read guaranteed not to
 //!   wait on storage (Linux files use `preadv2(RWF_NOWAIT)`). A hit is consumed inline. A miss
-//!   suspends on the exact ticket and the scheduler submits its batch to the shared urgent IO
-//!   queue. Execution never polls a background future or waits for IO on the worker thread.
+//!   hands the read out as required demand and suspends on the exact ticket. Execution never
+//!   polls a storage future or waits for IO on the worker thread.
 //! * Typed [`ExecNode`] push methods — leaf-driven value production through compiled physical
 //!   pipelines on the owning worker. Authoritative [`ActivationTarget`] decisions are distinct
 //!   from optional [`DemandTarget`] I/O hints.
 //!
 //! Compared to the V1 `LayoutReader` path this executor differs in two measurable ways:
 //!
-//! 1. There is no async task per evaluation. Planning, IO polling, and execution continuations
-//!    share one bounded worker pool; pending IO never parks a worker.
+//! 1. There is no async task per evaluation. Planning and execution continuations share one
+//!    bounded worker pool. The executor never touches storage: reads leave a [`MorselScan`] as
+//!    [`IoDemand`](io::IoDemand) on a stream taken with [`MorselScan::take_io`] and are answered
+//!    through [`IoCompletions`](io::IoCompletions), for example by [`SegmentSourceDriver`].
 //! 2. Each worker owns one arena and one active morsel. Arenas never migrate, and emission order
 //!    is restored by morsel index.
 //! 3. [`MorselScan::into_stream`] exposes ordered bounded output with explicit cancellation;
@@ -55,6 +57,7 @@ pub mod harness;
 pub mod io;
 pub mod node;
 pub mod nodes;
+pub mod source;
 pub mod stats;
 #[cfg(any(test, feature = "_test-harness"))]
 pub mod tpch;
@@ -70,6 +73,13 @@ pub use driver::MorselScan;
 pub use driver::MorselStream;
 pub use driver::morsels;
 pub use executor::PushMorselScanExecutor;
+pub use io::IoCompletions;
+pub use io::IoDemand;
+pub use io::IoDemandStream;
+pub use io::IoKey;
+pub use io::IoPriority;
+pub use io::IoRequest;
+pub use io::NowaitProbe;
 pub use node::ActivationRows;
 pub use node::ActivationTarget;
 pub use node::DemandTarget;
@@ -87,6 +97,7 @@ pub use node::PushCx;
 pub use node::Route;
 pub use node::Value;
 pub use node::ValueBatch;
+pub use source::SegmentSourceDriver;
 pub use stats::ScanStats;
 
 #[cfg(test)]

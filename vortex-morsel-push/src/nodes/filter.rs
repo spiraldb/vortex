@@ -694,9 +694,7 @@ fn end_input(
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
-    use std::sync::Arc;
 
-    use futures::FutureExt;
     use vortex_array::Canonical;
     use vortex_array::IntoArray;
     use vortex_array::arrays::PrimitiveArray;
@@ -707,9 +705,6 @@ mod tests {
     use vortex_buffer::BitBuffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
-    use vortex_layout::segments::SegmentFuture;
-    use vortex_layout::segments::SegmentId;
-    use vortex_layout::segments::SegmentSource;
     use vortex_mask::Mask;
     use vortex_session::VortexSession;
 
@@ -730,14 +725,6 @@ mod tests {
     use crate::node::Value;
     use crate::nodes::PushBatching;
     use crate::stats::ScanStats;
-
-    struct NoIo;
-
-    impl SegmentSource for NoIo {
-        fn request(&self, _id: SegmentId) -> SegmentFuture {
-            async { Err(vortex_err!("unexpected test IO")) }.boxed()
-        }
-    }
 
     #[test]
     fn projection_selection_requires_equal_aligned_and_misaligned_masks() {
@@ -821,7 +808,7 @@ mod tests {
         let mut filter = FilterExec::new(None, 0, expression, dtype);
         filter.reset(0..0);
 
-        let io = IoPlane::new(IoService::new(Arc::new(NoIo)));
+        let io = IoPlane::new(IoService::new().0);
         let cells = SharedCells::disabled();
         let session = VortexSession::empty();
         let mut stats = ScanStats::default();
@@ -843,7 +830,7 @@ mod tests {
             FilterExec::new_with_push_batching(Some(0), 1, expression, dtype, PushBatching::Morsel);
         filter.reset(0..4);
 
-        let io = IoPlane::new(IoService::new(Arc::new(NoIo)));
+        let io = IoPlane::new(IoService::new().0);
         let cells = SharedCells::disabled();
         let session = VortexSession::empty();
         let mut stats = ScanStats::default();
@@ -918,7 +905,7 @@ mod tests {
         );
         filter.reset(0..3);
 
-        let io = IoPlane::new(IoService::new(Arc::new(NoIo)));
+        let io = IoPlane::new(IoService::new().0);
         let cells = SharedCells::disabled();
         let session = VortexSession::empty();
         let mut stats = ScanStats::default();
@@ -970,7 +957,7 @@ mod tests {
         );
         filter.reset(10..14);
 
-        let io = IoPlane::new(IoService::new(Arc::new(NoIo)));
+        let io = IoPlane::new(IoService::new().0);
         let cells = SharedCells::disabled();
         let session = VortexSession::empty();
         let mut stats = ScanStats::default();

@@ -18,6 +18,7 @@ use vortex::expr::root;
 use vortex::expr::select;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::WriteOptionsSessionExt;
+use vortex::io::session::RuntimeSessionExt;
 use vortex::utils::parallelism::get_available_parallelism;
 use vortex_bench::Format;
 use vortex_bench::SESSION;
@@ -25,6 +26,7 @@ use vortex_bench::compress::Compressor;
 use vortex_bench::compress::read_projection;
 use vortex_bench::conversions::parquet_to_vortex_chunks;
 use vortex_morsel::MorselScan;
+use vortex_morsel::SegmentSourceDriver;
 use vortex_morsel::build_plan;
 use vortex_morsel::morsels;
 use vortex_morsel::nodes::ConjunctMode;
@@ -89,10 +91,12 @@ impl Compressor for VortexCompressor {
         )?);
         let cut = morsels(&plan, MORSEL_ROWS);
         let threads = get_available_parallelism().unwrap_or(1);
-        let (batches, _) = MorselScan::new(plan, file.segment_source(), SESSION.clone())
+        let scan = MorselScan::new(plan, SESSION.clone())
             .with_threads(threads)
-            .with_morsels(cut)
-            .run()?;
+            .with_morsels(cut);
+        let scan =
+            SegmentSourceDriver::new(file.segment_source()).connect(scan, &SESSION.handle())?;
+        let (batches, _) = scan.run()?;
 
         let mut ctx = SESSION.create_execution_ctx();
         for batch in batches {

@@ -35,6 +35,7 @@ use crate::driver::morsels;
 use crate::io::IoService;
 use crate::node::ExecutionMode;
 use crate::nodes::ConjunctMode;
+use crate::source::SegmentSourceDriver;
 
 type PlanCacheKey = (String, Option<String>, ConjunctMode);
 
@@ -173,15 +174,16 @@ impl PushMorselScanExecutor {
             return Ok(outputs);
         }
 
-        let segments = Arc::clone(&self.segments);
+        let driver = SegmentSourceDriver::new(Arc::clone(&self.segments));
         let handle = session.handle();
         let coordinator_handle = handle.clone();
+        let driver_handle = handle.clone();
         let threads = ranges.len().min(self.threads);
         handle
             .spawn(async move {
                 let result = coordinator_handle
                     .spawn_blocking(move || {
-                        MorselScan::new(plan, segments, session)
+                        let scan = MorselScan::new(plan, session)
                             .with_threads(threads)
                             .with_morsels(ranges)
                             .with_sparse_morsels(true)
@@ -190,9 +192,8 @@ impl PushMorselScanExecutor {
                             .with_execution_mode(ExecutionMode::Push)
                             .with_completion_sink(move |index, batch| {
                                 targets[index].complete(batch);
-                            })
-                            .run()
-                            .map(|_| ())
+                            });
+                        driver.connect(scan, &driver_handle)?.run().map(|_| ())
                     })
                     .await;
                 if let Err(err) = result {
@@ -243,11 +244,19 @@ fn build_external_outputs(
     morsels: Vec<SelectedMorsel>,
     driver: Arc<dyn Fn() + Send + Sync>,
 ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
-    let io = IoService::new(Arc::clone(&segments));
+    // One I/O service, and therefore one demand stream, spans every morsel of this file so
+    // reads dedupe across them. The engine's threads advance the runtime the driver runs on.
+    let source = SegmentSourceDriver::new(segments);
+    let (io, demand) = IoService::new();
+    io.set_background_reads(source.prefers_background_reads());
+    io.set_probe(Some(source.nowait_probe()));
+    session
+        .handle()
+        .spawn(source.drive(demand, io.completions()))
+        .detach();
     let mut outputs = Vec::with_capacity(morsels.len());
     for morsel in morsels {
         let plan = Arc::clone(&plan);
-        let segments = Arc::clone(&segments);
         let io = Arc::clone(&io);
         let driver = Arc::clone(&driver);
         let session = session.clone();
@@ -256,7 +265,7 @@ fn build_external_outputs(
             if ranges.is_empty() {
                 return Ok(None);
             }
-            let (batches, _) = MorselScan::new_with_morsels(plan, segments, session, ranges)
+            let (batches, _) = MorselScan::new_with_morsels(plan, session, ranges)
                 .with_io_service(io)
                 .with_external_driver(driver)
                 .with_share_decodes(false)

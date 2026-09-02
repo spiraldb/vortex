@@ -32,7 +32,6 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_error::vortex_panic;
-use vortex_layout::segments::SegmentSource;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_utils::aliases::hash_map::HashMap;
@@ -41,12 +40,14 @@ use vortex_utils::parallelism::get_available_parallelism;
 use crate::build::ExecPlan;
 use crate::build::cut_morsels;
 use crate::cells::SharedCells;
+use crate::io::IoCompletions;
+use crate::io::IoDemandStream;
 use crate::io::IoKey;
 use crate::io::IoPlane;
 use crate::io::IoPriority;
 use crate::io::IoRead;
-use crate::io::IoReadPoll;
 use crate::io::IoService;
+use crate::io::NowaitProbe;
 use crate::node::Arena;
 use crate::node::ExecPoll;
 use crate::node::PlanPoll;
@@ -103,7 +104,8 @@ fn demanding_morsels(
 /// One configured run of the morsel executor.
 pub struct MorselScan {
     plan: Arc<ExecPlan>,
-    segments: Arc<dyn SegmentSource>,
+    io: Arc<IoService>,
+    demand: Mutex<Option<IoDemandStream>>,
     session: VortexSession,
     morsels: Arc<[Range<u64>]>,
     demands: Option<Arc<[Mask]>>,
@@ -185,9 +187,6 @@ struct Scheduler {
     /// Whether filtered-scan lookahead refills apply; sparse random-access demand opts out.
     lookahead_enabled: bool,
     stopped: AtomicBool,
-    io_bytes: AtomicU64,
-    io_waits: AtomicU64,
-    io_wait_nanos: AtomicU64,
     lookahead_requests: AtomicU64,
     lookahead_batches: AtomicU64,
 }
@@ -337,7 +336,7 @@ impl Scheduler {
         let sort_reads_by_segment = should_sort_reads_by_segment(run.demands.as_deref());
         let lookahead_enabled = run.lookahead_morsels > 0
             && run.plan.has_filter()
-            && run.io.prefers_background_reads()
+            && run.io.background_reads()
             && run
                 .plan
                 .initial_lookahead_len(&run.morsels, run.demands.as_deref(), workers)
@@ -358,9 +357,6 @@ impl Scheduler {
             completed: AtomicUsize::new(0),
             lookahead_enabled,
             stopped: AtomicBool::new(false),
-            io_bytes: AtomicU64::new(0),
-            io_waits: AtomicU64::new(0),
-            io_wait_nanos: AtomicU64::new(0),
             lookahead_requests: AtomicU64::new(0),
             lookahead_batches: AtomicU64::new(0),
         });
@@ -377,11 +373,10 @@ impl Scheduler {
         let (required, speculative): (Vec<_>, Vec<_>) = reads
             .into_iter()
             .partition(|read| read.priority() == IoPriority::Required);
-        self.run.io.issue_batch(&speculative, true);
-        let eager_required =
-            self.run.io.prefers_background_reads() || self.run.io.nowait_unsupported();
+        self.run.io.start(&speculative);
+        let eager_required = self.run.io.background_reads() || self.run.io.probe_unsupported();
         if eager_required {
-            self.run.io.issue_batch(&required, true);
+            self.run.io.start(&required);
         }
         u64::from(self.submit_io_batch(required)) + u64::from(self.submit_io_batch(speculative))
     }
@@ -457,7 +452,7 @@ impl Scheduler {
     fn submit_exact_lookahead(self: &Arc<Self>) {
         const BATCH_READS: usize = 64;
 
-        if !self.run.io.prefers_background_reads() {
+        if !self.run.io.background_reads() {
             return;
         }
 
@@ -507,13 +502,7 @@ impl Scheduler {
         true
     }
 
-    fn wait(
-        self: &Arc<Self>,
-        worker: usize,
-        morsel: usize,
-        waits: &WaitSet,
-        io: &IoPlane,
-    ) -> VortexResult<()> {
+    fn wait(self: &Arc<Self>, morsel: usize, waits: &WaitSet, io: &IoPlane) -> VortexResult<()> {
         if waits.is_empty() {
             return Err(vortex_err!(
                 "execution blocked without naming an exact dependency"
@@ -530,7 +519,7 @@ impl Scheduler {
                 .io
                 .read(*ticket)
                 .ok_or_else(|| vortex_err!("blocked on an unknown IO ticket"))?;
-            read.promote();
+            self.run.io.promote(&read);
             targets.push(read);
         }
         if self.run.demands.is_none() || self.workers == 1 {
@@ -540,31 +529,18 @@ impl Scheduler {
                 }
             }
         }
+        // A demand-driven source only sees a read once it is handed out. Everything registered
+        // so far is started here, so the storage layer can order it around the exact targets.
         let mut reads: Vec<_> = self.reads.lock().values().cloned().collect();
         for target in &targets {
             if !reads.iter().any(|read| read.key() == target.key()) {
                 reads.push(target.clone());
             }
         }
-        for read in &reads {
-            self.run.io.issue(read, false);
-        }
+        self.run.io.start(&reads);
 
-        // Dense scans benefit from harvesting scan-wide lookahead while a worker is already
-        // waiting. Sparse-demand scans keep polling local to their exact/required set so random
-        // access does not walk or promote unrelated morsels.
-        let poll_reads = if self.run.demands.is_some() && self.workers > 1 {
-            targets.clone()
-        } else {
-            reads
-        };
-        let use_poll_ownership = self.run.demands.is_none() && self.workers > 1;
-        let mut owned = Vec::<IoRead>::new();
         futures::executor::block_on(poll_fn(|cx| {
             if self.stopped.load(Ordering::Acquire) {
-                for read in owned.drain(..) {
-                    read.release_poll(worker);
-                }
                 return Poll::Ready(Ok(()));
             }
             {
@@ -574,67 +550,20 @@ impl Scheduler {
                 }
             }
             if self.stopped.load(Ordering::Acquire) {
-                for read in owned.drain(..) {
-                    read.release_poll(worker);
-                }
                 return Poll::Ready(Ok(()));
             }
 
             let mut target_pending = false;
             for target in &targets {
+                if let Some(error) = target.failure() {
+                    return Poll::Ready(Err(vortex_err!("segment read failed: {error}")));
+                }
                 target_pending |= target.park(cx.waker().clone());
             }
-            if !target_pending {
-                for read in owned.drain(..) {
-                    read.release_poll(worker);
-                }
-                return Poll::Ready(Ok(()));
-            }
-
-            for read in &poll_reads {
-                if use_poll_ownership && !read.claim_poll(worker) {
-                    continue;
-                }
-                if use_poll_ownership && !owned.iter().any(|owned| owned.key() == read.key()) {
-                    owned.push(read.clone());
-                }
-                match read.poll(cx.waker()) {
-                    Ok(IoReadPoll::Pending) => {
-                        self.io_waits.fetch_add(1, Ordering::Relaxed);
-                    }
-                    Ok(IoReadPoll::Ready { bytes, wait_time }) => {
-                        if use_poll_ownership {
-                            read.release_poll(worker);
-                            owned.retain(|owned| owned.key() != read.key());
-                        }
-                        self.io_bytes.fetch_add(bytes as u64, Ordering::Relaxed);
-                        self.io_wait_nanos.fetch_add(
-                            u64::try_from(wait_time.as_nanos()).unwrap_or(u64::MAX),
-                            Ordering::Relaxed,
-                        );
-                    }
-                    Ok(IoReadPoll::AlreadyReady) => {
-                        if use_poll_ownership {
-                            read.release_poll(worker);
-                            owned.retain(|owned| owned.key() != read.key());
-                        }
-                    }
-                    Err(err) => {
-                        for read in owned.drain(..) {
-                            read.release_poll(worker);
-                        }
-                        return Poll::Ready(Err(err));
-                    }
-                }
-            }
-
-            if targets.iter().all(IoRead::is_ready) {
-                for read in owned.drain(..) {
-                    read.release_poll(worker);
-                }
-                Poll::Ready(Ok(()))
-            } else {
+            if target_pending {
                 Poll::Pending
+            } else {
+                Poll::Ready(Ok(()))
             }
         }))
     }
@@ -655,7 +584,7 @@ impl Scheduler {
                 Ok(LocalPoll::Runnable) => {}
                 Ok(LocalPoll::Blocked(waits)) => {
                     let wait_start = self.run.observe_timing.then(Instant::now);
-                    let result = self.wait(worker, morsel.index, &waits, &morsel.io);
+                    let result = self.wait(morsel.index, &waits, &morsel.io);
                     if let Some(wait_start) = wait_start {
                         morsel.stats.worker_io_wait_time += wait_start.elapsed();
                     }
@@ -773,11 +702,11 @@ impl Scheduler {
         for worker in worker_stats {
             stats.merge(&worker);
         }
-        stats.io_bytes += self.io_bytes.load(Ordering::Relaxed);
+        stats.io_bytes += self.run.io.io_bytes();
         stats.io_requests += self.lookahead_requests.load(Ordering::Relaxed);
         stats.io_batches += self.lookahead_batches.load(Ordering::Relaxed);
-        stats.io_waits = self.io_waits.load(Ordering::Relaxed);
-        stats.io_wait_time = Duration::from_nanos(self.io_wait_nanos.load(Ordering::Relaxed));
+        stats.io_waits = self.run.io.io_waits();
+        stats.io_wait_time = self.run.io.io_wait_time();
 
         let mut results = std::mem::take(&mut *self.results.lock());
         results.sort_unstable_by_key(|(index, _)| *index);
@@ -986,15 +915,17 @@ impl<'a> LocalMorsel<'a> {
 
 impl MorselScan {
     /// Configure a scan over a built plan.
-    pub fn new(
-        plan: Arc<ExecPlan>,
-        segments: Arc<dyn SegmentSource>,
-        session: VortexSession,
-    ) -> Self {
+    ///
+    /// The scan performs no I/O of its own. Take its demand stream with [`Self::take_io`] and
+    /// answer it from outside plan execution, for example through
+    /// [`SegmentSourceDriver`](crate::source::SegmentSourceDriver).
+    pub fn new(plan: Arc<ExecPlan>, session: VortexSession) -> Self {
         let morsels = Arc::from(morsels(&plan, 0));
+        let (io, demand) = IoService::new();
         Self {
             plan,
-            segments,
+            io,
+            demand: Mutex::new(Some(demand)),
             session,
             morsels,
             demands: None,
@@ -1004,6 +935,35 @@ impl MorselScan {
             lookahead_morsels: 0,
             completion: None,
         }
+    }
+
+    /// Take the reads this scan will hand out, and the handle used to answer them.
+    ///
+    /// The stream ends when the scan is dropped. It can be taken once; a scan whose demand is
+    /// never served blocks on its first read.
+    pub fn take_io(&self) -> VortexResult<(IoDemandStream, IoCompletions)> {
+        let demand = self
+            .demand
+            .lock()
+            .take()
+            .ok_or_else(|| vortex_err!("the scan's I/O demand stream was already taken"))?;
+        Ok((demand, self.io.completions()))
+    }
+
+    /// Let execution resolve a read inline when `probe` can prove the bytes are available
+    /// without waiting on storage.
+    pub fn with_nowait_probe(self, probe: NowaitProbe) -> Self {
+        self.io.set_probe(Some(probe));
+        self
+    }
+
+    /// Whether planned reads are handed out ahead of demand.
+    ///
+    /// Storage that overlaps and coalesces I/O wants every planned read early. In-memory sources
+    /// turn this off so execution resolves cells inline through the probe instead.
+    pub fn with_background_reads(self, background: bool) -> Self {
+        self.io.set_background_reads(background);
+        self
     }
 
     /// Keep this many morsels beyond the active window visible to background I/O on filtered
@@ -1222,7 +1182,7 @@ impl MorselExecutor {
             session: scan.session.clone(),
             morsels: Arc::clone(&scan.morsels),
             demands: scan.demands.clone(),
-            io: IoService::new(Arc::clone(&scan.segments)),
+            io: Arc::clone(&scan.io),
             cells,
             dictionary_values: (0..scan.plan.len()).map(|_| OnceLock::new()).collect(),
             start,
@@ -1246,6 +1206,7 @@ impl MorselExecutor {
             ExecutorWorkers::Pool(workers) => workers.run(Arc::clone(&scheduler), threads)?,
         };
         let (batches, mut stats) = scheduler.finish(worker_stats)?;
+        scan.io.clear();
         stats
             .morsel_traces
             .sort_unstable_by_key(|trace| trace.index);

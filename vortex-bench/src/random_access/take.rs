@@ -37,6 +37,7 @@ use vortex::array::stream::ArrayStreamExt;
 use vortex::buffer::Buffer;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::file::VortexFile;
+use vortex::io::session::RuntimeSessionExt;
 use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
 use vortex::utils::aliases::hash_map::HashMap;
 use vortex::utils::parallelism::get_available_parallelism;
@@ -44,6 +45,7 @@ use vortex_mask::Mask;
 use vortex_morsel::ExecPlan;
 use vortex_morsel::MorselExecutor;
 use vortex_morsel::MorselScan;
+use vortex_morsel::SegmentSourceDriver;
 use vortex_morsel::build_plan_for_ranges;
 use vortex_morsel::natural_morsels_for;
 use vortex_morsel::nodes::ConjunctMode;
@@ -624,13 +626,11 @@ impl VortexRandomAccessor {
         }
         let observe =
             std::env::var("VORTEX_RANDOM_ACCESS_MORSEL_OBSERVE").is_ok_and(|value| value == "1");
-        let scan = MorselScan::new(
-            Arc::clone(&plan),
-            self.file.segment_source(),
-            SESSION.clone(),
-        )
-        .with_morsel_demands(selected_morsels)?
-        .with_observability(observe);
+        let scan = MorselScan::new(Arc::clone(&plan), SESSION.clone())
+            .with_morsel_demands(selected_morsels)?
+            .with_observability(observe);
+        let scan = SegmentSourceDriver::new(self.file.segment_source())
+            .connect(scan, &SESSION.handle())?;
         let (batches, stats) = state
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("morsel executor was not initialized"))?

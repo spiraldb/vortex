@@ -17,17 +17,24 @@
 //!   do not read during planning. Planning is budget-bounded and resumable: a node that exhausts
 //!   its quantum yields [`PlanItem::Plan`] and resumes from its own cursor on the next call.
 //! * [`ExecNode::execute`] — value production. When a named required cell is still unissued,
-//!   [`ExecCx::ready`](node::ExecCx::ready) may attempt one source-provided read guaranteed not to
-//!   wait on storage (Linux files use `preadv2(RWF_NOWAIT)`). A hit is consumed inline. A miss
-//!   waits on the exact ticket. The owning worker drives all already-planned futures together
-//!   until that dependency is ready, then resumes the same morsel.
+//!   [`ExecCx::ready`](node::ExecCx::ready) may attempt one caller-provided probe guaranteed not
+//!   to wait on storage (Linux files use `preadv2(RWF_NOWAIT)`). A hit is consumed inline. A
+//!   miss hands the read out as required demand and waits on the exact ticket; the owning worker
+//!   resumes the same morsel once it is completed.
 //!
 //! Compared to the V1 `LayoutReader` path this executor differs in two measurable ways:
 //!
-//! 1. There is no async task per evaluation. Planning, IO waiting, and execution all stay on the
-//!    affinity-owned worker; a blocked worker cannot execute another morsel.
+//! 1. There is no async task per evaluation. Planning and execution stay on the affinity-owned
+//!    worker, which parks while its exact reads are outstanding; a blocked worker cannot execute
+//!    another morsel.
 //! 2. Each worker owns one arena and one active morsel. Arenas never migrate, and emission order
 //!    is restored by morsel index.
+//!
+//! The executor never touches storage. Reads it wants started leave a [`MorselScan`] as
+//! [`IoDemand`](io::IoDemand) on a stream taken with [`MorselScan::take_io`], and whoever owns
+//! storage answers them through [`IoCompletions`](io::IoCompletions); a blocked worker parks on
+//! its exact cells until they are completed. [`SegmentSourceDriver`] serves that demand from any
+//! [`SegmentSource`](vortex_layout::segments::SegmentSource) as one task on the caller's runtime.
 //!
 //! Raw request cells are shared for the lifetime of a scan, deduplicating both pending and
 //! completed segment reads. Decoded chunks use leased shared cells ([`cells::SharedCells`]): a
@@ -51,6 +58,7 @@ pub mod io;
 pub mod io_trace;
 pub mod node;
 pub mod nodes;
+pub mod source;
 pub mod stats;
 #[cfg(any(test, feature = "_test-harness"))]
 pub mod tpch;
@@ -65,6 +73,13 @@ pub use driver::MorselExecutor;
 pub use driver::MorselScan;
 pub use driver::morsels;
 pub use executor::MorselScanExecutor;
+pub use io::IoCompletions;
+pub use io::IoDemand;
+pub use io::IoDemandStream;
+pub use io::IoKey;
+pub use io::IoPriority;
+pub use io::IoRequest;
+pub use io::NowaitProbe;
 pub use node::ExecCx;
 pub use node::ExecNode;
 pub use node::ExecPoll;
@@ -73,6 +88,7 @@ pub use node::PlanItem;
 pub use node::PlanPoll;
 pub use node::Value;
 pub use node::ValueBatch;
+pub use source::SegmentSourceDriver;
 pub use stats::MorselTrace;
 pub use stats::ScanStats;
 

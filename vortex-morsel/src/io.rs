@@ -5,35 +5,34 @@
 //!
 //! Nodes *name* reads during planning: [`PlanCx::register`](crate::PlanCx::register) takes an
 //! [`IoBatch`] of [`IoUse`]s, each keyed to a whole stored unit, and hands back an [`IoTicket`].
-//! Execution may resolve an unissued required ticket through a source-provided non-blocking probe;
-//! otherwise it can only clone an already-ready cell or suspend on that exact ticket.
+//! Execution may resolve an unissued required ticket through a caller-provided non-blocking
+//! probe; otherwise it can only clone an already-ready cell or suspend on that exact ticket.
 //!
-//! A scan owns one [`IoService`], while each affinity-owned morsel has a small [`IoPlane`] that
-//! records only the tickets named by that morsel. The service deduplicates raw reads scan-wide and
-//! a blocked worker polls the relevant planned futures until its exact dependencies are ready.
+//! A scan owns one [`IoService`] but never touches storage. Reads the scheduler wants started
+//! leave the scan as [`IoDemand`] items on a stream, and whoever owns storage answers each one
+//! through [`IoCompletions`]. Each affinity-owned morsel has a small [`IoPlane`] that records only
+//! the tickets named by that morsel; the service deduplicates raw reads scan-wide, and a blocked
+//! worker parks on its exact cells until they are completed.
 
 use std::cell::RefCell;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::Weak;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU8;
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
-use std::task::Context;
-use std::task::Poll;
 use std::task::Waker;
 use std::time::Duration;
 use std::time::Instant;
 
-use futures::FutureExt;
+use futures::channel::mpsc;
 use parking_lot::Mutex;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_layout::segments::ReadAtNowait;
-use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
-use vortex_layout::segments::SegmentSource;
 use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::stats::ScanStats;
@@ -58,7 +57,7 @@ impl IoTicket {
 
 /// Scheduler priority attached by the parent operator while planning a read.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum IoPriority {
+pub enum IoPriority {
     /// Needed to start the next execution phase.
     Required,
     /// Useful lookahead that may finish while required CPU work runs.
@@ -121,13 +120,64 @@ impl FromIterator<IoUse> for IoBatch {
     }
 }
 
+/// One read the scan wants performed, handed out of plan execution.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IoRequest {
+    /// The stored unit to read.
+    pub key: IoKey,
+    /// Whether execution is known to need this read before it can continue.
+    pub priority: IoPriority,
+}
+
+/// What a scan asks of the caller that owns storage.
+#[derive(Debug)]
+pub enum IoDemand {
+    /// Start these reads. One item is one scheduling batch: a storage layer that coalesces
+    /// adjacent ranges should register the whole batch before making any member eligible.
+    Start(Vec<IoRequest>),
+    /// Execution is blocked on this read; finish it ahead of speculative work.
+    Promote(IoKey),
+}
+
+/// The stream of [`IoDemand`] a scan emits. It ends when the scan is dropped.
+pub type IoDemandStream = mpsc::UnboundedReceiver<IoDemand>;
+
+/// A caller-provided probe that resolves a read without waiting on storage.
+pub type NowaitProbe = Arc<dyn Fn(IoKey) -> VortexResult<ReadAtNowait> + Send + Sync>;
+
+/// Answers the reads a scan handed out through its [`IoDemandStream`].
+///
+/// Completions arriving after the scan has been dropped are ignored.
+#[derive(Clone)]
+pub struct IoCompletions {
+    service: Weak<IoService>,
+}
+
+impl IoCompletions {
+    /// Deliver the bytes (or the failure) for one read.
+    ///
+    /// Returns `false` once the scan is gone, so a driver can stop serving it.
+    pub fn complete(&self, key: IoKey, result: VortexResult<BufferHandle>) -> bool {
+        match self.service.upgrade() {
+            Some(service) => {
+                service.complete(key, result);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Whether the scan these completions belong to has been dropped.
+    pub fn is_closed(&self) -> bool {
+        self.service.strong_count() == 0
+    }
+}
+
 enum CellState {
     Unissued,
-    Pending {
-        future: SegmentFuture,
-        wait_started: Option<Instant>,
-    },
+    Requested { started: Instant },
     Ready(BufferHandle),
+    Failed(Arc<str>),
 }
 
 struct IoCell {
@@ -136,31 +186,90 @@ struct IoCell {
     waiters: Mutex<Vec<Waker>>,
     required: AtomicBool,
     submitted: AtomicBool,
-    poll_owner: AtomicUsize,
 }
 
-const NO_POLL_OWNER: usize = usize::MAX;
+impl IoCell {
+    fn priority(&self) -> IoPriority {
+        if self.required.load(Ordering::Acquire) {
+            IoPriority::Required
+        } else {
+            IoPriority::Speculative
+        }
+    }
+
+    fn wake_waiters(&self) {
+        for waiter in std::mem::take(&mut *self.waiters.lock()) {
+            waiter.wake();
+        }
+    }
+}
+
+const PROBE_UNKNOWN: u8 = 0;
+const PROBE_SUPPORTED: u8 = 1;
+const PROBE_UNSUPPORTED: u8 = 2;
 
 /// Scan-wide registry of raw segment requests.
 ///
-/// A segment future is created once per scan. Morsel-local planes hold references to these cells,
-/// so two overlapping morsels share both an in-flight request and its completed bytes.
+/// A cell is created once per key per scan. Morsel-local planes hold references to these cells,
+/// so two overlapping morsels share both an in-flight request and its completed bytes. The
+/// service never performs a read itself: it emits [`IoDemand`] and waits for [`IoCompletions`].
 pub(crate) struct IoService {
-    source: Arc<dyn SegmentSource>,
+    demand: mpsc::UnboundedSender<IoDemand>,
     cells: Mutex<HashMap<IoKey, Arc<IoCell>>>,
-    nowait_support: AtomicU8,
-    prefers_background_reads: bool,
+    probe: Mutex<Option<NowaitProbe>>,
+    probe_support: AtomicU8,
+    background_reads: AtomicBool,
+    io_bytes: AtomicU64,
+    io_waits: AtomicU64,
+    io_wait_nanos: AtomicU64,
 }
 
 impl IoService {
-    pub(crate) fn new(source: Arc<dyn SegmentSource>) -> Arc<Self> {
-        let prefers_background_reads = source.prefers_background_reads();
-        Arc::new(Self {
-            source,
+    /// Create a service and the demand stream it will emit reads on.
+    pub(crate) fn new() -> (Arc<Self>, IoDemandStream) {
+        let (demand, stream) = mpsc::unbounded();
+        let service = Arc::new(Self {
+            demand,
             cells: Mutex::new(HashMap::default()),
-            nowait_support: AtomicU8::new(0),
-            prefers_background_reads,
-        })
+            probe: Mutex::new(None),
+            probe_support: AtomicU8::new(PROBE_UNKNOWN),
+            background_reads: AtomicBool::new(true),
+            io_bytes: AtomicU64::new(0),
+            io_waits: AtomicU64::new(0),
+            io_wait_nanos: AtomicU64::new(0),
+        });
+        (service, stream)
+    }
+
+    pub(crate) fn completions(self: &Arc<Self>) -> IoCompletions {
+        IoCompletions {
+            service: Arc::downgrade(self),
+        }
+    }
+
+    pub(crate) fn set_probe(&self, probe: Option<NowaitProbe>) {
+        *self.probe.lock() = probe;
+        self.probe_support.store(PROBE_UNKNOWN, Ordering::Release);
+    }
+
+    pub(crate) fn probe(&self) -> Option<NowaitProbe> {
+        self.probe.lock().clone()
+    }
+
+    pub(crate) fn set_background_reads(&self, background: bool) {
+        self.background_reads.store(background, Ordering::Release);
+    }
+
+    /// Whether planned reads should be started ahead of demand.
+    ///
+    /// Storage that overlaps and coalesces I/O wants every planned read as early as possible.
+    /// In-memory sources keep this off so execution resolves cells inline through the probe.
+    pub(crate) fn background_reads(&self) -> bool {
+        self.background_reads.load(Ordering::Acquire)
+    }
+
+    pub(crate) fn probe_unsupported(&self) -> bool {
+        self.probe_support.load(Ordering::Acquire) == PROBE_UNSUPPORTED
     }
 
     fn register(&self, key: IoKey, priority: IoPriority) -> (Arc<IoCell>, bool) {
@@ -178,7 +287,6 @@ impl IoService {
             waiters: Mutex::new(Vec::new()),
             required: AtomicBool::new(priority == IoPriority::Required),
             submitted: AtomicBool::new(false),
-            poll_owner: AtomicUsize::new(NO_POLL_OWNER),
         });
         cells.insert(key, Arc::clone(&cell));
         (cell, true)
@@ -198,62 +306,48 @@ impl IoService {
             .collect()
     }
 
-    pub(crate) fn issue(&self, read: &IoRead, background: bool) {
-        let mut state = read.cell.state.lock();
-        if !matches!(*state, CellState::Unissued) {
-            return;
-        }
-        let future = match read.key() {
-            IoKey::Segment(id) if background => self.source.request_background(id),
-            IoKey::Segment(id) => self.source.request(id),
-        };
-        *state = CellState::Pending {
-            future,
-            wait_started: None,
-        };
-    }
-
-    /// Issue a scheduler batch while preserving its registration boundary at the segment source.
-    pub(crate) fn issue_batch(&self, reads: &[IoRead], background: bool) {
-        if !background {
-            for read in reads {
-                self.issue(read, false);
-            }
-            return;
-        }
-
-        let mut states = Vec::with_capacity(reads.len());
-        let mut ids = Vec::with_capacity(reads.len());
+    /// Hand every still-unissued read in `reads` out as one demand batch.
+    ///
+    /// Returns how many reads this call started. The batch boundary is preserved on the stream so
+    /// the storage layer can coalesce neighbours that were planned together.
+    pub(crate) fn start(&self, reads: &[IoRead]) -> usize {
+        let mut requests = Vec::with_capacity(reads.len());
         for read in reads {
-            let state = read.cell.state.lock();
-            if matches!(*state, CellState::Unissued) {
-                ids.push(match read.key() {
-                    IoKey::Segment(id) => id,
-                });
-                states.push(state);
+            let mut state = read.cell.state.lock();
+            if !matches!(*state, CellState::Unissued) {
+                continue;
             }
-        }
-
-        let futures = self.source.request_background_batch(&ids);
-        assert_eq!(
-            futures.len(),
-            states.len(),
-            "SegmentSource::request_background_batch must return one future per ID"
-        );
-        for (mut state, future) in states.into_iter().zip(futures) {
-            *state = CellState::Pending {
-                future,
-                wait_started: None,
+            if requests
+                .iter()
+                .any(|request: &IoRequest| request.key == read.cell.key)
+            {
+                continue;
+            }
+            *state = CellState::Requested {
+                started: Instant::now(),
             };
+            requests.push(IoRequest {
+                key: read.cell.key,
+                priority: read.cell.priority(),
+            });
         }
+        if requests.is_empty() {
+            return 0;
+        }
+        let started = requests.len();
+        drop(self.demand.unbounded_send(IoDemand::Start(requests)));
+        started
     }
 
-    pub(crate) fn nowait_unsupported(&self) -> bool {
-        self.nowait_support.load(Ordering::Acquire) == 2
-    }
-
-    pub(crate) fn prefers_background_reads(&self) -> bool {
-        self.prefers_background_reads
+    /// Mark a read as blocking execution: start it if nobody has, and ask for it to run ahead of
+    /// speculative work.
+    pub(crate) fn promote(&self, read: &IoRead) {
+        read.cell.required.store(true, Ordering::Release);
+        read.cell.submitted.store(true, Ordering::Release);
+        self.start(std::slice::from_ref(read));
+        if !read.is_settled() {
+            drop(self.demand.unbounded_send(IoDemand::Promote(read.cell.key)));
+        }
     }
 
     pub(crate) fn read(&self, ticket: IoTicket) -> Option<IoRead> {
@@ -263,9 +357,58 @@ impl IoService {
             .cloned()
             .map(|cell| IoRead { cell })
     }
+
+    fn complete(&self, key: IoKey, result: VortexResult<BufferHandle>) {
+        let Some(cell) = self.cells.lock().get(&key).cloned() else {
+            return;
+        };
+        let mut state = cell.state.lock();
+        let started = match &*state {
+            CellState::Ready(_) | CellState::Failed(_) => return,
+            CellState::Requested { started } => Some(*started),
+            CellState::Unissued => None,
+        };
+        *state = match result {
+            Ok(handle) => {
+                self.io_bytes
+                    .fetch_add(handle.len() as u64, Ordering::Relaxed);
+                CellState::Ready(handle)
+            }
+            Err(err) => CellState::Failed(err.to_string().into()),
+        };
+        drop(state);
+        if let Some(started) = started {
+            self.io_waits.fetch_add(1, Ordering::Relaxed);
+            self.io_wait_nanos.fetch_add(
+                u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+                Ordering::Relaxed,
+            );
+        }
+        cell.wake_waiters();
+    }
+
+    /// Bytes delivered through completions so far.
+    pub(crate) fn io_bytes(&self) -> u64 {
+        self.io_bytes.load(Ordering::Relaxed)
+    }
+
+    /// Reads that were handed out and answered through completions rather than resolved inline.
+    pub(crate) fn io_waits(&self) -> u64 {
+        self.io_waits.load(Ordering::Relaxed)
+    }
+
+    /// Total time handed-out reads spent outstanding.
+    pub(crate) fn io_wait_time(&self) -> Duration {
+        Duration::from_nanos(self.io_wait_nanos.load(Ordering::Relaxed))
+    }
+
+    /// Drop every cell and its bytes once a run is over.
+    pub(crate) fn clear(&self) {
+        self.cells.lock().clear();
+    }
 }
 
-/// One registered segment future that the shared scheduler can poll as an IO work item.
+/// One registered read the scheduler can start, promote, or park on.
 #[derive(Clone)]
 pub(crate) struct IoRead {
     cell: Arc<IoCell>,
@@ -277,39 +420,22 @@ impl IoRead {
     }
 
     pub(crate) fn priority(&self) -> IoPriority {
-        if self.cell.required.load(Ordering::Acquire) {
-            IoPriority::Required
-        } else {
-            IoPriority::Speculative
-        }
+        self.cell.priority()
     }
 
-    pub(crate) fn promote(&self) {
-        self.cell.required.store(true, Ordering::Release);
+    /// Whether the read has reached a terminal state.
+    pub(crate) fn is_settled(&self) -> bool {
+        matches!(
+            *self.cell.state.lock(),
+            CellState::Ready(_) | CellState::Failed(_)
+        )
     }
 
-    pub(crate) fn is_ready(&self) -> bool {
-        matches!(*self.cell.state.lock(), CellState::Ready(_))
-    }
-
-    pub(crate) fn claim_poll(&self, worker: usize) -> bool {
-        self.cell
-            .poll_owner
-            .compare_exchange(NO_POLL_OWNER, worker, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
-            || self.cell.poll_owner.load(Ordering::Acquire) == worker
-    }
-
-    pub(crate) fn release_poll(&self, worker: usize) {
-        if self
-            .cell
-            .poll_owner
-            .compare_exchange(worker, NO_POLL_OWNER, Ordering::AcqRel, Ordering::Acquire)
-            .is_ok()
-        {
-            for waiter in self.cell.waiters.lock().iter() {
-                waiter.wake_by_ref();
-            }
+    /// The failure recorded for this read, if its completion was an error.
+    pub(crate) fn failure(&self) -> Option<Arc<str>> {
+        match &*self.cell.state.lock() {
+            CellState::Failed(error) => Some(Arc::clone(error)),
+            _ => None,
         }
     }
 
@@ -319,7 +445,7 @@ impl IoRead {
     /// a completion either drains this waker or is observed here before insertion.
     pub(crate) fn park(&self, waker: Waker) -> bool {
         let state = self.cell.state.lock();
-        if matches!(*state, CellState::Ready(_)) {
+        if matches!(*state, CellState::Ready(_) | CellState::Failed(_)) {
             return false;
         }
         let mut waiters = self.cell.waiters.lock();
@@ -330,74 +456,14 @@ impl IoRead {
     }
 }
 
-/// Outcome of polling one scheduler-owned segment future.
-pub(crate) enum IoReadPoll {
-    /// The future retained the waker and will requeue this IO work item.
-    Pending,
-    /// This poll completed the read.
-    Ready {
-        /// Bytes in the returned segment.
-        bytes: usize,
-        /// Time since this future first returned `Pending`.
-        wait_time: Duration,
-    },
-    /// A stale wake observed a read another worker had already completed.
-    AlreadyReady,
-}
-
-impl IoRead {
-    /// Poll this one future without blocking the worker.
-    pub(crate) fn poll(&self, waker: &Waker) -> VortexResult<IoReadPoll> {
-        let mut state = self.cell.state.lock();
-        let CellState::Pending {
-            future,
-            wait_started,
-        } = &mut *state
-        else {
-            return match &*state {
-                CellState::Ready(_) => Ok(IoReadPoll::AlreadyReady),
-                CellState::Unissued => Err(vortex_err!("IO cell was polled before submission")),
-                CellState::Pending { .. } => unreachable!(),
-            };
-        };
-
-        let mut cx = Context::from_waker(waker);
-        loop {
-            match future.poll_unpin(&mut cx) {
-                Poll::Ready(result) => {
-                    let handle = result?;
-                    if handle.is_on_device() {
-                        let copy = handle.try_into_host()?;
-                        *future = async move { copy.await.map(BufferHandle::new_host) }.boxed();
-                        continue;
-                    }
-                    let bytes = handle.len();
-                    let wait_time = wait_started
-                        .take()
-                        .map_or(Duration::ZERO, |started| started.elapsed());
-                    *state = CellState::Ready(handle);
-                    drop(state);
-                    for waiter in std::mem::take(&mut *self.cell.waiters.lock()) {
-                        waiter.wake();
-                    }
-                    return Ok(IoReadPoll::Ready { bytes, wait_time });
-                }
-                Poll::Pending => {
-                    wait_started.get_or_insert_with(Instant::now);
-                    return Ok(IoReadPoll::Pending);
-                }
-            }
-        }
-    }
-}
-
 /// The ticket view owned by one affinity-local morsel continuation.
 ///
 /// The keyed map uses interior mutability because only planning and execution touch its shape.
-/// Individual cell futures live in the scan-wide service and are synchronized because any worker
-/// in the pool may poll them.
+/// Individual cells live in the scan-wide service and are synchronized because completions arrive
+/// from outside the worker.
 pub struct IoPlane {
     service: Arc<IoService>,
+    probe: Option<NowaitProbe>,
     cells: RefCell<HashMap<IoKey, Arc<IoCell>>>,
     unsubmitted: RefCell<Vec<Arc<IoCell>>>,
 }
@@ -405,14 +471,16 @@ pub struct IoPlane {
 impl IoPlane {
     /// Create a morsel-local view over the scan's shared IO service.
     pub(crate) fn new(service: Arc<IoService>) -> Self {
+        let probe = service.probe();
         Self {
             service,
+            probe,
             cells: RefCell::new(HashMap::default()),
             unsubmitted: RefCell::new(Vec::new()),
         }
     }
 
-    /// Register a batch of uses, issuing any cell that does not already exist.
+    /// Register a batch of uses, creating any cell that does not already exist.
     pub(crate) fn register(
         &self,
         batch: IoBatch,
@@ -443,9 +511,9 @@ impl IoPlane {
         Ok(tickets)
     }
 
-    /// Take newly registered reads for submission to the shared work queue.
+    /// Take newly registered reads for submission to the scheduler.
     ///
-    /// Each future is returned at most once even when planning spans several quanta. Duplicate
+    /// Each cell is returned at most once even when planning spans several quanta. Duplicate
     /// logical uses retain one keyed cell and cannot submit duplicate reads.
     pub(crate) fn take_reads(&self) -> Vec<IoRead> {
         std::mem::take(&mut *self.unsubmitted.borrow_mut())
@@ -484,9 +552,11 @@ impl IoPlane {
         ids
     }
 
-    /// Resolve a ticket inline when the source can prove the bytes are immediately available.
+    /// Resolve a ticket inline when the probe can prove the bytes are immediately available.
     ///
-    /// The cell is retained so duplicate uses inside this morsel share the same handle.
+    /// On a miss the read is handed out as required demand, unless a planning wave already holds
+    /// it and will submit it with its neighbours. The cell is retained so duplicate uses inside
+    /// this morsel share the same handle.
     pub(crate) fn ready(
         &self,
         ticket: IoTicket,
@@ -501,63 +571,54 @@ impl IoPlane {
         let mut state = cell.state.lock();
         match &*state {
             CellState::Ready(handle) => return Ok(Some(handle.clone())),
-            CellState::Pending { .. } => return Ok(None),
+            CellState::Requested { .. } => return Ok(None),
+            CellState::Failed(error) => {
+                return Err(vortex_err!("segment read failed: {error}"));
+            }
             CellState::Unissued => {}
         }
 
-        let IoKey::Segment(segment) = cell.key;
-        let queued_for_batch = cell.submitted.load(Ordering::Acquire);
-        if self.service.nowait_unsupported() {
-            if queued_for_batch {
-                return Ok(None);
+        if let Some(probe) = &self.probe
+            && !self.service.probe_unsupported()
+        {
+            stats.nowait_attempts += 1;
+            match probe(cell.key)? {
+                ReadAtNowait::Ready(handle) => {
+                    self.service
+                        .probe_support
+                        .store(PROBE_SUPPORTED, Ordering::Release);
+                    stats.nowait_hits += 1;
+                    stats.io_bytes += handle.len() as u64;
+                    *state = CellState::Ready(handle.clone());
+                    drop(state);
+                    cell.wake_waiters();
+                    return Ok(Some(handle));
+                }
+                ReadAtNowait::WouldBlock => {
+                    self.service
+                        .probe_support
+                        .store(PROBE_SUPPORTED, Ordering::Release);
+                    stats.nowait_misses += 1;
+                }
+                ReadAtNowait::Unsupported => {
+                    self.service
+                        .probe_support
+                        .store(PROBE_UNSUPPORTED, Ordering::Release);
+                    stats.nowait_unsupported += 1;
+                }
             }
-            let future = self.service.source.request(segment);
-            *state = CellState::Pending {
-                future,
-                wait_started: None,
-            };
+        }
+
+        // A read still queued in an open planning wave is submitted with that wave, so its
+        // neighbours coalesce. Anything else is needed right now.
+        if cell.submitted.load(Ordering::Acquire) {
             return Ok(None);
         }
-        stats.nowait_attempts += 1;
-        match self.service.source.request_nowait(segment)? {
-            ReadAtNowait::Ready(handle) => {
-                self.service.nowait_support.store(1, Ordering::Release);
-                stats.nowait_hits += 1;
-                stats.io_bytes += handle.len() as u64;
-                *state = CellState::Ready(handle.clone());
-                drop(state);
-                for waiter in std::mem::take(&mut *cell.waiters.lock()) {
-                    waiter.wake();
-                }
-                Ok(Some(handle))
-            }
-            ReadAtNowait::WouldBlock => {
-                self.service.nowait_support.store(1, Ordering::Release);
-                stats.nowait_misses += 1;
-                if queued_for_batch {
-                    return Ok(None);
-                }
-                let future = self.service.source.request(segment);
-                *state = CellState::Pending {
-                    future,
-                    wait_started: None,
-                };
-                Ok(None)
-            }
-            ReadAtNowait::Unsupported => {
-                self.service.nowait_support.store(2, Ordering::Release);
-                stats.nowait_unsupported += 1;
-                if queued_for_batch {
-                    return Ok(None);
-                }
-                let future = self.service.source.request(segment);
-                *state = CellState::Pending {
-                    future,
-                    wait_started: None,
-                };
-                Ok(None)
-            }
-        }
+        drop(state);
+        self.service.promote(&IoRead {
+            cell: Arc::clone(&cell),
+        });
+        Ok(None)
     }
 
     /// Drop every cell. Called between morsel batches to bound retained bytes.

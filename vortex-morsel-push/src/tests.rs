@@ -62,6 +62,7 @@ use vortex_session::VortexSession;
 use crate::DemandHintDelivery;
 use crate::ExecutionMode;
 use crate::PushMorselScanExecutor;
+use crate::SegmentSourceDriver;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
@@ -468,12 +469,14 @@ fn bounded_stream_resumes_in_order_after_consumer_stall(
         ConjunctMode::Cascade,
     )?);
     let cut = crate::driver::morsels(&plan, 0);
-    let mut stream = crate::MorselScan::new(plan, segments, session.clone())
+    let scan = crate::MorselScan::new(plan, session.clone())
         .with_threads(4)
         .with_morsels(cut)
         .with_execution_mode(execution_mode)
         .with_share_decodes(false)
-        .with_output_capacity(1, 1)
+        .with_output_capacity(1, 1);
+    let mut stream = SegmentSourceDriver::new(segments)
+        .connect_on_thread(scan)?
         .into_stream()?;
 
     std::thread::sleep(Duration::from_millis(20));
@@ -524,12 +527,14 @@ fn dropping_stream_cancels_stalled_scan(
         ConjunctMode::Cascade,
     )?);
     let cut = crate::driver::morsels(&plan, 0);
-    let mut stream = crate::MorselScan::new(plan, segments, session)
+    let scan = crate::MorselScan::new(plan, session)
         .with_threads(4)
         .with_morsels(cut)
         .with_execution_mode(execution_mode)
         .with_share_decodes(false)
-        .with_output_capacity(1, 1)
+        .with_output_capacity(1, 1);
+    let mut stream = SegmentSourceDriver::new(segments)
+        .connect_on_thread(scan)?
         .into_stream()?;
     drop(stream.next().transpose()?);
     drop(stream);
@@ -566,11 +571,13 @@ fn dropping_stream_cancels_never_ready_io() -> VortexResult<()> {
     let cut = crate::driver::morsels(&plan, 0);
     let (done_tx, done_rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let stream = crate::MorselScan::new(plan, Arc::new(NeverReadySource), session)
+        let scan = crate::MorselScan::new(plan, session)
             .with_threads(2)
             .with_morsels(cut)
-            .with_execution_mode(ExecutionMode::Push)
-            .into_stream();
+            .with_execution_mode(ExecutionMode::Push);
+        let stream = SegmentSourceDriver::new(Arc::new(NeverReadySource))
+            .connect_on_thread(scan)
+            .and_then(|scan| scan.into_stream());
         match stream {
             Ok(stream) => {
                 std::thread::sleep(Duration::from_millis(20));
@@ -602,7 +609,6 @@ fn rejects_invalid_morsel_cuts_before_starting() -> VortexResult<()> {
         None,
         ConjunctMode::Cascade,
     )?);
-    let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
     let row_count = plan.row_count();
     let invalid = [
         vec![],
@@ -615,10 +621,9 @@ fn rejects_invalid_morsel_cuts_before_starting() -> VortexResult<()> {
         vec![0..row_count - 1],
     ];
     for cut in invalid {
-        let result =
-            crate::MorselScan::new(Arc::clone(&plan), Arc::clone(&segments), session.clone())
-                .with_morsels(cut)
-                .into_stream();
+        let result = crate::MorselScan::new(Arc::clone(&plan), session.clone())
+            .with_morsels(cut)
+            .into_stream();
         assert!(result.is_err());
     }
     Ok(())

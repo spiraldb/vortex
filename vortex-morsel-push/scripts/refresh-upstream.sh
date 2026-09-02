@@ -22,7 +22,8 @@ is_allowed_overlay() {
         Cargo.toml | README.md | UPSTREAM.md | scripts/refresh-upstream.sh | \
             src/bin/morsel-eval.rs | \
             src/bin/tpch-eval.rs | src/build.rs | src/driver.rs | src/executor.rs | \
-            src/lib.rs | src/nodes/conjunct.rs)
+            src/harness.rs | src/io.rs | src/lib.rs | src/nodes/conjunct.rs | \
+            src/nodes/filter.rs | src/source.rs | src/tests.rs)
             return 0
             ;;
         *)

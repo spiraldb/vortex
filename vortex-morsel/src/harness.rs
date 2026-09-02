@@ -36,6 +36,7 @@ use crate::build::build_plan;
 use crate::driver::MorselScan;
 use crate::driver::morsels;
 use crate::nodes::ConjunctMode;
+use crate::source::SegmentSourceDriver;
 use crate::stats::ScanStats;
 
 /// One query against one fixture.
@@ -258,11 +259,12 @@ pub fn run_morsel(
         config.mode,
     )?);
     let cut = morsels(&plan, config.morsel_rows);
-    let scan = MorselScan::new(plan, Arc::clone(segments), session.clone())
+    let scan = MorselScan::new(plan, session.clone())
         .with_threads(config.threads)
         .with_morsels(cut)
         .with_share_decodes(config.share_decodes)
         .with_lookahead_morsels(config.lookahead_morsels);
+    let scan = SegmentSourceDriver::new(Arc::clone(segments)).connect_on_thread(scan)?;
 
     let (batches, stats, wall) = scan.run_timed()?;
 

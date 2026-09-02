@@ -29,6 +29,7 @@ use crate::MorselScan;
 use crate::build_plan;
 use crate::morsels;
 use crate::nodes::ConjunctMode;
+use crate::source::SegmentSourceDriver;
 
 type PlanCacheKey = (String, Option<String>, ConjunctMode);
 type OutputSender = Mutex<Option<oneshot::Sender<VortexResult<Option<ArrayRef>>>>>;
@@ -146,9 +147,10 @@ impl MorselScanExecutor {
         }
         let senders: Arc<[OutputSender]> = Arc::from(senders);
 
-        let segments = Arc::clone(&self.segments);
+        let driver = SegmentSourceDriver::new(Arc::clone(&self.segments));
         let handle = session.handle();
         let coordinator_handle = handle.clone();
+        let driver_handle = handle.clone();
         let threads = demands.len().min(self.threads);
         let lookahead_morsels = self.lookahead_morsels;
         let sink_senders = Arc::clone(&senders);
@@ -157,9 +159,10 @@ impl MorselScanExecutor {
                 let result = coordinator_handle
                     .spawn_blocking(move || {
                         let executor = MorselExecutor::shared(Arc::clone(&plan), threads)?;
-                        let scan = MorselScan::new(plan, segments, session)
+                        let scan = MorselScan::new(plan, session)
                             .with_threads(threads)
                             .with_lookahead_morsels(lookahead_morsels);
+                        let scan = driver.connect(scan, &driver_handle)?;
                         // All-true demands are a dense scan; keep them off the sparse
                         // random-access path, which localizes I/O polling per worker.
                         let scan = if demands.iter().all(|(_, demand)| demand.all_true()) {
