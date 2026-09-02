@@ -2136,7 +2136,7 @@ impl Scheduler {
     }
 
     fn submit_exact_lookahead(self: &Arc<Self>) {
-        if !self.run.io.background_reads() {
+        if self.stopped.load(Ordering::Acquire) || !self.run.io.background_reads() {
             return;
         }
         let end = if self.run.plan.has_filter() {
@@ -2208,7 +2208,7 @@ impl Scheduler {
     }
 
     fn advance_lookahead(self: &Arc<Self>, target: usize) {
-        if !self.run.io.background_reads() {
+        if self.stopped.load(Ordering::Acquire) || !self.run.io.background_reads() {
             return;
         }
         let Some(extension) =

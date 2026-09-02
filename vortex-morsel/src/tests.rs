@@ -1304,7 +1304,6 @@ fn cancelling_a_stalled_scan_releases_its_workers() -> VortexResult<()> {
     let scan = MorselScan::new(plan, session)
         .with_threads(2)
         .with_morsels(cut)
-        .with_share_decodes(false)
         .with_cancellation(Arc::clone(&cancellation));
     let scan = SegmentSourceDriver::new(Arc::new(NeverReadySource)).connect_on_thread(scan)?;
 

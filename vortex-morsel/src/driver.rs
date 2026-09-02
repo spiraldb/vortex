@@ -496,7 +496,7 @@ impl Scheduler {
     fn submit_exact_lookahead(self: &Arc<Self>) {
         const BATCH_READS: usize = 64;
 
-        if !self.run.io.background_reads() {
+        if self.stopped.load(Ordering::Acquire) || !self.run.io.background_reads() {
             return;
         }
 
@@ -670,7 +670,7 @@ impl Scheduler {
     /// Keep the lookahead window ahead of the active workers on filtered scans so background
     /// reads of later morsels overlap the current morsels' execution and coalesce together.
     fn refill_lookahead(self: &Arc<Self>, completed: usize) {
-        if !self.lookahead_enabled {
+        if !self.lookahead_enabled || self.stopped.load(Ordering::Acquire) {
             return;
         }
         let target = (completed + self.workers.saturating_mul(2) + self.run.lookahead_morsels)
@@ -1289,11 +1289,14 @@ impl MorselExecutor {
             .morsel_traces
             .sort_unstable_by_key(|trace| trace.index);
 
-        debug_assert_eq!(
-            run.cells.live(),
-            0,
-            "every lease must be released by the end of the scan"
-        );
+        // A cancelled scan leaves the leases of unfinished morsels outstanding by design.
+        if scheduler.remaining.load(Ordering::Acquire) == 0 {
+            debug_assert_eq!(
+                run.cells.live(),
+                0,
+                "every lease must be released by the end of the scan"
+            );
+        }
 
         let wall = start.elapsed();
         if observe_timing {

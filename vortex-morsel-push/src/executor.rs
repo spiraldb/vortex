@@ -169,6 +169,7 @@ impl PushMorselScanExecutor {
                 plan,
                 Arc::clone(&self.segments),
                 morsels,
+                row_caps,
                 Arc::clone(driver),
             );
         }
@@ -284,6 +285,7 @@ fn build_external_outputs(
     plan: Arc<ExecPlan>,
     segments: Arc<dyn SegmentSource>,
     morsels: Vec<SelectedMorsel>,
+    row_caps: Option<Vec<usize>>,
     driver: Arc<dyn Fn() + Send + Sync>,
 ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
     // One I/O service, and therefore one demand stream, spans every morsel of this file so
@@ -297,7 +299,8 @@ fn build_external_outputs(
         .spawn(source.drive(demand, io.completions()))
         .detach();
     let mut outputs = Vec::with_capacity(morsels.len());
-    for morsel in morsels {
+    for (morsel_index, morsel) in morsels.into_iter().enumerate() {
+        let row_cap = row_caps.as_ref().map(|caps| caps[morsel_index]);
         let plan = Arc::clone(&plan);
         let io = Arc::clone(&io);
         let driver = Arc::clone(&driver);
@@ -315,7 +318,10 @@ fn build_external_outputs(
                 .with_eager_lookahead(true)
                 .with_execution_mode(ExecutionMode::Push)
                 .run_on_current_thread()?;
-            combine_batches(batches)
+            match (combine_batches(batches)?, row_cap) {
+                (Some(array), Some(cap)) if array.len() > cap => Ok(Some(array.slice(0..cap)?)),
+                (batch, _) => Ok(batch),
+            }
         })
             as BoxFuture<'static, VortexResult<Option<ArrayRef>>>);
     }
