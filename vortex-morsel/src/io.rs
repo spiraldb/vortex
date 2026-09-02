@@ -309,18 +309,14 @@ impl IoService {
     /// Hand every still-unissued read in `reads` out as one demand batch.
     ///
     /// Returns how many reads this call started. The batch boundary is preserved on the stream so
-    /// the storage layer can coalesce neighbours that were planned together.
+    /// the storage layer can coalesce neighbours that were planned together. If nobody is
+    /// listening any more, the reads fail instead of leaving workers parked on them.
     pub(crate) fn start(&self, reads: &[IoRead]) -> usize {
         let mut requests = Vec::with_capacity(reads.len());
+        let mut cells = Vec::with_capacity(reads.len());
         for read in reads {
             let mut state = read.cell.state.lock();
             if !matches!(*state, CellState::Unissued) {
-                continue;
-            }
-            if requests
-                .iter()
-                .any(|request: &IoRequest| request.key == read.cell.key)
-            {
                 continue;
             }
             *state = CellState::Requested {
@@ -330,12 +326,21 @@ impl IoService {
                 key: read.cell.key,
                 priority: read.cell.priority(),
             });
+            cells.push(Arc::clone(&read.cell));
         }
         if requests.is_empty() {
             return 0;
         }
         let started = requests.len();
-        drop(self.demand.unbounded_send(IoDemand::Start(requests)));
+        if self
+            .demand
+            .unbounded_send(IoDemand::Start(requests))
+            .is_err()
+        {
+            for cell in &cells {
+                self.fail_cell(cell);
+            }
+        }
         started
     }
 
@@ -344,10 +349,28 @@ impl IoService {
     pub(crate) fn promote(&self, read: &IoRead) {
         read.cell.required.store(true, Ordering::Release);
         read.cell.submitted.store(true, Ordering::Release);
-        self.start(std::slice::from_ref(read));
-        if !read.is_settled() {
-            drop(self.demand.unbounded_send(IoDemand::Promote(read.cell.key)));
+        // A read started here goes out as required and is polled at once; only a read someone
+        // else already handed out as speculative needs the separate promotion.
+        if self.start(std::slice::from_ref(read)) == 0
+            && !read.is_settled()
+            && self
+                .demand
+                .unbounded_send(IoDemand::Promote(read.cell.key))
+                .is_err()
+        {
+            self.fail_cell(&read.cell);
         }
+    }
+
+    /// Settle a cell as failed because its demand can no longer be answered.
+    fn fail_cell(&self, cell: &IoCell) {
+        let mut state = cell.state.lock();
+        if matches!(*state, CellState::Ready(_) | CellState::Failed(_)) {
+            return;
+        }
+        *state = CellState::Failed("the scan's I/O demand stream is closed".into());
+        drop(state);
+        cell.wake_waiters();
     }
 
     pub(crate) fn read(&self, ticket: IoTicket) -> Option<IoRead> {
@@ -554,9 +577,11 @@ impl IoPlane {
 
     /// Resolve a ticket inline when the probe can prove the bytes are immediately available.
     ///
-    /// On a miss the read is handed out as required demand, unless a planning wave already holds
-    /// it and will submit it with its neighbours. The cell is retained so duplicate uses inside
-    /// this morsel share the same handle.
+    /// On a miss the caller blocks on the ticket and the scheduler hands the read out as required
+    /// demand when it parks the worker. A read this morsel planned has already been taken by its
+    /// planning wave by then; the direct hand-out below only covers a cell nothing ever
+    /// submitted. The cell is retained so duplicate uses inside this morsel share the same
+    /// handle.
     pub(crate) fn ready(
         &self,
         ticket: IoTicket,
@@ -609,8 +634,8 @@ impl IoPlane {
             }
         }
 
-        // A read still queued in an open planning wave is submitted with that wave, so its
-        // neighbours coalesce. Anything else is needed right now.
+        // A read taken by a planning wave is started with that wave, so its neighbours coalesce,
+        // and promoted when the worker parks on it. Anything never submitted is needed right now.
         if cell.submitted.load(Ordering::Acquire) {
             return Ok(None);
         }

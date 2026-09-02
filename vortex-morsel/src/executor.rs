@@ -5,6 +5,8 @@
 
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
@@ -117,16 +119,29 @@ impl MorselScanExecutor {
         limit: Option<u64>,
         row_offset: u64,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
-        if limit.is_some() {
-            vortex_bail!("the morsel scan executor does not support limits");
-        }
         if row_offset != 0 {
             vortex_bail!("the morsel scan executor does not support row offsets");
         }
 
         let plan = self.plan(&projection, filter.as_ref())?;
         let full_range = row_range.unwrap_or_else(|| 0..plan.row_count());
-        let demands = selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
+        let mut demands =
+            selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
+        // Without a filter every selected row is an output row, so the morsels past the limit
+        // can be dropped before any I/O. A filtered scan cannot know where the limit falls.
+        if let Some(limit) = limit
+            && filter.is_none()
+        {
+            let mut rows = 0u64;
+            let keep = demands
+                .iter()
+                .position(|(_, demand)| {
+                    rows += demand.true_count() as u64;
+                    rows >= limit
+                })
+                .map_or(demands.len(), |index| index + 1);
+            demands.truncate(keep);
+        }
         if demands.is_empty() {
             return Ok(Vec::new());
         }
@@ -146,6 +161,9 @@ impl MorselScanExecutor {
                 as BoxFuture<'static, VortexResult<Option<ArrayRef>>>);
         }
         let senders: Arc<[OutputSender]> = Arc::from(senders);
+        // Once every consumer has dropped its future there is nobody left to deliver to.
+        let cancel = Arc::new(AtomicBool::new(false));
+        let cancel_flag = Arc::clone(&cancel);
 
         let driver = SegmentSourceDriver::new(Arc::clone(&self.segments));
         let handle = session.handle();
@@ -161,7 +179,8 @@ impl MorselScanExecutor {
                         let executor = MorselExecutor::shared(Arc::clone(&plan), threads)?;
                         let scan = MorselScan::new(plan, session)
                             .with_threads(threads)
-                            .with_lookahead_morsels(lookahead_morsels);
+                            .with_lookahead_morsels(lookahead_morsels)
+                            .with_cancel_flag(cancel_flag);
                         let scan = driver.connect(scan, &driver_handle)?;
                         // All-true demands are a dense scan; keep them off the sparse
                         // random-access path, which localizes I/O polling per worker.
@@ -173,6 +192,15 @@ impl MorselScanExecutor {
                         let scan = scan.with_completion_sink(move |index, batch| {
                             if let Some(sender) = sink_senders[index].lock().take() {
                                 drop(sender.send(Ok(batch)));
+                            }
+                            let abandoned = sink_senders.iter().all(|sender| {
+                                sender
+                                    .lock()
+                                    .as_ref()
+                                    .is_none_or(oneshot::Sender::is_canceled)
+                            });
+                            if abandoned {
+                                cancel.store(true, Ordering::Release);
                             }
                         });
                         executor.run(&scan).map(|_| ())

@@ -44,6 +44,7 @@ which conclusions are host-specific.
 maxdepth: 1
 ---
 
+morsel-executor-primer
 layout-reader-v1
 plan-v2
 layout27

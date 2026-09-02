@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Affinity-owned morsel execution over one shared asynchronous IO service.
+//! Affinity-owned morsel execution over one shared I/O service.
 //!
 //! Each worker owns one arena and at most one active morsel. The arena never crosses a thread
-//! boundary. Planning submits all named segment futures to scan-wide required/speculative queues;
-//! while its morsel is suspended, a worker polls IO from those queues. Exact ticket completion
-//! wakes only the worker whose continuation parked on that ticket. Output order is restored by
-//! morsel index after all workers finish.
+//! boundary. Planning names segment reads; the scheduler hands them out through the service's
+//! demand stream, and whoever answers that demand completes the cells. A suspended worker waits
+//! for a signal rather than polling anything; exact ticket completion wakes only the worker whose
+//! continuation parked on that ticket. Output order is restored by morsel index after all workers
+//! finish.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -113,6 +114,7 @@ pub struct MorselScan {
     /// Issue every source in the lookahead window, not only the first predicate column.
     eager_lookahead: bool,
     external_driver: Option<ExternalDriver>,
+    cancellation: Option<Arc<StreamCancellation>>,
 }
 
 type CompletionSink = Arc<dyn Fn(usize, VortexResult<Option<ArrayRef>>) + Send + Sync>;
@@ -144,13 +146,13 @@ pub struct MorselStream {
     cancellation: Arc<StreamCancellation>,
 }
 
-struct StreamCancellation {
+pub(crate) struct StreamCancellation {
     cancelled: AtomicBool,
     scheduler: Mutex<Option<Weak<Scheduler>>>,
 }
 
 impl StreamCancellation {
-    fn new() -> Arc<Self> {
+    pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self {
             cancelled: AtomicBool::new(false),
             scheduler: Mutex::new(None),
@@ -166,7 +168,7 @@ impl StreamCancellation {
         }
     }
 
-    fn cancel(&self) {
+    pub(crate) fn cancel(&self) {
         self.cancelled.store(true, Ordering::Release);
         if let Some(scheduler) = self.scheduler.lock().as_ref().and_then(Weak::upgrade) {
             scheduler.stop();
@@ -2108,24 +2110,29 @@ impl Scheduler {
         (scheduler, worker_rx)
     }
 
-    fn issue_batch(&self, reads: &[IoRead]) -> bool {
-        self.run.io.start(reads) > 0
+    fn issue_batch(&self, reads: &[IoRead]) -> u64 {
+        u64::try_from(self.run.io.start(reads)).unwrap_or(u64::MAX)
     }
 
-    fn submit_reads(self: &Arc<Self>, mut reads: Vec<IoRead>) {
+    /// Hand a planning wave's reads out, returning how many reads and batches this call started.
+    fn submit_reads(self: &Arc<Self>, mut reads: Vec<IoRead>) -> (u64, u64) {
         reads.sort_unstable_by_key(|read| match read.key() {
             IoKey::Segment(id) => *id,
         });
         let (required, speculative): (Vec<_>, Vec<_>) = reads
             .into_iter()
             .partition(|read| read.priority() == IoPriority::Required);
-        self.issue_batch(&speculative);
+        let mut started = self.issue_batch(&speculative);
+        let mut batches = u64::from(started > 0);
         let eager_required = self.run.io.background_reads() || self.run.io.probe_unsupported();
         if eager_required {
-            self.issue_batch(&required);
+            let required_started = self.issue_batch(&required);
+            started += required_started;
+            batches += u64::from(required_started > 0);
         }
         self.submit_io_batch(required, true, eager_required);
         self.submit_io_batch(speculative, false, true);
+        (started, batches)
     }
 
     fn submit_exact_lookahead(self: &Arc<Self>) {
@@ -2619,8 +2626,10 @@ impl Scheduler {
             stats.merge(&worker);
         }
         stats.io_bytes += self.run.io.io_bytes();
-        stats.io_requests += self.run.io.io_starts();
-        stats.io_batches += self.run.io.io_start_batches();
+        // Workers attribute the reads their planning waves started to their morsels; the service
+        // holds the scan-wide totals, which also cover lookahead and promotion starts.
+        stats.io_requests = self.run.io.io_starts();
+        stats.io_batches = self.run.io.io_start_batches();
         stats.io_waits = self.run.io.io_waits();
         stats.io_wait_time = self.run.io.io_wait_time();
         stats.lookahead_refills += self.lookahead_refills.load(Ordering::Relaxed);
@@ -2838,7 +2847,9 @@ impl<'a> LocalMorsel<'a> {
                     &scheduler.run.cells,
                     &mut self.stats,
                 )?;
-                scheduler.submit_reads(self.io.take_reads());
+                let (started, batches) = scheduler.submit_reads(self.io.take_reads());
+                self.stats.io_requests += started;
+                self.stats.io_batches += batches;
                 match poll {
                     PlanPoll::Item(_) => Ok(LocalPoll::Runnable),
                     PlanPoll::Blocked(waits) => Ok(LocalPoll::Blocked(waits)),
@@ -3373,6 +3384,7 @@ impl MorselScan {
             sparse_morsels: false,
             eager_lookahead: false,
             external_driver: None,
+            cancellation: None,
         }
     }
 
@@ -3472,7 +3484,28 @@ impl MorselScan {
         self
     }
 
+    /// A scan whose demand nobody took would block on its first read; refuse to run it.
+    fn ensure_io_taken(&self) -> VortexResult<()> {
+        if self.demand.lock().is_some() {
+            return Err(vortex_err!(
+                "the scan's I/O demand was never taken; connect a SegmentSourceDriver or another \
+                 answerer before running"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Stop assigning morsels once `cancellation` fires, for example when every consumer of the
+    /// output has gone away. Morsels already running finish normally.
+    pub(crate) fn with_cancellation(mut self, cancellation: Arc<StreamCancellation>) -> Self {
+        self.cancellation = Some(cancellation);
+        self
+    }
+
     /// Share one I/O service, and therefore one demand stream, across several scans.
+    ///
+    /// Call this before `with_nowait_probe` or `with_background_reads`: it replaces the service
+    /// those methods configure, and the scan's own demand stream is discarded.
     pub(crate) fn with_io_service(mut self, io: Arc<IoService>) -> Self {
         self.io = io;
         self.demand = Mutex::new(None);
@@ -3560,6 +3593,7 @@ impl MorselScan {
     /// helper thread.
     pub fn run_on_current_thread(&self) -> VortexResult<(Vec<ArrayRef>, ScanStats)> {
         self.validate_morsels()?;
+        self.ensure_io_taken()?;
         vortex_ensure!(
             self.output_rows == usize::MAX && self.output_bytes == u64::MAX,
             "caller-thread scans require unbounded output credit"
@@ -3621,6 +3655,7 @@ impl MorselScan {
     /// bound. Root-edge heads may add at most one parked batch per active worker.
     pub fn into_stream(self) -> VortexResult<MorselStream> {
         self.validate_morsels()?;
+        self.ensure_io_taken()?;
         let (output_tx, output_rx) = bounded::<CreditedBatch>(self.threads.max(1));
         let (completion_tx, completion_rx) = mpsc::channel();
         let cancellation = StreamCancellation::new();
@@ -3644,6 +3679,7 @@ impl MorselScan {
     /// Run the scan with worker creation and shutdown outside the measured interval.
     pub(crate) fn run_timed(&self) -> VortexResult<(Vec<ArrayRef>, ScanStats, Duration)> {
         self.validate_morsels()?;
+        self.ensure_io_taken()?;
         let (output_tx, output_rx) = bounded::<CreditedBatch>(self.threads.max(1));
         let collector = std::thread::spawn(move || {
             output_rx
@@ -3651,7 +3687,7 @@ impl MorselScan {
                 .map(CreditedBatch::receive)
                 .collect::<Vec<_>>()
         });
-        let (stats, wall) = self.run_timed_to(output_tx, None)?;
+        let (stats, wall) = self.run_timed_to(output_tx, self.cancellation.as_ref())?;
         let batches = collector
             .join()
             .map_err(|_| vortex_err!("output collector panicked"))?;
@@ -4581,7 +4617,7 @@ mod tests {
     }
 
     #[test]
-    fn selected_unissued_demand_waits_for_the_scheduler_to_start_it() -> VortexResult<()> {
+    fn start_and_promote_hand_selected_unissued_demand_out() -> VortexResult<()> {
         let (service, mut demand) = IoService::new();
         let work = unissued_test_work(&service, 11)?;
 
@@ -4599,6 +4635,7 @@ mod tests {
         };
         assert_eq!(requests.len(), 1);
         assert_eq!(requests[0].key, work.reads[0].key());
+        assert_eq!(requests[0].priority, IoPriority::Speculative);
         assert!(matches!(
             demand.try_recv(),
             Ok(IoDemand::Promote(key)) if key == work.reads[0].key()

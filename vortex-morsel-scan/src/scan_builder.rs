@@ -247,7 +247,7 @@ impl<A: 'static + Send> MorselScanBuilder<A> {
             self.filter,
             self.row_range,
             self.selection,
-            None,
+            limit,
             self.row_offset,
         )?;
         let tasks = match limit {

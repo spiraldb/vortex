@@ -22,6 +22,7 @@ use vortex_io::runtime::Handle;
 use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
+use vortex_utils::aliases::hash_set::HashSet;
 
 use crate::MorselScan;
 use crate::io::IoCompletions;
@@ -34,7 +35,8 @@ use crate::io::NowaitProbe;
 /// How many speculative reads are polled at once. Required and promoted reads are always polled.
 const DEFAULT_BACKGROUND_WINDOW: usize = 16;
 
-type TaggedRead = BoxFuture<'static, (IoKey, VortexResult<BufferHandle>)>;
+/// A read being polled: its key, whether it counts against the speculative window, its result.
+type TaggedRead = BoxFuture<'static, (IoKey, bool, VortexResult<BufferHandle>)>;
 
 /// Serves a scan's I/O demand from a [`SegmentSource`].
 ///
@@ -117,12 +119,20 @@ impl SegmentSourceDriver {
         async move {
             let mut demand = demand.fuse();
             let mut polled = FuturesUnordered::<TaggedRead>::new();
+            // Keys currently being polled, and how many of those are speculative.
+            let mut in_flight = HashSet::<IoKey>::default();
+            let mut speculative_in_flight = 0usize;
             let mut background = VecDeque::<(IoKey, SegmentFuture)>::new();
+            // A worker can block on a read between another worker starting it and that start
+            // batch reaching this task, so a promotion may arrive before its read does.
+            let mut early_promotions = HashSet::<IoKey>::default();
             loop {
-                while polled.len() < window
+                while speculative_in_flight < window
                     && let Some((key, future)) = background.pop_front()
                 {
-                    polled.push(tag(key, future));
+                    in_flight.insert(key);
+                    speculative_in_flight += 1;
+                    polled.push(tag(key, future, true));
                 }
                 futures::select_biased! {
                     next = demand.next() => match next {
@@ -133,14 +143,26 @@ impl SegmentSourceDriver {
                                     IoKey::Segment(id) => id,
                                 })
                                 .collect::<Vec<SegmentId>>();
-                            let futures = if background_reads {
+                            let mut futures = if background_reads {
                                 source.request_background_batch(&ids)
                             } else {
                                 ids.iter().map(|&id| source.request(id)).collect()
                             };
+                            for request in requests.iter().skip(futures.len()) {
+                                let error = vortex_err!(
+                                    "segment source returned no read for {:?}",
+                                    request.key
+                                );
+                                if !completions.complete(request.key, Err(error)) {
+                                    return;
+                                }
+                            }
+                            futures.truncate(requests.len());
                             for (request, future) in requests.into_iter().zip(futures) {
-                                if request.priority == IoPriority::Required {
-                                    polled.push(tag(request.key, future));
+                                let promoted = early_promotions.remove(&request.key);
+                                if promoted || request.priority == IoPriority::Required {
+                                    in_flight.insert(request.key);
+                                    polled.push(tag(request.key, future, false));
                                 } else {
                                     background.push_back((request.key, future));
                                 }
@@ -151,13 +173,20 @@ impl SegmentSourceDriver {
                                 background.iter().position(|(queued, _)| *queued == key)
                                 && let Some((key, future)) = background.remove(position)
                             {
-                                polled.push(tag(key, future));
+                                in_flight.insert(key);
+                                polled.push(tag(key, future, false));
+                            } else if !in_flight.contains(&key) {
+                                early_promotions.insert(key);
                             }
                         }
                         None => return,
                     },
                     completed = polled.select_next_some() => {
-                        let (key, result) = completed;
+                        let (key, speculative, result) = completed;
+                        in_flight.remove(&key);
+                        if speculative {
+                            speculative_in_flight -= 1;
+                        }
                         if !completions.complete(key, result) {
                             return;
                         }
@@ -169,7 +198,7 @@ impl SegmentSourceDriver {
 }
 
 /// Attach the key to a segment future and settle device buffers on the host.
-fn tag(key: IoKey, future: SegmentFuture) -> TaggedRead {
+fn tag(key: IoKey, future: SegmentFuture, speculative: bool) -> TaggedRead {
     async move {
         let result = match future.await {
             Ok(handle) if handle.is_on_device() => match handle.try_into_host() {
@@ -178,7 +207,7 @@ fn tag(key: IoKey, future: SegmentFuture) -> TaggedRead {
             },
             result => result,
         };
-        (key, result)
+        (key, speculative, result)
     }
     .boxed()
 }

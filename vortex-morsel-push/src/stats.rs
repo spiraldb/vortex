@@ -104,7 +104,8 @@ pub struct ScanStats {
     pub io_registered: u64,
     /// Bytes returned by the segment source.
     pub io_bytes: u64,
-    /// Number of times a background segment future returned `Pending`.
+    /// Reads handed out through the demand stream and answered by a completion, rather than
+    /// resolved inline through the probe.
     pub io_waits: u64,
     /// Inline non-blocking read attempts made by execution.
     pub nowait_attempts: u64,
@@ -114,9 +115,9 @@ pub struct ScanStats {
     pub nowait_misses: u64,
     /// Inline non-blocking reads unsupported by the source or filesystem.
     pub nowait_unsupported: u64,
-    /// Cumulative wall latency from a segment future's first `Pending` until it became ready.
+    /// Cumulative wall time handed-out reads spent between being started and being completed.
     ///
-    /// Futures overlap and no CPU worker is parked, so this is not additive CPU or scan time.
+    /// Reads overlap, so this is not additive CPU or scan time.
     pub io_wait_time: Duration,
     /// Segment decodes performed.
     pub decodes: u64,

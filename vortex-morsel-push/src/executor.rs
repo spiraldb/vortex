@@ -31,6 +31,7 @@ use vortex_utils::aliases::hash_map::HashMap;
 use crate::MorselScan;
 use crate::build::ExecPlan;
 use crate::build::build_plan;
+use crate::driver::StreamCancellation;
 use crate::driver::morsels;
 use crate::io::IoService;
 use crate::node::ExecutionMode;
@@ -122,16 +123,33 @@ impl PushMorselScanExecutor {
         limit: Option<u64>,
         row_offset: u64,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
-        if limit.is_some() {
-            vortex_bail!("the morsel scan executor does not support limits");
-        }
         if row_offset != 0 {
             vortex_bail!("the morsel scan executor does not support row offsets");
         }
 
         let plan = self.plan(&projection, filter.as_ref())?;
         let full_range = row_range.unwrap_or_else(|| 0..plan.row_count());
-        let morsels = selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
+        let mut morsels =
+            selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
+        // Without a filter every selected row is an output row, so the morsels past the limit
+        // can be dropped before any I/O. A filtered scan cannot know where the limit falls.
+        if let Some(limit) = limit
+            && filter.is_none()
+        {
+            let mut rows = 0u64;
+            let keep = morsels
+                .iter()
+                .position(|morsel| {
+                    rows += morsel
+                        .selected_ranges
+                        .iter()
+                        .map(|range| range.end - range.start)
+                        .sum::<u64>();
+                    rows >= limit
+                })
+                .map_or(morsels.len(), |index| index + 1);
+            morsels.truncate(keep);
+        }
 
         if let Some(driver) = &self.external_driver {
             return build_external_outputs(
@@ -179,6 +197,10 @@ impl PushMorselScanExecutor {
         let coordinator_handle = handle.clone();
         let driver_handle = handle.clone();
         let threads = ranges.len().min(self.threads);
+        // Once every consumer has dropped its future there is nobody left to deliver to.
+        let cancellation = StreamCancellation::new();
+        let sink_cancellation = Arc::clone(&cancellation);
+        let sink_groups = groups.clone();
         handle
             .spawn(async move {
                 let result = coordinator_handle
@@ -190,8 +212,12 @@ impl PushMorselScanExecutor {
                             .with_lookahead_morsels(SHARED_LOOKAHEAD_MORSELS)
                             .with_eager_lookahead(true)
                             .with_execution_mode(ExecutionMode::Push)
+                            .with_cancellation(cancellation)
                             .with_completion_sink(move |index, batch| {
                                 targets[index].complete(batch);
+                                if sink_groups.iter().all(|group| group.is_abandoned()) {
+                                    sink_cancellation.cancel();
+                                }
                             });
                         driver.connect(scan, &driver_handle)?.run().map(|_| ())
                     })
@@ -353,6 +379,14 @@ impl OutputGroup {
         if let Some(sender) = self.sender.lock().take() {
             drop(sender.send(Err(vortex_err!("shared morsel scan failed: {message}"))));
         }
+    }
+
+    /// Whether the consumer of this group's output is gone or already served.
+    fn is_abandoned(&self) -> bool {
+        self.sender
+            .lock()
+            .as_ref()
+            .is_none_or(oneshot::Sender::is_canceled)
     }
 }
 

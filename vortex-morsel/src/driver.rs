@@ -114,6 +114,7 @@ pub struct MorselScan {
     observe: bool,
     lookahead_morsels: usize,
     completion: Option<CompletionSink>,
+    cancel: Option<Arc<AtomicBool>>,
 }
 
 /// A reusable worker pool for scans that share one execution plan.
@@ -144,6 +145,7 @@ struct WorkerRun {
     observe_morsels: bool,
     lookahead_morsels: usize,
     completion: Option<CompletionSink>,
+    cancel: Option<Arc<AtomicBool>>,
 }
 
 #[derive(Clone, Copy)]
@@ -766,6 +768,16 @@ impl<'a> LocalMorsel<'a> {
     }
 
     fn assign_next(&mut self, scheduler: &Scheduler) -> bool {
+        if scheduler
+            .run
+            .cancel
+            .as_ref()
+            .is_some_and(|cancel| cancel.load(Ordering::Acquire))
+        {
+            scheduler.stop();
+            self.active = false;
+            return false;
+        }
         let index = scheduler.next_morsel.fetch_add(1, Ordering::Relaxed);
         let Some(range) = scheduler.run.morsels.get(index).cloned() else {
             self.active = false;
@@ -934,6 +946,7 @@ impl MorselScan {
             observe: false,
             lookahead_morsels: 0,
             completion: None,
+            cancel: None,
         }
     }
 
@@ -948,6 +961,17 @@ impl MorselScan {
             .take()
             .ok_or_else(|| vortex_err!("the scan's I/O demand stream was already taken"))?;
         Ok((demand, self.io.completions()))
+    }
+
+    /// A scan whose demand nobody took would block on its first read; refuse to run it.
+    fn ensure_io_taken(&self) -> VortexResult<()> {
+        if self.demand.lock().is_some() {
+            return Err(vortex_err!(
+                "the scan's I/O demand was never taken; connect a SegmentSourceDriver or another \
+                 answerer before running"
+            ));
+        }
+        Ok(())
     }
 
     /// Let execution resolve a read inline when `probe` can prove the bytes are available
@@ -970,6 +994,13 @@ impl MorselScan {
     /// scans, refilled as morsels retire. Unfiltered scans already register the whole plan.
     pub fn with_lookahead_morsels(mut self, morsels: usize) -> Self {
         self.lookahead_morsels = morsels;
+        self
+    }
+
+    /// Stop assigning morsels once `flag` is set, for example when every consumer of the output
+    /// has gone away. Morsels already running finish normally.
+    pub fn with_cancel_flag(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.cancel = Some(flag);
         self
     }
 
@@ -1152,6 +1183,7 @@ impl MorselExecutor {
                 "morsel scan reaches row ranges that were not materialized in the execution plan"
             ));
         }
+        scan.ensure_io_taken()?;
         let threads = self.threads();
         let start = Instant::now();
         let observe_summary =
@@ -1190,6 +1222,7 @@ impl MorselExecutor {
             observe_morsels,
             lookahead_morsels: scan.lookahead_morsels,
             completion: scan.completion.clone(),
+            cancel: scan.cancel.clone(),
         });
 
         let scheduler = Scheduler::new(Arc::clone(&run), threads);
