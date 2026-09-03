@@ -53,11 +53,11 @@ impl NodeBlueprint for FlatSpec {
         ))
     }
 
-    fn stored_use(&self) -> Option<(IoKey, Range<u64>)> {
-        Some((
+    fn stored_uses(&self) -> Vec<(IoKey, Range<u64>)> {
+        vec![(
             IoKey::Segment(self.layout.segment_id()),
             self.lease_range.clone(),
-        ))
+        )]
     }
 }
 

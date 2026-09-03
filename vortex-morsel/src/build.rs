@@ -56,12 +56,15 @@ pub trait NodeBlueprint: Send + Sync {
     /// Create this node's mutable state for one worker arena. `id` is the node's own index.
     fn instantiate(&self, id: NodeId) -> Box<dyn ExecNode>;
 
-    /// The stored unit a leaf reads, with the root rows whose morsels use it.
+    /// The stored units this node reads, each with the root rows whose morsels use it.
     ///
     /// Lease counts and lookahead are computed from this alone, so a node that reads storage
-    /// must report it and a node that only combines children reports nothing.
-    fn stored_use(&self) -> Option<(IoKey, Range<u64>)> {
-        None
+    /// must report every unit and a node that only combines children reports nothing. The
+    /// runtime half of the contract is on the node: for every morsel whose range overlaps a
+    /// reported unit, the instantiated node registers that unit during planning and releases it
+    /// exactly once at retire, whether or not it ended up using the bytes.
+    fn stored_uses(&self) -> Vec<(IoKey, Range<u64>)> {
+        Vec::new()
     }
 }
 
@@ -271,7 +274,8 @@ impl SplitCx<'_> {
 /// it. Normally a stored unit is used by the morsels covering its own rows, but a dictionary's
 /// values are used by every morsel of the codes' range, so the dictionary planner scopes the
 /// values subtree to that range. Scoped subtrees never cut morsels and are never pruned by the
-/// planned ranges.
+/// planned ranges. Scopes only widen: a scope opened inside another keeps the outer one, because
+/// the outer range is already in root rows while an inner layout's own rows are not.
 pub struct LayoutCx<'a> {
     builder: &'a mut Builder,
     lease: Option<Range<u64>>,
@@ -319,13 +323,17 @@ impl LayoutCx<'_> {
         self.plan_scoped(layout, root_offset, lease)
     }
 
-    /// Plan a child layout under a new lease scope.
+    /// Plan a child layout under a lease scope of `lease` root rows.
+    ///
+    /// Inside an existing scope the existing scope is kept: it is the wider one, and it is the
+    /// only one expressed in root rows.
     pub fn child_with_lease(
         &mut self,
         layout: &LayoutRef,
         root_offset: u64,
         lease: Range<u64>,
     ) -> VortexResult<NodeId> {
+        let lease = self.lease.clone().unwrap_or(lease);
         self.plan_scoped(layout, root_offset, Some(lease))
     }
 
@@ -409,7 +417,7 @@ impl ExecPlan {
     /// the input to the shared-cell lease counts: the count for a unit is the number of
     /// (node, morsel) pairs whose ranges overlap.
     pub fn flat_uses(&self) -> impl Iterator<Item = (IoKey, Range<u64>)> + '_ {
-        self.nodes.iter().filter_map(|node| node.stored_use())
+        self.nodes.iter().flat_map(|node| node.stored_uses())
     }
 
     /// How many leading morsels the initial lookahead window covers.

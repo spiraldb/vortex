@@ -4,11 +4,12 @@
 //! The built-in [`LayoutPlanner`]s, one per stored layout kind the executor understands.
 //!
 //! Each planner answers two questions about its layout: where do fresh stored chunks start, and
-//! which nodes execute it. Keeping both answers in one place is what lets the morsel cut and the
-//! plan agree by construction.
+//! which nodes execute it. The two answers live side by side so they are reviewed together, and
+//! a test checks that the morsel cut they produce and the plan's natural splits agree.
 
 use std::sync::Arc;
 
+use vortex_array::dtype::FieldNames;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_layout::LayoutRef;
@@ -88,11 +89,15 @@ impl LayoutPlanner for FlatPlanner {
         root_offset: u64,
         cx: &mut LayoutCx<'_>,
     ) -> VortexResult<NodeId> {
+        let flat = layout
+            .as_opt::<Flat>()
+            .ok_or_else(|| vortex_err!("the flat planner was handed {}", layout.encoding_id()))?
+            .clone();
         let own_rows = root_offset..root_offset + layout.row_count();
         cx.split_at(own_rows.end);
         let lease_range = cx.lease_range(own_rows);
         Ok(cx.push(Box::new(FlatSpec {
-            layout: layout.as_::<Flat>().clone(),
+            layout: flat,
             root_offset,
             lease_range,
         })))
@@ -149,7 +154,9 @@ impl LayoutPlanner for DictPlanner {
 pub struct StructPlanner;
 
 impl StructPlanner {
-    fn children(layout: &LayoutRef) -> VortexResult<(Option<LayoutRef>, Vec<LayoutRef>)> {
+    fn children(
+        layout: &LayoutRef,
+    ) -> VortexResult<(FieldNames, Option<LayoutRef>, Vec<LayoutRef>)> {
         let fields = layout.dtype().as_struct_fields_opt().ok_or_else(|| {
             vortex_err!("struct layout has a non-struct dtype {}", layout.dtype())
         })?;
@@ -170,7 +177,7 @@ impl StructPlanner {
                     .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))?,
             );
         }
-        Ok((validity, children))
+        Ok((fields.names().clone(), validity, children))
     }
 }
 
@@ -185,7 +192,7 @@ impl LayoutPlanner for StructPlanner {
         root_offset: u64,
         cx: &mut SplitCx<'_>,
     ) -> VortexResult<()> {
-        let (validity, children) = Self::children(layout)?;
+        let (_, validity, children) = Self::children(layout)?;
         if let Some(validity) = validity {
             cx.child(&validity, root_offset)?;
         }
@@ -201,13 +208,7 @@ impl LayoutPlanner for StructPlanner {
         root_offset: u64,
         cx: &mut LayoutCx<'_>,
     ) -> VortexResult<NodeId> {
-        let names = layout
-            .dtype()
-            .as_struct_fields_opt()
-            .ok_or_else(|| vortex_err!("struct layout has a non-struct dtype {}", layout.dtype()))?
-            .names()
-            .clone();
-        let (validity, children) = Self::children(layout)?;
+        let (names, validity, children) = Self::children(layout)?;
         let validity = validity
             .map(|validity| cx.child(&validity, root_offset))
             .transpose()?;
@@ -240,7 +241,9 @@ impl LayoutPlanner for ChunkedPlanner {
         root_offset: u64,
         cx: &mut SplitCx<'_>,
     ) -> VortexResult<()> {
-        let chunked = layout.as_::<Chunked>();
+        let chunked = layout.as_opt::<Chunked>().ok_or_else(|| {
+            vortex_err!("the chunked planner was handed {}", layout.encoding_id())
+        })?;
         let mut offset = 0;
         for idx in 0..chunked.nchildren() {
             let rows = chunked.child_row_count(idx);
@@ -263,7 +266,9 @@ impl LayoutPlanner for ChunkedPlanner {
         root_offset: u64,
         cx: &mut LayoutCx<'_>,
     ) -> VortexResult<NodeId> {
-        let chunked = layout.as_::<Chunked>();
+        let chunked = layout.as_opt::<Chunked>().ok_or_else(|| {
+            vortex_err!("the chunked planner was handed {}", layout.encoding_id())
+        })?;
         let nchunks = chunked.nchildren();
         let mut offsets = Vec::with_capacity(nchunks + 1);
         offsets.push(0u64);

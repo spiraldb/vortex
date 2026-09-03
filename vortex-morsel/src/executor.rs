@@ -28,7 +28,7 @@ use vortex_utils::aliases::hash_map::HashMap;
 use crate::ExecPlan;
 use crate::MorselExecutor;
 use crate::MorselScan;
-use crate::build_plan;
+use crate::build::LayoutPlanners;
 use crate::driver::ScanCancellation;
 use crate::morsels;
 use crate::nodes::ConjunctMode;
@@ -45,6 +45,7 @@ const DEFAULT_LOOKAHEAD_MORSELS: usize = 16;
 pub struct MorselScanExecutor {
     layout: LayoutRef,
     segments: Arc<dyn SegmentSource>,
+    planners: LayoutPlanners,
     target_rows: u64,
     conjunct_mode: ConjunctMode,
     threads: usize,
@@ -58,6 +59,7 @@ impl MorselScanExecutor {
         Self {
             layout,
             segments,
+            planners: LayoutPlanners::default(),
             target_rows: 128 * 1024,
             conjunct_mode: ConjunctMode::Cascade,
             threads: 4,
@@ -69,6 +71,12 @@ impl MorselScanExecutor {
     /// Set how many morsels beyond the active window stay visible to background I/O.
     pub fn with_lookahead_morsels(mut self, morsels: usize) -> Self {
         self.lookahead_morsels = morsels;
+        self
+    }
+
+    /// Plan with `planners` instead of the built-in layout planners.
+    pub fn with_planners(mut self, planners: LayoutPlanners) -> Self {
+        self.planners = planners;
         self
     }
 
@@ -253,7 +261,7 @@ impl MorselScanExecutor {
         match cache.get(&key) {
             Some(plan) => Ok(Arc::clone(plan)),
             None => {
-                let plan = Arc::new(build_plan(
+                let plan = Arc::new(self.planners.build_plan(
                     &self.layout,
                     &projection,
                     filter.as_ref(),

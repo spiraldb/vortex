@@ -1496,3 +1496,61 @@ fn any_answerer_can_serve_a_scan() -> VortexResult<()> {
     assert_eq!(served.load(Ordering::Relaxed), plan.flat_uses().count());
     Ok(())
 }
+
+/// The morsel cut a planner produces before any node exists matches the plan's natural splits.
+#[rstest]
+#[case::misaligned(true)]
+#[case::aligned(false)]
+fn natural_morsels_match_the_plan(#[case] misaligned: bool) -> VortexResult<()> {
+    let session = session();
+    let fixture = if misaligned {
+        misaligned_fixture(&session, ROWS)?
+    } else {
+        aligned_fixture(&session, ROWS)?
+    };
+    for query in queries() {
+        let plan = build_plan(
+            &fixture.layout,
+            &query.projection,
+            query.filter.as_ref(),
+            ConjunctMode::Cascade,
+        )?;
+        let cut = crate::natural_morsels_for(
+            &fixture.layout,
+            &query.projection,
+            query.filter.as_ref(),
+            0,
+        )?;
+        assert_eq!(cut, morsels(&plan, 0), "query {}", query.name);
+    }
+    Ok(())
+}
+
+/// The agreement also holds through a dictionary's lease scope, which cuts no morsels of its own.
+#[rstest]
+fn natural_morsels_match_the_plan_for_dictionary_layouts() -> VortexResult<()> {
+    let session = session();
+    let first = VarBinViewArray::from_iter_str([
+        "alpha", "beta", "alpha", "gamma", "alpha", "beta", "gamma", "alpha",
+    ])
+    .into_array();
+    let second = VarBinViewArray::from_iter_str([
+        "delta", "alpha", "delta", "beta", "alpha", "delta", "alpha", "beta",
+    ])
+    .into_array();
+    let fixture = block_on(|handle| async {
+        let write_session = session.clone().with_handle(handle);
+        write_fixture_with(
+            vec![Column::new("label", vec![first, second])],
+            dict_strategy(),
+            &write_session,
+        )
+        .await
+    })?;
+    let projection = select(vec!["label"], root());
+    let plan = build_plan(&fixture.layout, &projection, None, ConjunctMode::Cascade)?;
+    let cut = crate::natural_morsels_for(&fixture.layout, &projection, None, 0)?;
+    assert_eq!(cut, morsels(&plan, 0));
+    assert!(cut.len() > 1, "each dictionary chunk is its own morsel");
+    Ok(())
+}

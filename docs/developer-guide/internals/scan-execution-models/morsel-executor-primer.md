@@ -87,12 +87,13 @@ walks the stored layout through the registered `LayoutPlanner`s and collects one
 `ConjunctSpec`, and the root `FilterSpec`. Unsupported layouts are errors, never fallbacks. The
 plan knows the row count, the natural split boundaries, and, through `NodeBlueprint::stored_use`,
 every `(IoKey, row range)` a leaf reads, which is what lease counting and lookahead are computed
-from.
+from. The node's side of that bargain is to register each reported unit while planning a morsel
+that overlaps it and release it exactly once at retire.
 
 ```rust
 pub trait NodeBlueprint: Send + Sync {
     fn instantiate(&self, id: NodeId) -> Box<dyn ExecNode>;
-    fn stored_use(&self) -> Option<(IoKey, Range<u64>)> { None }
+    fn stored_uses(&self) -> Vec<(IoKey, Range<u64>)> { Vec::new() }
 }
 ```
 
@@ -102,7 +103,7 @@ pub trait NodeBlueprint: Send + Sync {
   natural split.
 
 **Rule:** the plan is shared and read-only; all mutable state lives in per-worker arenas. A node
-that reads storage must say so through `stored_use`, because nothing else inspects a blueprint.
+that reads storage must say so through `stored_uses`, because nothing else inspects a blueprint.
 
 ### `LayoutPlanner`, `LayoutPlanners`, `LayoutCx`, `SplitCx` (`vortex-morsel/src/build.rs`, `layouts.rs`)
 
@@ -127,7 +128,9 @@ materializing indivisible children; `LayoutCx` lets it push blueprints, plan chi
 codes' range.
 
 **Rule:** a planner answers both questions about its layout, where chunks start and which nodes
-execute it, so the morsel cut and the plan agree by construction.
+execute it. The answers sit side by side, and a test checks that the cut and the plan's natural
+splits agree on every fixture. `MorselScanExecutor::with_planners` is how an engine supplies a
+registry.
 
 ### `ExecNode` (`vortex-morsel/src/node.rs`)
 
@@ -333,7 +336,7 @@ Three things vary by design and are traits. Everything else is deliberately conc
 | Extension point | Shape | Why this shape |
 | --- | --- | --- |
 | A new stored layout | `LayoutPlanner`, registered in `LayoutPlanners` | Layouts are the open set in Vortex; V1 extends the same way through `LayoutVTable::new_reader`. Before this, two duplicated `match`es in `build.rs` had to be edited per layout, and the split walk and the plan walk could disagree. A planner owns both answers for its layout. |
-| A new kind of node | `NodeBlueprint` plus `ExecNode` | A planner must be able to introduce node types the crate has never seen. The blueprint is the immutable half a worker instantiates; the exec node is the mutable half. Only `stored_use` is inspected from outside, so the scheduler stays ignorant of node types. |
+| A new kind of node | `NodeBlueprint` plus `ExecNode` | A planner must be able to introduce node types the crate has never seen. The blueprint is the immutable half a worker instantiates; the exec node is the mutable half. Only `stored_uses` is inspected from outside, so the scheduler stays ignorant of node types. |
 | A new way to perform reads | `IoAnswerer` | The scan only ever sees a demand stream and a completions handle. An engine's buffer manager, an object-store prefetcher, or a test double that scripts latency can serve it without implementing `SegmentSource`; `SegmentSourceDriver` is one answerer among possible others. |
 | A new operator between layouts and output | `ExecNode` | Already the per-node contract; six operators implement it. |
 
@@ -345,7 +348,11 @@ Kept concrete, and why:
 - **Lease cells.** `SharedCells` derives retention from the morsel cut; the design notes record
   that an earlier cache measured itself rather than the executor. A trait would invite caches
   back in.
-- **Completion sink and probe.** Closures. A trait would add nothing but a name.
+- **Completion sink and probe.** Closures. The probe reaches the scan through `IoAnswerer`, but
+  its type stays a closure; a trait would add nothing but a name.
+- **The stored unit itself.** `IoKey` has one variant, a segment. Every trait above speaks in
+  segments, so a layout whose unit is not one segment needs a new key variant first. That is the
+  real closed set, and it is closed on purpose until a second unit type exists.
 - **Worker hosting.** `MorselExecutor` has one inline and one pooled mode; the push crate's
   external-thread mode is the only other policy seen so far, and it is not yet settled enough
   to freeze behind a trait.

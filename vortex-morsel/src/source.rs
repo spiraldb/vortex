@@ -40,7 +40,7 @@ const DEFAULT_BACKGROUND_WINDOW: usize = 16;
 /// consume one and drive the other can serve it: a segment source, an engine's own buffer
 /// manager, a prefetcher, or a test double that scripts latency. An answerer is attached with
 /// [`MorselScan::connect`](crate::MorselScan::connect).
-pub trait IoAnswerer: Send + Sync {
+pub trait IoAnswerer {
     /// Whether planned reads should be handed out ahead of demand.
     ///
     /// Storage that overlaps and coalesces I/O wants every planned read early. In-memory
