@@ -85,7 +85,7 @@ The immutable blueprint of one scan. `build_plan(layout, projection, filter, con
 walks the stored layout through the registered `LayoutPlanner`s and collects one
 `NodeBlueprint` per node: `FlatSpec`, `ChunkedSpec`, `StructSpec`, `DictSpec` (pull only),
 `ConjunctSpec`, and the root `FilterSpec`. Unsupported layouts are errors, never fallbacks. The
-plan knows the row count, the natural split boundaries, and, through `NodeBlueprint::stored_use`,
+plan knows the row count, the natural split boundaries, and, through `NodeBlueprint::stored_uses`,
 every `(IoKey, row range)` a leaf reads, which is what lease counting and lookahead are computed
 from. The node's side of that bargain is to register each reported unit while planning a morsel
 that overlaps it and release it exactly once at retire.

@@ -72,7 +72,7 @@ pub trait NodeBlueprint: Send + Sync {
 ///
 /// Planners are consulted in registration order and the first whose [`handles`] accepts the
 /// layout owns it. A planner that only wraps another layout forwards through [`LayoutCx::child`];
-/// one that reads storage pushes a blueprint whose [`NodeBlueprint::stored_use`] names the unit.
+/// one that reads storage pushes a blueprint whose [`NodeBlueprint::stored_uses`] names the unit.
 ///
 /// [`handles`]: LayoutPlanner::handles
 pub trait LayoutPlanner: Send + Sync {
