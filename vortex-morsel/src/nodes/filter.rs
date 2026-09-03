@@ -12,6 +12,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
+use crate::build::NodeBlueprint;
 use crate::io::IoPriority;
 use crate::node::ChildPoll;
 use crate::node::ExecCx;
@@ -24,6 +25,29 @@ use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
 use crate::node::ValueBatch;
+
+/// The blueprint of the root filter node.
+pub struct FilterSpec {
+    /// The conjunct node, if the scan has a filter.
+    pub predicate: Option<NodeId>,
+    /// The projection input subtree.
+    pub projection: NodeId,
+    /// The projection, bound to the input subtree's dtype.
+    pub expr: BoundExpression,
+    /// The output dtype.
+    pub dtype: DType,
+}
+
+impl NodeBlueprint for FilterSpec {
+    fn instantiate(&self, _id: NodeId) -> Box<dyn ExecNode> {
+        Box::new(FilterExec::new(
+            self.predicate,
+            self.projection,
+            self.expr.clone(),
+            self.dtype.clone(),
+        ))
+    }
+}
 
 /// The root of a morsel: refine the demand with the filter, then project under it.
 pub struct FilterExec {

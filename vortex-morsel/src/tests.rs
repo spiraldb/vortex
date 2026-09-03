@@ -21,6 +21,7 @@ use std::task::Waker;
 use std::time::Duration;
 
 use futures::FutureExt;
+use futures::StreamExt;
 use futures::TryStreamExt;
 use futures::future::poll_fn;
 use parking_lot::Mutex;
@@ -66,11 +67,17 @@ use vortex_layout::session::LayoutSession;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
+use crate::IoAnswerer;
+use crate::IoDemand;
+use crate::LayoutCx;
+use crate::LayoutPlanner;
+use crate::LayoutPlanners;
 use crate::MorselScan;
 use crate::MorselScanExecutor;
 use crate::ScanCancellation;
 use crate::SegmentSourceDriver;
 use crate::build_plan;
+use crate::build_plan_with;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
@@ -80,7 +87,9 @@ use crate::harness::Query;
 use crate::harness::assert_same_rows;
 use crate::harness::run_morsel;
 use crate::harness::run_v1;
+use crate::layouts::FlatPlanner;
 use crate::morsels;
+use crate::node::NodeId;
 use crate::nodes::ConjunctMode;
 
 fn session() -> VortexSession {
@@ -1305,7 +1314,7 @@ fn cancelling_a_stalled_scan_releases_its_workers() -> VortexResult<()> {
         .with_threads(2)
         .with_morsels(cut)
         .with_cancellation(Arc::clone(&cancellation));
-    let scan = SegmentSourceDriver::new(Arc::new(NeverReadySource)).connect_on_thread(scan)?;
+    let scan = scan.connect_on_thread(&SegmentSourceDriver::new(Arc::new(NeverReadySource)))?;
 
     let (done_tx, done_rx) = mpsc::channel();
     std::thread::spawn(move || {
@@ -1318,5 +1327,160 @@ fn cancelling_a_stalled_scan_releases_its_workers() -> VortexResult<()> {
         .recv_timeout(Duration::from_secs(5))
         .map_err(|_| vortex_err!("the cancelled scan did not stop"))??;
     assert_eq!(batches, 0);
+    Ok(())
+}
+
+/// A planner registered ahead of the built-ins owns the layouts it handles.
+struct CountingFlatPlanner {
+    planned: Arc<AtomicUsize>,
+}
+
+impl LayoutPlanner for CountingFlatPlanner {
+    fn handles(&self, layout: &LayoutRef) -> bool {
+        FlatPlanner.handles(layout)
+    }
+
+    fn natural_splits(
+        &self,
+        layout: &LayoutRef,
+        root_offset: u64,
+        cx: &mut crate::SplitCx<'_>,
+    ) -> VortexResult<()> {
+        FlatPlanner.natural_splits(layout, root_offset, cx)
+    }
+
+    fn plan(
+        &self,
+        layout: &LayoutRef,
+        root_offset: u64,
+        cx: &mut LayoutCx<'_>,
+    ) -> VortexResult<NodeId> {
+        self.planned.fetch_add(1, Ordering::Relaxed);
+        FlatPlanner.plan(layout, root_offset, cx)
+    }
+}
+
+#[rstest]
+fn registered_planners_take_precedence_and_missing_planners_are_errors() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let query = Query {
+        name: "planner-registry",
+        projection: select(vec!["a", "b", "c"], root()),
+        filter: Some(gt(get_item("a", root()), lit(400i32))),
+    };
+
+    let planned = Arc::new(AtomicUsize::new(0));
+    let planners = LayoutPlanners::default().with(Arc::new(CountingFlatPlanner {
+        planned: Arc::clone(&planned),
+    }));
+    let plan = build_plan_with(
+        &planners,
+        &fixture.layout,
+        &query.projection,
+        query.filter.as_ref(),
+        ConjunctMode::Cascade,
+    )?;
+    let reference = build_plan(
+        &fixture.layout,
+        &query.projection,
+        query.filter.as_ref(),
+        ConjunctMode::Cascade,
+    )?;
+    assert_eq!(planned.load(Ordering::Relaxed), plan.flat_uses().count());
+    assert_eq!(plan.flat_uses().count(), reference.flat_uses().count());
+    assert_eq!(plan.natural_splits(), reference.natural_splits());
+
+    let err = build_plan_with(
+        &LayoutPlanners::empty(),
+        &fixture.layout,
+        &query.projection,
+        None,
+        ConjunctMode::Cascade,
+    )
+    .err()
+    .ok_or_else(|| vortex_err!("a plan without planners must fail"))?;
+    assert!(err.to_string().contains("no planner for layout"));
+    Ok(())
+}
+
+/// An answerer that serves bytes from memory with no `SegmentSource` at all.
+struct MemoryAnswerer {
+    buffers: Arc<[ByteBuffer]>,
+    served: Arc<AtomicUsize>,
+}
+
+impl IoAnswerer for MemoryAnswerer {
+    fn serve(
+        &self,
+        mut demand: crate::IoDemandStream,
+        completions: crate::IoCompletions,
+    ) -> futures::future::BoxFuture<'static, ()> {
+        let buffers = Arc::clone(&self.buffers);
+        let served = Arc::clone(&self.served);
+        async move {
+            while let Some(demand) = demand.next().await {
+                let IoDemand::Start(requests) = demand else {
+                    continue;
+                };
+                for request in requests {
+                    let crate::IoKey::Segment(id) = request.key;
+                    served.fetch_add(1, Ordering::Relaxed);
+                    let result = buffers
+                        .get(*id as usize)
+                        .cloned()
+                        .map(BufferHandle::new_host)
+                        .ok_or_else(|| vortex_err!("missing segment {id}"));
+                    if !completions.complete(request.key, result) {
+                        return;
+                    }
+                }
+            }
+        }
+        .boxed()
+    }
+}
+
+#[rstest]
+fn any_answerer_can_serve_a_scan() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let query = Query {
+        name: "custom-answerer",
+        projection: select(vec!["a", "c"], root()),
+        filter: Some(gt(get_item("b", root()), lit(50i32))),
+    };
+    let v1 = run_v1(&session, &fixture.layout, &fixture.segments, &query)?;
+
+    let plan = Arc::new(build_plan(
+        &fixture.layout,
+        &query.projection,
+        query.filter.as_ref(),
+        ConjunctMode::Cascade,
+    )?);
+    let served = Arc::new(AtomicUsize::new(0));
+    let answerer = MemoryAnswerer {
+        buffers: Arc::from(fixture.segment_buffers.clone()),
+        served: Arc::clone(&served),
+    };
+    let cut = morsels(&plan, 0);
+    let scan = MorselScan::new(Arc::clone(&plan), session.clone())
+        .with_threads(2)
+        .with_morsels(cut)
+        .connect_on_thread(&answerer)?;
+    let (batches, stats) = scan.run()?;
+
+    let rows = batches.iter().map(|batch| batch.len()).sum();
+    let morsel = crate::harness::RunOutcome {
+        rows,
+        batches,
+        wall: Duration::default(),
+        time_to_first_batch: None,
+        stats: Some(stats),
+        source_io_requests: None,
+        source_io_bytes: None,
+    };
+    assert_same_rows(&session, &v1_dtype(&fixture.layout, &query)?, &v1, &morsel)?;
+    assert_eq!(served.load(Ordering::Relaxed), plan.flat_uses().count());
     Ok(())
 }

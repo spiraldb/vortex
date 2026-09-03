@@ -4,9 +4,10 @@
 //! Performs a scan's reads from outside plan execution.
 //!
 //! [`MorselScan`] never touches storage: it hands the reads it wants out as [`IoDemand`] and
-//! waits for [`IoCompletions`]. [`SegmentSourceDriver`] is the standard way to answer that
-//! demand, using any [`SegmentSource`]. It runs as one task on the caller's runtime, so the
-//! worker threads that plan and execute morsels never poll a storage future.
+//! waits for [`IoCompletions`]. An [`IoAnswerer`] is whatever serves that demand;
+//! [`SegmentSourceDriver`] is the standard one, over any [`SegmentSource`]. It runs as one task
+//! on the caller's runtime, so the worker threads that plan and execute morsels never poll a
+//! storage future.
 
 use std::collections::VecDeque;
 use std::sync::Arc;
@@ -18,13 +19,11 @@ use futures::stream::FuturesUnordered;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
-use vortex_io::runtime::Handle;
 use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
 use vortex_utils::aliases::hash_set::HashSet;
 
-use crate::MorselScan;
 use crate::io::IoCompletions;
 use crate::io::IoDemand;
 use crate::io::IoDemandStream;
@@ -34,6 +33,30 @@ use crate::io::NowaitProbe;
 
 /// How many speculative reads are polled at once. Required and promoted reads are always polled.
 const DEFAULT_BACKGROUND_WINDOW: usize = 16;
+
+/// Answers a scan's I/O demand from outside plan execution.
+///
+/// The scan only ever sees the demand stream and the completions handle, so anything that can
+/// consume one and drive the other can serve it: a segment source, an engine's own buffer
+/// manager, a prefetcher, or a test double that scripts latency. An answerer is attached with
+/// [`MorselScan::connect`](crate::MorselScan::connect).
+pub trait IoAnswerer: Send + Sync {
+    /// Whether planned reads should be handed out ahead of demand.
+    ///
+    /// Storage that overlaps and coalesces I/O wants every planned read early. In-memory
+    /// answerers keep this off so execution resolves cells inline through the probe instead.
+    fn prefers_background_reads(&self) -> bool {
+        false
+    }
+
+    /// A probe that resolves a read without waiting on storage, if this answerer has one.
+    fn nowait_probe(&self) -> Option<NowaitProbe> {
+        None
+    }
+
+    /// Serve `demand` until the stream ends, answering each read through `completions`.
+    fn serve(&self, demand: IoDemandStream, completions: IoCompletions) -> BoxFuture<'static, ()>;
+}
 
 /// A read being polled: its key, whether it counts against the speculative window, its result.
 type TaggedRead = BoxFuture<'static, (IoKey, bool, VortexResult<BufferHandle>)>;
@@ -66,49 +89,8 @@ impl SegmentSourceDriver {
         self
     }
 
-    /// Whether the source wants planned reads started ahead of demand.
-    pub fn prefers_background_reads(&self) -> bool {
-        self.source.prefers_background_reads()
-    }
-
-    /// A probe over the source's non-blocking read path, for inline resolution during execution.
-    pub fn nowait_probe(&self) -> NowaitProbe {
-        let source = Arc::clone(&self.source);
-        Arc::new(move |key| match key {
-            IoKey::Segment(id) => source.request_nowait(id),
-        })
-    }
-
-    /// Configure `scan` for this source and start serving its reads on `handle`.
-    ///
-    /// The driver task ends when the scan is dropped. Reads still in flight at that point are
-    /// dropped with it, which cancels them at sources that support cancellation.
-    pub fn connect(&self, scan: MorselScan, handle: &Handle) -> VortexResult<MorselScan> {
-        let (demand, completions) = scan.take_io()?;
-        handle.spawn(self.drive(demand, completions)).detach();
-        Ok(scan
-            .with_background_reads(self.prefers_background_reads())
-            .with_nowait_probe(self.nowait_probe()))
-    }
-
-    /// Configure `scan` for this source and serve its reads from a dedicated thread.
-    ///
-    /// For callers without an async runtime, such as benchmarks and tests that run scans
-    /// synchronously. The thread exits when the scan is dropped.
-    pub fn connect_on_thread(&self, scan: MorselScan) -> VortexResult<MorselScan> {
-        let (demand, completions) = scan.take_io()?;
-        let drive = self.drive(demand, completions);
-        std::thread::Builder::new()
-            .name("vortex-morsel-io".into())
-            .spawn(move || futures::executor::block_on(drive))
-            .map_err(|err| vortex_err!("failed to spawn the segment source driver: {err}"))?;
-        Ok(scan
-            .with_background_reads(self.prefers_background_reads())
-            .with_nowait_probe(self.nowait_probe()))
-    }
-
     /// Serve `demand` until the scan drops its end of the stream.
-    pub fn drive(
+    fn drive(
         &self,
         demand: IoDemandStream,
         completions: IoCompletions,
@@ -194,6 +176,23 @@ impl SegmentSourceDriver {
                 }
             }
         }
+    }
+}
+
+impl IoAnswerer for SegmentSourceDriver {
+    fn prefers_background_reads(&self) -> bool {
+        self.source.prefers_background_reads()
+    }
+
+    fn nowait_probe(&self) -> Option<NowaitProbe> {
+        let source = Arc::clone(&self.source);
+        Some(Arc::new(move |key| match key {
+            IoKey::Segment(id) => source.request_nowait(id),
+        }))
+    }
+
+    fn serve(&self, demand: IoDemandStream, completions: IoCompletions) -> BoxFuture<'static, ()> {
+        self.drive(demand, completions).boxed()
     }
 }
 

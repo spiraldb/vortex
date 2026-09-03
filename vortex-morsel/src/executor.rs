@@ -200,7 +200,7 @@ impl MorselScanExecutor {
                             .with_threads(threads)
                             .with_lookahead_morsels(lookahead_morsels)
                             .with_cancellation(cancellation);
-                        let scan = driver.connect(scan, &driver_handle)?;
+                        let scan = scan.connect(&driver, &driver_handle)?;
                         // All-true demands are a dense scan; keep them off the sparse
                         // random-access path, which localizes I/O polling per worker.
                         let scan = if demands.iter().all(|(_, demand)| demand.all_true()) {

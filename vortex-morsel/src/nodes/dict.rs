@@ -10,6 +10,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
+use crate::build::NodeBlueprint;
 use crate::node::ChildPoll;
 use crate::node::ExecCx;
 use crate::node::ExecNode;
@@ -21,6 +22,22 @@ use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
 use crate::node::ValueBatch;
+
+/// The blueprint of a dictionary node.
+pub struct DictSpec {
+    /// The values subtree, planned over the whole values array.
+    pub values: NodeId,
+    /// The codes subtree, planned over the morsel's rows.
+    pub codes: NodeId,
+    /// Number of dictionary values.
+    pub values_len: usize,
+}
+
+impl NodeBlueprint for DictSpec {
+    fn instantiate(&self, id: NodeId) -> Box<dyn ExecNode> {
+        Box::new(DictExec::new(id, self.values, self.codes, self.values_len))
+    }
+}
 
 /// A dictionary values array paired with range-scoped codes.
 ///

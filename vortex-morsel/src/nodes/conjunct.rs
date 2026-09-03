@@ -11,6 +11,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
+use crate::build::NodeBlueprint;
 use crate::node::ChildPoll;
 use crate::node::ExecCx;
 use crate::node::ExecNode;
@@ -44,6 +45,29 @@ pub enum ConjunctMode {
     /// Every conjunct sees the incoming mask, and the results are intersected. More rows read;
     /// no dependency between conjuncts.
     Parallel,
+}
+
+/// The blueprint of a conjunct node: each conjunct's input subtree and bound predicate.
+pub struct ConjunctSpec {
+    /// One entry per conjunct.
+    pub slots: Vec<(NodeId, BoundExpression)>,
+    /// How the conjuncts relate.
+    pub mode: ConjunctMode,
+}
+
+impl NodeBlueprint for ConjunctSpec {
+    fn instantiate(&self, _id: NodeId) -> Box<dyn ExecNode> {
+        Box::new(ConjunctExec::new(
+            self.slots
+                .iter()
+                .map(|(input, predicate)| ConjunctSlot {
+                    input: *input,
+                    predicate: predicate.clone(),
+                })
+                .collect(),
+            self.mode,
+        ))
+    }
 }
 
 /// The demand spine: predicate evaluations feeding one intersection.

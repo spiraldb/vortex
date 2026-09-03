@@ -578,10 +578,8 @@ impl IoPlane {
     /// Resolve a ticket inline when the probe can prove the bytes are immediately available.
     ///
     /// On a miss the caller blocks on the ticket and the scheduler hands the read out as required
-    /// demand when it parks the worker. A read this morsel planned has already been taken by its
-    /// planning wave by then; the direct hand-out below only covers a cell nothing ever
-    /// submitted. The cell is retained so duplicate uses inside this morsel share the same
-    /// handle.
+    /// demand when it parks the worker. The cell is retained so duplicate uses inside this morsel
+    /// share the same handle.
     pub(crate) fn ready(
         &self,
         ticket: IoTicket,
@@ -634,15 +632,6 @@ impl IoPlane {
             }
         }
 
-        // A read taken by a planning wave is started with that wave, so its neighbours coalesce,
-        // and promoted when the worker parks on it. Anything never submitted is needed right now.
-        if cell.submitted.load(Ordering::Acquire) {
-            return Ok(None);
-        }
-        drop(state);
-        self.service.promote(&IoRead {
-            cell: Arc::clone(&cell),
-        });
         Ok(None)
     }
 

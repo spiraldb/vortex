@@ -14,6 +14,7 @@ use vortex_layout::layouts::flat::FlatLayout;
 use vortex_layout::segments::SegmentId;
 use vortex_session::registry::ReadContext;
 
+use crate::build::NodeBlueprint;
 use crate::io::IoBatch;
 use crate::io::IoKey;
 use crate::io::IoTicket;
@@ -31,6 +32,34 @@ use crate::node::Value;
 use crate::node::ValueBatch;
 use crate::node::Wait;
 use crate::node::WaitSet;
+
+/// The blueprint of a flat node: which segment, where its rows sit, and who leases them.
+pub struct FlatSpec {
+    /// The stored segment.
+    pub layout: FlatLayout,
+    /// Root-coordinate row of the segment's first row.
+    pub root_offset: u64,
+    /// Root rows whose morsels use this segment.
+    pub lease_range: Range<u64>,
+}
+
+impl NodeBlueprint for FlatSpec {
+    fn instantiate(&self, id: NodeId) -> Box<dyn ExecNode> {
+        Box::new(FlatExec::new(
+            &self.layout,
+            self.root_offset,
+            self.lease_range.clone(),
+            ProducerId(id),
+        ))
+    }
+
+    fn stored_use(&self) -> Option<(IoKey, Range<u64>)> {
+        Some((
+            IoKey::Segment(self.layout.segment_id()),
+            self.lease_range.clone(),
+        ))
+    }
+}
 
 /// The only node that touches the world: one stored segment, decoded and sliced.
 ///

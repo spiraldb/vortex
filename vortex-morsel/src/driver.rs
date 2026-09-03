@@ -33,6 +33,7 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_error::vortex_panic;
+use vortex_io::runtime::Handle;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_utils::aliases::hash_map::HashMap;
@@ -59,6 +60,7 @@ use crate::node::begin_morsel;
 use crate::node::poll_execute_morsel;
 use crate::node::poll_plan_morsel;
 use crate::node::retire_morsel;
+use crate::source::IoAnswerer;
 use crate::stats::ScanStats;
 
 /// The morsel row ranges for a plan.
@@ -989,6 +991,38 @@ impl MorselScan {
             lookahead_morsels: 0,
             completion: None,
             cancellation: None,
+        }
+    }
+
+    /// Attach `answerer` to serve this scan's reads, running it as a task on `handle`.
+    ///
+    /// The task ends when the scan is dropped. Reads still in flight at that point are dropped
+    /// with it, which cancels them at sources that support cancellation.
+    pub fn connect(self, answerer: &dyn IoAnswerer, handle: &Handle) -> VortexResult<Self> {
+        let (demand, completions) = self.take_io()?;
+        handle.spawn(answerer.serve(demand, completions)).detach();
+        Ok(self.configured_for(answerer))
+    }
+
+    /// Attach `answerer` to serve this scan's reads from a dedicated thread.
+    ///
+    /// For callers without an async runtime, such as benchmarks and tests that run scans
+    /// synchronously. The thread exits when the scan is dropped.
+    pub fn connect_on_thread(self, answerer: &dyn IoAnswerer) -> VortexResult<Self> {
+        let (demand, completions) = self.take_io()?;
+        let serve = answerer.serve(demand, completions);
+        std::thread::Builder::new()
+            .name("vortex-morsel-io".into())
+            .spawn(move || futures::executor::block_on(serve))
+            .map_err(|err| vortex_err!("failed to spawn the I/O answerer thread: {err}"))?;
+        Ok(self.configured_for(answerer))
+    }
+
+    fn configured_for(self, answerer: &dyn IoAnswerer) -> Self {
+        let scan = self.with_background_reads(answerer.prefers_background_reads());
+        match answerer.nowait_probe() {
+            Some(probe) => scan.with_nowait_probe(probe),
+            None => scan,
         }
     }
 

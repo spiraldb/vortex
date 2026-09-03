@@ -7,9 +7,15 @@
 //! instantiates one thread-local [`Arena`], whose node state survives IO suspension and is recycled
 //! across that worker's morsels without crossing a thread boundary.
 //!
-//! Only the layouts and expression shapes named in the P1 scope are accepted. Anything else is a
-//! build error rather than a silent fallback, so an unsupported query can never be timed as if
-//! the prototype had executed it.
+//! Two traits make the plan open without making it dynamic:
+//!
+//! * [`LayoutPlanner`] turns one kind of stored layout into nodes. The built-in planners cover
+//!   flat, chunked, struct, dictionary, and the transparent zoned wrappers; a new layout registers
+//!   a planner instead of editing a match. Unsupported layouts are build errors rather than silent
+//!   fallbacks, so an unsupported query can never be timed as if the executor had run it.
+//! * [`NodeBlueprint`] is the immutable description of one node. Planners push blueprints; every
+//!   worker arena instantiates them; the scheduler only asks a blueprint which stored unit it
+//!   reads.
 
 use std::ops::Range;
 use std::sync::Arc;
@@ -28,68 +34,220 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_layout::LayoutRef;
-use vortex_layout::layouts::chunked::Chunked;
-use vortex_layout::layouts::dict::Dict;
-use vortex_layout::layouts::flat::Flat;
-use vortex_layout::layouts::flat::FlatLayout;
 use vortex_layout::layouts::struct_::Struct;
-use vortex_layout::layouts::zoned::LegacyStats;
-use vortex_layout::layouts::zoned::Zoned;
 use vortex_mask::Mask;
 
 use crate::io::IoKey;
-use crate::io::ProducerId;
+use crate::layouts::ChunkedPlanner;
+use crate::layouts::DictPlanner;
+use crate::layouts::FlatPlanner;
+use crate::layouts::StructPlanner;
+use crate::layouts::ZonedPlanner;
 use crate::node::Arena;
 use crate::node::ExecNode;
 use crate::node::NodeId;
-use crate::nodes::ChunkedExec;
-use crate::nodes::ConjunctExec;
 use crate::nodes::ConjunctMode;
-use crate::nodes::ConjunctSlot;
-use crate::nodes::DictExec;
-use crate::nodes::FilterExec;
-use crate::nodes::FlatExec;
-use crate::nodes::StructExec;
+use crate::nodes::ConjunctSpec;
+use crate::nodes::FilterSpec;
+use crate::nodes::StructSpec;
 
-/// The immutable blueprint of one node.
-enum NodeSpec {
-    Flat {
-        layout: FlatLayout,
+/// The immutable blueprint of one node: everything a worker needs to instantiate it.
+pub trait NodeBlueprint: Send + Sync {
+    /// Create this node's mutable state for one worker arena. `id` is the node's own index.
+    fn instantiate(&self, id: NodeId) -> Box<dyn ExecNode>;
+
+    /// The stored unit a leaf reads, with the root rows whose morsels use it.
+    ///
+    /// Lease counts and lookahead are computed from this alone, so a node that reads storage
+    /// must report it and a node that only combines children reports nothing.
+    fn stored_use(&self) -> Option<(IoKey, Range<u64>)> {
+        None
+    }
+}
+
+/// Plans the nodes for one kind of stored layout.
+///
+/// Planners are consulted in registration order and the first whose [`handles`] accepts the
+/// layout owns it. A planner that only wraps another layout forwards through [`LayoutCx::child`];
+/// one that reads storage pushes a blueprint whose [`NodeBlueprint::stored_use`] names the unit.
+///
+/// [`handles`]: LayoutPlanner::handles
+pub trait LayoutPlanner: Send + Sync {
+    /// Whether this planner owns `layout`.
+    fn handles(&self, layout: &LayoutRef) -> bool;
+
+    /// Record the root rows at which `layout` starts fresh stored chunks.
+    ///
+    /// This runs before any node exists, to cut morsels, and must not materialize indivisible
+    /// children. `root_offset` is the root-coordinate row of the layout's first row.
+    fn natural_splits(
+        &self,
+        layout: &LayoutRef,
         root_offset: u64,
-        lease_range: Range<u64>,
-    },
-    Chunked {
-        chunk_offsets: Arc<[u64]>,
-        child_chunks: Arc<[usize]>,
-        children: Arc<[NodeId]>,
-        dtype: DType,
-    },
-    Struct {
-        names: FieldNames,
-        children: Arc<[NodeId]>,
-        validity: Option<NodeId>,
-    },
-    Dict {
-        values: NodeId,
-        codes: NodeId,
-        values_len: usize,
-    },
-    Conjunct {
-        slots: Vec<(NodeId, BoundExpression)>,
-        mode: ConjunctMode,
-    },
-    Filter {
-        predicate: Option<NodeId>,
-        projection: NodeId,
-        expr: BoundExpression,
-        dtype: DType,
-    },
+        cx: &mut SplitCx<'_>,
+    ) -> VortexResult<()>;
+
+    /// Append the nodes for `layout` to the plan and return the subtree root.
+    fn plan(
+        &self,
+        layout: &LayoutRef,
+        root_offset: u64,
+        cx: &mut LayoutCx<'_>,
+    ) -> VortexResult<NodeId>;
+}
+
+/// The ordered set of planners a plan is built with.
+#[derive(Clone)]
+pub struct LayoutPlanners {
+    planners: Vec<Arc<dyn LayoutPlanner>>,
+}
+
+impl Default for LayoutPlanners {
+    /// The built-in planners: zoned wrappers, flat, dictionary, struct, chunked.
+    fn default() -> Self {
+        Self {
+            planners: vec![
+                Arc::new(ZonedPlanner),
+                Arc::new(FlatPlanner),
+                Arc::new(DictPlanner),
+                Arc::new(StructPlanner),
+                Arc::new(ChunkedPlanner),
+            ],
+        }
+    }
+}
+
+impl LayoutPlanners {
+    /// No planners at all; every layout is an error until some are added.
+    pub fn empty() -> Self {
+        Self {
+            planners: Vec::new(),
+        }
+    }
+
+    /// Add a planner ahead of the existing ones, so it takes precedence for the layouts it handles.
+    pub fn with(mut self, planner: Arc<dyn LayoutPlanner>) -> Self {
+        self.planners.insert(0, planner);
+        self
+    }
+
+    fn find(&self, layout: &LayoutRef, root_offset: u64) -> VortexResult<Arc<dyn LayoutPlanner>> {
+        self.planners
+            .iter()
+            .find(|planner| planner.handles(layout))
+            .cloned()
+            .ok_or_else(|| {
+                vortex_err!(
+                    "the morsel executor has no planner for layout {} at row offset {root_offset}",
+                    layout.encoding_id()
+                )
+            })
+    }
+}
+
+/// What a planner may do while recording natural splits.
+pub struct SplitCx<'a> {
+    planners: &'a LayoutPlanners,
+    splits: &'a mut Vec<u64>,
+}
+
+impl SplitCx<'_> {
+    /// Record that a fresh stored chunk starts at root row `root_row`.
+    pub fn split_at(&mut self, root_row: u64) {
+        self.splits.push(root_row);
+    }
+
+    /// Record the splits of a child layout whose first row is at `root_offset`.
+    pub fn child(&mut self, layout: &LayoutRef, root_offset: u64) -> VortexResult<()> {
+        let planner = self.planners.find(layout, root_offset)?;
+        planner.natural_splits(layout, root_offset, self)
+    }
+}
+
+/// What a planner may do while building nodes.
+///
+/// A context carries a *lease scope*: the root rows whose morsels use whatever is planned under
+/// it. Normally a stored unit is used by the morsels covering its own rows, but a dictionary's
+/// values are used by every morsel of the codes' range, so the dictionary planner scopes the
+/// values subtree to that range. Scoped subtrees never cut morsels and are never pruned by the
+/// planned ranges.
+pub struct LayoutCx<'a> {
+    builder: &'a mut Builder,
+    lease: Option<Range<u64>>,
+}
+
+impl LayoutCx<'_> {
+    /// Append a blueprint and return its id.
+    pub fn push(&mut self, blueprint: Box<dyn NodeBlueprint>) -> NodeId {
+        self.builder.push(blueprint)
+    }
+
+    /// The root rows whose morsels use a unit planned here, given the unit's own rows.
+    pub fn lease_range(&self, own_rows: Range<u64>) -> Range<u64> {
+        self.lease.clone().unwrap_or(own_rows)
+    }
+
+    /// Record that a fresh stored chunk starts at root row `root_row`.
+    ///
+    /// Ignored under a lease scope: rows of a scoped subtree are not morsel boundaries.
+    pub fn split_at(&mut self, root_row: u64) {
+        if self.lease.is_none() {
+            self.builder.splits.push(root_row);
+        }
+    }
+
+    /// Whether a child covering `root_range` must be materialized for this plan.
+    ///
+    /// Range-scoped plans skip chunks no planned range intersects. Scoped subtrees are always
+    /// materialized.
+    pub fn is_planned(&self, root_range: &Range<u64>) -> bool {
+        if self.lease.is_some() {
+            return true;
+        }
+        self.builder.planned_ranges.as_deref().is_none_or(|ranges| {
+            let candidate = ranges.partition_point(|range| range.end <= root_range.start);
+            ranges
+                .get(candidate)
+                .is_some_and(|range| range.start < root_range.end)
+        })
+    }
+
+    /// Plan a child layout whose first row is at `root_offset`, inheriting this lease scope.
+    pub fn child(&mut self, layout: &LayoutRef, root_offset: u64) -> VortexResult<NodeId> {
+        let lease = self.lease.clone();
+        self.plan_scoped(layout, root_offset, lease)
+    }
+
+    /// Plan a child layout under a new lease scope.
+    pub fn child_with_lease(
+        &mut self,
+        layout: &LayoutRef,
+        root_offset: u64,
+        lease: Range<u64>,
+    ) -> VortexResult<NodeId> {
+        self.plan_scoped(layout, root_offset, Some(lease))
+    }
+
+    fn plan_scoped(
+        &mut self,
+        layout: &LayoutRef,
+        root_offset: u64,
+        lease: Option<Range<u64>>,
+    ) -> VortexResult<NodeId> {
+        let planner = self.builder.planners.find(layout, root_offset)?;
+        let mut cx = LayoutCx {
+            builder: &mut *self.builder,
+            lease,
+        };
+        planner.plan(layout, root_offset, &mut cx)
+    }
 }
 
 /// A shared, immutable execution plan for one scan.
 pub struct ExecPlan {
-    nodes: Vec<NodeSpec>,
+    nodes: Vec<Box<dyn NodeBlueprint>>,
     root: NodeId,
+    has_predicate: bool,
     output_dtype: DType,
     row_count: u64,
     /// Root-coordinate boundaries at which every column starts a fresh chunk, used as the
@@ -117,13 +275,7 @@ impl ExecPlan {
     }
 
     pub(crate) fn has_filter(&self) -> bool {
-        matches!(
-            &self.nodes[self.root as usize],
-            NodeSpec::Filter {
-                predicate: Some(_),
-                ..
-            }
-        )
+        self.has_predicate
     }
 
     /// The union of every column's chunk boundaries, in root coordinates.
@@ -149,29 +301,22 @@ impl ExecPlan {
         self.planned_ranges.is_none()
     }
 
-    /// Every flat node's stored unit and its root-coordinate row range, one entry per node.
+    /// Every leaf's stored unit and its root-coordinate row range, one entry per node.
     ///
     /// A segment referenced from two subtrees (a column in both filter and projection) appears
     /// once per referencing node, because each node registers its own use per morsel. This is
     /// the input to the shared-cell lease counts: the count for a unit is the number of
     /// (node, morsel) pairs whose ranges overlap.
     pub fn flat_uses(&self) -> impl Iterator<Item = (IoKey, Range<u64>)> + '_ {
-        self.nodes.iter().filter_map(|spec| match spec {
-            NodeSpec::Flat {
-                layout,
-                lease_range,
-                ..
-            } => Some((IoKey::Segment(layout.segment_id()), lease_range.clone())),
-            _ => None,
-        })
+        self.nodes.iter().filter_map(|node| node.stored_use())
     }
 
-    /// Stored units to expose to the shared I/O service before workers start.
-    ///
-    /// An unfiltered dense or exact-demand scan can expose its complete exact set. A filtered scan
-    /// exposes two morsels per worker. Known sparse demand is left to mask-aware node planning:
-    /// putting its full read set on the serial startup path delays useful CPU work.
     /// How many leading morsels the initial lookahead window covers.
+    ///
+    /// An unfiltered dense or exact-demand scan exposes its complete read set before workers
+    /// start. A filtered scan exposes two morsels per worker. Known sparse demand is left to
+    /// mask-aware node planning: putting its full read set on the serial startup path delays
+    /// useful CPU work.
     pub(crate) fn initial_lookahead_len(
         &self,
         morsels: &[Range<u64>],
@@ -179,9 +324,6 @@ impl ExecPlan {
         workers: usize,
     ) -> usize {
         debug_assert!(demands.is_none_or(|demands| demands.len() == morsels.len()));
-        let NodeSpec::Filter { predicate, .. } = &self.nodes[self.root as usize] else {
-            unreachable!("the plan root is always a filter node")
-        };
         let sparse_demands = demands.is_some_and(|demands| {
             demands
                 .iter()
@@ -189,7 +331,7 @@ impl ExecPlan {
         });
         if sparse_demands {
             0
-        } else if predicate.is_some() {
+        } else if self.has_predicate {
             morsels.len().min(workers.saturating_mul(2))
         } else {
             morsels.len()
@@ -221,78 +363,18 @@ impl ExecPlan {
 
     /// Instantiate one worker's mutable arena from this blueprint.
     pub fn instantiate(&self) -> Arena {
-        let nodes: Vec<Box<dyn ExecNode>> = self
-            .nodes
-            .iter()
-            .enumerate()
-            .map(|(idx, spec)| -> Box<dyn ExecNode> {
-                match spec {
-                    NodeSpec::Flat {
-                        layout,
-                        root_offset,
-                        lease_range,
-                    } => Box::new(FlatExec::new(
-                        layout,
-                        *root_offset,
-                        lease_range.clone(),
-                        ProducerId(u32::try_from(idx).unwrap_or(u32::MAX)),
-                    )),
-                    NodeSpec::Chunked {
-                        chunk_offsets,
-                        child_chunks,
-                        children,
-                        dtype,
-                    } => Box::new(ChunkedExec::new(
-                        Arc::clone(chunk_offsets),
-                        Arc::clone(child_chunks),
-                        Arc::clone(children),
-                        dtype.clone(),
-                    )),
-                    NodeSpec::Struct {
-                        names,
-                        children,
-                        validity,
-                    } => Box::new(StructExec::new(
-                        names.clone(),
-                        Arc::clone(children),
-                        *validity,
-                    )),
-                    NodeSpec::Dict {
-                        values,
-                        codes,
-                        values_len,
-                    } => Box::new(DictExec::new(
-                        u32::try_from(idx).unwrap_or(u32::MAX),
-                        *values,
-                        *codes,
-                        *values_len,
-                    )),
-                    NodeSpec::Conjunct { slots, mode } => Box::new(ConjunctExec::new(
-                        slots
-                            .iter()
-                            .map(|(input, predicate)| ConjunctSlot {
-                                input: *input,
-                                predicate: predicate.clone(),
-                            })
-                            .collect(),
-                        *mode,
-                    )),
-                    NodeSpec::Filter {
-                        predicate,
-                        projection,
-                        expr,
-                        dtype,
-                    } => Box::new(FilterExec::new(
-                        *predicate,
-                        *projection,
-                        expr.clone(),
-                        dtype.clone(),
-                    )),
-                }
-            })
-            .collect();
-        Arena::new(nodes)
+        Arena::new(
+            self.nodes
+                .iter()
+                .enumerate()
+                .map(|(idx, node)| node.instantiate(node_id(idx)))
+                .collect(),
+        )
     }
+}
+
+fn node_id(index: usize) -> NodeId {
+    NodeId::try_from(index).vortex_expect("exec plan exceeds u32 nodes")
 }
 
 fn range_has_demand(range: &Range<u64>, morsels: &[Range<u64>], demands: Option<&[Mask]>) -> bool {
@@ -313,7 +395,7 @@ fn range_has_demand(range: &Range<u64>, morsels: &[Range<u64>], demands: Option<
     })
 }
 
-/// Build an execution plan for `layout` under `projection` and `filter`.
+/// Build an execution plan for `layout` under `projection` and `filter` with the built-in planners.
 ///
 /// The expressions are *unbound*: each conjunct and the projection are re-bound against the
 /// narrowed struct dtype of just the fields they reference, which is what lets a subtree read
@@ -324,7 +406,18 @@ pub fn build_plan(
     filter: Option<&Expression>,
     mode: ConjunctMode,
 ) -> VortexResult<ExecPlan> {
-    build_plan_inner(layout, projection, filter, mode, None)
+    build_plan_with(&LayoutPlanners::default(), layout, projection, filter, mode)
+}
+
+/// Build an execution plan with an explicit set of layout planners.
+pub fn build_plan_with(
+    planners: &LayoutPlanners,
+    layout: &LayoutRef,
+    projection: &Expression,
+    filter: Option<&Expression>,
+    mode: ConjunctMode,
+) -> VortexResult<ExecPlan> {
+    build_plan_inner(planners, layout, projection, filter, mode, None)
 }
 
 /// Build a plan that materializes only layout chunks intersecting `ranges`.
@@ -357,7 +450,14 @@ pub fn build_plan_for_ranges(
         }
         previous_end = range.end;
     }
-    build_plan_inner(layout, projection, filter, mode, Some(Arc::from(ranges)))
+    build_plan_inner(
+        &LayoutPlanners::default(),
+        layout,
+        projection,
+        filter,
+        mode,
+        Some(Arc::from(ranges)),
+    )
 }
 
 /// Compute natural morsel ranges for the referenced columns without materializing indivisible
@@ -372,16 +472,8 @@ pub fn natural_morsels_for(
     filter: Option<&Expression>,
     target_rows: u64,
 ) -> VortexResult<Vec<Range<u64>>> {
-    let root_fields = layout
-        .dtype()
-        .as_struct_fields_opt()
-        .ok_or_else(|| vortex_err!("the morsel executor requires a struct-rooted layout"))?;
-    if !layout.is::<Struct>() {
-        vortex_bail!(
-            "the morsel executor requires a struct root layout, got {}",
-            layout.encoding_id()
-        );
-    }
+    let planners = LayoutPlanners::default();
+    let root_fields = struct_root(layout)?;
 
     let mut names = referenced_names(projection, layout.dtype(), root_fields)?;
     if let Some(filter) = filter {
@@ -394,6 +486,10 @@ pub fn natural_morsels_for(
     }
 
     let mut splits = Vec::new();
+    let mut cx = SplitCx {
+        planners: &planners,
+        splits: &mut splits,
+    };
     for name in names {
         let idx = root_fields
             .find(&name)
@@ -401,13 +497,36 @@ pub fn natural_morsels_for(
         let field = layout
             .slot(idx + 1)?
             .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))?;
-        collect_lazy_splits(&field, 0, &mut splits)?;
+        cx.child(&field, 0)?;
     }
-    splits.push(layout.row_count());
+    Ok(cut_morsels(
+        &finish_splits(splits, layout.row_count()),
+        target_rows,
+    ))
+}
+
+/// The root must be a non-nullable struct layout; return its fields.
+fn struct_root(layout: &LayoutRef) -> VortexResult<&StructFields> {
+    let root_fields = layout
+        .dtype()
+        .as_struct_fields_opt()
+        .ok_or_else(|| vortex_err!("the morsel executor requires a struct-rooted layout"))?;
+    if !layout.is::<Struct>() {
+        vortex_bail!(
+            "the morsel executor requires a struct root layout, got {}",
+            layout.encoding_id()
+        );
+    }
+    Ok(root_fields)
+}
+
+/// Sort, dedupe, and bound the recorded splits, always ending at the row count.
+fn finish_splits(mut splits: Vec<u64>, row_count: u64) -> Vec<u64> {
+    splits.push(row_count);
     splits.sort_unstable();
     splits.dedup();
-    splits.retain(|&split| split > 0 && split <= layout.row_count());
-    Ok(cut_morsels(&splits, target_rows))
+    splits.retain(|&split| split > 0 && split <= row_count);
+    splits
 }
 
 fn referenced_names(
@@ -432,87 +551,17 @@ fn referenced_names(
     Ok(names)
 }
 
-fn collect_lazy_splits(
-    layout: &LayoutRef,
-    root_offset: u64,
-    splits: &mut Vec<u64>,
-) -> VortexResult<()> {
-    if layout.is::<Zoned>() || layout.is::<LegacyStats>() {
-        let data = layout
-            .slot(0)?
-            .ok_or_else(|| vortex_err!("zoned layout has no data child"))?;
-        return collect_lazy_splits(&data, root_offset, splits);
-    }
-    if layout.is::<Flat>() {
-        splits.push(root_offset + layout.row_count());
-        return Ok(());
-    }
-    if layout.is::<Dict>() {
-        let codes = layout
-            .slot(1)?
-            .ok_or_else(|| vortex_err!("dictionary layout has no codes child"))?;
-        return collect_lazy_splits(&codes, root_offset, splits);
-    }
-    if layout.is::<Struct>() {
-        let fields = layout.dtype().as_struct_fields_opt().ok_or_else(|| {
-            vortex_err!("struct layout has a non-struct dtype {}", layout.dtype())
-        })?;
-        if layout.dtype().is_nullable()
-            && let Some(validity) = layout.slot(0)?
-        {
-            collect_lazy_splits(&validity, root_offset, splits)?;
-        }
-        for idx in 0..fields.nfields() {
-            let field = layout
-                .slot(idx + 1)?
-                .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))?;
-            collect_lazy_splits(&field, root_offset, splits)?;
-        }
-        return Ok(());
-    }
-    if layout.is::<Chunked>() {
-        let chunked = layout.as_::<Chunked>();
-        let mut offset = 0;
-        for idx in 0..chunked.nchildren() {
-            let rows = chunked.child_row_count(idx);
-            if !chunked.children().child_is_indivisible(idx) {
-                let child = chunked
-                    .slot(idx)?
-                    .ok_or_else(|| vortex_err!("chunked layout has no child {idx}"))?;
-                collect_lazy_splits(&child, root_offset + offset, splits)?;
-            }
-            offset += rows;
-            splits.push(root_offset + offset);
-        }
-        return Ok(());
-    }
-    vortex_bail!(
-        "the morsel executor supports flat and chunked columns only, got {} at row offset {}",
-        layout.encoding_id(),
-        root_offset
-    )
-}
-
 fn build_plan_inner(
+    planners: &LayoutPlanners,
     layout: &LayoutRef,
     projection: &Expression,
     filter: Option<&Expression>,
     mode: ConjunctMode,
     planned_ranges: Option<Arc<[Range<u64>]>>,
 ) -> VortexResult<ExecPlan> {
-    let root_dtype = layout.dtype().clone();
-    let root_fields = root_dtype
-        .as_struct_fields_opt()
-        .ok_or_else(|| vortex_err!("the morsel executor requires a struct-rooted layout"))?
-        .clone();
-    if root_dtype.is_nullable() {
+    let root_fields = struct_root(layout)?.clone();
+    if layout.dtype().is_nullable() {
         vortex_bail!("the morsel executor does not support a nullable root struct");
-    }
-    if !layout.is::<Struct>() {
-        vortex_bail!(
-            "the morsel executor requires a struct root layout, got {}",
-            layout.encoding_id()
-        );
     }
 
     let mut builder = Builder {
@@ -521,6 +570,7 @@ fn build_plan_inner(
         root_fields,
         splits: Vec::new(),
         planned_ranges: planned_ranges.clone(),
+        planners: planners.clone(),
     };
 
     // The filter: one subtree per conjunct, each over just that conjunct's fields.
@@ -533,49 +583,45 @@ fn build_plan_inner(
                 let (input, bound) = builder.build_scoped(&conjunct)?;
                 slots.push((input, bound));
             }
-            Some(builder.push(NodeSpec::Conjunct { slots, mode }))
+            Some(builder.push(Box::new(ConjunctSpec { slots, mode })))
         }
     };
 
     // The projection.
     let (projection_input, projection_bound) = builder.build_scoped(projection)?;
     let output_dtype = projection_bound.dtype().clone();
-    let root = builder.push(NodeSpec::Filter {
+    let root = builder.push(Box::new(FilterSpec {
         predicate,
         projection: projection_input,
         expr: projection_bound,
         dtype: output_dtype.clone(),
-    });
+    }));
 
     let row_count = layout.row_count();
-    let mut natural_splits = builder.splits;
-    natural_splits.push(row_count);
-    natural_splits.sort_unstable();
-    natural_splits.dedup();
-    natural_splits.retain(|&split| split > 0 && split <= row_count);
-
     Ok(ExecPlan {
         nodes: builder.nodes,
         root,
+        has_predicate: predicate.is_some(),
         output_dtype,
         row_count,
-        natural_splits,
+        natural_splits: finish_splits(builder.splits, row_count),
         planned_ranges,
     })
 }
 
 struct Builder {
-    nodes: Vec<NodeSpec>,
+    nodes: Vec<Box<dyn NodeBlueprint>>,
     layout: LayoutRef,
     root_fields: StructFields,
     splits: Vec<u64>,
     planned_ranges: Option<Arc<[Range<u64>]>>,
+    planners: LayoutPlanners,
 }
 
 impl Builder {
-    fn push(&mut self, spec: NodeSpec) -> NodeId {
-        self.nodes.push(spec);
-        NodeId::try_from(self.nodes.len() - 1).vortex_expect("exec plan exceeds u32 nodes")
+    fn push(&mut self, blueprint: Box<dyn NodeBlueprint>) -> NodeId {
+        self.nodes.push(blueprint);
+        node_id(self.nodes.len() - 1)
     }
 
     /// Build the subtree for one expression: a struct over exactly the top-level fields the
@@ -604,23 +650,23 @@ impl Builder {
                 .root_fields
                 .find(name)
                 .ok_or_else(|| vortex_err!("field {name} not found in the scan dtype"))?;
-            let field_layout = self.field_layout(idx)?;
-            children.push(self.build_layout(&field_layout, 0)?);
+            let field_layout = self
+                .layout
+                .slot(idx + 1)?
+                .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))?;
+            let mut cx = LayoutCx {
+                builder: self,
+                lease: None,
+            };
+            children.push(cx.child(&field_layout, 0)?);
         }
 
-        let node = self.push(NodeSpec::Struct {
+        let node = self.push(Box::new(StructSpec {
             names: FieldNames::from(names),
             children: Arc::from(children),
             validity: None,
-        });
+        }));
         Ok((node, bound))
-    }
-
-    /// The struct layout's child for field `idx`, accounting for the validity slot.
-    fn field_layout(&self, idx: usize) -> VortexResult<LayoutRef> {
-        self.layout
-            .slot(idx + 1)?
-            .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))
     }
 
     fn referenced_top_level_fields(&self, expr: &BoundExpression) -> VortexResult<Vec<FieldName>> {
@@ -647,143 +693,6 @@ impl Builder {
         // Keep the scan dtype's field order so `select` and `pack` see the fields they expect.
         names.sort_by_key(|name| self.root_fields.find(name).unwrap_or(usize::MAX));
         Ok(names)
-    }
-
-    /// Build the subtree for one column, recording its chunk boundaries as natural splits.
-    fn build_layout(&mut self, layout: &LayoutRef, root_offset: u64) -> VortexResult<NodeId> {
-        self.build_layout_with_lease(layout, root_offset, None)
-    }
-
-    fn build_layout_with_lease(
-        &mut self,
-        layout: &LayoutRef,
-        root_offset: u64,
-        lease_range: Option<Range<u64>>,
-    ) -> VortexResult<NodeId> {
-        if layout.is::<Zoned>() || layout.is::<LegacyStats>() {
-            let data = layout
-                .slot(0)?
-                .ok_or_else(|| vortex_err!("zoned layout has no data child"))?;
-            return self.build_layout_with_lease(&data, root_offset, lease_range);
-        }
-
-        if layout.is::<Flat>() {
-            if lease_range.is_none() {
-                self.splits.push(root_offset + layout.row_count());
-            }
-            let flat = layout.as_::<Flat>().clone();
-            return Ok(self.push(NodeSpec::Flat {
-                layout: flat,
-                root_offset,
-                lease_range: lease_range
-                    .unwrap_or_else(|| root_offset..root_offset + layout.row_count()),
-            }));
-        }
-
-        if layout.is::<Dict>() {
-            let values_layout = layout
-                .slot(0)?
-                .ok_or_else(|| vortex_err!("dictionary layout has no values child"))?;
-            let codes_layout = layout
-                .slot(1)?
-                .ok_or_else(|| vortex_err!("dictionary layout has no codes child"))?;
-            let values_len = usize::try_from(values_layout.row_count())
-                .map_err(|_| vortex_err!("dictionary values row count exceeds usize"))?;
-            let logical_range = root_offset..root_offset + layout.row_count();
-            let values =
-                self.build_layout_with_lease(&values_layout, root_offset, Some(logical_range))?;
-            let codes = self.build_layout_with_lease(&codes_layout, root_offset, lease_range)?;
-            return Ok(self.push(NodeSpec::Dict {
-                values,
-                codes,
-                values_len,
-            }));
-        }
-
-        if layout.is::<Struct>() {
-            let fields = layout.dtype().as_struct_fields_opt().ok_or_else(|| {
-                vortex_err!("struct layout has a non-struct dtype {}", layout.dtype())
-            })?;
-            let names = fields.names().clone();
-            let validity = if layout.dtype().is_nullable() {
-                let validity_layout = layout
-                    .slot(0)?
-                    .ok_or_else(|| vortex_err!("nullable struct layout has no validity child"))?;
-                Some(self.build_layout_with_lease(
-                    &validity_layout,
-                    root_offset,
-                    lease_range.clone(),
-                )?)
-            } else {
-                None
-            };
-            let mut children = Vec::with_capacity(fields.nfields());
-            for idx in 0..fields.nfields() {
-                let field = layout
-                    .slot(idx + 1)?
-                    .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))?;
-                children.push(self.build_layout_with_lease(
-                    &field,
-                    root_offset,
-                    lease_range.clone(),
-                )?);
-            }
-            return Ok(self.push(NodeSpec::Struct {
-                names,
-                children: Arc::from(children),
-                validity,
-            }));
-        }
-
-        if layout.is::<Chunked>() {
-            let chunked = layout.as_::<Chunked>();
-            let nchunks = chunked.nchildren();
-            let mut offsets = Vec::with_capacity(nchunks + 1);
-            offsets.push(0u64);
-            for idx in 0..nchunks {
-                offsets.push(offsets[idx] + chunked.child_row_count(idx));
-            }
-
-            let mut child_chunks = Vec::with_capacity(nchunks);
-            let mut children = Vec::with_capacity(nchunks);
-            for idx in 0..nchunks {
-                let offset = offsets[idx];
-                let child_end = offsets[idx + 1];
-                let child_range = root_offset + offset..root_offset + child_end;
-                if lease_range.is_none()
-                    && self.planned_ranges.as_deref().is_some_and(|ranges| {
-                        let candidate =
-                            ranges.partition_point(|range| range.end <= child_range.start);
-                        ranges
-                            .get(candidate)
-                            .is_none_or(|range| range.start >= child_range.end)
-                    })
-                {
-                    continue;
-                }
-                let child = layout
-                    .slot(idx)?
-                    .ok_or_else(|| vortex_err!("chunked layout has no child {idx}"))?;
-                child_chunks.push(idx);
-                children.push(self.build_layout_with_lease(
-                    &child,
-                    root_offset + offset,
-                    lease_range.clone(),
-                )?);
-            }
-            return Ok(self.push(NodeSpec::Chunked {
-                chunk_offsets: Arc::from(offsets),
-                child_chunks: Arc::from(child_chunks),
-                children: Arc::from(children),
-                dtype: layout.dtype().clone(),
-            }));
-        }
-
-        vortex_bail!(
-            "the morsel executor supports flat and chunked columns only, got {} at row offset {}",
-            layout.encoding_id(),
-            root_offset
-        )
     }
 }
 

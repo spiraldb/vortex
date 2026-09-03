@@ -12,6 +12,7 @@ use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 
+use crate::build::NodeBlueprint;
 use crate::node::ChildPoll;
 use crate::node::ExecCx;
 use crate::node::ExecNode;
@@ -23,6 +24,26 @@ use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
 use crate::node::ValueBatch;
+
+/// The blueprint of a struct node.
+pub struct StructSpec {
+    /// Field names, one per child.
+    pub names: FieldNames,
+    /// One child per field.
+    pub children: Arc<[NodeId]>,
+    /// The validity child of a nullable struct.
+    pub validity: Option<NodeId>,
+}
+
+impl NodeBlueprint for StructSpec {
+    fn instantiate(&self, _id: NodeId) -> Box<dyn ExecNode> {
+        Box::new(StructExec::new(
+            self.names.clone(),
+            Arc::clone(&self.children),
+            self.validity,
+        ))
+    }
+}
 
 /// Struct is almost nothing: identity edges to each field, then a zip.
 ///

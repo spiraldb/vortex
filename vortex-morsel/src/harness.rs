@@ -264,7 +264,7 @@ pub fn run_morsel(
         .with_morsels(cut)
         .with_share_decodes(config.share_decodes)
         .with_lookahead_morsels(config.lookahead_morsels);
-    let scan = SegmentSourceDriver::new(Arc::clone(segments)).connect_on_thread(scan)?;
+    let scan = scan.connect_on_thread(&SegmentSourceDriver::new(Arc::clone(segments)))?;
 
     let (batches, stats, wall) = scan.run_timed()?;
 

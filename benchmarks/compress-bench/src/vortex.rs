@@ -94,8 +94,10 @@ impl Compressor for VortexCompressor {
         let scan = MorselScan::new(plan, SESSION.clone())
             .with_threads(threads)
             .with_morsels(cut);
-        let scan =
-            SegmentSourceDriver::new(file.segment_source()).connect(scan, &SESSION.handle())?;
+        let scan = scan.connect(
+            &SegmentSourceDriver::new(file.segment_source()),
+            &SESSION.handle(),
+        )?;
         let (batches, _) = scan.run()?;
 
         let mut ctx = SESSION.create_execution_ctx();

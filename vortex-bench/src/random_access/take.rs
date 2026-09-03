@@ -629,8 +629,10 @@ impl VortexRandomAccessor {
         let scan = MorselScan::new(Arc::clone(&plan), SESSION.clone())
             .with_morsel_demands(selected_morsels)?
             .with_observability(observe);
-        let scan = SegmentSourceDriver::new(self.file.segment_source())
-            .connect(scan, &SESSION.handle())?;
+        let scan = scan.connect(
+            &SegmentSourceDriver::new(self.file.segment_source()),
+            &SESSION.handle(),
+        )?;
         let (batches, stats) = state
             .as_ref()
             .ok_or_else(|| anyhow::anyhow!("morsel executor was not initialized"))?

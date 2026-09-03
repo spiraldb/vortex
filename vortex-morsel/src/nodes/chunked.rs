@@ -14,6 +14,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
+use crate::build::NodeBlueprint;
 use crate::node::ChildPoll;
 use crate::node::ExecCx;
 use crate::node::ExecNode;
@@ -34,6 +35,29 @@ struct Cut {
     chunk_range: Range<u64>,
     /// The slice of the demand mask that covers this overlap.
     mask_range: Range<usize>,
+}
+
+/// The blueprint of a chunked node.
+pub struct ChunkedSpec {
+    /// Cumulative row offsets, one more than the number of chunks.
+    pub chunk_offsets: Arc<[u64]>,
+    /// Original chunk index of each materialized child.
+    pub child_chunks: Arc<[usize]>,
+    /// The materialized children, in chunk order.
+    pub children: Arc<[NodeId]>,
+    /// The column's dtype, for empty output.
+    pub dtype: DType,
+}
+
+impl NodeBlueprint for ChunkedSpec {
+    fn instantiate(&self, _id: NodeId) -> Box<dyn ExecNode> {
+        Box::new(ChunkedExec::new(
+            Arc::clone(&self.chunk_offsets),
+            Arc::clone(&self.child_chunks),
+            Arc::clone(&self.children),
+            self.dtype.clone(),
+        ))
+    }
 }
 
 /// Chunked has no runtime existence beyond cutting: it turns one range into per-chunk ranges and

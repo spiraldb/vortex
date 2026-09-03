@@ -79,20 +79,53 @@ configured concurrency (16 for local files).
 **Rule:** polling a `ReadFuture` promotes it. That is why the executor's driver polls speculative
 reads through a bounded window rather than all at once.
 
-### `ExecPlan` and `build_plan` (`vortex-morsel/src/build.rs`)
+### `ExecPlan`, `build_plan`, and `NodeBlueprint` (`vortex-morsel/src/build.rs`)
 
 The immutable blueprint of one scan. `build_plan(layout, projection, filter, conjunct_mode)`
-walks the stored layout and produces node specs for FLAT, CHUNKED, STRUCT, DICT (pull only),
-FILTER, and CONJUNCT. Unsupported shapes are errors, never fallbacks. The plan knows the row
-count, the natural split boundaries, and every `(IoKey, row range)` a flat node will use, which
-is what lease counting and lookahead are computed from.
+walks the stored layout through the registered `LayoutPlanner`s and collects one
+`NodeBlueprint` per node: `FlatSpec`, `ChunkedSpec`, `StructSpec`, `DictSpec` (pull only),
+`ConjunctSpec`, and the root `FilterSpec`. Unsupported layouts are errors, never fallbacks. The
+plan knows the row count, the natural split boundaries, and, through `NodeBlueprint::stored_use`,
+every `(IoKey, row range)` a leaf reads, which is what lease counting and lookahead are computed
+from.
 
-- `plan.instantiate()` builds one arena of mutable node state. Each worker owns one arena and
-  reuses it across morsels.
+```rust
+pub trait NodeBlueprint: Send + Sync {
+    fn instantiate(&self, id: NodeId) -> Box<dyn ExecNode>;
+    fn stored_use(&self) -> Option<(IoKey, Range<u64>)> { None }
+}
+```
+
+- `plan.instantiate()` asks every blueprint for one worker's mutable node state. Each worker
+  owns one arena and reuses it across morsels.
 - `morsels(&plan, target_rows)` (in `driver.rs`) cuts the row space; `0` means one morsel per
   natural split.
 
-**Rule:** the plan is shared and read-only; all mutable state lives in per-worker arenas.
+**Rule:** the plan is shared and read-only; all mutable state lives in per-worker arenas. A node
+that reads storage must say so through `stored_use`, because nothing else inspects a blueprint.
+
+### `LayoutPlanner`, `LayoutPlanners`, `LayoutCx`, `SplitCx` (`vortex-morsel/src/build.rs`, `layouts.rs`)
+
+How one kind of stored layout becomes nodes.
+
+```rust
+pub trait LayoutPlanner: Send + Sync {
+    fn handles(&self, layout: &LayoutRef) -> bool;
+    fn natural_splits(&self, layout: &LayoutRef, root_offset: u64, cx: &mut SplitCx<'_>) -> VortexResult<()>;
+    fn plan(&self, layout: &LayoutRef, root_offset: u64, cx: &mut LayoutCx<'_>) -> VortexResult<NodeId>;
+}
+```
+
+`LayoutPlanners` is an ordered registry; the first planner whose `handles` accepts a layout owns
+it, and `with` puts a new planner ahead of the built-ins. The built-ins in `layouts.rs` are
+`ZonedPlanner` (transparent wrapper), `FlatPlanner`, `DictPlanner`, `StructPlanner`, and
+`ChunkedPlanner`. `SplitCx` lets a planner record chunk boundaries and recurse without
+materializing indivisible children; `LayoutCx` lets it push blueprints, plan children, and open a
+*lease scope*, which is how the dictionary planner says its values are used by every morsel of the
+codes' range.
+
+**Rule:** a planner answers both questions about its layout, where chunks start and which nodes
+execute it, so the morsel cut and the plan agree by construction.
 
 ### `ExecNode` (`vortex-morsel/src/node.rs`)
 
@@ -185,13 +218,24 @@ pub type NowaitProbe = Arc<dyn Fn(IoKey) -> VortexResult<ReadAtNowait> + Send + 
 
 **Rule:** the scan says what it wants and when it is blocked; it never says how to read.
 
-### `SegmentSourceDriver` (`vortex-morsel/src/source.rs`)
+### `IoAnswerer` and `SegmentSourceDriver` (`vortex-morsel/src/source.rs`)
 
-The standard answerer. It consumes an `IoDemandStream`, issues reads on a `SegmentSource`, and
-calls `complete`. Both `connect(scan, &handle)`, which spawns it on a runtime, and
-`connect_on_thread(scan)`, which runs it on a dedicated thread for callers without a runtime
-such as the test harness, consume the scan and return it configured for the source: use the
-returned value.
+Whoever serves the demand stream.
+
+```rust
+pub trait IoAnswerer: Send + Sync {
+    fn prefers_background_reads(&self) -> bool { false }
+    fn nowait_probe(&self) -> Option<NowaitProbe> { None }
+    fn serve(&self, demand: IoDemandStream, completions: IoCompletions) -> BoxFuture<'static, ()>;
+}
+```
+
+`MorselScan::connect(&answerer, &handle)` spawns `serve` on a runtime and
+`MorselScan::connect_on_thread(&answerer)` runs it on a dedicated thread for callers without a
+runtime, such as the test harness. Both consume the scan and return it configured for the
+answerer: use the returned value.
+
+`SegmentSourceDriver` is the standard answerer over any `SegmentSource`.
 
 - A `Start` batch becomes one `request_background_batch` call (or one `request` per id for
   demand-driven sources), so coalescing sources still see the wave.
@@ -279,6 +323,32 @@ thread (DuckDB) drive morsels itself, ticking its own runtime while it waits.
 | Executor defaults | `executor.rs` | 4 threads, 128 Ki rows per morsel, 16 lookahead morsels, `Cascade`. |
 | `PushCx`, `NodeState`, `MorselStream` | push crate | Push-mode context, node lifecycle state, and the ordered output stream. |
 | `ScanExecutorOptions::with_external_threads` | `vortex-morsel-scan` | Lets an engine's own threads drive morsels and tick its runtime. |
+
+## Part 4: extension points, and which are traits
+
+Three things vary by design and are traits. Everything else is deliberately concrete.
+
+| Extension point | Shape | Why this shape |
+| --- | --- | --- |
+| A new stored layout | `LayoutPlanner`, registered in `LayoutPlanners` | Layouts are the open set in Vortex; V1 extends the same way through `LayoutVTable::new_reader`. Before this, two duplicated `match`es in `build.rs` had to be edited per layout, and the split walk and the plan walk could disagree. A planner owns both answers for its layout. |
+| A new kind of node | `NodeBlueprint` plus `ExecNode` | A planner must be able to introduce node types the crate has never seen. The blueprint is the immutable half a worker instantiates; the exec node is the mutable half. Only `stored_use` is inspected from outside, so the scheduler stays ignorant of node types. |
+| A new way to perform reads | `IoAnswerer` | The scan only ever sees a demand stream and a completions handle. An engine's buffer manager, an object-store prefetcher, or a test double that scripts latency can serve it without implementing `SegmentSource`; `SegmentSourceDriver` is one answerer among possible others. |
+| A new operator between layouts and output | `ExecNode` | Already the per-node contract; six operators implement it. |
+
+Kept concrete, and why:
+
+- **Morsel cutting.** `morsels`, `natural_morsels_for`, and `with_morsel_demands` are data:
+  ranges and masks. A policy trait here would hide which rows a scan reads, which is the one
+  thing every experiment has needed to see.
+- **Lease cells.** `SharedCells` derives retention from the morsel cut; the design notes record
+  that an earlier cache measured itself rather than the executor. A trait would invite caches
+  back in.
+- **Completion sink and probe.** Closures. A trait would add nothing but a name.
+- **Worker hosting.** `MorselExecutor` has one inline and one pooled mode; the push crate's
+  external-thread mode is the only other policy seen so far, and it is not yet settled enough
+  to freeze behind a trait.
+- **Backend selection.** `ScanBackend` is an enum of two prototypes plus V1; an enum is honest
+  about that.
 
 ## Part 2: one scan, end to end
 
