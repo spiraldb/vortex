@@ -116,7 +116,9 @@ pub trait LayoutPlanner: Send + Sync {
 }
 ```
 
-`LayoutPlanners` is an ordered registry; the first planner whose `handles` accepts a layout owns
+`LayoutPlanners` is an ordered registry and the entry point for planning: `build_plan`,
+`build_plan_for_ranges`, and `natural_morsels_for` are methods on it, and the free functions of
+the same names use the default registry. The first planner whose `handles` accepts a layout owns
 it, and `with` puts a new planner ahead of the built-ins. The built-ins in `layouts.rs` are
 `ZonedPlanner` (transparent wrapper), `FlatPlanner`, `DictPlanner`, `StructPlanner`, and
 `ChunkedPlanner`. `SplitCx` lets a planner record chunk boundaries and recurse without

@@ -131,6 +131,107 @@ impl LayoutPlanners {
         self
     }
 
+    /// Build an execution plan for `layout` under `projection` and `filter`.
+    ///
+    /// The expressions are *unbound*: each conjunct and the projection are re-bound against the
+    /// narrowed struct dtype of just the fields they reference, which is what lets a subtree read
+    /// only its own columns without any expression rewriting.
+    pub fn build_plan(
+        &self,
+        layout: &LayoutRef,
+        projection: &Expression,
+        filter: Option<&Expression>,
+        mode: ConjunctMode,
+    ) -> VortexResult<ExecPlan> {
+        build_plan_inner(self, layout, projection, filter, mode, None)
+    }
+
+    /// Build a plan that materializes only layout chunks intersecting `ranges`.
+    ///
+    /// The ranges use root row coordinates and must be sorted, non-overlapping, non-empty, and
+    /// within the layout row count. The resulting plan rejects scans outside those ranges.
+    pub fn build_plan_for_ranges(
+        &self,
+        layout: &LayoutRef,
+        projection: &Expression,
+        filter: Option<&Expression>,
+        mode: ConjunctMode,
+        ranges: &[Range<u64>],
+    ) -> VortexResult<ExecPlan> {
+        if ranges.is_empty() {
+            vortex_bail!("a range-scoped morsel plan requires at least one range");
+        }
+        let mut previous_end = 0;
+        for (idx, range) in ranges.iter().enumerate() {
+            if range.start >= range.end {
+                vortex_bail!("planned range must be non-empty, got {range:?}");
+            }
+            if range.end > layout.row_count() {
+                vortex_bail!(
+                    "planned range {range:?} exceeds layout row count {}",
+                    layout.row_count()
+                );
+            }
+            if idx > 0 && range.start < previous_end {
+                vortex_bail!("planned ranges must be sorted and non-overlapping");
+            }
+            previous_end = range.end;
+        }
+        build_plan_inner(
+            self,
+            layout,
+            projection,
+            filter,
+            mode,
+            Some(Arc::from(ranges)),
+        )
+    }
+
+    /// Compute natural morsel ranges for the referenced columns without materializing
+    /// indivisible chunk children.
+    ///
+    /// This mirrors the lazy V1 split walk: chunk row counts and indivisibility come from
+    /// serialized child metadata, so an all-flat chunked column contributes its boundaries
+    /// without constructing every child layout.
+    pub fn natural_morsels_for(
+        &self,
+        layout: &LayoutRef,
+        projection: &Expression,
+        filter: Option<&Expression>,
+        target_rows: u64,
+    ) -> VortexResult<Vec<Range<u64>>> {
+        let root_fields = struct_root(layout)?;
+
+        let mut names = referenced_names(projection, layout.dtype(), root_fields)?;
+        if let Some(filter) = filter {
+            for name in referenced_names(filter, layout.dtype(), root_fields)? {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+            names.sort_by_key(|name| root_fields.find(name).unwrap_or(usize::MAX));
+        }
+
+        let mut splits = Vec::new();
+        let mut cx = SplitCx {
+            planners: self,
+            splits: &mut splits,
+        };
+        for name in names {
+            let idx = root_fields
+                .find(&name)
+                .ok_or_else(|| vortex_err!("field {name} not found in the scan dtype"))?;
+            let field = layout
+                .slot(idx + 1)?
+                .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))?;
+            cx.child(&field, 0)?;
+        }
+        Ok(cut_morsels(
+            &finish_splits(splits, layout.row_count()),
+            target_rows,
+        ))
+    }
+
     fn find(&self, layout: &LayoutRef, root_offset: u64) -> VortexResult<Arc<dyn LayoutPlanner>> {
         self.planners
             .iter()
@@ -395,35 +496,21 @@ fn range_has_demand(range: &Range<u64>, morsels: &[Range<u64>], demands: Option<
     })
 }
 
-/// Build an execution plan for `layout` under `projection` and `filter` with the built-in planners.
+/// Build an execution plan with the built-in planners.
 ///
-/// The expressions are *unbound*: each conjunct and the projection are re-bound against the
-/// narrowed struct dtype of just the fields they reference, which is what lets a subtree read
-/// only its own columns without any expression rewriting.
+/// See [`LayoutPlanners::build_plan`].
 pub fn build_plan(
     layout: &LayoutRef,
     projection: &Expression,
     filter: Option<&Expression>,
     mode: ConjunctMode,
 ) -> VortexResult<ExecPlan> {
-    build_plan_with(&LayoutPlanners::default(), layout, projection, filter, mode)
+    LayoutPlanners::default().build_plan(layout, projection, filter, mode)
 }
 
-/// Build an execution plan with an explicit set of layout planners.
-pub fn build_plan_with(
-    planners: &LayoutPlanners,
-    layout: &LayoutRef,
-    projection: &Expression,
-    filter: Option<&Expression>,
-    mode: ConjunctMode,
-) -> VortexResult<ExecPlan> {
-    build_plan_inner(planners, layout, projection, filter, mode, None)
-}
-
-/// Build a plan that materializes only layout chunks intersecting `ranges`.
+/// Build a range-scoped plan with the built-in planners.
 ///
-/// The ranges use root row coordinates and must be sorted, non-overlapping, non-empty, and within
-/// the layout row count. The resulting plan rejects scans outside those ranges.
+/// See [`LayoutPlanners::build_plan_for_ranges`].
 pub fn build_plan_for_ranges(
     layout: &LayoutRef,
     projection: &Expression,
@@ -431,78 +518,19 @@ pub fn build_plan_for_ranges(
     mode: ConjunctMode,
     ranges: &[Range<u64>],
 ) -> VortexResult<ExecPlan> {
-    if ranges.is_empty() {
-        vortex_bail!("a range-scoped morsel plan requires at least one range");
-    }
-    let mut previous_end = 0;
-    for (idx, range) in ranges.iter().enumerate() {
-        if range.start >= range.end {
-            vortex_bail!("planned range must be non-empty, got {range:?}");
-        }
-        if range.end > layout.row_count() {
-            vortex_bail!(
-                "planned range {range:?} exceeds layout row count {}",
-                layout.row_count()
-            );
-        }
-        if idx > 0 && range.start < previous_end {
-            vortex_bail!("planned ranges must be sorted and non-overlapping");
-        }
-        previous_end = range.end;
-    }
-    build_plan_inner(
-        &LayoutPlanners::default(),
-        layout,
-        projection,
-        filter,
-        mode,
-        Some(Arc::from(ranges)),
-    )
+    LayoutPlanners::default().build_plan_for_ranges(layout, projection, filter, mode, ranges)
 }
 
-/// Compute natural morsel ranges for the referenced columns without materializing indivisible
-/// chunk children.
+/// Compute natural morsel ranges with the built-in planners.
 ///
-/// This mirrors the lazy V1 split walk: chunk row counts and indivisibility come from serialized
-/// child metadata, so an all-flat chunked column contributes its boundaries without constructing
-/// every child layout.
+/// See [`LayoutPlanners::natural_morsels_for`].
 pub fn natural_morsels_for(
     layout: &LayoutRef,
     projection: &Expression,
     filter: Option<&Expression>,
     target_rows: u64,
 ) -> VortexResult<Vec<Range<u64>>> {
-    let planners = LayoutPlanners::default();
-    let root_fields = struct_root(layout)?;
-
-    let mut names = referenced_names(projection, layout.dtype(), root_fields)?;
-    if let Some(filter) = filter {
-        for name in referenced_names(filter, layout.dtype(), root_fields)? {
-            if !names.contains(&name) {
-                names.push(name);
-            }
-        }
-        names.sort_by_key(|name| root_fields.find(name).unwrap_or(usize::MAX));
-    }
-
-    let mut splits = Vec::new();
-    let mut cx = SplitCx {
-        planners: &planners,
-        splits: &mut splits,
-    };
-    for name in names {
-        let idx = root_fields
-            .find(&name)
-            .ok_or_else(|| vortex_err!("field {name} not found in the scan dtype"))?;
-        let field = layout
-            .slot(idx + 1)?
-            .ok_or_else(|| vortex_err!("struct layout has no child for field {idx}"))?;
-        cx.child(&field, 0)?;
-    }
-    Ok(cut_morsels(
-        &finish_splits(splits, layout.row_count()),
-        target_rows,
-    ))
+    LayoutPlanners::default().natural_morsels_for(layout, projection, filter, target_rows)
 }
 
 /// The root must be a non-nullable struct layout; return its fields.

@@ -77,7 +77,6 @@ use crate::MorselScanExecutor;
 use crate::ScanCancellation;
 use crate::SegmentSourceDriver;
 use crate::build_plan;
-use crate::build_plan_with;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
@@ -1374,8 +1373,7 @@ fn registered_planners_take_precedence_and_missing_planners_are_errors() -> Vort
     let planners = LayoutPlanners::default().with(Arc::new(CountingFlatPlanner {
         planned: Arc::clone(&planned),
     }));
-    let plan = build_plan_with(
-        &planners,
+    let plan = planners.build_plan(
         &fixture.layout,
         &query.projection,
         query.filter.as_ref(),
@@ -1390,16 +1388,30 @@ fn registered_planners_take_precedence_and_missing_planners_are_errors() -> Vort
     assert_eq!(planned.load(Ordering::Relaxed), plan.flat_uses().count());
     assert_eq!(plan.flat_uses().count(), reference.flat_uses().count());
     assert_eq!(plan.natural_splits(), reference.natural_splits());
-
-    let err = build_plan_with(
-        &LayoutPlanners::empty(),
+    // The same registry cuts morsels and scopes plans, so a custom layout works everywhere.
+    assert_eq!(
+        planners.natural_morsels_for(&fixture.layout, &query.projection, None, 0)?,
+        crate::natural_morsels_for(&fixture.layout, &query.projection, None, 0)?
+    );
+    let scoped = planners.build_plan_for_ranges(
         &fixture.layout,
         &query.projection,
         None,
         ConjunctMode::Cascade,
-    )
-    .err()
-    .ok_or_else(|| vortex_err!("a plan without planners must fail"))?;
+        &[0..10, 20..30],
+    )?;
+    assert!(scoped.supports_ranges(&[0..10, 20..30]));
+    assert!(!scoped.supports_ranges(&[10..20, 20..30]));
+
+    let err = LayoutPlanners::empty()
+        .build_plan(
+            &fixture.layout,
+            &query.projection,
+            None,
+            ConjunctMode::Cascade,
+        )
+        .err()
+        .ok_or_else(|| vortex_err!("a plan without planners must fail"))?;
     assert!(err.to_string().contains("no planner for layout"));
     Ok(())
 }

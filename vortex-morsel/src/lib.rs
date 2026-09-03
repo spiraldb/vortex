@@ -74,7 +74,6 @@ pub use build::NodeBlueprint;
 pub use build::SplitCx;
 pub use build::build_plan;
 pub use build::build_plan_for_ranges;
-pub use build::build_plan_with;
 pub use build::natural_morsels_for;
 pub use driver::MorselExecutor;
 pub use driver::MorselScan;
