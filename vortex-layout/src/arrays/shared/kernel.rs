@@ -6,7 +6,6 @@ use vortex_session::VortexSession;
 
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
-use vortex_array::IntoArray;
 use vortex_array::ArrayView;
 use crate::arrays::shared::Shared;
 use crate::arrays::shared::current_array_ref_for_dispatch;
@@ -16,6 +15,7 @@ use vortex_array::scalar_fn::fns::like::Like;
 use vortex_array::scalar_fn::fns::like::LikeExecuteAdaptor;
 use vortex_array::scalar_fn::fns::like::LikeKernel;
 use vortex_array::scalar_fn::fns::like::LikeOptions;
+use vortex_array::scalar_fn::fns::like::try_execute_like_without_fallback;
 
 impl LikeKernel for Shared {
     fn like(
@@ -31,9 +31,7 @@ impl LikeKernel for Shared {
 
         // Give the current encoding's LIKE kernel a chance without removing Shared. If it
         // declines, normal execution will materialize Shared and retain that result for reuse.
-        let parent = Like::try_new(current.clone(), pattern.clone(), options)?.into_array();
-
-        ctx.try_execute_parent_kernel(&parent, &current, 0)
+        try_execute_like_without_fallback(&current, pattern, options, ctx)
     }
 }
 
