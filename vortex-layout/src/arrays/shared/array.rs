@@ -11,11 +11,13 @@ use async_lock::Mutex as AsyncMutex;
 use vortex_array::Array;
 use vortex_array::ArrayParts;
 use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::TypedArrayRef;
 use vortex_array::array_slots;
 use vortex_error::SharedVortexResult;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
 use crate::arrays::shared::Shared;
@@ -88,6 +90,23 @@ pub trait SharedArrayExt: TypedArrayRef<Shared> + SharedArraySlotsExt {
     }
 }
 impl<T: TypedArrayRef<Shared>> SharedArrayExt for T {}
+
+/// Returns the cached array, or the source before materialization.
+///
+/// A cached error is propagated so delegated execution cannot bypass it.
+/// If another thread is currently materializing the cache, this returns the source snapshot.
+pub(crate) fn current_array_ref_for_dispatch<'a>(
+    array: ArrayView<'a, Shared>,
+) -> VortexResult<&'a ArrayRef> {
+    let source = array.slots()[SharedSlots::SOURCE]
+        .as_ref()
+        .vortex_expect("SharedArray source slot must be present");
+    match array.data().cached.get() {
+        Some(Ok(cached)) => Ok(cached),
+        Some(Err(error)) => Err(Arc::clone(error).into()),
+        None => Ok(source),
+    }
+}
 
 impl SharedData {
     pub fn new() -> Self {
