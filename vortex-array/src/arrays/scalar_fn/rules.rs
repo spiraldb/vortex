@@ -27,7 +27,7 @@ pub(super) const RULES: ReduceRuleSet<ScalarFn> =
     ReduceRuleSet::new(&[&ScalarFnPackToStructRule, &ScalarFnAbstractReduceRule]);
 
 pub(super) const PARENT_RULES: ParentRuleSet<ScalarFn> = ParentRuleSet::new(&[
-    ParentRuleSet::lift(&ScalarFnUnaryFilterPushDownRule),
+    ParentRuleSet::lift(&ScalarFnFilterPushDownRule),
     ParentRuleSet::lift(&ScalarFnSliceReduceRule),
 ]);
 
@@ -95,9 +95,9 @@ impl ArrayReduceRule<ScalarFn> for ScalarFnAbstractReduceRule {
 }
 
 #[derive(Debug)]
-struct ScalarFnUnaryFilterPushDownRule;
+struct ScalarFnFilterPushDownRule;
 
-impl ArrayParentReduceRule<ScalarFn> for ScalarFnUnaryFilterPushDownRule {
+impl ArrayParentReduceRule<ScalarFn> for ScalarFnFilterPushDownRule {
     type Parent = Filter;
 
     fn reduce_parent(
@@ -106,31 +106,21 @@ impl ArrayParentReduceRule<ScalarFn> for ScalarFnUnaryFilterPushDownRule {
         parent: ArrayView<'_, Filter>,
         _child_idx: usize,
     ) -> VortexResult<Option<ArrayRef>> {
-        // If we only have one non-constant child, then it is _always_ cheaper to push down the
-        // filter over the children of the scalar function array.
-        if child
+        // Selection precedes value evaluation, including errors in unselected rows.
+        let new_children: Vec<_> = child
             .iter_children()
-            .filter(|c| !c.is::<Constant>())
-            .count()
-            == 1
-        {
-            let new_children: Vec<_> = child
-                .iter_children()
-                .map(|c| match c.as_opt::<Constant>() {
-                    Some(array) => {
-                        Ok(ConstantArray::new(array.scalar().clone(), parent.len()).into_array())
-                    }
-                    None => c.filter(parent.filter_mask().clone()),
-                })
-                .try_collect()?;
+            .map(|c| match c.as_opt::<Constant>() {
+                Some(array) => {
+                    Ok(ConstantArray::new(array.scalar().clone(), parent.len()).into_array())
+                }
+                None => c.filter(parent.filter_mask().clone()),
+            })
+            .try_collect()?;
 
-            let new_array =
-                ScalarFnArray::try_new(child.scalar_fn().clone(), new_children)?.into_array();
-
-            return Ok(Some(new_array));
-        }
-
-        Ok(None)
+        Ok(Some(
+            ScalarFnArray::try_new_with_len(child.scalar_fn().clone(), new_children, parent.len())?
+                .into_array(),
+        ))
     }
 }
 
