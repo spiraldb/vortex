@@ -24,9 +24,9 @@ generator, and Cargo/rustc 1.95+ on ``PATH``. Use a complete repository checkout
       -DVORTEX_BUILD_EXAMPLES=ON
     cmake --build build/cpp --parallel
 
-CMake builds the Rust FFI through Cargo; no separate ``cargo build`` is needed.
+CMake builds the Rust FFI through Cargo. No separate ``cargo build`` is needed.
 The first build may download dependencies. The commands above enable the examples
-used below; tests and examples are otherwise disabled by default.
+used below. Tests and examples are otherwise disabled by default.
 
 To embed Vortex in a CMake project, vendor or fetch a pinned checkout and link its
 target:
