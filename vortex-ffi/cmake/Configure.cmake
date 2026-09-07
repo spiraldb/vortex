@@ -274,9 +274,7 @@ block(SCOPE_FOR VARIABLES)
         _cargo_build_std)
     _vortex_resolve_rust_toolchain("${_workspace_root}" "${_sanitizer_rustflags}")
 
-    if(NOT "$ENV{CARGO_ENCODED_RUSTFLAGS}" STREQUAL "" OR NOT "$ENV{RUSTFLAGS}" STREQUAL "")
-        message(STATUS "Vortex ignores ambient Rust flags in its Cargo build")
-    endif()
+    message(STATUS "Vortex supplies Rust flags instead of environment or Cargo configuration rustflags")
 
     _vortex_native_flags(
         "${_configuration}"
@@ -284,8 +282,8 @@ block(SCOPE_FOR VARIABLES)
         "${_sanitizer_compile_flag}"
         _native_c_flags
         _native_cxx_flags)
-    # Frame pointers and PIC apply to every Rust build; the archive is embedded
-    # in shared parents.
+    # Mirror .cargo/config.toml's Unix rustflags, which CARGO_ENCODED_RUSTFLAGS overrides.
+    # Keep them in sync; PIC additionally allows embedding in shared libraries.
     set(_rustflags ${_sanitizer_rustflags} -C force-frame-pointers=yes -C relocation-model=pic)
 
     # Cargo owns incremental invalidation inside this CMake-build-local cache.

@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from pathlib import Path
 
@@ -51,13 +52,14 @@ class ConfigureTests(unittest.TestCase):
         cargo = self.work / "cargo"
         cargo.write_text(
             f"#!{sys.executable}\n"
-            "import pathlib, sys\n"
+            "import os, pathlib, sys\n"
             "args = sys.argv[1:]\n"
             "root = pathlib.Path(args[args.index('--target-dir') + 1])\n"
             "target = args[args.index('--target') + 1]\n"
             "archive = root / target / 'debug/libvortex_ffi.a'\n"
             "archive.parent.mkdir(parents=True, exist_ok=True)\n"
-            "archive.write_bytes(b'Cargo ran')\n",
+            "archive.write_bytes(b'Cargo ran')\n"
+            "(root / 'rustflags.txt').write_text(os.environ['CARGO_ENCODED_RUSTFLAGS'])\n",
             encoding="utf-8",
         )
         cargo.chmod(0o755)
@@ -85,6 +87,16 @@ class ConfigureTests(unittest.TestCase):
         archive = self.work / "standalone/vortex-artifacts/libvortex_ffi.a"
         self.assertTrue(archive.exists(), "The default standalone build did not produce an FFI archive")
         self.assertEqual(archive.read_bytes(), b"Cargo ran")
+
+    def test_rust_flags_match_workspace_defaults(self):
+        result = self.configure("rustflags", self.recording_cargo())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("environment or Cargo configuration rustflags", result.stdout)
+        self.build("rustflags")
+        actual = (self.work / "rustflags/cargo-target/rustflags.txt").read_text().split("\x1f")
+        config = tomllib.loads((self.repo / ".cargo/config.toml").read_text())
+        expected = config["target"]['cfg(target_family="unix")']["rustflags"] + ["-C", "relocation-model=pic"]
+        self.assertEqual(actual, expected, "Keep CMake's baseline Rust flags in sync with .cargo/config.toml")
 
     def test_unused_embedded_ffi_does_not_run_cargo(self):
         source = self.work / "parent"
