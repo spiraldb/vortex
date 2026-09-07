@@ -304,9 +304,16 @@ block(SCOPE_FOR VARIABLES)
         _vortex_reject_semicolon("${_name}" "${${_name}}")
     endforeach()
 
+    # Standalone FFI builds have no compiled CMake target to pull in the archive.
+    # Embedded builds run Cargo only when a consumer needs it.
+    set(_cargo_default_target "")
+    if(PROJECT_IS_TOP_LEVEL)
+        set(_cargo_default_target ALL)
+    endif()
+
     # The phony target lets Cargo own dependency tracking. Copy-if-different in
     # the driver prevents fresh Cargo checks from forcing downstream relinks.
-    add_custom_target(vortex_ffi_cargo_build
+    add_custom_target(vortex_ffi_cargo_build ${_cargo_default_target}
         COMMAND "${CMAKE_COMMAND}"
             "-DVORTEX_CARGO_EXECUTABLE=${VORTEX_CARGO_EXECUTABLE}"
             "-DVORTEX_RUSTC_EXECUTABLE=${VORTEX_RUSTC_EXECUTABLE}"

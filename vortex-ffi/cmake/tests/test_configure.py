@@ -5,6 +5,7 @@
 
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -18,12 +19,12 @@ class ConfigureTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name).resolve()
 
-    def configure(self, name, *options):
+    def configure(self, name, *options, source=None):
         return subprocess.run(
             [
                 "cmake",
                 "-S",
-                str(self.repo / "vortex-ffi"),
+                str(source or self.repo / "vortex-ffi"),
                 "-B",
                 str(self.work / name),
                 "-DCMAKE_BUILD_TYPE=Debug",
@@ -34,6 +35,57 @@ class ConfigureTests(unittest.TestCase):
             timeout=120,
             check=False,
         )
+
+    def build(self, name, *options):
+        result = subprocess.run(
+            ["cmake", "--build", str(self.work / name), *options],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def recording_cargo(self):
+        cargo = self.work / "cargo"
+        cargo.write_text(
+            f"#!{sys.executable}\n"
+            "import pathlib, sys\n"
+            "args = sys.argv[1:]\n"
+            "root = pathlib.Path(args[args.index('--target-dir') + 1])\n"
+            "target = args[args.index('--target') + 1]\n"
+            "archive = root / target / 'debug/libvortex_ffi.a'\n"
+            "archive.parent.mkdir(parents=True, exist_ok=True)\n"
+            "archive.write_bytes(b'Cargo ran')\n",
+            encoding="utf-8",
+        )
+        cargo.chmod(0o755)
+        return f"-DVORTEX_CARGO_EXECUTABLE={cargo}"
+
+    def test_standalone_default_build_runs_cargo(self):
+        result = self.configure("standalone", self.recording_cargo())
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.build("standalone")
+        archive = self.work / "standalone/vortex-artifacts/libvortex_ffi.a"
+        self.assertTrue(archive.exists(), "The default standalone build did not produce an FFI archive")
+        self.assertEqual(archive.read_bytes(), b"Cargo ran")
+
+    def test_unused_embedded_ffi_does_not_run_cargo(self):
+        source = self.work / "parent"
+        source.mkdir()
+        (source / "CMakeLists.txt").write_text(
+            "cmake_minimum_required(VERSION 3.28)\n"
+            "project(Parent LANGUAGES C CXX)\n"
+            f'add_subdirectory("{self.repo.as_posix()}/vortex-ffi" ffi)\n',
+            encoding="utf-8",
+        )
+        result = self.configure("embedded", self.recording_cargo(), source=source)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.build("embedded")
+        archive = self.work / "embedded/ffi/vortex-artifacts/libvortex_ffi.a"
+        self.assertFalse(archive.exists())
+        self.build("embedded", "--target", "vortex_ffi_cargo_build")
+        self.assertEqual(archive.read_bytes(), b"Cargo ran")
 
     def compiler_ids(self, c, cxx):
         # Override IDs after project() so the policy is testable on non-Apple hosts.
