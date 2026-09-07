@@ -29,9 +29,6 @@ pub enum TreeMode {
     Array {
         /// Path to the Vortex file
         file: PathBuf,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
     },
     /// Display the layout tree structure (metadata only, no array loading)
     Layout {
@@ -80,7 +77,7 @@ pub struct LayoutTreeNodeWithName {
 /// Returns an error if the file cannot be opened or read.
 pub async fn exec_tree(session: &VortexSession, args: TreeArgs) -> VortexResult<()> {
     match args.mode {
-        TreeMode::Array { file, json } => exec_array_tree(session, &file, json).await?,
+        TreeMode::Array { file } => exec_array_tree(session, &file).await?,
         TreeMode::Layout {
             file,
             verbose,
@@ -91,7 +88,7 @@ pub async fn exec_tree(session: &VortexSession, args: TreeArgs) -> VortexResult<
     Ok(())
 }
 
-async fn exec_array_tree(session: &VortexSession, file: &Path, _json: bool) -> VortexResult<()> {
+async fn exec_array_tree(session: &VortexSession, file: &Path) -> VortexResult<()> {
     let full = session
         .open_options()
         .open_path(file)
