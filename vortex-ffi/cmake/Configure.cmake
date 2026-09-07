@@ -126,13 +126,8 @@ function(_vortex_resolve_ffi_package
     set(${cuda_root_output} "${_cuda_root}" PARENT_SCOPE)
 endfunction()
 
-# Validate and configure the optional sanitizers. VORTEX_SANITIZER is a comma-
-# or semicolon-separated list of asan, lsan, ubsan, and tsan. Each entry
-# instruments the C and C++ code that clang compiles, including Cargo-built
-# target dependencies (not host tools). All but ubsan also instrument Rust,
-# which has no UBSan. Sanitizers require Clang and a Debug build, and rustc
-# itself rejects the nightly-only Rust flags on stable. Standard-library
-# instrumentation is optional.
+# Configure sanitizer flags for target code, not host build tools.
+# UBSan is native-only; Rust standard-library instrumentation is optional.
 function(_vortex_resolve_sanitizer
     configuration
     native_flag_output

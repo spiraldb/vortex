@@ -49,6 +49,7 @@ layers unless noted.
 | `VORTEX_BUILD_EXAMPLES`     | `OFF`                           | Build C and C++ examples.                                                                            |
 | `VORTEX_ENABLE_CUDA`        | `OFF`                           | Select the Linux-only CUDA FFI archive; see [CUDA](#cuda).                                           |
 | `VORTEX_CARGO_PROFILE`      | Inferred                        | Override the Cargo profile; see below.                                                               |
+| `VORTEX_RUSTUP_TOOLCHAIN`   | Inferred                        | Override the Rust toolchain; see [toolchain selection](#toolchain-and-build-behavior).               |
 | `VORTEX_WARNINGS_AS_ERRORS` | `ON` standalone, `OFF` embedded | Treat warnings as errors in the C++ wrapper and C API tests/examples, not dependencies or consumers. |
 | `VORTEX_SANITIZER`          | Empty                           | Select sanitizers, e.g. `asan,ubsan`; see [Sanitizers](#sanitizers).                                 |
 | `VORTEX_SANITIZE_RUST_STD`  | `OFF`                           | Also instrument Rust's standard library; requires nightly `rust-src` and a Rust sanitizer.           |
@@ -73,8 +74,8 @@ not supported.
 - `VORTEX_RUSTUP_TOOLCHAIN` caches the Rust toolchain override across reconfiguration. It defaults
   to `RUSTUP_TOOLCHAIN`, or `nightly` for Rust sanitizers; empty uses the workspace's
   `rust-toolchain.toml`. Change it with `-DVORTEX_RUSTUP_TOOLCHAIN=<toolchain>`, or clear it with
-  `-DVORTEX_RUSTUP_TOOLCHAIN=`. When enabling Rust sanitizers in an existing tree, select a nightly
-  explicitly if its cached toolchain is stable.
+  `-DVORTEX_RUSTUP_TOOLCHAIN=`. Enabling Rust sanitizers in an existing tree preserves this cache;
+  if it selects stable, configure fails with a request to set `-DVORTEX_RUSTUP_TOOLCHAIN=nightly`.
 - Cargo uses the lockfile, with optional features such as `mimalloc` disabled. CMake supplies the
   complete Rust flags, overriding flags from the environment and Cargo configuration.
 - Cargo-built native dependencies use CMake's compilers, archiver, and C/C++ flags, except
@@ -115,9 +116,14 @@ python3 -m unittest discover -s vortex-ffi/cmake/tests
 
 `VORTEX_SANITIZER` accepts a comma-separated list of `asan`, `lsan`, `ubsan`, and `tsan`.
 It requires `Debug` and Clang. Flags instrument Vortex's C/C++ code, Cargo-built native
-target dependencies, and targets linking Vortex, but not Cargo's host build tools or their
-native dependencies. All but `ubsan` also instrument Rust, which has no UBSan.
-Rust instrumentation defaults to rustup's `nightly` unless `RUSTUP_TOOLCHAIN` is set.
+target dependencies, and targets linking Vortex (including tests), but not Cargo's host build
+tools or their native dependencies. All but `ubsan` also instrument Rust, which has no UBSan.
+Rust instrumentation requires nightly; CMake checks the selected compiler at configure time.
+UBSan-only builds support stable. See [toolchain selection](#toolchain-and-build-behavior) for defaults
+and overrides.
+
+Sanitizer flags propagate through Vortex's target interface, not globally to FetchContent
+dependencies such as Catch2, nanoarrow, or magic_enum.
 
 ```sh
 rustup toolchain install nightly

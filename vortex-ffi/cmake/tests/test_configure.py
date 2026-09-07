@@ -3,6 +3,7 @@
 
 """Exercise CMake configuration without compiling the Rust archive."""
 
+import platform
 import shutil
 import subprocess
 import sys
@@ -61,6 +62,21 @@ class ConfigureTests(unittest.TestCase):
         )
         cargo.chmod(0o755)
         return f"-DVORTEX_CARGO_EXECUTABLE={cargo}"
+
+    def fake_nightly_rustc(self):
+        # Native compiler policy tests must not depend on an installed nightly.
+        arch = {"arm64": "aarch64", "AMD64": "x86_64"}.get(platform.machine(), platform.machine())
+        host = f"{arch}-apple-darwin" if sys.platform == "darwin" else f"{arch}-unknown-linux-gnu"
+        rustc = self.work / "rustc"
+        rustc.write_text(
+            f"#!{sys.executable}\n"
+            "import sys\n"
+            "assert sys.argv[1:] == ['-vV'], sys.argv\n"
+            f"print('rustc 1.95.0-nightly\\nhost: {host}\\nrelease: 1.95.0-nightly')\n",
+            encoding="utf-8",
+        )
+        rustc.chmod(0o755)
+        return f"-DVORTEX_RUSTC_EXECUTABLE={rustc}"
 
     def test_standalone_default_build_runs_cargo(self):
         result = self.configure("standalone", self.recording_cargo())
@@ -140,7 +156,7 @@ class ConfigureTests(unittest.TestCase):
                         '    CONTENT "$<TARGET_PROPERTY:vortex_ffi_static,INTERFACE_COMPILE_OPTIONS>")\n'
                     )
                 name = f"sanitizer-list-{index}"
-                result = self.configure(name, hook, f"-DVORTEX_SANITIZER={sanitizers}", "-DVORTEX_RUSTUP_TOOLCHAIN=")
+                result = self.configure(name, hook, f"-DVORTEX_SANITIZER={sanitizers}", self.fake_nightly_rustc())
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 flags = (self.work / name / "sanitizer-flags.txt").read_text(encoding="utf-8")
                 self.assertEqual(flags, expected)
@@ -154,6 +170,7 @@ class ConfigureTests(unittest.TestCase):
         result = self.configure(
             "clang-asan",
             self.compiler_ids("Clang", "Clang"),
+            self.fake_nightly_rustc(),
             "-DVORTEX_SANITIZER=asan,ubsan",
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

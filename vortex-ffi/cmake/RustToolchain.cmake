@@ -34,6 +34,17 @@ function(_vortex_resolve_rust_toolchain workspace_root sanitizer_rustflags)
         WORKING_DIRECTORY "${workspace_root}"
         OUTPUT_VARIABLE _rustc_verbose
         COMMAND_ERROR_IS_FATAL ANY)
+    if(sanitizer_rustflags)
+        string(REGEX MATCH "release: ([^\r\n]+)" _match "${_rustc_verbose}")
+        set(_rustc_release "${CMAKE_MATCH_1}")
+        if(NOT _rustc_release MATCHES "-nightly$")
+            message(FATAL_ERROR
+                "Rust sanitizer builds require nightly rustc.\n"
+                "Selected rustc release: ${_rustc_release}\n"
+                "Reconfigure with -DVORTEX_RUSTUP_TOOLCHAIN=nightly "
+                "(or another nightly toolchain).")
+        endif()
+    endif()
     string(REGEX MATCH "host: ([^\r\n]+)" _match "${_rustc_verbose}")
     set(VORTEX_RUST_TARGET "${CMAKE_MATCH_1}" PARENT_SCOPE)
 

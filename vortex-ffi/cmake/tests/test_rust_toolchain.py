@@ -55,7 +55,7 @@ class RustToolchainTests(unittest.TestCase):
         self.cargo = self.recording_tool("cargo")
         self.rustc = self.recording_tool("rustc")
 
-    def recording_tool(self, name):
+    def recording_tool(self, name, *, release=None):
         tool = self.work / name
         tool.write_text(
             f"#!{sys.executable}\n"
@@ -70,7 +70,9 @@ class RustToolchainTests(unittest.TestCase):
             f"    log.write(json.dumps(dict(tool={name!r}, override=override, "
             "selected=selected, cwd=str(cwd))) + '\\n')\n"
             + (
-                f"assert args == ['-vV'], args\nprint('rustc 1.95.0\\nhost: {self.host}\\nrelease: 1.95.0')\n"
+                "assert args == ['-vV'], args\n"
+                f"release = {release!r} or ('1.95.0-nightly' if selected.startswith('nightly') else '1.95.0')\n"
+                f"print(f'rustc {{release}}\\nhost: {self.host}\\nrelease: {{release}}')\n"
                 if name == "rustc"
                 else "assert args[0] == 'rustc', args\n"
                 "root = pathlib.Path(args[args.index('--target-dir') + 1])\n"
@@ -84,7 +86,7 @@ class RustToolchainTests(unittest.TestCase):
         tool.chmod(0o755)
         return tool
 
-    def run_cmake(self, *args, toolchain=None):
+    def run_cmake(self, *args, toolchain=None, success=True):
         env = os.environ.copy()
         env.pop("RUSTUP_TOOLCHAIN", None)
         if toolchain is not None:
@@ -97,10 +99,13 @@ class RustToolchainTests(unittest.TestCase):
             timeout=120,
             check=False,
         )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        if success:
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        else:
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         return result.stdout + result.stderr
 
-    def configure(self, *options, toolchain=None):
+    def configure(self, *options, toolchain=None, success=True):
         return self.run_cmake(
             "-S",
             self.source,
@@ -114,6 +119,7 @@ class RustToolchainTests(unittest.TestCase):
             f"-DVORTEX_RUSTC_EXECUTABLE={self.rustc}",
             *options,
             toolchain=toolchain,
+            success=success,
         )
 
     def build(self, *, toolchain=None, reconfigure=False):
@@ -136,6 +142,11 @@ class RustToolchainTests(unittest.TestCase):
             [line for line in cache if line.startswith("VORTEX_RUSTUP_TOOLCHAIN:")],
             [f"VORTEX_RUSTUP_TOOLCHAIN:STRING={selected}"],
         )
+
+    def assert_nightly_required(self, output, release="1.95.0"):
+        self.assertIn("Rust sanitizer builds require nightly rustc", output)
+        self.assertIn(f"release: {release}", output)
+        self.assertIn("-DVORTEX_RUSTUP_TOOLCHAIN=nightly", output)
 
     def new_build(self, name):
         self.build_dir = self.work / name
@@ -185,7 +196,7 @@ class RustToolchainTests(unittest.TestCase):
         expected.extend([("rustc", second), ("cargo", second)])
         self.assert_calls(expected)
 
-        self.configure("-DVORTEX_RUSTUP_TOOLCHAIN=", toolchain="ambient")
+        self.configure("-DVORTEX_RUSTUP_TOOLCHAIN=", "-DVORTEX_SANITIZER=", toolchain="ambient")
         self.build(toolchain="ambient")
         expected.extend([("rustc", None), ("cargo", None)])
         self.assert_calls(expected)
@@ -196,10 +207,17 @@ class RustToolchainTests(unittest.TestCase):
             with self.subTest(sanitizer=sanitizer):
                 self.new_build(f"empty-{sanitizer}")
                 output = self.configure(
-                    f"-DVORTEX_SANITIZER={sanitizer}", "-DVORTEX_RUSTUP_TOOLCHAIN=", toolchain="ambient"
+                    f"-DVORTEX_SANITIZER={sanitizer}",
+                    "-DVORTEX_RUSTUP_TOOLCHAIN=",
+                    toolchain="ambient",
+                    success=not sanitizer,
                 )
-                self.build(toolchain="ambient")
-                self.assert_calls([("rustc", None), ("cargo", None)])
+                if sanitizer:
+                    self.assert_nightly_required(output)
+                    self.assert_calls([("rustc", None)])
+                else:
+                    self.build(toolchain="ambient")
+                    self.assert_calls([("rustc", None), ("cargo", None)])
                 self.assert_cache("")
                 self.assertIn("Vortex Rust toolchain: workspace rust-toolchain.toml", output)
 
@@ -217,18 +235,51 @@ class RustToolchainTests(unittest.TestCase):
                 expected.extend([("rustc", "nightly"), ("cargo", "nightly")])
                 self.assert_calls(expected)
 
-    def test_ubsan_keeps_workspace_toolchain(self):
-        self.configure("-DVORTEX_SANITIZER=ubsan")
-        self.build(toolchain="ambient")
-        self.assert_calls([("rustc", None), ("cargo", None)])
-        self.assert_cache("")
+    def test_ubsan_accepts_stable_toolchain(self):
+        for selected in (None, "stable"):
+            with self.subTest(selected=selected):
+                self.new_build(f"ubsan-{selected}")
+                self.configure("-DVORTEX_SANITIZER=ubsan", toolchain=selected)
+                self.build(toolchain="ambient")
+                self.assert_calls([("rustc", selected), ("cargo", selected)])
+                self.assert_cache(selected or "")
 
-    def test_enabling_sanitizer_preserves_cached_workspace_selection(self):
-        self.configure()
-        self.configure("-DVORTEX_SANITIZER=asan")
-        self.build()
-        self.assert_calls([("rustc", None), ("rustc", None), ("cargo", None)])
-        self.assert_cache("")
+    def test_enabling_sanitizer_preserves_cached_stable_selection(self):
+        for selected in (None, "stable"):
+            with self.subTest(selected=selected):
+                self.new_build(f"cached-{selected}")
+                self.configure(toolchain=selected)
+                self.assert_cache(selected or "")
+                output = self.configure("-DVORTEX_SANITIZER=asan", toolchain="nightly", success=False)
+                self.assert_nightly_required(output)
+                expected = [("rustc", selected), ("rustc", selected)]
+                self.assert_calls(expected)
+                self.assert_cache(selected or "")
+
+                self.configure("-DVORTEX_RUSTUP_TOOLCHAIN=nightly")
+                self.build()
+                self.assert_calls([*expected, ("rustc", "nightly"), ("cargo", "nightly")])
+                self.assert_cache("nightly")
+
+    def test_sanitizer_checks_release_not_toolchain_name(self):
+        for selected, release, success in (
+            ("nightly-2026-04-01", "1.95.0-nightly", True),
+            ("custom-toolchain", "1.95.0-nightly", True),
+            ("nightly", "1.95.0", False),
+        ):
+            with self.subTest(selected=selected, release=release):
+                self.new_build(selected)
+                self.recording_tool("rustc", release=release)
+                output = self.configure(
+                    "-DVORTEX_SANITIZER=asan", f"-DVORTEX_RUSTUP_TOOLCHAIN={selected}", success=success
+                )
+                if success:
+                    self.build()
+                    self.assert_calls([("rustc", selected), ("cargo", selected)])
+                else:
+                    self.assert_nightly_required(output, release)
+                    self.assert_calls([("rustc", selected)])
+                self.assert_cache(selected)
 
 
 if __name__ == "__main__":
