@@ -270,7 +270,7 @@ jobs:
             -DVORTEX_SANITIZE_RUST_STD=ON \
             -DVORTEX_BUILD_TESTING=ON \
             -DVORTEX_BUILD_EXAMPLES=ON
-          cmake --build build --parallel
+          cmake --build build --parallel "$(nproc)"
       - name: Run tests
         run: |
           set -o pipefail

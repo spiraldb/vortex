@@ -5,13 +5,14 @@
 
 # Builds the C++ tests with gcov instrumentation, runs them, and writes
 # coverage.info next to this script; pass `html` to also render coverage/.
+# CMAKE_BUILD_PARALLEL_LEVEL overrides the detected CPU count.
 set -eu
 cd "$(dirname "$0")"
 
 cmake -S . -B build \
     -DVORTEX_BUILD_TESTING=ON \
     -DCMAKE_CXX_FLAGS=--coverage
-cmake --build build --parallel
+cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc)}"
 ctest --test-dir build --output-on-failure
 
 # lcov matches exclude globs against full source paths.
