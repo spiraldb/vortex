@@ -125,6 +125,31 @@ class ConfigureTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_sanitizer_list_whitespace_and_empty_items(self):
+        cases = (
+            (" ASAN , UBSAN, ", "-fsanitize=address,undefined"),
+            ("\t ubsan; ;\t", "-fsanitize=undefined"),
+            (" ; ,\t ", ""),
+        )
+        for index, (sanitizers, expected) in enumerate(cases):
+            with self.subTest(sanitizers=sanitizers):
+                hook = self.compiler_ids("Clang", "Clang")
+                with (self.work / "compiler-ids.cmake").open("a", encoding="utf-8") as script:
+                    script.write(
+                        'file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/sanitizer-flags.txt"\n'
+                        '    CONTENT "$<TARGET_PROPERTY:vortex_ffi_static,INTERFACE_COMPILE_OPTIONS>")\n'
+                    )
+                name = f"sanitizer-list-{index}"
+                result = self.configure(name, hook, f"-DVORTEX_SANITIZER={sanitizers}", "-DVORTEX_RUSTUP_TOOLCHAIN=")
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                flags = (self.work / name / "sanitizer-flags.txt").read_text(encoding="utf-8")
+                self.assertEqual(flags, expected)
+
+    def test_unknown_sanitizer_reports_trimmed_name(self):
+        result = self.configure("unknown-sanitizer", "-DVORTEX_SANITIZER=asan, typo ,")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("got 'typo'", result.stdout + result.stderr)
+
     def test_upstream_clang_accepts_rust_instrumentation(self):
         result = self.configure(
             "clang-asan",

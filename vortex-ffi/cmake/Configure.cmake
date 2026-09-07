@@ -140,6 +140,8 @@ function(_vortex_resolve_sanitizer
     build_std_output)
     string(REPLACE "," ";" _sanitizers "${VORTEX_SANITIZER}")
     string(TOLOWER "${_sanitizers}" _sanitizers)
+    list(TRANSFORM _sanitizers STRIP)
+    list(FILTER _sanitizers EXCLUDE REGEX "^$")
 
     set(_native "")
     set(_rust "")
