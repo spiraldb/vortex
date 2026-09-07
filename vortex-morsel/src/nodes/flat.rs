@@ -4,7 +4,10 @@
 use std::ops::Range;
 
 use vortex_array::ArrayRef;
+use vortex_array::IntoArray;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::dtype::DType;
+use vortex_array::scalar::Scalar;
 use vortex_array::serde::SerializedArray;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexExpect;
@@ -67,9 +70,11 @@ impl NodeBlueprint for FlatSpec {
 /// already holds a decoded value, planning skips issuing the read — the morsel's own lease keeps
 /// that value alive until it retires. Otherwise `execute` clones the scheduler-resolved ticket,
 /// decodes, publishes into the cell, and slices to the morsel's local range. It never filters:
-/// the row hint it ran under only shaped what was read, and the actual selection is applied by
-/// the filter node that holds it. Retire releases the lease whether the value was used or not;
-/// the last release drops the cell.
+/// the actual selection is applied by the filter node that holds it. The row hint is the only
+/// thing the leaf takes from its parent, and it uses it for exactly two decisions: an all-false
+/// hint at planning names no read, and an all-false hint at execution stands in placeholder rows
+/// for the range without waiting for one. Retire releases the lease whether the value was used or
+/// not; the last release drops the cell.
 pub struct FlatExec {
     segment: SegmentId,
     dtype: DType,
@@ -171,6 +176,12 @@ impl ExecNode for FlatExec {
             return Ok(PlanPoll::Item(PlanItem::Plan));
         }
 
+        // Nothing in this range is wanted: name no read. Execution stands in placeholder rows.
+        if cx.hint().all_false() {
+            self.planned = true;
+            return Ok(PlanPoll::Complete);
+        }
+
         // A decoded value already published by another morsel makes the read unnecessary. The
         // lease this morsel holds (counted before the scan started) pins the value until retire,
         // so skipping the read here can never leave execute empty-handed.
@@ -199,6 +210,22 @@ impl ExecNode for FlatExec {
         if self.done {
             return Ok(ExecPoll::Done);
         }
+        let coverage = self.root_offset + self.range.start..self.root_offset + self.range.end;
+
+        // Nobody will look at these rows: stand in for them without touching the read, even if
+        // planning did name one speculatively. The filter node drops them with its mask.
+        if cx.hint().all_false() {
+            let rows = usize::try_from(self.range.end - self.range.start)
+                .vortex_expect("flat range fits usize");
+            let array = ConstantArray::new(Scalar::default_value(&self.dtype), rows).into_array();
+            cx.stats().rows_placeholder += rows as u64;
+            self.done = true;
+            return Ok(ExecPoll::Value(ValueBatch {
+                coverage,
+                value: Value::Array(array),
+            }));
+        }
+
         let Some(mut array) = self.decode(cx)? else {
             let ticket = self
                 .ticket
@@ -216,10 +243,10 @@ impl ExecNode for FlatExec {
         cx.stats().rows_materialized += array.len() as u64;
         self.done = true;
 
-        Ok(ExecPoll::Value(ValueBatch::dense(
-            self.root_offset + self.range.start..self.root_offset + self.range.end,
-            Value::Array(array),
-        )))
+        Ok(ExecPoll::Value(ValueBatch {
+            coverage,
+            value: Value::Array(array),
+        }))
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {

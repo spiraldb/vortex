@@ -4,20 +4,19 @@
 use std::ops::Range;
 use std::sync::Arc;
 
+use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::FieldNames;
 use vortex_array::validity::Validity;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
-use vortex_mask::Mask;
 
 use crate::build::NodeBlueprint;
 use crate::node::ChildPoll;
 use crate::node::ExecCx;
 use crate::node::ExecNode;
 use crate::node::ExecPoll;
-use crate::node::Materialized;
 use crate::node::NodeId;
 use crate::node::PlanCx;
 use crate::node::PlanItem;
@@ -48,9 +47,8 @@ impl NodeBlueprint for StructSpec {
 
 /// Struct is almost nothing: identity edges to each field, then a zip.
 ///
-/// Every field is planned and executed under the *same* hint. Fields may still materialize
-/// different rows, because each column's chunks are cut and skipped on its own boundaries, so
-/// the zip aligns every field to the rows they all hold before building the struct.
+/// Every field is planned and executed under the *same* hint, and every field comes back dense
+/// over the range, so the zip is a zip.
 pub struct StructExec {
     names: FieldNames,
     children: Arc<[NodeId]>,
@@ -61,8 +59,8 @@ pub struct StructExec {
     plan_cursor: usize,
     plan_started: bool,
     exec_cursor: usize,
-    fields: Vec<Materialized>,
-    validity_array: Option<Materialized>,
+    fields: Vec<ArrayRef>,
+    validity_array: Option<ArrayRef>,
     done: bool,
 }
 
@@ -126,6 +124,7 @@ impl ExecNode for StructExec {
         }
 
         let hint = cx.hint().clone();
+        let len = hint.len();
         if let Some(validity) = self.validity
             && self.validity_array.is_none()
         {
@@ -155,43 +154,16 @@ impl ExecNode for StructExec {
             }
         }
 
-        // Fields agree on their rows unless a column skipped a chunk the others kept. Align
-        // everything to the rows every field holds; the hint guarantees nobody needs the rest.
-        let common = self
-            .fields
-            .iter()
-            .chain(self.validity_array.iter())
-            .map(|field| &field.rows)
-            .fold(None::<Mask>, |common, rows| {
-                Some(match common {
-                    None => rows.clone(),
-                    Some(common) if &common == rows => common,
-                    Some(common) => &common & rows,
-                })
-            })
-            .unwrap_or_else(|| hint.clone());
-        if common.len() != hint.len() {
-            return Err(vortex_err!(
-                "struct fields materialized {} rows for a range of {}",
-                common.len(),
-                hint.len()
-            ));
-        }
-        let mut fields = Vec::with_capacity(self.fields.len());
-        for field in self.fields.drain(..) {
-            fields.push(field.select(&common)?);
-        }
-        let validity = match self.validity_array.take() {
-            Some(validity) => Validity::Array(validity.select(&common)?),
-            None => Validity::NonNullable,
-        };
-        let len = common.true_count();
+        let fields = std::mem::take(&mut self.fields);
+        let validity = self
+            .validity_array
+            .take()
+            .map_or(Validity::NonNullable, Validity::Array);
         let array = StructArray::try_new(self.names.clone(), fields, len, validity)?.into_array();
         self.done = true;
 
         Ok(ExecPoll::Value(ValueBatch {
             coverage: self.range.clone(),
-            materialized: common,
             value: Value::Array(array),
         }))
     }

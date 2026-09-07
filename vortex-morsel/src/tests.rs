@@ -1630,3 +1630,44 @@ fn leaves_never_apply_the_selection(#[values(false, true)] filtered: bool) -> Vo
     );
     Ok(())
 }
+
+/// A chunk whose hint is all-false is neither awaited nor decoded: the leaf stands in
+/// placeholder rows and the filter node drops them with its mask.
+#[test]
+fn unwanted_chunks_are_not_decoded() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let projection = select(vec!["a", "b", "c"], root());
+    let filter = lt(get_item("a", root()), lit(10i32));
+    let plan = Arc::new(build_plan(
+        &fixture.layout,
+        &projection,
+        Some(&filter),
+        ConjunctMode::Cascade,
+    )?);
+
+    // One morsel over the whole file, so every chunk of every column is in range.
+    let scan = MorselScan::new(Arc::clone(&plan), session.clone())
+        .with_threads(1)
+        .with_morsel_demands(vec![(0..ROWS as u64, Mask::new_true(ROWS))])?
+        .connect_on_thread(&SegmentSourceDriver::new(Arc::clone(&fixture.segments)))?;
+    let (batches, stats) = scan.run()?;
+    let dtype = plan.output_dtype().clone();
+    let actual = concat(&batches, &dtype)?;
+
+    let reference = Query {
+        name: "skip-reference",
+        projection,
+        filter: Some(filter),
+    };
+    let expected = run_v1(&session, &fixture.layout, &fixture.segments, &reference)?;
+    let expected = concat(&expected.batches, &dtype)?;
+    let mut ctx = session.create_execution_ctx();
+    assert_eq!(actual.len(), expected.len());
+    assert!(all_non_distinct(&actual, &expected, &mut ctx)?);
+
+    // `a` is read whole for the predicate (three chunks); `b` and `c` only need their first.
+    assert_eq!(stats.decodes, 3 + 1 + 1);
+    assert!(stats.rows_placeholder > 0);
+    Ok(())
+}

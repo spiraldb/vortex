@@ -149,11 +149,11 @@ pub trait ExecNode: Send {
 - `reset` prepares the node for a new morsel in its own local coordinates.
 - `next_plan` *names* reads by registering `IoUse`s and receiving tickets. It never reads. It is
   budget-bounded (`PLAN_BUDGET = 64` uses per quantum) and resumable from its own cursor.
-- `execute` produces a value under the row hint in the context. The hint is advice about which
-  rows the parent expects to need; a node may materialize only those rows or every row of its
-  range, and says which in `ValueBatch::materialized`. It may try one inline probe through
-  `ExecCx::ready`; otherwise a missing dependency must return `ExecPoll::Blocked` with the
-  exact ticket. It must never block, poll a future, or transfer device memory.
+- `execute` produces a value that is dense over the node's range. The row hint in the context
+  is advice about which rows the parent will look at; it never changes the value's shape. It
+  may try one inline probe through `ExecCx::ready`; otherwise a missing dependency must return
+  `ExecPoll::Blocked` with the exact ticket. It must never block, poll a future, or transfer
+  device memory.
 - `retire` releases leases for the finished morsel.
 
 The arena drives a node by taking it out of its slot, handing the rest of the arena to the
@@ -175,30 +175,24 @@ The three contexts are the only way a node touches the world.
 
 **Rule:** a node sees its own row hint, its own tickets, and its own children. Nothing else.
 
-### `ValueBatch`, `Materialized` (`vortex-morsel/src/node.rs`)
+### `ValueBatch` and the row hint (`vortex-morsel/src/node.rs`)
 
 What flows back up. A `ValueBatch` is a value plus the root-coordinate `coverage` it accounts
-for and a `materialized` mask over that coverage saying which rows an array value actually
-holds. `ExecCx::child_array` returns a `Materialized { array, rows }`, and
-`Materialized::select(&selection)` is the one operation that turns a selection into dropped
-rows: it compresses the selection by the rows the child holds, then filters struct fields and
-chunks one at a time by their own slice of the mask. That last part matters: the generic
-filter kernel turns a sparse mask over a chunked array into per-index takes, which cost Q15
-about 15 percent single-threaded until the root selected per chunk the way the leaves used to.
-
-Two things carry a selection through the tree, and they are deliberately different:
+for, and an array value always holds one row per row of that coverage. Two things carry a
+selection through the tree, and they are deliberately different:
 
 - The **hint** flows down as advice. The filter node hints the projection with the mask it
-  computed, so chunks with no hinted rows are neither planned nor decoded, and a sparse
-  conjunct hints its input with the incoming rows so only those are evaluated.
+  computed, and a sparse conjunct hints its input with the incoming rows. Only the flat leaf
+  reads it, for two decisions: an all-false hint at planning names no read, and an all-false
+  hint at execution answers with a constant placeholder of the range's length instead of
+  waiting for one. Chunked concatenates, struct zips, dict indexes; none of them look at it.
 - The **conjunct's mask** flows up as a value. It is the boolean array the predicate produced,
-  expressed over the morsel's whole coverage, and it is the only thing anyone applies. Leaves
-  never filter; chunked concatenates what its cuts held; struct aligns its fields to the rows
-  they all hold; the filter root selects exactly the mask from whatever the projection
-  materialized.
+  expressed over the morsel's whole coverage, and it is the only thing anyone applies. The
+  filter root applies it once, filtering each struct field and each chunk by its own slice of
+  the mask (`filter_rows`), which drops the placeholder rows along with everything else.
 
-**Rule:** a hint may shrink what a node materializes, never what it reports. A node that
-ignores its hint is correct; a node that assumes its child obeyed one is a bug.
+**Rule:** a hint may spare a leaf a read, never change what a batch looks like. Every batch is
+dense over its coverage, so no node has to describe what it holds.
 
 ### `IoUse`, `IoBatch`, `IoTicket`, `IoKey` (`vortex-morsel/src/io.rs`)
 

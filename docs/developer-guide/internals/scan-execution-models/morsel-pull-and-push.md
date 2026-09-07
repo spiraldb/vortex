@@ -51,12 +51,12 @@ FilterExec::execute
 
 - **A hint flows down, a mask flows up.** A node executes under a row hint its parent chose:
   the rows the parent expects to need. The filter evaluates its predicate under the morsel's
-  own selection, then hints the projection with the resulting mask, so projection chunks with
-  no hinted rows are never planned or decoded. The hint is advice: a leaf decodes and slices
-  its range but never filters, and every batch reports which rows it holds in
-  `ValueBatch::materialized`. The actual selection is the conjunct's boolean array, and the
-  filter root applies it once to whatever the projection materialized. A conjunct in cascade
-  mode passes each conjunct the mask the previous one produced.
+  own selection, then hints the projection with the resulting mask. Only the flat leaf reads
+  the hint: a chunk nobody wants is not read, and at execution the leaf answers with
+  placeholder rows of the right length instead of waiting for it. Every batch is therefore
+  dense over its range, chunked concatenates and struct zips without bookkeeping, and the
+  filter root applies the conjunct's boolean array once. A conjunct in cascade mode passes
+  each conjunct the mask the previous one produced.
 - **Blocking unwinds the stack.** When a leaf finds its cell not ready it returns
   `ExecPoll::Blocked(waits)` naming the exact ticket; every ancestor returns the same, the
   worker parks, and on wake the root is polled again. Each node keeps a cursor so it resumes
@@ -138,7 +138,7 @@ contract on `ExecNode` grows from five methods to ten, plus a defaulted benchmar
 | Plan | Filter names `a` (required) then `b` (speculative). | Same planning stream. `a` becomes a predicate source, `b` a deferred projection source. |
 | Start | Root `execute` runs; filter asks the conjunct for a mask. | The runtime activates `a`'s source with all rows; `b` waits for a gate. |
 | Predicate | Conjunct asks `a`'s subtree for an array hinted with the morsel's rows, applies `a > 400`, returns the mask. | `a`'s source decodes and pushes one batch to the conjunct's port; the conjunct evaluates `a > 400` on arrival and pushes the mask to the filter's port 0. |
-| Projection | Filter executes `b`'s subtree hinted with the mask; `b`'s leaf decodes its range whole and reports it as materialized; the filter selects the mask's rows. | The filter emits a projection gate with the mask; `b`'s source is activated with exactly those rows, decodes, filters, and pushes to port 1. |
+| Projection | Filter executes `b`'s subtree hinted with the mask; `b`'s leaf decodes its range whole (or stands in placeholder rows where the mask is all-false); the filter applies the mask. | The filter emits a projection gate with the mask; `b`'s source is activated with exactly those rows, decodes, filters, and pushes to port 1. |
 | Output | Filter applies the projection expression and returns one batch. | The filter waits for both ports to end, applies the projection expression, and emits one root batch. |
 | A read not ready | The leaf returns `Blocked(ticket)`; the whole stack unwinds; the worker parks; the root is re-polled. | The stage returns `Waiting(ticket)`; that pipeline's frames are suspended; the worker parks; that stage is resumed. |
 
@@ -231,9 +231,9 @@ scans and smallest where decode and predicate kernels dominate.
 
 Ask three questions of any change to either crate:
 
-1. Does it change what rows a leaf materializes? In pull a leaf materializes its whole range
-   and the filter root selects the conjunct's mask; the parent's hint only decides which chunks
-   are planned. In push it is the activation, which is exact for the projection under a filter.
+1. Does it change what rows a leaf materializes? In pull a leaf hands up its whole range and
+   the filter root applies the conjunct's mask; the hint only decides which chunks are read at
+   all. In push it is the activation, which is exact for the projection under a filter.
 2. Does it change when a read starts? Neither model starts a read during execution; planning
    names it and the scheduler hands it out. Push additionally holds deferred sources' reads as
    speculative until a gate or a park proves them needed.

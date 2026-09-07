@@ -23,6 +23,7 @@ use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
 use crate::node::ValueBatch;
+use crate::node::filter_rows;
 use crate::nodes::EXPR_EVAL_THRESHOLD;
 
 /// One conjunct: the subtree producing its input, and the predicate applied to that input.
@@ -115,8 +116,8 @@ impl ConjunctExec {
 
         // The regime switch: over a sparse selection, reduce the input to the selected rows and
         // evaluate only those; over a dense one, evaluate the whole range and intersect. Same
-        // choice the V1 flat reader makes. Either way the input's hint is advice; this node holds
-        // the selection and applies it itself.
+        // choice the V1 flat reader makes. The input comes back dense either way; the hint only
+        // lets its leaves skip reads, and this node applies the selection it holds.
         let sparse = incoming.density() < EXPR_EVAL_THRESHOLD;
         let child_hint = if sparse {
             incoming.clone()
@@ -134,20 +135,19 @@ impl ConjunctExec {
                 ));
             }
         };
-        let domain = if sparse {
-            incoming.clone()
+        let array = if sparse {
+            filter_rows(input, incoming.clone())?
         } else {
-            input.rows.clone()
+            input
         };
-        let array = input.select(&domain)?.apply_bound(&slot.predicate)?;
+        let array = array.apply_bound(&slot.predicate)?;
         let mut ctx = cx.session().create_execution_ctx();
         let predicate_mask = array.null_as_false().execute(&mut ctx)?;
 
-        // Express the verdict over the whole coverage again, then keep only incoming rows.
-        Ok(ChildPoll::Value(if domain.all_true() {
-            incoming.bitand(&predicate_mask)
+        Ok(ChildPoll::Value(if sparse {
+            incoming.intersect_by_rank(&predicate_mask)
         } else {
-            domain.intersect_by_rank(&predicate_mask)
+            incoming.bitand(&predicate_mask)
         }))
     }
 }
@@ -240,10 +240,10 @@ impl ExecNode for ConjunctExec {
         self.incoming = None;
         self.done = true;
 
-        Ok(ExecPoll::Value(ValueBatch::dense(
-            self.range.clone(),
-            Value::Mask(mask),
-        )))
+        Ok(ExecPoll::Value(ValueBatch {
+            coverage: self.range.clone(),
+            value: Value::Mask(mask),
+        }))
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {

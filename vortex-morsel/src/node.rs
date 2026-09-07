@@ -14,7 +14,7 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::Struct;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::chunked::ChunkedArrayExt;
-use vortex_array::arrays::struct_::StructDataParts;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -52,7 +52,7 @@ impl<'a> ScanCaches<'a> {
 /// A value produced by a node for its parent.
 #[derive(Clone)]
 pub enum Value {
-    /// Dense rows: length equals the true count of the batch's `materialized` mask.
+    /// Dense rows, one per row of the batch's coverage.
     Array(ArrayRef),
     /// A selection over the batch's whole coverage; same length as the coverage.
     Mask(Mask),
@@ -78,64 +78,23 @@ impl Value {
 
 /// A value plus the dense range of *input* rows it accounts for.
 ///
-/// The row hint a node executes under is advice, not an instruction: a node may materialize
-/// fewer rows than its coverage because of it, or ignore it. Whatever it did, it says so in
-/// `materialized`, so a consumer can apply the actual selection with `compress_by_mask`.
+/// Every batch is dense over its coverage. The row hint a node executes under never changes
+/// that: a leaf that was told nothing in its range is wanted stands in placeholder rows rather
+/// than leaving a hole, so parents concatenate and zip without any bookkeeping, and the filter
+/// node that holds the actual selection applies it once.
 pub struct ValueBatch {
     /// The root-coordinate row range this batch accounts for.
     pub coverage: Range<u64>,
-    /// The rows of `coverage` an array value holds, in coverage order. Always all-true for a
-    /// mask value, which is expressed over the whole coverage.
-    pub materialized: Mask,
     /// The value itself.
     pub value: Value,
 }
 
-impl ValueBatch {
-    /// A batch that holds every row of its coverage.
-    pub fn dense(coverage: Range<u64>, value: Value) -> Self {
-        let rows = usize::try_from(coverage.end - coverage.start)
-            .vortex_expect("batch coverage exceeds usize");
-        Self {
-            coverage,
-            materialized: Mask::new_true(rows),
-            value,
-        }
-    }
-}
-
-/// An array value together with the coverage rows it holds.
-pub struct Materialized {
-    /// The rows, dense over `rows`' true positions.
-    pub array: ArrayRef,
-    /// Which rows of the requested range the array holds.
-    pub rows: Mask,
-}
-
-impl Materialized {
-    /// Reduce this array to exactly `selection`, which must be a subset of `rows`.
-    ///
-    /// This is the one place the actual selection meets the hint: the caller knows what it
-    /// wants, the batch knows what it holds, and the difference is a rank-domain filter.
-    pub fn select(self, selection: &Mask) -> VortexResult<ArrayRef> {
-        if selection.all_true() && self.rows.all_true() {
-            return Ok(self.array);
-        }
-        let keep = if self.rows.all_true() {
-            selection.clone()
-        } else {
-            self.rows.compress_by_mask(selection)?
-        };
-        select_rows(self.array, keep)
-    }
-}
-
 /// Keep exactly the rows `keep` selects, one chunk at a time.
 ///
-/// The generic filter kernel turns a sparse mask over a chunked array into per-index takes. The
-/// leaves used to filter each chunk by its own slice of the mask, and this keeps that cost
-/// profile now that the selection is applied above them.
-fn select_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef> {
+/// The generic filter kernel turns a sparse mask over a chunked array into per-index takes,
+/// which cost Q15 about 15 percent. Filtering each chunk by its own slice of the mask keeps the
+/// cost profile the leaves had when they filtered themselves.
+pub(crate) fn filter_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef> {
     if keep.all_true() {
         return Ok(array);
     }
@@ -150,7 +109,7 @@ fn select_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef> {
             let end = offset + chunk.len();
             let part = keep.slice(offset..end);
             if !part.all_false() {
-                parts.push(select_rows(chunk.clone(), part)?);
+                parts.push(filter_rows(chunk.clone(), part)?);
             }
             offset = end;
         }
@@ -162,20 +121,13 @@ fn select_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef> {
     }
     if let Some(struct_) = array.as_opt::<Struct>() {
         let len = keep.true_count();
-        let StructDataParts {
-            fields,
-            struct_fields,
-            validity,
-            ..
-        } = struct_.into_owned().into_data_parts();
-        let validity = validity.filter(&keep)?;
-        let fields = fields
-            .into_iter()
-            .map(|field| select_rows(field, keep.clone()))
+        let validity = struct_.struct_validity().filter(&keep)?;
+        let fields = struct_
+            .iter_unmasked_fields()
+            .map(|field| filter_rows(field.clone(), keep.clone()))
             .collect::<VortexResult<Vec<_>>>()?;
         return Ok(
-            StructArray::try_new(struct_fields.names().clone(), fields, len, validity)?
-                .into_array(),
+            StructArray::try_new(struct_.names().clone(), fields, len, validity)?.into_array(),
         );
     }
     array.filter(keep)
@@ -462,9 +414,10 @@ pub struct ExecCx<'a> {
 impl<'a> ExecCx<'a> {
     /// The rows the parent expects to need from this node.
     ///
-    /// A hint, one entry per row of the node's local range. A node may materialize only the
-    /// hinted rows or every row, and reports which in [`ValueBatch::materialized`]; the actual
-    /// selection is applied by whoever holds it, never assumed from the hint.
+    /// A hint, one entry per row of the node's local range. It is advice about which rows will
+    /// be looked at, never a selection to apply: a batch is always dense over its range. A flat
+    /// leaf uses it to load early, and to stand in placeholder rows without reading when nothing
+    /// in its range is wanted. The actual selection is applied by the filter node that holds it.
     pub fn hint(&self) -> &Mask {
         &self.demand
     }
@@ -532,13 +485,10 @@ impl<'a> ExecCx<'a> {
         result
     }
 
-    /// Drive a child to an array value with the rows it holds, failing if it produced nothing.
-    pub fn child_array(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<Materialized>> {
+    /// Drive a child to an array value, failing if it produced nothing.
+    pub fn child_array(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<ArrayRef>> {
         match self.child_value(id, hint)? {
-            ChildPoll::Value(batch) => Ok(ChildPoll::Value(Materialized {
-                array: batch.value.into_array()?,
-                rows: batch.materialized,
-            })),
+            ChildPoll::Value(batch) => Ok(ChildPoll::Value(batch.value.into_array()?)),
             ChildPoll::Blocked(waits) => Ok(ChildPoll::Blocked(waits)),
             ChildPoll::Done => Ok(ChildPoll::Done),
         }

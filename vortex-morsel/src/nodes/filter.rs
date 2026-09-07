@@ -25,6 +25,7 @@ use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
 use crate::node::ValueBatch;
+use crate::node::filter_rows;
 
 /// The blueprint of the root filter node.
 pub struct FilterSpec {
@@ -53,7 +54,8 @@ impl NodeBlueprint for FilterSpec {
 /// with it, then apply it to whatever the projection materialized.
 ///
 /// This is the only node that turns a selection into dropped rows. Leaves below it never filter;
-/// they report what they hold and this node reconciles that with the mask it computed.
+/// they hand up their whole range (or placeholder rows where the hint told them nothing is
+/// wanted), and this node applies the mask it computed.
 pub struct FilterExec {
     predicate: Option<NodeId>,
     projection: NodeId,
@@ -156,15 +158,14 @@ impl ExecNode for FilterExec {
                 cx.stats().morsels_empty += 1;
                 return Ok(ExecPoll::Value(ValueBatch {
                     coverage: self.range.clone(),
-                    materialized: mask,
                     value: Value::Array(Canonical::empty(&self.output_dtype).into_array()),
                 }));
             }
             self.mask = Some(mask);
         }
 
-        // The selection is the projection's hint: chunks it leaves untouched are never planned
-        // or decoded. Whatever the projection did materialize is then cut to the selection here.
+        // The selection is the projection's hint: chunks it leaves untouched are never read or
+        // decoded. The projection comes back dense over the range, and the mask is applied here.
         let mask = self
             .mask
             .as_ref()
@@ -175,7 +176,7 @@ impl ExecNode for FilterExec {
             ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
             ChildPoll::Done => return Err(vortex_err!("filter projection produced no value")),
         };
-        let array = projected.select(&mask)?;
+        let array = filter_rows(projected, mask)?;
         cx.stats().rows_selected += array.len() as u64;
         let array = array.apply_bound(&self.projection_expr)?;
         self.mask = None;
@@ -183,7 +184,6 @@ impl ExecNode for FilterExec {
 
         Ok(ExecPoll::Value(ValueBatch {
             coverage: self.range.clone(),
-            materialized: mask,
             value: Value::Array(array),
         }))
     }
