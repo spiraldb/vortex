@@ -60,6 +60,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
             "-DVALUE=-fsanitize=address",
         ]
         self.rustflags = ["-C", "force-frame-pointers=yes", "-C", "relocation-model=pic"]
+        self.compiler_arg1 = {"CC": "", "CXX": ""}
 
     def executable(self, name, body):
         path = self.work / name
@@ -116,6 +117,8 @@ class CargoEnvironmentFixture(unittest.TestCase):
             "VORTEX_CXXFLAGS": ";".join(cxxflags),
             "VORTEX_C_COMPILER": self.tools["CC"],
             "VORTEX_CXX_COMPILER": self.tools["CXX"],
+            "VORTEX_C_COMPILER_ARG1": self.compiler_arg1["CC"],
+            "VORTEX_CXX_COMPILER_ARG1": self.compiler_arg1["CXX"],
             "VORTEX_AR": self.tools["AR"],
             "VORTEX_RANLIB": self.tools["RANLIB"],
         }
@@ -362,6 +365,86 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
                 cxxflags = [*self.cxxflags[:1], *flags, *self.cxxflags[1:]]
                 env = self.run_driver(cflags, cxxflags)
                 self.assert_native_environment(env, cflags, cxxflags)
+
+    def test_compiler_arguments_reach_probes_and_cache(self):
+        required = {
+            "CC": ["", "--sysroot=/sdk with spaces", '-DC_LABEL="apostrophe\'s"', "-fsanitize=undefined"],
+            "CXX": ["-std=c++20", '-DCXX_LABEL="two words"', "-fsanitize=address", "-DVALUE=-fsanitize=address", ""],
+        }
+        self.compiler_arg1 = {language: shlex.join(args) for language, args in required.items()}
+        wrapper = self.recording_cache()
+        for cached in (False, True):
+            env = self.run_driver(self.cflags, self.cxxflags, {"RUSTC_WRAPPER": wrapper} if cached else {})
+            for language, args in required.items():
+                for host in (False, True):
+                    with self.subTest(cached=cached, language=language, host=host):
+                        self.cache_log.unlink(missing_ok=True)
+                        selected = env.copy()
+                        if host:
+                            selected["CARGO_ENCODED_RUSTFLAGS"] = ""
+                        # Mandatory compiler arguments, unlike CFLAGS, also belong in probes.
+                        result = subprocess.run(
+                            [*self.native_command(selected, language), "-E", "detect_compiler_family.c"],
+                            env=selected,
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            check=True,
+                        )
+                        expected = [arg for arg in args if not host or not arg.startswith("-fsanitize=")]
+                        expected += ["-E", "detect_compiler_family.c"]
+                        self.assertEqual(json.loads(result.stdout), {"tool": self.tools[language], "flags": expected})
+                        self.assertEqual(
+                            self.cache_calls(),
+                            [{"compiler": self.tools[language], "flags": expected}] if cached else [],
+                        )
+
+    def test_compiler_argument_changes_invalidate_cc_builds(self):
+        self.compiler_arg1 = {"CC": "-DC_REQUIRED=1", "CXX": "-DCXX_REQUIRED=1"}
+        original = self.run_driver(self.cflags, self.cxxflags)
+        unchanged = self.run_driver(self.cflags, self.cxxflags)
+        for language in ("CC", "CXX"):
+            self.assertEqual(self.effective_tool(original, language), self.effective_tool(unchanged, language))
+        for language in ("CC", "CXX"):
+            with self.subTest(language=language):
+                self.compiler_arg1[language] += " -DCHANGED=1"
+                changed = self.run_driver(self.cflags, self.cxxflags)
+                for name in ("CC", "CXX"):
+                    self.assertEqual(
+                        self.effective_tool(original, name) == self.effective_tool(changed, name), name != language
+                    )
+                original = changed
+
+    def test_configured_wrappers_prevent_rust_wrapper_fallback(self):
+        compilers = self.tools.copy()
+        fallback = self.recording_cache()
+        for name in ("env", "ccache", "distcc", "sccache", "icecc", "cachepot", "buildcache", "kache", "custom"):
+            configured = self.executable(
+                f"configured tools' directory/{name}", "import os, sys\nos.execv(sys.argv[1], sys.argv[1:])\n"
+            )
+            for language in ("CC", "CXX"):
+                self.tools[language] = configured
+                self.compiler_arg1[language] = shlex.join([compilers[language], "-DREQUIRED=1", "-fsanitize=undefined"])
+            env = self.run_driver(
+                self.cflags, self.cxxflags, {"RUSTC_WRAPPER": fallback, "CC_KNOWN_WRAPPER_CUSTOM": "custom"}
+            )
+            for language in ("CC", "CXX"):
+                for host in (False, True):
+                    with self.subTest(wrapper=name, language=language, host=host):
+                        selected = env.copy()
+                        if host:
+                            selected["CARGO_ENCODED_RUSTFLAGS"] = ""
+                        result = subprocess.run(
+                            [*self.native_command(selected, language), "-E", "probe.c"],
+                            env=selected,
+                            capture_output=True,
+                            text=True,
+                            timeout=30,
+                            check=True,
+                        )
+                        expected = ["-DREQUIRED=1", *([] if host else ["-fsanitize=undefined"]), "-E", "probe.c"]
+                        self.assertEqual(json.loads(result.stdout), {"tool": compilers[language], "flags": expected})
+            self.assertEqual(self.cache_calls(), [], "An explicit compiler wrapper must suppress the fallback")
 
     def test_flag_changes_invalidate_cc_builds(self):
         original = self.run_driver(self.cflags, self.cxxflags)

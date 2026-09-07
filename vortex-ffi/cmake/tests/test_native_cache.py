@@ -5,6 +5,7 @@
 
 import hashlib
 import json
+import shlex
 import shutil
 import socket
 import subprocess
@@ -44,7 +45,9 @@ class NativeCacheTests(test_cargo_environment.CargoEnvironmentFixture):
         include = self.work / "include directory"
         include.mkdir()
         (include / "fixture's header.h").write_text("#define HEADER_VALUE 1\n", encoding="utf-8")
-        flags = ["-O0", "-fPIC", "-fsanitize=undefined", f"-I{include}", '-DCACHE_TEXT="hello world"']
+        flags = ["-O0", "-fPIC", "-fsanitize=undefined"]
+        required = [f"-I{include}", '-DCACHE_TEXT="hello world"', "-fsanitize=undefined"]
+        self.compiler_arg1 = {language: shlex.join(required) for language in ("CC", "CXX")}
         env = self.run_driver(flags, flags, {"RUSTC_WRAPPER": str(wrapper)})
         self.assertEqual(env["RUSTC_WRAPPER"], str(wrapper))
         # Never connect to the developer's server, inherit remote-cache settings,

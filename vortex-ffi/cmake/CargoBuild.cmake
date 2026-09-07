@@ -88,9 +88,27 @@ endfunction()
 # CARGO_ENCODED_RUSTFLAGS: empty for host dependencies, nonempty for our target.
 # Strip only host sanitizer flags: host dependencies still need toolchain flags,
 # and cc-rs must see the flags itself to handle compiler and flag-support probes.
-function(_vortex_native_compiler_launcher compiler output)
+function(_vortex_native_compiler_launcher compiler arg1 output)
+    _vortex_reject_semicolon("compiler ARG1" "${arg1}")
     _vortex_encode_shell_arguments(_compiler "${compiler}")
+    separate_arguments(_command UNIX_COMMAND "${_compiler} ${arg1}")
+    # Quote the list expansion to preserve empty mandatory arguments.
+    _vortex_encode_shell_arguments(_compiler_command "${_command}")
+
+    # Match cc-rs: an explicit known wrapper suppresses RUSTC_WRAPPER fallback.
+    # Keep its command intact rather than caching env or double-wrapping sccache.
+    get_filename_component(_compiler_name "${compiler}" NAME_WLE)
+    set(_known_wrappers ccache distcc sccache icecc cachepot buildcache kache env
+        "$ENV{CC_KNOWN_WRAPPER_CUSTOM}")
+    set(_use_rustc_wrapper true)
+    list(LENGTH _command _command_length)
+    if(_command_length GREATER 1 AND _compiler_name IN_LIST _known_wrappers)
+        set(_use_rustc_wrapper false)
+    endif()
+
     string(CONFIGURE [=[#!/bin/sh
+# Mandatory compiler arguments also apply to compiler-family and flag probes.
+set -- @_compiler_command@ "$@"
 if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
     for arg do
         shift
@@ -100,17 +118,18 @@ if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
         esac
     done
 fi
-set -- @_compiler@ "$@"
 # Match cc-rs's native-compatible Rust wrappers, but cache AFTER filtering.
-wrapper_name=${RUSTC_WRAPPER##*/}
-case "${wrapper_name%.*}" in
-    sccache|cachepot|buildcache|kache) set -- "$RUSTC_WRAPPER" "$@" ;;
-esac
+if @_use_rustc_wrapper@; then
+    wrapper_name=${RUSTC_WRAPPER##*/}
+    case "${wrapper_name%.*}" in
+        sccache|cachepot|buildcache|kache) set -- "$RUSTC_WRAPPER" "$@" ;;
+    esac
+fi
 exec "$@"
 ]=] _script @ONLY)
 
     # cc-rs tracks CC/CXX, not launcher contents. Change the path when the
-    # compiler or script changes; CFLAGS/CXXFLAGS already track flag changes.
+    # compiler, mandatory arguments, or script changes; CFLAGS/CXXFLAGS track flags.
     string(SHA256 _key "${_script}")
     set(_directory "${VORTEX_CARGO_TARGET_DIR}/cmake-native-tools")
     set(_launcher "${_directory}/cc-${_key}")
@@ -131,8 +150,8 @@ function(_vortex_make_cargo_environment target_key_lower output)
     string(JOIN "${_separator}" _rustflags ${VORTEX_RUSTFLAGS})
     _vortex_encode_shell_arguments(_cflags ${VORTEX_CFLAGS})
     _vortex_encode_shell_arguments(_cxxflags ${VORTEX_CXXFLAGS})
-    _vortex_native_compiler_launcher("${VORTEX_C_COMPILER}" _cc)
-    _vortex_native_compiler_launcher("${VORTEX_CXX_COMPILER}" _cxx)
+    _vortex_native_compiler_launcher("${VORTEX_C_COMPILER}" "${VORTEX_C_COMPILER_ARG1}" _cc)
+    _vortex_native_compiler_launcher("${VORTEX_CXX_COMPILER}" "${VORTEX_CXX_COMPILER_ARG1}" _cxx)
     _vortex_build_tool_path(_cargo_path)
 
     set(_environment
