@@ -12,7 +12,7 @@ cd "$(dirname "$0")"
 cmake -S . -B build \
     -DVORTEX_BUILD_TESTING=ON \
     -DCMAKE_CXX_FLAGS=--coverage
-cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(nproc)}"
+cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN)}"
 ctest --test-dir build --output-on-failure
 
 # lcov matches exclude globs against full source paths.

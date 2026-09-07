@@ -148,9 +148,9 @@ CUDA device code, the CUB helper, and nvCOMP are not sanitizer-instrumented.
 
 ### Coverage
 
-The helper reports C++ coverage only. It needs a gcov/LCOV toolchain and `nproc` for the default
-job count (`CMAKE_BUILD_PARALLEL_LEVEL` overrides it). Add `genhtml` for HTML output.
-Omit `html` to write only `coverage.info`:
+The helper reports C++ coverage only. It needs a gcov/LCOV toolchain and `genhtml` for HTML
+output. Parallelism defaults to the online CPU count and can be overridden with
+`CMAKE_BUILD_PARALLEL_LEVEL`. Omit `html` to write only `coverage.info`:
 
 ```sh
 cd lang/cpp
