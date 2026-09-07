@@ -5,7 +5,7 @@
 # archive from vortex-ffi and exports Vortex::cpp_static. It supports standalone
 # configuration and add_subdirectory() from the repository root or a parent.
 
-# FetchContent requires CMake 3.25.
+# CMake 3.25 is required for block() and FetchContent SYSTEM.
 cmake_minimum_required(VERSION 3.25)
 
 project(VortexCXX DESCRIPTION "Vortex C++ wrapper" LANGUAGES C CXX)

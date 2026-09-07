@@ -11,7 +11,7 @@
 # See lang/cpp/README.md for build options and embedding requirements,
 # and vortex-ffi/README.md for C API development.
 
-# FetchContent requires CMake 3.25.
+# CMake 3.25 is required for block() and FetchContent SYSTEM.
 cmake_minimum_required(VERSION 3.25)
 
 project(VortexNative DESCRIPTION "Vortex native libraries" LANGUAGES NONE)

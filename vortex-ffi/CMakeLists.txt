@@ -5,7 +5,7 @@
 # exports Vortex::ffi_static for C consumers; lang/cpp layers the C++ wrapper on
 # top. It supports standalone configuration and add_subdirectory() from a parent.
 
-# FetchContent requires CMake 3.25.
+# CMake 3.25 is required for block() and FetchContent SYSTEM.
 cmake_minimum_required(VERSION 3.25)
 
 project(VortexFFI DESCRIPTION "Vortex C FFI" LANGUAGES C CXX)
