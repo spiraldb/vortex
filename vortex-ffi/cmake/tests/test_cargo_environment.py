@@ -17,6 +17,8 @@ from cc_fixture import cached_cc_version
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 COVERAGE_FLAGS = [
+    "-fsanitize-coverage=trace-pc-guard",
+    "-fsanitize-coverage=trace-cmp,trace-div",
     "--coverage",
     "-fprofile-arcs",
     "-ftest-coverage",

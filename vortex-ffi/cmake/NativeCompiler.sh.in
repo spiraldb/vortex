@@ -10,7 +10,7 @@ if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
     for arg do
         shift
         case "$arg" in
-            -fsanitize=*|--coverage|-fprofile-arcs|-ftest-coverage) ;;
+            -fsanitize=*|-fsanitize-coverage=*|--coverage|-fprofile-arcs|-ftest-coverage) ;;
             -fprofile-instr-generate|-fprofile-instr-generate=*|-fcoverage-mapping) ;;
             -fprofile-generate|-fprofile-generate=*) ;;
             *) set -- "$@" "$arg" ;;
