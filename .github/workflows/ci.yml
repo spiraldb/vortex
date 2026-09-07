@@ -569,9 +569,36 @@ jobs:
         with:
           command: check ${{ matrix.checks }}
 
+  cmake-integration-test:
+    name: "CMake integration (test)"
+    timeout-minutes: 10
+    runs-on: >-
+      ${{ github.repository == 'vortex-data/vortex'
+          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=cmake-integration-test', github.run_id)
+          || 'ubuntu-latest' }}
+    steps:
+      - uses: runs-on/action@v2
+        if: github.repository == 'vortex-data/vortex'
+        with:
+          sccache: s3
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
+      - uses: ./.github/actions/setup-prebuild
+        with:
+          enable-sccache: "true"
+      - name: Pin rustup proxy to repository toolchain
+        run: |
+          TOOLCHAIN="$(grep '^channel' rust-toolchain.toml | cut -d '"' -f 2)"
+          echo "RUSTUP_TOOLCHAIN=$TOOLCHAIN" >> "$GITHUB_ENV"
+      # The offline cc-rs fixtures skip unless cc 1.4.0 is in Cargo's registry cache.
+      - name: Fetch Cargo dependencies for offline fixtures
+        run: cargo fetch --locked
+      - name: Test CMake integration
+        run: python3 -m unittest discover -v -s vortex-ffi/cmake/tests
+
   cxx-api:
     name: "C++ API"
-    timeout-minutes: 5
+    # Leave room for cold, per-build-tree Cargo artifacts, including sanitized std.
+    timeout-minutes: 15
     env:
       UBSAN_OPTIONS: "halt_on_error=1"
     runs-on: >-
@@ -592,8 +619,6 @@ jobs:
         run: |
           rustup toolchain install $NIGHTLY_TOOLCHAIN
           rustup component add --toolchain $NIGHTLY_TOOLCHAIN rust-src rustfmt clippy llvm-tools-preview
-      - name: Test CMake integration
-        run: python3 -m unittest discover -s vortex-ffi/cmake/tests
       - name: Build C++ tests and examples (asan)
         env:
           RUSTUP_TOOLCHAIN: ${{ env.NIGHTLY_TOOLCHAIN }}
