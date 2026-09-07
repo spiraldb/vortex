@@ -703,10 +703,11 @@ jobs:
           enable-sccache: "true"
           targets: "wasm32-wasip1"
       - name: Setup Wasmer
-        shell: bash
-        run: |
-          curl https://get.wasmer.io -sSfL | sh
-          echo "$HOME/.wasmer/bin" >> $GITHUB_PATH
+        uses: wasmerio/setup-wasmer@6c5d5cfde33555ebd3e0172ba547497890c4b1c0  # v3
+        with:
+          version: "v7.4.0"
+      - name: Verify Wasmer installation
+        run: wasmer --version
       - run: cargo build --profile ci --target wasm32-wasip1
         working-directory: ./wasm-test
       - run: wasmer run ./target/wasm32-wasip1/ci/wasm-test.wasm
