@@ -16,6 +16,20 @@ from pathlib import Path
 from cc_fixture import cached_cc_version
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+COVERAGE_FLAGS = [
+    "--coverage",
+    "-fprofile-arcs",
+    "-ftest-coverage",
+    "-fprofile-instr-generate",
+    "-fprofile-instr-generate=/profile directory's/run.profraw",
+    "-fcoverage-mapping",
+    "-fprofile-generate",
+    "-fprofile-generate=/profile directory's",
+]
+
+
+def host_flags(flags):
+    return [flag for flag in flags if not flag.startswith("-fsanitize=") and flag not in COVERAGE_FLAGS]
 
 
 def rust_toolchain_environment():
@@ -216,7 +230,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
                 self.assertEqual(self.compile_flags(env, language, host=False), expected)
                 self.assertEqual(
                     self.compile_flags(env, language, host=True),
-                    [flag for flag in expected if not flag.startswith("-fsanitize=")],
+                    host_flags(expected),
                 )
 
     def prepare_native_toolchain(self):
@@ -329,8 +343,8 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
                 with self.subTest(wrapper=name + suffix):
                     wrapper = self.recording_cache(name + suffix)
                     self.cache_log.unlink(missing_ok=True)
-                    cflags = [*self.cflags, "-fsanitize=address,undefined"]
-                    cxxflags = ["-fsanitize=undefined", *self.cxxflags]
+                    cflags = [*self.cflags, "-fsanitize=address,undefined", *COVERAGE_FLAGS]
+                    cxxflags = ["-fsanitize=undefined", *COVERAGE_FLAGS, *self.cxxflags]
                     env = self.run_driver(cflags, cxxflags, {"RUSTC_WRAPPER": wrapper})
                     self.assertEqual(env["RUSTC_WRAPPER"], wrapper)
                     self.assert_native_environment(env, cflags, cxxflags)
@@ -340,7 +354,7 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
                             {
                                 "compiler": self.tools[language],
                                 "flags": ["-O0", "-c", "source with spaces", "-o", "object file"]
-                                + [flag for flag in flags if not host or not flag.startswith("-fsanitize=")],
+                                + (host_flags(flags) if host else flags),
                             }
                             for language, flags in (("CC", cflags), ("CXX", cxxflags))
                             for host in (False, True)
@@ -381,15 +395,33 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
                 for target in (self.target, self.target.replace("-", "_")):
                     self.assertEqual(env[f"{language}_{target}"], " ".join(command))
 
-    def test_only_sanitizer_flags_are_target_only(self):
+    def test_only_instrumentation_flags_are_target_only(self):
+        preserved = [
+            "-pthread",
+            "-fno-omit-frame-pointer",
+            "-fno-exceptions",
+            "-fno-sanitize-recover=all",
+            "-fprofile-use",
+            "-fprofile-use=/profile directory's",
+            "-fprofile-instr-use=/profile directory's/run.profdata",
+            "-fprofile-sample-use=sample.prof",
+            "-fprofile-correction",
+            "-fprofile-dir=/profile directory's",
+            "-fprofile-update=atomic",
+            "-fcoverage-prefix-map=/old=/new",
+            "-fno-profile-arcs",
+            "-fno-coverage-mapping",
+            *(f"-DLOOKALIKE={flag}" for flag in COVERAGE_FLAGS),
+        ]
         for flags in (
             ["-fsanitize=address,undefined"],
             ["-fsanitize=undefined", "-fsanitize=address"],
+            *([flag] for flag in COVERAGE_FLAGS),
             [],
         ):
             with self.subTest(flags=flags):
-                cflags = [*flags, *self.cflags]
-                cxxflags = [*self.cxxflags[:1], *flags, *self.cxxflags[1:]]
+                cflags = [*flags, *self.cflags, *preserved]
+                cxxflags = [*self.cxxflags[:1], *flags, *self.cxxflags[1:], *preserved]
                 env = self.run_driver(cflags, cxxflags)
                 self.assert_native_environment(env, cflags, cxxflags)
 
@@ -398,6 +430,7 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
             "CC": ["", "--sysroot=/sdk with spaces", '-DC_LABEL="apostrophe\'s"', "-fsanitize=undefined"],
             "CXX": ["-std=c++20", '-DCXX_LABEL="two words"', "-fsanitize=address", "-DVALUE=-fsanitize=address", ""],
         }
+        required = {language: [*COVERAGE_FLAGS, *args] for language, args in required.items()}
         self.compiler_arg1 = {language: shlex.join(args) for language, args in required.items()}
         wrapper = self.recording_cache()
         for cached in (False, True):
@@ -418,7 +451,7 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
                             timeout=30,
                             check=True,
                         )
-                        expected = [arg for arg in args if not host or not arg.startswith("-fsanitize=")]
+                        expected = host_flags(args) if host else args.copy()
                         expected += ["-E", "detect_compiler_family.c"]
                         self.assertEqual(json.loads(result.stdout), {"tool": self.tools[language], "flags": expected})
                         self.assertEqual(
@@ -488,9 +521,9 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
         self.assert_native_environment(changed, cflags, self.cxxflags)
 
     def test_ambient_flags_accumulate_without_bypassing_host_filter(self):
-        global_flags = ["-DORDER=global", "-fsanitize=address"]
-        host_flags = ["-DORDER=host", "-fsanitize=leak"]
-        literal_flags = ["-DORDER=literal", "-fsanitize=undefined"]
+        global_flags = ["-DORDER=global", "-fsanitize=address", *COVERAGE_FLAGS]
+        host_flags = ["-DORDER=host", "-fsanitize=leak", "--coverage"]
+        literal_flags = ["-DORDER=literal", "-fsanitize=undefined", "-fprofile-arcs", "-ftest-coverage"]
         ambient = {}
         for name in ("CFLAGS", "CXXFLAGS"):
             ambient.update(
@@ -507,12 +540,15 @@ class CargoEnvironmentTests(CargoEnvironmentFixture):
                 ambient[key] = "/ambient/tool-must-not-run"
         cflags = [*self.cflags, "-fsanitize=undefined"]
         cxxflags = [*self.cxxflags, "-fsanitize=undefined"]
+        ambient["RUSTC_WRAPPER"] = self.recording_cache()
         env = self.run_driver(cflags, cxxflags, ambient)
         self.assert_native_environment(
             env,
             [*global_flags, *host_flags, *cflags, *literal_flags],
             [*global_flags, *host_flags, *cxxflags, *literal_flags],
         )
+        for call in self.cache_calls()[1::2]:
+            self.assertFalse(any(flag in COVERAGE_FLAGS or flag.startswith("-fsanitize=") for flag in call["flags"]))
         for name in ("CFLAGS", "CXXFLAGS"):
             for key in self.env_names(name):
                 if key != f"{name}_{self.target.replace('-', '_')}":

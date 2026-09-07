@@ -86,8 +86,8 @@ endfunction()
 # cc-rs chooses HOST_* whenever HOST == TARGET, including native target builds.
 # Cargo's explicit --target instead distinguishes them through build-script
 # CARGO_ENCODED_RUSTFLAGS: empty for host dependencies, nonempty for our target.
-# Strip only host sanitizer flags: host dependencies still need toolchain flags,
-# and cc-rs must see the flags itself to handle compiler and flag-support probes.
+# Host links lack sanitizer and coverage runtimes; strip only their instrumentation.
+# Keep other flags visible to cc-rs for compiler and flag-support probes.
 function(_vortex_native_compiler_launcher compiler arg1 output)
     _vortex_reject_semicolon("compiler ARG1" "${arg1}")
     _vortex_encode_shell_arguments(_compiler "${compiler}")
@@ -113,7 +113,9 @@ if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
     for arg do
         shift
         case "$arg" in
-            -fsanitize=*) ;;
+            -fsanitize=*|--coverage|-fprofile-arcs|-ftest-coverage) ;;
+            -fprofile-instr-generate|-fprofile-instr-generate=*|-fcoverage-mapping) ;;
+            -fprofile-generate|-fprofile-generate=*) ;;
             *) set -- "$@" "$arg" ;;
         esac
     done

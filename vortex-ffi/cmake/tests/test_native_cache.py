@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-"""Optional real-sccache regression; all cache/server state is private to the test."""
+"""Real host/target instrumentation and optional sccache regressions with private cache state."""
 
 import hashlib
 import json
@@ -33,6 +33,70 @@ class NativeCacheTests(test_cargo_environment.CargoEnvironmentFixture):
     def cache_stats(self, env):
         return json.loads(self.run_command([env["RUSTC_WRAPPER"], "--show-stats", "--stats-format=json"], env))["stats"]
 
+    @unittest.skipUnless(all(shutil.which(tool) for tool in ("ar", "ranlib")), "ar and ranlib are required")
+    def test_coverage_build_dependency_links_and_target_stays_instrumented(self):
+        self.prepare_native_toolchain()
+        self.tools.update(AR=shutil.which("ar"), RANLIB=shutil.which("ranlib"))
+        self.compiler_arg1["CC"] = "--coverage"
+        env = self.run_driver(["-O0", "-fPIC"], ["-O0", "-fPIC"], {"CXXFLAGS": "--coverage"})
+        env["RUSTC"] = shutil.which("rustc")
+        fixture = self.work / "coverage"
+        helper = fixture / "host-helper"
+        helper.mkdir(parents=True)
+        (fixture / "Cargo.toml").write_text(
+            '[workspace]\n[package]\nname = "coverage-fixture"\nversion = "0.0.0"\nedition = "2021"\n'
+            '[lib]\npath = "lib.rs"\ncrate-type = ["staticlib"]\n'
+            '[dependencies]\nhost-helper = { path = "host-helper" }\n'
+            '[build-dependencies]\nhost-helper = { path = "host-helper" }\n',
+            encoding="utf-8",
+        )
+        (fixture / "lib.rs").write_text("pub fn value(x: i32) -> i32 { host_helper::value(x) }\n", encoding="utf-8")
+        (fixture / "build.rs").write_text("fn main() { assert_eq!(host_helper::value(5), 24); }\n", encoding="utf-8")
+        (helper / "Cargo.toml").write_text(
+            '[package]\nname = "host-helper"\nversion = "0.0.0"\nedition = "2021"\n'
+            f'[lib]\npath = "lib.rs"\n[build-dependencies]\ncc = "={self.cc_version}"\n',
+            encoding="utf-8",
+        )
+        (helper / "lib.rs").write_text(
+            'extern "C" { fn native_c(x: i32) -> i32; fn native_cpp(x: i32) -> i32; }\n'
+            "pub fn value(x: i32) -> i32 { unsafe { native_c(x) + native_cpp(x) } }\n",
+            encoding="utf-8",
+        )
+        (helper / "build.rs").write_text(
+            "fn main() {\n"
+            '    cc::Build::new().file("native_c.c").compile("native_c");\n'
+            '    cc::Build::new().cpp(true).file("native_cpp.cpp").compile("native_cpp");\n'
+            "}\n",
+            encoding="utf-8",
+        )
+        (helper / "native_c.c").write_text("int native_c(int x) { return x + 7; }\n", encoding="utf-8")
+        (helper / "native_cpp.cpp").write_text('extern "C" int native_cpp(int x) { return x + 7; }\n', encoding="utf-8")
+        target_dir = fixture / "target"
+        # Cargo, not the test, clears host Rust flags. Calling both native functions
+        # forces their objects into the build-script link, exposing missing runtimes.
+        self.run_command(
+            [
+                "cargo",
+                "build",
+                "--offline",
+                "--manifest-path",
+                fixture / "Cargo.toml",
+                "--target",
+                self.target,
+                "--target-dir",
+                target_dir,
+            ],
+            env,
+        )
+        for host, directory in ((True, target_dir), (False, target_dir / self.target)):
+            objects = sorted(directory.glob("debug/build/host-helper-*/out/*native_*.o"))
+            self.assertEqual(len(objects), 2, objects)
+            for obj in objects:
+                with self.subTest(host=host, object=obj.name):
+                    symbols = self.run_command(["nm", "-u", obj], env)
+                    self.assertEqual("llvm_gcda" in symbols, not host, symbols)
+                    self.assertEqual(obj.with_suffix(".gcno").exists(), not host)
+
     def test_host_target_objects_and_rust_cache_hits(self):
         sccache = shutil.which("sccache")
 
@@ -45,8 +109,8 @@ class NativeCacheTests(test_cargo_environment.CargoEnvironmentFixture):
         include = self.work / "include directory"
         include.mkdir()
         (include / "fixture's header.h").write_text("#define HEADER_VALUE 1\n", encoding="utf-8")
-        flags = ["-O0", "-fPIC", "-fsanitize=undefined"]
-        required = [f"-I{include}", '-DCACHE_TEXT="hello world"', "-fsanitize=undefined"]
+        flags = ["-O0", "-fPIC", "-fsanitize=undefined", "--coverage"]
+        required = [f"-I{include}", '-DCACHE_TEXT="hello world"', "-fsanitize=undefined", "--coverage"]
         self.compiler_arg1 = {language: shlex.join(required) for language in ("CC", "CXX")}
         env = self.run_driver(flags, flags, {"RUSTC_WRAPPER": str(wrapper)})
         self.assertEqual(env["RUSTC_WRAPPER"], str(wrapper))
@@ -101,7 +165,10 @@ class NativeCacheTests(test_cargo_environment.CargoEnvironmentFixture):
                                 self.assertEqual(args, compiler_args)
                                 digest = hashlib.sha256(obj.read_bytes()).hexdigest()
                                 symbols = self.run_command(["nm", "-u", obj], selected)
-                                self.assertEqual("ubsan" in symbols, mode == "target", f"{cached=} {mode=}: {symbols}")
+                                for runtime in ("ubsan", "llvm_gcda"):
+                                    self.assertEqual(
+                                        runtime in symbols, mode == "target", f"{cached=} {mode=}: {symbols}"
+                                    )
                                 if cached:
                                     self.assertEqual(digest, reference[mode], f"wrong cached {mode} object")
                                 else:

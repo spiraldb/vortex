@@ -78,8 +78,11 @@ not supported.
   if it selects stable, configure fails with a request to set `-DVORTEX_RUSTUP_TOOLCHAIN=nightly`.
 - Cargo uses the lockfile, with optional features such as `mimalloc` disabled. CMake supplies the
   complete Rust flags, overriding flags from the environment and Cargo configuration.
-- Cargo-built native dependencies use CMake's compilers, archiver, and C/C++ flags, except
-  warning-as-error flags. Host build dependencies also omit sanitizer instrumentation.
+- Cargo-built native dependencies use CMake's compilers, archiver, C/C++ flags, and macOS SDK.
+  Warning-as-error flags are omitted; host dependencies also omit sanitizer and coverage instrumentation.
+  `CMAKE_C_FLAGS`/`CMAKE_CXX_FLAGS`, including standards and coverage, are deliberately forwarded
+  after dependency flags and can override their choices. Prefer Vortex options or target-scoped
+  flags to avoid imposing global policy.
 - Cargo checks for changes whenever a target depending on Vortex is built. Its cache lives under
   the FFI binary directory: `ffi/cargo-target` in root and C++ builds. The CMake `clean` target
   removes this cache too.
