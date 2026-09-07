@@ -5,8 +5,10 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 use std::sync::Weak;
 
+use arrow_schema::DataType;
 use datafusion_common::Result as DFResult;
 use datafusion_common::config::ConfigOptions;
+use datafusion_common::exec_datafusion_err;
 use datafusion_common::tree_node::TreeNodeRecursion;
 use datafusion_datasource::TableSchema;
 use datafusion_datasource::file::FileSource;
@@ -129,23 +131,25 @@ use crate::persistent::reader::VortexReaderFactory;
 ///
 /// - `full_predicate`, which is used by DataFusion's `FilePruner` to skip whole
 ///   files before they are opened,
-/// - `vortex_predicate`, which contains only the expressions Vortex can evaluate
-///   during the scan.
+/// - `vortex_predicate`, which contains accepted exact filters. After per-file
+///   adaptation, these run either natively or as DataFusion residual filters.
 ///
 /// Projection handling depends on
 /// [`VortexTableOptions::projection_pushdown`]:
 ///
 /// - when disabled, `VortexSource` still prunes unreferenced top-level columns,
 ///   but DataFusion applies the full projection after the scan,
-/// - when enabled, the scan can evaluate a Vortex-native projection and leave
-///   only unsupported expressions for DataFusion.
+/// - when enabled, the default convertor evaluates fully supported projections
+///   natively. Otherwise, DataFusion evaluates the full projection over raw columns.
 ///
 /// Predicate handling depends on [`VortexTableOptions::predicate_pushdown`]:
 ///
 /// - when disabled, `VortexSource` still keeps the full predicate for
 ///   DataFusion file pruning, but reports filters as not pushed down so
 ///   DataFusion evaluates them after the scan,
-/// - when enabled, supported filters are pushed into the Vortex scan.
+/// - when enabled, supported filters are pushed into the Vortex scan. If file
+///   adaptation requires residual filtering, DataFusion filters raw scan batches
+///   before the final projection and limit.
 ///
 /// # Observability
 ///
@@ -187,8 +191,7 @@ pub struct VortexSource {
     /// Combined predicate expression containing all filters from DataFusion query planning.
     /// Used with FilePruner to skip files based on statistics and partition values.
     pub(crate) full_predicate: Option<PhysicalExprRef>,
-    /// Subset of predicates that can be pushed down into Vortex scan operations.
-    /// These are expressions that Vortex can efficiently evaluate during scanning.
+    /// Accepted exact predicates, evaluated natively or as per-file residuals.
     pub(crate) vortex_predicate: Option<PhysicalExprRef>,
     /// DataFusion-native metrics exposed through `DataSourceExec`.
     df_metrics: ExecutionPlanMetricsSet,
@@ -472,16 +475,20 @@ impl FileSource for VortexSource {
         let supported_filters = filters
             .into_iter()
             .map(|expr| {
+                if expr.data_type(self.table_schema.table_schema())? != DataType::Boolean {
+                    return Err(exec_datafusion_err!("Filter must be Boolean: {expr}"));
+                }
                 if self
                     .expression_convertor
-                    .can_be_pushed_down(&expr, self.table_schema.file_schema())
+                    .try_convert(&expr, self.table_schema.table_schema())?
+                    .is_some()
                 {
-                    PushedDownPredicate::supported(expr)
+                    Ok(PushedDownPredicate::supported(expr))
                 } else {
-                    PushedDownPredicate::unsupported(expr)
+                    Ok(PushedDownPredicate::unsupported(expr))
                 }
             })
-            .collect::<Vec<_>>();
+            .collect::<DFResult<Vec<_>>>()?;
 
         if supported_filters
             .iter()
@@ -573,12 +580,12 @@ mod tests {
     }
 
     impl ExpressionConvertor for TrackingExpressionConvertor {
-        fn can_be_pushed_down(&self, expr: &PhysicalExprRef, schema: &Schema) -> bool {
-            self.inner.can_be_pushed_down(expr, schema)
-        }
-
-        fn convert(&self, expr: &dyn PhysicalExpr) -> DFResult<vortex::expr::Expression> {
-            self.inner.convert(expr)
+        fn try_convert(
+            &self,
+            expr: &PhysicalExprRef,
+            schema: &Schema,
+        ) -> DFResult<Option<vortex::expr::Expression>> {
+            self.inner.try_convert(expr, schema)
         }
 
         fn split_projection(

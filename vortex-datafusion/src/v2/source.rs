@@ -121,7 +121,6 @@ use vortex_utils::parallelism::get_available_parallelism;
 use crate::convert::exprs::DefaultExpressionConvertor;
 use crate::convert::exprs::ExpressionConvertor;
 use crate::convert::exprs::ProcessedProjection;
-use crate::convert::exprs::make_vortex_predicate;
 use crate::convert::stats::stats_set_to_df;
 
 /// Builder for [`VortexDataSource`].
@@ -555,6 +554,7 @@ impl DataSource for VortexDataSource {
         let ProcessedProjection {
             scan_projection,
             leftover_projection,
+            ..
         } = convertor.split_projection(projection.clone(), input_schema, &projected_schema)?;
 
         // Compose with the initial projection so the scan operates on the original
@@ -607,10 +607,14 @@ impl DataSource for VortexDataSource {
 
         // Classify each filter: pushable filters are passed into the ScanRequest in open(),
         // so we can safely claim PushedDown::Yes for them.
-        let pushdown_results: Vec<PushedDown> = filters
+        let converted = filters
+            .iter()
+            .map(|expr| convertor.try_convert(expr, input_schema))
+            .collect::<DFResult<Vec<_>>>()?;
+        let pushdown_results: Vec<PushedDown> = converted
             .iter()
             .map(|expr| {
-                if convertor.can_be_pushed_down(expr, input_schema) {
+                if expr.is_some() {
                     PushedDown::Yes
                 } else {
                     PushedDown::No
@@ -625,18 +629,8 @@ impl DataSource for VortexDataSource {
             ));
         }
 
-        // Collect the pushable filter expressions.
-        let pushable: Vec<Arc<dyn PhysicalExpr>> = filters
-            .iter()
-            .zip(pushdown_results.iter())
-            .filter_map(|(expr, pushed)| match pushed {
-                PushedDown::Yes => Some(Arc::clone(expr)),
-                PushedDown::No => None,
-            })
-            .collect();
-
         // Convert to Vortex conjunction.
-        let vortex_pred = make_vortex_predicate(&convertor, &pushable)?;
+        let vortex_pred = vortex::expr::and_collect(converted.into_iter().flatten());
 
         // Combine with existing filter.
         let new_filter = match (&self.filter, vortex_pred) {

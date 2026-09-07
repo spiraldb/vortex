@@ -911,14 +911,12 @@ mod tests {
 
     #[derive(Default)]
     struct ExpressionConvertorCalls {
-        can_be_pushed_down: AtomicBool,
-        convert: AtomicBool,
+        try_convert: AtomicBool,
     }
 
     impl ExpressionConvertorCalls {
         fn reset(&self) {
-            self.can_be_pushed_down.store(false, Ordering::Relaxed);
-            self.convert.store(false, Ordering::Relaxed);
+            self.try_convert.store(false, Ordering::Relaxed);
         }
     }
 
@@ -943,17 +941,16 @@ mod tests {
     }
 
     impl ExpressionConvertor for TestExpressionConvertor {
-        fn can_be_pushed_down(&self, expr: &Arc<dyn PhysicalExpr>, schema: &Schema) -> bool {
-            self.calls.can_be_pushed_down.store(true, Ordering::Relaxed);
+        fn try_convert(
+            &self,
+            expr: &Arc<dyn PhysicalExpr>,
+            schema: &Schema,
+        ) -> DFResult<Option<Expression>> {
+            self.calls.try_convert.store(true, Ordering::Relaxed);
             match self.pushdown_mode {
-                PushdownMode::Reject => false,
-                PushdownMode::Delegate => self.inner.can_be_pushed_down(expr, schema),
+                PushdownMode::Reject => Ok(None),
+                PushdownMode::Delegate => self.inner.try_convert(expr, schema),
             }
-        }
-
-        fn convert(&self, expr: &dyn PhysicalExpr) -> DFResult<Expression> {
-            self.calls.convert.store(true, Ordering::Relaxed);
-            self.inner.convert(expr)
         }
 
         fn split_projection(
@@ -988,8 +985,7 @@ mod tests {
             &ConfigOptions::new(),
         )?;
 
-        assert!(calls.can_be_pushed_down.load(Ordering::Relaxed));
-        assert!(!calls.convert.load(Ordering::Relaxed));
+        assert!(calls.try_convert.load(Ordering::Relaxed));
         assert!(matches!(result.filters.as_slice(), [PushedDown::No]));
         Ok(())
     }
@@ -1129,8 +1125,7 @@ mod tests {
             .collect()
             .await?;
 
-        assert!(calls.can_be_pushed_down.load(Ordering::Relaxed));
-        assert!(calls.convert.load(Ordering::Relaxed));
+        assert!(calls.try_convert.load(Ordering::Relaxed));
         let mut values = Vec::new();
         for batch in batches {
             let array = batch
