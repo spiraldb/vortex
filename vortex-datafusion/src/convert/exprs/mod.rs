@@ -60,9 +60,10 @@ pub struct ProcessedProjection {
 
 /// Trait for converting DataFusion expressions to Vortex ones.
 ///
-/// Custom convertors implement a single schema-aware decision. Successful conversion must
-/// preserve DataFusion values, nulls, and evaluation errors. Unsupported expressions remain
-/// in DataFusion, including when a file's schema adapter introduces them.
+/// Custom convertors implement a single schema-aware decision. Conversion should preserve
+/// DataFusion values, nulls, and evaluation errors; see [`DefaultExpressionConvertor`] for
+/// the temporary arithmetic exception. Unsupported expressions remain in DataFusion,
+/// including when a file's schema adapter introduces them.
 ///
 /// # Implementing a custom convertor
 ///
@@ -87,7 +88,7 @@ pub struct ProcessedProjection {
 ///         }
 ///     }
 pub trait ExpressionConvertor: Send + Sync {
-    /// Convert an expression with equivalent DataFusion behavior for this schema.
+    /// Convert an expression for native evaluation against this schema.
     ///
     /// Returns None for valid but unsupported expressions. Malformed expressions and
     /// conversion failures return errors. Callers must retain unsupported exact predicates
@@ -176,8 +177,9 @@ pub(crate) fn raw_projection(
 
 /// The default schema-aware DataFusion expression convertor.
 ///
-/// Casts and operators are accepted only for the SQL semantics implemented by Vortex.
-/// Other valid expressions are evaluated by DataFusion.
+/// Supported arithmetic is pushed down using Vortex semantics, including its checked
+/// integer arithmetic. Matching DataFusion's overflow behavior is deferred to a future patch.
+/// Other expressions require compatible SQL semantics or remain in DataFusion.
 pub struct DefaultExpressionConvertor {
     session: VortexSession,
 }
@@ -206,19 +208,7 @@ impl DefaultExpressionConvertor {
             };
             let left_type = binary.left().data_type(schema)?;
             let right_type = binary.right().data_type(schema)?;
-            if operator.is_arithmetic() {
-                // DataFusion's integer +/-/* can wrap; Vortex arithmetic is checked.
-                // Decimal coercion and result precision also differ.
-                let supported = matches!(
-                    (&left_type, &right_type),
-                    (DataType::Float32, DataType::Float32) | (DataType::Float64, DataType::Float64)
-                ) || (*binary.op() == DFOperator::Divide
-                    && left_type.is_integer()
-                    && left_type == right_type);
-                if !supported {
-                    return Ok(None);
-                }
-            } else if *binary.op() == DFOperator::And || *binary.op() == DFOperator::Or {
+            if *binary.op() == DFOperator::And || *binary.op() == DFOperator::Or {
                 if left_type != DataType::Boolean || right_type != DataType::Boolean {
                     return Err(exec_datafusion_err!(
                         "Boolean operator requires Boolean operands: {expr}"

@@ -902,7 +902,8 @@ fn test_cast_options_fall_back() -> DFResult<()> {
 #[case::add(DFOperator::Plus)]
 #[case::sub(DFOperator::Minus)]
 #[case::mul(DFOperator::Multiply)]
-fn test_integer_overflow_modes_fall_back(
+#[case::div(DFOperator::Divide)]
+fn test_integer_arithmetic_pushdown_ignores_overflow_mode(
     #[case] op: DFOperator,
     #[values(false, true)] checked: bool,
 ) -> DFResult<()> {
@@ -918,9 +919,67 @@ fn test_integer_overflow_modes_fall_back(
     assert!(
         DefaultExpressionConvertor::default()
             .try_convert(&expr, &schema)?
-            .is_none()
+            .is_some()
     );
     Ok(())
+}
+
+#[rstest]
+#[case::add(DFOperator::Plus)]
+#[case::sub(DFOperator::Minus)]
+#[case::mul(DFOperator::Multiply)]
+#[case::div(DFOperator::Divide)]
+fn test_native_integer_arithmetic(
+    #[case] op: DFOperator,
+    #[values(false, true)] checked: bool,
+) -> anyhow::Result<()> {
+    let batch = arrow_array::record_batch!(
+        ("a", Int32, vec![Some(-12), Some(0), Some(12), None]),
+        ("b", Int32, vec![-2, 2, 2, 0])
+    )?;
+    assert_native_matches(
+        Arc::new(
+            df_expr::BinaryExpr::new(
+                Arc::new(df_expr::Column::new("a", 0)),
+                op,
+                Arc::new(df_expr::Column::new("b", 1)),
+            )
+            .with_fail_on_overflow(checked),
+        ),
+        batch,
+    )
+}
+
+#[rstest]
+#[case::add(DFOperator::Plus)]
+#[case::sub(DFOperator::Minus)]
+#[case::mul(DFOperator::Multiply)]
+#[case::div(DFOperator::Divide)]
+fn test_native_decimal_arithmetic(#[case] op: DFOperator) -> anyhow::Result<()> {
+    let batch = arrow_array::RecordBatch::try_from_iter([
+        (
+            "a",
+            Arc::new(
+                arrow_array::Decimal128Array::from(vec![Some(-1200), Some(0), Some(1200), None])
+                    .with_precision_and_scale(12, 2)?,
+            ) as arrow_array::ArrayRef,
+        ),
+        (
+            "b",
+            Arc::new(
+                arrow_array::Decimal128Array::from(vec![-200, 200, 200, 0])
+                    .with_precision_and_scale(12, 2)?,
+            ) as arrow_array::ArrayRef,
+        ),
+    ])?;
+    assert_native_matches(
+        Arc::new(df_expr::BinaryExpr::new(
+            Arc::new(df_expr::Column::new("a", 0)),
+            op,
+            Arc::new(df_expr::Column::new("b", 1)),
+        )),
+        batch,
+    )
 }
 
 #[test]
