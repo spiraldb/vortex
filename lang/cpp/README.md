@@ -86,8 +86,6 @@ not supported.
 - Cargo checks for changes whenever a target depending on Vortex is built. Its cache lives under
   the FFI binary directory: `ffi/cargo-target` in root and C++ builds. The CMake `clean` target
   removes this cache too.
-- Shared CI setup exports `CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER` for all
-  upstream jobs opting into sccache, not only C/C++ jobs.
 - After Cargo runs, CMake stages headers from the checkout into the build directory so changes
   trigger recompilation immediately. Nightly builds without Rust sanitizers may regenerate `vortex.h`
   with cbindgen and `clang-format`; stable and Rust-sanitized builds leave it unchanged.
