@@ -229,7 +229,8 @@ jobs:
           - sanitizer: "asan,lsan,ubsan"
           - sanitizer: tsan
     name: "Rust/C++ FFI tests (${{ matrix.sanitizer }})"
-    timeout-minutes: 5
+    # Allow cold builds of Rust's sanitizer-instrumented standard library.
+    timeout-minutes: 15
     env:
       ASAN_OPTIONS: "symbolize=1:check_initialization_order=1:detect_leaks=1:leak_check_at_exit=1"
       LSAN_OPTIONS: "report_objects=1"
