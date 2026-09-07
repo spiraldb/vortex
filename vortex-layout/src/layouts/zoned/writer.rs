@@ -26,7 +26,6 @@ use crate::layouts::zoned::AggregateStatsAccumulator;
 use crate::layouts::zoned::ZonedLayout;
 use crate::layouts::zoned::aggregate_partials;
 use crate::layouts::zoned::aggregates::default_zoned_aggregate_fns;
-use crate::layouts::zoned::skip_index::SkipIndexRef;
 use crate::segments::SegmentSinkRef;
 use crate::sequence::SendableSequentialStream;
 use crate::sequence::SequencePointer;
@@ -44,15 +43,10 @@ pub struct ZonedLayoutOptions {
     pub block_size: NonZeroUsize,
     /// The aggregate partials to collect for each block.
     ///
-    /// If unset, the writer chooses pruning aggregates from the input dtype.
+    /// If unset, the writer chooses pruning aggregates from the input dtype. An explicit list
+    /// replaces those defaults. Unsupported aggregates are omitted. If none remain, the writer
+    /// returns the child layout without zoned statistics.
     pub aggregate_fns: Option<Arc<[AggregateFnRef]>>,
-    /// Additional skip indexes to build for each block.
-    ///
-    /// **Note:** Register each skip index implementation with the writing and
-    /// reading sessions using `session.register_skip_index::<T>()`. The
-    /// configured instances in this list determine the options written to the
-    /// file.
-    pub skip_indexes: Option<Arc<[SkipIndexRef]>>,
     /// Number of chunks to compute aggregate partials in parallel.
     pub concurrency: NonZeroUsize,
 }
@@ -65,7 +59,6 @@ impl Default for ZonedLayoutOptions {
             concurrency: unsafe {
                 NonZeroUsize::new_unchecked(get_available_parallelism().unwrap_or(1))
             },
-            skip_indexes: None,
         }
     }
 }
@@ -101,23 +94,12 @@ impl LayoutStrategy for ZonedStrategy {
         mut eof: SequencePointer,
         session: &VortexSession,
     ) -> VortexResult<LayoutRef> {
-        let mut aggregate_fns = self
+        let aggregate_fns = self
             .options
             .aggregate_fns
             .clone()
             .unwrap_or_else(|| default_zoned_aggregate_fns(stream.dtype(), session))
             .to_vec();
-
-        // Append aggregate functions contributed by skip indexes to
-        // the default or user-provided aggregation functions
-        if let Some(skip_indexes) = &self.options.skip_indexes {
-            for skip_index in skip_indexes.iter() {
-                match skip_index.aggregate_fn(stream.dtype()) {
-                    Some(skip_aggregate_fn) => aggregate_fns.push(skip_aggregate_fn),
-                    None => vortex_bail!("skip index is unsupported for type {}", stream.dtype()),
-                }
-            }
-        }
 
         let compute_session = session.clone();
 
@@ -223,14 +205,11 @@ mod tests {
     use vortex_array::aggregate_fn::fns::null_count::NullCount;
     use vortex_array::aggregate_fn::fns::sum::Sum;
     use vortex_array::arrays::ChunkedArray;
-    use vortex_array::arrays::DecimalArray;
     use vortex_array::dtype::DType;
-    use vortex_array::dtype::DecimalDType;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
     use vortex_array::extension::datetime::TimeUnit;
     use vortex_array::extension::datetime::Timestamp;
-    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_io::runtime::Handle;
@@ -244,8 +223,8 @@ mod tests {
     use crate::layouts::flat::writer::FlatLayoutStrategy;
     use crate::layouts::zoned::Zoned;
     use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
-    use crate::layouts::zoned::aggregates::bloom_filter::BloomOptions;
     use crate::layouts::zoned::schema::default_bounded_stat_max_bytes;
+    use crate::layouts::zoned::skip_index::SkipIndex;
     use crate::layouts::zoned::skip_index::bloom::BloomSkipIndex;
     use crate::segments::TestSegments;
     use crate::sequence::SequenceId;
@@ -397,56 +376,17 @@ mod tests {
 
     #[test]
     fn writer_appends_skip_index_aggregate() -> VortexResult<()> {
-        let options = ZonedLayoutOptions::default()
-            .with_skip_index(BloomSkipIndex::new(BloomOptions::default()).into());
+        let mut options = ZonedLayoutOptions::default();
+        let bloom_index = BloomSkipIndex::default();
+        options.aggregate_fns = Some(vec![bloom_index.aggregate_fn()].into());
+
         let written =
             write_zones_with_options(LayoutWriterContext::new(ArrayContext::empty()), options)?;
 
         // Should include defaults, plus bloom filter.
         assert!(
-            written
-                == [
-                    BloomFilter {}.id().to_string(),
-                    Max {}.id().to_string(),
-                    Min {}.id().to_string(),
-                    NullCount {}.id().to_string()
-                ],
+            written == [BloomFilter {}.id().to_string()],
             "expected bloom and defaults present, wrote {written:?}"
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn writer_rejects_skip_index_unsupported_for_dtype() -> VortexResult<()> {
-        let options = ZonedLayoutOptions::default()
-            .with_skip_index(BloomSkipIndex::new(BloomOptions::default()).into());
-
-        // Decimals are not supported yet.
-        let decimal_dtype = DecimalDType::new(5, 2);
-        let dtype = DType::Decimal(decimal_dtype, Nullability::NonNullable);
-
-        let chunk = DecimalArray::new(
-            buffer![1i32, 2i32, -3i32],
-            decimal_dtype,
-            Validity::NonNullable,
-        );
-        let error = write_zones_with_options_and_values(
-            LayoutWriterContext::new(ArrayContext::empty()),
-            options,
-            ChunkedArray::try_new(
-                vec![
-                    chunk.clone().into_array(),
-                    chunk.clone().into_array(),
-                    chunk.into_array(),
-                ],
-                dtype,
-            )
-            .vortex_expect("valid chunk"),
-        )
-        .expect_err("unsupported skip index should fail the write");
-        assert!(
-            error.to_string().contains("unsupported for type"),
-            "unexpected error: {error}"
         );
         Ok(())
     }

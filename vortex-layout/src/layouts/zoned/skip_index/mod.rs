@@ -4,22 +4,23 @@
 //! Skipping-index interface and its implementations.
 //!
 //! This module also provides the session extension used to register skip index
-//! implementations and extends [`ZonedLayoutOptions`] with support for adding
-//! a skip index.
+//! implementations. Writers collect the bound aggregate returned by [`SkipIndex::aggregate_fn`]
+//! through [`ZonedLayoutOptions::aggregate_fns`](super::writer::ZonedLayoutOptions::aggregate_fns).
 //!
 //! # Difference from a locating index
 //!
 //! Unlike a locating index, a skip index summarizes a zone. It does not locate
 //! matching rows. It can only prove that a zone cannot match a predicate.
 
-use std::sync::Arc;
-
 use vortex_array::aggregate_fn::AggregateFnRef;
-use vortex_array::dtype::DType;
+use vortex_array::aggregate_fn::AggregateFnVTable;
+use vortex_array::aggregate_fn::AggregateFnVTableExt;
+use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
+use vortex_array::scalar_fn::ScalarFnVTable;
+use vortex_array::scalar_fn::session::ScalarFnSessionExt;
+use vortex_array::stats::StatsSessionExt;
+use vortex_array::stats::rewrite::StatsRewriteRuleRef;
 use vortex_session::SessionExt;
-use vortex_session::VortexSession;
-
-use super::writer::ZonedLayoutOptions;
 
 pub mod bloom;
 
@@ -33,8 +34,9 @@ pub mod bloom;
 ///
 /// First, register the components needed to use the index through
 /// [`SkipIndexSessionExt::register_skip_index`]. When writing, use
-/// [`ZonedLayoutOptions::with_skip_index`] to add a configured skip index to the
-/// zoned layout options. Pass the resulting options to
+/// [`SkipIndex::aggregate_fn`] to bind the index options and set
+/// [`ZonedLayoutOptions::aggregate_fns`](super::writer::ZonedLayoutOptions::aggregate_fns).
+/// An explicit aggregate list replaces the writer's default aggregates. Pass the resulting options to
 /// `WriteStrategyBuilder::with_field_zoned_options` for the field to be indexed.
 ///
 /// # Logical and physical representation
@@ -54,91 +56,87 @@ pub mod bloom;
 /// use vortex_session::VortexSession;
 ///
 /// fn register_index(session: &VortexSession) {
-///     session.register_skip_index::<BloomSkipIndex>();
+///     let index = BloomSkipIndex::default();
+///     session.register_skip_index(&index);
 /// }
 /// ```
 ///
-/// For writes, create a configured instance and add it to the zoned layout
-/// options for the field:
+/// For writes, create a configured instance and select its aggregate for the field:
 ///
 /// ```
 /// use vortex_layout::layouts::zoned::skip_index::bloom::BloomSkipIndex;
+/// use vortex_layout::layouts::zoned::skip_index::SkipIndex;
 /// use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
 ///
 /// fn zoned_options() -> ZonedLayoutOptions {
-///     ZonedLayoutOptions::default().with_skip_index(BloomSkipIndex::default().into())
+///     let index = BloomSkipIndex::default();
+///     ZonedLayoutOptions {
+///         aggregate_fns: Some(vec![index.aggregate_fn()].into()),
+///         ..Default::default()
+///     }
 /// }
 /// ```
 ///
 /// Then use `WriteStrategyBuilder::with_field_zoned_options` to apply the
 /// options to the field you want to index.
 pub trait SkipIndex: Send + Sync + 'static {
-    /// The aggregate state to persist for `input_dtype`, or `None` when unsupported.
-    fn aggregate_fn(&self, input_dtype: &DType) -> Option<AggregateFnRef>;
+    /// The concrete aggregate implementation registered for this index.
+    type Aggregate: AggregateFnVTable;
+    /// The concrete scalar implementation registered for this index.
+    type Scalar: ScalarFnVTable;
 
-    /// Registers the session components for this skip-index type.
-    fn register(session: &VortexSession)
-    where
-        Self: Sized;
+    /// Returns the aggregate implementation, without binding write options.
+    fn aggregate_vtable(&self) -> Self::Aggregate;
+
+    /// Returns the scalar implementation.
+    fn scalar_vtable(&self) -> Self::Scalar;
+
+    /// Returns the options to bind when writing this index.
+    fn options(&self) -> <Self::Aggregate as AggregateFnVTable>::Options;
+
+    /// Returns the rules that turn query predicates into proofs over the summary.
+    fn rewrite_rules(&self) -> Vec<StatsRewriteRuleRef>;
+
+    /// Binds this index's write options into an aggregate for the zoned writer.
+    ///
+    /// Binding does not register components or check input dtype compatibility. The zoned writer
+    /// omits aggregates that do not support its input dtype.
+    fn aggregate_fn(&self) -> AggregateFnRef {
+        self.aggregate_vtable().bind(self.options())
+    }
 }
 
 /// Extension trait for registering skipping indexes with a Vortex session.
 pub trait SkipIndexSessionExt: SessionExt {
-    /// Registers the session components for the skip index implementation `T`.
+    /// Registers the aggregate, probe scalar functions, and rewrite rules
+    /// supplied by an skip index.
     ///
-    /// Register each implementation only once per session. Clones of a session
-    /// share registrations and do not need to be registered again.
+    /// If the aggregate ID is already registered, this
+    /// method skips all components to avoid appending duplicate rewrite rules.
     ///
     /// For more information about skip indexes, see [`SkipIndex`].
-    fn register_skip_index<T: SkipIndex>(&self) {
-        T::register(&self.session());
+    fn register_skip_index<I: SkipIndex>(&self, index: &I) {
+        let session = self.session();
+        let aggregate = index.aggregate_vtable();
+
+        // The idea is to avoid duplicating rewrite rules.
+        // Since neither they nor the skip index carry an ID,
+        // this uses the aggregate ID instead.
+        if session
+            .aggregate_fns()
+            .find_plugin(&aggregate.id())
+            .is_some()
+        {
+            return;
+        }
+
+        session.aggregate_fns().register(aggregate);
+        session.scalar_fns().register(index.scalar_vtable());
+
+        for rule in index.rewrite_rules() {
+            session.stats().register_rewrite_ref(rule);
+        }
     }
 }
 
 impl<S: SessionExt> SkipIndexSessionExt for S {}
-
-/// A reference-counted, configured [`SkipIndex`] used by the writer.
-///
-/// Registration is type-based through
-/// [`SkipIndexSessionExt::register_skip_index`]. See [`SkipIndex`] for usage
-/// details and examples.
-#[derive(Clone)]
-pub struct SkipIndexRef(Arc<dyn SkipIndex>);
-
-impl SkipIndexRef {
-    pub fn new(index_ref: Arc<dyn SkipIndex>) -> Self {
-        SkipIndexRef(index_ref)
-    }
-
-    pub fn aggregate_fn(&self, input_dtype: &DType) -> Option<AggregateFnRef> {
-        self.0.aggregate_fn(input_dtype)
-    }
-}
-
-impl<T> From<T> for SkipIndexRef
-where
-    T: SkipIndex,
-{
-    fn from(skip_index: T) -> Self {
-        SkipIndexRef(Arc::new(skip_index))
-    }
-}
-
-impl ZonedLayoutOptions {
-    /// Add `skip_index` to this zoned writer while retaining the default aggregates.
-    ///
-    /// `WriteStrategyBuilder::with_field_zoned_options` can install the configured options for one
-    /// field while retaining the default data layout pipeline.
-    pub fn with_skip_index(mut self, skip_index: SkipIndexRef) -> Self {
-        let mut skip_indexes = self
-            .skip_indexes
-            .take()
-            .map(|indexes| indexes.to_vec())
-            .unwrap_or_default();
-
-        skip_indexes.push(skip_index);
-        self.skip_indexes = Some(skip_indexes.into());
-
-        self
-    }
-}

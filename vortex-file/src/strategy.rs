@@ -125,11 +125,17 @@ impl WriteStrategyBuilder {
         self
     }
 
-    /// Override only the zoned-statistics options for a field while retaining the default
-    /// repartitioning, dictionary, compression, buffering, and flat-layout pipeline.
+    /// Override zoned-statistics options for a field while retaining the dictionary, compression,
+    /// buffering, and flat-layout pipeline.
     ///
     /// This can attach custom per-zone aggregates without changing the physical data strategy for
     /// the field.
+    ///
+    /// TODO (joacoc): Who has the authority here for block size? ZonedLayoutOptions or repartition?
+    ///
+    /// The supplied block size controls both repartitioning and zone length for this field,
+    /// overriding [`Self::with_row_block_size`]. An explicit aggregate list replaces the default
+    /// aggregates.
     pub fn with_field_zoned_options(
         mut self,
         field: impl Into<FieldPath>,
@@ -274,7 +280,6 @@ impl WriteStrategyBuilder {
             };
 
         let repartition_strategy = build_repartition(ZonedLayoutOptions {
-            // Always repartition into 8K row blocks
             block_size: row_block_size,
             ..Default::default()
         });

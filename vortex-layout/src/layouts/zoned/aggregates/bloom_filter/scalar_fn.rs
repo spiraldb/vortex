@@ -54,7 +54,7 @@ use crate::layouts::zoned::aggregates::bloom_filter::BloomPartial;
 use crate::layouts::zoned::aggregates::bloom_filter::is_bloom_valid_dtype;
 
 #[derive(Clone, Debug)]
-pub(in crate::layouts::zoned) struct BloomContains;
+pub struct BloomContains;
 
 impl ScalarFnVTable for BloomContains {
     type Options = BloomOptions;

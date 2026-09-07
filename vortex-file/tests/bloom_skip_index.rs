@@ -27,10 +27,12 @@ use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::expr::BoundExpression;
@@ -40,15 +42,18 @@ use vortex_array::expr::bound::lit;
 use vortex_array::expr::bound::root;
 use vortex_array::field_path;
 use vortex_array::stream::ArrayStreamExt;
+use vortex_array::validity::Validity;
+use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 use vortex_file::OpenOptionsSessionExt;
 use vortex_file::WriteOptionsSessionExt;
 use vortex_file::WriteStrategyBuilder;
 use vortex_io::session::RuntimeSession;
 use vortex_layout::LayoutStrategy;
+use vortex_layout::layouts::zoned::Zoned;
 use vortex_layout::layouts::zoned::aggregates::bloom_filter::BloomOptions;
 use vortex_layout::layouts::zoned::aggregates::bloom_filter::HashFn;
-use vortex_layout::layouts::zoned::skip_index::SkipIndexRef;
+use vortex_layout::layouts::zoned::skip_index::SkipIndex;
 use vortex_layout::layouts::zoned::skip_index::SkipIndexSessionExt;
 use vortex_layout::layouts::zoned::skip_index::bloom::BloomSkipIndex;
 use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
@@ -61,22 +66,22 @@ const NZONES: usize = 4;
 const HIT: i64 = 502;
 const MISS: i64 = 503;
 
-fn bloom() -> SkipIndexRef {
+fn bloom() -> BloomSkipIndex {
     bloom_with_options(BloomOptions::default())
 }
 
-fn bloom_with_options(options: BloomOptions) -> SkipIndexRef {
-    SkipIndexRef::new(Arc::new(BloomSkipIndex::new(options)))
+fn bloom_with_options(options: BloomOptions) -> BloomSkipIndex {
+    BloomSkipIndex::new(options)
 }
 
-fn session(register_bloom: bool) -> VortexSession {
+fn session(index: &BloomSkipIndex, register_index: bool) -> VortexSession {
     let session = vortex_array::array_session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
     vortex_file::register_default_encodings(&session);
 
-    if register_bloom {
-        session.register_skip_index::<BloomSkipIndex>();
+    if register_index {
+        session.register_skip_index(index);
     }
 
     session
@@ -125,15 +130,12 @@ fn filter(value: i64) -> BoundExpression {
     eq(get_item("id", root(input_dtype)), lit(value))
 }
 
-fn strategy(index: &SkipIndexRef, zone_len: usize) -> VortexResult<Arc<dyn LayoutStrategy>> {
-    let mut options = ZonedLayoutOptions {
+fn strategy<T: SkipIndex>(index: &T, zone_len: usize) -> VortexResult<Arc<dyn LayoutStrategy>> {
+    let options = ZonedLayoutOptions {
         block_size: NonZeroUsize::new(zone_len).expect("zone length is non-zero"),
+        aggregate_fns: Some(vec![index.aggregate_fn()].into()),
         ..Default::default()
     };
-
-    // Adding the aggregate to these field-specific zoned options is the explicit write-side
-    // opt-in. Registering the index in the session alone does not change the file layout.
-    options = options.with_skip_index(index.clone());
 
     Ok(WriteStrategyBuilder::default()
         .with_field_zoned_options(field_path!(id), options)
@@ -151,7 +153,7 @@ async fn scan(file: &vortex_file::VortexFile, value: i64) -> VortexResult<ArrayR
 async fn write_file(
     session: &VortexSession,
     input: &ArrayRef,
-    index: &SkipIndexRef,
+    index: &BloomSkipIndex,
     zone_len: usize,
 ) -> VortexResult<Vec<u8>> {
     let mut bytes = Vec::new();
@@ -168,14 +170,14 @@ async fn write_file(
 #[expect(clippy::tests_outside_test_module)]
 #[tokio::test]
 async fn bloom_roundtrip_prunes_and_unknown_reader_matches_full_scan() -> VortexResult<()> {
-    let index_ref = bloom();
-    let write_session = session(true);
+    let index = bloom();
+    let write_session = session(&index, true);
     let input = data();
-    let bytes = write_file(&write_session, &input, &index_ref, ZONE_LEN).await?;
+    let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
 
     // Reconstruct every read-side extension from a fresh session rather than accidentally relying
     // on state retained by the writer.
-    let read_session = session(true);
+    let read_session = session(&index, true);
     let file = read_session.open_options().open_buffer(bytes.clone())?;
     let reader = file.layout_reader()?;
     let row_count = file.row_count();
@@ -217,7 +219,7 @@ async fn bloom_roundtrip_prunes_and_unknown_reader_matches_full_scan() -> Vortex
     // An allow-unknown reader without Bloom registration bypasses the unavailable zone map and
     // scans the data child. This both supplies the reference result and verifies that an optional
     // index does not become a hard read-time dependency.
-    let full_scan_session = session(false);
+    let full_scan_session = session(&index, false);
     full_scan_session.allow_unknown();
     let full_scan_file = full_scan_session.open_options().open_buffer(bytes)?;
 
@@ -256,14 +258,14 @@ async fn reader_uses_bloom_options_serialized_in_file() -> VortexResult<()> {
         NonZeroU32::new(512).expect("block count is non-zero"),
         HashFn::XxHash3_64,
     );
-    let index_ref = bloom_with_options(options);
-    let write_session = session(true);
+    let index = bloom_with_options(options);
+    let write_session = session(&index, true);
     let input = data();
-    let bytes = write_file(&write_session, &input, &index_ref, ZONE_LEN).await?;
+    let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
 
     // The reader registers only the implementation type and does not receive
     // the options used by the writer.
-    let read_session = session(true);
+    let read_session = session(&index, true);
     let file = read_session.open_options().open_buffer(bytes)?;
     let reader = file.layout_reader()?;
     let row_count = file.row_count();
@@ -279,5 +281,39 @@ async fn reader_uses_bloom_options_serialized_in_file() -> VortexResult<()> {
         miss_mask.all_false(),
         "an absent value should be pruned using the serialized Bloom options"
     );
+    Ok(())
+}
+
+#[expect(clippy::tests_outside_test_module)]
+#[tokio::test]
+async fn unsupported_bloom_dtype_is_omitted_and_roundtrips() -> VortexResult<()> {
+    let index = bloom();
+    let write_session = session(&index, true);
+    let decimals = DecimalArray::new(
+        buffer![100i32, -250, 0, 375, 999, -1],
+        DecimalDType::new(5, 2),
+        Validity::NonNullable,
+    );
+    let input = StructArray::from_fields(&[("id", decimals.into_array())])?.into_array();
+    let bytes = write_file(&write_session, &input, &index, 3).await?;
+
+    // Bloom index is not necessary because
+    // the stats are not written.
+    let read_session = session(&index, false);
+    let file = read_session.open_options().open_buffer(bytes)?;
+    assert_eq!(file.row_count(), 6);
+
+    // Extra check
+    let mut layouts = vec![Arc::clone(file.footer().layout())];
+    while let Some(layout) = layouts.pop() {
+        // Bloom replaces the default aggregates, and no stats are written.
+        // Then, no aggregates should remain, so the writer should omit
+        // the zoned layout.
+        assert!(!layout.is::<Zoned>());
+        layouts.extend(layout.children()?);
+    }
+
+    let actual = file.scan()?.into_array_stream()?.read_all().await?;
+    assert_arrays_eq!(actual, input, &mut read_session.create_execution_ctx());
     Ok(())
 }
