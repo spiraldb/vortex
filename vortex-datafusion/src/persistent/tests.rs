@@ -620,3 +620,73 @@ async fn arrow_uuid_extension_roundtrip_nested_struct() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_clickbench_avg_octet_length_pushdown() -> anyhow::Result<()> {
+    let ctx = TestSessionContext::new(true);
+    ctx.session
+        .sql("SET datafusion.optimizer.enable_aggregate_expression_pushdown = true")
+        .await?
+        .collect()
+        .await?;
+
+    ctx.session
+        .sql(
+            "CREATE EXTERNAL TABLE hits \
+                    (\"CounterID\" INT NOT NULL, \"URL\" VARCHAR NOT NULL) \
+                STORED AS vortex \
+                LOCATION '/hits/'",
+        )
+        .await?;
+    ctx.session
+        .sql(
+            "INSERT INTO hits VALUES (1, 'http://a'), (1, 'http://bb'), (2, 'http://ccc'), (2, ''), (3, 'x')",
+        )
+        .await?
+        .collect()
+        .await?;
+
+    let query = "SELECT \"CounterID\", AVG(OCTET_LENGTH(\"URL\")) AS l, COUNT(*) AS c \
+                 FROM hits WHERE \"URL\" <> '' GROUP BY \"CounterID\" \
+                 HAVING COUNT(*) > 0 ORDER BY l DESC LIMIT 25";
+
+    let df = ctx.session.sql(query).await?;
+    let plan = df.clone().create_physical_plan().await?;
+    println!(
+        "PLAN:\n{}",
+        DisplayableExecutionPlan::new(plan.as_ref()).indent(true)
+    );
+    // Show how the Vortex source splits the pushed projection between the scan
+    // and the leftover DataFusion projection.
+    use datafusion_common::tree_node::TreeNode;
+    use datafusion_common::tree_node::TreeNodeRecursion;
+    use datafusion_datasource::file_scan_config::FileScanConfig;
+    use datafusion_datasource::source::DataSourceExec;
+
+    use crate::convert::exprs::DefaultExpressionConvertor;
+    use crate::convert::exprs::ExpressionConvertor;
+    plan.apply(|node| {
+        if let Some(exec) = node.downcast_ref::<DataSourceExec>()
+            && let Some(config) = exec.data_source().downcast_ref::<FileScanConfig>()
+            && let Some(projection) = config.file_source().projection()
+        {
+            let table_schema = config.file_source().table_schema().table_schema();
+            let output_schema = projection.project_schema(table_schema)?;
+            let split = DefaultExpressionConvertor::default().split_projection(
+                projection.clone(),
+                table_schema,
+                &output_schema,
+            )?;
+            println!("VORTEX SCAN PROJECTION: {}", split.scan_projection);
+            println!("LEFTOVER DF PROJECTION: {}", split.leftover_projection);
+            assert!(
+                split.scan_projection.to_string().contains("byte_length"),
+                "octet_length should be evaluated by the Vortex scan"
+            );
+        }
+        Ok(TreeNodeRecursion::Continue)
+    })?;
+    let result = df.collect().await?;
+    println!("{}", pretty_format_batches(&result)?);
+    Ok(())
+}

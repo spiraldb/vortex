@@ -450,6 +450,44 @@ incremental = false
 debug = false
 
 [patch.crates-io]
+# EXPERIMENT: build against the DataFusion branch that adds
+# `datafusion.optimizer.enable_aggregate_expression_pushdown`.
+datafusion = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-catalog = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-catalog-listing = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-common = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-common-runtime = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-datasource = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-datasource-arrow = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-datasource-avro = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-datasource-csv = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-datasource-json = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-datasource-parquet = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-doc = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-execution = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-expr = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-expr-common = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-functions = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-functions-aggregate = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-functions-aggregate-common = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-functions-nested = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-functions-table = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-functions-window = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-functions-window-common = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-macros = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-optimizer = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-physical-expr = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-physical-expr-adapter = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-physical-expr-common = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-physical-optimizer = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-physical-plan = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-proto = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-proto-common = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-proto-models = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-pruning = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-session = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-spark = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
+datafusion-sql = { git = "https://github.com/joseph-isaacs/datafusion", branch = "claude/aggregation-scalar-pushdown-cbyoyd" }
 geoarrow = { version = "=0.8.0", git = "https://github.com/geoarrow/geoarrow-rs", rev = "855d2e138e54ce503c4488d5bb795ca1ea880d1f" }
 geoarrow-array = { version = "=0.8.0", git = "https://github.com/geoarrow/geoarrow-rs", rev = "855d2e138e54ce503c4488d5bb795ca1ea880d1f" }
 geoarrow-cast = { version = "=0.8.0", git = "https://github.com/geoarrow/geoarrow-rs", rev = "855d2e138e54ce503c4488d5bb795ca1ea880d1f" }
