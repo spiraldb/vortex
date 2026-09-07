@@ -1,10 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-# Target names carry a prefix so a build that also includes the C examples has
-# no clashes; the executables keep their plain names.
+# Prefix targets and keep executables local so a parent's shared output
+# directory cannot merge C and C++ examples with the same name.
 foreach(_name reader writer dtype scan scan_to_arrow)
     add_executable(cpp_${_name} ${_name}.cpp)
-    set_target_properties(cpp_${_name} PROPERTIES OUTPUT_NAME ${_name})
+
+    set_target_properties(cpp_${_name} PROPERTIES
+        OUTPUT_NAME ${_name}
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     target_link_libraries(cpp_${_name} PRIVATE Vortex::cpp_static nanoarrow_shared)
 endforeach()
