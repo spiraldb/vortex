@@ -45,6 +45,9 @@ use vortex::scalar_fn::fns::operators::Operator;
 use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
 
+#[cfg(test)]
+mod tests;
+
 /// Result of splitting a projection into Vortex expressions and leftover DataFusion projections.
 pub struct ProcessedProjection {
     /// Projection evaluated by the Vortex scan.
@@ -640,18 +643,13 @@ fn supported_data_types(dt: &DataType) -> bool {
 fn array_length_input(scalar_fn: &ScalarFunctionExpr) -> Option<&Arc<dyn PhysicalExpr>> {
     match scalar_fn.args() {
         [input] => Some(input),
-        [input, dimension] if is_dimension_one(dimension) => Some(input),
+        [input, dimension]
+            if dimension
+                .downcast_ref::<df_expr::Literal>()
+                .is_some_and(|literal| matches!(literal.value(), ScalarValue::Int64(Some(1)))) =>
+        {
+            Some(input)
+        }
         _ => None,
     }
 }
-
-/// Returns true if `expr` is an `Int64` literal equal to 1. DataFusion coerces the `array_length`
-/// dimension argument to `Int64`, so that is the only form we need to recognize; any other literal
-/// simply isn't pushed down.
-fn is_dimension_one(expr: &Arc<dyn PhysicalExpr>) -> bool {
-    expr.downcast_ref::<df_expr::Literal>()
-        .is_some_and(|literal| matches!(literal.value(), ScalarValue::Int64(Some(1))))
-}
-
-#[cfg(test)]
-mod tests;
