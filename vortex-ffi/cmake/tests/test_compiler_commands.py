@@ -82,10 +82,13 @@ class CompilerCommandTests(unittest.TestCase):
                 encoding="utf-8",
             )
         self.env = test_cargo_environment.rust_toolchain_environment()
+        # Each case selects its own wrappers, independent of CI's CMake launchers.
         for key in list(self.env):
             if key.startswith(("CC", "CXX", "CFLAGS", "HOST_", "TARGET_", "SCCACHE_")) or key in (
                 "AR",
                 "RANLIB",
+                "CMAKE_C_COMPILER_LAUNCHER",
+                "CMAKE_CXX_COMPILER_LAUNCHER",
                 "RUSTC_WRAPPER",
                 "RUSTC_WORKSPACE_WRAPPER",
                 "RUSTFLAGS",
