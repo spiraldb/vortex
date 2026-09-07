@@ -80,8 +80,8 @@ not supported.
   the FFI binary directory: `ffi/cargo-target` in root and C++ builds. The CMake `clean` target
   removes this cache too.
 - After Cargo runs, CMake stages headers from the checkout into the build directory so changes
-  trigger recompilation immediately. Non-sanitizer nightly builds may regenerate `vortex.h`
-  with cbindgen and `clang-format`; stable and sanitizer builds leave it unchanged.
+  trigger recompilation immediately. Nightly builds without Rust sanitizers may regenerate `vortex.h`
+  with cbindgen and `clang-format`; stable and Rust-sanitized builds leave it unchanged.
   Nightly and CUDA builds need a writable checkout because they can generate source files there.
 - Cargo may download locked dependencies. Enabling tests/examples may also download Nanoarrow,
   Catch2, and magic_enum during CMake configure.
