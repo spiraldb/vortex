@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import test_cargo_environment
+
 
 @unittest.skipUnless(
     all(shutil.which(tool) for tool in ("cmake", "ninja", "cargo", "rustc", "clang", "clang++")),
@@ -79,7 +81,7 @@ class CompilerCommandTests(unittest.TestCase):
                 f"int {function}(void) {{ return {macro}; }}\n",
                 encoding="utf-8",
             )
-        self.env = os.environ.copy()
+        self.env = test_cargo_environment.rust_toolchain_environment()
         for key in list(self.env):
             if key.startswith(("CC", "CXX", "CFLAGS", "HOST_", "TARGET_", "SCCACHE_")) or key in (
                 "AR",
@@ -93,14 +95,16 @@ class CompilerCommandTests(unittest.TestCase):
                 self.env.pop(key)
         self.env.update(CARGO_NET_OFFLINE="true", CARGO_BUILD_JOBS="2")
         self.compilers = [shutil.which("clang"), shutil.which("clang++")]
-        self.run_command(["cargo", "generate-lockfile", "--offline"], self.env)
+        self.run_command(
+            ["cargo", "generate-lockfile", "--offline", "--manifest-path", self.source / "Cargo.toml"], self.env
+        )
         version = self.run_command(["rustc", "-vV"], self.env)
         self.target = next(line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: "))
 
     def run_command(self, command, env):
         result = subprocess.run(
             list(map(str, command)),
-            cwd=self.source,
+            cwd=test_cargo_environment.REPO_ROOT,
             env=env,
             capture_output=True,
             text=True,
@@ -144,7 +148,17 @@ class CompilerCommandTests(unittest.TestCase):
         if not quoted:
             # The same environment command already works in ordinary Cargo/cc-rs.
             self.run_command(
-                ["cargo", "build", "--locked", "--target", self.target, "--target-dir", self.work / f"{name}-direct"],
+                [
+                    "cargo",
+                    "build",
+                    "--locked",
+                    "--manifest-path",
+                    self.source / "Cargo.toml",
+                    "--target",
+                    self.target,
+                    "--target-dir",
+                    self.work / f"{name}-direct",
+                ],
                 env,
             )
         cargo_build = ["cmake", "--build", build, "--target", "vortex_ffi_cargo_build"]

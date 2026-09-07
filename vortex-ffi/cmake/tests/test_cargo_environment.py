@@ -13,6 +13,25 @@ import tempfile
 import unittest
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def rust_toolchain_environment():
+    """Keep the repository's Rust selection when fixtures run outside its tree."""
+    env = os.environ.copy()
+    if not env.get("RUSTUP_TOOLCHAIN") and shutil.which("rustup"):
+        result = subprocess.run(
+            ["rustup", "show", "active-toolchain"],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        env["RUSTUP_TOOLCHAIN"] = result.stdout.split()[0]
+    return env
+
 
 class CargoEnvironmentFixture(unittest.TestCase):
     def setUp(self):
@@ -61,6 +80,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
         ]
         self.rustflags = ["-C", "force-frame-pointers=yes", "-C", "relocation-model=pic"]
         self.compiler_arg1 = {"CC": "", "CXX": ""}
+        self.rustup_toolchain = os.environ.get("RUSTUP_TOOLCHAIN", "")
 
     def executable(self, name, body):
         path = self.work / name
@@ -104,6 +124,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
         inputs = {
             "VORTEX_CARGO_EXECUTABLE": self.cargo,
             "VORTEX_RUSTC_EXECUTABLE": sys.executable,
+            "VORTEX_RUSTUP_TOOLCHAIN": self.rustup_toolchain,
             "VORTEX_RUST_TARGET": self.target,
             "VORTEX_CARGO_TARGET_DIR": self.target_dir,
             "VORTEX_CARGO_PROFILE": "dev",
@@ -136,6 +157,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
         recording = json.loads((self.target_dir / "environment.json").read_text())
         self.assertEqual(recording["args"][recording["args"].index("--target") + 1], self.target)
         self.assertEqual(recording["env"]["CARGO_ENCODED_RUSTFLAGS"], "\x1f".join(self.rustflags))
+        self.assertEqual(recording["env"].get("RUSTUP_TOOLCHAIN", ""), self.rustup_toolchain)
         return recording["env"]
 
     def cc_names(self, name):
@@ -235,7 +257,8 @@ class CargoEnvironmentFixture(unittest.TestCase):
             "    Ok(())\n}\n",
             encoding="utf-8",
         )
-        build_env = os.environ.copy()
+        build_env = rust_toolchain_environment()
+        self.rustup_toolchain = build_env.get("RUSTUP_TOOLCHAIN", "")
         for key in ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS"):
             build_env.pop(key, None)
         result = subprocess.run(
@@ -248,7 +271,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
                 "--target-dir",
                 str(probe / "target"),
             ],
-            cwd=probe,
+            cwd=REPO_ROOT,
             env=build_env,
             capture_output=True,
             text=True,
@@ -258,7 +281,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         version = subprocess.run(
             ["rustc", "-vV"],
-            cwd=probe,
+            cwd=REPO_ROOT,
             env=build_env,
             capture_output=True,
             text=True,
