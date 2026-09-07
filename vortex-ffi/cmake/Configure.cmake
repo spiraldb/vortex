@@ -10,10 +10,7 @@ include("${CMAKE_CURRENT_LIST_DIR}/Helpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/RustToolchain.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/SystemDependencies.cmake")
 
-# Use an explicit Cargo profile override or map the single-config CMake build
-# type to a profile and artifact directory. Empty and unknown build types use
-# Cargo's development profile, with a warning for unknown ones; multi-config
-# generators remain unsupported.
+# Map the single-config build type to a Cargo profile unless explicitly overridden.
 function(_vortex_resolve_cargo_profile configuration_output profile_output artifact_directory_output)
     if(CMAKE_CONFIGURATION_TYPES)
         message(FATAL_ERROR
@@ -40,8 +37,8 @@ function(_vortex_resolve_cargo_profile configuration_output profile_output artif
         endif()
 
         set(_cargo_profile "${VORTEX_CARGO_PROFILE}")
-    elseif(_build_type STREQUAL "DEBUG")
-        # Debug maps to Cargo's built-in development profile.
+    elseif(_build_type STREQUAL "DEBUG" OR _build_type STREQUAL "")
+        # Debug and empty build types map to Cargo's built-in development profile.
         set(_cargo_profile "dev")
     elseif(_build_type STREQUAL "RELEASE")
         # Release maps to Cargo's built-in optimized profile.
@@ -52,9 +49,6 @@ function(_vortex_resolve_cargo_profile configuration_output profile_output artif
     elseif(_build_type STREQUAL "MINSIZEREL")
         # MinSizeRel uses the release profile optimized for binary size.
         set(_cargo_profile "release_size")
-    elseif(_build_type STREQUAL "")
-        # An empty build type compiles C++ without optimization, which matches dev.
-        set(_cargo_profile "dev")
     else()
         # Unknown build types fall back to Cargo's development profile with a warning.
         message(WARNING
@@ -66,8 +60,6 @@ function(_vortex_resolve_cargo_profile configuration_output profile_output artif
 
     if(_cargo_profile STREQUAL "dev")
         set(_artifact_directory "debug")
-    elseif(_cargo_profile STREQUAL "release")
-        set(_artifact_directory "release")
     else()
         set(_artifact_directory "${_cargo_profile}")
     endif()
@@ -77,10 +69,7 @@ function(_vortex_resolve_cargo_profile configuration_output profile_output artif
     set(${artifact_directory_output} "${_artifact_directory}" PARENT_SCOPE)
 endfunction()
 
-# Select the Cargo package and static archive that provide Vortex FFI for a
-# CPU-only or CUDA-enabled build. Return the source headers and optional
-# CUDA tools. Fail if the workspace manifest, lockfile, or selected package
-# manifest is missing, or CUDA is requested outside Linux.
+# Select the FFI package, archive, headers, and optional CUDA tools.
 function(_vortex_resolve_ffi_package
     workspace_root
     package_output

@@ -35,15 +35,7 @@ function(_vortex_require_build_inputs)
     endforeach()
 endfunction()
 
-# Format the Rust target for `cc` environment variable names.
-function(_vortex_cc_target_env_key output)
-    string(REPLACE "-" "_" _target_key "${VORTEX_RUST_TARGET}")
-    string(TOLOWER "${_target_key}" _target_key)
-    set(${output} "${_target_key}" PARENT_SCOPE)
-endfunction()
-
-# Assemble the Cargo command that builds the selected FFI package as
-# a static library with the selected Cargo profile.
+# An explicit native --target isolates library Rust flags from Cargo's build tools.
 function(_vortex_make_cargo_command output)
     set(_command
         "${VORTEX_CARGO_EXECUTABLE}"
@@ -83,11 +75,7 @@ function(_vortex_build_tool_path output)
     set(${output} "${_path}" PARENT_SCOPE)
 endfunction()
 
-# cc-rs chooses HOST_* whenever HOST == TARGET, including native target builds.
-# Cargo's explicit --target instead distinguishes them through build-script
-# CARGO_ENCODED_RUSTFLAGS: empty for host dependencies, nonempty for our target.
-# Host links lack sanitizer and coverage runtimes; strip only their instrumentation.
-# Keep other flags visible to cc-rs for compiler and flag-support probes.
+# Wrap the compiler for host-only flag filtering without hiding arguments from cc-rs probes.
 function(_vortex_native_compiler_launcher compiler arg1 output)
     _vortex_reject_semicolon("compiler ARG1" "${arg1}")
     _vortex_encode_shell_arguments(_compiler "${compiler}")
@@ -106,29 +94,8 @@ function(_vortex_native_compiler_launcher compiler arg1 output)
         set(_use_rustc_wrapper false)
     endif()
 
-    string(CONFIGURE [=[#!/bin/sh
-# Mandatory compiler arguments also apply to compiler-family and flag probes.
-set -- @_compiler_command@ "$@"
-if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
-    for arg do
-        shift
-        case "$arg" in
-            -fsanitize=*|--coverage|-fprofile-arcs|-ftest-coverage) ;;
-            -fprofile-instr-generate|-fprofile-instr-generate=*|-fcoverage-mapping) ;;
-            -fprofile-generate|-fprofile-generate=*) ;;
-            *) set -- "$@" "$arg" ;;
-        esac
-    done
-fi
-# Match cc-rs's native-compatible Rust wrappers, but cache AFTER filtering.
-if @_use_rustc_wrapper@; then
-    wrapper_name=${RUSTC_WRAPPER##*/}
-    case "${wrapper_name%.*}" in
-        sccache|cachepot|buildcache|kache) set -- "$RUSTC_WRAPPER" "$@" ;;
-    esac
-fi
-exec "$@"
-]=] _script @ONLY)
+    file(READ "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/NativeCompiler.sh.in" _template)
+    string(CONFIGURE "${_template}" _script @ONLY)
 
     # cc-rs tracks CC/CXX, not launcher contents. Change the path when the
     # compiler, mandatory arguments, or script changes; CFLAGS/CXXFLAGS track flags.
@@ -145,7 +112,10 @@ exec "$@"
 endfunction()
 
 # Assemble the Cargo environment from the selected tools and flags.
-function(_vortex_make_cargo_environment target_key_lower output)
+function(_vortex_make_cargo_environment output)
+    string(REPLACE "-" "_" _target_key "${VORTEX_RUST_TARGET}")
+    string(TOLOWER "${_target_key}" _target_key)
+
     # Cargo separates CARGO_ENCODED_RUSTFLAGS arguments with ASCII unit separator,
     # and the cc crate reads shell-quoted words with CC_SHELL_ESCAPED_FLAGS.
     string(ASCII 31 _separator)
@@ -161,12 +131,12 @@ function(_vortex_make_cargo_environment target_key_lower output)
         "RUSTC=${VORTEX_RUSTC_EXECUTABLE}"
         "CC_SHELL_ESCAPED_FLAGS=1"
         "CC_KNOWN_WRAPPER_CUSTOM=env"
-        "CFLAGS_${target_key_lower}=${_cflags}"
-        "CXXFLAGS_${target_key_lower}=${_cxxflags}"
+        "CFLAGS_${_target_key}=${_cflags}"
+        "CXXFLAGS_${_target_key}=${_cxxflags}"
         "CARGO_ENCODED_RUSTFLAGS=${_rustflags}")
 
     # Tool lookup prefers the literal triple over its underscore spelling.
-    foreach(_key IN ITEMS "${VORTEX_RUST_TARGET}" "${target_key_lower}")
+    foreach(_key IN ITEMS "${VORTEX_RUST_TARGET}" "${_target_key}")
         list(APPEND _environment
             "CC_${_key}=${_cc}"
             "CXX_${_key}=${_cxx}"
@@ -196,9 +166,8 @@ endfunction()
 
 _vortex_require_build_inputs()
 get_filename_component(_workspace_root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
-_vortex_cc_target_env_key(_target_key)
 _vortex_make_cargo_command(_cargo_command)
-_vortex_make_cargo_environment("${_target_key}" _cargo_environment)
+_vortex_make_cargo_environment(_cargo_environment)
 
 # Run Cargo with the CMake-selected tools and flags. Cargo remains responsible
 # for dependency tracking and incremental freshness.
