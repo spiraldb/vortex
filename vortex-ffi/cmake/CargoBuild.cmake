@@ -59,9 +59,13 @@ function(_vortex_make_cargo_command output)
     set(${output} "${_command}" PARENT_SCOPE)
 endfunction()
 
-# Prepend the selected Rust and CUDA toolchain directories to the ambient PATH.
+# Put the native launchers and selected toolchains before the ambient PATH.
 function(_vortex_build_tool_path output)
-    get_filename_component(_path "${VORTEX_RUSTC_EXECUTABLE}" DIRECTORY)
+    if(VORTEX_CARGO_TARGET_DIR MATCHES ":")
+        message(FATAL_ERROR "The Cargo target directory cannot contain ':' because native launchers use PATH")
+    endif()
+    get_filename_component(_rust_bin_dir "${VORTEX_RUSTC_EXECUTABLE}" DIRECTORY)
+    set(_path "${VORTEX_CARGO_TARGET_DIR}/cmake-native-tools:${_rust_bin_dir}")
 
     if(VORTEX_NVCC_EXECUTABLE)
         get_filename_component(_nvcc_bin_dir "${VORTEX_NVCC_EXECUTABLE}" DIRECTORY)
@@ -94,7 +98,13 @@ if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
         esac
     done
 fi
-exec @_compiler@ "$@"
+set -- @_compiler@ "$@"
+# Match cc-rs's native-compatible Rust wrappers, but cache AFTER filtering.
+wrapper_name=${RUSTC_WRAPPER##*/}
+case "${wrapper_name%.*}" in
+    sccache|cachepot|buildcache|kache) set -- "$RUSTC_WRAPPER" "$@" ;;
+esac
+exec "$@"
 ]=] _script @ONLY)
 
     # cc-rs tracks CC/CXX, not launcher contents. Change the path when the
@@ -106,7 +116,9 @@ exec @_compiler@ "$@"
     file(WRITE "${_launcher}" "${_script}")
     file(CHMOD "${_launcher}" PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-    set(${output} "${_launcher}" PARENT_SCOPE)
+    # An explicit cc-rs wrapper suppresses its outer RUSTC_WRAPPER fallback.
+    # It splits CC/CXX on whitespace, so resolve the launcher through PATH.
+    set(${output} "env cc-${_key}" PARENT_SCOPE)
 endfunction()
 
 # Assemble the Cargo environment from the selected tools and flags.
@@ -125,6 +137,7 @@ function(_vortex_make_cargo_environment target_key_lower output)
         "PATH=${_cargo_path}"
         "RUSTC=${VORTEX_RUSTC_EXECUTABLE}"
         "CC_SHELL_ESCAPED_FLAGS=1"
+        "CC_KNOWN_WRAPPER_CUSTOM=env"
         "CFLAGS_${target_key_lower}=${_cflags}"
         "CXXFLAGS_${target_key_lower}=${_cxxflags}"
         "CARGO_ENCODED_RUSTFLAGS=${_rustflags}")

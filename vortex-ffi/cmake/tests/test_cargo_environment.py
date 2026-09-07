@@ -14,15 +14,14 @@ import unittest
 from pathlib import Path
 
 
-@unittest.skipUnless(shutil.which("cmake"), "CMake is required")
-class CargoEnvironmentTests(unittest.TestCase):
+class CargoEnvironmentFixture(unittest.TestCase):
     def setUp(self):
         self.driver = Path(__file__).resolve().parents[1] / "CargoBuild.cmake"
         temporary = tempfile.TemporaryDirectory(prefix="vortex-cargo-environment-")
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name).resolve()
         self.target = "aarch64-apple-darwin"
-        self.target_dir = self.work / "cargo target"
+        self.target_dir = self.work / "cargo target's"
         self.archive = self.target_dir / self.target / "debug" / "libvortex_ffi.a"
         self.staged = self.work / "staged" / "libvortex_ffi.a"
         self.cargo = self.executable(
@@ -38,7 +37,7 @@ class CargoEnvironmentTests(unittest.TestCase):
         )
         self.tools = {
             name: self.executable(
-                f"selected {name.lower()}",
+                f"selected {name.lower()}'s",
                 "import json, sys\nprint(json.dumps({'tool': sys.argv[0], 'flags': sys.argv[1:]}))\n",
             )
             for name in ("CC", "CXX", "AR", "RANLIB")
@@ -62,9 +61,25 @@ class CargoEnvironmentTests(unittest.TestCase):
 
     def executable(self, name, body):
         path = self.work / name
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(f"#!{sys.executable}\n{body}", encoding="utf-8")
         path.chmod(0o755)
         return str(path)
+
+    def recording_cache(self, name="sccache"):
+        self.cache_log = self.work / "native cache.jsonl"
+        return self.executable(
+            f"cache tools' directory/{name}",
+            "import json, os, sys\n"
+            f"with open({str(self.cache_log)!r}, 'a', encoding='utf-8') as log:\n"
+            "    log.write(json.dumps({'compiler': sys.argv[1], 'flags': sys.argv[2:]}) + '\\n')\n"
+            "os.execv(sys.argv[1], sys.argv[1:])\n",
+        )
+
+    def cache_calls(self):
+        if not self.cache_log.exists():
+            return []
+        return [json.loads(line) for line in self.cache_log.read_text(encoding="utf-8").splitlines()]
 
     def env_names(self, name):
         return (
@@ -77,6 +92,8 @@ class CargoEnvironmentTests(unittest.TestCase):
 
     def run_driver(self, cflags, cxxflags, ambient=None):
         env = os.environ.copy()
+        for key in ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CC_KNOWN_WRAPPER_CUSTOM"):
+            env.pop(key, None)
         for name in ("CFLAGS", "CXXFLAGS", "CC", "CXX", "AR", "RANLIB"):
             for key in self.env_names(name):
                 env.pop(key, None)
@@ -126,6 +143,12 @@ class CargoEnvironmentTests(unittest.TestCase):
     def effective_tool(self, env, name):
         return next(env[key] for key in self.cc_names(name) if key in env)
 
+    def native_command(self, env, language):
+        value = self.effective_tool(env, language)
+        # Match cc-rs: an existing path is one word; wrapper strings use
+        # split_whitespace(), not the shell parsing used for CFLAGS/CXXFLAGS.
+        return [value] if Path(value).is_file() else value.split()
+
     def compile_flags(self, cargo_env, language, host):
         env = cargo_env.copy()
         env.update(HOST=self.target, TARGET=self.target)
@@ -140,7 +163,7 @@ class CargoEnvironmentTests(unittest.TestCase):
         flags = [flag for key in reversed(self.cc_names(name)) for flag in shlex.split(env.get(key, ""))]
         arguments = ["-O0", "-c", "source with spaces", "-o", "object file"]
         result = subprocess.run(
-            [self.effective_tool(env, language), *arguments, *flags],
+            [*self.native_command(env, language), *arguments, *flags],
             env=env,
             capture_output=True,
             text=True,
@@ -163,6 +186,165 @@ class CargoEnvironmentTests(unittest.TestCase):
                     self.compile_flags(env, language, host=True),
                     [flag for flag in expected if not flag.startswith("-fsanitize=")],
                 )
+
+    def prepare_cc_probe(self):
+        if not all(shutil.which(tool) for tool in ("cargo", "rustc", "clang", "clang++")):
+            self.skipTest("Cargo, rustc, and Clang are required for real cc-rs probes")
+        cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
+        if not any((cargo_home / "registry/src").glob("*/cc-1.4.0")):
+            self.skipTest("cc 1.4.0 must be cached for the offline probe test")
+        # Each invocation starts with fresh cc-rs compiler/flag probe caches.
+        probe = self.work / "probe"
+        probe.mkdir()
+        (probe / "Cargo.toml").write_text(
+            '[workspace]\n[package]\nname = "cc-probe"\nversion = "0.0.0"\n'
+            'edition = "2021"\n[[bin]]\nname = "cc-probe"\npath = "main.rs"\n'
+            '[dependencies]\ncc = "=1.4.0"\n',
+            encoding="utf-8",
+        )
+        (probe / "main.rs").write_text(
+            "fn main() -> Result<(), Box<dyn std::error::Error>> {\n"
+            '    let target = std::env::var("TARGET")?;\n'
+            "    let args: Vec<_> = std::env::args().collect();\n"
+            "    let mut build = cc::Build::new();\n"
+            "    build.target(&target).host(&target).opt_level(0).debug(false)\n"
+            "        .cargo_metadata(false).inherit_rustflags(false)\n"
+            '        .cpp(args[1] == "CXX");\n'
+            "    let tool = build.try_get_compiler()?;\n"
+            "    let clang = tool.is_like_clang();\n"
+            "    let mut command = tool.to_command();\n"
+            '    println!("program={:?}", command.get_program());\n'
+            '    println!("args={:?}", command.get_args().collect::<Vec<_>>());\n'
+            "    if args.len() == 4 {\n"
+            '        let status = command.args(["-c", &args[2], "-o", &args[3]]).status()?;\n'
+            '        if !status.success() { return Err(format!("compiler failed: {status}").into()); }\n'
+            "    } else {\n"
+            '        let supported = build.is_flag_supported("-fno-omit-frame-pointer")?;\n'
+            '        let unsupported = build.is_flag_supported("-fdefinitely-not-a-supported-flag")?;\n'
+            '        println!("{{\\"clang\\": {clang}, \\"supported\\": {supported}, '
+            '\\"unsupported\\": {unsupported}}}");\n'
+            "    }\n"
+            "    Ok(())\n}\n",
+            encoding="utf-8",
+        )
+        build_env = os.environ.copy()
+        for key in ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS"):
+            build_env.pop(key, None)
+        result = subprocess.run(
+            [
+                "cargo",
+                "build",
+                "--offline",
+                "--manifest-path",
+                str(probe / "Cargo.toml"),
+                "--target-dir",
+                str(probe / "target"),
+            ],
+            cwd=probe,
+            env=build_env,
+            capture_output=True,
+            text=True,
+            timeout=120,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        version = subprocess.run(
+            ["rustc", "-vV"],
+            cwd=probe,
+            env=build_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        ).stdout
+        self.target = next(line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: "))
+        self.archive = self.target_dir / self.target / "debug" / "libvortex_ffi.a"
+        for language, name in (("CC", "clang"), ("CXX", "clang++")):
+            compiler = shutil.which(name)
+            if sys.platform == "darwin":
+                # /usr/bin/clang is Apple's dispatch tool, which cannot be renamed.
+                compiler = subprocess.run(
+                    ["xcrun", "--find", name], capture_output=True, text=True, timeout=30, check=True
+                ).stdout.strip()
+            path = self.work / f"real {name}'s compiler"
+            path.symlink_to(compiler)
+            self.tools[language] = str(path)
+        return probe / "target/debug/cc-probe"
+
+    def run_cc_probe(self, probe, env, language, *arguments):
+        build_env = dict(env, HOST=self.target, TARGET=self.target, OUT_DIR=str(self.work / "probe out"))
+        result = subprocess.run(
+            [str(probe), language, *map(str, arguments)],
+            env=build_env,
+            capture_output=True,
+            text=True,
+            timeout=45,
+            check=False,
+        )
+        output = result.stdout + result.stderr
+        self.assertEqual(result.returncode, 0, output)
+        return result.stdout
+
+
+@unittest.skipUnless(shutil.which("cmake"), "CMake is required")
+class CargoEnvironmentTests(CargoEnvironmentFixture):
+    def test_native_cache_receives_real_compiler_after_host_filter(self):
+        for name in ("sccache", "cachepot", "buildcache", "kache"):
+            for suffix in ("", ".exe"):
+                with self.subTest(wrapper=name + suffix):
+                    wrapper = self.recording_cache(name + suffix)
+                    self.cache_log.unlink(missing_ok=True)
+                    cflags = [*self.cflags, "-fsanitize=address,undefined"]
+                    cxxflags = ["-fsanitize=undefined", *self.cxxflags]
+                    env = self.run_driver(cflags, cxxflags, {"RUSTC_WRAPPER": wrapper})
+                    self.assertEqual(env["RUSTC_WRAPPER"], wrapper)
+                    self.assert_native_environment(env, cflags, cxxflags)
+                    self.assertEqual(
+                        self.cache_calls(),
+                        [
+                            {
+                                "compiler": self.tools[language],
+                                "flags": ["-O0", "-c", "source with spaces", "-o", "object file"]
+                                + [flag for flag in flags if not host or not flag.startswith("-fsanitize=")],
+                            }
+                            for language, flags in (("CC", cflags), ("CXX", cxxflags))
+                            for host in (False, True)
+                        ],
+                    )
+
+    def test_no_native_cache_for_absent_or_unknown_rust_wrapper(self):
+        for name in (None, "rust-only", "sccache-other", "sccache.exe.bak"):
+            with self.subTest(wrapper=name):
+                wrapper = self.recording_cache(name or "unused")
+                self.cache_log.unlink(missing_ok=True)
+                ambient = {"RUSTC_WRAPPER": wrapper} if name else {}
+                cflags = [*self.cflags, "-fsanitize=undefined"]
+                cxxflags = [*self.cxxflags, "-fsanitize=undefined"]
+                env = self.run_driver(cflags, cxxflags, ambient)
+                self.assertEqual(env.get("RUSTC_WRAPPER"), ambient.get("RUSTC_WRAPPER"))
+                self.assert_native_environment(env, cflags, cxxflags)
+                self.assertEqual(self.cache_calls(), [])
+
+    def test_explicit_cc_wrapper_prevents_outer_rust_wrapper_fallback(self):
+        wrapper = self.recording_cache()
+        env = self.run_driver(
+            self.cflags,
+            self.cxxflags,
+            {"RUSTC_WRAPPER": wrapper, "CC_KNOWN_WRAPPER_CUSTOM": "ambient-wrapper"},
+        )
+        self.assertEqual(env["RUSTC_WRAPPER"], wrapper)
+        self.assertEqual(env["CC_KNOWN_WRAPPER_CUSTOM"], "env")
+        directory = self.target_dir / "cmake-native-tools"
+        self.assertEqual(env["PATH"].split(os.pathsep)[0], str(directory))
+        for language in ("CC", "CXX"):
+            with self.subTest(language=language):
+                command = self.native_command(env, language)
+                self.assertEqual(len(command), 2)
+                self.assertEqual(command[0], "env")
+                self.assertRegex(command[1], r"^cc-[0-9a-f]{64}$")
+                self.assertEqual(shutil.which(command[1], path=env["PATH"]), str(directory / command[1]))
+                for target in (self.target, self.target.replace("-", "_")):
+                    self.assertEqual(env[f"{language}_{target}"], " ".join(command))
 
     def test_only_sanitizer_flags_are_target_only(self):
         for flags in (
@@ -227,7 +409,7 @@ class CargoEnvironmentTests(unittest.TestCase):
             with self.subTest(language=language):
                 arguments = ["-E", "detect_compiler_family.c"]
                 result = subprocess.run(
-                    [self.effective_tool(env, language), *arguments],
+                    [*self.native_command(env, language), *arguments],
                     env=env,
                     capture_output=True,
                     text=True,
@@ -236,88 +418,37 @@ class CargoEnvironmentTests(unittest.TestCase):
                 )
                 self.assertEqual(json.loads(result.stdout)["flags"], arguments)
 
-    @unittest.skipUnless(
-        all(shutil.which(tool) for tool in ("cargo", "rustc", "clang", "clang++")),
-        "Cargo, rustc, and Clang are required for real cc-rs probes",
-    )
     def test_real_cc_compiler_family_and_flag_support(self):
-        cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
-        if not any((cargo_home / "registry/src").glob("*/cc-1.4.0")):
-            self.skipTest("cc 1.4.0 must be cached for the offline probe test")
-        # A tiny executable exercises cc-rs itself, without compiling Vortex or
-        # downloading dependencies. Each run starts with a fresh cc probe cache.
-        probe = self.work / "probe"
-        probe.mkdir()
-        (probe / "Cargo.toml").write_text(
-            '[workspace]\n[package]\nname = "cc-probe"\nversion = "0.0.0"\n'
-            'edition = "2021"\n[[bin]]\nname = "cc-probe"\npath = "main.rs"\n'
-            '[dependencies]\ncc = "=1.4.0"\n',
-            encoding="utf-8",
-        )
-        (probe / "main.rs").write_text(
-            "fn main() -> Result<(), Box<dyn std::error::Error>> {\n"
-            '    let target = std::env::var("TARGET")?;\n'
-            "    let mut build = cc::Build::new();\n"
-            "    build.target(&target).host(&target).opt_level(0).debug(false)\n"
-            "        .cargo_metadata(false).inherit_rustflags(false)\n"
-            '        .cpp(std::env::args().nth(1).as_deref() == Some("CXX"));\n'
-            "    let clang = build.try_get_compiler()?.is_like_clang();\n"
-            '    let supported = build.is_flag_supported("-fno-omit-frame-pointer")?;\n'
-            '    println!("{{\\"clang\\": {clang}, \\"supported\\": {supported}}}");\n'
-            "    Ok(())\n}\n",
-            encoding="utf-8",
-        )
-        result = subprocess.run(
-            [
-                "cargo",
-                "build",
-                "--offline",
-                "--manifest-path",
-                str(probe / "Cargo.toml"),
-                "--target-dir",
-                str(probe / "target"),
-            ],
-            cwd=probe,
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        version = subprocess.run(
-            ["rustc", "-vV"],
-            cwd=probe,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        ).stdout
-        self.target = next(line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: "))
-        self.archive = self.target_dir / self.target / "debug" / "libvortex_ffi.a"
-        self.tools.update(CC=shutil.which("clang"), CXX=shutil.which("clang++"))
-        for language, flag in (("CXX", "-Werror"), ("CC", "-v"), ("CXX", "-v")):
-            env = self.run_driver([flag, "-fsanitize=undefined"], [flag, "-fsanitize=undefined"])
-            env.update(HOST=self.target, TARGET=self.target, OUT_DIR=str(probe / "out"))
-            for host in (False, True):
-                with self.subTest(language=language, flag=flag, host=host):
-                    build_env = env.copy()
-                    if host:
-                        build_env["CARGO_ENCODED_RUSTFLAGS"] = ""
-                    result = subprocess.run(
-                        [str(probe / "target/debug/cc-probe"), language],
-                        env=build_env,
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                        check=False,
-                    )
-                    output = result.stdout + result.stderr
-                    self.assertEqual(result.returncode, 0, output)
-                    self.assertEqual(
-                        json.loads(result.stdout.splitlines()[-1]),
-                        {"clang": True, "supported": True},
-                        output,
-                    )
+        probe = self.prepare_cc_probe()
+        for name in (None, "sccache", "rust-only"):
+            wrapper = self.recording_cache(name or "unused")
+            self.cache_log.unlink(missing_ok=True)
+            ambient = {"RUSTC_WRAPPER": wrapper} if name else {}
+            for language, flag in (("CXX", "-Werror"), ("CC", "-v"), ("CXX", "-v")):
+                env = self.run_driver([flag, "-fsanitize=undefined"], [flag, "-fsanitize=undefined"], ambient)
+                for host in (False, True):
+                    with self.subTest(wrapper=name, language=language, flag=flag, host=host):
+                        build_env = env.copy()
+                        if host:
+                            build_env["CARGO_ENCODED_RUSTFLAGS"] = ""
+                        output = self.run_cc_probe(probe, build_env, language)
+                        self.assertIn('program="env"', output.splitlines(), output)
+                        compiler = self.native_command(env, language)[1]
+                        self.assertTrue(
+                            any(line.startswith(f'args=["{compiler}"') for line in output.splitlines()), output
+                        )
+                        self.assertEqual(
+                            json.loads(output.splitlines()[-1]),
+                            {"clang": True, "supported": True, "unsupported": False},
+                            output,
+                        )
+            calls = self.cache_calls()
+            if name == "sccache":
+                self.assertTrue(calls)
+                for call in calls:
+                    self.assertIn(call["compiler"], (self.tools["CC"], self.tools["CXX"]))
+            else:
+                self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":
