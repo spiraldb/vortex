@@ -4,7 +4,7 @@
 # Builds and stages the Rust FFI static library used by the Vortex C++ target.
 # Configure.cmake invokes this internal script automatically during the build.
 
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.25)
 
 include("${CMAKE_CURRENT_LIST_DIR}/Helpers.cmake")
 

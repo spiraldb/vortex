@@ -94,7 +94,7 @@ class HeaderTests(unittest.TestCase):
         )
         (self.source / "CMakeLists.txt").write_text(
             textwrap.dedent("""\
-                cmake_minimum_required(VERSION 3.28)
+                cmake_minimum_required(VERSION 3.25)
                 project(HeaderConsumer LANGUAGES C CXX)
                 if(VORTEX_ENABLE_CUDA)
                     set(CMAKE_SYSTEM_NAME Linux)

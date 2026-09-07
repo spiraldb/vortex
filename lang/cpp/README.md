@@ -5,7 +5,7 @@ A C++20 API for reading and writing Vortex files. See the
 
 ## Build
 
-Requirements: CMake 3.28+, native C/C++ compilers, and Cargo/rustc 1.95+ on `PATH`.
+Requirements: CMake 3.25+, native C/C++ compilers, and Cargo/rustc 1.95+ on `PATH`.
 Supported platforms are GNU/Linux x86_64 and aarch64, and macOS arm64 for standalone development.
 Use a complete Vortex checkout and run commands from its root:
 

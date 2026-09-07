@@ -11,7 +11,7 @@ Building from source
 --------------------
 
 Vortex currently provides source builds only, for GNU/Linux x86_64/aarch64 and
-macOS arm64. You need a C compiler, a C++20 compiler, CMake 3.28+ with a single-config
+macOS arm64. You need a C compiler, a C++20 compiler, CMake 3.25+ with a single-config
 generator, and Cargo/rustc 1.95+ on ``PATH``. Use a complete repository checkout:
 
 .. code-block:: bash

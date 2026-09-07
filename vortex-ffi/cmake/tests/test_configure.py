@@ -74,7 +74,7 @@ class ConfigureTests(unittest.TestCase):
         source = self.work / "parent"
         source.mkdir()
         (source / "CMakeLists.txt").write_text(
-            "cmake_minimum_required(VERSION 3.28)\n"
+            "cmake_minimum_required(VERSION 3.25)\n"
             "project(Parent LANGUAGES C CXX)\n"
             f'add_subdirectory("{self.repo.as_posix()}/vortex-ffi" ffi)\n',
             encoding="utf-8",

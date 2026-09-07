@@ -5,7 +5,8 @@
 # archive from vortex-ffi and exports Vortex::cpp_static. It supports standalone
 # configuration and add_subdirectory() from the repository root or a parent.
 
-cmake_minimum_required(VERSION 3.28)
+# FetchContent requires CMake 3.25.
+cmake_minimum_required(VERSION 3.25)
 
 # project() is safe inside a parent's add_subdirectory(). A Vortex-owned top
 # level, this directory or the repository root, gets developer defaults below;
