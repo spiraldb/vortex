@@ -621,11 +621,8 @@ jobs:
       - uses: ./.github/actions/setup-prebuild
         with:
           enable-sccache: "true"
-
-      - name: Install Rust nightly toolchain
-        run: |
-          rustup toolchain install $NIGHTLY_TOOLCHAIN
-          rustup component add --toolchain $NIGHTLY_TOOLCHAIN rust-src rustfmt clippy llvm-tools-preview
+          toolchain: ${{ env.NIGHTLY_TOOLCHAIN }}
+          components: "rust-src, rustfmt, clippy, llvm-tools-preview"
       - name: Build C++ tests and examples (asan)
         env:
           RUSTUP_TOOLCHAIN: ${{ env.NIGHTLY_TOOLCHAIN }}
