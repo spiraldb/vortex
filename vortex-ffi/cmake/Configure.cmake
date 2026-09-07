@@ -128,8 +128,8 @@ endfunction()
 
 # Validate and configure the optional sanitizers. VORTEX_SANITIZER is a comma-
 # or semicolon-separated list of asan, lsan, ubsan, and tsan. Each entry
-# instruments the C and C++ code that clang compiles, including Cargo-built C
-# dependencies, and all but ubsan also instrument the Rust code through rustc,
+# instruments the C and C++ code that clang compiles, including Cargo-built
+# target dependencies (not host tools). All but ubsan also instrument Rust,
 # which has no UBSan. Sanitizers require Clang and a Debug build, and rustc
 # itself rejects the nightly-only Rust flags on stable. Standard-library
 # instrumentation is optional.
@@ -210,8 +210,8 @@ function(_vortex_resolve_sanitizer
 endfunction()
 
 # Reconstruct CMake's effective C and C++ flags for Cargo build scripts, then
-# append deployment-target, sanitizer, and PIC requirements. Return the C/C++
-# flag lists.
+# append deployment-target, sanitizer, and PIC requirements. The driver strips
+# only sanitizer instrumentation from host build dependencies.
 function(_vortex_native_flags
     configuration
     apple_deployment_target
@@ -232,7 +232,7 @@ function(_vortex_native_flags
     endif()
 
     if(sanitizer_flag)
-        # Instrument Cargo-built native code with the selected sanitizer.
+        # Instrument Cargo-built target native code with the selected sanitizer.
         list(APPEND _cflags "${sanitizer_flag}")
         list(APPEND _cxxflags "${sanitizer_flag}")
     endif()

@@ -77,8 +77,39 @@ function(_vortex_build_tool_path output)
     set(${output} "${_path}" PARENT_SCOPE)
 endfunction()
 
-# Assemble the target-specific Cargo environment from the selected tools and
-# flags.
+# cc-rs chooses HOST_* whenever HOST == TARGET, including native target builds.
+# Cargo's explicit --target instead distinguishes them through build-script
+# CARGO_ENCODED_RUSTFLAGS: empty for host dependencies, nonempty for our target.
+# Strip only host sanitizer flags: host dependencies still need toolchain flags,
+# and cc-rs must see the flags itself to handle compiler and flag-support probes.
+function(_vortex_native_compiler_launcher compiler output)
+    _vortex_encode_shell_arguments(_compiler "${compiler}")
+    string(CONFIGURE [=[#!/bin/sh
+if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
+    for arg do
+        shift
+        case "$arg" in
+            -fsanitize=*) ;;
+            *) set -- "$@" "$arg" ;;
+        esac
+    done
+fi
+exec @_compiler@ "$@"
+]=] _script @ONLY)
+
+    # cc-rs tracks CC/CXX, not launcher contents. Change the path when the
+    # compiler or script changes; CFLAGS/CXXFLAGS already track flag changes.
+    string(SHA256 _key "${_script}")
+    set(_directory "${VORTEX_CARGO_TARGET_DIR}/cmake-native-tools")
+    set(_launcher "${_directory}/cc-${_key}")
+    file(MAKE_DIRECTORY "${_directory}")
+    file(WRITE "${_launcher}" "${_script}")
+    file(CHMOD "${_launcher}" PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    set(${output} "${_launcher}" PARENT_SCOPE)
+endfunction()
+
+# Assemble the Cargo environment from the selected tools and flags.
 function(_vortex_make_cargo_environment target_key_lower output)
     # Cargo separates CARGO_ENCODED_RUSTFLAGS arguments with ASCII unit separator,
     # and the cc crate reads shell-quoted words with CC_SHELL_ESCAPED_FLAGS.
@@ -86,19 +117,26 @@ function(_vortex_make_cargo_environment target_key_lower output)
     string(JOIN "${_separator}" _rustflags ${VORTEX_RUSTFLAGS})
     _vortex_encode_shell_arguments(_cflags ${VORTEX_CFLAGS})
     _vortex_encode_shell_arguments(_cxxflags ${VORTEX_CXXFLAGS})
+    _vortex_native_compiler_launcher("${VORTEX_C_COMPILER}" _cc)
+    _vortex_native_compiler_launcher("${VORTEX_CXX_COMPILER}" _cxx)
     _vortex_build_tool_path(_cargo_path)
 
     set(_environment
         "PATH=${_cargo_path}"
         "RUSTC=${VORTEX_RUSTC_EXECUTABLE}"
         "CC_SHELL_ESCAPED_FLAGS=1"
-        "CC_${target_key_lower}=${VORTEX_C_COMPILER}"
-        "CXX_${target_key_lower}=${VORTEX_CXX_COMPILER}"
-        "AR_${target_key_lower}=${VORTEX_AR}"
-        "RANLIB_${target_key_lower}=${VORTEX_RANLIB}"
         "CFLAGS_${target_key_lower}=${_cflags}"
         "CXXFLAGS_${target_key_lower}=${_cxxflags}"
         "CARGO_ENCODED_RUSTFLAGS=${_rustflags}")
+
+    # Tool lookup prefers the literal triple over its underscore spelling.
+    foreach(_key IN ITEMS "${VORTEX_RUST_TARGET}" "${target_key_lower}")
+        list(APPEND _environment
+            "CC_${_key}=${_cc}"
+            "CXX_${_key}=${_cxx}"
+            "AR_${_key}=${VORTEX_AR}"
+            "RANLIB_${_key}=${VORTEX_RANLIB}")
+    endforeach()
 
     # Keep the toolchain selection seen at configure time, even when the
     # ambient environment differs at build time.

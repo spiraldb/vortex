@@ -74,6 +74,8 @@ not supported.
   configure time; reconfigure to change it.
 - Cargo uses the lockfile, with optional features such as `mimalloc` disabled. CMake supplies the
   complete Rust flags, overriding flags from the environment and Cargo configuration.
+- Cargo-built native dependencies use CMake's compilers, archiver, and C/C++ flags. Host build
+  dependencies keep those flags except sanitizer instrumentation.
 - Cargo checks for changes whenever a target depending on Vortex is built. Its cache lives under
   the FFI binary directory: `ffi/cargo-target` in root and C++ builds. The CMake `clean` target
   removes this cache too.
@@ -109,7 +111,8 @@ python3 -m unittest discover -s vortex-ffi/cmake/tests
 
 `VORTEX_SANITIZER` accepts a comma-separated list of `asan`, `lsan`, `ubsan`, and `tsan`.
 It requires `Debug` and Clang. Flags instrument Vortex's C/C++ code, Cargo-built native
-dependencies, and targets linking Vortex. All but `ubsan` also instrument Rust, which has no UBSan.
+target dependencies, and targets linking Vortex, but not Cargo's host build tools or their
+native dependencies. All but `ubsan` also instrument Rust, which has no UBSan.
 Rust instrumentation defaults to rustup's `nightly` unless `RUSTUP_TOOLCHAIN` is set.
 
 ```sh
