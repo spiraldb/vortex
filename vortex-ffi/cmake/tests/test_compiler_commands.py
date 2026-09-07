@@ -9,6 +9,7 @@ import shlex
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -193,6 +194,75 @@ class CompilerCommandTests(unittest.TestCase):
         ):
             with self.subTest(command=name):
                 self.exercise(name, wrapper=wrapper, quoted=quoted)
+
+    @unittest.skipUnless(sys.platform == "darwin", "Apple SDK fixture requires macOS")
+    @unittest.skipUnless(shutil.which("xcrun"), "xcrun is required for the Apple SDK fixture")
+    def test_osx_sysroot_headers_and_cargo_freshness(self):
+        real_sdk = Path(self.run_command(["xcrun", "--sdk", "macosx", "--show-sdk-path"], self.env).strip())
+        self.env["SDKROOT"] = str(real_sdk)
+        sdks = []
+        for value in (7, 9):
+            sdk = self.work / f"SDK directory's {value}" / "MacOSX.sdk"
+            # Overlay only usr/include; use the installed SDK's headers and libraries.
+            for relative, exclude in ((".", "usr"), ("usr", "include"), ("usr/include", None)):
+                (sdk / relative).mkdir(parents=True, exist_ok=True)
+                for entry in (real_sdk / relative).iterdir():
+                    if entry.name != exclude:
+                        (sdk / relative / entry.name).symlink_to(entry)
+            (sdk / "usr/include/vortex_fixture_sdk.h").write_text(
+                f"#define FIXTURE_SDK_VALUE {value}\n", encoding="utf-8"
+            )
+            sdks.append(sdk)
+        for extension, header in (("c", "stdlib.h"), ("cpp", "cstdlib")):
+            (self.ffi / f"native.{extension}").write_text(
+                f"#include <{header}>\n#include <vortex_fixture_sdk.h>\n"
+                f"int native_{extension}(void) {{ return FIXTURE_SDK_VALUE; }}\n",
+                encoding="utf-8",
+            )
+        build = self.work / "sdk-build"
+        configure = ["cmake", "-G", "Ninja", "-S", self.source, "-B", build, "-DCMAKE_BUILD_TYPE=Debug"]
+        for language, compiler in zip(("C", "CXX"), self.compilers, strict=True):
+            configure.append(f"-DCMAKE_{language}_COMPILER={compiler}")
+        cargo_build = ["cmake", "--build", build, "--target", "vortex_ffi_cargo_build"]
+        previous = {}
+        for sdk in sdks:
+            with self.subTest(sdk=sdk):
+                # Only the SDK selection changes, not sources or ordinary flags.
+                self.run_command([*configure, f"-DCMAKE_OSX_SYSROOT={sdk}"], self.env)
+                self.run_command(["cmake", "--build", build, "--target", "cmake_native"], self.env)
+                self.run_command(cargo_build, self.env)
+                objects = sorted((build / "ffi/cargo-target" / self.target).glob("debug/build/*/out/*-native.o"))
+                self.assertEqual(len(objects), 2)
+                output = (objects[0].parent.parent / "output").read_text(encoding="utf-8")
+                for language in ("CFLAGS", "CXXFLAGS"):
+                    key = f"{language}_{self.target.replace('-', '_')}"
+                    self.assertIn(f"cargo:rerun-if-env-changed={key}", output)
+                    prefix = f"{key} = Some("
+                    flags = shlex.split(
+                        next(
+                            line.removeprefix(prefix).removesuffix(")")
+                            for line in output.splitlines()
+                            if line.startswith(prefix)
+                        )
+                    )
+                    self.assertEqual(flags[flags.index("-isysroot") + 1], str(sdk))
+                digests = {obj: hashlib.sha256(obj.read_bytes()).hexdigest() for obj in objects}
+                if previous:
+                    self.assertEqual(digests.keys(), previous.keys())
+                    for obj, digest in digests.items():
+                        self.assertNotEqual(digest, previous[obj], f"SDK change did not rebuild {obj.name}")
+                previous = digests
+                timestamps = [obj.stat().st_mtime_ns for obj in objects]
+                self.run_command(cargo_build, self.env)
+                self.assertEqual([obj.stat().st_mtime_ns for obj in objects], timestamps, "Cargo should remain fresh")
+
+        self.run_command([*configure, "-DCMAKE_OSX_SYSROOT=macosx"], self.env)
+        commands = shlex.split(
+            self.run_command(["ninja", "-C", build, "-t", "commands", "vortex_ffi_cargo_build"], self.env)
+        )
+        for language in ("CFLAGS", "CXXFLAGS"):
+            flags = next(arg for arg in commands if arg.startswith(f"-DVORTEX_{language}="))
+            self.assertIn(f"-isysroot;{real_sdk}", flags, "CMake must resolve the named SDK before forwarding it")
 
     def test_sccache_compiler_commands(self):
         sccache = shutil.which("sccache")

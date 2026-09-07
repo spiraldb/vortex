@@ -206,9 +206,8 @@ function(_vortex_resolve_sanitizer
     set(${build_std_output} "${VORTEX_SANITIZE_RUST_STD}" PARENT_SCOPE)
 endfunction()
 
-# Reconstruct CMake's effective C and C++ flags for Cargo build scripts, then
-# append deployment-target, sanitizer, and PIC requirements. The driver strips
-# only sanitizer instrumentation from host build dependencies.
+# Reconstruct CMake's effective C and C++ flags for Cargo build scripts, including
+# Apple SDK, deployment-target, sanitizer, and PIC requirements.
 function(_vortex_native_flags
     configuration
     apple_deployment_target
@@ -226,6 +225,13 @@ function(_vortex_native_flags
     # Preserve other flags: even non-linker options can be toolchain requirements.
     list(FILTER _cflags EXCLUDE REGEX "^(-Werror(=.*)?|-pedantic-errors)$")
     list(FILTER _cxxflags EXCLUDE REGEX "^(-Werror(=.*)?|-pedantic-errors)$")
+
+    if(APPLE AND CMAKE_OSX_SYSROOT)
+        # CMake resolves named SDKs to paths for single-config generators.
+        _vortex_reject_semicolon("CMAKE_OSX_SYSROOT" "${CMAKE_OSX_SYSROOT}")
+        list(APPEND _cflags -isysroot "${CMAKE_OSX_SYSROOT}")
+        list(APPEND _cxxflags -isysroot "${CMAKE_OSX_SYSROOT}")
+    endif()
 
     if(apple_deployment_target)
         # Match Cargo-built native code to CMake's minimum macOS version.
