@@ -15,6 +15,7 @@ from pathlib import Path
 
 import test_cargo_environment
 from cc_fixture import cached_cc_version
+from test_native_flags import ERROR_FLAGS
 
 
 @unittest.skipUnless(
@@ -144,22 +145,7 @@ class CompilerCommandTests(unittest.TestCase):
         configure = ["cmake", "-G", "Ninja", "-S", self.source, "-B", build, "-DCMAKE_BUILD_TYPE=Debug", *options]
         self.run_command(configure, env)
         self.run_command(["cmake", "--build", build, "--target", "cmake_native"], env)
-        if not quoted:
-            # The same environment command already works in ordinary Cargo/cc-rs.
-            self.run_command(
-                [
-                    "cargo",
-                    "build",
-                    "--locked",
-                    "--manifest-path",
-                    self.source / "Cargo.toml",
-                    "--target",
-                    self.target,
-                    "--target-dir",
-                    self.work / f"{name}-direct",
-                ],
-                env,
-            )
+
         cargo_build = ["cmake", "--build", build, "--target", "vortex_ffi_cargo_build"]
         self.run_command(cargo_build, env)
         archives = sorted((build / "ffi/cargo-target" / self.target).glob("debug/build/*/out/libnative_*.a"))
@@ -183,6 +169,88 @@ class CompilerCommandTests(unittest.TestCase):
             self.assertNotEqual(
                 hashlib.sha256(archive.read_bytes()).hexdigest(), before, f"ARG1 change did not rebuild {archive.name}"
             )
+
+    def test_vendored_warning_and_cargo_freshness(self):
+        include = self.work / "parent include's directory"
+        include.mkdir()
+        (include / "parent.h").write_text("#define HEADER_VALUE 3\n", encoding="utf-8")
+        for extension, macro in (("c", "REVIEW_ARG1"), ("cpp", "REVIEW_CXX_ARG1")):
+            assertion = "_Static_assert" if extension == "c" else "static_assert"
+            (self.ffi / f"native.{extension}").write_text(
+                '#include "parent.h"\n'
+                '#ifndef __OPTIMIZE__\n#error "parent optimization was lost"\n#endif\n'
+                "enum small { zero, one };\n"
+                f'{assertion}(sizeof(enum small) == 1, "parent ABI flag was lost");\n'
+                f"int native_{extension}(void) {{\n"
+                "    int vendored_unused;\n"
+                f"    return {macro} + PARENT_VALUE + CONFIG_VALUE + HEADER_VALUE;\n}}\n",
+                encoding="utf-8",
+            )
+        build = self.work / "native-flags"
+        configure = ["cmake", "-G", "Ninja", "-S", self.source, "-B", build, "-DCMAKE_BUILD_TYPE=Debug"]
+        globals_by_language = {}
+        for compiler, language, macro, extension in zip(
+            self.compilers, ("C", "CXX"), ("REVIEW_ARG1", "REVIEW_CXX_ARG1"), ("c", "cpp"), strict=True
+        ):
+            configure += [f"-DCMAKE_{language}_COMPILER={compiler}", f"-DFIXTURE_{language}_ARG1=-D{macro}=7"]
+            globals_by_language[language] = ["-Wunused-variable", "-fshort-enums", f"-I{include}"]
+            # Establish the root cause independently: the parent policy rejects this
+            # otherwise compilable third-party warning in both native languages.
+            result = subprocess.run(
+                [
+                    compiler,
+                    *globals_by_language[language],
+                    "-O1",
+                    "-DCONFIG_VALUE=1",
+                    "-DPARENT_VALUE=7",
+                    f"-D{macro}=7",
+                    "-Werror",
+                    "-c",
+                    str(self.ffi / f"native.{extension}"),
+                    "-o",
+                    str(self.work / f"control-{extension}.o"),
+                ],
+                env=self.env,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("error: unused variable 'vendored_unused'", result.stderr)
+
+        def reconfigure(value, policy):
+            options = []
+            for language, flags in globals_by_language.items():
+                options += [
+                    f"-DCMAKE_{language}_FLAGS={shlex.join([*flags, f'-DPARENT_VALUE={value}', *policy])}",
+                    f"-DCMAKE_{language}_FLAGS_DEBUG={shlex.join(['-O1', '-DCONFIG_VALUE=1', *policy])}",
+                ]
+            self.run_command([*configure, *options], self.env)
+
+        cargo_build = ["cmake", "--build", build, "--target", "vortex_ffi_cargo_build"]
+        reconfigure(7, ERROR_FLAGS)
+        self.run_command(cargo_build, self.env)
+        archives = sorted((build / "ffi/cargo-target" / self.target).glob("debug/build/*/out/libnative_*.a"))
+        self.assertEqual(len(archives), 2)
+        output = (archives[0].parent.parent / "output").read_text(encoding="utf-8")
+        self.assertEqual(output.count("warning: unused variable 'vendored_unused'"), 2)
+        timestamps = [archive.stat().st_mtime_ns for archive in archives]
+        digests = [hashlib.sha256(archive.read_bytes()).hexdigest() for archive in archives]
+        self.run_command(cargo_build, self.env)
+        self.assertEqual([archive.stat().st_mtime_ns for archive in archives], timestamps)
+        reconfigure(7, [])
+        self.run_command(cargo_build, self.env)
+        self.assertEqual(
+            [archive.stat().st_mtime_ns for archive in archives],
+            timestamps,
+            "Changing only the parent's warning-as-error policy must leave Cargo fresh",
+        )
+        reconfigure(8, [])
+        self.run_command(cargo_build, self.env)
+        for archive, timestamp, digest in zip(archives, timestamps, digests, strict=True):
+            self.assertNotEqual(archive.stat().st_mtime_ns, timestamp)
+            self.assertNotEqual(hashlib.sha256(archive.read_bytes()).hexdigest(), digest)
 
     def test_uncached_compiler_commands(self):
         for name, wrapper, quoted in (

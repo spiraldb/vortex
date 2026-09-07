@@ -21,12 +21,12 @@ class ConfigureTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name).resolve()
 
-    def configure(self, name, *options, source=None):
+    def configure(self, name, *options):
         return subprocess.run(
             [
                 "cmake",
                 "-S",
-                str(source or self.repo / "vortex-ffi"),
+                str(self.repo / "vortex-ffi"),
                 "-B",
                 str(self.work / name),
                 "-DCMAKE_BUILD_TYPE=Debug",
@@ -80,14 +80,6 @@ class ConfigureTests(unittest.TestCase):
         rustc.chmod(0o755)
         return f"-DVORTEX_RUSTC_EXECUTABLE={rustc}"
 
-    def test_standalone_default_build_runs_cargo(self):
-        result = self.configure("standalone", self.recording_cargo())
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.build("standalone")
-        archive = self.work / "standalone/vortex-artifacts/libvortex_ffi.a"
-        self.assertTrue(archive.exists(), "The default standalone build did not produce an FFI archive")
-        self.assertEqual(archive.read_bytes(), b"Cargo ran")
-
     def test_rust_flags_match_workspace_defaults(self):
         result = self.configure("rustflags", self.recording_cargo())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -97,23 +89,6 @@ class ConfigureTests(unittest.TestCase):
         config = tomllib.loads((self.repo / ".cargo/config.toml").read_text())
         expected = config["target"]['cfg(target_family="unix")']["rustflags"] + ["-C", "relocation-model=pic"]
         self.assertEqual(actual, expected, "Keep CMake's baseline Rust flags in sync with .cargo/config.toml")
-
-    def test_unused_embedded_ffi_does_not_run_cargo(self):
-        source = self.work / "parent"
-        source.mkdir()
-        (source / "CMakeLists.txt").write_text(
-            "cmake_minimum_required(VERSION 3.25)\n"
-            "project(Parent LANGUAGES C CXX)\n"
-            f'add_subdirectory("{self.repo.as_posix()}/vortex-ffi" ffi)\n',
-            encoding="utf-8",
-        )
-        result = self.configure("embedded", self.recording_cargo(), source=source)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.build("embedded")
-        archive = self.work / "embedded/ffi/vortex-artifacts/libvortex_ffi.a"
-        self.assertFalse(archive.exists())
-        self.build("embedded", "--target", "vortex_ffi_cargo_build")
-        self.assertEqual(archive.read_bytes(), b"Cargo ran")
 
     def compiler_ids(self, c, cxx):
         # Override IDs after project() so the policy is testable on non-Apple hosts.

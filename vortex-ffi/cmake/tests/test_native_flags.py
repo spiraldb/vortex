@@ -3,7 +3,6 @@
 
 """Keep parent warning policy out of Cargo's vendored native dependencies."""
 
-import hashlib
 import json
 import shlex
 import shutil
@@ -12,7 +11,6 @@ import unittest
 from pathlib import Path
 
 import test_cargo_environment
-import test_compiler_commands
 
 ERROR_FLAGS = ["-Werror", "-Werror=unused-variable", "-pedantic-errors"]
 
@@ -96,98 +94,6 @@ class NativeFlagsTests(test_cargo_environment.CargoEnvironmentFixture):
                         check=True,
                     )
                     self.assertEqual(json.loads(result.stdout)["flags"], [*ERROR_FLAGS, *ERROR_FLAGS, "-fPIC"])
-
-
-@unittest.skipUnless(
-    all(shutil.which(tool) for tool in ("cmake", "ninja", "cargo", "rustc", "clang", "clang++")),
-    "CMake, Ninja, Cargo, rustc, and Clang are required",
-)
-class NativeFlagsBuildTests(unittest.TestCase):
-    def test_vendored_warning_and_cargo_freshness(self):
-        # Reuse the tiny real Cargo workspace without rerunning its unrelated tests.
-        fixture = test_compiler_commands.CompilerCommandTests()
-        self.addCleanup(fixture.doCleanups)
-        fixture.setUp()
-        include = fixture.work / "parent include's directory"
-        include.mkdir()
-        (include / "parent.h").write_text("#define HEADER_VALUE 3\n", encoding="utf-8")
-        for extension, macro in (("c", "REVIEW_ARG1"), ("cpp", "REVIEW_CXX_ARG1")):
-            assertion = "_Static_assert" if extension == "c" else "static_assert"
-            (fixture.ffi / f"native.{extension}").write_text(
-                '#include "parent.h"\n'
-                '#ifndef __OPTIMIZE__\n#error "parent optimization was lost"\n#endif\n'
-                "enum small { zero, one };\n"
-                f'{assertion}(sizeof(enum small) == 1, "parent ABI flag was lost");\n'
-                f"int native_{extension}(void) {{\n"
-                "    int vendored_unused;\n"
-                f"    return {macro} + PARENT_VALUE + CONFIG_VALUE + HEADER_VALUE;\n}}\n",
-                encoding="utf-8",
-            )
-        build = fixture.work / "native-flags"
-        configure = ["cmake", "-G", "Ninja", "-S", fixture.source, "-B", build, "-DCMAKE_BUILD_TYPE=Debug"]
-        globals_by_language = {}
-        for compiler, language, macro, extension in zip(
-            fixture.compilers, ("C", "CXX"), ("REVIEW_ARG1", "REVIEW_CXX_ARG1"), ("c", "cpp"), strict=True
-        ):
-            configure += [f"-DCMAKE_{language}_COMPILER={compiler}", f"-DFIXTURE_{language}_ARG1=-D{macro}=7"]
-            globals_by_language[language] = ["-Wunused-variable", "-fshort-enums", f"-I{include}"]
-            # Establish the root cause independently: the parent policy rejects this
-            # otherwise compilable third-party warning in both native languages.
-            result = subprocess.run(
-                [
-                    compiler,
-                    *globals_by_language[language],
-                    "-O1",
-                    "-DCONFIG_VALUE=1",
-                    "-DPARENT_VALUE=7",
-                    f"-D{macro}=7",
-                    "-Werror",
-                    "-c",
-                    str(fixture.ffi / f"native.{extension}"),
-                    "-o",
-                    str(fixture.work / f"control-{extension}.o"),
-                ],
-                env=fixture.env,
-                capture_output=True,
-                text=True,
-                timeout=30,
-                check=False,
-            )
-            self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn("error: unused variable 'vendored_unused'", result.stderr)
-
-        def reconfigure(value, policy):
-            options = []
-            for language, flags in globals_by_language.items():
-                options += [
-                    f"-DCMAKE_{language}_FLAGS={shlex.join([*flags, f'-DPARENT_VALUE={value}', *policy])}",
-                    f"-DCMAKE_{language}_FLAGS_DEBUG={shlex.join(['-O1', '-DCONFIG_VALUE=1', *policy])}",
-                ]
-            fixture.run_command([*configure, *options], fixture.env)
-
-        cargo_build = ["cmake", "--build", build, "--target", "vortex_ffi_cargo_build"]
-        reconfigure(7, ERROR_FLAGS)
-        fixture.run_command(cargo_build, fixture.env)
-        archives = sorted((build / "ffi/cargo-target" / fixture.target).glob("debug/build/*/out/libnative_*.a"))
-        self.assertEqual(len(archives), 2)
-        output = (archives[0].parent.parent / "output").read_text(encoding="utf-8")
-        self.assertEqual(output.count("warning: unused variable 'vendored_unused'"), 2)
-        timestamps = [archive.stat().st_mtime_ns for archive in archives]
-        digests = [hashlib.sha256(archive.read_bytes()).hexdigest() for archive in archives]
-        fixture.run_command(cargo_build, fixture.env)
-        self.assertEqual([archive.stat().st_mtime_ns for archive in archives], timestamps)
-        reconfigure(7, [])
-        fixture.run_command(cargo_build, fixture.env)
-        self.assertEqual(
-            [archive.stat().st_mtime_ns for archive in archives],
-            timestamps,
-            "Changing only the parent's warning-as-error policy must leave Cargo fresh",
-        )
-        reconfigure(8, [])
-        fixture.run_command(cargo_build, fixture.env)
-        for archive, timestamp, digest in zip(archives, timestamps, digests, strict=True):
-            self.assertNotEqual(archive.stat().st_mtime_ns, timestamp)
-            self.assertNotEqual(hashlib.sha256(archive.read_bytes()).hexdigest(), digest)
 
 
 if __name__ == "__main__":
