@@ -9,5 +9,10 @@ foreach(_name reader writer dtype scan scan_to_arrow)
     set_target_properties(cpp_${_name} PROPERTIES
         OUTPUT_NAME ${_name}
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    # Drop inherited per-config overrides so the local output directory takes effect.
+    foreach(_config IN ITEMS "${CMAKE_BUILD_TYPE}" ${CMAKE_CONFIGURATION_TYPES})
+        string(TOUPPER "${_config}" _config_upper)
+        set_property(TARGET cpp_${_name} PROPERTY RUNTIME_OUTPUT_DIRECTORY_${_config_upper})
+    endforeach()
     target_link_libraries(cpp_${_name} PRIVATE Vortex::cpp_static nanoarrow_shared)
 endforeach()

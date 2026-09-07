@@ -9,6 +9,11 @@ foreach(_name scan scan_to_arrow dtype write_sample)
     set_target_properties(ffi_${_name} PROPERTIES
         OUTPUT_NAME ${_name}
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+    # Drop inherited per-config overrides so the local output directory takes effect.
+    foreach(_config IN ITEMS "${CMAKE_BUILD_TYPE}" ${CMAKE_CONFIGURATION_TYPES})
+        string(TOUPPER "${_config}" _config_upper)
+        set_property(TARGET ffi_${_name} PROPERTY RUNTIME_OUTPUT_DIRECTORY_${_config_upper})
+    endforeach()
     target_compile_features(ffi_${_name} PRIVATE c_std_17)
     target_compile_options(ffi_${_name} PRIVATE -Wall -Wextra -Wpedantic)
     if(VORTEX_WARNINGS_AS_ERRORS)
