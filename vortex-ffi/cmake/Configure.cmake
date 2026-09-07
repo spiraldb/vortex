@@ -225,6 +225,11 @@ function(_vortex_native_flags
     separate_arguments(_cflags UNIX_COMMAND "${_cmake_c_flags}")
     separate_arguments(_cxxflags UNIX_COMMAND "${_cmake_cxx_flags}")
 
+    # Cargo's vendored dependencies do not share the parent's warning policy.
+    # Preserve other flags: even non-linker options can be toolchain requirements.
+    list(FILTER _cflags EXCLUDE REGEX "^(-Werror(=.*)?|-pedantic-errors)$")
+    list(FILTER _cxxflags EXCLUDE REGEX "^(-Werror(=.*)?|-pedantic-errors)$")
+
     if(apple_deployment_target)
         # Match Cargo-built native code to CMake's minimum macOS version.
         list(APPEND _cflags "-mmacosx-version-min=${apple_deployment_target}")

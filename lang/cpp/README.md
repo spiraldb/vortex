@@ -77,8 +77,8 @@ not supported.
   explicitly if its cached toolchain is stable.
 - Cargo uses the lockfile, with optional features such as `mimalloc` disabled. CMake supplies the
   complete Rust flags, overriding flags from the environment and Cargo configuration.
-- Cargo-built native dependencies use CMake's compilers, archiver, and C/C++ flags. Host build
-  dependencies keep those flags except sanitizer instrumentation.
+- Cargo-built native dependencies use CMake's compilers, archiver, and C/C++ flags, except
+  warning-as-error flags. Host build dependencies also omit sanitizer instrumentation.
 - Cargo checks for changes whenever a target depending on Vortex is built. Its cache lives under
   the FFI binary directory: `ffi/cargo-target` in root and C++ builds. The CMake `clean` target
   removes this cache too.
