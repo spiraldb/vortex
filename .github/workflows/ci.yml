@@ -590,6 +590,8 @@ jobs:
         run: |
           rustup toolchain install $NIGHTLY_TOOLCHAIN
           rustup component add --toolchain $NIGHTLY_TOOLCHAIN rust-src rustfmt clippy llvm-tools-preview
+      - name: Test CMake integration
+        run: python3 -m unittest discover -s vortex-ffi/cmake/tests
       - name: Build C++ tests and examples (asan)
         env:
           RUSTUP_TOOLCHAIN: ${{ env.NIGHTLY_TOOLCHAIN }}

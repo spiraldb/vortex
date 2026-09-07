@@ -185,6 +185,14 @@ function(_vortex_resolve_sanitizer
         set(_native_flag "-fsanitize=${_native_joined}")
     endif()
     if(_rust)
+        # Rust's instrumentation expects upstream compiler-rt, not Apple's runtime.
+        if(NOT CMAKE_C_COMPILER_ID STREQUAL "Clang" OR
+            NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+            message(FATAL_ERROR
+                "Rust sanitizer builds require upstream LLVM Clang for C and C++; "
+                "set CMAKE_C_COMPILER and CMAKE_CXX_COMPILER to its clang and clang++. "
+                "AppleClang is supported only for ubsan")
+        endif()
         list(JOIN _rust "," _rust_joined)
         list(APPEND _rustflags
             -A warnings

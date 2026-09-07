@@ -99,6 +99,12 @@ ctest --test-dir build/cpp-dev --output-on-failure
 C++ examples (`reader`, `writer`, `dtype`, `scan`, `scan_to_arrow`) are in
 `build/cpp-dev/examples/`; C examples are in `build/cpp-dev/ffi/examples/`.
 
+To run build-system regression tests without compiling the Rust archive:
+
+```sh
+python3 -m unittest discover -s vortex-ffi/cmake/tests
+```
+
 ### Sanitizers
 
 `VORTEX_SANITIZER` accepts a comma-separated list of `asan`, `lsan`, `ubsan`, and `tsan`.
@@ -116,9 +122,9 @@ cmake --build build/cpp-asan --parallel
 ctest --test-dir build/cpp-asan --output-on-failure
 ```
 
-For ASan on macOS, select upstream LLVM Clang: AppleClang's runtime cannot link Rust's ASan
-instrumentation. AppleClang also lacks LSan on arm64. To instrument Rust's standard library,
-install `rust-src` for the selected nightly and add `-DVORTEX_SANITIZE_RUST_STD=ON`.
+Rust sanitizer builds require upstream LLVM Clang; CMake accepts AppleClang only for `ubsan`.
+AppleClang's runtime cannot link Rust's ASan instrumentation. To instrument Rust's standard
+library, install `rust-src` for the selected nightly and add `-DVORTEX_SANITIZE_RUST_STD=ON`.
 CUDA device code, the CUB helper, and nvCOMP are not sanitizer-instrumented.
 
 ### Coverage
