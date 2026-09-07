@@ -19,6 +19,7 @@ use crate::node::ChildPoll;
 use crate::node::ExecCx;
 use crate::node::ExecNode;
 use crate::node::ExecPoll;
+use crate::node::Materialized;
 use crate::node::NodeId;
 use crate::node::PlanCx;
 use crate::node::PlanItem;
@@ -81,6 +82,8 @@ pub struct ChunkedExec {
     plan_started: bool,
     exec_cursor: usize,
     parts: Vec<ArrayRef>,
+    /// One mask per cut, in cut order: the rows of that cut the child materialized.
+    materialized: Vec<Mask>,
     missing_chunk: Option<usize>,
     done: bool,
 }
@@ -106,6 +109,7 @@ impl ChunkedExec {
             plan_started: false,
             exec_cursor: 0,
             parts: Vec::new(),
+            materialized: Vec::new(),
             missing_chunk: None,
             done: false,
         }
@@ -156,6 +160,7 @@ impl ExecNode for ChunkedExec {
         self.plan_started = false;
         self.exec_cursor = 0;
         self.parts.clear();
+        self.materialized.clear();
         self.missing_chunk = None;
         self.done = false;
         self.cut();
@@ -173,19 +178,19 @@ impl ExecNode for ChunkedExec {
                 return Ok(PlanPoll::Item(PlanItem::Plan));
             }
             let cut = self.cuts[self.plan_cursor].clone();
-            let child_demand = slice_mask(cx.demand(), cut.mask_range.clone());
-            if child_demand.all_false() {
+            let child_hint = slice_mask(cx.hint(), cut.mask_range.clone());
+            if child_hint.all_false() {
                 self.plan_cursor += 1;
                 self.plan_started = false;
                 continue;
             }
             let fresh = !self.plan_started;
             self.plan_started = true;
-            if cx.plan_child_with_demand(
+            if cx.plan_child_with_hint(
                 self.children[cut.child],
                 cut.chunk_range,
                 fresh,
-                child_demand,
+                child_hint,
             )? {
                 self.plan_cursor += 1;
                 self.plan_started = false;
@@ -201,32 +206,40 @@ impl ExecNode for ChunkedExec {
             return Ok(ExecPoll::Done);
         }
 
+        let rows = usize::try_from(self.range.end - self.range.start)
+            .vortex_expect("chunked range fits usize");
         if self.cuts.is_empty() {
             self.done = true;
             return Ok(ExecPoll::Value(ValueBatch {
                 coverage: self.range.clone(),
+                materialized: Mask::new_false(rows),
                 value: Value::Array(Canonical::empty(&self.dtype).into_array()),
             }));
         }
 
-        let demand = cx.demand().clone();
+        let hint = cx.hint().clone();
         if self.parts.capacity() < self.cuts.len() {
             self.parts
                 .reserve(self.cuts.len().saturating_sub(self.parts.len()));
         }
         while self.exec_cursor < self.cuts.len() {
             let cut = self.cuts[self.exec_cursor].clone();
-            let child_demand = slice_mask(&demand, cut.mask_range);
-            if child_demand.all_false() {
+            let child_hint = slice_mask(&hint, cut.mask_range.clone());
+            if child_hint.all_false() {
+                // A chunk nobody expects to need is neither planned nor materialized; the batch
+                // says so, and a consumer that does need it would be a planning bug.
+                self.materialized
+                    .push(Mask::new_false(cut.mask_range.len()));
                 self.exec_cursor += 1;
                 continue;
             }
             let child = self.children[cut.child];
-            match cx.child_array(child, child_demand)? {
-                ChildPoll::Value(array) => {
+            match cx.child_array(child, child_hint)? {
+                ChildPoll::Value(Materialized { array, rows }) => {
                     if !array.is_empty() {
                         self.parts.push(array);
                     }
+                    self.materialized.push(rows);
                     self.exec_cursor += 1;
                 }
                 ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
@@ -245,10 +258,13 @@ impl ExecNode for ChunkedExec {
                 ChunkedArray::try_new(parts, dtype)?.into_array()
             }
         };
+        let materialized = Mask::concat(std::mem::take(&mut self.materialized).iter())?;
+        debug_assert_eq!(materialized.len(), rows);
         self.done = true;
 
         Ok(ExecPoll::Value(ValueBatch {
             coverage: self.range.clone(),
+            materialized,
             value: Value::Array(array),
         }))
     }

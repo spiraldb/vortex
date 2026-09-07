@@ -15,6 +15,7 @@ use crate::node::ChildPoll;
 use crate::node::ExecCx;
 use crate::node::ExecNode;
 use crate::node::ExecPoll;
+use crate::node::Materialized;
 use crate::node::NodeId;
 use crate::node::PlanCx;
 use crate::node::PlanItem;
@@ -53,7 +54,7 @@ pub struct DictExec {
     plan_cursor: usize,
     plan_started: bool,
     values_array: Option<ArrayRef>,
-    codes_array: Option<ArrayRef>,
+    codes_array: Option<Materialized>,
     values_active: bool,
     done: bool,
 }
@@ -116,12 +117,12 @@ impl ExecNode for DictExec {
             }
             let fresh = !self.plan_started;
             self.plan_started = true;
-            let demand = if self.plan_cursor == 0 {
+            let hint = if self.plan_cursor == 0 {
                 Mask::new_true(self.values_len)
             } else {
-                cx.demand().clone()
+                cx.hint().clone()
             };
-            if cx.plan_child_with_demand(self.child(), self.child_range(), fresh, demand)? {
+            if cx.plan_child_with_hint(self.child(), self.child_range(), fresh, hint)? {
                 if self.plan_cursor == 0 {
                     self.values_active = true;
                 }
@@ -144,15 +145,24 @@ impl ExecNode for DictExec {
         } else if self.values_array.is_none() {
             match cx.child_array(self.values, Mask::new_true(self.values_len))? {
                 ChildPoll::Value(values) => {
-                    self.values_array = Some(cx.publish_dictionary(self.node, values));
+                    // The values are hinted whole and must arrive whole: every code indexes
+                    // them, so a partial dictionary is a planning bug, not a selection.
+                    if !values.rows.all_true() {
+                        return Err(vortex_err!(
+                            "dictionary values child materialized {} of {} rows",
+                            values.rows.true_count(),
+                            values.rows.len()
+                        ));
+                    }
+                    self.values_array = Some(cx.publish_dictionary(self.node, values.array));
                 }
                 ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
                 ChildPoll::Done => return Err(vortex_err!("dictionary values produced no value")),
             }
         }
         if self.codes_array.is_none() {
-            let demand = cx.demand().clone();
-            match cx.child_array(self.codes, demand)? {
+            let hint = cx.hint().clone();
+            match cx.child_array(self.codes, hint)? {
                 ChildPoll::Value(codes) => self.codes_array = Some(codes),
                 ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
                 ChildPoll::Done => return Err(vortex_err!("dictionary codes produced no value")),
@@ -163,7 +173,7 @@ impl ExecNode for DictExec {
             .values_array
             .take()
             .ok_or_else(|| vortex_err!("dictionary values were not initialized"))?;
-        let codes = self
+        let Materialized { array: codes, rows } = self
             .codes_array
             .take()
             .ok_or_else(|| vortex_err!("dictionary codes were not initialized"))?;
@@ -171,6 +181,7 @@ impl ExecNode for DictExec {
         self.done = true;
         Ok(ExecPoll::Value(ValueBatch {
             coverage: self.range.clone(),
+            materialized: rows,
             value: Value::Array(array),
         }))
     }

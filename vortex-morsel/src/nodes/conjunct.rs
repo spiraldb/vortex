@@ -113,17 +113,19 @@ impl ConjunctExec {
     ) -> VortexResult<ChildPoll<Mask>> {
         let slot = &self.slots[idx];
 
-        // The regime switch: over a sparse mask, filter first and correct by rank; over a dense
-        // one, evaluate the whole range and intersect. Same choice the V1 flat reader makes.
+        // The regime switch: over a sparse selection, reduce the input to the selected rows and
+        // evaluate only those; over a dense one, evaluate the whole range and intersect. Same
+        // choice the V1 flat reader makes. Either way the input's hint is advice; this node holds
+        // the selection and applies it itself.
         let sparse = incoming.density() < EXPR_EVAL_THRESHOLD;
-        let child_demand = if sparse {
+        let child_hint = if sparse {
             incoming.clone()
         } else {
             Mask::new_true(incoming.len())
         };
 
-        let array = match cx.child_array(slot.input, child_demand)? {
-            ChildPoll::Value(array) => array,
+        let input = match cx.child_array(slot.input, child_hint)? {
+            ChildPoll::Value(input) => input,
             ChildPoll::Blocked(waits) => return Ok(ChildPoll::Blocked(waits)),
             ChildPoll::Done => {
                 return Err(vortex_err!(
@@ -132,14 +134,20 @@ impl ConjunctExec {
                 ));
             }
         };
-        let array = array.apply_bound(&slot.predicate)?;
+        let domain = if sparse {
+            incoming.clone()
+        } else {
+            input.rows.clone()
+        };
+        let array = input.select(&domain)?.apply_bound(&slot.predicate)?;
         let mut ctx = cx.session().create_execution_ctx();
         let predicate_mask = array.null_as_false().execute(&mut ctx)?;
 
-        Ok(ChildPoll::Value(if sparse {
-            incoming.intersect_by_rank(&predicate_mask)
-        } else {
+        // Express the verdict over the whole coverage again, then keep only incoming rows.
+        Ok(ChildPoll::Value(if domain.all_true() {
             incoming.bitand(&predicate_mask)
+        } else {
+            domain.intersect_by_rank(&predicate_mask)
         }))
     }
 }
@@ -185,7 +193,7 @@ impl ExecNode for ConjunctExec {
             return Ok(ExecPoll::Done);
         }
         if self.incoming.is_none() {
-            let incoming = cx.demand().clone();
+            let incoming = cx.hint().clone();
             self.mask = Some(incoming.clone());
             self.incoming = Some(incoming);
         }
@@ -232,10 +240,10 @@ impl ExecNode for ConjunctExec {
         self.incoming = None;
         self.done = true;
 
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.range.clone(),
-            value: Value::Mask(mask),
-        }))
+        Ok(ExecPoll::Value(ValueBatch::dense(
+            self.range.clone(),
+            Value::Mask(mask),
+        )))
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {

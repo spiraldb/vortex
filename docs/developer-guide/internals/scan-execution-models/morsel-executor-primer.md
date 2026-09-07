@@ -149,9 +149,11 @@ pub trait ExecNode: Send {
 - `reset` prepares the node for a new morsel in its own local coordinates.
 - `next_plan` *names* reads by registering `IoUse`s and receiving tickets. It never reads. It is
   budget-bounded (`PLAN_BUDGET = 64` uses per quantum) and resumable from its own cursor.
-- `execute` produces values under the demand mask in the context. It may try one inline probe
-  through `ExecCx::ready`; otherwise a missing dependency must return `ExecPoll::Blocked` with
-  the exact ticket. It must never block, poll a future, or transfer device memory.
+- `execute` produces a value under the row hint in the context. The hint is advice about which
+  rows the parent expects to need; a node may materialize only those rows or every row of its
+  range, and says which in `ValueBatch::materialized`. It may try one inline probe through
+  `ExecCx::ready`; otherwise a missing dependency must return `ExecPoll::Blocked` with the
+  exact ticket. It must never block, poll a future, or transfer device memory.
 - `retire` releases leases for the finished morsel.
 
 The arena drives a node by taking it out of its slot, handing the rest of the arena to the
@@ -167,11 +169,36 @@ The three contexts are the only way a node touches the world.
 
 | Context | What it offers |
 | --- | --- |
-| `PlanCx` | `demand()`, `budget()`, `register(IoBatch) -> VortexResult<Vec<IoTicket>>`, `decoded_available(key)`, `plan_child(..)` |
-| `ExecCx` | `demand()`, `session()`, `ready(ticket) -> VortexResult<Option<BufferHandle>>`, `shared_decoded(key)`, `publish_decoded(key, array)`, `child_value/array/mask(..)` |
+| `PlanCx` | `hint()`, `budget()`, `register(IoBatch) -> VortexResult<Vec<IoTicket>>`, `decoded_available(key)`, `plan_child(..)` |
+| `ExecCx` | `hint()`, `session()`, `ready(ticket) -> VortexResult<Option<BufferHandle>>`, `shared_decoded(key)`, `publish_decoded(key, array)`, `child_value/array/mask(..)` |
 | `RetireCx` | `retire_child(id)`, `release_use(key)` |
 
-**Rule:** a node sees its own demand mask, its own tickets, and its own children. Nothing else.
+**Rule:** a node sees its own row hint, its own tickets, and its own children. Nothing else.
+
+### `ValueBatch`, `Materialized` (`vortex-morsel/src/node.rs`)
+
+What flows back up. A `ValueBatch` is a value plus the root-coordinate `coverage` it accounts
+for and a `materialized` mask over that coverage saying which rows an array value actually
+holds. `ExecCx::child_array` returns a `Materialized { array, rows }`, and
+`Materialized::select(&selection)` is the one operation that turns a selection into dropped
+rows: it compresses the selection by the rows the child holds, then filters struct fields and
+chunks one at a time by their own slice of the mask. That last part matters: the generic
+filter kernel turns a sparse mask over a chunked array into per-index takes, which cost Q15
+about 15 percent single-threaded until the root selected per chunk the way the leaves used to.
+
+Two things carry a selection through the tree, and they are deliberately different:
+
+- The **hint** flows down as advice. The filter node hints the projection with the mask it
+  computed, so chunks with no hinted rows are neither planned nor decoded, and a sparse
+  conjunct hints its input with the incoming rows so only those are evaluated.
+- The **conjunct's mask** flows up as a value. It is the boolean array the predicate produced,
+  expressed over the morsel's whole coverage, and it is the only thing anyone applies. Leaves
+  never filter; chunked concatenates what its cuts held; struct aligns its fields to the rows
+  they all hold; the filter root selects exactly the mask from whatever the projection
+  materialized.
+
+**Rule:** a hint may shrink what a node materializes, never what it reports. A node that
+ignores its hint is correct; a node that assumes its child obeyed one is a bug.
 
 ### `IoUse`, `IoBatch`, `IoTicket`, `IoKey` (`vortex-morsel/src/io.rs`)
 

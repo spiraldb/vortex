@@ -202,3 +202,41 @@ morsel lookahead: 16 morsels (TPCH_LOOKAHEAD)
 | D  morsel (x14, 131072r) | 0.912ms [0.896ms,0.931ms] | 0.11x | 0.204ms | 46 | 5.80 [4,6] | 4.50 [4,5] | 2.00 [2,2] | 0.17 (8/46, max 1) | 207 | 44919780 | 44919780 | 152/0/0 | 55 | 2.127ms | 214 | 62 |
 
 Every configuration reproduced V1's dtype, row count and ordered content exactly.
+
+## Hint model in the pull crate: before and after
+
+The pull crate stopped filtering at its leaves on 2026-09-07: the row mask a node executes
+under became a hint, every batch reports the rows it holds in `ValueBatch::materialized`, and
+the filter root applies the conjuncts' mask once. Both evaluators were run against a binary
+built from the commit before the change and one built from the change, interleaved
+before/after in two rounds on the same 14-core host (load average 4 to 6 during the runs),
+five iterations per configuration. Each cell below is the ratio of the smaller of the two
+rounds' minimums, so it favours neither binary; the V1 and push rows come from the same
+binaries and did not change, so they bound the noise.
+
+| Rows | Geomean after/before | Same-binary noise (before round 2 / round 1) |
+| --- | --: | --: |
+| Pull crate, all 107 configurations | 1.06 | 0.98 |
+| Pull crate, single-thread configurations | 1.02 | |
+| Pull crate, 14-thread configurations | 1.09 | |
+| V1 control, 46 configurations | 1.00 | 0.97 |
+| Push control, 45 configurations | 1.03 | 0.99 |
+
+Every TPC-H configuration is within 5 percent. The 14-thread gap sits in the sub-millisecond
+`morsel-eval` rows, where the same binary swings by 30 percent between runs (`NA3 scan-all`,
+which the change cannot touch, moved 0.19 ms to 0.29 ms on its own); the one row that held
+up across three further alternations is `WN5 selective-wide` at 65536-row morsels, about
+1.10x, and it is not explained yet.
+
+One real regression was found and fixed on the way. The first version applied the selection
+to the projection's struct in one call, and the chunked filter kernel turns a sparse mask
+into per-index takes. Q15 single-threaded went from 4.3 ms to 4.9 ms. `Materialized::select`
+now walks struct fields and chunks and filters each chunk by its own slice of the mask, the
+way the leaves used to, and Q15 returned to 4.4 ms across three alternations.
+
+```bash
+TPCH_ITERATIONS=5 target/release/tpch-eval 1     # built with --features _test-harness
+target/release/morsel-eval
+TPCH_QUERY=Q15 TPCH_ITERATIONS=15 target/release/tpch-eval 1
+MORSEL_EVAL_QUERY="WN5 selective-wide" MORSEL_EVAL_ITERATIONS=15 target/release/morsel-eval
+```

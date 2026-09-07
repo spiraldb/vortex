@@ -28,6 +28,8 @@ use parking_lot::Mutex;
 use rstest::rstest;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::fns::all_non_distinct::all_non_distinct;
 use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -64,6 +66,7 @@ use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
 use vortex_layout::session::LayoutSession;
+use vortex_mask::Mask;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
@@ -84,6 +87,7 @@ use crate::fixtures::write_fixture_with;
 use crate::harness::MorselConfig;
 use crate::harness::Query;
 use crate::harness::assert_same_rows;
+use crate::harness::concat;
 use crate::harness::run_morsel;
 use crate::harness::run_v1;
 use crate::layouts::FlatPlanner;
@@ -1552,5 +1556,77 @@ fn natural_morsels_match_the_plan_for_dictionary_layouts() -> VortexResult<()> {
     let cut = crate::natural_morsels_for(&fixture.layout, &projection, None, 0)?;
     assert_eq!(cut, morsels(&plan, 0));
     assert!(cut.len() > 1, "each dictionary chunk is its own morsel");
+    Ok(())
+}
+
+/// The row hint never drops a row on its own: leaves hand up what they hold, and the root
+/// applies the actual selection, which is the caller's sparse demand intersected with the
+/// predicate the conjuncts computed.
+#[rstest]
+fn leaves_never_apply_the_selection(#[values(false, true)] filtered: bool) -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let projection = select(vec!["a", "b", "c"], root());
+    let predicate = gt(get_item("a", root()), lit(400i32));
+    let filter = filtered.then(|| predicate.clone());
+    let plan = Arc::new(build_plan(
+        &fixture.layout,
+        &projection,
+        filter.as_ref(),
+        ConjunctMode::Cascade,
+    )?);
+
+    // Every 37th row of each morsel: a sparse selection supplied by the caller.
+    let cut = morsels(&plan, 0);
+    let demands = cut
+        .iter()
+        .map(|range| {
+            let len = usize::try_from(range.end - range.start)?;
+            Ok((
+                range.clone(),
+                Mask::from_indices(len, (0..len).step_by(37).collect::<Vec<_>>()),
+            ))
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let sparse = Mask::concat(demands.iter().map(|(_, demand)| demand))?;
+
+    let scan = MorselScan::new(Arc::clone(&plan), session.clone())
+        .with_threads(2)
+        .with_morsel_demands(demands)?
+        .connect_on_thread(&SegmentSourceDriver::new(Arc::clone(&fixture.segments)))?;
+    let (batches, stats) = scan.run()?;
+    let dtype = plan.output_dtype().clone();
+    let actual = concat(&batches, &dtype)?;
+
+    // Expected: the unfiltered V1 result, cut by the sparse selection and the predicate.
+    let full_query = Query {
+        name: "sparse-reference",
+        projection,
+        filter: None,
+    };
+    let full = run_v1(&session, &fixture.layout, &fixture.segments, &full_query)?;
+    let full = concat(&full.batches, &dtype)?;
+    let mut selection = sparse;
+    if filtered {
+        let mut ctx = session.create_execution_ctx();
+        let verdict: Mask = full
+            .clone()
+            .apply_bound(&predicate.bind(&dtype)?)?
+            .null_as_false()
+            .execute(&mut ctx)?;
+        selection = &selection & &verdict;
+    }
+    let expected = full.filter(selection)?;
+    let mut ctx = session.create_execution_ctx();
+    assert_eq!(actual.len(), expected.len());
+    assert!(all_non_distinct(&actual, &expected, &mut ctx)?);
+
+    assert_eq!(stats.rows_selected, expected.len() as u64);
+    assert!(
+        stats.rows_materialized > stats.rows_selected,
+        "leaves materialized {} rows for {} selected",
+        stats.rows_materialized,
+        stats.rows_selected
+    );
     Ok(())
 }

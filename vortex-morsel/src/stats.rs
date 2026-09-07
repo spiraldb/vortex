@@ -111,6 +111,10 @@ pub struct ScanStats {
     pub decodes: u64,
     /// Decodes served from a shared cell published by another morsel.
     pub decode_reuses: u64,
+    /// Rows leaves handed up, before any selection was applied.
+    pub rows_materialized: u64,
+    /// Rows that survived the actual selection at the root.
+    pub rows_selected: u64,
     /// Conjuncts skipped because the mask was already all-false.
     pub conjuncts_short_circuited: u64,
     /// Morsels whose filter selected no rows.
@@ -173,6 +177,8 @@ impl ScanStats {
         self.io_wait_time += other.io_wait_time;
         self.decodes += other.decodes;
         self.decode_reuses += other.decode_reuses;
+        self.rows_materialized += other.rows_materialized;
+        self.rows_selected += other.rows_selected;
         self.conjuncts_short_circuited += other.conjuncts_short_circuited;
         self.morsels_empty += other.morsels_empty;
         self.execute_io_blocks += other.execute_io_blocks;

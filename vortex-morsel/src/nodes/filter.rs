@@ -49,7 +49,11 @@ impl NodeBlueprint for FilterSpec {
     }
 }
 
-/// The root of a morsel: refine the demand with the filter, then project under it.
+/// The root of a morsel: run the conjuncts to get the actual selection, hint the projection
+/// with it, then apply it to whatever the projection materialized.
+///
+/// This is the only node that turns a selection into dropped rows. Leaves below it never filter;
+/// they report what they hold and this node reconciles that with the mask it computed.
 pub struct FilterExec {
     predicate: Option<NodeId>,
     projection: NodeId,
@@ -133,16 +137,18 @@ impl ExecNode for FilterExec {
             return Ok(ExecPoll::Done);
         }
         if self.mask.is_none() {
-            let demand = cx.demand().clone();
+            // The morsel's own selection is the caller's, and therefore actual; the conjuncts
+            // only narrow it.
+            let selection = cx.hint().clone();
             let mask = match self.predicate {
-                Some(predicate) => match cx.child_mask(predicate, demand)? {
+                Some(predicate) => match cx.child_mask(predicate, selection)? {
                     ChildPoll::Value(mask) => mask,
                     ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
                     ChildPoll::Done => {
                         return Err(vortex_err!("filter predicate produced no value"));
                     }
                 },
-                None => demand,
+                None => selection,
             };
 
             if mask.all_false() {
@@ -150,30 +156,34 @@ impl ExecNode for FilterExec {
                 cx.stats().morsels_empty += 1;
                 return Ok(ExecPoll::Value(ValueBatch {
                     coverage: self.range.clone(),
+                    materialized: mask,
                     value: Value::Array(Canonical::empty(&self.output_dtype).into_array()),
                 }));
             }
             self.mask = Some(mask);
         }
 
-        // The projection subtree executes only for surviving rows. A sealed-empty chunk avoids
-        // cloning and decoding its projection tickets, although planning may have prefetched them.
+        // The selection is the projection's hint: chunks it leaves untouched are never planned
+        // or decoded. Whatever the projection did materialize is then cut to the selection here.
         let mask = self
             .mask
             .as_ref()
             .vortex_expect("non-empty predicate mask is retained")
             .clone();
-        let array = match cx.child_array(self.projection, mask)? {
-            ChildPoll::Value(array) => array,
+        let projected = match cx.child_array(self.projection, mask.clone())? {
+            ChildPoll::Value(projected) => projected,
             ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
             ChildPoll::Done => return Err(vortex_err!("filter projection produced no value")),
         };
+        let array = projected.select(&mask)?;
+        cx.stats().rows_selected += array.len() as u64;
         let array = array.apply_bound(&self.projection_expr)?;
         self.mask = None;
         self.done = true;
 
         Ok(ExecPoll::Value(ValueBatch {
             coverage: self.range.clone(),
+            materialized: mask,
             value: Value::Array(array),
         }))
     }

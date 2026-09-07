@@ -66,8 +66,10 @@ impl NodeBlueprint for FlatSpec {
 /// `next_plan` names the segment exactly once per morsel. If the shared cell for the segment
 /// already holds a decoded value, planning skips issuing the read — the morsel's own lease keeps
 /// that value alive until it retires. Otherwise `execute` clones the scheduler-resolved ticket,
-/// decodes, publishes into the cell, then slices to the morsel's local range and applies demand.
-/// Retire releases the lease whether the value was used or not; the last release drops the cell.
+/// decodes, publishes into the cell, and slices to the morsel's local range. It never filters:
+/// the row hint it ran under only shaped what was read, and the actual selection is applied by
+/// the filter node that holds it. Retire releases the lease whether the value was used or not;
+/// the last release drops the cell.
 pub struct FlatExec {
     segment: SegmentId,
     dtype: DType,
@@ -211,17 +213,13 @@ impl ExecNode for FlatExec {
         if start > 0 || end < array.len() {
             array = array.slice(start..end)?;
         }
-
-        let demand = cx.demand();
-        if !demand.all_true() {
-            array = array.filter(demand.clone())?;
-        }
+        cx.stats().rows_materialized += array.len() as u64;
         self.done = true;
 
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.root_offset + self.range.start..self.root_offset + self.range.end,
-            value: Value::Array(array),
-        }))
+        Ok(ExecPoll::Value(ValueBatch::dense(
+            self.root_offset + self.range.start..self.root_offset + self.range.end,
+            Value::Array(array),
+        )))
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {

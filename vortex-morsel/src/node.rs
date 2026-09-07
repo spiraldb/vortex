@@ -7,7 +7,16 @@ use std::ops::Range;
 use std::sync::OnceLock;
 
 use vortex_array::ArrayRef;
+use vortex_array::Canonical;
+use vortex_array::IntoArray;
+use vortex_array::arrays::Chunked;
+use vortex_array::arrays::ChunkedArray;
+use vortex_array::arrays::Struct;
+use vortex_array::arrays::StructArray;
+use vortex_array::arrays::chunked::ChunkedArrayExt;
+use vortex_array::arrays::struct_::StructDataParts;
 use vortex_array::buffer::BufferHandle;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_error::vortex_panic;
@@ -43,9 +52,9 @@ impl<'a> ScanCaches<'a> {
 /// A value produced by a node for its parent.
 #[derive(Clone)]
 pub enum Value {
-    /// Dense rows: length equals the true count of the demand mask the node was executed under.
+    /// Dense rows: length equals the true count of the batch's `materialized` mask.
     Array(ArrayRef),
-    /// A refinement of the demand mask the node was executed under; same length as that mask.
+    /// A selection over the batch's whole coverage; same length as the coverage.
     Mask(Mask),
 }
 
@@ -68,11 +77,108 @@ impl Value {
 }
 
 /// A value plus the dense range of *input* rows it accounts for.
+///
+/// The row hint a node executes under is advice, not an instruction: a node may materialize
+/// fewer rows than its coverage because of it, or ignore it. Whatever it did, it says so in
+/// `materialized`, so a consumer can apply the actual selection with `compress_by_mask`.
 pub struct ValueBatch {
     /// The root-coordinate row range this batch accounts for.
     pub coverage: Range<u64>,
+    /// The rows of `coverage` an array value holds, in coverage order. Always all-true for a
+    /// mask value, which is expressed over the whole coverage.
+    pub materialized: Mask,
     /// The value itself.
     pub value: Value,
+}
+
+impl ValueBatch {
+    /// A batch that holds every row of its coverage.
+    pub fn dense(coverage: Range<u64>, value: Value) -> Self {
+        let rows = usize::try_from(coverage.end - coverage.start)
+            .vortex_expect("batch coverage exceeds usize");
+        Self {
+            coverage,
+            materialized: Mask::new_true(rows),
+            value,
+        }
+    }
+}
+
+/// An array value together with the coverage rows it holds.
+pub struct Materialized {
+    /// The rows, dense over `rows`' true positions.
+    pub array: ArrayRef,
+    /// Which rows of the requested range the array holds.
+    pub rows: Mask,
+}
+
+impl Materialized {
+    /// Reduce this array to exactly `selection`, which must be a subset of `rows`.
+    ///
+    /// This is the one place the actual selection meets the hint: the caller knows what it
+    /// wants, the batch knows what it holds, and the difference is a rank-domain filter.
+    pub fn select(self, selection: &Mask) -> VortexResult<ArrayRef> {
+        if selection.all_true() && self.rows.all_true() {
+            return Ok(self.array);
+        }
+        let keep = if self.rows.all_true() {
+            selection.clone()
+        } else {
+            self.rows.compress_by_mask(selection)?
+        };
+        select_rows(self.array, keep)
+    }
+}
+
+/// Keep exactly the rows `keep` selects, one chunk at a time.
+///
+/// The generic filter kernel turns a sparse mask over a chunked array into per-index takes. The
+/// leaves used to filter each chunk by its own slice of the mask, and this keeps that cost
+/// profile now that the selection is applied above them.
+fn select_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef> {
+    if keep.all_true() {
+        return Ok(array);
+    }
+    if keep.all_false() {
+        return Ok(Canonical::empty(array.dtype()).into_array());
+    }
+    if let Some(chunked) = array.as_opt::<Chunked>() {
+        let dtype = array.dtype().clone();
+        let mut parts = Vec::with_capacity(chunked.nchunks());
+        let mut offset = 0usize;
+        for chunk in chunked.iter_chunks() {
+            let end = offset + chunk.len();
+            let part = keep.slice(offset..end);
+            if !part.all_false() {
+                parts.push(select_rows(chunk.clone(), part)?);
+            }
+            offset = end;
+        }
+        return Ok(match parts.len() {
+            0 => Canonical::empty(&dtype).into_array(),
+            1 => parts.pop().vortex_expect("one part"),
+            _ => ChunkedArray::try_new(parts, dtype)?.into_array(),
+        });
+    }
+    if let Some(struct_) = array.as_opt::<Struct>() {
+        let len = keep.true_count();
+        let StructDataParts {
+            fields,
+            struct_fields,
+            validity,
+            ..
+        } = struct_.into_owned().into_data_parts();
+        let validity = validity.filter(&keep)?;
+        let fields = fields
+            .into_iter()
+            .map(|field| select_rows(field, keep.clone()))
+            .collect::<VortexResult<Vec<_>>>()?;
+        return Ok(
+            StructArray::try_new(struct_fields.names().clone(), fields, len, validity)?
+                .into_array(),
+        );
+    }
+    array.filter(keep)
 }
 
 /// What a node's planning stream produced.
@@ -249,8 +355,11 @@ pub struct PlanCx<'a> {
 }
 
 impl<'a> PlanCx<'a> {
-    /// The known row demand for the node currently being planned.
-    pub fn demand(&self) -> &Mask {
+    /// The rows the parent expects to need from the node being planned.
+    ///
+    /// A hint: it bounds which stored units are worth naming, and it is a superset of whatever
+    /// selection the scan finally applies.
+    pub fn hint(&self) -> &Mask {
         &self.demand
     }
 
@@ -305,11 +414,11 @@ impl<'a> PlanCx<'a> {
     /// Returns `true` when the child completed, `false` when the shared budget ran out and the
     /// caller should yield and resume at this child.
     pub fn plan_child(&mut self, id: NodeId, range: Range<u64>, fresh: bool) -> VortexResult<bool> {
-        self.plan_child_with_demand(id, range, fresh, self.demand.clone())
+        self.plan_child_with_hint(id, range, fresh, self.demand.clone())
     }
 
-    /// Drive a child under a transformed row demand.
-    pub(crate) fn plan_child_with_demand(
+    /// Drive a child under a transformed row hint.
+    pub(crate) fn plan_child_with_hint(
         &mut self,
         id: NodeId,
         range: Range<u64>,
@@ -351,11 +460,12 @@ pub struct ExecCx<'a> {
 }
 
 impl<'a> ExecCx<'a> {
-    /// The demand mask this node is executing under.
+    /// The rows the parent expects to need from this node.
     ///
-    /// Its length equals the number of rows in the node's local range; the node must produce
-    /// exactly `demand().true_count()` rows.
-    pub fn demand(&self) -> &Mask {
+    /// A hint, one entry per row of the node's local range. A node may materialize only the
+    /// hinted rows or every row, and reports which in [`ValueBatch::materialized`]; the actual
+    /// selection is applied by whoever holds it, never assumed from the hint.
+    pub fn hint(&self) -> &Mask {
         &self.demand
     }
 
@@ -401,12 +511,12 @@ impl<'a> ExecCx<'a> {
         self.stats
     }
 
-    /// Drive a child to a value under `demand`.
+    /// Drive a child to a value under `hint`.
     ///
     /// The child is polled until it yields a value, blocks on exact tickets, or reports `Done`.
-    pub fn child_value(&mut self, id: NodeId, demand: Mask) -> VortexResult<ChildPoll<ValueBatch>> {
+    pub fn child_value(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<ValueBatch>> {
         let mut node = self.arena.take(id);
-        let saved = std::mem::replace(&mut self.demand, demand);
+        let saved = std::mem::replace(&mut self.demand, hint);
         let result = (|| {
             loop {
                 match node.execute(self)? {
@@ -422,18 +532,21 @@ impl<'a> ExecCx<'a> {
         result
     }
 
-    /// Drive a child to an array value, failing if it produced nothing.
-    pub fn child_array(&mut self, id: NodeId, demand: Mask) -> VortexResult<ChildPoll<ArrayRef>> {
-        match self.child_value(id, demand)? {
-            ChildPoll::Value(batch) => Ok(ChildPoll::Value(batch.value.into_array()?)),
+    /// Drive a child to an array value with the rows it holds, failing if it produced nothing.
+    pub fn child_array(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<Materialized>> {
+        match self.child_value(id, hint)? {
+            ChildPoll::Value(batch) => Ok(ChildPoll::Value(Materialized {
+                array: batch.value.into_array()?,
+                rows: batch.materialized,
+            })),
             ChildPoll::Blocked(waits) => Ok(ChildPoll::Blocked(waits)),
             ChildPoll::Done => Ok(ChildPoll::Done),
         }
     }
 
     /// Drive a child to a mask value.
-    pub fn child_mask(&mut self, id: NodeId, demand: Mask) -> VortexResult<ChildPoll<Mask>> {
-        match self.child_value(id, demand)? {
+    pub fn child_mask(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<Mask>> {
+        match self.child_value(id, hint)? {
             ChildPoll::Value(batch) => Ok(ChildPoll::Value(batch.value.into_mask()?)),
             ChildPoll::Blocked(waits) => Ok(ChildPoll::Blocked(waits)),
             ChildPoll::Done => Ok(ChildPoll::Done),
