@@ -69,17 +69,26 @@ class EntrypointTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def configure(self, name, entrypoint, *options, parent=None):
+    def configure(self, name, entrypoint, *options, parent=None, parent_marker=None, exclude_from_all=False):
         source = self.repo / ENTRYPOINTS[entrypoint]
         build = self.work / name
         vortex_build = build
         if parent:
             parent_source = self.work / f"{name}-parent"
             parent_source.mkdir()
+            marker = f"set(_vortex_top_level {parent_marker})\n" if parent_marker is not None else ""
+            exclude = " EXCLUDE_FROM_ALL" if exclude_from_all else ""
             (parent_source / "CMakeLists.txt").write_text(
                 "cmake_minimum_required(VERSION 3.25)\n"
                 f"project({parent} LANGUAGES C CXX)\n"
-                f'add_subdirectory("{source.as_posix()}" vortex)\n',
+                f"{marker}"
+                'set(parent_build_type "${CMAKE_BUILD_TYPE}")\n'
+                'set(parent_top_level "${_vortex_top_level}")\n'
+                f'add_subdirectory("{source.as_posix()}" vortex{exclude})\n'
+                'if(NOT "${CMAKE_BUILD_TYPE}" STREQUAL "${parent_build_type}"\n'
+                '    OR NOT "${_vortex_top_level}" STREQUAL "${parent_top_level}")\n'
+                '    message(FATAL_ERROR "Vortex changed parent variables")\n'
+                "endif()\n",
                 encoding="utf-8",
             )
             source = parent_source
@@ -132,6 +141,39 @@ class EntrypointTests(unittest.TestCase):
                     _, build = self.configure(f"{parent}-{entrypoint}", entrypoint, parent=parent)
                     self.assert_settings(build, entrypoint, "", "OFF")
 
+    def test_flattened_parent_sources_do_not_confer_ownership(self):
+        flattened = self.work / "flattened"
+        # Real directories reproduce the path heuristic bug; symlinks resolve to the checkout.
+        for directory in ("vortex-ffi/cmake", "vortex-ffi/cinclude", "lang/cpp/src", "lang/cpp/include"):
+            shutil.copytree(
+                self.repo / directory, flattened / directory, ignore=shutil.ignore_patterns("tests", "__pycache__")
+            )
+        for path in (
+            "Cargo.toml",
+            "Cargo.lock",
+            "vortex-ffi/Cargo.toml",
+            "vortex-ffi/CMakeLists.txt",
+            "lang/cpp/CMakeLists.txt",
+        ):
+            shutil.copyfile(self.repo / path, flattened / path)
+        self.repo = flattened
+        for entrypoint in ("ffi", "cpp"):
+            with self.subTest(entrypoint=entrypoint):
+                (flattened / "CMakeLists.txt").write_text(
+                    "cmake_minimum_required(VERSION 3.25)\n"
+                    "project(Parent LANGUAGES C CXX)\n"
+                    f"add_subdirectory({ENTRYPOINTS[entrypoint]} vortex)\n",
+                    encoding="utf-8",
+                )
+                build, _ = self.configure(f"flattened-{entrypoint}", "root")
+                self.assert_settings(build / "vortex", entrypoint, "", "OFF")
+
+    def test_embedded_root_resets_inherited_marker(self):
+        for marker in ("ON", "OFF"):
+            with self.subTest(marker=marker):
+                _, build = self.configure(f"root-{marker}", "root", parent="Parent", parent_marker=marker)
+                self.assert_settings(build, "root", "", "OFF")
+
     def test_explicit_options_override_defaults(self):
         for parent, warnings in ((None, "OFF"), ("Parent", "ON"), ("VortexApp", "ON")):
             for entrypoint in ENTRYPOINTS:
@@ -152,12 +194,19 @@ class EntrypointTests(unittest.TestCase):
 
     def test_unused_embedded_ffi_keeps_cargo_lazy(self):
         for parent in ("Parent", "VortexApp"):
-            with self.subTest(parent=parent):
-                build, ffi = self.configure(parent, "ffi", parent=parent)
-                self.run_command("cmake", "--build", build)
-                self.assertFalse(list(build.rglob("libvortex_ffi.a")))
-                self.run_command("cmake", "--build", build, "--target", "vortex_ffi_cargo_build")
-                self.assertEqual((ffi / "vortex-artifacts/libvortex_ffi.a").read_bytes(), b"Cargo ran")
+            for entrypoint in ("ffi", "root"):
+                with self.subTest(parent=parent, entrypoint=entrypoint):
+                    build, vortex = self.configure(
+                        f"{parent}-{entrypoint}",
+                        entrypoint,
+                        parent=parent,
+                        exclude_from_all=entrypoint == "root",
+                    )
+                    ffi = vortex if entrypoint == "ffi" else vortex / "ffi"
+                    self.run_command("cmake", "--build", build)
+                    self.assertFalse(list(build.rglob("libvortex_ffi.a")))
+                    self.run_command("cmake", "--build", build, "--target", "vortex_ffi_cargo_build")
+                    self.assertEqual((ffi / "vortex-artifacts/libvortex_ffi.a").read_bytes(), b"Cargo ran")
 
 
 if __name__ == "__main__":

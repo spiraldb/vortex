@@ -16,6 +16,9 @@ cmake_minimum_required(VERSION 3.25)
 
 project(VortexNative DESCRIPTION "Vortex native libraries" LANGUAGES NONE)
 
+# Directory-scoped developer defaults; an embedded root resets inherited ownership.
+set(_vortex_top_level "${PROJECT_IS_TOP_LEVEL}")
+
 # A standalone configure writes compile_commands.json for editor tooling.
 if(PROJECT_IS_TOP_LEVEL)
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

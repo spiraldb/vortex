@@ -10,13 +10,10 @@ cmake_minimum_required(VERSION 3.25)
 
 project(VortexCXX DESCRIPTION "Vortex C++ wrapper" LANGUAGES C CXX)
 
-# Only Vortex's source-tree entry points get developer defaults, regardless of
-# the parent's project name. Resolve paths to recognize symlinked checkouts too.
-file(REAL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../.." _vortex_repo_source_dir)
-file(REAL_PATH "${CMAKE_SOURCE_DIR}" _vortex_top_source_dir)
-if(PROJECT_IS_TOP_LEVEL OR _vortex_top_source_dir STREQUAL _vortex_repo_source_dir)
+# Standalone entry points own their defaults; otherwise inherit Vortex's marker.
+if(PROJECT_IS_TOP_LEVEL)
     set(_vortex_top_level ON)
-else()
+elseif(NOT DEFINED _vortex_top_level)
     set(_vortex_top_level OFF)
 endif()
 
