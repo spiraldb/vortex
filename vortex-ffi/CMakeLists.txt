@@ -8,11 +8,15 @@
 # FetchContent requires CMake 3.25.
 cmake_minimum_required(VERSION 3.25)
 
-# project() is safe inside a parent's add_subdirectory(). A Vortex-owned top
-# level, this directory or the repository root, gets developer defaults below;
-# an embedding parent keeps its own.
 project(VortexFFI DESCRIPTION "Vortex C FFI" LANGUAGES C CXX)
-if(CMAKE_PROJECT_NAME MATCHES "^Vortex")
+
+# Only Vortex's source-tree entry points get developer defaults, regardless of
+# the parent's project name. Resolve paths to recognize symlinked checkouts too.
+file(REAL_PATH "${CMAKE_CURRENT_SOURCE_DIR}/.." _vortex_repo_source_dir)
+file(REAL_PATH "${CMAKE_SOURCE_DIR}" _vortex_top_source_dir)
+if(PROJECT_IS_TOP_LEVEL
+    OR _vortex_top_source_dir STREQUAL _vortex_repo_source_dir
+    OR _vortex_top_source_dir STREQUAL "${_vortex_repo_source_dir}/lang/cpp")
     set(_vortex_top_level ON)
 else()
     set(_vortex_top_level OFF)
