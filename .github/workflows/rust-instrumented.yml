@@ -233,7 +233,7 @@ jobs:
     env:
       ASAN_OPTIONS: "symbolize=1:check_initialization_order=1:detect_leaks=1:leak_check_at_exit=1"
       LSAN_OPTIONS: "report_objects=1"
-      UBSAN_OPTIONS: "halt_on_error=1"
+      UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
       ASAN_SYMBOLIZER_PATH: "/usr/bin/llvm-symbolizer"
       MSAN_OPTIONS: "symbolize=1"
       MSAN_SYMBOLIZER_PATH: "/usr/bin/llvm-symbolizer"
