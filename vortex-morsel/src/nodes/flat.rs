@@ -88,6 +88,8 @@ pub struct FlatExec {
     lease_range: Range<u64>,
     estimated_bytes: usize,
     producer: ProducerId,
+    /// The value placeholder rows carry; never observed, but it must have the right dtype.
+    placeholder: Scalar,
 
     // Per-morsel state.
     range: Range<u64>,
@@ -116,6 +118,7 @@ impl FlatExec {
             lease_range,
             estimated_bytes,
             producer,
+            placeholder: Scalar::default_value(layout.dtype()),
             range: 0..0,
             ticket: None,
             planned: false,
@@ -217,7 +220,7 @@ impl ExecNode for FlatExec {
         if cx.hint().all_false() {
             let rows = usize::try_from(self.range.end - self.range.start)
                 .vortex_expect("flat range fits usize");
-            let array = ConstantArray::new(Scalar::default_value(&self.dtype), rows).into_array();
+            let array = ConstantArray::new(self.placeholder.clone(), rows).into_array();
             cx.stats().rows_placeholder += rows as u64;
             self.done = true;
             return Ok(ExecPoll::Value(ValueBatch {

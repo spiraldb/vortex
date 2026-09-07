@@ -205,38 +205,45 @@ Every configuration reproduced V1's dtype, row count and ordered content exactly
 
 ## Hint model in the pull crate: before and after
 
-The pull crate stopped filtering at its leaves on 2026-09-07: the row mask a node executes
-under became a hint, every batch reports the rows it holds in `ValueBatch::materialized`, and
-the filter root applies the conjuncts' mask once. Both evaluators were run against a binary
-built from the commit before the change and one built from the change, interleaved
-before/after in two rounds on the same 14-core host (load average 4 to 6 during the runs),
-five iterations per configuration. Each cell below is the ratio of the smaller of the two
-rounds' minimums, so it favours neither binary; the V1 and push rows come from the same
-binaries and did not change, so they bound the noise.
+The pull crate stopped filtering at its leaves on 2026-09-07. The row mask a node executes
+under is a hint; only the flat leaf reads it, to name no read for a range nobody wants and to
+answer such a range with placeholder rows instead of waiting; every batch is dense over its
+range; and the filter root applies the conjuncts' mask once. Both evaluators were run against a
+binary built from the commit before the change and one built from the change, interleaved
+before/after in two rounds on the same 14-core host, five iterations per configuration. Each
+cell is the ratio of the smaller of the two rounds' minimums, so it favours neither binary. The
+V1 and push rows come from code the change does not touch, so they bound the noise.
 
-| Rows | Geomean after/before | Same-binary noise (before round 2 / round 1) |
-| --- | --: | --: |
-| Pull crate, all 107 configurations | 1.06 | 0.98 |
-| Pull crate, single-thread configurations | 1.02 | |
-| Pull crate, 14-thread configurations | 1.09 | |
-| V1 control, 46 configurations | 1.00 | 0.97 |
-| Push control, 45 configurations | 1.03 | 0.99 |
+| Rows | Geomean after/before |
+| --- | --: |
+| Pull crate, all 107 configurations | 1.03 |
+| Pull crate, single-thread configurations | 1.01 |
+| Pull crate, 14-thread configurations | 1.04 |
+| V1 control, 46 configurations | 1.00 |
+| Push control, 45 configurations | 0.99 |
+| Same binary, round 2 over round 1 | 1.08 |
 
-Every TPC-H configuration is within 5 percent. The 14-thread gap sits in the sub-millisecond
-`morsel-eval` rows, where the same binary swings by 30 percent between runs (`NA3 scan-all`,
-which the change cannot touch, moved 0.19 ms to 0.29 ms on its own); the one row that held
-up across three further alternations is `WN5 selective-wide` at 65536-row morsels, about
-1.10x, and it is not explained yet.
+Every TPC-H configuration is within 5 percent. What remains above the noise is a handful of
+14-thread `morsel-eval` rows on the wide-numeric workload at 65536-row morsels, `WN5
+selective-wide` in particular, at 1.2x to 1.4x across repeated alternations while its
+single-thread rows are flat. Per-morsel traces explain it: on that workload a morsel spends
+about 0.7 ms planning (twenty columns, six to eight chunks each, one registration per read
+through one lock, fourteen workers at once) and about 0.2 ms executing, and the planning total
+for the same binary swings between 9 ms and 15 ms from one run to the next. Execution time per
+morsel is equal or lower after the change. The gap is a pre-existing lock convoy in planning
+that the new binary happens to land in more often, and the fix belongs in registration, not in
+the value path.
 
-One real regression was found and fixed on the way. The first version applied the selection
-to the projection's struct in one call, and the chunked filter kernel turns a sparse mask
-into per-index takes. Q15 single-threaded went from 4.3 ms to 4.9 ms. `Materialized::select`
-now walks struct fields and chunks and filters each chunk by its own slice of the mask, the
-way the leaves used to, and Q15 returned to 4.4 ms across three alternations.
+Two false starts are worth recording. Applying the mask to the projection's struct in one
+call routed sparse masks through the chunked filter kernel's per-index take path and cost Q15
+15 percent single-threaded; filtering each field and chunk by its own slice of the mask
+(`filter_rows`) restored it. And the first version of the hint model let chunked skip unwanted
+chunks and then described the holes in every batch with a mask; the masks, their intersection
+in struct, and the rank-domain compression at the root tripled small allocations and contended
+malloc across workers. Dense batches with leaf placeholders removed all of that.
 
 ```bash
 TPCH_ITERATIONS=5 target/release/tpch-eval 1     # built with --features _test-harness
 target/release/morsel-eval
-TPCH_QUERY=Q15 TPCH_ITERATIONS=15 target/release/tpch-eval 1
-MORSEL_EVAL_QUERY="WN5 selective-wide" MORSEL_EVAL_ITERATIONS=15 target/release/morsel-eval
+MORSEL_EVAL_QUERY="WN5 selective-wide" MORSEL_EVAL_MORSEL_ROWS=65536 MORSEL_EVAL_ITERATIONS=15 target/release/morsel-eval
 ```
