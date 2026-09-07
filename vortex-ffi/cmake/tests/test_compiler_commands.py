@@ -4,7 +4,6 @@
 """Build a tiny Cargo/cc-rs fixture using the production CMake compiler handoff."""
 
 import hashlib
-import os
 import shlex
 import shutil
 import socket
@@ -15,6 +14,7 @@ import unittest
 from pathlib import Path
 
 import test_cargo_environment
+from cc_fixture import cached_cc_version
 
 
 @unittest.skipUnless(
@@ -23,9 +23,7 @@ import test_cargo_environment
 )
 class CompilerCommandTests(unittest.TestCase):
     def setUp(self):
-        cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
-        if not any((cargo_home / "registry/src").glob("*/cc-1.4.0")):
-            self.skipTest("cc 1.4.0 must be cached for the offline fixture")
+        self.cc_version = cached_cc_version()
         temporary = tempfile.TemporaryDirectory(prefix="vortex-compiler-commands-")
         self.addCleanup(temporary.cleanup)
         self.work = Path(temporary.name).resolve()
@@ -54,7 +52,7 @@ class CompilerCommandTests(unittest.TestCase):
         )
         (self.ffi / "Cargo.toml").write_text(
             '[package]\nname = "vortex-ffi"\nversion = "0.0.0"\nedition = "2021"\n'
-            '[lib]\npath = "lib.rs"\n[build-dependencies]\ncc = "=1.4.0"\n',
+            f'[lib]\npath = "lib.rs"\n[build-dependencies]\ncc = "={self.cc_version}"\n',
             encoding="utf-8",
         )
         (self.ffi / "lib.rs").write_text("pub fn value() -> i32 { 7 }\n", encoding="utf-8")

@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 import test_cargo_environment
+from cc_fixture import cached_cc_version
 
 
 @unittest.skipUnless(
@@ -22,8 +23,7 @@ import test_cargo_environment
 class ProbeToolchainTests(unittest.TestCase):
     def setUp(self):
         cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo")).resolve()
-        if not any((cargo_home / "registry/src").glob("*/cc-1.4.0")):
-            self.skipTest("cc 1.4.0 must be cached for the offline fixtures")
+        cached_cc_version()
         self.tests = Path(__file__).resolve().parent
         self.repo = self.tests.parents[2]
         temporary = tempfile.TemporaryDirectory(prefix="vortex-probe-toolchain-")

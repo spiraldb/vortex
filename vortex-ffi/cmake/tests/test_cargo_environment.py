@@ -13,6 +13,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from cc_fixture import cached_cc_version
+
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -161,7 +163,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
         return recording["env"]
 
     def cc_names(self, name):
-        # cc 1.4.0 target_envs(): native HOST == TARGET uses HOST_* for BOTH
+        # cc-rs target_envs(): native HOST == TARGET uses HOST_* for BOTH
         # host build dependencies and target libraries, even with cargo --target.
         return (
             f"{name}_{self.target}",
@@ -217,19 +219,46 @@ class CargoEnvironmentFixture(unittest.TestCase):
                     [flag for flag in expected if not flag.startswith("-fsanitize=")],
                 )
 
-    def prepare_cc_probe(self):
+    def prepare_native_toolchain(self):
         if not all(shutil.which(tool) for tool in ("cargo", "rustc", "clang", "clang++")):
             self.skipTest("Cargo, rustc, and Clang are required for real cc-rs probes")
-        cargo_home = Path(os.environ.get("CARGO_HOME", Path.home() / ".cargo"))
-        if not any((cargo_home / "registry/src").glob("*/cc-1.4.0")):
-            self.skipTest("cc 1.4.0 must be cached for the offline probe test")
+        self.cc_version = cached_cc_version()
+        build_env = rust_toolchain_environment()
+        self.rustup_toolchain = build_env.get("RUSTUP_TOOLCHAIN", "")
+        for key in ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS"):
+            build_env.pop(key, None)
+        version = subprocess.run(
+            ["rustc", "-vV"],
+            cwd=REPO_ROOT,
+            env=build_env,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        ).stdout
+        self.target = next(line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: "))
+        self.archive = self.target_dir / self.target / "debug" / "libvortex_ffi.a"
+        for language, name in (("CC", "clang"), ("CXX", "clang++")):
+            compiler = shutil.which(name)
+            if sys.platform == "darwin":
+                # /usr/bin/clang is Apple's dispatch tool, which cannot be renamed.
+                compiler = subprocess.run(
+                    ["xcrun", "--find", name], capture_output=True, text=True, timeout=30, check=True
+                ).stdout.strip()
+            path = self.work / f"real {name}'s compiler"
+            path.symlink_to(compiler)
+            self.tools[language] = str(path)
+        return build_env
+
+    def prepare_cc_probe(self):
+        build_env = self.prepare_native_toolchain()
         # Each invocation starts with fresh cc-rs compiler/flag probe caches.
         probe = self.work / "probe"
         probe.mkdir()
         (probe / "Cargo.toml").write_text(
             '[workspace]\n[package]\nname = "cc-probe"\nversion = "0.0.0"\n'
             'edition = "2021"\n[[bin]]\nname = "cc-probe"\npath = "main.rs"\n'
-            '[dependencies]\ncc = "=1.4.0"\n',
+            f'[dependencies]\ncc = "={self.cc_version}"\n',
             encoding="utf-8",
         )
         (probe / "main.rs").write_text(
@@ -257,10 +286,6 @@ class CargoEnvironmentFixture(unittest.TestCase):
             "    Ok(())\n}\n",
             encoding="utf-8",
         )
-        build_env = rust_toolchain_environment()
-        self.rustup_toolchain = build_env.get("RUSTUP_TOOLCHAIN", "")
-        for key in ("RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS"):
-            build_env.pop(key, None)
         result = subprocess.run(
             [
                 "cargo",
@@ -279,27 +304,6 @@ class CargoEnvironmentFixture(unittest.TestCase):
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        version = subprocess.run(
-            ["rustc", "-vV"],
-            cwd=REPO_ROOT,
-            env=build_env,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        ).stdout
-        self.target = next(line.removeprefix("host: ") for line in version.splitlines() if line.startswith("host: "))
-        self.archive = self.target_dir / self.target / "debug" / "libvortex_ffi.a"
-        for language, name in (("CC", "clang"), ("CXX", "clang++")):
-            compiler = shutil.which(name)
-            if sys.platform == "darwin":
-                # /usr/bin/clang is Apple's dispatch tool, which cannot be renamed.
-                compiler = subprocess.run(
-                    ["xcrun", "--find", name], capture_output=True, text=True, timeout=30, check=True
-                ).stdout.strip()
-            path = self.work / f"real {name}'s compiler"
-            path.symlink_to(compiler)
-            self.tools[language] = str(path)
         return probe / "target/debug/cc-probe"
 
     def run_cc_probe(self, probe, env, language, *arguments):
