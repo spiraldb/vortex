@@ -70,8 +70,11 @@ not supported.
 
 - CMake discovers Cargo and rustc with `find_program`. Override them with
   `VORTEX_CARGO_EXECUTABLE` and `VORTEX_RUSTC_EXECUTABLE`. The rustc host determines the native target.
-- Rustup proxies honor the workspace's `rust-toolchain.toml`. CMake captures `RUSTUP_TOOLCHAIN` at
-  configure time; reconfigure to change it.
+- `VORTEX_RUSTUP_TOOLCHAIN` caches the Rust toolchain override across reconfiguration. It defaults
+  to `RUSTUP_TOOLCHAIN`, or `nightly` for Rust sanitizers; empty uses the workspace's
+  `rust-toolchain.toml`. Change it with `-DVORTEX_RUSTUP_TOOLCHAIN=<toolchain>`, or clear it with
+  `-DVORTEX_RUSTUP_TOOLCHAIN=`. When enabling Rust sanitizers in an existing tree, select a nightly
+  explicitly if its cached toolchain is stable.
 - Cargo uses the lockfile, with optional features such as `mimalloc` disabled. CMake supplies the
   complete Rust flags, overriding flags from the environment and Cargo configuration.
 - Cargo-built native dependencies use CMake's compilers, archiver, and C/C++ flags. Host build

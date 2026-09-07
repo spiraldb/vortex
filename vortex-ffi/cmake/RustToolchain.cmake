@@ -5,22 +5,37 @@
 
 include_guard(GLOBAL)
 
-# Sets VORTEX_RUST_TARGET, VORTEX_RUSTUP_TOOLCHAIN, and
-# VORTEX_APPLE_DEPLOYMENT_TARGET in the caller's scope. The cache entries
-# VORTEX_CARGO_EXECUTABLE and VORTEX_RUSTC_EXECUTABLE hold the selected tools.
-function(_vortex_resolve_rust_toolchain workspace_root)
-    # Rustup proxies honor the workspace toolchain file when run from the
-    # workspace. RUSTUP_TOOLCHAIN is captured so Cargo builds keep this selection.
+# Sets VORTEX_RUST_TARGET and VORTEX_APPLE_DEPLOYMENT_TARGET in the caller's
+# scope. Cache entries hold the selected Cargo/rustc tools and rustup override.
+function(_vortex_resolve_rust_toolchain workspace_root sanitizer_rustflags)
+    # Initialize once: automatic reconfiguration may run without the original environment.
+    if(NOT DEFINED VORTEX_RUSTUP_TOOLCHAIN)
+        set(VORTEX_RUSTUP_TOOLCHAIN "$ENV{RUSTUP_TOOLCHAIN}")
+        if(sanitizer_rustflags AND VORTEX_RUSTUP_TOOLCHAIN STREQUAL "")
+            set(VORTEX_RUSTUP_TOOLCHAIN nightly)
+        endif()
+    endif()
+    set(VORTEX_RUSTUP_TOOLCHAIN "${VORTEX_RUSTUP_TOOLCHAIN}" CACHE STRING
+        "Rustup toolchain override (empty uses the workspace rust-toolchain.toml)")
+
+    if(VORTEX_RUSTUP_TOOLCHAIN)
+        set(_rustup_environment "RUSTUP_TOOLCHAIN=${VORTEX_RUSTUP_TOOLCHAIN}")
+        message(STATUS "Vortex Rust toolchain override: ${VORTEX_RUSTUP_TOOLCHAIN}")
+    else()
+        set(_rustup_environment --unset=RUSTUP_TOOLCHAIN)
+        message(STATUS "Vortex Rust toolchain: workspace rust-toolchain.toml (no override)")
+    endif()
+
     find_program(VORTEX_CARGO_EXECUTABLE NAMES cargo REQUIRED)
     find_program(VORTEX_RUSTC_EXECUTABLE NAMES rustc REQUIRED)
     execute_process(
-        COMMAND "${VORTEX_RUSTC_EXECUTABLE}" -vV
+        COMMAND "${CMAKE_COMMAND}" -E env "${_rustup_environment}"
+            "${VORTEX_RUSTC_EXECUTABLE}" -vV
         WORKING_DIRECTORY "${workspace_root}"
         OUTPUT_VARIABLE _rustc_verbose
         COMMAND_ERROR_IS_FATAL ANY)
     string(REGEX MATCH "host: ([^\r\n]+)" _match "${_rustc_verbose}")
     set(VORTEX_RUST_TARGET "${CMAKE_MATCH_1}" PARENT_SCOPE)
-    set(VORTEX_RUSTUP_TOOLCHAIN "$ENV{RUSTUP_TOOLCHAIN}" PARENT_SCOPE)
 
     # Without an explicit deployment target the cc crate uses the SDK version,
     # which can exceed CMake's link target and makes ld64 warn about every

@@ -259,17 +259,12 @@ block(SCOPE_FOR VARIABLES)
         _nvcc_executable
         _cuda_root)
 
-    _vortex_resolve_rust_toolchain("${_workspace_root}")
     _vortex_resolve_sanitizer(
         "${_configuration}"
         _sanitizer_compile_flag
         _sanitizer_rustflags
         _cargo_build_std)
-    # Rust sanitizers need nightly-only rustc flags; default to rustup's
-    # nightly unless the environment already selected a toolchain.
-    if(_sanitizer_rustflags AND VORTEX_RUSTUP_TOOLCHAIN STREQUAL "")
-        set(VORTEX_RUSTUP_TOOLCHAIN nightly)
-    endif()
+    _vortex_resolve_rust_toolchain("${_workspace_root}" "${_sanitizer_rustflags}")
 
     if(NOT "$ENV{CARGO_ENCODED_RUSTFLAGS}" STREQUAL "" OR NOT "$ENV{RUSTFLAGS}" STREQUAL "")
         message(STATUS "Vortex ignores ambient Rust flags in its Cargo build")
