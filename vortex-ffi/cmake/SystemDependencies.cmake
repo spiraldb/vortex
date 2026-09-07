@@ -16,13 +16,7 @@ function(_vortex_attach_system_dependencies target rust_target)
         endif()
 
         target_link_libraries("${target}" INTERFACE
-            gcc_s
-            util
-            rt
-            Threads::Threads
-            m
-            ${CMAKE_DL_LIBS}
-            c)
+            gcc_s util rt Threads::Threads m ${CMAKE_DL_LIBS} c)
     elseif(rust_target STREQUAL "aarch64-apple-darwin")
         # The archive needs no C++ runtime, so C and C++ consumers alike only
         # need libSystem from their driver plus these extra libraries.
