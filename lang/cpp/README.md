@@ -86,6 +86,8 @@ not supported.
 - Cargo checks for changes whenever a target depending on Vortex is built. Its cache lives under
   the FFI binary directory: `ffi/cargo-target` in root and C++ builds. The CMake `clean` target
   removes this cache too.
+- Shared CI setup exports `CMAKE_C_COMPILER_LAUNCHER`/`CMAKE_CXX_COMPILER_LAUNCHER` for all
+  upstream jobs opting into sccache, not only C/C++ jobs.
 - After Cargo runs, CMake stages headers from the checkout into the build directory so changes
   trigger recompilation immediately. Nightly builds without Rust sanitizers may regenerate `vortex.h`
   with cbindgen and `clang-format`; stable and Rust-sanitized builds leave it unchanged.
@@ -109,11 +111,14 @@ ctest --test-dir build/cpp-dev --output-on-failure
 C++ examples (`reader`, `writer`, `dtype`, `scan`, `scan_to_arrow`) are in
 `build/cpp-dev/examples/`; C examples are in `build/cpp-dev/ffi/examples/`.
 
-To run build-system regression tests without compiling the Rust archive:
+To run build-system regressions without building Vortex (Python 3.11+):
 
 ```sh
-python3 -m unittest discover -s vortex-ffi/cmake/tests
+python3 vortex-ffi/cmake/tests/run_tests.py
 ```
+
+Run `cargo fetch --locked` first to enable the offline compiler fixtures. Add `--ci` to reject
+unexpected skips.
 
 ### Sanitizers
 

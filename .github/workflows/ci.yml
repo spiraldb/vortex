@@ -585,15 +585,22 @@ jobs:
       - uses: ./.github/actions/setup-prebuild
         with:
           enable-sccache: "true"
+      - name: Install sccache for fork integration tests
+        if: github.repository != 'vortex-data/vortex'
+        uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
       - name: Pin rustup proxy to repository toolchain
         run: |
           TOOLCHAIN="$(grep '^channel' rust-toolchain.toml | cut -d '"' -f 2)"
           echo "RUSTUP_TOOLCHAIN=$TOOLCHAIN" >> "$GITHUB_ENV"
-      # The offline cc-rs fixtures skip unless cc 1.4.0 is in Cargo's registry cache.
+      - name: Install Ninja for CMake integration tests
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+      # Populate the registry cache for the lockfile-selected offline fixtures.
       - name: Fetch Cargo dependencies for offline fixtures
         run: cargo fetch --locked
       - name: Test CMake integration
-        run: python3 -m unittest discover -v -s vortex-ffi/cmake/tests
+        run: python3 vortex-ffi/cmake/tests/run_tests.py --ci
 
   cxx-api:
     name: "C++ API"
