@@ -14,6 +14,10 @@ You can also add `vortex-ffi` alone. The target supplies the archive, headers, a
 libraries. See the [C++ README](../lang/cpp/README.md) for requirements, build options, and deployment
 constraints shared by both bindings.
 
+CMake stages headers under `vortex-artifacts/include` in the FFI binary directory after Cargo
+runs, so header changes trigger recompilation in the same build. `clean` removes these copies,
+not the headers in the checkout.
+
 ### Examples and tests
 
 Run from the repository root. Tests use Catch2 and require a C++ compiler.

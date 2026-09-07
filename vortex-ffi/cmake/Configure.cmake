@@ -78,20 +78,20 @@ function(_vortex_resolve_cargo_profile configuration_output profile_output artif
 endfunction()
 
 # Select the Cargo package and static archive that provide Vortex FFI for a
-# CPU-only or CUDA-enabled build. Return the include directories and optional
+# CPU-only or CUDA-enabled build. Return the source headers and optional
 # CUDA tools. Fail if the workspace manifest, lockfile, or selected package
 # manifest is missing, or CUDA is requested outside Linux.
 function(_vortex_resolve_ffi_package
     workspace_root
     package_output
     archive_name_output
-    include_dirs_output
+    headers_output
     nvcc_output
     cuda_root_output)
     set(_package "vortex-ffi")
     set(_archive_name "libvortex_ffi.a")
     set(_manifest "${workspace_root}/vortex-ffi/Cargo.toml")
-    set(_include_dirs "${workspace_root}/vortex-ffi/cinclude")
+    set(_headers "${workspace_root}/vortex-ffi/cinclude/vortex.h")
 
     # Shadow parent-scope values so CPU-only builds return empty CUDA outputs.
     set(_nvcc "")
@@ -105,7 +105,7 @@ function(_vortex_resolve_ffi_package
         set(_package "vortex-cuda-ffi")
         set(_archive_name "libvortex_cuda_ffi.a")
         set(_manifest "${workspace_root}/vortex-cuda/ffi/Cargo.toml")
-        list(APPEND _include_dirs "${workspace_root}/vortex-cuda/ffi/cinclude")
+        list(APPEND _headers "${workspace_root}/vortex-cuda/ffi/cinclude/vortex_cuda.h")
         # CMake's FindCUDAToolkit module sets these after find_package succeeds.
         set(_nvcc "${CUDAToolkit_NVCC_EXECUTABLE}")
         set(_cuda_root "${CUDAToolkit_TARGET_DIR}")
@@ -121,7 +121,7 @@ function(_vortex_resolve_ffi_package
 
     set(${package_output} "${_package}" PARENT_SCOPE)
     set(${archive_name_output} "${_archive_name}" PARENT_SCOPE)
-    set(${include_dirs_output} "${_include_dirs}" PARENT_SCOPE)
+    set(${headers_output} "${_headers}" PARENT_SCOPE)
     set(${nvcc_output} "${_nvcc}" PARENT_SCOPE)
     set(${cuda_root_output} "${_cuda_root}" PARENT_SCOPE)
 endfunction()
@@ -255,7 +255,7 @@ block(SCOPE_FOR VARIABLES)
         "${_workspace_root}"
         _ffi_package
         _cargo_archive_name
-        _ffi_include_dirs
+        _ffi_headers
         _nvcc_executable
         _cuda_root)
 
@@ -293,10 +293,24 @@ block(SCOPE_FOR VARIABLES)
     set(_cargo_ffi_archive
         "${_cargo_target_dir}/${VORTEX_RUST_TARGET}/${_cargo_artifact_directory}/${_cargo_archive_name}")
     set(_ffi_archive "${CMAKE_CURRENT_BINARY_DIR}/vortex-artifacts/libvortex_ffi.a")
+    set(_ffi_include_dir "${CMAKE_CURRENT_BINARY_DIR}/vortex-artifacts/include")
+    # Imported include directories must exist before the first build.
+    file(MAKE_DIRECTORY "${_ffi_include_dir}")
+    # Clean also owns headers staged by previous configurations of this build tree.
+    set_property(DIRECTORY APPEND PROPERTY ADDITIONAL_CLEAN_FILES "${_ffi_include_dir}")
+    if(NOT VORTEX_ENABLE_CUDA)
+        # A reused CUDA build tree must not expose the CUDA API in CPU-only mode.
+        file(REMOVE "${_ffi_include_dir}/vortex_cuda.h")
+    endif()
+    set(_staged_headers "")
+    foreach(_header IN LISTS _ffi_headers)
+        get_filename_component(_header_name "${_header}" NAME)
+        list(APPEND _staged_headers "${_ffi_include_dir}/${_header_name}")
+    endforeach()
 
     # Each value below becomes one `-D` argument of the driver and later one
-    # environment entry, where a semicolon would split it. The flag variables
-    # are passed as lists on purpose.
+    # environment entry, where a semicolon would split it. The flag and header
+    # variables are passed as lists on purpose.
     foreach(_name IN ITEMS
         VORTEX_CARGO_EXECUTABLE VORTEX_RUSTC_EXECUTABLE VORTEX_RUSTUP_TOOLCHAIN
         VORTEX_APPLE_DEPLOYMENT_TARGET
@@ -312,7 +326,9 @@ block(SCOPE_FOR VARIABLES)
     endif()
 
     # The phony target lets Cargo own dependency tracking. Copy-if-different in
-    # the driver prevents fresh Cargo checks from forcing downstream relinks.
+    # the driver prevents fresh Cargo checks from forcing downstream rebuilds.
+    # Declare staged headers so Ninja reevaluates consumers after Cargo runs.
+    # Source headers are not byproducts: clean must never delete checkout files.
     add_custom_target(vortex_ffi_cargo_build ${_cargo_default_target}
         COMMAND "${CMAKE_COMMAND}"
             "-DVORTEX_CARGO_EXECUTABLE=${VORTEX_CARGO_EXECUTABLE}"
@@ -327,6 +343,8 @@ block(SCOPE_FOR VARIABLES)
             "-DVORTEX_CUDA_ROOT=${_cuda_root}"
             "-DVORTEX_CARGO_BUILD_STD=${_cargo_build_std}"
             "-DVORTEX_CMAKE_FFI_ARCHIVE=${_ffi_archive}"
+            "-DVORTEX_FFI_HEADERS=${_ffi_headers}"
+            "-DVORTEX_CMAKE_FFI_INCLUDE_DIR=${_ffi_include_dir}"
             "-DVORTEX_RUSTFLAGS=${_rustflags}"
             "-DVORTEX_CFLAGS=${_native_c_flags}"
             "-DVORTEX_CXXFLAGS=${_native_cxx_flags}"
@@ -336,7 +354,7 @@ block(SCOPE_FOR VARIABLES)
             "-DVORTEX_RANLIB=${CMAKE_RANLIB}"
             "-DVORTEX_APPLE_DEPLOYMENT_TARGET=${VORTEX_APPLE_DEPLOYMENT_TARGET}"
             -P "${CMAKE_CURRENT_LIST_DIR}/CargoBuild.cmake"
-        BYPRODUCTS "${_ffi_archive}"
+        BYPRODUCTS "${_ffi_archive}" ${_staged_headers}
         COMMENT "Building the PIC Vortex FFI static archive with Cargo"
         USES_TERMINAL
         VERBATIM)
@@ -345,7 +363,7 @@ block(SCOPE_FOR VARIABLES)
     add_library(vortex_ffi_static STATIC IMPORTED GLOBAL)
     set_target_properties(vortex_ffi_static PROPERTIES
         IMPORTED_LOCATION "${_ffi_archive}"
-        INTERFACE_INCLUDE_DIRECTORIES "${_ffi_include_dirs}")
+        INTERFACE_INCLUDE_DIRECTORIES "${_ffi_include_dir}")
     add_dependencies(vortex_ffi_static vortex_ffi_cargo_build)
     _vortex_attach_system_dependencies(vortex_ffi_static "${VORTEX_RUST_TARGET}")
     if(_sanitizer_compile_flag)

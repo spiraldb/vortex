@@ -24,6 +24,8 @@ class CargoEnvironmentFixture(unittest.TestCase):
         self.target_dir = self.work / "cargo target's"
         self.archive = self.target_dir / self.target / "debug" / "libvortex_ffi.a"
         self.staged = self.work / "staged" / "libvortex_ffi.a"
+        self.header = self.work / "vortex.h"
+        self.header.write_text("/* recorded header */\n", encoding="utf-8")
         self.cargo = self.executable(
             "recording cargo",
             "import json, os, pathlib, sys\n"
@@ -107,6 +109,8 @@ class CargoEnvironmentFixture(unittest.TestCase):
             "VORTEX_FFI_PACKAGE": "vortex-ffi",
             "VORTEX_CARGO_FFI_ARCHIVE": self.archive,
             "VORTEX_CMAKE_FFI_ARCHIVE": self.staged,
+            "VORTEX_FFI_HEADERS": self.header,
+            "VORTEX_CMAKE_FFI_INCLUDE_DIR": self.staged.parent / "include",
             "VORTEX_RUSTFLAGS": ";".join(self.rustflags),
             "VORTEX_CFLAGS": ";".join(cflags),
             "VORTEX_CXXFLAGS": ";".join(cxxflags),
@@ -125,6 +129,7 @@ class CargoEnvironmentFixture(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(self.staged.read_bytes(), b"recorded archive")
+        self.assertEqual((self.staged.parent / "include/vortex.h").read_bytes(), self.header.read_bytes())
         recording = json.loads((self.target_dir / "environment.json").read_text())
         self.assertEqual(recording["args"][recording["args"].index("--target") + 1], self.target)
         self.assertEqual(recording["env"]["CARGO_ENCODED_RUSTFLAGS"], "\x1f".join(self.rustflags))

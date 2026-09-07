@@ -20,6 +20,8 @@ function(_vortex_require_build_inputs)
         VORTEX_FFI_PACKAGE
         VORTEX_CARGO_FFI_ARCHIVE
         VORTEX_CMAKE_FFI_ARCHIVE
+        VORTEX_FFI_HEADERS
+        VORTEX_CMAKE_FFI_INCLUDE_DIR
         VORTEX_RUSTFLAGS
         VORTEX_CFLAGS
         VORTEX_CXXFLAGS
@@ -205,3 +207,11 @@ file(MAKE_DIRECTORY "${_destination_dir}")
 file(COPY_FILE
     "${VORTEX_CARGO_FFI_ARCHIVE}" "${VORTEX_CMAKE_FFI_ARCHIVE}"
     ONLY_IF_DIFFERENT)
+
+# Cargo may regenerate checkout headers; publish them before consumers compile.
+file(MAKE_DIRECTORY "${VORTEX_CMAKE_FFI_INCLUDE_DIR}")
+foreach(_header IN LISTS VORTEX_FFI_HEADERS)
+    get_filename_component(_name "${_header}" NAME)
+    file(COPY_FILE "${_header}" "${VORTEX_CMAKE_FFI_INCLUDE_DIR}/${_name}"
+        ONLY_IF_DIFFERENT)
+endforeach()
