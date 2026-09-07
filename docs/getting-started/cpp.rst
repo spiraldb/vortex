@@ -1,69 +1,52 @@
 C++ Quickstart
 ==============
 
-Vortex C++ API allows you to read and write ``.vortex`` files directly or via
-an Arrow compatibility layer like `nanoarrow <https://arrow.apache.org/nanoarrow/>`_.
-The only dependency apart from Vortex is ``nanoarrow``.
+The C++ API reads and writes ``.vortex`` files, with optional Arrow interoperability
+through `nanoarrow <https://arrow.apache.org/nanoarrow/>`_.
 
 .. note::
-   C++ API is a work in progress. Please reach out to us if you are interested
-   in using Vortex from C++ or you want a feature not covered yet e.g.
-   extension support.
+   The C++ API is still evolving. Please reach out if you need a missing feature.
 
 Building from source
 --------------------
 
-Vortex does not provide prebuilt C++ libraries yet. Building from source requires
-C++20, CMake 3.28 or newer with a single-config generator, and native Cargo and
-rustc 1.95 or newer with the target standard library installed. The initial CMake
-integration builds static position-independent-code libraries only. Use a complete
-workspace checkout; the C++ directory cannot be built from an isolated source copy.
+Vortex currently provides source builds only, for GNU/Linux x86_64/aarch64 and
+macOS arm64. You need a C compiler, a C++20 compiler, CMake 3.28+ with a single-config
+generator, and Cargo/rustc 1.95+ on ``PATH``. Use a complete repository checkout:
 
 .. code-block:: bash
 
     git clone --depth 1 https://github.com/vortex-data/vortex
     cd vortex
 
-    cmake -S lang/cpp -B build/cpp -G Ninja \
+    cmake -S lang/cpp -B build/cpp \
       -DCMAKE_BUILD_TYPE=Release \
       -DVORTEX_BUILD_EXAMPLES=ON
     cmake --build build/cpp --parallel
 
-Configuration locates Cargo and rustc and takes the Rust target from the rustc
-host. The locked ``vortex-ffi`` compilation occurs only when the CMake build runs,
-so a separate ``cargo build`` step is neither required nor recommended.
-Building examples can download nanoarrow during configure; Cargo can download
-locked Rust dependencies during the build.
+CMake builds the Rust FFI through Cargo; no separate ``cargo build`` is needed.
+The first build may download dependencies. The commands above enable the examples
+used below; tests and examples are otherwise disabled by default.
 
-Tests and examples default to ``OFF``. ``VORTEX_WARNINGS_AS_ERRORS`` defaults to
-``ON`` for a standalone build and ``OFF`` when a parent adds ``lang/cpp``.
-
-Source-tree consumers add the repository root, which builds the Rust FFI once and
-the C++ wrapper on top, and link the canonical target:
+To embed Vortex in a CMake project, vendor or fetch a pinned checkout and link its
+target:
 
 .. code-block:: cmake
 
     add_subdirectory(path/to/vortex vortex)
     target_link_libraries(target PRIVATE Vortex::cpp_static)
 
-The Vortex archives are PIC and can be embedded into a shared parent. Keep calls
-behind a private C++ translation unit and use the parent's normal version script or
-exported-symbol allowlist: the shared parent owns its public ABI, and the Vortex
-interface target does not apply parent-wide symbol-export policy.
+The target includes the required headers and link dependencies. Vortex builds
+static, position-independent libraries, with no installation rules or
+``find_package(Vortex)`` package. If embedding it in a shared library, keep Vortex
+symbols private using the parent's export policy.
 
-The CMake integration is source-only: it does not provide installation rules or a
-``find_package(Vortex)`` package. Downstream projects should vendor or fetch a pinned
-Vortex checkout and add it directly.
-
-Native macOS arm64 is supported for standalone development, but macOS is not a
-cuDF integration target. GNU/Linux x86_64 and aarch64 are modeled, while full
-GCC 14, Conda compiler-wrapper, glibc 2.28, and cuDF validation remains deferred.
-
-See the `C++ bindings README
-<https://github.com/vortex-data/vortex/blob/develop/lang/cpp/README.md>`_ for all CMake
-options, cache behavior, and source-integration rules. Have a look at the
-`examples <https://github.com/vortex-data/vortex/tree/develop/lang/cpp/examples>`_
-directory as well.
+See the `C++ README
+<https://github.com/vortex-data/vortex/blob/develop/lang/cpp/README.md>`_ for build
+options, platform limits, sanitizers, and CUDA deployment requirements, and the
+`examples directory
+<https://github.com/vortex-data/vortex/tree/develop/lang/cpp/examples>`_ for complete
+programs.
 
 Reading files
 -------------

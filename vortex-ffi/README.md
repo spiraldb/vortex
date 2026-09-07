@@ -1,102 +1,94 @@
 # Vortex C bindings
 
-## Runtime threading
+## Use from CMake
 
-The FFI uses a shared, caller-driven runtime. By default Vortex creates no runtime worker threads:
-the host threads currently executing FFI calls drive the runtime. Multiple host threads making
-concurrent FFI calls can drive runtime work in parallel while keeping thread ownership entirely in
-the host application.
-
-Applications that want a single FFI operation to make progress on additional threads may opt into
-Vortex-owned background workers with `vx_runtime_set_worker_threads`. This is a process-global
-setting shared by every FFI session. Calling it with a non-zero count changes the threading model
-from host-thread-only execution to a combination of host threads and Vortex-owned workers. Calling
-it with zero signals the background workers to stop and restores the host-thread-only
-configuration.
-
-Applications that already supply concurrency through their own host threads should leave the
-worker count at its default of zero to avoid oversubscription.
-
-## Updating Headers
-
-If you're developing FFI and want to rebuild `cinclude/vortex.h`, run:
-
-```sh
-cargo +nightly build -p vortex-ffi
-```
-
-## Usage from a CMake project
-
-CMake builds the Rust archive through Cargo; no separate `cargo build` is needed. Add the
-repository root, or this directory alone, and link the static target:
+CMake builds the Rust archive through Cargo; no separate `cargo build` is needed. Add a complete
+Vortex checkout and link the C target:
 
 ```cmake
 add_subdirectory(path/to/vortex vortex)
 target_link_libraries(my_target PRIVATE Vortex::ffi_static)
 ```
 
-The target carries the headers in `cinclude/`, the archive, and the system libraries it needs.
-Build options such as `VORTEX_CARGO_PROFILE`, `VORTEX_ENABLE_CUDA`, and `VORTEX_SANITIZER` are
-documented in the [C++ README](../lang/cpp/README.md) and apply to both layers.
+You can also add `vortex-ffi` alone. The target supplies the archive, headers, and native link
+libraries. See the [C++ README](../lang/cpp/README.md) for requirements, build options, and deployment
+constraints shared by both bindings.
 
-## Running C examples
+### Examples and tests
+
+Run from the repository root. Tests use Catch2 and require a C++ compiler.
 
 ```sh
-cmake -S . -B build -DVORTEX_BUILD_EXAMPLES=ON
-cmake --build build --parallel
-./build/examples/write_sample sample.vortex
-./build/examples/dtype 'sample.vortex'
-./build/examples/scan 'sample.vortex'
-./build/examples/scan_to_arrow 'sample.vortex'
+cmake -S vortex-ffi -B build/ffi \
+    -DVORTEX_BUILD_EXAMPLES=ON -DVORTEX_BUILD_TESTING=ON
+cmake --build build/ffi --parallel
+ctest --test-dir build/ffi --output-on-failure
+
+./build/ffi/examples/write_sample sample.vortex
+./build/ffi/examples/dtype sample.vortex
+./build/ffi/examples/scan sample.vortex
+./build/ffi/examples/scan_to_arrow sample.vortex
 ```
 
-## Testing C part
+## Runtime threading
 
-The tests use Catch2, so a C++ compiler is required:
+By default, host threads executing FFI calls drive a shared runtime; Vortex creates no worker
+threads. Concurrent FFI calls can drive runtime work in parallel.
+
+`vx_runtime_set_worker_threads(n)` adds Vortex-owned background workers so a single FFI call can
+make progress on multiple threads. This setting is process-global and shared by all FFI sessions.
+Setting it to zero signals the workers to stop and restores host-thread-only execution. Leave it
+at zero if your application already provides concurrency, to avoid oversubscription.
+
+## Update the C header
+
+To regenerate `vortex-ffi/cinclude/vortex.h`:
 
 ```sh
-cmake -S . -B build -DVORTEX_BUILD_TESTING=ON
-cmake --build build --parallel
-ctest --test-dir build --output-on-failure
+cargo +nightly build -p vortex-ffi
 ```
 
-## Testing Rust part with sanitizers
+## Sanitizer tests
 
-The Rust tests run under a sanitizer with nightly `cargo test`. Substitute the native target
-triple, for example `x86_64-unknown-linux-gnu`:
+### Rust and C/C++ together
 
-```sh
-# inside vortex-ffi
-RUSTFLAGS="-Zsanitizer=address -Cunsafe-allow-abi-mismatch=sanitizer" \
-cargo +nightly test -Zbuild-std --target <target triple> --tests -- --no-capture
-```
-
-Use `-Zsanitizer=memory` for MemorySanitizer and `-Zsanitizer=thread` for ThreadSanitizer; the
-latter needs `TSAN_OPTIONS="suppressions=$PWD/tsan_suppressions.txt"`.
-
-- `-Zbuild-std` is needed as memory and thread sanitizers report std errors otherwise.
-- `allow-abi-mismatch` is safe because in our dependency graph only crates like `compiler_builtins`
-  unset sanitization, and they do it on purpose.
-- `--tests` skips doctests, which rustdoc builds without `RUSTFLAGS` and which would therefore
-  mismatch the sanitizer-built dependencies.
-- Make sure to use `cargo test` and not `cargo nextest` as nextest reports less leaks.
-- If you want stack trace symbolization, install `llvm-symbolizer`.
-
-## Testing Rust and C with sanitizers
-
-CMake instruments the Rust archive, its C dependencies, and the tests together. `VORTEX_SANITIZER`
-takes a comma-separated list of `asan`, `lsan`, `ubsan`, and `tsan`. Each instruments the C and C++
-code, and all but `ubsan` also instrument the Rust code, since rustc has no UBSan. Rust
-instrumentation uses rustup's `nightly` toolchain, which needs the `rust-src` component,
-unless `RUSTUP_TOOLCHAIN` selects another, and the C and C++ side needs Clang:
+Use CMake to instrument the Rust archive, its native dependencies, and the C API tests. See
+[Sanitizers](../lang/cpp/README.md#sanitizers) for toolchain requirements and supported sanitizers.
+From the repository root:
 
 ```sh
-cmake -S . -B build \
+rustup toolchain install nightly --component rust-src
+cmake -S vortex-ffi -B build/ffi-asan \
+    -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
     -DVORTEX_SANITIZER=asan,ubsan -DVORTEX_SANITIZE_RUST_STD=ON \
     -DVORTEX_BUILD_TESTING=ON
-cmake --build build --parallel
-./build/test/vortex_ffi_test 2>&1 | rustfilt -i-
+cmake --build build/ffi-asan --parallel
+ctest --test-dir build/ffi-asan --output-on-failure
 ```
 
-For ThreadSanitizer use `tsan` and point `TSAN_OPTIONS` at `tsan_suppressions.txt`.
+For ThreadSanitizer, use `tsan` and set `TSAN_OPTIONS` to
+`suppressions=/absolute/path/to/vortex/vortex-ffi/tsan_suppressions.txt`.
+For Rust-demangled output, run `build/ffi-asan/test/vortex_ffi_test` directly and pipe its output
+through `rustfilt -i-`.
+
+### Rust only
+
+Use nightly `cargo test`, with `rust-src` installed. This example targets Linux x86_64; replace the
+triple with your native target:
+
+```sh
+RUSTFLAGS="-Zsanitizer=address -Cunsafe-allow-abi-mismatch=sanitizer" \
+cargo +nightly test -p vortex-ffi -Zbuild-std \
+    --target x86_64-unknown-linux-gnu --tests -- --no-capture
+```
+
+Use `-Zsanitizer=memory` for MemorySanitizer or `-Zsanitizer=thread` for ThreadSanitizer, with the
+suppression file above. Keep these flags and tools in mind:
+
+- `-Zbuild-std` instruments the standard library, avoiding false positives with memory/thread
+  sanitizers.
+- `-Cunsafe-allow-abi-mismatch=sanitizer` permits dependencies such as `compiler_builtins` to opt
+  out of instrumentation deliberately.
+- `--tests` skips doctests: rustdoc ignores `RUSTFLAGS`, causing sanitizer mismatches.
+- Use `cargo test`, not nextest, to catch more leaks; install `llvm-symbolizer` for stack traces.
