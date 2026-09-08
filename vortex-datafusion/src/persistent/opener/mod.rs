@@ -15,8 +15,6 @@ use datafusion_common::Statistics;
 use datafusion_common::arrow::array::AsArray;
 use datafusion_common::arrow::array::RecordBatch;
 use datafusion_common::exec_datafusion_err;
-use datafusion_common::tree_node::Transformed;
-use datafusion_common::tree_node::TreeNode;
 use datafusion_datasource::PartitionedFile;
 use datafusion_datasource::TableSchema;
 use datafusion_datasource::file_stream::FileOpenFuture;
@@ -25,11 +23,12 @@ use datafusion_execution::cache::cache_manager::CachedFileMetadataEntry;
 use datafusion_execution::cache::cache_manager::FileMetadataCache;
 use datafusion_physical_expr::PhysicalExprRef;
 use datafusion_physical_expr::expressions as df_expr;
+use datafusion_physical_expr::projection::ProjectionExpr;
 use datafusion_physical_expr::projection::ProjectionExprs;
 use datafusion_physical_expr::simplifier::PhysicalExprSimplifier;
 use datafusion_physical_expr::split_conjunction;
 use datafusion_physical_expr::utils::collect_columns;
-use datafusion_physical_expr::utils::conjunction;
+use datafusion_physical_expr::utils::conjunction_opt;
 use datafusion_physical_expr::utils::reassign_expr_columns;
 use datafusion_physical_expr_adapter::PhysicalExprAdapterFactory;
 use datafusion_physical_expr_adapter::replace_columns_with_literals;
@@ -304,18 +303,13 @@ impl FileOpener for VortexOpener {
                     }
                 }
             }
-            let residual_filter = if residual_filters.is_empty() {
-                None
-            } else {
-                Some(conjunction(residual_filters))
-            };
+            let residual_filter = conjunction_opt(residual_filters);
             let native_filter = vortex::expr::and_collect(native_filters)
                 .map(|filter| filter.optimize_recursive(vxf.dtype())?.bind(vxf.dtype()))
                 .transpose()
                 .map_err(|e| exec_datafusion_err!("Couldn't bind Vortex scan filter in {}: {e}", file.path()))?;
 
             // Residual filters must see raw inputs before computed projections or aliases.
-            let mut residual_columns = None;
             let ProcessedProjection {
                 scan_projection,
                 scan_reference_schema,
@@ -325,9 +319,16 @@ impl FileOpener for VortexOpener {
                 indices.extend(collect_columns(residual).into_iter().map(|column| column.index()));
                 indices.sort_unstable();
                 indices.dedup();
-                let required = ProjectionExprs::from_indices(&indices, &this_file_schema);
-                let raw = raw_projection(required, &this_file_schema)?;
-                residual_columns = Some(indices);
+                let required = indices.into_iter().map(|index| {
+                    let field = this_file_schema.fields().get(index).ok_or_else(|| {
+                        exec_datafusion_err!("Projection column index {index} is out of bounds")
+                    })?;
+                    Ok(ProjectionExpr {
+                        expr: Arc::new(df_expr::Column::new(field.name(), index)),
+                        alias: field.name().clone(),
+                    })
+                }).collect::<DFResult<Vec<_>>>()?;
+                let raw = raw_projection(required.into(), &this_file_schema)?;
                 ProcessedProjection {
                     scan_projection: raw.scan_projection,
                     scan_reference_schema: raw.scan_reference_schema,
@@ -356,17 +357,11 @@ impl FileOpener for VortexOpener {
             let stream_schema =
                 calculate_physical_schema(&scan_dtype, &scan_reference_schema, &session.arrow())?;
 
-            let (leftover_projection, residual_filter) = if let Some(indices) = residual_columns {
-                (
-                    leftover_projection.try_map_exprs(|expr| reassign_raw_columns(expr, &indices))?,
-                    residual_filter.map(|expr| reassign_raw_columns(expr, &indices)).transpose()?,
-                )
-            } else {
-                (
-                    leftover_projection.try_map_exprs(|expr| reassign_expr_columns(expr, &stream_schema))?,
-                    residual_filter,
-                )
-            };
+            let leftover_projection = leftover_projection
+                .try_map_exprs(|expr| reassign_expr_columns(expr, &stream_schema))?;
+            let residual_filter = residual_filter
+                .map(|expr| reassign_expr_columns(expr, &stream_schema))
+                .transpose()?;
             let projector = leftover_projection.make_projector(&stream_schema)?;
 
             // We share our layout readers with others partitions in the scan, so we can only need to read each layout in each file once.
@@ -647,22 +642,6 @@ fn split_midpoint_to_byte(split_range: &Range<u64>, row_count: u64, total_size: 
     let midpoint_byte = (u128::from(midpoint_row) * u128::from(total_size)) / u128::from(row_count);
 
     u64::try_from(midpoint_byte).vortex_expect("midpoint byte projection should fit into u64")
-}
-
-/// Remap physical file indices onto the ordered raw columns emitted by the scan.
-fn reassign_raw_columns(expr: PhysicalExprRef, indices: &[usize]) -> DFResult<PhysicalExprRef> {
-    expr.transform_up(|expr| {
-        let Some(column) = expr.downcast_ref::<df_expr::Column>() else {
-            return Ok(Transformed::no(expr));
-        };
-        let index = indices
-            .binary_search(&column.index())
-            .map_err(|_| exec_datafusion_err!("Missing raw filter/projection column {column}"))?;
-        Ok(Transformed::yes(
-            Arc::new(df_expr::Column::new(column.name(), index)) as PhysicalExprRef,
-        ))
-    })
-    .map(|result| result.data)
 }
 
 #[cfg(test)]

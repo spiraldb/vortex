@@ -21,6 +21,7 @@ use datafusion_physical_expr::projection::ProjectionExpr;
 use datafusion_physical_expr::projection::ProjectionExprs;
 use datafusion_physical_expr::utils::collect_columns;
 use datafusion_physical_plan::expressions as df_expr;
+use itertools::Itertools;
 use vortex::VortexSessionDefault;
 use vortex::array::VortexSessionExecute;
 use vortex::dtype::DType;
@@ -109,21 +110,20 @@ pub trait ExpressionConvertor: Send + Sync {
         input_schema: &Schema,
         output_schema: &Schema,
     ) -> DFResult<ProcessedProjection> {
+        // Duplicate output names cannot identify native pack fields unambiguously.
+        if !source_projection
+            .iter()
+            .map(|projection| &projection.alias)
+            .all_unique()
+        {
+            return self.no_pushdown_projection(source_projection, input_schema);
+        }
         let mut scan_projection = Vec::with_capacity(source_projection.as_ref().len());
-        for projection in source_projection.iter() {
+        for projection in source_projection.as_ref() {
             let Some(expr) = self.try_convert(&projection.expr, input_schema)? else {
-                return self.no_pushdown_projection(source_projection.clone(), input_schema);
+                return self.no_pushdown_projection(source_projection, input_schema);
             };
             scan_projection.push((projection.alias.clone(), expr));
-        }
-        // Duplicate output names cannot identify native pack fields unambiguously.
-        let mut names = scan_projection
-            .iter()
-            .map(|(name, _)| name)
-            .collect::<Vec<_>>();
-        names.sort_unstable();
-        if names.windows(2).any(|names| names[0] == names[1]) {
-            return self.no_pushdown_projection(source_projection, input_schema);
         }
         Ok(ProcessedProjection {
             scan_projection: pack(scan_projection, Nullability::NonNullable),
@@ -203,12 +203,13 @@ impl DefaultExpressionConvertor {
         input_dtype: &DType,
     ) -> DFResult<Option<Expression>> {
         let converted = if let Some(binary) = expr.downcast_ref::<df_expr::BinaryExpr>() {
-            let Ok(operator) = try_operator_from_df(binary.op()) else {
+            let Some(operator) = try_operator_from_df(binary.op()) else {
                 return Ok(None);
             };
+            let boolean_operator = matches!(operator, Operator::And | Operator::Or);
             let left_type = binary.left().data_type(schema)?;
             let right_type = binary.right().data_type(schema)?;
-            if *binary.op() == DFOperator::And || *binary.op() == DFOperator::Or {
+            if boolean_operator {
                 if left_type != DataType::Boolean || right_type != DataType::Boolean {
                     return Err(exec_datafusion_err!(
                         "Boolean operator requires Boolean operands: {expr}"
@@ -223,7 +224,7 @@ impl DefaultExpressionConvertor {
             ) else {
                 return Ok(None);
             };
-            if matches!(binary.op(), DFOperator::And | DFOperator::Or)
+            if boolean_operator
                 && (label_infallible(&left).get(&left) != Some(&true)
                     || label_infallible(&right).get(&right) != Some(&true))
             {
@@ -245,19 +246,23 @@ impl DefaultExpressionConvertor {
         } else if let Some(literal) = expr.downcast_ref::<df_expr::Literal>() {
             let field = literal.return_field(schema)?;
             let array = literal.value().to_array()?;
-            if self.session.arrow().from_arrow_field(&field).is_err() {
-                return Ok(None);
-            }
             if array.len() != 1 {
                 return Err(exec_datafusion_err!(
-                    "Literal must contain exactly one value: {expr}"
+                    "Literal must contain exactly one value, found {}",
+                    array.len()
                 ));
             }
-            let array = self
-                .session
-                .arrow()
-                .from_arrow_array(array, &field)
-                .map_err(|e| exec_datafusion_err!("Failed to convert literal {expr}: {e}"))?;
+            let array = match self.session.arrow().from_arrow_array(array, &field) {
+                Ok(array) => array,
+                Err(error) => {
+                    if self.session.arrow().from_arrow_field(&field).is_err() {
+                        return Ok(None);
+                    }
+                    return Err(exec_datafusion_err!(
+                        "Failed to convert literal {expr}: {error}"
+                    ));
+                }
+            };
             lit(array
                 .execute_scalar(0, &mut self.session.create_execution_ctx())
                 .map_err(|e| exec_datafusion_err!("Failed to evaluate literal {expr}: {e}"))?)
@@ -323,11 +328,6 @@ impl DefaultExpressionConvertor {
         } else if let Some(case_expr) = expr.downcast_ref::<df_expr::CaseExpr>() {
             if case_expr.expr().is_some() {
                 return Ok(None);
-            }
-            if case_expr.when_then_expr().is_empty() {
-                return Err(exec_datafusion_err!(
-                    "CASE requires at least one WHEN clause"
-                ));
             }
             let mut pairs = Vec::with_capacity(case_expr.when_then_expr().len());
             for (when, then) in case_expr.when_then_expr() {
@@ -417,44 +417,36 @@ impl DefaultExpressionConvertor {
             return Ok(Some(result));
         }
 
-        let octet_length =
-            ScalarFunctionExpr::try_downcast_func::<OctetLengthFunc>(scalar_fn).is_some();
-        let array_length =
-            ScalarFunctionExpr::try_downcast_func::<ArrayLength>(scalar_fn).is_some();
-        let input = if octet_length {
-            let [input] = scalar_fn.args() else {
-                return Err(exec_datafusion_err!(
-                    "octet_length requires exactly one argument"
-                ));
-            };
-            let data_type = input.data_type(schema)?;
-            let data_type = match &data_type {
-                DataType::Dictionary(_, value) => value.as_ref(),
-                data_type => data_type,
-            };
-            if !data_type.is_binary() && !data_type.is_string() {
+        let (input, length): (_, fn(Expression) -> Expression) =
+            if ScalarFunctionExpr::try_downcast_func::<OctetLengthFunc>(scalar_fn).is_some() {
+                let [input] = scalar_fn.args() else {
+                    return Err(exec_datafusion_err!(
+                        "octet_length requires exactly one argument"
+                    ));
+                };
+                let data_type = input.data_type(schema)?;
+                let data_type = match &data_type {
+                    DataType::Dictionary(_, value) => value.as_ref(),
+                    data_type => data_type,
+                };
+                if !data_type.is_binary() && !data_type.is_string() {
+                    return Ok(None);
+                }
+                (input, byte_length)
+            } else if ScalarFunctionExpr::try_downcast_func::<ArrayLength>(scalar_fn).is_some() {
+                let Some(input) = array_length_input(scalar_fn)? else {
+                    return Ok(None);
+                };
+                if !matches!(
+                    input.data_type(schema)?,
+                    DataType::List(_) | DataType::LargeList(_) | DataType::FixedSizeList(_, _)
+                ) {
+                    return Ok(None);
+                }
+                (input, list_length)
+            } else {
                 return Ok(None);
-            }
-            input
-        } else if array_length {
-            if scalar_fn.args().is_empty() || scalar_fn.args().len() > 2 {
-                return Err(exec_datafusion_err!(
-                    "array_length requires one or two arguments"
-                ));
-            }
-            let Some(input) = array_length_input(scalar_fn) else {
-                return Ok(None);
             };
-            if !matches!(
-                input.data_type(schema)?,
-                DataType::List(_) | DataType::LargeList(_) | DataType::FixedSizeList(_, _)
-            ) {
-                return Ok(None);
-            }
-            input
-        } else {
-            return Ok(None);
-        };
         let Some(input) = self.convert_expr(input, schema, input_dtype)? else {
             return Ok(None);
         };
@@ -465,14 +457,7 @@ impl DefaultExpressionConvertor {
         )) else {
             return Ok(None);
         };
-        Ok(Some(cast(
-            if octet_length {
-                byte_length(input)
-            } else {
-                list_length(input)
-            },
-            return_dtype,
-        )))
+        Ok(Some(cast(length(input), return_dtype)))
     }
 }
 
@@ -549,20 +534,20 @@ fn supported_cast(cast: &df_expr::CastExpr, schema: &Schema) -> DFResult<bool> {
         ))
 }
 
-fn try_operator_from_df(value: &DFOperator) -> DFResult<Operator> {
+fn try_operator_from_df(value: &DFOperator) -> Option<Operator> {
     match value {
-        DFOperator::Eq => Ok(Operator::Eq),
-        DFOperator::NotEq => Ok(Operator::NotEq),
-        DFOperator::Lt => Ok(Operator::Lt),
-        DFOperator::LtEq => Ok(Operator::Lte),
-        DFOperator::Gt => Ok(Operator::Gt),
-        DFOperator::GtEq => Ok(Operator::Gte),
-        DFOperator::And => Ok(Operator::And),
-        DFOperator::Or => Ok(Operator::Or),
-        DFOperator::Plus => Ok(Operator::Add),
-        DFOperator::Minus => Ok(Operator::Sub),
-        DFOperator::Multiply => Ok(Operator::Mul),
-        DFOperator::Divide => Ok(Operator::Div),
+        DFOperator::Eq => Some(Operator::Eq),
+        DFOperator::NotEq => Some(Operator::NotEq),
+        DFOperator::Lt => Some(Operator::Lt),
+        DFOperator::LtEq => Some(Operator::Lte),
+        DFOperator::Gt => Some(Operator::Gt),
+        DFOperator::GtEq => Some(Operator::Gte),
+        DFOperator::And => Some(Operator::And),
+        DFOperator::Or => Some(Operator::Or),
+        DFOperator::Plus => Some(Operator::Add),
+        DFOperator::Minus => Some(Operator::Sub),
+        DFOperator::Multiply => Some(Operator::Mul),
+        DFOperator::Divide => Some(Operator::Div),
         DFOperator::IsDistinctFrom
         | DFOperator::IsNotDistinctFrom
         | DFOperator::RegexMatch
@@ -593,12 +578,7 @@ fn try_operator_from_df(value: &DFOperator) -> DFResult<Operator> {
         | DFOperator::Question
         | DFOperator::QuestionAnd
         | DFOperator::QuestionPipe
-        | DFOperator::Colon => {
-            tracing::debug!(operator = %value, "Can't pushdown binary_operator operator");
-            Err(exec_datafusion_err!(
-                "Unsupported datafusion operator {value}"
-            ))
-        }
+        | DFOperator::Colon => None,
     }
 }
 
@@ -630,16 +610,20 @@ fn supported_data_types(dt: &DataType) -> bool {
 /// `list_length`: either the single-argument form `array_length(arr)`, or the two-argument form
 /// with an explicit first dimension `array_length(arr, 1)`, which is equivalent. Higher
 /// dimensions recurse into nested lists and are not supported.
-fn array_length_input(scalar_fn: &ScalarFunctionExpr) -> Option<&Arc<dyn PhysicalExpr>> {
+/// Calls with other arities return errors.
+fn array_length_input(scalar_fn: &ScalarFunctionExpr) -> DFResult<Option<&Arc<dyn PhysicalExpr>>> {
     match scalar_fn.args() {
-        [input] => Some(input),
+        [input] => Ok(Some(input)),
         [input, dimension]
             if dimension
                 .downcast_ref::<df_expr::Literal>()
                 .is_some_and(|literal| matches!(literal.value(), ScalarValue::Int64(Some(1)))) =>
         {
-            Some(input)
+            Ok(Some(input))
         }
-        _ => None,
+        [_, _] => Ok(None),
+        _ => Err(exec_datafusion_err!(
+            "array_length requires one or two arguments"
+        )),
     }
 }

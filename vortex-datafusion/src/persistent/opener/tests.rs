@@ -27,6 +27,8 @@ use datafusion::scalar::ScalarValue;
 use datafusion_common::arrow::compute::concat_batches;
 use datafusion_common::assert_batches_eq;
 use datafusion_common::stats::Precision;
+use datafusion_common::tree_node::Transformed;
+use datafusion_common::tree_node::TreeNode;
 use datafusion_execution::cache::default_cache::DefaultCache;
 use datafusion_expr::Operator;
 use datafusion_physical_expr::PhysicalExpr;
@@ -295,15 +297,22 @@ async fn test_open() -> anyhow::Result<()> {
 #[tokio::test]
 async fn test_residual_filter_unprojected_column(
     #[values(false, true)] projection_pushdown: bool,
+    #[values(false, true)] reordered_schema: bool,
 ) -> anyhow::Result<()> {
     let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
     let batch = record_batch!(
         ("a", Int32, vec![10, 20, 30, 40]),
+        ("unused", Int32, vec![0, 0, 0, 0]),
         ("b", Int32, vec![Some(1), Some(2), None, Some(4)])
     )?;
     let size = write_arrow_to_vortex(Arc::clone(&store), "residual.vortex", batch.clone()).await?;
+    let schema = Arc::new(batch.schema().project(if reordered_schema {
+        &[2, 0, 1]
+    } else {
+        &[0, 1, 2]
+    })?);
     let modulo: PhysicalExprRef = Arc::new(df_expr::BinaryExpr::new(
-        Arc::new(df_expr::Column::new("b", 1)),
+        Arc::new(df_expr::Column::new("b", schema.index_of("b")?)),
         Operator::Modulo,
         Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(2)))),
     ));
@@ -312,7 +321,8 @@ async fn test_residual_filter_unprojected_column(
         Operator::Eq,
         Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(0)))),
     ));
-    let mut opener = make_opener(store, TableSchema::from(batch.schema()), Some(filter));
+    let mut opener = make_opener(store, TableSchema::from(Arc::clone(&schema)), Some(filter));
+    opener.projection = ProjectionExprs::from_indices(&[schema.index_of("a")?], &schema);
     opener.projection_pushdown = projection_pushdown;
     opener.limit = Some(1);
     let batches = opener
