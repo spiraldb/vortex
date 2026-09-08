@@ -272,7 +272,7 @@ impl WriteStrategyBuilder {
                     RepartitionWriterOptions {
                         // No minimum block size in bytes
                         block_size_minimum: 0,
-                        block_len_multiple: zone_block_size,
+                        block_len_multiple: row_block_size.get(),
                         block_size_target: None,
                         canonicalize: false,
                     },
