@@ -99,14 +99,17 @@ ctest --test-dir build/cpp-dev --output-on-failure
 
 Examples appear in `build/cpp-dev/examples/` (C++) and `build/cpp-dev/ffi/examples/` (C).
 
-Build-system regressions need Python 3.11+, but do not build Vortex:
+Build-system regressions require Python 3.11+, CMake, Ninja, Make, Rust, Clang, and `nm`.
+They compile a tiny Cargo/C/C++ fixture, not Vortex:
 
 ```sh
 cargo fetch --locked
-python3 vortex-ffi/cmake/tests/run_tests.py
+python3 -m unittest discover -s vortex-ffi/cmake/tests -v
 ```
 
-Add `--ci` to reject unexpected skips.
+Missing tools fail the tests rather than skipping them. These checks cover embedding,
+compiler flags, rebuilds, generated headers, and CUDA architecture forwarding;
+the C/C++ CI jobs build and test Vortex itself.
 
 ### Sanitizers
 
@@ -146,12 +149,35 @@ Coverage instrumentation stays off Cargo's build tools.
 
 `VORTEX_ENABLE_CUDA=ON` selects `vortex-cuda-ffi` and adds `vortex_cuda.h` to the existing targets.
 Requires Linux, a CUDA toolkit (`CUDAToolkit_ROOT` if needed), and libclang.
-The build may download the pinned CUDA 12 nvCOMP SDK.
+The build downloads the pinned CUDA 12 nvCOMP SDK if uncached.
 
-**Not a relocatable deployment artifact:**
+`CMAKE_CUDA_ARCHITECTURES` controls both Vortex kernels and CUB. For example:
 
-- NVCC uses `-arch=native`. `CMAKE_CUDA_ARCHITECTURES` has no effect.
-- Kernel sources and PTX are generated in the checkout. PTX is embedded in the archive.
+```sh
+cmake -S lang/cpp -B build/cpp-cuda -DVORTEX_ENABLE_CUDA=ON \
+    -DCMAKE_CUDA_ARCHITECTURES="80-real;90-virtual"
+```
+
+- `80-real` emits only machine code for `sm_80`.
+- `80-virtual` emits only PTX with compute capability 8.0 as its baseline (`compute_80`).
+  The driver JIT-compiles it for GPUs with compute capability 8.0 or newer, not older GPUs.
+- `80` emits both machine code and PTX. The driver uses compatible machine code when available,
+  otherwise it JIT-compiles the PTX automatically.
+
+The `80` is a GPU capability baseline, not a PTX ISA version. The driver must support the PTX
+ISA version emitted by the CUDA toolkit. Architecture-specific (`a`) and family-specific (`f`)
+PTX targets have narrower compatibility than ordinary numeric targets.
+
+`native` (the default) targets the GPUs visible at build time without PTX fallback.
+`all` and `all-major` use NVCC's corresponding architecture selection; `OFF` leaves selection
+to NVCC's defaults. Explicit targets allow GPU-less builds; GPU and toolkit compatibility
+still apply. With `native`, clean the build cache when switching GPU hosts.
+This does not retarget the prebuilt nvCOMP SDK.
+
+**Deployment limits:**
+
+- Kernel sources are generated in the checkout. Compiled kernels live in Cargo's build directory
+  and are embedded in the archive as fat binaries.
 - CMake does not stage shared libraries. `libvortex_cub.so` must remain at its Cargo build path
   or beside the executable. `libnvcomp.so` is loaded from its original Cargo build path.
 - CUDA operations require a compatible NVIDIA driver and an accessible GPU.
