@@ -496,20 +496,19 @@ mod tests {
     }
 
     #[test]
-    fn zero_sized_buffers_do_not_allocate() -> VortexResult<()> {
+    fn empty_buffers_preserve_allocator_without_allocating() -> VortexResult<()> {
         let allocator = TrackingAllocator::default();
         let state = Arc::clone(&allocator.state);
         let allocator = BufferAllocatorRef::new(allocator);
-        let mut buffer = BufferMut::<()>::zeroed_in(3, allocator.clone());
-        buffer.push(());
+        let buffer = BufferMut::<u32>::zeroed_in(0, allocator.clone());
         let buffer = buffer.freeze();
         let copy = buffer.clone().into_mut();
         assert!(copy.allocator().ptr_eq(&allocator));
         let mut buffer = buffer
             .try_into_mut()
             .map_err(|_| vortex_err!("unique buffer"))?;
-        buffer.push(());
-        assert_eq!(buffer.len(), 5);
+        buffer.reserve(0);
+        assert!(buffer.is_empty());
         assert!(buffer.allocator().ptr_eq(&allocator));
         drop((copy, buffer));
         assert_eq!(state.allocations.load(Ordering::Relaxed), 0);

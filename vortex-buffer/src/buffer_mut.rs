@@ -23,14 +23,26 @@ use crate::debug::TruncatedDebug;
 use crate::trusted_len::TrustedLen;
 
 /// A mutable buffer that maintains a runtime-defined alignment through resizing operations.
+///
+/// Zero-sized element types are rejected at compile time when constructing a buffer.
+///
+/// ```compile_fail
+/// use vortex_buffer::BufferMut;
+/// let _ = BufferMut::<()>::empty();
+/// ```
+///
+/// ```compile_fail
+/// use vortex_buffer::BufferMut;
+/// let _ = BufferMut::<()>::zeroed(3);
+/// ```
 pub struct BufferMut<T> {
     /// The owned allocation, including any bytes before `ptr` used for alignment.
     pub(crate) allocation: Allocation,
-    /// The first element, aligned to `alignment`; it may dangle for an empty or zero-sized buffer.
+    /// The first element, aligned to `alignment`; it may dangle for an empty buffer.
     pub(crate) ptr: std::ptr::NonNull<T>,
     /// The number of initialized `T` values starting at `ptr`.
     pub(crate) length: usize,
-    /// The number of `T` values that fit from `ptr`; this is `usize::MAX` for zero-sized `T`.
+    /// The number of `T` values that fit from `ptr`.
     pub(crate) capacity: usize,
     /// The minimum alignment maintained for `ptr` across reallocations.
     pub(crate) alignment: Alignment,
@@ -106,6 +118,7 @@ impl<T> BufferMut<T> {
         preferred_alignment: Option<Alignment>,
         allocator: BufferAllocatorRef,
     ) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         let actual = max(
             alignment,
             preferred_alignment.unwrap_or(Alignment::of::<u8>()),
@@ -137,11 +150,7 @@ impl<T> BufferMut<T> {
         let offset = allocation.ptr().as_ptr().align_offset(actual.as_usize());
         // SAFETY: the allocation includes enough padding to reach this aligned pointer.
         let ptr = unsafe { allocation.ptr().add(offset).cast() };
-        let capacity = if size_of::<T>() == 0 {
-            usize::MAX
-        } else {
-            (allocation.size() - offset) / size_of::<T>()
-        };
+        let capacity = (allocation.size() - offset) / size_of::<T>();
         Self {
             allocation,
             ptr,
@@ -210,6 +219,7 @@ impl<T> BufferMut<T> {
         preferred_alignment: Option<Alignment>,
         allocator: BufferAllocatorRef,
     ) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         let preferred_alignment = preferred_alignment.unwrap_or(Alignment::of::<u8>());
         let actual_alignment = max(preferred_alignment, alignment);
         let size = len
@@ -232,11 +242,7 @@ impl<T> BufferMut<T> {
             .align_offset(actual_alignment.as_usize());
         // SAFETY: the allocation includes enough padding to reach this aligned pointer.
         let ptr = unsafe { allocation.ptr().add(offset).cast() };
-        let capacity = if size_of::<T>() == 0 {
-            usize::MAX
-        } else {
-            (allocation.size() - offset) / size_of::<T>()
-        };
+        let capacity = (allocation.size() - offset) / size_of::<T>();
         Self {
             allocation,
             ptr,
@@ -843,14 +849,6 @@ impl<T> BufferMut<T> {
     /// We use the lower bound hint on the iterator to manually write data, and then we continue to
     /// push items normally past the lower bound.
     fn extend_iter(&mut self, mut iter: impl Iterator<Item = T>) {
-        // Pointer differences cannot count zero-sized elements.
-        if size_of::<T>() == 0 {
-            for item in iter {
-                self.push(item);
-            }
-            return;
-        }
-
         // Since we do not know the length of the iterator, we can only guess how much memory we
         // need to reserve. Note that these hints may be inaccurate.
         let (lower_bound, _) = iter.size_hint();
@@ -901,14 +899,6 @@ impl<T> BufferMut<T> {
     /// The caller guarantees that the iterator will have a trusted upper bound, which allows the
     /// implementation to reserve all of the memory needed up front.
     pub fn extend_trusted<I: TrustedLen<Item = T>>(&mut self, iter: I) {
-        // Pointer differences cannot count zero-sized elements.
-        if size_of::<T>() == 0 {
-            for item in iter {
-                self.push(item);
-            }
-            return;
-        }
-
         let (_, upper_bound) = iter.size_hint();
         self.reserve(
             upper_bound
@@ -1048,15 +1038,6 @@ mod test {
 
         buffer.reserve(capacity);
         assert_eq!(buffer.capacity(), capacity * 2);
-    }
-
-    #[test]
-    fn zero_sized_elements_grow() {
-        let mut buffer = BufferMut::<()>::empty();
-        assert_eq!(buffer.capacity(), usize::MAX);
-        buffer.push(());
-        buffer.push(());
-        assert_eq!(buffer.len(), 2);
     }
 
     #[test]

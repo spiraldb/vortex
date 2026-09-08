@@ -28,9 +28,32 @@ use crate::debug::TruncatedDebug;
 use crate::trusted_len::TrustedLen;
 
 /// An immutable buffer of items of `T`.
+///
+/// Zero-sized element types are rejected at compile time when constructing a buffer.
+///
+/// ```compile_fail
+/// use vortex_buffer::Buffer;
+/// let _ = Buffer::<()>::empty();
+/// ```
+///
+/// ```compile_fail
+/// use vortex_buffer::Buffer;
+/// let _ = Buffer::from(vec![(); 3]);
+/// ```
+///
+/// ```compile_fail
+/// use vortex_buffer::{Buffer, ByteBuffer};
+/// let _ = Buffer::<()>::from_byte_buffer(ByteBuffer::empty());
+/// ```
+///
+/// ```compile_fail
+/// use bytes::Bytes;
+/// use vortex_buffer::{Alignment, Buffer};
+/// let _ = Buffer::<()>::from_bytes_aligned(Bytes::new(), Alignment::none());
+/// ```
 #[derive(Clone)]
 pub struct Buffer<T> {
-    /// The first element in this view; may dangle for an empty buffer or zero-sized `T`.
+    /// The first element in this view; may dangle for an empty buffer.
     pub(crate) ptr: NonNull<T>,
     /// The number of initialized `T` values visible from `ptr`.
     pub(crate) length: usize,
@@ -216,6 +239,7 @@ impl<T> Buffer<T> {
     ///
     /// This does not allocate. Empty buffers use an aligned dangling pointer.
     pub fn empty_aligned(alignment: Alignment) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must align to the scalar type's alignment {}",
@@ -263,12 +287,9 @@ impl<T> Buffer<T> {
     /// ## Panics
     ///
     /// Panics if the buffer is not aligned to the given alignment, if the length is not a multiple
-    /// of the size of `T`, if `T` is zero-sized, or if the given alignment is not aligned to that of `T`.
+    /// of the size of `T`, or if the given alignment is not aligned to that of `T`.
     pub fn from_byte_buffer_aligned(buffer: ByteBuffer, alignment: Alignment) -> Self {
-        assert!(
-            size_of::<T>() != 0,
-            "cannot infer a zero-sized element count from bytes"
-        );
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -299,12 +320,9 @@ impl<T> Buffer<T> {
     /// ## Panics
     ///
     /// Panics if the buffer is not aligned to the size of `T`, or the length is not a multiple of
-    /// the size of `T`, or if `T` is zero-sized.
+    /// the size of `T`.
     pub fn from_bytes_aligned(bytes: Bytes, alignment: Alignment) -> Self {
-        assert!(
-            size_of::<T>() != 0,
-            "cannot infer a zero-sized element count from bytes"
-        );
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -555,7 +573,7 @@ impl<T> Buffer<T> {
         let subset_end = subset_start
             .checked_add(size_of_val(subset))
             .vortex_expect("slice_ref address overflow");
-        if subset.len() > self.len() || subset_start < start || subset_end > end {
+        if subset_start < start || subset_end > end {
             vortex_panic!("slice_ref subset must be contained in the buffer");
         }
 
@@ -627,9 +645,7 @@ impl<T> Buffer<T> {
         match Arc::try_unwrap(backing) {
             Ok(BufferBacking::Owned(allocation)) => {
                 let offset = ptr.addr().get() - allocation.ptr().addr().get();
-                let capacity = if size_of::<T>() == 0 {
-                    usize::MAX
-                } else if allocation.size() == 0 {
+                let capacity = if allocation.size() == 0 {
                     0
                 } else {
                     (allocation.size() - offset) / size_of::<T>()
@@ -805,10 +821,11 @@ where
     T: Send + Sync + 'static,
 {
     fn from(value: Vec<T>) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         let length = value.len();
         let alignment = Alignment::of::<T>();
         if std::mem::needs_drop::<T>() {
-            // Keep the typed owner so its elements are dropped, including zero-sized elements.
+            // Keep the typed owner so its elements are dropped.
             Self {
                 ptr: NonNull::new(value.as_ptr().cast_mut())
                     .vortex_expect("a Vec always has a non-null pointer"),
@@ -882,7 +899,7 @@ fn empty_ptr<T>() -> NonNull<T> {
 
 /// Owned iterator over a [`Buffer`].
 pub struct BufferIterator<T: Copy> {
-    // Keep the buffer alive; its length also counts the remaining zero-sized elements.
+    // Keep the buffer alive for the duration of the iteration.
     _buffer: Buffer<T>,
     ptr: *const T,
     end: *const T,
@@ -898,11 +915,6 @@ impl<T: Copy> Iterator for BufferIterator<T> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if size_of::<T>() == 0 {
-            let value = self._buffer.as_slice().last().copied()?;
-            self._buffer.length -= 1;
-            return Some(value);
-        }
         if self.ptr == self.end {
             None
         } else {
@@ -915,12 +927,7 @@ impl<T: Copy> Iterator for BufferIterator<T> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = if size_of::<T>() == 0 {
-            self._buffer.length
-        } else {
-            // SAFETY: both cursors belong to the buffer and T is not zero-sized.
-            (unsafe { self.end.offset_from(self.ptr) }) as usize
-        };
+        let remaining = unsafe { self.end.offset_from(self.ptr) } as usize;
         (remaining, Some(remaining))
     }
 }
