@@ -12,6 +12,7 @@ use futures::StreamExt;
 use futures::stream::BoxStream;
 use object_store::ObjectStore;
 use object_store::ObjectStoreExt;
+use object_store::local::LocalFileSystem;
 use object_store::path::Path;
 use vortex_error::VortexResult;
 
@@ -21,6 +22,8 @@ use crate::filesystem::FileSystem;
 use crate::object_store::ObjectStoreReadAt;
 use crate::object_store::object_path_from_literal;
 use crate::runtime::Handle;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::std_file::FileReadAt;
 
 /// A [`FileSystem`] backed by an [`ObjectStore`].
 // TODO(ngates): we could consider spawning a driver task inside this file system such that we can
@@ -28,6 +31,12 @@ use crate::runtime::Handle;
 pub struct ObjectStoreFileSystem {
     store: Arc<dyn ObjectStore>,
     handle: Handle,
+    /// Set when the store is the local file system. Reads then go through [`FileReadAt`] on the
+    /// runtime's own blocking pool: `object_store` reads local files through the ambient tokio
+    /// runtime's blocking pool whenever the calling thread has one, and awaiting those from a
+    /// task driven by a non-tokio Vortex runtime can stall indefinitely.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+    local: Option<Arc<LocalFileSystem>>,
 }
 
 impl Debug for ObjectStoreFileSystem {
@@ -41,16 +50,22 @@ impl Debug for ObjectStoreFileSystem {
 impl ObjectStoreFileSystem {
     /// Create a new filesystem backed by the given object store and runtime handle.
     pub fn new(store: Arc<dyn ObjectStore>, handle: Handle) -> Self {
-        Self { store, handle }
+        Self {
+            store,
+            handle,
+            local: None,
+        }
     }
 
     /// Create a new filesystem backed by a local file system object store and the given runtime
     /// handle.
     pub fn local(handle: Handle) -> Self {
-        Self::new(
-            Arc::new(object_store::local::LocalFileSystem::new()),
+        let local = Arc::new(LocalFileSystem::new());
+        Self {
+            store: Arc::clone(&local) as Arc<dyn ObjectStore>,
             handle,
-        )
+            local: Some(local),
+        }
     }
 }
 
@@ -90,9 +105,15 @@ impl FileSystem for ObjectStoreFileSystem {
     }
 
     async fn open_read(&self, path: &str) -> VortexResult<Arc<dyn VortexReadAt>> {
+        let object_path = object_path_from_literal(path);
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(local) = &self.local {
+            let file_path = local.path_to_filesystem(&object_path)?;
+            return Ok(Arc::new(FileReadAt::open(file_path, self.handle.clone())?));
+        }
         Ok(Arc::new(ObjectStoreReadAt::new(
             Arc::clone(&self.store),
-            object_path_from_literal(path),
+            object_path,
             self.handle.clone(),
         )))
     }
