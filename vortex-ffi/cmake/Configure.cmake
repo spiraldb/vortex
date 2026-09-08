@@ -6,6 +6,7 @@
 
 include_guard(GLOBAL)
 
+include("${CMAKE_CURRENT_LIST_DIR}/Cuda.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/Helpers.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/RustToolchain.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/SystemDependencies.cmake")
@@ -197,6 +198,9 @@ endfunction()
 
 # Reconstruct CMake's effective C and C++ flags for Cargo build scripts, including
 # Apple SDK, deployment-target, sanitizer, and PIC requirements.
+#
+# These flags reach build.rs through Cargo's environment, where the cc crate uses
+# them to build native dependencies consistently with the parent CMake project.
 function(_vortex_native_flags
     configuration
     apple_deployment_target
@@ -246,6 +250,11 @@ endfunction()
 # the public Vortex C++ target.
 block(SCOPE_FOR VARIABLES)
     _vortex_resolve_cargo_profile(_configuration _cargo_profile _cargo_artifact_directory)
+
+    set(_cuda_arch_flags "")
+    if(VORTEX_ENABLE_CUDA)
+        _vortex_resolve_cuda_architectures(_cuda_arch_flags)
+    endif()
 
     get_filename_component(_workspace_root "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
     _vortex_resolve_ffi_package(
@@ -332,6 +341,7 @@ block(SCOPE_FOR VARIABLES)
             "-DVORTEX_CARGO_FFI_ARCHIVE=${_cargo_ffi_archive}"
             "-DVORTEX_NVCC_EXECUTABLE=${_nvcc_executable}"
             "-DVORTEX_CUDA_ROOT=${_cuda_root}"
+            "-DVORTEX_CUDA_ARCH_FLAGS=${_cuda_arch_flags}"
             "-DVORTEX_CARGO_BUILD_STD=${_cargo_build_std}"
             "-DVORTEX_CMAKE_FFI_ARCHIVE=${_ffi_archive}"
             "-DVORTEX_FFI_HEADERS=${_ffi_headers}"

@@ -153,7 +153,12 @@ function(_vortex_make_cargo_environment output)
     endif()
 
     if(VORTEX_CUDA_ROOT)
-        list(APPEND _environment "CUDA_PATH=${VORTEX_CUDA_ROOT}")
+        # Match CARGO_ENCODED_RUSTFLAGS. Even an empty value must override ambient
+        # flags: OFF means no architecture flags, while an absent env defaults to native.
+        string(JOIN "${_separator}" _cuda_arch_flags ${VORTEX_CUDA_ARCH_FLAGS})
+        list(APPEND _environment
+            "CUDA_PATH=${VORTEX_CUDA_ROOT}"
+            "VORTEX_CUDA_ARCH_FLAGS=${_cuda_arch_flags}")
     endif()
 
     if(VORTEX_APPLE_DEPLOYMENT_TARGET)
