@@ -50,7 +50,8 @@ fn test_compress() -> VortexResult<()> {
         .display_as(DisplayOptions::MetadataOnly)
         .to_string()
         .to_lowercase();
-    assert_eq!(display, "vortex.dict(f32, len=1024)");
+    assert_arrays_eq!(compressed, array, &mut SESSION.create_execution_ctx());
+    assert_eq!(display, "vortex.alp(f32, len=1024)");
 
     Ok(())
 }
