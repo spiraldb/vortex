@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q9.slt.no explains the upstream query unchanged.
+query IIIRI
+SELECT "RegionID", SUM("AdvEngineID"), COUNT(*) AS c, AVG("ResolutionWidth"), COUNT(DISTINCT "UserID") FROM hits GROUP BY "RegionID" ORDER BY c DESC, "RegionID" LIMIT 10;
+----
+229 38044 426435 1612.787186792829 27961
+2 12801 148193 1593.870891337647 10413
+208 2673 30614 1490.615110733651 3073
+1 1802 28577 1623.851698918711 1720
+34 508 14329 1592.897201479517 1428
+47 1041 13661 1637.85191420833 943
+158 78 13294 1576.340604784113 1110
+7 1166 11679 1627.319034163884 647
+42 642 11547 1625.601021910453 956
+184 30 10157 1614.693807226543 987

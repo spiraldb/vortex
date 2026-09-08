@@ -3,7 +3,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-set -ex -o pipefail
+# Generates TPC-H data at scale factor 0.1 as Parquet under slt/tpch/data/ and
+# converts each table to Vortex.
+
+set -e -o pipefail
 
 if ! command -v uvx &> /dev/null; then
   echo "Error: uvx not found. Install uv first: https://docs.astral.sh/uv/" >&2
@@ -11,18 +14,16 @@ if ! command -v uvx &> /dev/null; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CRATE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 DATA_DIR="${SCRIPT_DIR}/data"
 
 mkdir -p "${DATA_DIR}"
 
-# 1. Generate TPC-H data at scale factor 0.1
 echo "Generating TPC-H data (SF=0.1)..."
-uvx tpchgen-cli -s 0.1 --format=parquet --output-dir "${DATA_DIR}/" 
+uvx tpchgen-cli -s 0.1 --format=parquet --output-dir "${DATA_DIR}/"
 
-# 2. Convert each parquet file to Vortex format
 for f in "${DATA_DIR}"/*.parquet; do
   echo "Converting $(basename "$f") to Vortex..."
-  cargo run --release --package vortex-tui --bin vx -- convert "$f"
+  rm -f "${f%.parquet}.vortex"
+  (cd "${CRATE_DIR}" && cargo run --release --package vortex-tui --bin vx -- convert "$f")
 done
-
-echo "Done."

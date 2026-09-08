@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query T
+SELECT "SearchPhrase" FROM hits WHERE "SearchPhrase" <> '' ORDER BY "SearchPhrase" LIMIT 10;
+----
+'exis disco ryder injected cuda 7269
+'kbnyjuj gjhnf gtgthm vfibys row 3 ставе
+'kbnyjuj gjhnf gtgthm vfibys row 3 ставе
+'kbnyst exfcnm vekmnbdfhrf
+'kbnyst exfcnm vekmnbdfhrf
+(http://kommedium=cpc&utm_source=main происход
++100 дизелькатровский стой
++100 дизелькатровский стой
++100500 4.5 отзывы
++100500 4.5 отзывы

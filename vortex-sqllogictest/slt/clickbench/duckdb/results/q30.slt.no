@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q30.slt.no explains the upstream query unchanged.
+query IIIIR
+SELECT "SearchEngineID", "ClientIP", COUNT(*) AS c, SUM("IsRefresh"), AVG("ResolutionWidth") FROM hits WHERE "SearchPhrase" <> '' GROUP BY "SearchEngineID", "ClientIP" ORDER BY c DESC, "SearchEngineID", "ClientIP" LIMIT 10;
+----
+2 1124827693 180 90 1734.088888888889
+2 1090700661 72 34 1410.333333333333
+2 1600523122 55 21 1368
+2 1388696273 54 27 1893.37037037037
+89 1608608493 53 23 1368
+2 2117869668 47 19 1638
+2 1294197925 46 24 1638
+2 -1319697794 44 22 1714.909090909091
+2 711074589 44 22 1750
+2 1332033259 44 22 1368

@@ -1,0 +1,336 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN (FORMAT json)
+SELECT "SearchEngineID", "SearchPhrase", COUNT(*) AS c FROM hits WHERE "SearchPhrase" <> '' GROUP BY "SearchEngineID", "SearchPhrase" ORDER BY c DESC LIMIT 10;
+----
+logical_plan [
+    {
+        "name": "LIMIT",
+        "children": [
+            {
+                "name": "ORDER_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "AGGREGATE",
+                                "children": [
+                                    {
+                                        "name": "FILTER",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Filters": "",
+                                                            "Function": "Vortex Scan"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "WatchID",
+                                                        "JavaEnable",
+                                                        "Title",
+                                                        "GoodEvent",
+                                                        "EventTime",
+                                                        "EventDate",
+                                                        "CounterID",
+                                                        "ClientIP",
+                                                        "RegionID",
+                                                        "UserID",
+                                                        "CounterClass",
+                                                        "OS",
+                                                        "UserAgent",
+                                                        "URL",
+                                                        "Referer",
+                                                        "IsRefresh",
+                                                        "RefererCategoryID",
+                                                        "RefererRegionID",
+                                                        "URLCategoryID",
+                                                        "URLRegionID",
+                                                        "ResolutionWidth",
+                                                        "ResolutionHeight",
+                                                        "ResolutionDepth",
+                                                        "FlashMajor",
+                                                        "FlashMinor",
+                                                        "FlashMinor2",
+                                                        "NetMajor",
+                                                        "NetMinor",
+                                                        "UserAgentMajor",
+                                                        "UserAgentMinor",
+                                                        "CookieEnable",
+                                                        "JavascriptEnable",
+                                                        "IsMobile",
+                                                        "MobilePhone",
+                                                        "MobilePhoneModel",
+                                                        "Params",
+                                                        "IPNetworkID",
+                                                        "TraficSourceID",
+                                                        "SearchEngineID",
+                                                        "SearchPhrase",
+                                                        "AdvEngineID",
+                                                        "IsArtifical",
+                                                        "WindowClientWidth",
+                                                        "WindowClientHeight",
+                                                        "ClientTimeZone",
+                                                        "ClientEventTime",
+                                                        "SilverlightVersion1",
+                                                        "SilverlightVersion2",
+                                                        "SilverlightVersion3",
+                                                        "SilverlightVersion4",
+                                                        "PageCharset",
+                                                        "CodeVersion",
+                                                        "IsLink",
+                                                        "IsDownload",
+                                                        "IsNotBounce",
+                                                        "FUniqID",
+                                                        "OriginalURL",
+                                                        "HID",
+                                                        "IsOldCounter",
+                                                        "IsEvent",
+                                                        "IsParameter",
+                                                        "DontCountHits",
+                                                        "WithHash",
+                                                        "HitColor",
+                                                        "LocalEventTime",
+                                                        "Age",
+                                                        "Sex",
+                                                        "Income",
+                                                        "Interests",
+                                                        "Robotness",
+                                                        "RemoteIP",
+                                                        "WindowName",
+                                                        "OpenerName",
+                                                        "HistoryLength",
+                                                        "BrowserLanguage",
+                                                        "BrowserCountry",
+                                                        "SocialNetwork",
+                                                        "SocialAction",
+                                                        "HTTPError",
+                                                        "SendTiming",
+                                                        "DNSTiming",
+                                                        "ConnectTiming",
+                                                        "ResponseStartTiming",
+                                                        "ResponseEndTiming",
+                                                        "FetchTiming",
+                                                        "SocialSourceNetworkID",
+                                                        "SocialSourcePage",
+                                                        "ParamPrice",
+                                                        "ParamOrderID",
+                                                        "ParamCurrency",
+                                                        "ParamCurrencyID",
+                                                        "OpenstatServiceName",
+                                                        "OpenstatCampaignID",
+                                                        "OpenstatAdID",
+                                                        "OpenstatSourceID",
+                                                        "UTMSource",
+                                                        "UTMMedium",
+                                                        "UTMCampaign",
+                                                        "UTMContent",
+                                                        "UTMTerm",
+                                                        "FromTag",
+                                                        "HasGCLID",
+                                                        "RefererHash",
+                                                        "URLHash",
+                                                        "CLID"
+                                                    ]
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": "(SearchPhrase != CAST('' AS VARCHAR))"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Groups": [
+                                        "SearchEngineID",
+                                        "SearchPhrase"
+                                    ],
+                                    "Expressions": "count_star()"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expressions": [
+                                "SearchEngineID",
+                                "SearchPhrase",
+                                "c"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Order By": "count_star()"
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": ""
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "TOP_N",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "AGGREGATE",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Filters": "($.SearchPhrase != \"\")",
+                                                            "Function": "Vortex Scan",
+                                                            "Estimated Cardinality": "200000"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "SearchEngineID",
+                                                        "SearchPhrase"
+                                                    ],
+                                                    "Estimated Cardinality": "200000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "__internal_compress_integral_utinyint(#0, 0)",
+                                                "#1"
+                                            ],
+                                            "Estimated Cardinality": "200000"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Groups": [
+                                        "SearchEngineID",
+                                        "SearchPhrase"
+                                    ],
+                                    "Expressions": "count_star()",
+                                    "Estimated Cardinality": "199999"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expressions": [
+                                "__internal_decompress_integral_smallint(#0, 0)",
+                                "#1",
+                                "#2"
+                            ],
+                            "Estimated Cardinality": "199999"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "SearchEngineID",
+                        "SearchPhrase",
+                        "c"
+                    ],
+                    "Estimated Cardinality": "199999"
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": "",
+            "Estimated Cardinality": "10"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "TOP_N",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "HASH_GROUP_BY",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Function": "Vortex Scan",
+                                                    "Filters": "($.SearchPhrase != \"\")",
+                                                    "Projections": [
+                                                        "SearchEngineID",
+                                                        "SearchPhrase"
+                                                    ],
+                                                    "Estimated Cardinality": "200000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Projections": [
+                                                "__internal_compress_integral_utinyint(#0, 0)",
+                                                "#1"
+                                            ],
+                                            "Estimated Cardinality": "200000"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Projections": [
+                                        "SearchEngineID",
+                                        "SearchPhrase"
+                                    ],
+                                    "Estimated Cardinality": "200000"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": [
+                                "#0",
+                                "#1"
+                            ],
+                            "Aggregates": "count_star()",
+                            "Estimated Cardinality": "199999"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Projections": [
+                        "__internal_decompress_integral_smallint(#0, 0)",
+                        "#1",
+                        "#2"
+                    ],
+                    "Estimated Cardinality": "199999"
+                }
+            }
+        ],
+        "extra_info": {
+            "Top": "10",
+            "Order By": "count_star() DESC"
+        }
+    }
+]

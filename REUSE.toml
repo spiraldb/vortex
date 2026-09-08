@@ -12,6 +12,13 @@ path = "vortex-btrblocks/decision-tree.*"
 SPDX-FileCopyrightText = "Copyright the Vortex contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
 
+# ClickBench result fixtures contain raw control characters from the dataset, so REUSE treats
+# them as binary and ignores their SPDX headers.
+[[annotations]]
+path = "vortex-sqllogictest/slt/clickbench/**/results/*.slt.no"
+SPDX-FileCopyrightText = "Copyright the Vortex contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
 # Golden files are licensed under CC-BY-4.0.
 [[annotations]]
 path = "**/goldenfiles/**"
