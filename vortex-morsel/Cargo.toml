@@ -64,6 +64,7 @@ tracing = { workspace = true }
 rustix = { workspace = true, features = ["fs"], optional = true }
 
 [dev-dependencies]
+tracing-subscriber = { workspace = true }
 arrow-array = { workspace = true }
 arrow-cast = { workspace = true }
 parquet = { workspace = true }

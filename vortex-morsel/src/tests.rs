@@ -59,7 +59,9 @@ use vortex_layout::LayoutStrategy;
 use vortex_layout::layouts::dict::Dict;
 use vortex_layout::layouts::dict::writer::DictLayoutOptions;
 use vortex_layout::layouts::dict::writer::DictStrategy;
+use vortex_layout::layouts::flat::Flat;
 use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
+use vortex_layout::layouts::struct_::Struct;
 use vortex_layout::scan::scan_builder::ScanBuilder;
 use vortex_layout::segments::ReadAtNowait;
 use vortex_layout::segments::SegmentFuture;
@@ -90,6 +92,7 @@ use crate::harness::assert_same_rows;
 use crate::harness::concat;
 use crate::harness::run_morsel;
 use crate::harness::run_v1;
+use crate::io_trace::RecordingSegmentSource;
 use crate::layouts::FlatPlanner;
 use crate::morsels;
 use crate::node::NodeId;
@@ -1669,5 +1672,145 @@ fn unwanted_chunks_are_not_decoded() -> VortexResult<()> {
     // `a` is read whole for the predicate (three chunks); `b` and `c` only need their first.
     assert_eq!(stats.decodes, 3 + 1 + 1);
     assert!(stats.rows_placeholder > 0);
+    Ok(())
+}
+
+/// A readable trace of one morsel: the segments, the reads it named in the order the source
+/// saw them, what was decoded or stood in for, and what came out.
+///
+/// Run it with `cargo nextest run -p vortex-morsel trace_one_morsel --no-capture`.
+#[test]
+fn trace_one_morsel() -> VortexResult<()> {
+    // A second call in the same process is fine: the first subscriber stays installed.
+    drop(
+        tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_target(true)
+            .with_ansi(false)
+            .with_test_writer()
+            .try_init(),
+    );
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+
+    // Which segment holds which rows of which column: walk the layout down to its flats.
+    fn walk(
+        layout: &LayoutRef,
+        name: &str,
+        offset: u64,
+        out: &mut Vec<(SegmentId, String)>,
+    ) -> VortexResult<()> {
+        if let Some(flat) = layout.as_opt::<Flat>() {
+            let label = format!("{name} rows {offset}..{}", offset + layout.row_count());
+            println!("  segment {:>2}: {label}", *flat.segment_id());
+            out.push((flat.segment_id(), label));
+            return Ok(());
+        }
+        let is_struct = layout.as_opt::<Struct>().is_some();
+        let names: Vec<String> = match layout.dtype() {
+            DType::Struct(fields, _) => fields.names().iter().map(|n| n.to_string()).collect(),
+            _ => Vec::new(),
+        };
+        let mut child_offset = offset;
+        for slot in 0..layout.nslots() {
+            let Some(child) = layout.slot(slot)? else {
+                continue;
+            };
+            let child_name = if is_struct {
+                // Slot 0 of a struct layout is its validity child; fields start at slot 1.
+                slot.checked_sub(1)
+                    .and_then(|field| names.get(field).cloned())
+                    .unwrap_or_else(|| format!("{name}.{slot}"))
+            } else {
+                format!("{name}[{slot}]")
+            };
+            walk(&child, &child_name, child_offset, out)?;
+            if !is_struct {
+                child_offset += child.row_count();
+            }
+        }
+        Ok(())
+    }
+    let mut segments: Vec<(SegmentId, String)> = Vec::new();
+    println!(
+        "== segments == root layout is {}",
+        fixture.layout.encoding_id()
+    );
+    walk(&fixture.layout, "", 0, &mut segments)?;
+
+    // SELECT a, b, c WHERE a < 10: one morsel over the whole file.
+    let projection = select(vec!["a", "b", "c"], root());
+    let filter = lt(get_item("a", root()), lit(10i32));
+    let plan = Arc::new(build_plan(
+        &fixture.layout,
+        &projection,
+        Some(&filter),
+        ConjunctMode::Cascade,
+    )?);
+    let splits: Vec<String> = plan.natural_splits().iter().map(u64::to_string).collect();
+    println!(
+        "== plan == root node {}, {} rows, natural splits at {}",
+        plan.root(),
+        plan.row_count(),
+        splits.join(" ")
+    );
+
+    let recording = RecordingSegmentSource::new(Arc::clone(&fixture.segments));
+    let source = Arc::clone(&recording) as Arc<dyn SegmentSource>;
+    let scan = MorselScan::new(Arc::clone(&plan), session)
+        .with_threads(1)
+        .with_observability(true)
+        .with_morsel_demands(vec![(0..ROWS as u64, Mask::new_true(ROWS))])?
+        .connect_on_thread(&SegmentSourceDriver::new(source))?;
+    let (batches, stats) = scan.run()?;
+
+    println!("== reads, in the order the source saw them ==");
+    for demand in recording.demands() {
+        let label = segments
+            .iter()
+            .find(|(id, _)| *id == demand.segment)
+            .map_or("?", |(_, label)| label.as_str());
+        println!(
+            "  #{:<2} at +{:>5}us  segment {:>2}  {label}",
+            demand.ordinal,
+            demand.needed_at.as_micros(),
+            *demand.segment
+        );
+    }
+
+    println!("== morsel ==");
+    for trace in &stats.morsel_traces {
+        println!(
+            "  morsel {} rows {}..{}: plan polls {}, execute polls {}, named uses {}, requests {}, \
+             cell hits {}, blocked {} time(s), planning {}us, execution {}us, io wait {}us",
+            trace.index,
+            trace.row_start,
+            trace.row_end,
+            trace.plan_polls,
+            trace.execute_polls,
+            trace.io_uses,
+            trace.io_requests,
+            trace.io_cell_hits,
+            trace.execute_io_blocks,
+            trace.planning_time.as_micros(),
+            trace.execution_time.as_micros(),
+            trace.worker_io_wait_time.as_micros()
+        );
+    }
+    println!(
+        "  decodes {} (reused {}), rows from storage {}, placeholder rows {}, rows selected {}, \
+         empty morsels {}",
+        stats.decodes,
+        stats.decode_reuses,
+        stats.rows_materialized,
+        stats.rows_placeholder,
+        stats.rows_selected,
+        stats.morsels_empty
+    );
+    let rows: usize = batches.iter().map(|batch| batch.len()).sum();
+    println!("== output == {} batch(es), {rows} rows", batches.len());
+
+    assert_eq!(rows, 10);
+    assert_eq!(stats.decodes, 3 + 1 + 1);
     Ok(())
 }
