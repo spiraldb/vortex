@@ -21,13 +21,8 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::dtype::Field;
 use vortex_array::dtype::FieldMask;
-use vortex_array::session::ArraySessionExt;
 use vortex_buffer::Buffer;
 use vortex_buffer::ByteBufferMut;
-use vortex_edition::Edition;
-use vortex_edition::EditionId;
-use vortex_edition::EditionInclusion;
-use vortex_edition::EditionSessionExt;
 use vortex_file::OpenOptionsSessionExt;
 use vortex_file::VortexFile;
 use vortex_file::WriteOptionsSessionExt;
@@ -49,7 +44,7 @@ fn main() {
 const ROWS_PER_CHUNK: usize = 1024;
 
 /// (columns, chunks) configurations.
-const CONFIGS: &[(usize, usize)] = &[(64, 256)];
+const CONFIGS: &[(usize, usize)] = &[(16, 64)];
 
 static RUNTIME: LazyLock<tokio::runtime::Runtime> = LazyLock::new(|| {
     tokio::runtime::Builder::new_current_thread()
@@ -65,31 +60,8 @@ static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
         .with::<RuntimeSession>()
         .with_tokio();
     vortex_file::register_default_encodings(&session);
-    enable_all_registered_array_encodings(&session);
     session
 });
-
-const BENCH_EDITION: EditionId = EditionId::new("bench", 2026, 8, 0);
-
-fn enable_all_registered_array_encodings(session: &VortexSession) {
-    let editions = session.editions();
-    editions
-        .declare_edition(Edition {
-            id: BENCH_EDITION,
-            min_vortex_version: None,
-        })
-        .unwrap();
-    let ids = session
-        .arrays()
-        .registry()
-        .read(|map| map.keys().copied().collect::<Vec<_>>());
-    for id in ids {
-        editions
-            .declare_inclusion(EditionInclusion::array(&id, BENCH_EDITION))
-            .unwrap();
-    }
-    session.enable_edition(BENCH_EDITION).unwrap();
-}
 
 fn make_file(columns: usize, chunks: usize) -> VortexFile {
     let field_names = (0..columns).map(|c| format!("col_{c}")).collect::<Vec<_>>();
@@ -119,6 +91,7 @@ fn make_file(columns: usize, chunks: usize) -> VortexFile {
         .block_on(
             SESSION
                 .write_options()
+                .disable_editions()
                 .with_strategy(strategy)
                 .write(&mut buf, array.to_array_stream()),
         )
@@ -136,7 +109,7 @@ static FILES: LazyLock<HashMap<(usize, usize), VortexFile>> = LazyLock::new(|| {
 
 /// (columns, average chunks per column) for the misaligned files. A single column cannot be
 /// misaligned, so only multi-column configs are used.
-const MISALIGNED_CONFIGS: &[(usize, usize)] = &[(64, 256)];
+const MISALIGNED_CONFIGS: &[(usize, usize)] = &[(16, 64)];
 
 /// Per-column repartition block length: all distinct, so no two columns share interior chunk
 /// boundaries. Mirrors real files where byte-size coalescing gives each column its own chunking.
@@ -185,6 +158,7 @@ fn make_misaligned_file(columns: usize, chunks: usize) -> VortexFile {
         .block_on(
             SESSION
                 .write_options()
+                .disable_editions()
                 .with_strategy(strategy.build())
                 .write(&mut buf, array.to_array_stream()),
         )

@@ -13,6 +13,10 @@ use vortex_session::registry::CachedId;
 
 use crate::ArrayRef;
 use crate::ExecutionCtx;
+use crate::IntoArray;
+use crate::arrays::Constant;
+use crate::arrays::ConstantArray;
+use crate::arrays::ScalarFnArray;
 use crate::arrays::StructArray;
 use crate::arrays::struct_::StructArrayExt;
 use crate::builtins::ArrayBuiltins;
@@ -23,6 +27,7 @@ use crate::dtype::Nullability;
 use crate::expr::Expression;
 use crate::expr::display::ExprDisplay;
 use crate::expr::lit;
+use crate::scalar::Scalar;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::EmptyOptions;
@@ -37,6 +42,20 @@ use crate::scalar_fn::fns::pack::Pack;
 
 #[derive(Clone)]
 pub struct GetItem;
+
+impl GetItem {
+    /// Creates a lazy projection of `field_name` from `input`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `input` is not a struct or does not contain `field_name`.
+    pub fn try_new(
+        input: ArrayRef,
+        field_name: impl Into<FieldName>,
+    ) -> VortexResult<ScalarFnArray> {
+        ScalarFnArray::try_new(GetItem.bind(field_name.into()), vec![input])
+    }
+}
 
 impl ScalarFnVTable for GetItem {
     type Options = FieldName;
@@ -111,7 +130,30 @@ impl ScalarFnVTable for GetItem {
         args: &dyn ExecutionArgs,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        let input = args.get(0)?.execute::<StructArray>(ctx)?;
+        let input = args.get(0)?;
+        if let Some(constant) = input.as_opt::<Constant>() {
+            let dtype = self.return_dtype(field_name, &[input.dtype().clone()])?;
+            let scalar = if constant.scalar().is_null() {
+                Scalar::null(dtype)
+            } else {
+                constant
+                    .scalar()
+                    .as_struct()
+                    .field(field_name)
+                    .ok_or_else(|| {
+                        vortex_err!(
+                            "Field '{}' missing from constant struct array {}",
+                            field_name,
+                            input.dtype()
+                        )
+                    })?
+                    .cast(&dtype)?
+            };
+
+            return Ok(ConstantArray::new(scalar, input.len()).into_array());
+        }
+
+        let input = input.execute::<StructArray>(ctx)?;
         let field = input.unmasked_field_by_name(field_name).cloned()?;
 
         match input.dtype().nullability() {
@@ -184,9 +226,9 @@ impl ScalarFnVTable for GetItem {
         true
     }
 
-    fn is_fallible(&self, _field_name: &FieldName) -> bool {
-        // If this type-checks its infallible.
-        false
+    fn is_infallible(&self, _field_name: &FieldName) -> bool {
+        // If this type-checks, it is infallible.
+        true
     }
 }
 
@@ -195,8 +237,19 @@ mod tests {
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
 
+    use super::GetItem;
+    use crate::ArrayRef;
     use crate::IntoArray;
+    use crate::VortexSessionExecute;
+    use crate::arrays::Constant;
+    use crate::arrays::ConstantArray;
+    use crate::arrays::Filter;
+    use crate::arrays::Primitive;
+    use crate::arrays::ScalarFn;
+    use crate::arrays::Slice;
+    use crate::builtins::ArrayBuiltins;
     use crate::dtype::DType;
+    use crate::dtype::FieldName;
     use crate::dtype::FieldNames;
     use crate::dtype::Nullability;
     use crate::dtype::Nullability::NonNullable;
@@ -207,6 +260,7 @@ mod tests {
     use crate::expr::lit;
     use crate::expr::pack;
     use crate::expr::root;
+    use crate::scalar::Scalar;
     use crate::scalar_fn::fns::get_item::StructArray;
     use crate::validity::Validity;
 
@@ -273,6 +327,79 @@ mod tests {
             item.dtype(),
             &DType::Primitive(PType::I32, Nullability::Nullable)
         );
+        Ok(())
+    }
+
+    #[test]
+    fn execute_constant_struct_stays_constant() -> VortexResult<()> {
+        let field_count = 128usize;
+        let selected_idx = 97i32;
+        let names = (0..field_count)
+            .map(|idx| FieldName::from(format!("f{idx}")))
+            .collect::<Vec<_>>();
+        let dtypes = vec![DType::Primitive(PType::I32, NonNullable); field_count];
+        let fields = StructFields::new(FieldNames::from(names), dtypes);
+        let scalar = Scalar::struct_(
+            DType::Struct(fields, NonNullable),
+            (0..128).map(|idx| Scalar::primitive(idx, NonNullable)),
+        );
+        let array = ConstantArray::new(scalar, 1_000_000).into_array();
+        let mut ctx = crate::array_session().create_execution_ctx();
+
+        let item: ArrayRef = GetItem::try_new(array, "f97")?
+            .into_array()
+            .execute(&mut ctx)?;
+
+        let constant = item.as_::<Constant>();
+        assert_eq!(constant.len(), 1_000_000);
+        assert_eq!(
+            constant.scalar(),
+            &Scalar::primitive(selected_idx, NonNullable)
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn get_item_pushes_through_filter() -> VortexResult<()> {
+        use vortex_mask::Mask;
+
+        let filtered = test_array()
+            .into_array()
+            .filter(Mask::from_iter([true, false, true]))?;
+
+        let item = filtered.get_item("a")?;
+
+        assert!(item.is::<Filter>());
+        assert!(!item.is::<ScalarFn>());
+        Ok(())
+    }
+
+    #[test]
+    fn get_item_pushes_through_slice() -> VortexResult<()> {
+        let sliced = test_array().into_array().slice(1..3)?;
+
+        let item = sliced.get_item("a")?;
+
+        assert!(item.is::<Primitive>());
+        assert!(!item.is::<Slice>());
+        assert!(!item.is::<ScalarFn>());
+        Ok(())
+    }
+
+    #[test]
+    fn get_item_pushes_through_masked() -> VortexResult<()> {
+        let masked = test_array()
+            .into_array()
+            .mask(Validity::from_iter([true, false, true]).to_array(3))?;
+
+        let item = masked.get_item("a")?;
+
+        assert!(item.is::<Primitive>());
+        assert_eq!(
+            item.dtype(),
+            &DType::Primitive(PType::I32, Nullability::Nullable)
+        );
+        assert!(!item.is::<ScalarFn>());
         Ok(())
     }
 

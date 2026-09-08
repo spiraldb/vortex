@@ -10,7 +10,7 @@ use vortex_error::vortex_bail;
 use vortex_mask::Mask;
 
 use super::ElementTuple;
-use super::element_tuple::batch_constant;
+use super::element_tuple::batch_const;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
@@ -30,19 +30,21 @@ use crate::scalar_fn::unstable::row::InputElement;
 use crate::validity::Validity;
 
 static DECODE_CALLS: AtomicUsize = AtomicUsize::new(0);
+static CONSTANT_DECODE_LEN: AtomicUsize = AtomicUsize::new(0);
 
 macro_rules! i64_test_element {
-    ($element:ident, $decode_fallible:literal $(, $can_decode:item)?) => {
+    ($element:ident, $decode_infallible:literal $(, $can_decode:item)?) => {
         struct $element;
 
         // SAFETY: the view and unchecked access delegate to the `i64` implementation.
         unsafe impl InputElement for $element {
             type Column = Buffer<i64>;
+            type Constant = i64;
             type View<'a> = &'a [i64];
             type Elem<'a> = i64;
 
             const DENSE_SAFE: bool = true;
-            const DECODE_FALLIBLE: bool = $decode_fallible;
+            const DECODE_INFALLIBLE: bool = $decode_infallible;
 
             fn validate(dtype: &DType) -> VortexResult<()> {
                 <i64 as InputElement>::validate(dtype)
@@ -53,18 +55,26 @@ macro_rules! i64_test_element {
                 <i64 as InputElement>::decode(array, ctx)
             }
 
+            fn decode_constant(
+                array: ArrayRef,
+                ctx: &mut ExecutionCtx,
+            ) -> VortexResult<Self::Constant> {
+                CONSTANT_DECODE_LEN.store(array.len(), Ordering::Relaxed);
+                <i64 as InputElement>::decode_constant(array, ctx)
+            }
+
             $($can_decode)?
 
             fn get(column: &Self::Column, index: usize) -> i64 {
                 <i64 as InputElement>::get(column, index)
             }
 
-            fn view(column: &Self::Column) -> Self::View<'_> {
-                <i64 as InputElement>::view(column)
+            fn get_constant(constant: &Self::Constant) -> i64 {
+                *constant
             }
 
-            fn view_len(view: &Self::View<'_>) -> usize {
-                <i64 as InputElement>::view_len(view)
+            fn view(column: &Self::Column) -> Self::View<'_> {
+                <i64 as InputElement>::view(column)
             }
 
             fn get_from_view<'a>(view: &Self::View<'a>, index: usize) -> i64
@@ -87,12 +97,20 @@ macro_rules! i64_test_element {
 
 i64_test_element!(
     DecodeProbe,
-    false,
+    true,
     fn can_decode_null_tolerant(_array: &ArrayRef) -> VortexResult<bool> {
         Ok(true)
     }
 );
-i64_test_element!(DenseFallible, true);
+i64_test_element!(DenseFallible, false);
+
+#[test]
+fn test_view_lens_match_checks_each_view() {
+    let first: &[i64] = &[1, 2];
+    let second: &[i64] = &[3];
+
+    assert!(!<(i64, i64)>::view_lens_match(&(first, second), 2));
+}
 
 #[test]
 fn test_null_tolerant_decline_precedes_decoding() -> VortexResult<()> {
@@ -110,31 +128,46 @@ fn test_null_tolerant_decline_precedes_decoding() -> VortexResult<()> {
 }
 
 #[test]
-fn test_batch_constant_unwraps_filtered_masked_constant() -> VortexResult<()> {
+fn test_batch_constant_uses_constant_decoder() -> VortexResult<()> {
+    DECODE_CALLS.store(0, Ordering::Relaxed);
+    CONSTANT_DECODE_LEN.store(0, Ordering::Relaxed);
+    let args = VecExecutionArgs::new(vec![ConstantArray::new(7_i64, 3).into_array()], 3);
+    let mut ctx = array_session().create_execution_ctx();
+
+    let columns = <(DecodeProbe,)>::decode(&args, &mut ctx)?;
+
+    assert_eq!(DECODE_CALLS.load(Ordering::Relaxed), 0);
+    assert_eq!(CONSTANT_DECODE_LEN.load(Ordering::Relaxed), 3);
+    assert_eq!(<(DecodeProbe,)>::const_values(&columns), (Some(7),));
+    Ok(())
+}
+
+#[test]
+fn test_batch_const_unwraps_filtered_masked_constant() -> VortexResult<()> {
     let child = ConstantArray::new(7_i64, 3).into_array();
     let masked =
         MaskedArray::try_new(child, Validity::from_iter([true, false, true]))?.into_array();
     let filtered = masked.filter(Mask::from_iter([true, true, false]))?;
 
-    let Some(constant) = batch_constant(&filtered) else {
+    let Some(const_array) = batch_const(&filtered) else {
         vortex_bail!("filtered masked constant must remain batch-constant");
     };
 
-    assert!(constant.is::<Constant>());
+    assert!(const_array.is::<Constant>());
     Ok(())
 }
 
 #[test]
-fn test_batch_constant_preserves_filtered_extension() -> VortexResult<()> {
+fn test_batch_const_preserves_filtered_extension() -> VortexResult<()> {
     let ext_dtype = Timestamp::new(TimeUnit::Milliseconds, Nullability::NonNullable).erased();
     let extension =
         ExtensionArray::new(ext_dtype, ConstantArray::new(7_i64, 3).into_array()).into_array();
     let filtered = extension.filter(Mask::from_iter([true, false, true]))?;
 
-    let Some(constant) = batch_constant(&filtered) else {
+    let Some(const_array) = batch_const(&filtered) else {
         vortex_bail!("filtered extension storage must remain batch-constant");
     };
 
-    assert_eq!(constant.dtype(), extension.dtype());
+    assert_eq!(const_array.dtype(), extension.dtype());
     Ok(())
 }

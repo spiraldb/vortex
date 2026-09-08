@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+select
+    o_year,
+    sum(case
+            when nation = 'BRAZIL' then volume
+            else 0
+        end) / sum(volume) as mkt_share
+from
+    (
+        select
+            extract(year from o_orderdate) as o_year,
+            l_extendedprice * (1 - l_discount) as volume,
+            n2.n_name as nation
+        from
+            part,
+            supplier,
+            lineitem,
+            orders,
+            customer,
+            nation n1,
+            nation n2,
+            region
+        where
+                p_partkey = l_partkey
+          and s_suppkey = l_suppkey
+          and l_orderkey = o_orderkey
+          and o_custkey = c_custkey
+          and c_nationkey = n1.n_nationkey
+          and n1.n_regionkey = r_regionkey
+          and r_name = 'AMERICA'
+          and s_nationkey = n2.n_nationkey
+          and o_orderdate between date '1995-01-01' and date '1996-12-31'
+          and p_type = 'ECONOMY ANODIZED STEEL'
+    ) as all_nations
+group by
+    o_year
+order by
+    o_year;
+----
+logical_plan
+01)Sort: all_nations.o_year ASC NULLS LAST
+02)--Projection: all_nations.o_year, sum(CASE WHEN all_nations.nation = Utf8("BRAZIL") THEN all_nations.volume ELSE Int64(0) END) / sum(all_nations.volume) AS mkt_share
+03)----Aggregate: groupBy=[[all_nations.o_year]], aggr=[[sum(CASE WHEN all_nations.nation = Utf8View("BRAZIL") THEN all_nations.volume ELSE Decimal128(0.0000,38,4) END) AS sum(CASE WHEN all_nations.nation = Utf8("BRAZIL") THEN all_nations.volume ELSE Int64(0) END), sum(all_nations.volume)]]
+04)------SubqueryAlias: all_nations
+05)--------Projection: date_part(Utf8("YEAR"), orders.o_orderdate) AS o_year, lineitem.l_extendedprice * (Decimal128(1,20,0) - lineitem.l_discount) AS volume, n2.n_name AS nation
+06)----------Inner Join: n1.n_regionkey = region.r_regionkey
+07)------------Projection: lineitem.l_extendedprice, lineitem.l_discount, orders.o_orderdate, n1.n_regionkey, n2.n_name
+08)--------------Inner Join: supplier.s_nationkey = n2.n_nationkey
+09)----------------Projection: lineitem.l_extendedprice, lineitem.l_discount, supplier.s_nationkey, orders.o_orderdate, n1.n_regionkey
+10)------------------Inner Join: customer.c_nationkey = n1.n_nationkey
+11)--------------------Projection: lineitem.l_extendedprice, lineitem.l_discount, supplier.s_nationkey, orders.o_orderdate, customer.c_nationkey
+12)----------------------Inner Join: orders.o_custkey = customer.c_custkey
+13)------------------------Projection: lineitem.l_extendedprice, lineitem.l_discount, supplier.s_nationkey, orders.o_custkey, orders.o_orderdate
+14)--------------------------Inner Join: lineitem.l_orderkey = orders.o_orderkey
+15)----------------------------Projection: lineitem.l_orderkey, lineitem.l_extendedprice, lineitem.l_discount, supplier.s_nationkey
+16)------------------------------Inner Join: lineitem.l_suppkey = supplier.s_suppkey
+17)--------------------------------Projection: lineitem.l_orderkey, lineitem.l_suppkey, lineitem.l_extendedprice, lineitem.l_discount
+18)----------------------------------Inner Join: part.p_partkey = lineitem.l_partkey
+19)------------------------------------Projection: part.p_partkey
+20)--------------------------------------Filter: part.p_type = Utf8View("ECONOMY ANODIZED STEEL")
+21)----------------------------------------TableScan: part projection=[p_partkey, p_type], partial_filters=[part.p_type = Utf8View("ECONOMY ANODIZED STEEL")]
+22)------------------------------------TableScan: lineitem projection=[l_orderkey, l_partkey, l_suppkey, l_extendedprice, l_discount]
+23)--------------------------------TableScan: supplier projection=[s_suppkey, s_nationkey]
+24)----------------------------Filter: orders.o_orderdate >= Date32("1995-01-01") AND orders.o_orderdate <= Date32("1996-12-31")
+25)------------------------------TableScan: orders projection=[o_orderkey, o_custkey, o_orderdate], partial_filters=[orders.o_orderdate >= Date32("1995-01-01"), orders.o_orderdate <= Date32("1996-12-31")]
+26)------------------------TableScan: customer projection=[c_custkey, c_nationkey]
+27)--------------------SubqueryAlias: n1
+28)----------------------TableScan: nation projection=[n_nationkey, n_regionkey]
+29)----------------SubqueryAlias: n2
+30)------------------TableScan: nation projection=[n_nationkey, n_name]
+31)------------Projection: region.r_regionkey
+32)--------------Filter: region.r_name = Utf8View("AMERICA")
+33)----------------TableScan: region projection=[r_regionkey, r_name], partial_filters=[region.r_name = Utf8View("AMERICA")]
+physical_plan
+01)SortPreservingMergeExec: [o_year@0 ASC NULLS LAST]
+02)--SortExec: expr=[o_year@0 ASC NULLS LAST], preserve_partitioning=[true]
+03)----ProjectionExec: expr=[o_year@0 as o_year, sum(CASE WHEN all_nations.nation = Utf8("BRAZIL") THEN all_nations.volume ELSE Int64(0) END)@1 / sum(all_nations.volume)@2 as mkt_share]
+04)------AggregateExec: mode=FinalPartitioned, gby=[o_year@0 as o_year], aggr=[sum(CASE WHEN all_nations.nation = BRAZIL THEN all_nations.volume ELSE 0.0000 END) as sum(CASE WHEN all_nations.nation = Utf8("BRAZIL") THEN all_nations.volume ELSE Int64(0) END), sum(all_nations.volume)]
+05)--------RepartitionExec: partitioning=Hash([o_year@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[o_year@0 as o_year], aggr=[sum(CASE WHEN all_nations.nation = BRAZIL THEN all_nations.volume ELSE 0.0000 END) as sum(CASE WHEN all_nations.nation = Utf8("BRAZIL") THEN all_nations.volume ELSE Int64(0) END), sum(all_nations.volume)]
+07)------------ProjectionExec: expr=[date_part(YEAR, o_orderdate@0) as o_year, l_extendedprice@1 * (1 - l_discount@2) as volume, n_name@3 as nation]
+08)--------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(r_regionkey@0, n_regionkey@3)], projection=[o_orderdate@3, l_extendedprice@1, l_discount@2, n_name@5]
+09)----------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/region.vortex]]}, projection=[r_regionkey], file_type=vortex, predicate: r_name@1 = AMERICA
+10)----------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(n_nationkey@0, s_nationkey@2)], projection=[l_extendedprice@2, l_discount@3, o_orderdate@5, n_regionkey@6, n_name@1]
+11)------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/nation.vortex]]}, projection=[n_nationkey, n_name], file_type=vortex
+12)------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(n_nationkey@0, c_nationkey@4)], projection=[l_extendedprice@2, l_discount@3, s_nationkey@4, o_orderdate@5, n_regionkey@1]
+13)--------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/nation.vortex]]}, projection=[n_nationkey, n_regionkey], file_type=vortex
+14)--------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(c_custkey@0, o_custkey@3)], projection=[l_extendedprice@2, l_discount@3, s_nationkey@4, o_orderdate@6, c_nationkey@1]
+15)----------------------CoalescePartitionsExec
+16)------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>]]}, projection=[c_custkey, c_nationkey], file_type=vortex
+17)----------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(o_orderkey@0, l_orderkey@0)], projection=[l_extendedprice@4, l_discount@5, s_nationkey@6, o_custkey@1, o_orderdate@2]
+18)------------------------CoalescePartitionsExec
+19)--------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>]]}, projection=[o_orderkey, o_custkey, o_orderdate], file_type=vortex, predicate: o_orderdate@4 >= 1995-01-01 AND o_orderdate@4 <= 1996-12-31
+20)------------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s_suppkey@0, l_suppkey@1)], projection=[l_orderkey@2, l_extendedprice@4, l_discount@5, s_nationkey@1]
+21)--------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/supplier.vortex]]}, projection=[s_suppkey, s_nationkey], file_type=vortex
+22)--------------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(p_partkey@0, l_partkey@1)], projection=[l_orderkey@1, l_suppkey@3, l_extendedprice@4, l_discount@5]
+23)----------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/part.vortex]]}, projection=[p_partkey], file_type=vortex, predicate: p_type@4 = ECONOMY ANODIZED STEEL
+24)----------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>]]}, projection=[l_orderkey, l_partkey, l_suppkey, l_extendedprice, l_discount], file_type=vortex

@@ -3,33 +3,41 @@
 
 //! Typed decoding and row access for one input column.
 //!
-//! [`InputElement`] separates invocation-wide decoding from the checked and unchecked access paths
-//! used by row kernels.
+//! [`InputElement`] separates invocation-wide column and batch-constant decoding from the checked
+//! and unchecked access paths used by row kernels.
 
 use vortex_error::VortexResult;
 
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::dtype::DType;
+use crate::scalar_fn::unstable::row::ViewLen;
 
 /// An element type that can be read row-wise out of an input column.
 ///
 /// # Safety
 ///
-/// For every view returned by [`view`](Self::view), every index below
-/// [`view_len`](Self::view_len) **must** satisfy the safety contract of
-/// [`get_from_view_unchecked`](Self::get_from_view_unchecked). Shared execution relies on this
-/// proof to perform unchecked reads after one pre-loop length check.
+/// - For each view returned by [`view`](Self::view), every index below [`ViewLen::len`] **must**
+///   satisfy the contract of [`get_from_view_unchecked`](Self::get_from_view_unchecked).
+/// - The view length and its addressable indices **must** remain stable while the view exists.
+///   Interior mutability exposed through an element **must not** change either property.
+/// - Shared execution checks the length once before unchecked reads. Violating these requirements
+///   can cause undefined behavior.
 pub unsafe trait InputElement: 'static {
     /// The decoded column representation supporting `O(1)` row access.
     type Column;
+
+    /// The decoded representation of one non-null batch-constant input.
+    ///
+    /// This representation stores one logical value regardless of the input array's batch length.
+    type Constant;
 
     /// The row-loop view of a decoded column.
     ///
     /// This can borrow a cheaper representation than [`Column`](Self::Column). Primitive elements,
     /// for example, expose a slice so its pointer and length are loop invariants rather than
     /// re-reading a [`Buffer`](vortex_buffer::Buffer) descriptor for every row.
-    type View<'a>;
+    type View<'a>: ViewLen;
 
     /// The borrowed element value handed to a row closure.
     type Elem<'a>;
@@ -41,19 +49,29 @@ pub unsafe trait InputElement: 'static {
     /// null rows to the row closure.
     const DENSE_SAFE: bool;
 
-    /// Whether [`decode`](Self::decode) can fail on _legal_ input data.
+    /// Whether [`decode`](Self::decode) is infallible for _legal_ input data.
     ///
     /// This excludes infrastructural failures such as IO or allocation.
-    const DECODE_FALLIBLE: bool;
+    /// It is independent of
+    /// [`RowFn::INFALLIBLE`](crate::scalar_fn::unstable::row::RowFn::INFALLIBLE), which describes
+    /// the row operation rather than input decoding.
+    const DECODE_INFALLIBLE: bool;
 
     /// Validate that `dtype` is an acceptable input column dtype for this element type.
     fn validate(dtype: &DType) -> VortexResult<()>;
 
     /// Decode `array` into its column representation.
     ///
-    /// Called once per row-kernel invocation, including deferred-error retries. Hoist dtype checks,
-    /// downcasts, and other invocation-invariant work into this method.
+    /// Called once per row-kernel invocation. Retrying a partially valid batch after a dense
+    /// deferred error starts a second invocation over valid rows. Hoist dtype checks, downcasts,
+    /// and other invocation-invariant work into this method.
     fn decode(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Column>;
+
+    /// Decode one non-null batch-constant input.
+    ///
+    /// `array` retains its logical batch length. Implementations can extract one value directly
+    /// without slicing or materializing a one-row column.
+    fn decode_constant(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Constant>;
 
     /// Whether [`decode_null_tolerant`](Self::decode_null_tolerant) can decode this array.
     ///
@@ -68,7 +86,7 @@ pub unsafe trait InputElement: 'static {
     /// cannot decode this particular array.
     ///
     /// Override this for a non-dense-safe representation that can still place safe placeholders in
-    /// null slots. The skip-invalid executor never reads those slots.
+    /// null slots. Valid-row execution never reads those slots.
     fn decode_null_tolerant(
         array: ArrayRef,
         ctx: &mut ExecutionCtx,
@@ -83,17 +101,15 @@ pub unsafe trait InputElement: 'static {
     /// Read one row without repeating batch-constant work from [`decode`](Self::decode).
     fn get(column: &Self::Column, index: usize) -> Self::Elem<'_>;
 
-    /// Borrow the representation used when this argument varies within the batch.
-    ///
-    /// Called once before the hot loop. Constants do not use this view because the tuple adapter
-    /// keeps their one-row decoded representation separate.
-    fn view(column: &Self::Column) -> Self::View<'_>;
+    /// Read the element stored in a decoded batch constant.
+    fn get_constant(constant: &Self::Constant) -> Self::Elem<'_>;
 
-    /// Number of rows addressable through a [`View`](Self::View).
+    /// Borrow the representation used inside the row loop.
     ///
-    /// Every index below this length must be valid for
-    /// [`get_from_view_unchecked`](Self::get_from_view_unchecked).
-    fn view_len(view: &Self::View<'_>) -> usize;
+    /// Executors call this before the hot loop. For every index below the returned view's length,
+    /// [`get_from_view`](Self::get_from_view) must produce the same element as [`get`](Self::get) on
+    /// `column`.
+    fn view(column: &Self::Column) -> Self::View<'_>;
 
     /// Read one row from a [`View`](Self::View).
     fn get_from_view<'a>(view: &Self::View<'a>, index: usize) -> Self::Elem<'a>
@@ -104,7 +120,7 @@ pub unsafe trait InputElement: 'static {
     ///
     /// # Safety
     ///
-    /// `index` must be less than [`view_len`](Self::view_len) for `view`.
+    /// `index` must be less than [`ViewLen::len`] for `view`.
     unsafe fn get_from_view_unchecked<'a>(view: &Self::View<'a>, index: usize) -> Self::Elem<'a>
     where
         Self: 'a,

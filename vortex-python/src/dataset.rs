@@ -137,7 +137,7 @@ impl PyVortexDataset {
             ResolvedStore::ObjectStore(store, path) => {
                 session
                     .open_options()
-                    .open_object_store(&store, path.as_ref())
+                    .open_object_store(&store, path)
                     .await?
             }
             ResolvedStore::Path(path) => session.open_options().open_path(path).await?,
@@ -207,7 +207,7 @@ impl PyVortexDataset {
                 .scan()?
                 .with_projection(projection)
                 .with_some_filter(filter)
-                .with_split_by(split_by.map(SplitBy::RowCount).unwrap_or(SplitBy::Layout));
+                .with_split_by(split_by.map(SplitBy::RowCount).unwrap_or_default());
             if let Some((l, r)) = row_range {
                 scan = scan.with_row_range(l..r);
             }
@@ -253,7 +253,7 @@ impl PyVortexDataset {
                 .scan()?
                 .with_projection(projection)
                 .with_some_filter(filter)
-                .with_split_by(split_by.map(SplitBy::RowCount).unwrap_or(SplitBy::Layout));
+                .with_split_by(split_by.map(SplitBy::RowCount).unwrap_or_default());
             if let Some((l, r)) = row_range {
                 scan = scan.with_row_range(l..r);
             }

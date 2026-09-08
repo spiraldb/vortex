@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q15.slt.no explains the upstream query unchanged.
+query II
+SELECT "UserID", COUNT(*) FROM hits GROUP BY "UserID" ORDER BY COUNT(*) DESC, "UserID" LIMIT 10;
+----
+1508127196834704092 1303
+3205616454965152970 949
+502693359570399458 893
+873022393995828557 876
+2256536417172705921 695
+340634745528635910 610
+72709437341035504 560
+5705194083846317709 532
+1257144732630861346 524
+4885305169967046117 516

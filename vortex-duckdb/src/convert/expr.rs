@@ -17,7 +17,7 @@ use vortex::aggregate_fn::fns::first::First;
 use vortex::aggregate_fn::fns::max::Max;
 use vortex::aggregate_fn::fns::mean::Mean;
 use vortex::aggregate_fn::fns::min::Min;
-use vortex::aggregate_fn::fns::sum::Sum;
+use vortex::aggregate_fn::fns::sum_v2::SumV2;
 use vortex::arrow::ArrowSessionExt;
 use vortex::dtype::DType;
 use vortex::dtype::Nullability;
@@ -42,6 +42,7 @@ use vortex::expr::lit;
 use vortex::expr::not;
 use vortex::expr::or_collect;
 use vortex::expr::root;
+use vortex::layout::layouts::row_idx::row_idx;
 use vortex::scalar::Scalar;
 use vortex::scalar_fn::EmptyOptions as ScalarEmptyOptions;
 use vortex::scalar_fn::ScalarFnVTableExt;
@@ -535,7 +536,7 @@ impl PushedAggregate {
         Ok(match self {
             Self::Min => Box::new(Accumulator::try_new(Min, opts, dtype)?),
             Self::Max => Box::new(Accumulator::try_new(Max, opts, dtype)?),
-            Self::Sum => Box::new(Accumulator::try_new(Sum, opts, dtype)?),
+            Self::Sum => Box::new(Accumulator::try_new(SumV2, opts, dtype)?),
             Self::Mean => Box::new(Accumulator::try_new(
                 Mean::combined(),
                 PairOptions(opts, opts),
@@ -588,7 +589,22 @@ fn try_from_expression_inner(
             };
             col.clone()
         }
-        BoundColumnRef(col_ref) => col(col_ref.name.as_ref()),
+        BoundColumnRef(col_ref) => {
+            let name = col_ref.name.as_ref();
+            if name == "file_row_number" {
+                return Ok(Some(row_idx()));
+            }
+
+            // Duckdb generates some columns (e.g. hive partitions) after we
+            // load file data, so filters on these columns can't be evaluated
+            if ctx
+                .fields
+                .is_some_and(|fields| !fields.iter().any(|field| field.name == name))
+            {
+                return Ok(None);
+            }
+            col(name)
+        }
         BoundConstant(const_) => lit(Scalar::try_from(const_.value)?),
         BoundComparison(compare) => {
             let operator: Operator = compare.op.try_into()?;

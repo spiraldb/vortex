@@ -28,19 +28,24 @@ fn main() {
 
     // Source directory for kernels (hand-written and generated .cu/.cuh files)
     let kernels_src = Path::new(&manifest_dir).join("kernels/src");
-    // Output directory for compiled .ptx files - separate by profile.
-    let kernels_gen = Path::new(&manifest_dir).join("kernels/gen").join(&profile);
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
+    // Keep different architecture selections isolated across build trees.
+    let kernels_gen = out_dir.join("kernels");
 
-    std::fs::create_dir_all(&kernels_gen).expect("Failed to create kernels/gen directory");
-
-    println!("cargo:rerun-if-env-changed=PROFILE");
-
-    // nvcc availability depends on PATH (e.g. entering/leaving a nix shell that
-    // provides cuda_nvcc). Without this, cargo caches a stale build.rs result
-    // from an environment without nvcc, and switching to one with nvcc does not
-    // trigger PTX recompilation — producing a binary with an empty embedded_ptx
-    // table that silently falls back to CPU at runtime.
-    println!("cargo:rerun-if-env-changed=PATH");
+    // NVCC's output depends on its flags and, with native, the visible GPUs.
+    for name in [
+        "PROFILE",
+        "PATH",
+        "CUDA_PATH",
+        "VORTEX_CUDA_ARCH_FLAGS",
+        "CUDA_VISIBLE_DEVICES",
+        "CUDA_DEVICE_ORDER",
+        "NVCC_PREPEND_FLAGS",
+        "NVCC_APPEND_FLAGS",
+        "NVCC_CCBIN",
+    ] {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
 
     // Regenerate bit_unpack kernels only when the generator changes
     println!(
@@ -54,18 +59,19 @@ fn main() {
     generate_unpack::<u32>(&kernels_src, 32).expect("Failed to generate unpack for u32");
     generate_unpack::<u64>(&kernels_src, 16).expect("Failed to generate unpack for u64");
 
-    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
     generate_arrow_device_array_bindings(Path::new(&manifest_dir), &out_dir);
     generate_dynamic_dispatch_bindings(&kernels_src, &out_dir);
     generate_patches_bindings(&kernels_src, &out_dir);
 
-    generate_embedded_ptx(&out_dir, &kernels_gen).expect("Failed to generate embedded PTX source");
-
     if !is_cuda_available() {
+        // The kernel loader unconditionally includes embedded_kernels.rs, so emit a Rust stub
+        // even without nvcc, replacing any stale table from a previous CUDA-enabled build.
+        generate_embedded_kernels(&out_dir, &[]).expect("Failed to generate empty kernel table");
         return;
     }
 
-    // Watch and compile .cu and .cuh files from kernels/src to PTX in kernels/gen
+    std::fs::create_dir_all(&kernels_gen).expect("Failed to create kernel output directory");
+    let mut kernel_files = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&kernels_src) {
         for path in entries.flatten().map(|entry| entry.path()) {
             let is_generated = path
@@ -74,10 +80,9 @@ fn main() {
                 .is_some_and(|n| n.starts_with("bit_unpack_"));
 
             match path.extension().and_then(|e| e.to_str()) {
+                // Only watch hand-written .cuh/.h files, not generated ones
+                // (generated files are rebuilt when cuda_kernel_generator changes)
                 Some("cuh") | Some("h") if !is_generated => {
-                    // Only watch hand-written .cuh/.h files, not generated ones
-                    // (generated files are rebuilt when cuda_kernel_generator changes)
-
                     println!("cargo:rerun-if-changed={}", path.display());
                 }
                 Some("cu") => {
@@ -86,61 +91,45 @@ fn main() {
                     if !is_generated {
                         println!("cargo:rerun-if-changed={}", path.display());
                     }
-                    // Compile all .cu files to PTX in gen directory
-                    nvcc_compile_ptx(&kernels_src, &kernels_gen, &path, &profile)
+                    let kernel = nvcc_compile_kernel(&kernels_src, &kernels_gen, &path, &profile)
                         .map_err(|e| {
                             format!("Failed to compile CUDA kernel {}: {}", path.display(), e)
                         })
                         .unwrap();
+                    kernel_files.push(kernel);
                 }
                 _ => {}
             }
         }
     }
 
-    // Refresh embedded_ptx.rs after nvcc has compiled PTX so the binary embeds the latest kernels.
-    generate_embedded_ptx(&out_dir, &kernels_gen).expect("Failed to generate embedded PTX source");
+    kernel_files.sort();
+    generate_embedded_kernels(&out_dir, &kernel_files)
+        .expect("Failed to generate embedded kernels");
 }
 
-/// Generates `embedded_ptx.rs`, a module-name lookup table of `include_str!`-embedded PTX.
-///
-/// Called before the `nvcc` check to create an empty table for no-toolkit builds, then again after
-/// PTX compilation so runtime loading never depends on build-machine filesystem paths.
-fn generate_embedded_ptx(out_dir: &Path, kernels_gen: &Path) -> io::Result<()> {
-    let mut ptx_files = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(kernels_gen) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|e| e.to_str()) == Some("ptx") {
-                ptx_files.push(path);
-            }
-        }
-    }
-    ptx_files.sort();
-
-    let mut file = File::create(out_dir.join("embedded_ptx.rs"))?;
-    if ptx_files.is_empty() {
+/// Embeds only this build's fatbins, excluding stale outputs from previous configurations.
+fn generate_embedded_kernels(out_dir: &Path, kernel_files: &[PathBuf]) -> io::Result<()> {
+    let mut file = File::create(out_dir.join("embedded_kernels.rs"))?;
+    if kernel_files.is_empty() {
         writeln!(
             file,
-            "pub(crate) fn embedded_ptx(_module_name: &str) -> Option<&'static str> {{"
+            "pub(crate) fn embedded_kernel(_module_name: &str) -> Option<&'static [u8]> {{ None }}"
         )?;
-        writeln!(file, "    None")?;
-        writeln!(file, "}}")?;
         return Ok(());
     }
-
     writeln!(
         file,
-        "pub(crate) fn embedded_ptx(module_name: &str) -> Option<&'static str> {{"
+        "pub(crate) fn embedded_kernel(module_name: &str) -> Option<&'static [u8]> {{"
     )?;
     writeln!(file, "    match module_name {{")?;
-    for path in ptx_files {
+    for path in kernel_files {
         let Some(module_name) = path.file_stem().and_then(|stem| stem.to_str()) else {
             continue;
         };
         writeln!(
             file,
-            "        {module_name:?} => Some(include_str!({:?})),",
+            "        {module_name:?} => Some(include_bytes!({:?})),",
             path.to_string_lossy()
         )?;
     }
@@ -166,13 +155,16 @@ fn generate_unpack<T: FastLanes>(output_dir: &Path, thread_count: usize) -> io::
     Ok(cu_path)
 }
 
-fn nvcc_compile_ptx(
+fn nvcc_compile_kernel(
     include_dir: &Path,
     output_dir: &Path,
     cu_path: &Path,
     profile: &str,
-) -> io::Result<()> {
+) -> io::Result<PathBuf> {
+    let architecture_flags =
+        env::var("VORTEX_CUDA_ARCH_FLAGS").unwrap_or_else(|_| "-arch=native".to_owned());
     let mut cmd = Command::new("nvcc");
+    cmd.args(architecture_flags.split_whitespace());
     if profile == "debug" {
         cmd.arg("-O0");
 
@@ -199,23 +191,21 @@ fn nvcc_compile_ptx(
         cmd.arg("-O3");
     }
 
-    // Output PTX file goes to output_dir with same base name
-    let ptx_path = output_dir
+    let fatbin_path = output_dir
         .join(cu_path.file_name().unwrap())
-        .with_extension("ptx");
+        .with_extension("fatbin");
 
     cmd.arg("-std=c++20")
-        .arg("-arch=native")
         // Flags forwarded to Clang.
         .arg("--compiler-options=-Wall -Wextra -Wpedantic -Werror")
         .arg("--restrict")
-        .arg("--ptx")
+        // Fatbins preserve real/virtual architecture lists; PTX alone cannot.
+        .arg("--fatbin")
         .arg("--include-path")
         .arg(include_dir)
-        .arg("-c")
         .arg(cu_path)
         .arg("-o")
-        .arg(&ptx_path);
+        .arg(&fatbin_path);
 
     let res = cmd.output()?;
 
@@ -245,7 +235,7 @@ fn nvcc_compile_ptx(
             cu_path.display()
         )));
     }
-    Ok(())
+    Ok(fatbin_path)
 }
 
 /// Generate bindings for the vendored Arrow C Device ABI header.

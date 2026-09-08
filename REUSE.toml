@@ -12,6 +12,13 @@ path = "vortex-btrblocks/decision-tree.*"
 SPDX-FileCopyrightText = "Copyright the Vortex contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
 
+# ClickBench result fixtures contain raw control characters from the dataset, so REUSE treats
+# them as binary and ignores their SPDX headers.
+[[annotations]]
+path = "vortex-sqllogictest/slt/clickbench/**/results/*.slt.no"
+SPDX-FileCopyrightText = "Copyright the Vortex contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
 # Golden files are licensed under CC-BY-4.0.
 [[annotations]]
 path = "**/goldenfiles/**"
@@ -21,7 +28,7 @@ SPDX-License-Identifier = "CC-BY-4.0"
 # Utility code.
 
 [[annotations]]
-path = ["**/README.md", "AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md", "STYLE.md", "tsc/**.md"]
+path = ["**/README.md", "AGENTS.md", "**/AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md", "SECURITY.md", "STYLE.md", "tsc/**.md"]
 SPDX-FileCopyrightText = "Copyright the Vortex contributors"
 SPDX-License-Identifier = "CC-BY-4.0"
 
@@ -37,6 +44,11 @@ SPDX-FileCopyrightText = "Copyright the Vortex contributors"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "vortex-ffi/cmake/tests/fixtures/native/vortex-ffi/header-version"
+SPDX-FileCopyrightText = "Copyright the Vortex contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
 path = ["vortex-cuda/kernels/src/bit_unpack_*"]
 precedence = "override"
 SPDX-FileCopyrightText = "Copyright the Vortex contributors"
@@ -46,3 +58,8 @@ SPDX-License-Identifier = "Apache-2.0"
 path = "vortex-cuda/src/arrow/reference/arrow_c_device.h"
 SPDX-FileCopyrightText = "2016-2025 Copyright The Apache Software Foundation"
 SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "vortex-duckdb/patches/**"
+SPDX-FileCopyrightText = "Copyright the Vortex contributors"
+SPDX-License-Identifier = "CC-BY-4.0"

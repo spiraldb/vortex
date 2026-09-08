@@ -9,23 +9,26 @@ use vortex_error::vortex_ensure_eq;
 use crate::ArrayRef;
 use crate::ExecutionCtx;
 use crate::IntoArray;
+use crate::arrays::Constant;
 use crate::arrays::PrimitiveArray;
 use crate::dtype::DType;
 use crate::dtype::NativePType;
 use crate::dtype::Nullability;
+use crate::scalar::ScalarValue;
 use crate::scalar_fn::unstable::row::InputElement;
 use crate::scalar_fn::unstable::row::OutputElement;
 use crate::validity::Validity;
 
-// SAFETY: the per-row view is a native slice, and its reported length is the slice length.
+// SAFETY: the view is a native slice, and its reported length is the slice length.
 unsafe impl<T: NativePType> InputElement for T {
     type Column = Buffer<T>;
+    type Constant = T;
     type View<'a> = &'a [T];
     type Elem<'a> = T;
 
     // Every lane of the buffer holds a `T`, valid or not.
     const DENSE_SAFE: bool = true;
-    const DECODE_FALLIBLE: bool = false;
+    const DECODE_INFALLIBLE: bool = true;
 
     fn validate(dtype: &DType) -> VortexResult<()> {
         let expected = T::PTYPE;
@@ -44,6 +47,24 @@ unsafe impl<T: NativePType> InputElement for T {
         Ok(array.execute::<PrimitiveArray>(ctx)?.into_buffer::<T>())
     }
 
+    fn decode_constant(array: ArrayRef, _ctx: &mut ExecutionCtx) -> VortexResult<Self::Constant> {
+        let Some(constant) = array.as_opt::<Constant>() else {
+            vortex_bail!(
+                "a primitive batch constant must use the Constant encoding, got {}",
+                array.encoding_id()
+            );
+        };
+        let scalar = constant.scalar();
+        let Some(ScalarValue::Primitive(value)) = scalar.value() else {
+            vortex_bail!(
+                "a primitive batch constant must contain a non-null {} value, got {scalar}",
+                T::PTYPE
+            );
+        };
+
+        value.cast::<T>()
+    }
+
     fn can_decode_null_tolerant(_array: &ArrayRef) -> VortexResult<bool> {
         Ok(true)
     }
@@ -52,12 +73,12 @@ unsafe impl<T: NativePType> InputElement for T {
         column[index]
     }
 
-    fn view(column: &Self::Column) -> Self::View<'_> {
-        column.as_slice()
+    fn get_constant(constant: &Self::Constant) -> T {
+        *constant
     }
 
-    fn view_len(view: &Self::View<'_>) -> usize {
-        view.len()
+    fn view(column: &Self::Column) -> Self::View<'_> {
+        column.as_slice()
     }
 
     fn get_from_view<'a>(view: &Self::View<'a>, index: usize) -> T

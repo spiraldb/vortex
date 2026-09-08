@@ -5,42 +5,28 @@
 
 use geo::ConvexHull;
 use vortex_array::ArrayRef;
-use vortex_array::ExecutionCtx;
-use vortex_array::IntoArray;
-use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::ScalarFnArray;
 use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability;
 use vortex_array::dtype::extension::ExtDType;
 use vortex_array::dtype::extension::ExtDTypeRef;
-use vortex_array::expr::Expression;
-use vortex_array::expr::union_child_validities;
-use vortex_array::scalar_fn::Arity;
-use vortex_array::scalar_fn::ChildName;
 use vortex_array::scalar_fn::EmptyOptions;
-use vortex_array::scalar_fn::ExecutionArgs;
 use vortex_array::scalar_fn::ScalarFnId;
-use vortex_array::scalar_fn::ScalarFnVTable;
 use vortex_array::scalar_fn::TypedScalarFnInstance;
-use vortex_array::validity::Validity;
-use vortex_arrow::ArrowSessionExt;
+use vortex_array::scalar_fn::unstable::row::RowFn;
+use vortex_array::scalar_fn::unstable::row::RowVisitor;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
-use vortex_mask::AllOr;
-use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
 use crate::extension::MultiPoint;
 use crate::extension::Polygon;
-use crate::extension::build_polygon_array;
 use crate::extension::coordinate::Dimension;
-use crate::extension::geometries;
 use crate::extension::polygon_storage_dtype;
-use crate::extension::single_geometry;
-use crate::scalar_fn::execute::Execution;
-use crate::scalar_fn::execute::Operand;
-use crate::scalar_fn::execute::dispatch_unary;
+use crate::scalar_fn::row::GeometryRow;
+use crate::scalar_fn::row::PolygonSink;
 
 /// Resolve the strict native `MultiPoint -> Polygon` overload.
 fn convex_hull_dtype(dtypes: &[DType]) -> VortexResult<ExtDTypeRef> {
@@ -63,61 +49,9 @@ fn convex_hull_dtype(dtypes: &[DType]) -> VortexResult<ExtDTypeRef> {
 
     Ok(ExtDType::<Polygon>::try_new(
         input.metadata::<MultiPoint>().clone(),
-        polygon_storage_dtype(Dimension::Xy, dtypes[0].nullability()),
+        polygon_storage_dtype(Dimension::Xy, Nullability::NonNullable),
     )?
     .erased())
-}
-
-/// Compute hulls for the valid rows and scatter them into a full-length native polygon array.
-fn convex_hull_array(
-    array: ArrayRef,
-    valid: &Mask,
-    output_dtype: &ExtDTypeRef,
-    ctx: &mut ExecutionCtx,
-) -> VortexResult<ArrayRef> {
-    let decoded = geometries(&array.filter(valid.clone())?, ctx)?;
-    let hulls = decoded.iter().map(ConvexHull::convex_hull);
-    let polygons = match valid.indices() {
-        AllOr::All => hulls.map(Some).collect(),
-        AllOr::None => vec![None; array.len()],
-        AllOr::Some(rows) => {
-            let mut polygons = vec![None; array.len()];
-            for (&row, hull) in rows.iter().zip(hulls) {
-                polygons[row] = Some(hull);
-            }
-            polygons
-        }
-    };
-    build_polygon_array(
-        &polygons,
-        output_dtype.metadata::<Polygon>().clone(),
-        output_dtype.nullability(),
-        &ctx.session().arrow(),
-    )
-}
-
-/// Execute convex hull after shared unary shape and null dispatch.
-fn execute_convex_hull(
-    execution: Execution<1, Validity>,
-    output_dtype: &ExtDTypeRef,
-    ctx: &mut ExecutionCtx,
-) -> VortexResult<ArrayRef> {
-    match execution.operands {
-        [Operand::Constant(scalar)] => {
-            let hull = single_geometry(&scalar, ctx)?.convex_hull();
-            let output = build_polygon_array(
-                &[Some(hull)],
-                output_dtype.metadata::<Polygon>().clone(),
-                output_dtype.nullability(),
-                &ctx.session().arrow(),
-            )?;
-            Ok(ConstantArray::new(output.execute_scalar(0, ctx)?, execution.len).into_array())
-        }
-        [Operand::Column(array)] => {
-            let valid = execution.valid.execute_mask(execution.len, ctx)?;
-            convex_hull_array(array, &valid, output_dtype, ctx)
-        }
-    }
 }
 
 /// Compute the two-dimensional convex hull of each native `MultiPoint` as a native `Polygon`.
@@ -127,7 +61,7 @@ pub struct SpatialConvexHull;
 
 impl SpatialConvexHull {
     /// A lazy `ScalarFnArray` computing a polygon hull for each native `MultiPoint` row.
-    pub fn try_new_array(array: ArrayRef) -> VortexResult<ScalarFnArray> {
+    pub fn try_new(array: ArrayRef) -> VortexResult<ScalarFnArray> {
         ScalarFnArray::try_new(
             TypedScalarFnInstance::new(SpatialConvexHull, EmptyOptions).erased(),
             vec![array],
@@ -135,8 +69,11 @@ impl SpatialConvexHull {
     }
 }
 
-impl ScalarFnVTable for SpatialConvexHull {
+impl RowFn for SpatialConvexHull {
     type Options = EmptyOptions;
+
+    const ARG_NAMES: &'static [&'static str] = &["multipoint"];
+    const INFALLIBLE: bool = true;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.st.convex_hull");
@@ -151,51 +88,17 @@ impl ScalarFnVTable for SpatialConvexHull {
         Ok(EmptyOptions)
     }
 
-    fn arity(&self, _: &Self::Options) -> Arity {
-        Arity::Exact(1)
-    }
-
-    fn child_name(&self, _: &Self::Options, child_idx: usize) -> ChildName {
-        match child_idx {
-            0 => ChildName::from("multipoint"),
-            _ => unreachable!("convex_hull has exactly one child"),
-        }
-    }
-
-    fn return_dtype(&self, _: &Self::Options, dtypes: &[DType]) -> VortexResult<DType> {
-        Ok(DType::Extension(convex_hull_dtype(dtypes)?))
-    }
-
-    fn execute(
+    fn dispatch<V: RowVisitor>(
         &self,
-        _: &Self::Options,
-        args: &dyn ExecutionArgs,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<ArrayRef> {
-        let input = args.get(0)?;
-        let output_dtype = convex_hull_dtype(std::slice::from_ref(input.dtype()))?;
-        dispatch_unary(
-            &input,
-            DType::Extension(output_dtype.clone()),
-            |execution, ctx| execute_convex_hull(execution, &output_dtype, ctx),
-            ctx,
-        )
-    }
-
-    fn validity(
-        &self,
-        _: &Self::Options,
-        expression: &Expression,
-    ) -> VortexResult<Option<Expression>> {
-        union_child_validities(expression)
-    }
-
-    fn is_strict(&self, _: &Self::Options) -> bool {
-        true
-    }
-
-    fn is_fallible(&self, _: &Self::Options) -> bool {
-        false
+        _options: &Self::Options,
+        args: &[DType],
+        visitor: V,
+    ) -> VortexResult<V::VisitResult> {
+        visitor
+            .with_output_dtype(DType::Extension(convex_hull_dtype(args)?))
+            .visit_into::<(GeometryRow,), PolygonSink, _>((), |(geometry,), output| {
+                *output = geometry.convex_hull();
+            })
     }
 }
 
@@ -240,7 +143,7 @@ mod tests {
             (0.0, 0.0),
             (2.0, 0.0),
         ]]])?;
-        let result = SpatialConvexHull::try_new_array(input)?.into_array();
+        let result = SpatialConvexHull::try_new(input)?.into_array();
         let mut ctx = vortex_array::array_session().create_execution_ctx();
 
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -263,7 +166,7 @@ mod tests {
     ) -> VortexResult<()> {
         let input = multipoint_column(vec![points])?;
         let expected = polygon_column(vec![expected_rings])?;
-        let result = SpatialConvexHull::try_new_array(input)?.into_array();
+        let result = SpatialConvexHull::try_new(input)?.into_array();
         let mut ctx = vortex_array::array_session().create_execution_ctx();
 
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -288,7 +191,7 @@ mod tests {
             Validity::from_iter([true, false]),
         )?
         .into_array();
-        let result = SpatialConvexHull::try_new_array(input)?.into_array();
+        let result = SpatialConvexHull::try_new(input)?.into_array();
         let mut ctx = vortex_array::array_session().create_execution_ctx();
 
         assert_arrays_eq!(result, expected, &mut ctx);
@@ -302,7 +205,7 @@ mod tests {
             .execute_scalar(0, &mut ctx)?;
         let input = ConstantArray::new(scalar, 3).into_array();
 
-        let result = SpatialConvexHull::try_new_array(input)?.into_array();
+        let result = SpatialConvexHull::try_new(input)?.into_array();
         let Columnar::Constant(constant) = result.clone().execute::<Columnar>(&mut ctx)? else {
             return Err(vortex_err!(
                 "convex_hull of a constant should remain constant"
@@ -328,9 +231,9 @@ mod tests {
         )?
         .into_array();
 
-        let collected = SpatialCollect::try_new_array(point_lists)?.into_array();
-        let hulls = SpatialConvexHull::try_new_array(collected)?.into_array();
-        let areas = SpatialArea::try_new_array(hulls)?.into_array();
+        let collected = SpatialCollect::try_new(point_lists)?.into_array();
+        let hulls = SpatialConvexHull::try_new(collected)?.into_array();
+        let areas = SpatialArea::try_new(hulls)?.into_array();
         let expected = PrimitiveArray::from_iter([4.0_f64, 0.0]).into_array();
         let mut ctx = vortex_array::array_session().create_execution_ctx();
 
@@ -354,7 +257,7 @@ mod tests {
     #[test]
     fn rejects_non_multipoint_input() -> VortexResult<()> {
         let input: ArrayRef = point_column(vec![0.0], vec![0.0])?;
-        assert!(SpatialConvexHull::try_new_array(input).is_err());
+        assert!(SpatialConvexHull::try_new(input).is_err());
         Ok(())
     }
 }

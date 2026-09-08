@@ -7,13 +7,13 @@
 //! selected visit with the input dtypes during planning and return its output dtype.
 
 use std::mem::needs_drop;
-use std::ops::BitOrAssign;
 
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 
 use crate::dtype::DType;
 use crate::scalar_fn::unstable::row::ElementTuple;
+use crate::scalar_fn::unstable::row::FailureEvidence;
 use crate::scalar_fn::unstable::row::IndexedElementTuple;
 use crate::scalar_fn::unstable::row::OutputElement;
 use crate::scalar_fn::unstable::row::OutputSink;
@@ -32,12 +32,6 @@ const fn assert_input_visit_contract<F: RowFn, Args: ElementTuple>() {
     assert!(
         Args::ARITY == F::ARG_NAMES.len(),
         "the visited argument tuple must have the arity declared by RowFn::ARG_NAMES",
-    );
-    // Dictionary push-down can evaluate values that no input row references. Every dispatch must
-    // therefore match the function-wide fallibility declaration.
-    assert!(
-        !Args::DECODE_FALLIBLE || F::FALLIBLE,
-        "RowFn::FALLIBLE must be true when input decoding can fail",
     );
 }
 
@@ -59,8 +53,8 @@ where
 {
     assert_input_visit_contract::<Function, Args>();
     assert!(
-        !ApplyResult::FALLIBLE || Function::FALLIBLE,
-        "RowFn::FALLIBLE must be true when a row result can fail",
+        ApplyResult::INFALLIBLE || !Function::INFALLIBLE,
+        "RowFn::INFALLIBLE must be false when a row result can fail",
     );
 }
 
@@ -69,12 +63,12 @@ where
     Function: RowFn,
     Args: IndexedElementTuple,
     Out: OutputElement,
-    Fail: Copy + Default + BitOrAssign,
+    Fail: FailureEvidence,
 {
     assert_owned_visit_contract::<Function, Args, Out>();
     assert!(
-        Function::FALLIBLE,
-        "RowFn::FALLIBLE must be true when a row result defers failure evidence",
+        !Function::INFALLIBLE,
+        "RowFn::INFALLIBLE must be false when a row result defers failure evidence",
     );
     assert!(
         size_of::<Fail>() <= size_of::<Out>(),
@@ -96,17 +90,17 @@ pub(super) fn validate_owned_visit<Args: ElementTuple, Out: OutputElement>(
     Ok(dtype)
 }
 
-pub(super) fn validate_sink_visit<Args, Sink, Options>(
-    options: &Options,
+pub(super) fn validate_sink_visit<Args, Sink>(
     dtypes: &[DType],
+    params: &Sink::Params,
 ) -> VortexResult<DType>
 where
     Args: ElementTuple,
-    Sink: OutputSink<Options>,
+    Sink: OutputSink,
 {
     Args::validate(dtypes)?;
 
-    let dtype = Sink::output_dtype(options, dtypes)?;
+    let dtype = Sink::storage_dtype(params);
     vortex_ensure!(
         !dtype.is_nullable(),
         "row output sinks must declare a non-nullable dtype, got {dtype}",

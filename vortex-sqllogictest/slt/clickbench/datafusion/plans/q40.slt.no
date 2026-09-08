@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "URLHash", "EventDate", COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-01' AND "EventDate" <= '2013-07-31' AND "IsRefresh" = 0 AND "TraficSourceID" IN (-1, 6) AND "RefererHash" = 3594120000172545465 GROUP BY "URLHash", "EventDate" ORDER BY PageViews DESC LIMIT 10 OFFSET 100;
+----
+logical_plan
+01)Limit: skip=100, fetch=10
+02)--Sort: pageviews DESC NULLS FIRST, fetch=110
+03)----Projection: hits.URLHash, hits.EventDate, count(Int64(1)) AS count(*) AS pageviews
+04)------Aggregate: groupBy=[[hits.URLHash, hits.EventDate]], aggr=[[count(Int64(1))]]
+05)--------Projection: hits.EventDate, hits.URLHash
+06)----------Filter: hits.CounterID = Int32(62) AND hits.EventDate >= TimestampMicrosecond(1372636800000000, None) AND hits.EventDate <= TimestampMicrosecond(1375228800000000, None) AND hits.IsRefresh = Int16(0) AND (hits.TraficSourceID = Int16(-1) OR hits.TraficSourceID = Int16(6)) AND hits.RefererHash = Int64(3594120000172545465)
+07)------------TableScan: hits projection=[EventDate, CounterID, IsRefresh, TraficSourceID, RefererHash, URLHash], partial_filters=[hits.CounterID = Int32(62), hits.EventDate >= TimestampMicrosecond(1372636800000000, None), hits.EventDate <= TimestampMicrosecond(1375228800000000, None), hits.IsRefresh = Int16(0), hits.TraficSourceID = Int16(-1) OR hits.TraficSourceID = Int16(6), hits.RefererHash = Int64(3594120000172545465)]
+physical_plan
+01)GlobalLimitExec: skip=100, fetch=10
+02)--SortPreservingMergeExec: [pageviews@2 DESC], fetch=110
+03)----ProjectionExec: expr=[URLHash@0 as URLHash, EventDate@1 as EventDate, count(Int64(1))@2 as pageviews]
+04)------SortExec: TopK(fetch=110), expr=[count(Int64(1))@2 DESC], preserve_partitioning=[true]
+05)--------AggregateExec: mode=FinalPartitioned, gby=[URLHash@0 as URLHash, EventDate@1 as EventDate], aggr=[count(Int64(1))]
+06)----------RepartitionExec: partitioning=Hash([URLHash@0, EventDate@1], 4), input_partitions=4
+07)------------AggregateExec: mode=Partial, gby=[URLHash@1 as URLHash, EventDate@0 as EventDate], aggr=[count(Int64(1))]
+08)--------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[EventDate, URLHash], file_type=vortex, predicate: CounterID@6 = 62 AND EventDate@5 >= 1372636800000000 AND EventDate@5 <= 1375228800000000 AND IsRefresh@15 = 0 AND (TraficSourceID@37 = -1 OR TraficSourceID@37 = 6) AND RefererHash@102 = 3594120000172545465

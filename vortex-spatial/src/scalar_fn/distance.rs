@@ -6,43 +6,18 @@
 use geo::Distance;
 use geo::Euclidean;
 use vortex_array::ArrayRef;
-use vortex_array::ExecutionCtx;
 use vortex_array::arrays::ScalarFnArray;
 use vortex_array::dtype::DType;
-use vortex_array::dtype::Nullability;
-use vortex_array::dtype::PType;
-use vortex_array::expr::Expression;
-use vortex_array::expr::union_child_validities;
-use vortex_array::scalar_fn::Arity;
-use vortex_array::scalar_fn::ChildName;
 use vortex_array::scalar_fn::EmptyOptions;
-use vortex_array::scalar_fn::ExecutionArgs;
 use vortex_array::scalar_fn::ScalarFnId;
-use vortex_array::scalar_fn::ScalarFnVTable;
 use vortex_array::scalar_fn::TypedScalarFnInstance;
+use vortex_array::scalar_fn::unstable::row::RowFn;
+use vortex_array::scalar_fn::unstable::row::RowVisitor;
 use vortex_error::VortexResult;
-use vortex_error::vortex_ensure;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
-use crate::extension::is_native_geometry;
-use crate::scalar_fn::execute::execute_binary_geo_types;
-
-/// Validate the two native geometry operands accepted by `ST_Distance`.
-fn validate_distance_operands(dtypes: &[DType]) -> VortexResult<()> {
-    vortex_ensure!(
-        dtypes.len() == 2,
-        "spatial: distance requires exactly two geometry operands, got {}",
-        dtypes.len()
-    );
-    for dtype in dtypes {
-        vortex_ensure!(
-            is_native_geometry(dtype),
-            "spatial: distance operand {dtype} is not a native geometry type"
-        );
-    }
-    Ok(())
-}
+use crate::scalar_fn::row::GeometryRow;
 
 /// Planar (Euclidean) `ST_Distance` (no geodesic correction) between two native geometry
 /// operands, each a column or a constant literal.
@@ -52,7 +27,7 @@ pub struct SpatialDistance;
 impl SpatialDistance {
     /// A lazy `ScalarFnArray` computing the per-row distance between operands `a` and `b`; either may
     /// be constant. The output length is taken from `a`.
-    pub fn try_new_array(a: ArrayRef, b: ArrayRef) -> VortexResult<ScalarFnArray> {
+    pub fn try_new(a: ArrayRef, b: ArrayRef) -> VortexResult<ScalarFnArray> {
         ScalarFnArray::try_new(
             TypedScalarFnInstance::new(SpatialDistance, EmptyOptions).erased(),
             vec![a, b],
@@ -60,66 +35,37 @@ impl SpatialDistance {
     }
 }
 
-impl ScalarFnVTable for SpatialDistance {
+impl RowFn for SpatialDistance {
     type Options = EmptyOptions;
+
+    const ARG_NAMES: &'static [&'static str] = &["a", "b"];
+    const INFALLIBLE: bool = true;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.st.distance");
         *ID
     }
 
-    fn serialize(&self, _: &Self::Options) -> VortexResult<Option<Vec<u8>>> {
+    fn serialize(&self, _options: &Self::Options) -> VortexResult<Option<Vec<u8>>> {
         Ok(Some(vec![]))
     }
 
-    fn deserialize(&self, _: &[u8], _: &VortexSession) -> VortexResult<Self::Options> {
+    fn deserialize(
+        &self,
+        _metadata: &[u8],
+        _session: &VortexSession,
+    ) -> VortexResult<Self::Options> {
         Ok(EmptyOptions)
     }
 
-    fn arity(&self, _: &Self::Options) -> Arity {
-        Arity::Exact(2)
-    }
-
-    fn child_name(&self, _: &Self::Options, child_idx: usize) -> ChildName {
-        match child_idx {
-            0 => ChildName::from("a"),
-            1 => ChildName::from("b"),
-            _ => unreachable!("distance has exactly two children"),
-        }
-    }
-
-    fn return_dtype(&self, _: &Self::Options, dtypes: &[DType]) -> VortexResult<DType> {
-        validate_distance_operands(dtypes)?;
-        let nullability = Nullability::from(dtypes.iter().any(DType::is_nullable));
-        Ok(DType::Primitive(PType::F64, nullability))
-    }
-
-    fn execute(
+    fn dispatch<V: RowVisitor>(
         &self,
-        _: &Self::Options,
-        args: &dyn ExecutionArgs,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<ArrayRef> {
-        let a = args.get(0)?;
-        let b = args.get(1)?;
+        _options: &Self::Options,
+        _args: &[DType],
+        visitor: V,
+    ) -> VortexResult<V::VisitResult> {
         // Distance is a value, not a verdict: no bounding-rect test can decide it.
-        execute_binary_geo_types(&a, &b, |x, y| Euclidean.distance(x, y), None, ctx)
-    }
-
-    fn validity(
-        &self,
-        _: &Self::Options,
-        expression: &Expression,
-    ) -> VortexResult<Option<Expression>> {
-        union_child_validities(expression)
-    }
-
-    fn is_strict(&self, _: &Self::Options) -> bool {
-        true
-    }
-
-    fn is_fallible(&self, _: &Self::Options) -> bool {
-        false
+        visitor.visit::<(GeometryRow, GeometryRow), f64>(|(a, b)| Euclidean.distance(a, b))
     }
 }
 
@@ -143,6 +89,7 @@ mod tests {
     use vortex_error::VortexResult;
 
     use super::SpatialDistance;
+    use crate::test_harness::nullable_multipolygon_column;
     use crate::test_harness::nullable_point_column;
     use crate::test_harness::point_column;
     use crate::test_harness::polygon_column;
@@ -176,7 +123,7 @@ mod tests {
 
         let a = point_column(vec![0.0, 3.0, 0.0, 3.0], vec![0.0, 0.0, 4.0, 4.0])?;
         let b = point_constant(0.0, 0.0, 4, &mut ctx)?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         assert_eq!(distances(distance, &mut ctx)?, vec![0.0, 3.0, 4.0, 5.0]);
         Ok(())
@@ -190,7 +137,7 @@ mod tests {
 
         let a = point_column(vec![0.0, 1.0], vec![0.0, 1.0])?;
         let b = point_column(vec![3.0, 1.0], vec![4.0, 1.0])?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         assert_eq!(distances(distance, &mut ctx)?, vec![5.0, 0.0]);
         Ok(())
@@ -207,7 +154,7 @@ mod tests {
         let single = polygon_column(vec![vec![ring]])?.execute_scalar(0, &mut ctx)?;
         let square = ConstantArray::new(single, 2).into_array();
         let points = point_column(vec![7.0, 2.0], vec![2.0, 2.0])?;
-        let distance = SpatialDistance::try_new_array(points, square)?.into_array();
+        let distance = SpatialDistance::try_new(points, square)?.into_array();
 
         assert_eq!(distances(distance, &mut ctx)?, vec![3.0, 0.0]);
         Ok(())
@@ -221,7 +168,7 @@ mod tests {
 
         let a = point_constant(0.0, 0.0, 4, &mut ctx)?;
         let b = point_column(vec![0.0, 3.0, 0.0, 3.0], vec![0.0, 0.0, 4.0, 4.0])?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         assert_eq!(distances(distance, &mut ctx)?, vec![0.0, 3.0, 4.0, 5.0]);
         Ok(())
@@ -235,7 +182,7 @@ mod tests {
 
         let a = point_constant(0.0, 0.0, 3, &mut ctx)?;
         let b = point_constant(3.0, 4.0, 3, &mut ctx)?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         assert_eq!(distances(distance, &mut ctx)?, vec![5.0, 5.0, 5.0]);
         Ok(())
@@ -263,10 +210,44 @@ mod tests {
 
         let a = nullable_point_column(vec![Some((0.0, 0.0)), None, Some((3.0, 4.0))])?;
         let b = point_constant(0.0, 0.0, 3, &mut ctx)?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         let expected = PrimitiveArray::new(
             vec![0.0f64, 0.0, 5.0],
+            Validity::from_iter([true, false, true]),
+        )
+        .into_array();
+        assert_arrays_eq!(distance, expected, &mut ctx);
+        Ok(())
+    }
+
+    /// A nullable column of a list-storage geometry type (`MultiPolygon`): nulls propagate and
+    /// valid rows get exact distances, with the null row's storage never decoded.
+    #[test]
+    fn distance_propagates_nulls_for_multipolygon() -> VortexResult<()> {
+        let session = vortex_array::array_session();
+        let mut ctx = session.create_execution_ctx();
+
+        let near = vec![vec![vec![
+            (0.0, 0.0),
+            (4.0, 0.0),
+            (4.0, 4.0),
+            (0.0, 4.0),
+            (0.0, 0.0),
+        ]]];
+        let far = vec![vec![vec![
+            (10.0, 6.0),
+            (14.0, 6.0),
+            (14.0, 10.0),
+            (10.0, 10.0),
+            (10.0, 6.0),
+        ]]];
+        let a = nullable_multipolygon_column(vec![Some(near), None, Some(far)])?;
+        let b = point_constant(7.0, 2.0, 3, &mut ctx)?;
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
+
+        let expected = PrimitiveArray::new(
+            vec![3.0f64, 0.0, 5.0],
             Validity::from_iter([true, false, true]),
         )
         .into_array();
@@ -282,7 +263,7 @@ mod tests {
 
         let a = nullable_point_column(vec![Some((0.0, 0.0)), None, Some((0.0, 0.0))])?;
         let b = nullable_point_column(vec![Some((3.0, 4.0)), Some((1.0, 1.0)), None])?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         let expected = PrimitiveArray::new(
             vec![5.0f64, 0.0, 0.0],
@@ -302,7 +283,7 @@ mod tests {
         let point_dtype = point_column(vec![0.0], vec![0.0])?.dtype().as_nullable();
         let null_const = ConstantArray::new(Scalar::null(point_dtype), 3).into_array();
         let b = point_column(vec![0.0, 3.0, 0.0], vec![0.0, 0.0, 4.0])?;
-        let distance = SpatialDistance::try_new_array(null_const, b)?.into_array();
+        let distance = SpatialDistance::try_new(null_const, b)?.into_array();
 
         let expected = PrimitiveArray::new(vec![0.0f64; 3], Validity::AllInvalid).into_array();
         assert_arrays_eq!(distance, expected, &mut ctx);
@@ -317,7 +298,7 @@ mod tests {
 
         let a = nullable_point_column(vec![None, None])?;
         let b = point_constant(0.0, 0.0, 2, &mut ctx)?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         let expected = PrimitiveArray::new(vec![0.0f64; 2], Validity::AllInvalid).into_array();
         assert_arrays_eq!(distance, expected, &mut ctx);
@@ -333,7 +314,7 @@ mod tests {
 
         let a = nullable_point_column(vec![Some((0.0, 0.0)), None])?;
         let b = nullable_point_column(vec![None, Some((1.0, 1.0))])?;
-        let distance = SpatialDistance::try_new_array(a, b)?.into_array();
+        let distance = SpatialDistance::try_new(a, b)?.into_array();
 
         let expected = PrimitiveArray::new(vec![0.0f64; 2], Validity::AllInvalid).into_array();
         assert_arrays_eq!(distance, expected, &mut ctx);
@@ -350,7 +331,7 @@ mod tests {
 
         let a = point_column(vec![], vec![])?;
         let b = point_column(vec![], vec![])?;
-        let result = SpatialDistance::try_new_array(a, b)?
+        let result = SpatialDistance::try_new(a, b)?
             .into_array()
             .execute::<Canonical>(&mut ctx)?
             .into_array();

@@ -1,0 +1,806 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# common_subplan drops the c_acctbal > 0 filter when merging Vortex scans.
+# Disable it for Q22 until it preserves pushed filters.
+statement ok
+SET disabled_optimizers = 'common_subplan';
+
+query TT
+EXPLAIN (FORMAT json)
+select
+    cntrycode,
+    count(*) as numcust,
+    sum(c_acctbal) as totacctbal
+from
+    (
+        select
+            substring(c_phone from 1 for 2) as cntrycode,
+            c_acctbal
+        from
+            customer
+        where
+                substring(c_phone from 1 for 2) in
+                ('13', '31', '23', '29', '30', '18', '17')
+          and c_acctbal > (
+            select
+                avg(c_acctbal)
+            from
+                customer
+            where
+                    c_acctbal > 0.00
+              and substring(c_phone from 1 for 2) in
+                  ('13', '31', '23', '29', '30', '18', '17')
+        )
+          and not exists (
+                select
+                    *
+                from
+                    orders
+                where
+                        o_custkey = c_custkey
+            )
+    ) as custsale
+group by
+    cntrycode
+order by
+    cntrycode;
+----
+logical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "FILTER",
+                                        "children": [
+                                            {
+                                                "name": "DEPENDENT_JOIN",
+                                                "children": [
+                                                    {
+                                                        "name": "CROSS_PRODUCT",
+                                                        "children": [
+                                                            {
+                                                                "name": "PROJECTION",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "READ_VORTEX",
+                                                                        "children": [],
+                                                                        "extra_info": {
+                                                                            "Filters": "",
+                                                                            "Function": "Vortex Scan"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Expressions": [
+                                                                        "c_custkey",
+                                                                        "c_name",
+                                                                        "c_address",
+                                                                        "c_nationkey",
+                                                                        "c_phone",
+                                                                        "c_acctbal",
+                                                                        "c_mktsegment",
+                                                                        "c_comment"
+                                                                    ]
+                                                                }
+                                                            },
+                                                            {
+                                                                "name": "PROJECTION",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "AGGREGATE",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "PROJECTION",
+                                                                                "children": [
+                                                                                    {
+                                                                                        "name": "AGGREGATE",
+                                                                                        "children": [
+                                                                                            {
+                                                                                                "name": "FILTER",
+                                                                                                "children": [
+                                                                                                    {
+                                                                                                        "name": "PROJECTION",
+                                                                                                        "children": [
+                                                                                                            {
+                                                                                                                "name": "READ_VORTEX",
+                                                                                                                "children": [],
+                                                                                                                "extra_info": {
+                                                                                                                    "Filters": "",
+                                                                                                                    "Function": "Vortex Scan"
+                                                                                                                }
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "extra_info": {
+                                                                                                            "Expressions": [
+                                                                                                                "c_custkey",
+                                                                                                                "c_name",
+                                                                                                                "c_address",
+                                                                                                                "c_nationkey",
+                                                                                                                "c_phone",
+                                                                                                                "c_acctbal",
+                                                                                                                "c_mktsegment",
+                                                                                                                "c_comment"
+                                                                                                            ]
+                                                                                                        }
+                                                                                                    }
+                                                                                                ],
+                                                                                                "extra_info": {
+                                                                                                    "Expressions": [
+                                                                                                        "(c_acctbal > CAST(0.00 AS DECIMAL(15,2)))",
+                                                                                                        "(\"substring\"(c_phone, CAST(1 AS BIGINT), CAST(2 AS BIGINT)) IN (CAST('13' AS VARCHAR), CAST('31' AS VARCHAR), CAST('23' AS VARCHAR), CAST('29' AS VARCHAR), CAST('30' AS VARCHAR), CAST('18' AS VARCHAR), CAST('17' AS VARCHAR)))"
+                                                                                                    ]
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "extra_info": {
+                                                                                            "Groups": "",
+                                                                                            "Expressions": "avg(c_acctbal)"
+                                                                                        }
+                                                                                    }
+                                                                                ],
+                                                                                "extra_info": {
+                                                                                    "Expressions": "avg(c_acctbal)"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Groups": "",
+                                                                            "Expressions": [
+                                                                                "\"first\"(#[20.0])",
+                                                                                "count_star()"
+                                                                            ]
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Expressions": [
+                                                                        "CASE  WHEN ((#[39.1] > 1)) THEN (\"error\"('More than one row returned by a subquery used as an expression - scalar subqueries can only return a single row.",
+                                                                        "Use \"SET scalar_subquery_error_on_multiple_rows=false\" to revert to previous behavior of returning a random row.')) ELSE #[39.0] END"
+                                                                    ]
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": ""
+                                                        }
+                                                    },
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "FILTER",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "PROJECTION",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "READ_VORTEX",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Filters": "",
+                                                                                    "Function": "Vortex Scan"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Expressions": [
+                                                                                "o_orderkey",
+                                                                                "o_custkey",
+                                                                                "o_orderstatus",
+                                                                                "o_totalprice",
+                                                                                "o_orderdate",
+                                                                                "o_orderpriority",
+                                                                                "o_clerk",
+                                                                                "o_shippriority",
+                                                                                "o_comment"
+                                                                            ]
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Expressions": "(o_custkey = c_custkey)"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "o_orderkey",
+                                                                "o_custkey",
+                                                                "o_orderstatus",
+                                                                "o_totalprice",
+                                                                "o_orderdate",
+                                                                "o_orderpriority",
+                                                                "o_clerk",
+                                                                "o_shippriority",
+                                                                "o_comment"
+                                                            ]
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Join Type": "MARK",
+                                                    "Conditions": ""
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "(\"substring\"(c_phone, CAST(1 AS BIGINT), CAST(2 AS BIGINT)) IN (CAST('13' AS VARCHAR), CAST('31' AS VARCHAR), CAST('23' AS VARCHAR), CAST('29' AS VARCHAR), CAST('30' AS VARCHAR), CAST('18' AS VARCHAR), CAST('17' AS VARCHAR)))",
+                                                "(CAST(c_acctbal AS DOUBLE) > SUBQUERY)",
+                                                "(NOT SUBQUERY)"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "cntrycode",
+                                        "c_acctbal"
+                                    ]
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "cntrycode",
+                            "Expressions": [
+                                "count_star()",
+                                "sum(c_acctbal)"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "cntrycode",
+                        "numcust",
+                        "totacctbal"
+                    ]
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "custsale.cntrycode"
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "DELIM_JOIN",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "COMPARISON_JOIN",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "READ_VORTEX",
+                                                                        "children": [],
+                                                                        "extra_info": {
+                                                                            "Filters": "",
+                                                                            "Function": "Vortex Scan",
+                                                                            "Estimated Cardinality": "150000"
+                                                                        }
+                                                                    },
+                                                                    {
+                                                                        "name": "DELIM_GET",
+                                                                        "children": [],
+                                                                        "extra_info": {
+                                                                            "Expressions": "",
+                                                                            "Estimated Cardinality": "2719"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Join Type": "INNER",
+                                                                    "Conditions": "(o_custkey = c_custkey)",
+                                                                    "Estimated Cardinality": "27190"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": "c_custkey",
+                                                            "Estimated Cardinality": "27190"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": "c_custkey",
+                                                    "Estimated Cardinality": "27190"
+                                                }
+                                            },
+                                            {
+                                                "name": "COMPARISON_JOIN",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "FILTER",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "COMPARISON_JOIN",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "READ_VORTEX",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Filters": "",
+                                                                                    "Function": "Vortex Scan",
+                                                                                    "Estimated Cardinality": "15000"
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "name": "CHUNK_GET",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Expressions": "",
+                                                                                    "Estimated Cardinality": "0"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Join Type": "MARK",
+                                                                            "Conditions": "(\"substring\"(c_phone, 1, 2) = #0)",
+                                                                            "Estimated Cardinality": "15000"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Expressions": "IN (...)",
+                                                                    "Estimated Cardinality": "3000"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "c_custkey",
+                                                                "c_phone",
+                                                                "c_acctbal"
+                                                            ],
+                                                            "Estimated Cardinality": "3000"
+                                                        }
+                                                    },
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "AGGREGATE",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "PROJECTION",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "AGGREGATE",
+                                                                                "children": [
+                                                                                    {
+                                                                                        "name": "PROJECTION",
+                                                                                        "children": [
+                                                                                            {
+                                                                                                "name": "FILTER",
+                                                                                                "children": [
+                                                                                                    {
+                                                                                                        "name": "COMPARISON_JOIN",
+                                                                                                        "children": [
+                                                                                                            {
+                                                                                                                "name": "READ_VORTEX",
+                                                                                                                "children": [],
+                                                                                                                "extra_info": {
+                                                                                                                    "Filters": "($.c_acctbal > decimal128(0, precision=15, scale=2))",
+                                                                                                                    "Function": "Vortex Scan",
+                                                                                                                    "Estimated Cardinality": "3000"
+                                                                                                                }
+                                                                                                            },
+                                                                                                            {
+                                                                                                                "name": "CHUNK_GET",
+                                                                                                                "children": [],
+                                                                                                                "extra_info": {
+                                                                                                                    "Expressions": "",
+                                                                                                                    "Estimated Cardinality": "0"
+                                                                                                                }
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "extra_info": {
+                                                                                                            "Join Type": "MARK",
+                                                                                                            "Conditions": "(\"substring\"(c_phone, 1, 2) = #0)",
+                                                                                                            "Estimated Cardinality": "3000"
+                                                                                                        }
+                                                                                                    }
+                                                                                                ],
+                                                                                                "extra_info": {
+                                                                                                    "Expressions": "IN (...)",
+                                                                                                    "Estimated Cardinality": "600"
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "extra_info": {
+                                                                                            "Expressions": "c_acctbal",
+                                                                                            "Estimated Cardinality": "600"
+                                                                                        }
+                                                                                    }
+                                                                                ],
+                                                                                "extra_info": {
+                                                                                    "Groups": "",
+                                                                                    "Expressions": "avg(c_acctbal)",
+                                                                                    "Estimated Cardinality": "1"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Expressions": "avg(c_acctbal)",
+                                                                            "Estimated Cardinality": "1"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Groups": "",
+                                                                    "Expressions": [
+                                                                        "\"first\"(#0)",
+                                                                        "count_star()"
+                                                                    ],
+                                                                    "Estimated Cardinality": "1"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "CASE  WHEN ((#1 > 1)) THEN (\"error\"('More than one row returned by a subquery used as an expression - scalar subqueries can only return a single row.",
+                                                                "Use \"SET scalar_subquery_error_on_multiple_rows=false\" to revert to previous behavior of returning a random row.')) ELSE #0 END"
+                                                            ],
+                                                            "Estimated Cardinality": "1"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Join Type": "INNER",
+                                                    "Conditions": "(CAST(c_acctbal AS DOUBLE) > SUBQUERY)",
+                                                    "Estimated Cardinality": "3000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Join Type": "RIGHT_ANTI",
+                                            "Conditions": "(c_custkey IS NOT DISTINCT FROM c_custkey)",
+                                            "Estimated Cardinality": "600"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "cntrycode",
+                                        "c_acctbal"
+                                    ],
+                                    "Estimated Cardinality": "600"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "cntrycode",
+                            "Expressions": [
+                                "count_star()",
+                                "sum(c_acctbal)"
+                            ],
+                            "Estimated Cardinality": "588"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "cntrycode",
+                        "numcust",
+                        "totacctbal"
+                    ],
+                    "Estimated Cardinality": "588"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "custsale.cntrycode"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "HASH_GROUP_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "RIGHT_DELIM_JOIN",
+                                        "children": [
+                                            {
+                                                "name": "NESTED_LOOP_JOIN",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "FILTER",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "HASH_JOIN",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "READ_VORTEX",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Function": "Vortex Scan",
+                                                                                    "Projections": [
+                                                                                        "c_custkey",
+                                                                                        "c_phone",
+                                                                                        "c_acctbal"
+                                                                                    ],
+                                                                                    "Estimated Cardinality": "15000"
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "name": "COLUMN_DATA_SCAN",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Estimated Cardinality": "0"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Join Type": "MARK",
+                                                                            "Conditions": "\"substring\"(c_phone, 1, 2) = #0",
+                                                                            "Estimated Cardinality": "15000"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Expression": "IN (...)",
+                                                                    "Estimated Cardinality": "3000"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Projections": [
+                                                                "c_custkey",
+                                                                "c_phone",
+                                                                "c_acctbal"
+                                                            ],
+                                                            "Estimated Cardinality": "3000"
+                                                        }
+                                                    },
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "UNGROUPED_AGGREGATE",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "PROJECTION",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "UNGROUPED_AGGREGATE",
+                                                                                "children": [
+                                                                                    {
+                                                                                        "name": "PROJECTION",
+                                                                                        "children": [
+                                                                                            {
+                                                                                                "name": "PROJECTION",
+                                                                                                "children": [
+                                                                                                    {
+                                                                                                        "name": "FILTER",
+                                                                                                        "children": [
+                                                                                                            {
+                                                                                                                "name": "HASH_JOIN",
+                                                                                                                "children": [
+                                                                                                                    {
+                                                                                                                        "name": "READ_VORTEX",
+                                                                                                                        "children": [],
+                                                                                                                        "extra_info": {
+                                                                                                                            "Function": "Vortex Scan",
+                                                                                                                            "Filters": "($.c_acctbal > decimal128(0, precision=15, scale=2))",
+                                                                                                                            "Projections": [
+                                                                                                                                "c_phone",
+                                                                                                                                "c_acctbal"
+                                                                                                                            ],
+                                                                                                                            "Estimated Cardinality": "3000"
+                                                                                                                        }
+                                                                                                                    },
+                                                                                                                    {
+                                                                                                                        "name": "COLUMN_DATA_SCAN",
+                                                                                                                        "children": [],
+                                                                                                                        "extra_info": {
+                                                                                                                            "Estimated Cardinality": "0"
+                                                                                                                        }
+                                                                                                                    }
+                                                                                                                ],
+                                                                                                                "extra_info": {
+                                                                                                                    "Join Type": "MARK",
+                                                                                                                    "Conditions": "\"substring\"(c_phone, 1, 2) = #0",
+                                                                                                                    "Estimated Cardinality": "3000"
+                                                                                                                }
+                                                                                                            }
+                                                                                                        ],
+                                                                                                        "extra_info": {
+                                                                                                            "Expression": "IN (...)",
+                                                                                                            "Estimated Cardinality": "600"
+                                                                                                        }
+                                                                                                    }
+                                                                                                ],
+                                                                                                "extra_info": {
+                                                                                                    "Projections": "c_acctbal",
+                                                                                                    "Estimated Cardinality": "600"
+                                                                                                }
+                                                                                            }
+                                                                                        ],
+                                                                                        "extra_info": {
+                                                                                            "Projections": "c_acctbal",
+                                                                                            "Estimated Cardinality": "600"
+                                                                                        }
+                                                                                    }
+                                                                                ],
+                                                                                "extra_info": {
+                                                                                    "Aggregates": "avg(#0)"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Projections": "#0",
+                                                                            "Estimated Cardinality": "1"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Aggregates": [
+                                                                        "\"first\"(#0)",
+                                                                        "count_star()"
+                                                                    ]
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Projections": [
+                                                                "CASE  WHEN ((#1 > 1)) THEN (\"error\"('More than one row returned by a subquery used as an expression - scalar subqueries can only return a single row.",
+                                                                "Use \"SET scalar_subquery_error_on_multiple_rows=false\" to revert to previous behavior of returning a random row.')) ELSE #0 END"
+                                                            ],
+                                                            "Estimated Cardinality": "1"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Join Type": "INNER",
+                                                    "Conditions": "CAST(c_acctbal AS DOUBLE) > SUBQUERY",
+                                                    "Estimated Cardinality": "3000"
+                                                }
+                                            },
+                                            {
+                                                "name": "HASH_JOIN",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "HASH_JOIN",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "READ_VORTEX",
+                                                                        "children": [],
+                                                                        "extra_info": {
+                                                                            "Function": "Vortex Scan",
+                                                                            "Projections": "o_custkey",
+                                                                            "Estimated Cardinality": "150000"
+                                                                        }
+                                                                    },
+                                                                    {
+                                                                        "name": "DELIM_SCAN",
+                                                                        "children": [],
+                                                                        "extra_info": {
+                                                                            "Delim Index": "1",
+                                                                            "Estimated Cardinality": "2719"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Join Type": "INNER",
+                                                                    "Conditions": "o_custkey = c_custkey",
+                                                                    "Estimated Cardinality": "27190"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Projections": "c_custkey",
+                                                            "Estimated Cardinality": "27190"
+                                                        }
+                                                    },
+                                                    {
+                                                        "name": "DUMMY_SCAN",
+                                                        "children": [],
+                                                        "extra_info": {}
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Join Type": "RIGHT_ANTI",
+                                                    "Conditions": "c_custkey IS NOT DISTINCT FROM c_custkey",
+                                                    "Estimated Cardinality": "600"
+                                                }
+                                            },
+                                            {
+                                                "name": "HASH_GROUP_BY",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Groups": "#0",
+                                                    "Aggregates": "",
+                                                    "Estimated Cardinality": "2719"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Join Type": "RIGHT_ANTI",
+                                            "Conditions": "c_custkey IS NOT DISTINCT FROM c_custkey",
+                                            "Estimated Cardinality": "600",
+                                            "Delim Index": "1"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Projections": [
+                                        "cntrycode",
+                                        "c_acctbal"
+                                    ],
+                                    "Estimated Cardinality": "600"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Projections": [
+                                "cntrycode",
+                                "c_acctbal"
+                            ],
+                            "Estimated Cardinality": "600"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Groups": "#0",
+                    "Aggregates": [
+                        "count_star()",
+                        "sum(#1)"
+                    ],
+                    "Estimated Cardinality": "588"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "custsale.cntrycode ASC"
+        }
+    }
+]
+
+statement ok
+SET disabled_optimizers = '';

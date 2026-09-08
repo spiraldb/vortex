@@ -147,7 +147,7 @@ impl State {
     pub(crate) fn owned_layout(self) -> Layout {
         // SAFETY: every `State::owned` caller passes the parts of a valid `Layout`, and the size
         // round-trips exactly because `owned` rejects anything wider than `MAX_OWNED_SIZE`.
-        unsafe { Layout::from_size_align_unchecked(self.owned_size(), *self.owned_alignment()) }
+        unsafe { Layout::from_size_align_unchecked(self.owned_size(), self.owned_alignment().as_usize()) }
     }
 
     /// The [`Shared`] this state points at.
@@ -322,7 +322,7 @@ fn layout_for(size: usize, alignment: Alignment) -> Layout {
     if size == 0 {
         bytes_panic!("Cannot allocate a zero-sized buffer region");
     }
-    Layout::from_size_align(size, *alignment).unwrap_or_else(|_| {
+    Layout::from_size_align(size, alignment.as_usize()).unwrap_or_else(|_| {
         bytes_panic!("Buffer of {size} bytes aligned to {alignment} exceeds the maximum layout")
     })
 }

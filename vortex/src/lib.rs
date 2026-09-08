@@ -149,7 +149,7 @@ pub mod compressor {
     pub use vortex_btrblocks::SchemeId;
 }
 
-/// Vortex editions: named, frozen sets of encodings with a read-compatibility guarantee.
+/// Vortex editions: versioned sets of serialized components.
 pub mod editions;
 
 pub mod dtype {
@@ -265,6 +265,11 @@ pub mod encodings {
         pub use vortex_fsst::*;
     }
 
+    /// Parquet Variant array encoding.
+    pub mod parquet_variant {
+        pub use vortex_parquet_variant::*;
+    }
+
     /// Pco numeric compression encoding.
     pub mod pco {
         pub use vortex_pco::*;
@@ -317,16 +322,19 @@ impl VortexSessionDefault for VortexSession {
             .with::<MemorySession>()
             .with::<RuntimeSession>();
         vortex_arrow::initialize(&session);
+        vortex_parquet_variant::initialize(&session);
         editions::register_default_editions(&session);
         editions::enable_default_editions(&session);
 
-        // `MultiFileSession` holds a `moka` cache whose clock reads `std::time::Instant::now()`
-        // when constructed. `Instant` is unsupported on `wasm32` and panics with "time not
-        // implemented on this platform". Multi-file scanning is not available on wasm anyway, so
-        // only register this session variable on non-wasm targets.
-        #[cfg(all(feature = "files", not(target_arch = "wasm32")))]
+        #[cfg(feature = "files")]
         let session = {
+            // `MultiFileSession` holds a `moka` cache whose clock reads `std::time::Instant::now()`
+            // when constructed. `Instant` is unsupported on `wasm32` and panics with "time not
+            // implemented on this platform". Multi-file scanning is not available on wasm anyway, so
+            // only register this session variable on non-wasm targets.
+            #[cfg(not(target_arch = "wasm32"))]
             let session = session.with::<file::multi::MultiFileSession>();
+            // Default encodings are registered everywhere (if the `files` feature is enabled).
             file::register_default_encodings(&session);
             session
         };

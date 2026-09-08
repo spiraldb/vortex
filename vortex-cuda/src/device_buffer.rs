@@ -56,7 +56,6 @@ pub struct CudaDeviceBuffer {
     /// reads without copying or repacking.
     zeroed_tail_start: Option<usize>,
 }
-
 mod private {
     use std::fmt::Debug;
     use std::sync::Arc;
@@ -474,7 +473,7 @@ impl DeviceBuffer for CudaDeviceBuffer {
 
     fn aligned(self: Arc<Self>, alignment: Alignment) -> VortexResult<Arc<dyn DeviceBuffer>> {
         let effective_ptr = self.device_ptr + self.offset as u64;
-        if effective_ptr.is_multiple_of(*alignment as u64) {
+        if effective_ptr.is_multiple_of(alignment.as_usize() as u64) {
             Ok(Arc::new(CudaDeviceBuffer {
                 allocation: Arc::clone(&self.allocation),
                 offset: self.offset,

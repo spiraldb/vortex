@@ -55,7 +55,7 @@ jobs:
           - { shard: 4, name: "Encodings 1", packages: "vortex-alp vortex-bytebool vortex-datetime-parts" }
           - { shard: 5, name: "Encodings 2", packages: "vortex-decimal-byte-parts vortex-fastlanes vortex-fsst", features: "--features _test-harness" }
           - { shard: 6, name: "Encodings 3", packages: "vortex-pco vortex-runend vortex-sequence" }
-          - { shard: 7, name: "Encodings 4", packages: "vortex-sparse vortex-zigzag vortex-zstd" }
+          - { shard: 7, name: "Encodings 4 & layout", packages: "vortex-sparse vortex-zigzag vortex-zstd vortex-layout" }
           - { shard: 8, name: "Storage formats & row encoding", packages: "vortex-flatbuffers vortex-proto vortex-btrblocks vortex-row" }
           - { shard: 9, name: "Tensor & spatial", packages: "vortex-tensor vortex-spatial" }
     name: "Benchmark with Codspeed (Shard #${{ matrix.shard }})"
@@ -126,7 +126,7 @@ jobs:
     name: "Benchmark with Codspeed (${{ matrix.features }})"
     timeout-minutes: 60
     runs-on: >-
-      runs-on=${{ github.run_id }}/runner=bench-dedicated/family=${{ matrix.family }}/image=${{ matrix.image }}/disk=large/extras=s3-cache/tag=bench-codspeed-cpu-features-${{ matrix.features }}
+      runs-on=${{ github.run_id }}/runner=bench-dedicated/family=${{ matrix.family }}/image=${{ matrix.image }}/extras=s3-cache/tag=bench-codspeed-cpu-features-${{ matrix.features }}
     steps:
       - uses: runs-on/action@v2
         with:
@@ -168,6 +168,7 @@ jobs:
           RUSTFLAGS: ${{ matrix.rustflags }}
           VORTEX_BENCH_VARIANT: ${{ matrix.features }}
           VORTEX_BENCH_PREFIX: "${{ matrix.features }}::"
+          VORTEX_BENCH_SUFFIX: "_${{ matrix.features }}"
         run: |
           cargo codspeed build --locked -m walltime --profile bench \
             ${{ steps.select.outputs.packages }}
@@ -255,7 +256,7 @@ jobs:
         include:
           - { shard: 1, name: "Bitpacked", benches: "bitpacked_cuda" }
           - { shard: 2, name: "Dynamic dispatch", benches: "dynamic_dispatch_cuda" }
-          - { shard: 3, name: "Standalone kernels", benches: "alp_cuda date_time_parts_cuda dict_cuda fsst_cuda runend_cuda" }
+          - { shard: 3, name: "Standalone kernels", benches: "alp_cuda date_time_parts_cuda delta_cuda dict_cuda fsst_cuda runend_cuda" }
     name: "Benchmark with Codspeed (CUDA Shard #${{ matrix.shard }} - ${{ matrix.name }})"
     timeout-minutes: 30
     runs-on: >-

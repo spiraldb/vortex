@@ -8,11 +8,11 @@
 //!
 //! [`RowFn`]: crate::scalar_fn::unstable::row::RowFn
 
-use std::ops::BitOrAssign;
-
 use vortex_error::VortexResult;
 
+use crate::dtype::DType;
 use crate::scalar_fn::unstable::row::ElementTuple;
+use crate::scalar_fn::unstable::row::FailureEvidence;
 use crate::scalar_fn::unstable::row::IndexedElementTuple;
 use crate::scalar_fn::unstable::row::OutputElement;
 use crate::scalar_fn::unstable::row::OutputSink;
@@ -22,15 +22,60 @@ use crate::scalar_fn::unstable::row::SinkResult;
 ///
 /// Only the framework implements this trait. The `visit_prepared*` methods derive shared state
 /// from constant arguments before visiting any rows. Every visit verifies that the argument tuple
-/// matches [`RowFn::ARG_NAMES`] and that fallible decoding agrees with [`RowFn::FALLIBLE`].
+/// matches [`RowFn::ARG_NAMES`] and that row-result fallibility agrees with
+/// [`RowFn::INFALLIBLE`]. Input decoding declares its fallibility independently.
+///
+/// A visit selects the _storage dtype_, the dtype the chosen [`OutputElement`] or [`OutputSink`]
+/// physically builds. [`with_output_dtype`](Self::with_output_dtype) declares the _output dtype_,
+/// the dtype the function returns, which defaults to the storage dtype.
 ///
 /// [`RowFn::ARG_NAMES`]: crate::scalar_fn::unstable::row::RowFn::ARG_NAMES
-/// [`RowFn::FALLIBLE`]: crate::scalar_fn::unstable::row::RowFn::FALLIBLE
-pub trait RowVisitor<Options>: private::Sealed + Sized {
+/// [`RowFn::INFALLIBLE`]: crate::scalar_fn::unstable::row::RowFn::INFALLIBLE
+pub trait RowVisitor: private::Sealed + Sized {
     /// The framework result of visiting one concrete row signature.
     ///
     /// This is a batch plan or execution result, not a per-row output.
     type VisitResult;
+
+    /// Declare the dtype this dispatch labels onto the column it builds, replacing the storage
+    /// dtype as the function's output dtype.
+    ///
+    /// Use this for an output dtype derived from the function options or the argument dtypes. A
+    /// dtype that is a property of the Rust type belongs on [`OutputElement::element_dtype`] or
+    /// [`OutputSink::storage_dtype`] instead.
+    ///
+    /// Batch execution applies the label after deriving nullability and masking null rows, so an
+    /// empty or all-null batch carries the same metadata as a populated one.
+    ///
+    /// `dtype` **must** be non-nullable, and **must** apply by wrapping the finished column. That
+    /// restricts it to the storage dtype itself or to an extension dtype storing it, because an
+    /// extension array holds its storage column as a child whatever that column's encoding. The
+    /// visit validates both, and execution checks that this dispatch declares the dtype planning
+    /// selected.
+    ///
+    /// Labelling validates dtypes and not values. An extension type can constrain its storage
+    /// values through [`ExtVTable::validate_scalar_value`], so a dispatch that declares one
+    /// **must** produce values that satisfy it. This is the same trust the framework places in
+    /// [`OutputElement::element_dtype`].
+    ///
+    /// # Examples
+    ///
+    /// Truncate each timestamp to a granularity while preserving its unit and timezone. Deriving
+    /// the unit once feeds both the output dtype and the row kernel, so the two cannot disagree.
+    ///
+    /// ```ignore
+    /// let (ext_dtype, unit) = timestamp_dtype(&args[0])?;
+    /// let ticks = options.ticks_in(unit)?;
+    ///
+    /// visitor
+    ///     .with_output_dtype(DType::Extension(
+    ///         ext_dtype.with_nullability(Nullability::NonNullable),
+    ///     ))
+    ///     .visit::<(TimestampRow,), i64>(move |(value,)| value - value.rem_euclid(ticks))
+    /// ```
+    /// [`ExtVTable::validate_scalar_value`]: crate::dtype::extension::ExtVTable::validate_scalar_value
+    /// [`OutputElement::element_dtype`]: crate::scalar_fn::unstable::row::OutputElement::element_dtype
+    fn with_output_dtype(self, dtype: DType) -> Self;
 
     /// Visit an infallible row computation that returns one output value per row.
     ///
@@ -50,10 +95,10 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     /// Dispatch an equality helper over its primitive element type.
     ///
     /// ```ignore
-    /// fn visit_equal<T, Options, V>(visitor: V) -> VortexResult<V::VisitResult>
+    /// fn visit_equal<T, V>(visitor: V) -> VortexResult<V::VisitResult>
     /// where
     ///     T: NativePType,
-    ///     V: RowVisitor<Options>,
+    ///     V: RowVisitor,
     /// {
     ///     visitor.visit::<(T, T), bool>(|(lhs, rhs)| lhs.is_eq(rhs))
     /// }
@@ -69,12 +114,29 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
         self.visit_prepared::<Args, Out, ()>(|_| (), move |&(), args| apply(args))
     }
 
+    /// Visit an infallible Boolean row computation and pack its output during evaluation.
+    ///
+    /// This has the same requirements as [`visit`](Self::visit). Set `MULTIVERSIONED` to `true`
+    /// to select the packing loop for the current CPU at runtime. This mode is intended only for
+    /// small predicates and requires benchmark evidence. Set it to `false` to use the inlined
+    /// packing loop.
+    fn visit_bool<Args, const MULTIVERSIONED: bool>(
+        self,
+        apply: impl Fn(Args::Elems<'_>) -> bool,
+    ) -> VortexResult<Self::VisitResult>
+    where
+        Args: IndexedElementTuple,
+    {
+        self.visit::<Args, bool>(apply)
+    }
+
     /// The prepared form of [`visit`](Self::visit), with the same prerequisites.
     ///
     /// # Examples
     ///
     /// Test whether each string occurs in its allowed-values list. The prepare closure builds one
-    /// lookup table for a batch-constant list. The row closure scans a varying list directly.
+    /// lookup table for a batch-constant list. The row closure scans the current list from the
+    /// input column directly.
     ///
     /// ```ignore
     /// visitor.visit_prepared::<
@@ -109,7 +171,7 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     /// another row, sink, or local cell can violate the safety contract of [`OutputSink::finish`].
     ///
     /// A fallible `ApplyResult` requires
-    /// [`RowFn::FALLIBLE`](crate::scalar_fn::unstable::row::RowFn::FALLIBLE) to be `true`.
+    /// [`RowFn::INFALLIBLE`](crate::scalar_fn::unstable::row::RowFn::INFALLIBLE) to be `false`.
     ///
     /// # Examples
     ///
@@ -125,6 +187,7 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     /// }
     ///
     /// visitor.visit_into::<(i64, i64), UninitElementSink<i64>, _>(
+    ///     (),
     ///     |(lhs, rhs), output| {
     ///         let Some(value) = lhs.checked_div(rhs) else {
     ///             return Err(integer_division_error());
@@ -137,14 +200,16 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     /// ```
     fn visit_into<Args, Sink, ApplyResult>(
         self,
-        apply: impl Fn(Args::Elems<'_>, <Sink as OutputSink<Options>>::Row<'_>) -> ApplyResult,
+        params: Sink::Params,
+        apply: impl Fn(Args::Elems<'_>, Sink::Row<'_>) -> ApplyResult,
     ) -> VortexResult<Self::VisitResult>
     where
         Args: ElementTuple,
-        Sink: OutputSink<Options>,
-        ApplyResult: SinkResult<WriteToken = <Sink as OutputSink<Options>>::WriteToken>,
+        Sink: OutputSink,
+        ApplyResult: SinkResult<WriteToken = Sink::WriteToken>,
     {
         self.visit_prepared_into::<Args, Sink, (), ApplyResult>(
+            params,
             |_| (),
             move |&(), args, row| apply(args, row),
         )
@@ -161,16 +226,17 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     /// visitor.visit_prepared_into::<
     ///     (TensorRow<T>, TensorRow<T>),
     ///     UninitElementSink<T>,
-    ///     ConstantVectorMagnitudes<T>,
+    ///     ConstVectorMagnitudes<T>,
     ///     InitializedElement,
     /// >(
-    ///     |(lhs, rhs)| ConstantVectorMagnitudes {
+    ///     (),
+    ///     |(lhs, rhs)| ConstVectorMagnitudes {
     ///         lhs: lhs.map(vector_magnitude),
     ///         rhs: rhs.map(vector_magnitude),
     ///     },
-    ///     |constant_magnitudes, (lhs, rhs), output| {
+    ///     |const_magnitudes, (lhs, rhs), output| {
     ///         let similarity =
-    ///             cosine_similarity_with_constant_magnitudes(constant_magnitudes, lhs, rhs);
+    ///             cosine_similarity_with_const_magnitudes(const_magnitudes, lhs, rhs);
     ///
     ///         // SAFETY: `output` is the `UninitElementSink` row supplied for this callback.
     ///         unsafe { InitializedElement::write(output, similarity) }
@@ -179,30 +245,31 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     /// ```
     fn visit_prepared_into<Args, Sink, Prepared, ApplyResult>(
         self,
+        params: Sink::Params,
         prepare: impl FnOnce(Args::ConstElems<'_>) -> Prepared,
-        apply: impl Fn(
-            &Prepared,
-            Args::Elems<'_>,
-            <Sink as OutputSink<Options>>::Row<'_>,
-        ) -> ApplyResult,
+        apply: impl Fn(&Prepared, Args::Elems<'_>, Sink::Row<'_>) -> ApplyResult,
     ) -> VortexResult<Self::VisitResult>
     where
         Args: ElementTuple,
-        Sink: OutputSink<Options>,
-        ApplyResult: SinkResult<WriteToken = <Sink as OutputSink<Options>>::WriteToken>;
+        Sink: OutputSink,
+        ApplyResult: SinkResult<WriteToken = Sink::WriteToken>;
 
     /// Visit a row computation that returns an owned output value and deferred failure evidence.
     ///
     /// `apply` must not panic or have side effects. Dense execution can pass unspecified values
     /// from null rows.
     ///
-    /// The executor OR-reduces `Fail` across rows and passes the result to `finish_failure`.
-    /// [`Default::default`] **must** mean success, including for an empty batch. The compiler
-    /// cannot check this requirement.
+    /// The executor OR-reduces [`FailureEvidence`] across rows and passes the result to
+    /// `finish_failure`.
     ///
-    /// [`RowFn::FALLIBLE`](crate::scalar_fn::unstable::row::RowFn::FALLIBLE) **must** be `true`.
-    /// `Out` must not require drop glue. `Fail` must be no wider than `Out`, or failure tracking
-    /// reduces the vector width. The framework checks these requirements.
+    /// If `finish_failure` rejects dense evidence, reduction has lost which row failed. Batch
+    /// execution therefore resolves input validity: it preserves the error for all-valid input,
+    /// suppresses it for all-null input, and retries `apply` over valid rows for partially valid
+    /// input. A prepared retry also runs `prepare` again.
+    ///
+    /// [`RowFn::INFALLIBLE`](crate::scalar_fn::unstable::row::RowFn::INFALLIBLE) **must** be
+    /// `false`. `Out` must not require drop glue. `Fail` must be no wider than `Out`, or failure
+    /// tracking reduces the vector width. The framework checks these requirements.
     ///
     /// # Examples
     ///
@@ -237,9 +304,34 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     where
         Args: IndexedElementTuple,
         Out: OutputElement,
-        Fail: Copy + Default + BitOrAssign,
+        Fail: FailureEvidence,
     {
         self.visit_prepared_deferred::<Args, Out, (), Fail>(
+            |_| (),
+            move |&(), args| apply(args),
+            finish_failure,
+        )
+    }
+
+    /// Visit a deferred row computation whose Boolean output is packed during evaluation.
+    ///
+    /// This has the same requirements and failure handling as
+    /// [`visit_deferred`](Self::visit_deferred). It selects direct packed collection instead of the
+    /// generic owned-output path.
+    ///
+    /// Set `MULTIVERSIONED` to `true` to select the packing loop for the current CPU at runtime.
+    /// This mode is intended only for small predicates and requires benchmark evidence. Set it to
+    /// `false` to use the inlined packing loop.
+    fn visit_deferred_bool<Args, Fail, const MULTIVERSIONED: bool>(
+        self,
+        apply: impl Fn(Args::Elems<'_>) -> (bool, Fail),
+        finish_failure: impl FnOnce(Fail) -> VortexResult<()>,
+    ) -> VortexResult<Self::VisitResult>
+    where
+        Args: IndexedElementTuple,
+        Fail: FailureEvidence,
+    {
+        self.visit_prepared_deferred_bool::<Args, (), Fail, MULTIVERSIONED>(
             |_| (),
             move |&(), args| apply(args),
             finish_failure,
@@ -290,7 +382,21 @@ pub trait RowVisitor<Options>: private::Sealed + Sized {
     where
         Args: IndexedElementTuple,
         Out: OutputElement,
-        Fail: Copy + Default + BitOrAssign;
+        Fail: FailureEvidence;
+
+    /// The prepared form of [`visit_deferred_bool`](Self::visit_deferred_bool).
+    fn visit_prepared_deferred_bool<Args, Prepared, Fail, const MULTIVERSIONED: bool>(
+        self,
+        prepare: impl FnOnce(Args::ConstElems<'_>) -> Prepared,
+        apply: impl Fn(&Prepared, Args::Elems<'_>) -> (bool, Fail),
+        finish_failure: impl FnOnce(Fail) -> VortexResult<()>,
+    ) -> VortexResult<Self::VisitResult>
+    where
+        Args: IndexedElementTuple,
+        Fail: FailureEvidence,
+    {
+        self.visit_prepared_deferred::<Args, bool, Prepared, Fail>(prepare, apply, finish_failure)
+    }
 }
 
 pub(super) mod private {

@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q39.slt.no explains the upstream query unchanged.
+query IIITTI
+SELECT "TraficSourceID", "SearchEngineID", "AdvEngineID", CASE WHEN ("SearchEngineID" = 0 AND "AdvEngineID" = 0) THEN "Referer" ELSE '' END AS Src, "URL" AS Dst, COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-01' AND "EventDate" <= '2013-07-31' AND "IsRefresh" = 0 GROUP BY "TraficSourceID", "SearchEngineID", "AdvEngineID", Src, Dst ORDER BY PageViews DESC, "TraficSourceID", "SearchEngineID", "AdvEngineID", Src, Dst LIMIT 10 OFFSET 1000;
+----
+-1 0 0 http://state=19945206/foto-4/login-2006/makum http://irr.ru/index.php?showalbum/login-163315&op_uid=15653568-recept/suhie-erotvinegozakonodar 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makum http://irr.ru/index.php?showalbum/login-19104849072%26pz%3D0%26anbieter%3Decircle&security.wildberries 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makum http://irr.ru/index.php?showalbum/login-ganadonu/photo=on&acce_HD3200&ti 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makum http://irr.ru/index.php?showalbum/login-tant-Pereezinu_diplombing/houses/moskol 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makum http://irr.ru/index.php?showalbum/login/?_h=gallery-tort-pliazhnaia-moda 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makumiroshoowbiz/down%2Fholodilnik.ru/765/price http://irr.ru/index.php?showalbum/login-leniya7777294,938303130 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makumiroshoowbiz/down%2Fholodilnik.ru/76581369 http://irr.ru/index.php?showalbum/login-kapusta-advertika/search/room=1&damage=10&can_be_checked 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makumiroshoowbiz/photo=1&av=1&source=web&cd=7&sig2=pmKaMWQntUm-aUpvG4EuWt1024&biw=13731610231 http://irr.ru/index.php?showalbum/login-art&ch=UTF-8&sF=11,7,74955230-la-fleurl%3D%26CompPath%3D7424.html5/v12/?fromShow_aux_page.aspx#locationcoding/Plitka.ru/rem_silver_req.request=astroizvodskaya-obl.irr.ru/news/world/2013/matched_country_id=0&scroll_to_auto_id=483803115954/?adpid=935333170 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makumiroshoowbiz/photo=1&state/apartment http://irr.ru/index.php?showalbum/logisterh7.adwords&sort/progs_chevyj-90599%26bn%3D0%26ar_ntype=product/blog/909443-Trio_11672,95506016.html?1=1&cid=577&oki=1&op_seo_entry=&op_uid=1682891.html_params=rhost%3Dad.adriver.ru/search=1&av=1&nm=1&distana/breed/lomon_c=319359-96830597432642#images/0001216629%26sliceideas.ru/real-estate/out-of-town/hasimagesize=6495,9226145?page22/b112dba20100 10
+-1 0 0 http://state=19945206/foto-4/login-2006/makumiroshoowbiz/photo=49&text=люди-сектор 2 фильм скорте&clid=1831962cecfvfhf&btnG=Найти&siteid%3D240%26point_period=0&ifi=1&win=82&comment_id=4312/cities.ru/search?text=вальгии http://irr.ru/index.php?showalbum/login-kapusta-advert273389; U; Android 4.0.1453.116 Safari%2F5 10

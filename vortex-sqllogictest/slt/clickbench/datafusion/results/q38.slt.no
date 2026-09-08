@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q38.slt.no explains the upstream query unchanged.
+query TI
+SELECT "URL", COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-01' AND "EventDate" <= '2013-07-31' AND "IsRefresh" = 0 AND "IsLink" <> 0 AND "IsDownload" = 0 GROUP BY "URL" ORDER BY PageViews DESC, "URL" LIMIT 10 OFFSET 1000;
+----
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,94552/photo-3.xhtml?html_params%3D0%26rleurl%3D%26bn%3Dorder_by=0&hide 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,94552/photo-3.xhtml_param=0&driver.ru/cars/art/088848&s_yers=chat/svetlo 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,94552/photo-3.xhtml_params=rhost%3D400%26url%3D%26bn%3Dorder_by=0&hide 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/work.html_params%3D0%26rleurl%3D%26CompPath%3Dhttp://video.yandex.ru/filmId=s4hAuutourism/otdelo.ua/searchivet_allery/pic/89393.html?1=1&cid=52635349894,9247478/grams 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/work=che&ch=UTF-8&sF=0,0,0&aN=Netscape&aV=5.0 (Windows NT 6.2; Windows NT 5.1) AppleWebKit%2F537.36&bL=ru-ru&cE=true&uA=Mozilla%2Fzhienskaia-moda-zhito-cvet-spa-advert27420 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/work=che&fssize%3D0%26rnd%3D2%26pz%3D0%26rnd%3D2788888,264;IC,236;IC,691;IC,60395&ch=UTF-8&sF=11,7,7,7;VL,2184087/photo=0&is_hot=0&view/10718&prr=http://wildberring 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/work=che&offline.ru/real-estate/apartments/7394597114109162249,0.003465.php?t=89307769%252f7769%252fmediaplus%252f728x90.html%3Fhtml?1=1&cid=52635349894,9247478/grams 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/work=ok&balance_mkadrov.ru/catalog/8503/p_000.ru/my/hit_list=0&vip=&input_city=0&page=4&marka=0&po_yers=20073192641#/view_type%3D0%26aktion/russinsk/details/?cat_number 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/work=ok&balances/hotelstvo.ru/real-estate/apartments-saledParams%3Drhost%3D_blank%26sid%3D2005&po_yers=200411/adfox/184618/irr.ru/page_type=0&vip=0&confiscategories 2
+http://stalker-pub-20087898675494,960948/#page_type%3D260117152337&spn=1395,9455989.ya.ru/work=vk&referre=all&text=rhost%3Dad.adriver.ru/moscowbooks/search/index.ru/vlg/events-saledParams%3Drhost%3D43%26bt%3D90%26nid%3D839322%26pz%3D0%26pz%3D0%26nid%3D43 2

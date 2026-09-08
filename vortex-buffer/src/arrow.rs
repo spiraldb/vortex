@@ -2,19 +2,20 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use arrow_buffer::ArrowNativeType;
-use arrow_buffer::MutableBuffer;
 use arrow_buffer::OffsetBuffer;
 use vortex_error::vortex_panic;
 
 use crate::Alignment;
 use crate::Buffer;
 use crate::ByteBuffer;
-use crate::ByteBufferMut;
 
 impl<T: ArrowNativeType> Buffer<T> {
     /// Converts the buffer zero-copy into a `arrow_buffer::Buffer`.
     pub fn into_arrow_scalar_buffer(self) -> arrow_buffer::ScalarBuffer<T> {
-        let buffer = arrow_buffer::Buffer::from(self.into_bytes());
+        if self.is_empty() {
+            return Vec::new().into();
+        }
+        let buffer = self.into_byte_buffer().into_arrow_buffer();
         arrow_buffer::ScalarBuffer::from(buffer)
     }
 
@@ -25,8 +26,19 @@ impl<T: ArrowNativeType> Buffer<T> {
     /// Panics if the Arrow buffer is not aligned to the requested alignment, or if the requested
     /// alignment is not sufficient for type T.
     pub fn from_arrow_scalar_buffer(arrow: arrow_buffer::ScalarBuffer<T>) -> Self {
-        let buffer = ByteBuffer::from_arrow_buffer(arrow.into_inner(), Alignment::of::<T>());
-        Self::from_byte_buffer(buffer)
+        let length = arrow.len();
+        let arrow = arrow.into_inner();
+
+        let alignment = Alignment::of::<T>();
+        if arrow.as_ptr().align_offset(alignment.as_usize()) != 0 {
+            vortex_panic!(
+                "Arrow buffer is not aligned to the requested alignment: {}",
+                alignment
+            );
+        }
+
+        debug_assert_eq!(length, arrow.len() / size_of::<T>());
+        Self::from_arrow_owner(arrow, length, alignment)
     }
 
     /// Converts the buffer zero-copy into a `arrow_buffer::OffsetBuffer`.
@@ -41,67 +53,39 @@ impl<T: ArrowNativeType> Buffer<T> {
 impl ByteBuffer {
     /// Converts the buffer zero-copy into a `arrow_buffer::Buffer`.
     pub fn into_arrow_buffer(self) -> arrow_buffer::Buffer {
+        if let Some(crate::BufferBacking::Arrow(arrow)) = self.backing.as_deref() {
+            let offset = self.ptr.addr().get() - arrow.as_ptr().addr();
+            return arrow.slice_with_length(offset, self.length);
+        }
         arrow_buffer::Buffer::from(self.into_bytes())
     }
 
-    /// Convert an Arrow buffer into a Vortex byte buffer, without copying.
-    ///
-    /// When the Arrow buffer is the sole owner of its allocation, the resulting Vortex buffer
-    /// keeps it mutable: `try_into_mut` will then succeed rather than copying.
+    /// Convert an Arrow scalar buffer into a Vortex scalar buffer.
     ///
     /// ## Panics
     ///
     /// Panics if the Arrow buffer is not sufficiently aligned.
     pub fn from_arrow_buffer(arrow: arrow_buffer::Buffer, alignment: Alignment) -> Self {
-        // `Buffer::into_mutable` hands back the buffer's whole allocation, and asserts outright
-        // that the buffer is not offset into it, so only reach for it when the buffer covers its
-        // allocation exactly. Any other Arrow buffer is adopted read-only.
-        let covers_allocation = arrow.ptr_offset() == 0 && arrow.len() == arrow.capacity();
-        let buffer = if covers_allocation {
-            match arrow.into_mutable() {
-                Ok(mutable) => ByteBufferMut::from_owner(MutableBufferOwner(mutable)).freeze(),
-                Err(arrow) => ByteBuffer::from_owner(ArrowOwner(arrow)),
-            }
-        } else {
-            ByteBuffer::from_owner(ArrowOwner(arrow))
-        };
+        let length = arrow.len();
 
-        if !alignment.is_ptr_aligned(buffer.as_ptr()) {
+        if arrow.as_ptr().align_offset(alignment.as_usize()) != 0 {
             vortex_panic!(
                 "Arrow buffer is not aligned to the requested alignment: {}",
                 alignment
             );
         }
-        buffer.ensure_aligned(alignment)
-    }
-}
 
-/// A wrapper giving `arrow_buffer::Buffer` the `AsRef<[u8]>` impl that buffer adoption needs.
-struct ArrowOwner(arrow_buffer::Buffer);
-
-impl AsRef<[u8]> for ArrowOwner {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
-
-/// A wrapper giving `arrow_buffer::MutableBuffer` an `AsMut<[u8]>` impl.
-struct MutableBufferOwner(MutableBuffer);
-
-impl AsMut<[u8]> for MutableBufferOwner {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.0.as_slice_mut()
+        Self::from_arrow_owner(arrow, length, alignment)
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod test {
     use arrow_buffer::Buffer as ArrowBuffer;
     use arrow_buffer::ScalarBuffer;
 
     use crate::Alignment;
     use crate::Buffer;
-    use crate::ByteBuffer;
     use crate::buffer;
 
     #[test]
@@ -121,49 +105,21 @@ mod tests {
     }
 
     #[test]
+    fn empty_into_arrow_scalar_buffer() {
+        let scalar = Buffer::<i64>::empty().into_arrow_scalar_buffer();
+
+        assert!(scalar.is_empty());
+        assert_eq!(scalar.as_ptr().align_offset(align_of::<i64>()), 0);
+    }
+
+    #[test]
     fn from_arrow_buffer() {
         let arrow = ArrowBuffer::from_vec(vec![0i32, 1, 2]);
         let buf = Buffer::from_arrow_buffer(arrow.clone(), Alignment::of::<i32>());
         assert_eq!(arrow.as_ref(), buf.as_slice(), "Buffer values differ");
         assert_eq!(arrow.as_ptr(), buf.as_ptr(), "Conversion not zero-copy");
-    }
 
-    #[test]
-    fn sole_owner_arrow_buffer_stays_mutable() {
-        let arrow = ArrowBuffer::from_vec(vec![0u8, 1, 2, 3]);
-        let ptr = arrow.as_ptr();
-        let buf = ByteBuffer::from_arrow_buffer(arrow, Alignment::of::<u8>());
-        assert_eq!(buf.as_ptr(), ptr);
-
-        let mut buf = buf
-            .try_into_mut()
-            .expect("sole owner of the Arrow allocation");
-        buf[0] = 10;
-        assert_eq!(buf.as_slice(), &[10, 1, 2, 3]);
-        assert_eq!(buf.as_ptr(), ptr, "still no copy");
-    }
-
-    #[test]
-    fn truncated_arrow_slice_keeps_its_length() {
-        // A sole-owner Arrow buffer that does not span its whole allocation must not be widened
-        // back out to the allocation: `Buffer::into_mutable` would hand us all ten bytes.
-        let arrow = ArrowBuffer::from_vec(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        let sliced = arrow.slice_with_length(0, 3);
-        drop(arrow);
-
-        let buf = ByteBuffer::from_arrow_buffer(sliced, Alignment::of::<u8>());
-        assert_eq!(buf.as_slice(), &[1, 2, 3]);
-    }
-
-    #[test]
-    fn offset_arrow_slice_is_adopted_read_only() {
-        // `Buffer::into_mutable` asserts that the buffer is not offset into its allocation, so an
-        // offset slice must take the read-only path rather than panicking.
-        let arrow = ArrowBuffer::from_vec(vec![1u8, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-        let sliced = arrow.slice_with_length(4, 4);
-        drop(arrow);
-
-        let buf = ByteBuffer::from_arrow_buffer(sliced, Alignment::of::<u8>());
-        assert_eq!(buf.as_slice(), &[5, 6, 7, 8]);
+        let round_trip = buf.into_arrow_buffer();
+        assert_eq!(round_trip.as_ptr(), arrow.as_ptr());
     }
 }

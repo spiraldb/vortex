@@ -407,7 +407,7 @@ impl UniqueBytes {
             return false;
         }
         let layout = self.state.owned_layout();
-        if layout.align() < *alignment {
+        if layout.align() < alignment.as_usize() {
             return false;
         }
         let new_size = max(target, layout.size());

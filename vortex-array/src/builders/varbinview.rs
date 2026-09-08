@@ -790,10 +790,6 @@ impl ArrayBuilder for VarBinViewBuilder {
         self.nulls.reserve_exact(additional);
     }
 
-    unsafe fn set_validity_unchecked(&mut self, validity: Mask) {
-        self.nulls = LazyBitBufferBuilder::from_validity_mask(validity);
-    }
-
     fn finish(&mut self) -> ArrayRef {
         self.finish_into_varbinview().into_array()
     }
@@ -804,7 +800,8 @@ impl ArrayBuilder for VarBinViewBuilder {
 }
 
 impl VarBinViewBuilder {
-    #[inline]
+    #[allow(clippy::inline_always)]
+    #[inline(always)]
     fn push_view(
         &mut self,
         view: BinaryView,

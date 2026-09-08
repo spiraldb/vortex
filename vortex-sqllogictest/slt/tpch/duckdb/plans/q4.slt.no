@@ -1,0 +1,426 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN (FORMAT json)
+select
+    o_orderpriority,
+    count(*) as order_count
+from
+    orders
+where
+        o_orderdate >= date '1993-07-01'
+  and o_orderdate < date '1993-07-01' + interval '3' month
+  and exists (
+        select
+            *
+        from
+            lineitem
+        where
+                l_orderkey = o_orderkey
+          and l_commitdate < l_receiptdate
+    )
+group by
+    o_orderpriority
+order by
+    o_orderpriority;
+----
+logical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "FILTER",
+                                "children": [
+                                    {
+                                        "name": "DEPENDENT_JOIN",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Filters": "",
+                                                            "Function": "Vortex Scan"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "o_orderkey",
+                                                        "o_custkey",
+                                                        "o_orderstatus",
+                                                        "o_totalprice",
+                                                        "o_orderdate",
+                                                        "o_orderpriority",
+                                                        "o_clerk",
+                                                        "o_shippriority",
+                                                        "o_comment"
+                                                    ]
+                                                }
+                                            },
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "FILTER",
+                                                        "children": [
+                                                            {
+                                                                "name": "PROJECTION",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "READ_VORTEX",
+                                                                        "children": [],
+                                                                        "extra_info": {
+                                                                            "Filters": "",
+                                                                            "Function": "Vortex Scan"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Expressions": [
+                                                                        "l_orderkey",
+                                                                        "l_partkey",
+                                                                        "l_suppkey",
+                                                                        "l_linenumber",
+                                                                        "l_quantity",
+                                                                        "l_extendedprice",
+                                                                        "l_discount",
+                                                                        "l_tax",
+                                                                        "l_returnflag",
+                                                                        "l_linestatus",
+                                                                        "l_shipdate",
+                                                                        "l_commitdate",
+                                                                        "l_receiptdate",
+                                                                        "l_shipinstruct",
+                                                                        "l_shipmode",
+                                                                        "l_comment"
+                                                                    ]
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "(l_orderkey = o_orderkey)",
+                                                                "(l_commitdate < l_receiptdate)"
+                                                            ]
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "l_orderkey",
+                                                        "l_partkey",
+                                                        "l_suppkey",
+                                                        "l_linenumber",
+                                                        "l_quantity",
+                                                        "l_extendedprice",
+                                                        "l_discount",
+                                                        "l_tax",
+                                                        "l_returnflag",
+                                                        "l_linestatus",
+                                                        "l_shipdate",
+                                                        "l_commitdate",
+                                                        "l_receiptdate",
+                                                        "l_shipinstruct",
+                                                        "l_shipmode",
+                                                        "l_comment"
+                                                    ]
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Join Type": "MARK",
+                                            "Conditions": ""
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "(o_orderdate >= CAST('1993-07-01' AS DATE))",
+                                        "(CAST(o_orderdate AS TIMESTAMP) < (CAST('1993-07-01' AS DATE) + to_months(CAST(trunc(CAST('3' AS DOUBLE)) AS INTEGER))))",
+                                        "SUBQUERY"
+                                    ]
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "o_orderpriority",
+                            "Expressions": "count_star()"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "o_orderpriority",
+                        "order_count"
+                    ]
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "memory.main.orders.o_orderpriority"
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "DELIM_JOIN",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "COMPARISON_JOIN",
+                                                        "children": [
+                                                            {
+                                                                "name": "READ_VORTEX",
+                                                                "children": [],
+                                                                "extra_info": {
+                                                                    "Filters": "($.l_commitdate < $.l_receiptdate)",
+                                                                    "Function": "Vortex Scan",
+                                                                    "Estimated Cardinality": "120114"
+                                                                }
+                                                            },
+                                                            {
+                                                                "name": "DELIM_GET",
+                                                                "children": [],
+                                                                "extra_info": {
+                                                                    "Expressions": "",
+                                                                    "Estimated Cardinality": "5438"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Join Type": "INNER",
+                                                            "Conditions": "(l_orderkey = o_orderkey)",
+                                                            "Estimated Cardinality": "21772"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": "o_orderkey",
+                                                    "Estimated Cardinality": "21772"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": "o_orderkey",
+                                            "Estimated Cardinality": "21772"
+                                        }
+                                    },
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "FILTER",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Filters": "($.o_orderdate >= 1993-07-01)",
+                                                            "Function": "Vortex Scan",
+                                                            "Estimated Cardinality": "30000"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": "(CAST(o_orderdate AS TIMESTAMP) < '1993-10-01 00:00:00'::TIMESTAMP)",
+                                                    "Estimated Cardinality": "6000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "o_orderkey",
+                                                "o_orderpriority"
+                                            ],
+                                            "Estimated Cardinality": "6000"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Join Type": "RIGHT_SEMI",
+                                    "Conditions": "(o_orderkey IS NOT DISTINCT FROM o_orderkey)",
+                                    "Estimated Cardinality": "1200"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "o_orderpriority",
+                            "Expressions": "count_star()",
+                            "Estimated Cardinality": "1176"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "o_orderpriority",
+                        "order_count"
+                    ],
+                    "Estimated Cardinality": "1176"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "memory.main.orders.o_orderpriority"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "HASH_GROUP_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "RIGHT_DELIM_JOIN",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "FILTER",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Function": "Vortex Scan",
+                                                            "Filters": "($.o_orderdate >= 1993-07-01)",
+                                                            "Projections": [
+                                                                "o_orderkey",
+                                                                "o_orderdate",
+                                                                "o_orderpriority"
+                                                            ],
+                                                            "Estimated Cardinality": "30000"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expression": "(CAST(o_orderdate AS TIMESTAMP) < '1993-10-01 00:00:00'::TIMESTAMP)",
+                                                    "Estimated Cardinality": "6000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Projections": [
+                                                "#0",
+                                                "#2"
+                                            ],
+                                            "Estimated Cardinality": "6000"
+                                        }
+                                    },
+                                    {
+                                        "name": "HASH_JOIN",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "HASH_JOIN",
+                                                        "children": [
+                                                            {
+                                                                "name": "READ_VORTEX",
+                                                                "children": [],
+                                                                "extra_info": {
+                                                                    "Function": "Vortex Scan",
+                                                                    "Filters": "($.l_commitdate < $.l_receiptdate)",
+                                                                    "Projections": "l_orderkey",
+                                                                    "Estimated Cardinality": "120114"
+                                                                }
+                                                            },
+                                                            {
+                                                                "name": "DELIM_SCAN",
+                                                                "children": [],
+                                                                "extra_info": {
+                                                                    "Delim Index": "1",
+                                                                    "Estimated Cardinality": "5438"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Join Type": "INNER",
+                                                            "Conditions": "l_orderkey = o_orderkey",
+                                                            "Estimated Cardinality": "21772"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Projections": "o_orderkey",
+                                                    "Estimated Cardinality": "21772"
+                                                }
+                                            },
+                                            {
+                                                "name": "DUMMY_SCAN",
+                                                "children": [],
+                                                "extra_info": {}
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Join Type": "RIGHT_SEMI",
+                                            "Conditions": "o_orderkey IS NOT DISTINCT FROM o_orderkey",
+                                            "Estimated Cardinality": "1200"
+                                        }
+                                    },
+                                    {
+                                        "name": "HASH_GROUP_BY",
+                                        "children": [],
+                                        "extra_info": {
+                                            "Groups": "#0",
+                                            "Aggregates": "",
+                                            "Estimated Cardinality": "5438"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Join Type": "RIGHT_SEMI",
+                                    "Conditions": "o_orderkey IS NOT DISTINCT FROM o_orderkey",
+                                    "Estimated Cardinality": "1200",
+                                    "Delim Index": "1"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Projections": "o_orderpriority",
+                            "Estimated Cardinality": "1200"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Groups": "#0",
+                    "Aggregates": "count_star()",
+                    "Estimated Cardinality": "1176"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "memory.main.orders.o_orderpriority ASC"
+        }
+    }
+]

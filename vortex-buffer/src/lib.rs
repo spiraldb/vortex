@@ -5,12 +5,10 @@
 
 //! A library for working with custom aligned buffers of sized values.
 //!
-//! The `vortex-buffer` crate follows the model of `bytes::Bytes` and therefore supports zero-copy
-//! cloning and slicing, but differs in that it can define and maintain a custom alignment, adopt
-//! foreign allocations without giving up mutability, and hand a `Vec<T>` back out again.
+//! The `vortex-buffer` crate supports zero-copy cloning and slicing with a custom allocator and
+//! runtime alignment.
 //!
-//! * `Buffer<T>` and `BufferMut<T>` provide immutable and mutable views over a reference-counted
-//!   allocation.
+//! * `Buffer<T>` and `BufferMut<T>` provide immutable and mutable typed buffers.
 //! * `ByteBuffer` and `ByteBufferMut` are type aliases for `u8` buffers.
 //! * `BufferString` is a wrapper around a `ByteBuffer` that enforces utf-8 encoding.
 //! * `ConstBuffer<T, const A: usize>` provides similar functionality to `Buffer<T>` except with a
@@ -41,24 +39,13 @@
 //! | `bytes::Bytes`                   | ✔️        | ❌️️️               | ❌️️️       |
 //! | `Vec<T>`                         | ❌️        | ❌️️               | ✔️       |
 //!
-//! ## Foreign and borrowed memory
-//!
-//! A buffer does not have to own an allocation Vortex made. [`Buffer::from_vec`] adopts a
-//! `Vec<T>`, [`Buffer::from_static`] borrows a `'static` slice, and [`Buffer::from_owner`] adopts
-//! anything that keeps a `[T]` alive - an Arrow buffer, a memory map, a slab handed over an FFI
-//! boundary. All three are zero-copy.
-//!
-//! Foreign memory stays *mutable* where it safely can. [`BufferMut::from_owner`] takes an owner
-//! that can hand over exclusive, writable access, and [`Buffer::try_into_mut`] then succeeds for
-//! it whenever the buffer is the only handle to its allocation - including for adopted `Vec<T>`s,
-//! which [`Buffer::try_into_vec`] can also hand straight back.
-//!
 //! ## Features
 //!
 //! The `arrow` feature can be enabled to provide conversion functions to/from Arrow Rust buffers,
 //! including `arrow_buffer::Buffer`, `arrow_buffer::ScalarBuffer<T>`, and
 //! `arrow_buffer::OffsetBuffer`.
 
+pub use allocation::*;
 pub use bit::*;
 pub use buffer::*;
 pub use buffer_mut::*;
@@ -68,6 +55,7 @@ pub use dispatch::*;
 pub use string::*;
 pub use vortex_bytes::Alignment;
 pub use vortex_bytes::InvalidAlignment;
+mod allocation;
 #[cfg(feature = "arrow")]
 mod arrow;
 mod bit;
