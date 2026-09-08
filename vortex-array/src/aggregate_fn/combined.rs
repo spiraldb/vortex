@@ -20,6 +20,7 @@ use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::aggregate_fn::Accumulator;
 use crate::aggregate_fn::AccumulatorRef;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::builtins::ArrayBuiltins;
@@ -76,12 +77,30 @@ pub trait BinaryCombined: 'static + Send + Sync + Clone {
     }
 
     /// Return type of the combined aggregate.
-    fn return_dtype(&self, input_dtype: &DType) -> Option<DType>;
+    fn return_dtype(&self, options: &CombinedOptions<Self>, input_dtype: &DType) -> Option<DType>;
 
     /// Combine the finalized left and right results into the final aggregate.
-    fn finalize(&self, left: ArrayRef, right: ArrayRef) -> VortexResult<ArrayRef>;
+    ///
+    /// `dtypes` describes the combined aggregate; `left` and `right` already have their respective
+    /// child's result type. The returned array must have type `dtypes.result`.
+    fn finalize(
+        &self,
+        options: &CombinedOptions<Self>,
+        dtypes: AggregateDTypes<'_>,
+        left: ArrayRef,
+        right: ArrayRef,
+    ) -> VortexResult<ArrayRef>;
 
-    fn finalize_scalar(&self, left_scalar: Scalar, right_scalar: Scalar) -> VortexResult<Scalar>;
+    /// Combine the finalized child scalars into a result of type `dtypes.result`.
+    ///
+    /// `dtypes` describes the combined aggregate, matching the context passed to [`Self::finalize`].
+    fn finalize_scalar(
+        &self,
+        options: &CombinedOptions<Self>,
+        dtypes: AggregateDTypes<'_>,
+        left_scalar: Scalar,
+        right_scalar: Scalar,
+    ) -> VortexResult<Scalar>;
 
     /// Serialize the options for this combined aggregate. Default: not serializable.
     fn serialize(&self, options: &CombinedOptions<Self>) -> VortexResult<Option<Vec<u8>>> {
@@ -147,8 +166,8 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
         BinaryCombined::deserialize(&self.0, metadata, session)
     }
 
-    fn return_dtype(&self, _options: &Self::Options, input_dtype: &DType) -> Option<DType> {
-        BinaryCombined::return_dtype(&self.0, input_dtype)
+    fn return_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
+        BinaryCombined::return_dtype(&self.0, options, input_dtype)
     }
 
     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
@@ -160,8 +179,9 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
     fn empty_partial(
         &self,
         options: &Self::Options,
-        input_dtype: &DType,
+        dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
+        let input_dtype = dtypes.input;
         let left = Accumulator::try_new(self.0.left(), options.0.clone(), input_dtype.clone())?;
         let right = Accumulator::try_new(self.0.right(), options.1.clone(), input_dtype.clone())?;
         Ok((
@@ -173,6 +193,7 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
     fn combine_partials(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -193,21 +214,34 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         let l_scalar = partial.0.partial_scalar()?;
         let r_scalar = partial.1.partial_scalar()?;
-        let dtype = self
-            .0
-            .partial_struct_dtype(l_scalar.dtype().clone(), r_scalar.dtype().clone());
+        let dtype = dtypes.partial.clone();
         Ok(Scalar::struct_(dtype, vec![l_scalar, r_scalar]))
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         partial.0.reset();
         partial.1.reset();
     }
 
-    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         partial.0.is_saturated() && partial.1.is_saturated()
     }
 
@@ -219,6 +253,7 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
     fn try_accumulate(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         state: &mut Self::Partial,
         batch: &ArrayRef,
         ctx: &mut ExecutionCtx,
@@ -231,6 +266,7 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
     fn accumulate(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         _state: &mut Self::Partial,
         _batch: &Columnar,
         _ctx: &mut ExecutionCtx,
@@ -238,21 +274,57 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
         unreachable!("Combined::try_accumulate handles all batches")
     }
 
-    fn finalize(&self, options: &Self::Options, states: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        states: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         let l_field = states.get_item(FieldName::from(self.0.left_name()))?;
         let r_field = states.get_item(FieldName::from(self.0.right_name()))?;
-        let l_finalized = self.0.left().finalize(&options.0, l_field)?;
-        let r_finalized = self.0.right().finalize(&options.1, r_field)?;
-        BinaryCombined::finalize(&self.0, l_finalized, r_finalized)
+        let l_result_dtype = self
+            .0
+            .left()
+            .return_dtype(&options.0, dtypes.input)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", dtypes.input))?;
+        let l_partial_dtype = self
+            .0
+            .left()
+            .partial_dtype(&options.0, dtypes.input)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", dtypes.input))?;
+        let l_dtypes = AggregateDTypes {
+            input: dtypes.input,
+            partial: &l_partial_dtype,
+            result: &l_result_dtype,
+        };
+        let l_finalized = self.0.left().finalize(&options.0, l_dtypes, l_field)?;
+        let r_result_dtype = self
+            .0
+            .right()
+            .return_dtype(&options.1, dtypes.input)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", dtypes.input))?;
+        let r_partial_dtype = self
+            .0
+            .right()
+            .partial_dtype(&options.1, dtypes.input)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", dtypes.input))?;
+        let r_dtypes = AggregateDTypes {
+            input: dtypes.input,
+            partial: &r_partial_dtype,
+            result: &r_result_dtype,
+        };
+        let r_finalized = self.0.right().finalize(&options.1, r_dtypes, r_field)?;
+        BinaryCombined::finalize(&self.0, options, dtypes, l_finalized, r_finalized)
     }
 
     fn finalize_scalar(
         &self,
-        _options: &Self::Options,
+        options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
         let l_scalar = partial.0.final_scalar()?;
         let r_scalar = partial.1.final_scalar()?;
-        BinaryCombined::finalize_scalar(&self.0, l_scalar, r_scalar)
+        BinaryCombined::finalize_scalar(&self.0, options, dtypes, l_scalar, r_scalar)
     }
 }

@@ -8,6 +8,7 @@ use vortex_mask::Mask;
 use super::MinMaxPartial;
 use super::MinMaxResult;
 use crate::ExecutionCtx;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::NumericalAggregateOpts;
 use crate::arrays::PrimitiveArray;
 use crate::dtype::NativePType;
@@ -18,6 +19,7 @@ use crate::scalar::Scalar;
 
 pub(super) fn accumulate_primitive(
     options: &NumericalAggregateOpts,
+    dtypes: AggregateDTypes<'_>,
     partial: &mut MinMaxPartial,
     p: &PrimitiveArray,
     ctx: &mut ExecutionCtx,
@@ -25,7 +27,7 @@ pub(super) fn accumulate_primitive(
     let skip_nans = options.skip_nans;
     match_each_native_ptype!(p.ptype(), |T| {
         let local = compute_min_max_with_validity::<T>(p, ctx, skip_nans)?;
-        partial.merge(options, local);
+        partial.merge(options, dtypes, local);
         Ok(())
     })
 }

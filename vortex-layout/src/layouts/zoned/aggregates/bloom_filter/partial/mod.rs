@@ -93,13 +93,17 @@ impl TryFrom<u32> for HashFn {
 /// ```rust
 /// use vortex_array::dtype::{DType, Nullability};
 /// use vortex_layout::layouts::zoned::aggregates::bloom_filter::{BloomFilter, BloomOptions};
-/// use vortex_array::aggregate_fn::AggregateFnVTable;
+/// use vortex_array::aggregate_fn::{AggregateDTypes, AggregateFnVTable};
 ///
 /// let filter = BloomFilter {};
+/// let input_dtype = DType::Binary(Nullability::NonNullable);
+/// let partial_dtype = filter.partial_dtype(&BloomOptions::default(), &input_dtype).expect("supported dtype");
+/// let result_dtype = filter.return_dtype(&BloomOptions::default(), &input_dtype).expect("supported dtype");
+/// let dtypes = AggregateDTypes { input: &input_dtype, partial: &partial_dtype, result: &result_dtype };
 /// let mut zone = filter
 ///     .empty_partial(
 ///         &BloomOptions::default(),
-///         &DType::Binary(Nullability::NonNullable),
+///         dtypes,
 ///     )
 ///     .expect("valid partial");
 ///

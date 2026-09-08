@@ -10,6 +10,7 @@ use vortex_session::registry::CachedId;
 use crate::ArrayRef;
 use crate::Columnar;
 use crate::ExecutionCtx;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::NumericalAggregateOpts;
@@ -54,7 +55,7 @@ impl AggregateFnVTable for Count {
     fn empty_partial(
         &self,
         _options: &Self::Options,
-        _input_dtype: &DType,
+        _dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
         Ok(0)
     }
@@ -62,6 +63,7 @@ impl AggregateFnVTable for Count {
     fn combine_partials(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -73,22 +75,38 @@ impl AggregateFnVTable for Count {
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         Ok(Scalar::primitive(*partial, Nullability::NonNullable))
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         *partial = 0;
     }
 
     #[inline]
-    fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        _partial: &Self::Partial,
+    ) -> bool {
         false
     }
 
     fn try_accumulate(
         &self,
         options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         state: &mut Self::Partial,
         batch: &ArrayRef,
         ctx: &mut ExecutionCtx,
@@ -105,6 +123,7 @@ impl AggregateFnVTable for Count {
     fn accumulate(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         _partial: &mut Self::Partial,
         _batch: &Columnar,
         _ctx: &mut ExecutionCtx,
@@ -112,16 +131,22 @@ impl AggregateFnVTable for Count {
         unreachable!("Count::try_accumulate handles all arrays")
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
     fn finalize_scalar(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.to_scalar(options, partial)
+        self.to_scalar(options, dtypes, partial)
     }
 }
 
@@ -132,6 +157,7 @@ mod tests {
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
     use vortex_session::VortexSession;
 
     use crate::ArrayRef;
@@ -139,6 +165,7 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::aggregate_fn::Accumulator;
+    use crate::aggregate_fn::AggregateDTypes;
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::DynAccumulator;
     use crate::aggregate_fn::NumericalAggregateOpts;
@@ -247,16 +274,38 @@ mod tests {
     #[test]
     fn count_state_merge() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut state = Count.empty_partial(&NumericalAggregateOpts::default(), &dtype)?;
+        let input_dtype = dtype;
+        let result_dtype = Count
+            .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = Count
+            .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = Count.empty_partial(&NumericalAggregateOpts::default(), dtypes)?;
 
         let scalar1 = Scalar::primitive(5u64, Nullability::NonNullable);
-        Count.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar1)?;
+        Count.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            scalar1,
+        )?;
 
         let scalar2 = Scalar::primitive(3u64, Nullability::NonNullable);
-        Count.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar2)?;
+        Count.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            scalar2,
+        )?;
 
-        let result = Count.to_scalar(&NumericalAggregateOpts::default(), &state)?;
-        Count.reset(&NumericalAggregateOpts::default(), &mut state);
+        let result = Count.to_scalar(&NumericalAggregateOpts::default(), dtypes, &state)?;
+        Count.reset(&NumericalAggregateOpts::default(), dtypes, &mut state);
         assert_eq!(result.as_primitive().typed_value::<u64>(), Some(8));
         Ok(())
     }

@@ -16,6 +16,7 @@ use std::num::NonZeroU32;
 use vortex_array::ArrayRef;
 use vortex_array::Columnar;
 use vortex_array::ExecutionCtx;
+use vortex_array::aggregate_fn::AggregateDTypes;
 use vortex_array::aggregate_fn::AggregateFnId;
 use vortex_array::aggregate_fn::AggregateFnVTable;
 use vortex_array::dtype::DType;
@@ -298,7 +299,11 @@ impl AggregateFnVTable for BloomFilter {
     }
 
     /// Returns an empty Bloom filter with all blocks zero-initialized.
-    fn empty_partial(&self, options: &Self::Options, _: &DType) -> VortexResult<Self::Partial> {
+    fn empty_partial(
+        &self,
+        options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+    ) -> VortexResult<Self::Partial> {
         Ok(BloomPartial::from(options))
     }
 
@@ -306,6 +311,7 @@ impl AggregateFnVTable for BloomFilter {
     fn combine_partials(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -327,25 +333,41 @@ impl AggregateFnVTable for BloomFilter {
     /// Returns the non-nullable binary representation of a bloom filter
     ///
     /// Basically turns each block into a single byte sequence.
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         let bytes: Vec<u8> = partial.serialize();
         Ok(Scalar::binary(bytes, Nullability::NonNullable))
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         partial.reset();
     }
 
     /// Returns true if all the blocks are full.
     ///
     /// When a bloom filter is saturated, it cannot rule out any values.
-    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         partial.is_saturated()
     }
 
     fn accumulate(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -359,16 +381,22 @@ impl AggregateFnVTable for BloomFilter {
         Ok(())
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
     fn finalize_scalar(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.to_scalar(options, partial)
+        self.to_scalar(options, dtypes, partial)
     }
 }
 
@@ -430,33 +458,86 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
     #[test]
     fn saturation_false_when_empty() -> VortexResult<()> {
         let options = BloomOptions::default();
-        let partial =
-            BloomFilter.empty_partial(&options, &DType::Binary(Nullability::NonNullable))?;
-        assert!(!BloomFilter.is_saturated(&options, &partial));
+        let input_dtype = DType::Binary(Nullability::NonNullable);
+        let result_dtype = BloomFilter
+            .return_dtype(&options, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = BloomFilter
+            .partial_dtype(&options, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let partial = BloomFilter.empty_partial(&options, dtypes)?;
+        assert!(!BloomFilter.is_saturated(&options, dtypes, &partial));
         Ok(())
     }
 
     #[test]
-    fn saturation_true_when_every_block_is_full() {
+    fn saturation_true_when_every_block_is_full() -> VortexResult<()> {
         let blocks = vec![[u32::MAX; 8]; 4];
         let partial = BloomPartial::from(blocks);
 
         let options = BloomOptions::new(NonZeroU32::new(4).unwrap(), HashFn::XxHash3_64);
-        assert!(BloomFilter.is_saturated(&options, &partial));
+        let input_dtype = DType::Binary(Nullability::NonNullable);
+        let result_dtype = BloomFilter
+            .return_dtype(&options, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = BloomFilter
+            .partial_dtype(&options, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        assert!(BloomFilter.is_saturated(&options, dtypes, &partial));
+        Ok(())
     }
 
     #[test]
     fn combine_partials_rejects_mismatched_block_counts() -> VortexResult<()> {
         let smaller_options = BloomOptions::new(NonZeroU32::new(4).unwrap(), HashFn::XxHash3_64);
-        let mut smaller = BloomFilter
-            .empty_partial(&smaller_options, &DType::Binary(Nullability::NonNullable))?;
-        let bigger = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+        let smaller_input_dtype = DType::Binary(Nullability::NonNullable);
+        let smaller_result_dtype = BloomFilter
+            .return_dtype(&smaller_options, &smaller_input_dtype)
+            .ok_or_else(|| {
+                vortex_err!("Unsupported aggregate input dtype: {}", smaller_input_dtype)
+            })?;
+        let smaller_partial_dtype = BloomFilter
+            .partial_dtype(&smaller_options, &smaller_input_dtype)
+            .ok_or_else(|| {
+                vortex_err!("Unsupported aggregate input dtype: {}", smaller_input_dtype)
+            })?;
+        let smaller_dtypes = AggregateDTypes {
+            input: &smaller_input_dtype,
+            partial: &smaller_partial_dtype,
+            result: &smaller_result_dtype,
+        };
+        let input_dtype = DType::Binary(Nullability::NonNullable);
+        let result_dtype = BloomFilter
+            .return_dtype(&BloomOptions::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = BloomFilter
+            .partial_dtype(&BloomOptions::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut smaller = BloomFilter.empty_partial(&smaller_options, smaller_dtypes)?;
+        let bigger = BloomFilter.empty_partial(&BloomOptions::default(), dtypes)?;
 
-        let bigger_scalar = BloomFilter.to_scalar(&BloomOptions::default(), &bigger)?;
-        let result = BloomFilter.combine_partials(&smaller_options, &mut smaller, bigger_scalar);
+        let bigger_scalar = BloomFilter.to_scalar(&BloomOptions::default(), dtypes, &bigger)?;
+        let result = BloomFilter.combine_partials(
+            &smaller_options,
+            smaller_dtypes,
+            &mut smaller,
+            bigger_scalar,
+        );
 
         assert!(
             result.is_err(),
@@ -467,36 +548,40 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
 
     #[test]
     fn combine_partials_unions_two_disjoint_partials() -> VortexResult<()> {
-        let mut partial = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+        let input_dtype = DType::Binary(Nullability::NonNullable);
+        let result_dtype = BloomFilter
+            .return_dtype(&BloomOptions::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = BloomFilter
+            .partial_dtype(&BloomOptions::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut partial = BloomFilter.empty_partial(&BloomOptions::default(), dtypes)?;
         for i in 0..50i64 {
             partial.insert(i.to_le_bytes());
         }
 
-        let mut secondary_partial = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+        let mut secondary_partial = BloomFilter.empty_partial(&BloomOptions::default(), dtypes)?;
         for i in 50..100i64 {
             secondary_partial.insert(i.to_le_bytes());
         }
 
         // The following expected works because seed is equal for all.
         // If the seed is different for both partials, then this will fail.
-        let mut expected = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+        let mut expected = BloomFilter.empty_partial(&BloomOptions::default(), dtypes)?;
         for i in 0..100i64 {
             expected.insert(i.to_le_bytes());
         }
 
         let secondary_partial_as_scalar =
-            BloomFilter.to_scalar(&BloomOptions::default(), &secondary_partial)?;
+            BloomFilter.to_scalar(&BloomOptions::default(), dtypes, &secondary_partial)?;
         BloomFilter.combine_partials(
             &BloomOptions::default(),
+            dtypes,
             &mut partial,
             secondary_partial_as_scalar,
         )?;

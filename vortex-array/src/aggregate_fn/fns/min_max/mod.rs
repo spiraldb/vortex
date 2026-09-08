@@ -25,6 +25,7 @@ use crate::Canonical;
 use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::aggregate_fn::Accumulator;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
@@ -197,12 +198,16 @@ pub struct MinMax;
 pub struct MinMaxPartial {
     min: Option<Scalar>,
     max: Option<Scalar>,
-    element_dtype: DType,
 }
 
 impl MinMaxPartial {
     /// Merge a local `MinMaxResult` into this partial state.
-    fn merge(&mut self, options: &NumericalAggregateOpts, local: Option<MinMaxResult>) {
+    fn merge(
+        &mut self,
+        options: &NumericalAggregateOpts,
+        dtypes: AggregateDTypes<'_>,
+        local: Option<MinMaxResult>,
+    ) {
         let Some(MinMaxResult { min, max }) = local else {
             return;
         };
@@ -212,7 +217,7 @@ impl MinMaxPartial {
         // dropped when they are skipped.
         if scalar_is_nan(&min) || scalar_is_nan(&max) || self.is_poisoned() {
             if !options.skip_nans {
-                self.poison();
+                self.poison(dtypes);
             }
             return;
         }
@@ -229,15 +234,15 @@ impl MinMaxPartial {
     }
 
     /// Poison the partial state to `{min: NaN, max: NaN}`.
-    fn poison(&mut self) {
-        let nan = nan_scalar(&self.element_dtype);
+    fn poison(&mut self, dtypes: AggregateDTypes<'_>) {
+        let nan = nan_scalar(dtypes.input);
         self.min = Some(nan.clone());
         self.max = Some(nan);
     }
 
     /// Whether the partial state is poisoned to NaN.
     fn is_poisoned(&self) -> bool {
-        self.element_dtype.is_float() && self.min.as_ref().is_some_and(scalar_is_nan)
+        self.min.as_ref().is_some_and(scalar_is_nan)
     }
 }
 
@@ -310,41 +315,56 @@ impl AggregateFnVTable for MinMax {
     fn empty_partial(
         &self,
         _options: &Self::Options,
-        input_dtype: &DType,
+        _dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
         Ok(MinMaxPartial {
             min: None,
             max: None,
-            element_dtype: input_dtype.clone(),
         })
     }
 
     fn combine_partials(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
         let local = MinMaxResult::from_scalar(other)?;
-        partial.merge(options, local);
+        partial.merge(options, dtypes, local);
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
-        let dtype = make_minmax_dtype(&partial.element_dtype);
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        let dtype = dtypes.partial.clone();
         Ok(match (&partial.min, &partial.max) {
             (Some(min), Some(max)) => Scalar::struct_(dtype, vec![min.clone(), max.clone()]),
             _ => Scalar::null(dtype),
         })
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         partial.min = None;
         partial.max = None;
     }
 
     #[inline]
-    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         // A poisoned NaN-including min/max is fully determined.
         partial.is_poisoned()
     }
@@ -352,13 +372,14 @@ impl AggregateFnVTable for MinMax {
     fn try_accumulate(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &ArrayRef,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<bool> {
         // NaN-aware shortcircuits only apply to NaN-including float min/max; everything else
         // takes the default dispatch path.
-        if options.skip_nans || !partial.element_dtype.is_float() {
+        if options.skip_nans || !dtypes.input.is_float() {
             return Ok(false);
         }
         match batch.statistics().get_as::<u64>(Stat::NaNCount) {
@@ -369,9 +390,10 @@ impl AggregateFnVTable for MinMax {
                 if let Some((min, max)) = cached_min.zip(cached_max) {
                     // Cached float stats carry the (possibly nullable) array dtype; `to_scalar`
                     // builds a struct with non-nullable fields, so normalise here.
-                    let non_nullable_dtype = partial.element_dtype.as_nonnullable();
+                    let non_nullable_dtype = dtypes.input.as_nonnullable();
                     partial.merge(
                         options,
+                        dtypes,
                         Some(MinMaxResult {
                             min: min.cast(&non_nullable_dtype)?,
                             max: max.cast(&non_nullable_dtype)?,
@@ -383,7 +405,7 @@ impl AggregateFnVTable for MinMax {
             }
             Precision::Exact(_) => {
                 // At least one NaN value poisons both extrema without scanning the batch.
-                partial.poison();
+                partial.poison(dtypes);
                 Ok(true)
             }
             _ => Ok(false),
@@ -393,6 +415,7 @@ impl AggregateFnVTable for MinMax {
     fn accumulate(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -406,7 +429,7 @@ impl AggregateFnVTable for MinMax {
                 // NaN float constants are skipped or poison the extrema, per the options.
                 if scalar_is_nan(scalar) {
                     if !options.skip_nans {
-                        partial.poison();
+                        partial.poison(dtypes);
                     }
                     return Ok(());
                 }
@@ -414,6 +437,7 @@ impl AggregateFnVTable for MinMax {
                 let cast = scalar.cast(&non_nullable_dtype)?;
                 partial.merge(
                     options,
+                    dtypes,
                     Some(MinMaxResult {
                         min: cast.clone(),
                         max: cast,
@@ -422,11 +446,11 @@ impl AggregateFnVTable for MinMax {
                 Ok(())
             }
             Columnar::Canonical(c) => match c {
-                Canonical::Primitive(p) => accumulate_primitive(options, partial, p, ctx),
-                Canonical::Bool(b) => accumulate_bool(options, partial, b, ctx),
-                Canonical::VarBinView(v) => accumulate_varbinview(options, partial, v, ctx),
-                Canonical::Decimal(d) => accumulate_decimal(options, partial, d, ctx),
-                Canonical::Extension(e) => accumulate_extension(options, partial, e, ctx),
+                Canonical::Primitive(p) => accumulate_primitive(options, dtypes, partial, p, ctx),
+                Canonical::Bool(b) => accumulate_bool(options, dtypes, partial, b, ctx),
+                Canonical::VarBinView(v) => accumulate_varbinview(options, dtypes, partial, v, ctx),
+                Canonical::Decimal(d) => accumulate_decimal(options, dtypes, partial, d, ctx),
+                Canonical::Extension(e) => accumulate_extension(options, dtypes, partial, e, ctx),
                 Canonical::Null(_) => Ok(()),
                 Canonical::Union(_) => {
                     todo!("TODO(connor)[Union]: implement min_max for Union arrays")
@@ -442,16 +466,22 @@ impl AggregateFnVTable for MinMax {
         }
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
     fn finalize_scalar(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.to_scalar(options, partial)
+        self.to_scalar(options, dtypes, partial)
     }
 }
 
@@ -464,11 +494,13 @@ mod tests {
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
     use vortex_session::VortexSession;
 
     use crate::IntoArray as _;
     use crate::VortexSessionExecute;
     use crate::aggregate_fn::Accumulator;
+    use crate::aggregate_fn::AggregateDTypes;
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::DynAccumulator;
     use crate::aggregate_fn::NumericalAggregateOpts;
@@ -671,21 +703,45 @@ mod tests {
     #[test]
     fn test_state_merge() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut state = MinMax.empty_partial(&NumericalAggregateOpts::default(), &dtype)?;
+        let input_dtype = dtype.clone();
+        let result_dtype = MinMax
+            .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = MinMax
+            .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = MinMax.empty_partial(&NumericalAggregateOpts::default(), dtypes)?;
 
         let struct_dtype = make_minmax_dtype(&dtype);
         let scalar1 = Scalar::struct_(
             struct_dtype.clone(),
             vec![Scalar::from(5i32), Scalar::from(15i32)],
         );
-        MinMax.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar1)?;
+        MinMax.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            scalar1,
+        )?;
 
         let scalar2 = Scalar::struct_(struct_dtype, vec![Scalar::from(2i32), Scalar::from(10i32)]);
-        MinMax.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar2)?;
+        MinMax.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            scalar2,
+        )?;
 
-        let result = MinMaxResult::from_scalar(
-            MinMax.to_scalar(&NumericalAggregateOpts::default(), &state)?,
-        )?
+        let result = MinMaxResult::from_scalar(MinMax.to_scalar(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &state,
+        )?)?
         .vortex_expect("should have result");
         assert_eq!(result.min, Scalar::from(2i32));
         assert_eq!(result.max, Scalar::from(15i32));

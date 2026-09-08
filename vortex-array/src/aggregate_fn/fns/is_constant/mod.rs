@@ -31,6 +31,7 @@ use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::aggregate_fn::Accumulator;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
@@ -219,7 +220,6 @@ pub struct IsConstantPartial {
     is_constant: bool,
     /// None = empty (no values seen), Some(null) = all nulls, Some(v) = first value seen.
     first_value: Option<Scalar>,
-    element_dtype: DType,
 }
 
 impl IsConstantPartial {
@@ -286,18 +286,18 @@ impl AggregateFnVTable for IsConstant {
     fn empty_partial(
         &self,
         _options: &Self::Options,
-        input_dtype: &DType,
+        _dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
         Ok(IsConstantPartial {
             is_constant: true,
             first_value: None,
-            element_dtype: input_dtype.clone(),
         })
     }
 
     fn combine_partials(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -330,8 +330,13 @@ impl AggregateFnVTable for IsConstant {
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
-        let dtype = make_is_constant_partial_dtype(&partial.element_dtype);
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        let dtype = dtypes.partial.clone();
         Ok(match &partial.first_value {
             None => {
                 // Empty accumulator — return null struct.
@@ -341,27 +346,36 @@ impl AggregateFnVTable for IsConstant {
                 dtype,
                 vec![
                     Scalar::bool(partial.is_constant, Nullability::NonNullable),
-                    first_value
-                        .clone()
-                        .cast(&partial.element_dtype.as_nullable())?,
+                    first_value.clone().cast(&dtypes.input.as_nullable())?,
                 ],
             ),
         })
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         partial.is_constant = true;
         partial.first_value = None;
     }
 
     #[inline]
-    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         !partial.is_constant
     }
 
     fn accumulate(
         &self,
         _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -385,7 +399,7 @@ impl AggregateFnVTable for IsConstant {
 
                 let all_invalid = array_ref.all_invalid(ctx)?;
                 if all_invalid {
-                    partial.check_value(Scalar::null(partial.element_dtype.as_nullable()));
+                    partial.check_value(Scalar::null(dtypes.input.as_nullable()));
                     return Ok(());
                 }
 
@@ -432,13 +446,19 @@ impl AggregateFnVTable for IsConstant {
         }
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         partials.get_item(NAMES.get(0).vortex_expect("out of bounds").clone())
     }
 
     fn finalize_scalar(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
         if partial.first_value.is_none() {

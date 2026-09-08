@@ -17,6 +17,7 @@ use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::aggregate_fn::Accumulator;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFn;
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnVTable;
@@ -187,12 +188,12 @@ pub struct GroupedAccumulator<V: AggregateFnVTable> {
     options: V::Options,
     /// Type-erased aggregate function used for kernel dispatch.
     aggregate_fn: AggregateFnRef,
-    /// The DType of the input.
-    dtype: DType,
-    /// The DType of the aggregate.
-    return_dtype: DType,
-    /// The DType of the partial accumulator state.
+    /// The type of the input values.
+    input_dtype: DType,
+    /// The type of serialized partial state.
     partial_dtype: DType,
+    /// The type of the final result.
+    result_dtype: DType,
     /// The accumulated state for prior batches of groups.
     partials: Vec<ArrayRef>,
 }
@@ -200,28 +201,21 @@ pub struct GroupedAccumulator<V: AggregateFnVTable> {
 impl<V: AggregateFnVTable> GroupedAccumulator<V> {
     pub fn try_new(vtable: V, options: V::Options, dtype: DType) -> VortexResult<Self> {
         let aggregate_fn = AggregateFn::new(vtable.clone(), options.clone()).erased();
-        let return_dtype = vtable.return_dtype(&options, &dtype).ok_or_else(|| {
-            vortex_err!(
-                "Aggregate function {} cannot be applied to dtype {}",
-                vtable.id(),
-                dtype
-            )
-        })?;
-        let partial_dtype = vtable.partial_dtype(&options, &dtype).ok_or_else(|| {
-            vortex_err!(
-                "Aggregate function {} cannot be applied to dtype {}",
-                vtable.id(),
-                dtype
-            )
-        })?;
+        let input_dtype = dtype;
+        let result_dtype = vtable
+            .return_dtype(&options, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = vtable
+            .partial_dtype(&options, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
 
         Ok(Self {
             vtable,
             options,
             aggregate_fn,
-            dtype,
-            return_dtype,
+            input_dtype,
             partial_dtype,
+            result_dtype,
             partials: vec![],
         })
     }
@@ -253,9 +247,9 @@ impl<V: AggregateFnVTable> DynGroupedAccumulator for GroupedAccumulator<V> {
             ),
         };
         vortex_ensure!(
-            elements_dtype.as_ref() == &self.dtype,
+            elements_dtype.as_ref() == &self.input_dtype,
             "Input DType mismatch: expected {}, got {}",
-            self.dtype,
+            self.input_dtype,
             elements_dtype
         );
 
@@ -282,12 +276,17 @@ impl<V: AggregateFnVTable> DynGroupedAccumulator for GroupedAccumulator<V> {
 
     fn finish(&mut self) -> VortexResult<ArrayRef> {
         let states = self.flush()?;
-        let results = self.vtable.finalize(&self.options, states)?;
+        let dtypes = AggregateDTypes {
+            input: &self.input_dtype,
+            partial: &self.partial_dtype,
+            result: &self.result_dtype,
+        };
+        let results = self.vtable.finalize(&self.options, dtypes, states)?;
 
         vortex_ensure!(
-            results.dtype() == &self.return_dtype,
+            results.dtype() == &self.result_dtype,
             "Return DType mismatch: expected {}, got {}",
-            self.return_dtype,
+            self.result_dtype,
             results.dtype()
         );
 
@@ -359,7 +358,7 @@ impl<V: AggregateFnVTable> GroupedAccumulator<V> {
         let mut accumulator = Accumulator::try_new(
             self.vtable.clone(),
             self.options.clone(),
-            self.dtype.clone(),
+            self.input_dtype.clone(),
         )?;
         let mut states = builder_with_capacity(&self.partial_dtype, grouped.len());
         let group_ranges = grouped.group_ranges(ctx)?;

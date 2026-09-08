@@ -26,6 +26,7 @@ use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::aggregate_fn::Accumulator;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
@@ -205,7 +206,6 @@ pub struct IsSortedPartial {
     /// None = empty (no values seen).
     first_value: Option<Scalar>,
     last_value: Option<Scalar>,
-    element_dtype: DType,
 }
 
 static NAMES: std::sync::LazyLock<FieldNames> = std::sync::LazyLock::new(|| {
@@ -279,19 +279,19 @@ impl AggregateFnVTable for IsSorted {
     fn empty_partial(
         &self,
         _options: &Self::Options,
-        input_dtype: &DType,
+        _dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
         Ok(IsSortedPartial {
             is_sorted: true,
             first_value: None,
             last_value: None,
-            element_dtype: input_dtype.clone(),
         })
     }
 
     fn combine_partials(
         &self,
         options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -315,7 +315,8 @@ impl AggregateFnVTable for IsSorted {
 
         if !other_is_sorted {
             partial.is_sorted = false;
-            // Still update last_value for correctness if needed, but we're done.
+            // FIXME: Preserve other_first when merging into an empty accumulator. Otherwise,
+            // to_scalar emits an empty state and a later merge loses the unsorted result.
             if let Some(last) = other_last {
                 partial.last_value = Some(last);
             }
@@ -355,8 +356,13 @@ impl AggregateFnVTable for IsSorted {
         Ok(())
     }
 
-    fn to_scalar(&self, options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
-        let dtype = make_is_sorted_partial_dtype(&partial.element_dtype);
+    fn to_scalar(
+        &self,
+        options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        let dtype = dtypes.partial.clone();
         Ok(match (&partial.first_value, &partial.last_value) {
             (None, _) => {
                 // Empty accumulator — return null struct.
@@ -393,20 +399,31 @@ impl AggregateFnVTable for IsSorted {
         })
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         partial.is_sorted = true;
         partial.first_value = None;
         partial.last_value = None;
     }
 
     #[inline]
-    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         !partial.is_sorted
     }
 
     fn accumulate(
         &self,
         options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -520,13 +537,19 @@ impl AggregateFnVTable for IsSorted {
         }
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         partials.get_item(NAMES.get(0).vortex_expect("out of bounds").clone())
     }
 
     fn finalize_scalar(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
         if partial.first_value.is_none() {

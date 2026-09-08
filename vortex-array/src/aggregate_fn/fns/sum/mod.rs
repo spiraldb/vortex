@@ -10,7 +10,6 @@ pub(crate) use grouped::PrimitiveGroupedSumEncodingKernel;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
-use vortex_error::vortex_err;
 use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
@@ -27,6 +26,7 @@ use crate::Canonical;
 use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::aggregate_fn::Accumulator;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
@@ -144,16 +144,12 @@ impl AggregateFnVTable for Sum {
 
     fn empty_partial(
         &self,
-        options: &Self::Options,
-        input_dtype: &DType,
+        _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
-        let return_dtype = self
-            .return_dtype(options, input_dtype)
-            .ok_or_else(|| vortex_err!("Unsupported sum dtype: {}", input_dtype))?;
-        let initial = make_zero_state(&return_dtype);
+        let initial = make_zero_state(dtypes.result);
 
         Ok(SumPartial {
-            return_dtype,
             current: Some(initial),
         })
     }
@@ -161,6 +157,7 @@ impl AggregateFnVTable for Sum {
     fn combine_partials(
         &self,
         _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -195,7 +192,11 @@ impl AggregateFnVTable for Sum {
                 *acc += val;
                 false
             }
-            SumState::Decimal { value, dtype } => {
+            SumState::Decimal(value) => {
+                let dtype = dtypes
+                    .result
+                    .as_decimal_opt()
+                    .vortex_expect("decimal sum result dtype");
                 let val = other
                     .as_decimal()
                     .decimal_value()
@@ -215,15 +216,20 @@ impl AggregateFnVTable for Sum {
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         Ok(match &partial.current {
-            None => Scalar::null(partial.return_dtype.as_nullable()),
+            None => Scalar::null(dtypes.result.as_nullable()),
             Some(SumState::Unsigned(v)) => Scalar::primitive(*v, Nullability::Nullable),
             Some(SumState::Signed(v)) => Scalar::primitive(*v, Nullability::Nullable),
             Some(SumState::Float(v)) => Scalar::primitive(*v, Nullability::Nullable),
-            Some(SumState::Decimal { value, .. }) => {
-                let decimal_dtype = *partial
-                    .return_dtype
+            Some(SumState::Decimal(value)) => {
+                let decimal_dtype = *dtypes
+                    .result
                     .as_decimal_opt()
                     .vortex_expect("return dtype must be decimal");
                 Scalar::decimal(*value, decimal_dtype, Nullability::Nullable)
@@ -231,12 +237,22 @@ impl AggregateFnVTable for Sum {
         })
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
-        partial.current = Some(make_zero_state(&partial.return_dtype));
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
+        partial.current = Some(make_zero_state(dtypes.result));
     }
 
     #[inline]
-    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         match partial.current.as_ref() {
             None => true,
             Some(SumState::Float(v)) => v.is_nan(),
@@ -247,6 +263,7 @@ impl AggregateFnVTable for Sum {
     fn try_accumulate(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &ArrayRef,
         _ctx: &mut ExecutionCtx,
@@ -261,12 +278,12 @@ impl AggregateFnVTable for Sum {
                 // NaN-free batch: the cached NaN-skipping sum (if any) equals the
                 // NaN-including sum.
                 if let Precision::Exact(sum) = batch.statistics().get(Stat::Sum) {
-                    let sum = if sum.dtype() == &partial.return_dtype {
+                    let sum = if sum.dtype() == dtypes.result {
                         sum
                     } else {
-                        sum.cast(&partial.return_dtype)?
+                        sum.cast(dtypes.result)?
                     };
-                    self.combine_partials(options, partial, sum)?;
+                    self.combine_partials(options, dtypes, partial, sum)?;
                     return Ok(true);
                 }
                 Ok(false)
@@ -285,6 +302,7 @@ impl AggregateFnVTable for Sum {
     fn accumulate(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -295,8 +313,8 @@ impl AggregateFnVTable for Sum {
             if options.skip_nans && c.scalar().as_primitive_opt().is_some_and(|p| p.is_nan()) {
                 return Ok(());
             }
-            if let Some(product) = multiply_constant(c.scalar(), c.len(), &partial.return_dtype)? {
-                self.combine_partials(options, partial, product)?;
+            if let Some(product) = multiply_constant(c.scalar(), c.len(), dtypes.result)? {
+                self.combine_partials(options, dtypes, partial, product)?;
             }
             return Ok(());
         }
@@ -311,7 +329,7 @@ impl AggregateFnVTable for Sum {
             Columnar::Canonical(c) => match c {
                 Canonical::Primitive(p) => accumulate_primitive(&mut inner, p, ctx, skip_nans),
                 Canonical::Bool(b) => accumulate_bool(&mut inner, b, ctx),
-                Canonical::Decimal(d) => accumulate_decimal(&mut inner, d, ctx),
+                Canonical::Decimal(d) => accumulate_decimal(&mut inner, dtypes.result, d, ctx),
                 _ => vortex_bail!("Unsupported canonical type for sum: {}", batch.dtype()),
             },
             Columnar::Constant(_) => unreachable!(),
@@ -328,23 +346,27 @@ impl AggregateFnVTable for Sum {
         Ok(())
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
     fn finalize_scalar(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.to_scalar(options, partial)
+        self.to_scalar(options, dtypes, partial)
     }
 }
 
-/// The group state for a sum aggregate, containing the accumulated value and configuration
-/// needed for reset/result without external context.
+/// The accumulated sum, or overflow state.
 pub struct SumPartial {
-    return_dtype: DType,
     /// The current accumulated state, or `None` if saturated (checked overflow).
     current: Option<SumState>,
 }
@@ -356,10 +378,7 @@ pub enum SumState {
     Unsigned(u64),
     Signed(i64),
     Float(f64),
-    Decimal {
-        value: DecimalValue,
-        dtype: DecimalDType,
-    },
+    Decimal(DecimalValue),
 }
 
 pub(crate) fn make_zero_state(return_dtype: &DType) -> SumState {
@@ -369,10 +388,7 @@ pub(crate) fn make_zero_state(return_dtype: &DType) -> SumState {
             PType::I8 | PType::I16 | PType::I32 | PType::I64 => SumState::Signed(0),
             PType::F16 | PType::F32 | PType::F64 => SumState::Float(0.0),
         },
-        DType::Decimal(decimal, _) => SumState::Decimal {
-            value: DecimalValue::zero(decimal),
-            dtype: *decimal,
-        },
+        DType::Decimal(decimal, _) => SumState::Decimal(DecimalValue::zero(decimal)),
         _ => vortex_panic!("Unsupported sum type"),
     }
 }
@@ -409,11 +425,13 @@ mod tests {
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
 
     use crate::ArrayRef;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::aggregate_fn::Accumulator;
+    use crate::aggregate_fn::AggregateDTypes;
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::DynAccumulator;
     use crate::aggregate_fn::DynGroupedAccumulator;
@@ -544,16 +562,38 @@ mod tests {
     #[test]
     fn sum_state_merge() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), &dtype)?;
+        let input_dtype = dtype;
+        let result_dtype = Sum
+            .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = Sum
+            .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), dtypes)?;
 
         let scalar1 = Scalar::primitive(100i64, Nullable);
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar1)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            scalar1,
+        )?;
 
         let scalar2 = Scalar::primitive(50i64, Nullable);
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar2)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            scalar2,
+        )?;
 
-        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
-        Sum.reset(&NumericalAggregateOpts::default(), &mut state);
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), dtypes, &state)?;
+        Sum.reset(&NumericalAggregateOpts::default(), dtypes, &mut state);
         assert_eq!(result.as_primitive().typed_value::<i64>(), Some(150));
         Ok(())
     }

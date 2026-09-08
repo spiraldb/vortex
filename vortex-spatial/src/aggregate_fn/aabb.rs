@@ -8,6 +8,7 @@ use vortex_array::ArrayRef;
 use vortex_array::Columnar;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::aggregate_fn::AggregateDTypes;
 use vortex_array::aggregate_fn::AggregateFnId;
 use vortex_array::aggregate_fn::AggregateFnVTable;
 use vortex_array::aggregate_fn::EmptyOptions;
@@ -150,7 +151,7 @@ impl AggregateFnVTable for GeometryAabb {
     fn empty_partial(
         &self,
         _options: &Self::Options,
-        _input_dtype: &DType,
+        _dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
         Ok(AabbPartial { rect: None })
     }
@@ -158,6 +159,7 @@ impl AggregateFnVTable for GeometryAabb {
     fn combine_partials(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -167,18 +169,33 @@ impl AggregateFnVTable for GeometryAabb {
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         Ok(match partial.rect {
             Some(rect) => rect_to_storage(rect),
             None => Scalar::null(aabb_dtype()),
         })
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         partial.rect = None;
     }
 
-    fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        _partial: &Self::Partial,
+    ) -> bool {
         // An AABB can always grow, so it is never saturated.
         false
     }
@@ -186,6 +203,7 @@ impl AggregateFnVTable for GeometryAabb {
     fn accumulate(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -217,7 +235,12 @@ impl AggregateFnVTable for GeometryAabb {
         Ok(())
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         // The stored partial is already the AABB struct, so finalizing is the identity.
         Ok(partials)
     }
@@ -225,9 +248,10 @@ impl AggregateFnVTable for GeometryAabb {
     fn finalize_scalar(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.to_scalar(options, partial)
+        self.to_scalar(options, dtypes, partial)
     }
 }
 
@@ -237,6 +261,7 @@ mod tests {
     use vortex_array::ArrayRef;
     use vortex_array::VortexSessionExecute;
     use vortex_array::aggregate_fn::Accumulator;
+    use vortex_array::aggregate_fn::AggregateDTypes;
     use vortex_array::aggregate_fn::AggregateFnVTable;
     use vortex_array::aggregate_fn::DynAccumulator;
     use vortex_array::aggregate_fn::EmptyOptions;
@@ -246,6 +271,7 @@ mod tests {
     use vortex_array::scalar::Scalar;
     use vortex_array::stats::session::StatsSessionExt;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
 
     use super::AabbPartial;
     use super::GeometryAabb;
@@ -396,22 +422,36 @@ mod tests {
     /// array is chunked.
     #[test]
     fn combine_partials_unions_boxes() -> VortexResult<()> {
+        let input_dtype = point_column(vec![], vec![])?.dtype().clone();
+        let result_dtype = GeometryAabb
+            .return_dtype(&EmptyOptions, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = GeometryAabb
+            .partial_dtype(&EmptyOptions, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
         let bbox = |xmin, ymin, xmax, ymax| AabbPartial {
             rect: Some(SpatialRect::new((xmin, ymin), (xmax, ymax))),
         };
         let mut partial = AabbPartial { rect: None };
         GeometryAabb.combine_partials(
             &EmptyOptions,
+            dtypes,
             &mut partial,
-            GeometryAabb.to_scalar(&EmptyOptions, &bbox(0.0, 0.0, 1.0, 1.0))?,
+            GeometryAabb.to_scalar(&EmptyOptions, dtypes, &bbox(0.0, 0.0, 1.0, 1.0))?,
         )?;
         GeometryAabb.combine_partials(
             &EmptyOptions,
+            dtypes,
             &mut partial,
-            GeometryAabb.to_scalar(&EmptyOptions, &bbox(5.0, -2.0, 7.0, 3.0))?,
+            GeometryAabb.to_scalar(&EmptyOptions, dtypes, &bbox(5.0, -2.0, 7.0, 3.0))?,
         )?;
         assert_eq!(
-            aabb(&GeometryAabb.to_scalar(&EmptyOptions, &partial)?)?,
+            aabb(&GeometryAabb.to_scalar(&EmptyOptions, dtypes, &partial)?)?,
             (0.0, -2.0, 7.0, 3.0)
         );
         Ok(())
@@ -420,12 +460,29 @@ mod tests {
     /// A null partial (an empty group's AABB) is a no-op in `combine_partials`.
     #[test]
     fn combine_partials_ignores_null() -> VortexResult<()> {
+        let input_dtype = point_column(vec![], vec![])?.dtype().clone();
+        let result_dtype = GeometryAabb
+            .return_dtype(&EmptyOptions, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = GeometryAabb
+            .partial_dtype(&EmptyOptions, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
         let mut partial = AabbPartial {
             rect: Some(SpatialRect::new((0.0, 0.0), (1.0, 1.0))),
         };
-        GeometryAabb.combine_partials(&EmptyOptions, &mut partial, Scalar::null(aabb_dtype()))?;
+        GeometryAabb.combine_partials(
+            &EmptyOptions,
+            dtypes,
+            &mut partial,
+            Scalar::null(aabb_dtype()),
+        )?;
         assert_eq!(
-            aabb(&GeometryAabb.to_scalar(&EmptyOptions, &partial)?)?,
+            aabb(&GeometryAabb.to_scalar(&EmptyOptions, dtypes, &partial)?)?,
             (0.0, 0.0, 1.0, 1.0)
         );
         Ok(())

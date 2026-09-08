@@ -10,6 +10,7 @@ use crate::ArrayRef;
 use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::IntoArray;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnSatisfaction;
@@ -38,11 +39,15 @@ pub struct Max;
 /// Partial accumulator state for the maximum aggregate.
 pub struct MaxPartial {
     max: Option<Scalar>,
-    element_dtype: DType,
 }
 
 impl MaxPartial {
-    fn merge(&mut self, options: &NumericalAggregateOpts, max: Scalar) {
+    fn merge(
+        &mut self,
+        options: &NumericalAggregateOpts,
+        dtypes: AggregateDTypes<'_>,
+        max: Scalar,
+    ) {
         if max.is_null() {
             return;
         }
@@ -51,7 +56,7 @@ impl MaxPartial {
         // participate, and are dropped when they are skipped.
         if scalar_is_nan(&max) || self.is_poisoned() {
             if !options.skip_nans {
-                self.poison();
+                self.poison(dtypes);
             }
             return;
         }
@@ -62,12 +67,12 @@ impl MaxPartial {
         });
     }
 
-    fn poison(&mut self) {
-        self.max = Some(nan_scalar(&self.element_dtype));
+    fn poison(&mut self, dtypes: AggregateDTypes<'_>) {
+        self.max = Some(nan_scalar(dtypes.input));
     }
 
     fn is_poisoned(&self) -> bool {
-        self.element_dtype.is_float() && self.max.as_ref().is_some_and(scalar_is_nan)
+        self.max.as_ref().is_some_and(scalar_is_nan)
     }
 }
 
@@ -123,37 +128,50 @@ impl AggregateFnVTable for Max {
     fn empty_partial(
         &self,
         _options: &Self::Options,
-        input_dtype: &DType,
+        _dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
-        Ok(MaxPartial {
-            max: None,
-            element_dtype: input_dtype.clone(),
-        })
+        Ok(MaxPartial { max: None })
     }
 
     fn combine_partials(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
-        partial.merge(options, other);
+        partial.merge(options, dtypes, other);
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
-        let dtype = partial.element_dtype.as_nullable();
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        let dtype = dtypes.input.as_nullable();
         match &partial.max {
             Some(max) => max.cast(&dtype),
             None => Ok(Scalar::null(dtype)),
         }
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         partial.max = None;
     }
 
-    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         // A poisoned NaN-including maximum is fully determined.
         partial.is_poisoned()
     }
@@ -161,13 +179,14 @@ impl AggregateFnVTable for Max {
     fn try_accumulate(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &ArrayRef,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<bool> {
         // NaN-aware shortcircuits only apply to the NaN-including float maximum; everything else
         // takes the default dispatch path.
-        if options.skip_nans || !partial.element_dtype.is_float() {
+        if options.skip_nans || !dtypes.input.is_float() {
             return Ok(false);
         }
         match batch.statistics().get_as::<u64>(Stat::NaNCount) {
@@ -175,13 +194,13 @@ impl AggregateFnVTable for Max {
                 // NaN-free batch: the cached NaN-skipping maximum (if any) is valid. `to_scalar`
                 // re-casts to the result dtype, so the cached scalar can merge as-is.
                 if let Some(max) = batch.statistics().get(Stat::Max).as_exact() {
-                    partial.merge(options, max);
+                    partial.merge(options, dtypes, max);
                     return Ok(true);
                 }
                 Ok(false)
             }
             Precision::Exact(_) => {
-                partial.poison();
+                partial.poison(dtypes);
                 Ok(true)
             }
             _ => Ok(false),
@@ -191,6 +210,7 @@ impl AggregateFnVTable for Max {
     fn accumulate(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -202,21 +222,27 @@ impl AggregateFnVTable for Max {
             Columnar::Constant(constant) => constant.clone().into_array(),
         };
         if let Some(result) = min_max(&array, ctx, *options)? {
-            partial.merge(options, result.max);
+            partial.merge(options, dtypes, result.max);
         }
         Ok(())
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
     fn finalize_scalar(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.to_scalar(options, partial)
+        self.to_scalar(options, dtypes, partial)
     }
 }
 

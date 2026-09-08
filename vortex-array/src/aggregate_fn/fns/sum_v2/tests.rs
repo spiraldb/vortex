@@ -5,6 +5,7 @@ use prost::Message;
 use rstest::rstest;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_proto::expr as pb;
 
 use super::SumV2;
@@ -13,6 +14,7 @@ use crate::ArrayRef;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
 use crate::aggregate_fn::Accumulator;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::AggregateFnVTableExt;
@@ -373,7 +375,19 @@ fn finalize_struct_applies_partial_and_struct_validity(
     )?
     .into_array();
 
-    let result = SumV2.finalize(&NumericalAggregateOpts::default(), partials)?;
+    let input_dtype = DType::Primitive(PType::I32, Nullable);
+    let result_dtype = SumV2
+        .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+        .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+    let partial_dtype = SumV2
+        .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+        .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+    let dtypes = AggregateDTypes {
+        input: &input_dtype,
+        partial: &partial_dtype,
+        result: &result_dtype,
+    };
+    let result = SumV2.finalize(&NumericalAggregateOpts::default(), dtypes, partials)?;
     let expected = PrimitiveArray::from_option_iter(expected).into_array();
     assert_arrays_eq!(
         &result,

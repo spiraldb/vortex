@@ -38,6 +38,7 @@ use crate::Columnar;
 use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::aggregate_fn::Accumulator;
+use crate::aggregate_fn::AggregateDTypes;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::DynAccumulator;
@@ -134,7 +135,7 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
     fn empty_partial(
         &self,
         _options: &Self::Options,
-        _input_dtype: &DType,
+        _dtypes: AggregateDTypes<'_>,
     ) -> VortexResult<Self::Partial> {
         Ok(0)
     }
@@ -142,6 +143,7 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
     fn combine_partials(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         other: Scalar,
     ) -> VortexResult<()> {
@@ -155,22 +157,38 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
         Ok(())
     }
 
-    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         Ok(Scalar::primitive(*partial, NonNullable))
     }
 
-    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
+    fn reset(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partial: &mut Self::Partial,
+    ) {
         *partial = 0;
     }
 
     #[inline]
-    fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        _partial: &Self::Partial,
+    ) -> bool {
         false
     }
 
     fn accumulate(
         &self,
         _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -187,16 +205,22 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
         Ok(())
     }
 
-    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypes<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
     fn finalize_scalar(
         &self,
         options: &Self::Options,
+        dtypes: AggregateDTypes<'_>,
         partial: &Self::Partial,
     ) -> VortexResult<Scalar> {
-        self.to_scalar(options, partial)
+        self.to_scalar(options, dtypes, partial)
     }
 }
 
@@ -351,6 +375,7 @@ mod tests {
     use crate::RecursiveCanonical;
     use crate::VortexSessionExecute;
     use crate::aggregate_fn::Accumulator;
+    use crate::aggregate_fn::AggregateDTypes;
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::DynAccumulator;
     use crate::aggregate_fn::EmptyOptions;
@@ -692,21 +717,35 @@ mod tests {
     #[test]
     fn state_merge() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut state = UncompressedSizeInBytes.empty_partial(&EmptyOptions, &dtype)?;
+        let input_dtype = dtype;
+        let result_dtype = UncompressedSizeInBytes
+            .return_dtype(&EmptyOptions, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = UncompressedSizeInBytes
+            .partial_dtype(&EmptyOptions, &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = UncompressedSizeInBytes.empty_partial(&EmptyOptions, dtypes)?;
 
         UncompressedSizeInBytes.combine_partials(
             &EmptyOptions,
+            dtypes,
             &mut state,
             Scalar::primitive(5u64, Nullability::NonNullable),
         )?;
         UncompressedSizeInBytes.combine_partials(
             &EmptyOptions,
+            dtypes,
             &mut state,
             Scalar::primitive(3u64, Nullability::NonNullable),
         )?;
 
-        let result = UncompressedSizeInBytes.to_scalar(&EmptyOptions, &state)?;
-        UncompressedSizeInBytes.reset(&EmptyOptions, &mut state);
+        let result = UncompressedSizeInBytes.to_scalar(&EmptyOptions, dtypes, &state)?;
+        UncompressedSizeInBytes.reset(&EmptyOptions, dtypes, &mut state);
         assert_eq!(result.as_primitive().typed_value::<u64>(), Some(8));
         Ok(())
     }

@@ -15,6 +15,7 @@ use vortex_mask::Mask;
 use super::SumState;
 use crate::ExecutionCtx;
 use crate::arrays::DecimalArray;
+use crate::dtype::DType;
 use crate::dtype::DecimalDType;
 use crate::dtype::DecimalType;
 use crate::dtype::NativeDecimalType;
@@ -25,6 +26,7 @@ use crate::scalar::DecimalValue;
 /// Returns Ok(true) if saturated (overflow), Ok(false) if not.
 pub(crate) fn accumulate_decimal(
     inner: &mut SumState,
+    return_dtype: &DType,
     d: &DecimalArray,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<bool> {
@@ -37,10 +39,13 @@ pub(crate) fn accumulate_decimal(
         }
     };
 
-    let SumState::Decimal { value, dtype } = inner else {
+    let SumState::Decimal(value) = inner else {
         vortex_panic!("expected decimal sum state for decimal input");
     };
 
+    let dtype = return_dtype
+        .as_decimal_opt()
+        .vortex_expect("decimal sum result dtype");
     let values_type = DecimalType::smallest_decimal_value_type(dtype);
     match_each_decimal_value_type!(d.values_type(), |T| {
         match_each_decimal_value_type!(values_type, |I| {
@@ -110,9 +115,11 @@ mod tests {
     use vortex_buffer::buffer;
     use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
 
     use crate::IntoArray;
     use crate::VortexSessionExecute;
+    use crate::aggregate_fn::AggregateDTypes;
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::NumericalAggregateOpts;
     use crate::aggregate_fn::fns::sum::Sum;
@@ -357,20 +364,41 @@ mod tests {
         // Native type for precision 14 is I64 (max precision 18), so 14 < 18.
         // Use combine_partials to push state near (but under) 10^14.
         let input_dtype = DType::Decimal(DecimalDType::new(4, 0), Nullability::NonNullable);
-        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), &input_dtype)?;
+        let result_dtype = Sum
+            .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = Sum
+            .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), dtypes)?;
 
         let near_limit = Scalar::decimal(
             DecimalValue::from(99_999_999_999_990i64),
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            near_limit,
+        )?;
 
         // Add a small value that keeps us just under 10^14.
         let small = Scalar::decimal(DecimalValue::from(9i64), DecimalDType::new(14, 0), Nullable);
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, small)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            small,
+        )?;
 
-        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), dtypes, &state)?;
         assert!(!result.is_null());
         assert_eq!(
             result.as_decimal().decimal_value(),
@@ -387,21 +415,42 @@ mod tests {
         // i256 arithmetic does not overflow. This tests the precision-based
         // saturation path in combine_partials.
         let input_dtype = DType::Decimal(DecimalDType::new(4, 0), Nullability::NonNullable);
-        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), &input_dtype)?;
+        let result_dtype = Sum
+            .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = Sum
+            .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), dtypes)?;
 
         let near_limit = Scalar::decimal(
             DecimalValue::from(99_999_999_999_999i64),
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            near_limit,
+        )?;
 
         // Push the sum to exactly 10^14, exceeding precision 14.
         let one_more =
             Scalar::decimal(DecimalValue::from(1i64), DecimalDType::new(14, 0), Nullable);
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, one_more)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            one_more,
+        )?;
 
-        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), dtypes, &state)?;
         assert!(result.is_null());
         assert_eq!(
             result.dtype(),
@@ -414,23 +463,44 @@ mod tests {
     fn sum_decimal_precision_overflow_negative() -> VortexResult<()> {
         // Same setup but with negative values: sum reaches -10^14.
         let input_dtype = DType::Decimal(DecimalDType::new(4, 0), Nullability::NonNullable);
-        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), &input_dtype)?;
+        let result_dtype = Sum
+            .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = Sum
+            .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), dtypes)?;
 
         let near_limit = Scalar::decimal(
             DecimalValue::from(-99_999_999_999_999i64),
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            near_limit,
+        )?;
 
         let one_more = Scalar::decimal(
             DecimalValue::from(-1i64),
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, one_more)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            one_more,
+        )?;
 
-        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), dtypes, &state)?;
         assert!(result.is_null());
         Ok(())
     }
@@ -446,13 +516,29 @@ mod tests {
         // a real array that pushes it over.
         let input_dtype = DType::Decimal(DecimalDType::new(27, 0), Nullability::NonNullable);
         let return_dtype = DecimalDType::new(37, 0);
-        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), &input_dtype)?;
+        let result_dtype = Sum
+            .return_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let partial_dtype = Sum
+            .partial_dtype(&NumericalAggregateOpts::default(), &input_dtype)
+            .ok_or_else(|| vortex_err!("Unsupported aggregate input dtype: {}", input_dtype))?;
+        let dtypes = AggregateDTypes {
+            input: &input_dtype,
+            partial: &partial_dtype,
+            result: &result_dtype,
+        };
+        let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), dtypes)?;
 
         // Set state to 10^37 - 1 via combine_partials.
         let near_limit_val: i128 = 10i128.pow(37) - 1;
         let near_limit =
             Scalar::decimal(DecimalValue::from(near_limit_val), return_dtype, Nullable);
-        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
+        Sum.combine_partials(
+            &NumericalAggregateOpts::default(),
+            dtypes,
+            &mut state,
+            near_limit,
+        )?;
 
         // Now accumulate a real i128 array with a single element = 1 to overflow precision.
         let decimal =
@@ -463,12 +549,13 @@ mod tests {
         let mut ctx = array_session().create_execution_ctx();
         Sum.accumulate(
             &NumericalAggregateOpts::default(),
+            dtypes,
             &mut state,
             &columnar,
             &mut ctx,
         )?;
 
-        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), dtypes, &state)?;
         assert!(result.is_null());
         Ok(())
     }
