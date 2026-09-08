@@ -1,0 +1,68 @@
+diff --git i/vortex-layout/src/layouts/zoned/skip_index/bloom.rs w/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
+index 1f36a8bc2e..c62e92841a 100644
+--- i/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
+@@ -6,6 +6,7 @@
+ use std::sync::Arc;
+ 
+ use vortex_array::aggregate_fn::AggregateFnVTable;
++use vortex_array::scalar_fn::session::ScalarFnSession;
+ use vortex_array::stats::rewrite::StatsRewriteRuleRef;
+ 
+ use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
+@@ -41,14 +42,13 @@ impl BloomSkipIndex {
+ 
+ impl SkipIndex for BloomSkipIndex {
+     type Aggregate = BloomFilter;
+-    type Scalar = BloomContains;
+ 
+     fn aggregate_vtable(&self) -> Self::Aggregate {
+         BloomFilter
+     }
+ 
+-    fn scalar_vtable(&self) -> Self::Scalar {
+-        BloomContains
++    fn register_scalar_fns(&self, scalar_fns: &ScalarFnSession) {
++        scalar_fns.register(BloomContains);
+     }
+ 
+     fn options(&self) -> <Self::Aggregate as AggregateFnVTable>::Options {
+diff --git i/vortex-layout/src/layouts/zoned/skip_index/mod.rs w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+index ade8171dab..d9b2ff7011 100644
+--- i/vortex-layout/src/layouts/zoned/skip_index/mod.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+@@ -16,7 +16,7 @@ use vortex_array::aggregate_fn::AggregateFnRef;
+ use vortex_array::aggregate_fn::AggregateFnVTable;
+ use vortex_array::aggregate_fn::AggregateFnVTableExt;
+ use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
+-use vortex_array::scalar_fn::ScalarFnVTable;
++use vortex_array::scalar_fn::session::ScalarFnSession;
+ use vortex_array::scalar_fn::session::ScalarFnSessionExt;
+ use vortex_array::stats::StatsSessionExt;
+ use vortex_array::stats::rewrite::StatsRewriteRuleRef;
+@@ -68,14 +68,12 @@ pub mod bloom;
+ pub trait SkipIndex: Send + Sync + 'static {
+     /// The concrete aggregate implementation registered for this index.
+     type Aggregate: AggregateFnVTable;
+-    /// The concrete scalar implementation registered for this index.
+-    type Scalar: ScalarFnVTable;
+ 
+     /// Returns the aggregate implementation, without binding write options.
+     fn aggregate_vtable(&self) -> Self::Aggregate;
+ 
+-    /// Returns the scalar implementation.
+-    fn scalar_vtable(&self) -> Self::Scalar;
++    /// Register any custom scalar functions required by this index's rewrite rules.
++    fn register_scalar_fns(&self, _scalar_fns: &ScalarFnSession) {}
+ 
+     /// Returns the options to bind when writing this index.
+     fn options(&self) -> <Self::Aggregate as AggregateFnVTable>::Options;
+@@ -117,7 +115,7 @@ pub trait SkipIndexSessionExt: SessionExt {
+         }
+ 
+         session.aggregate_fns().register(aggregate);
+-        session.scalar_fns().register(index.scalar_vtable());
++        index.register_scalar_fns(&session.scalar_fns());
+ 
+         for rule in index.rewrite_rules() {
+             session.stats().register_rewrite_ref(rule);

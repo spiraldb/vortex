@@ -1,0 +1,148 @@
+    Blocking waiting for file lock on build directory
+   Compiling vortex-array v0.1.0 ($REPO/vortex-array)
+   Compiling vortex-runend v0.1.0 ($REPO/encodings/runend)
+   Compiling vortex-fastlanes v0.1.0 ($REPO/encodings/fastlanes)
+   Compiling vortex-fsst v0.1.0 ($REPO/encodings/fsst)
+   Compiling vortex-zigzag v0.1.0 ($REPO/encodings/zigzag)
+   Compiling vortex-sparse v0.1.0 ($REPO/encodings/sparse)
+   Compiling vortex-sequence v0.1.0 ($REPO/encodings/sequence)
+   Compiling vortex-decimal-byte-parts v0.1.0 ($REPO/encodings/decimal-byte-parts)
+   Compiling vortex-compressor v0.1.0 ($REPO/vortex-compressor)
+   Compiling vortex-datetime-parts v0.1.0 ($REPO/encodings/datetime-parts)
+   Compiling vortex-arrow v0.1.0 ($REPO/vortex-arrow)
+   Compiling vortex-io v0.1.0 ($REPO/vortex-io)
+   Compiling vortex-scan v0.1.0 ($REPO/vortex-scan)
+   Compiling vortex-pco v0.1.0 ($REPO/encodings/pco)
+   Compiling vortex-bytebool v0.1.0 ($REPO/encodings/bytebool)
+   Compiling vortex-onpair v0.1.0 ($REPO/encodings/onpair)
+   Compiling vortex-alp v0.1.0 ($REPO/encodings/alp)
+   Compiling vortex-btrblocks v0.1.0 ($REPO/vortex-btrblocks)
+   Compiling vortex-layout v0.1.0 ($REPO/vortex-layout)
+   Compiling vortex-file v0.1.0 ($REPO/vortex-file)
+    Finished `test` profile [unoptimized] target(s) in 2m 59s
+   Doc-tests vortex_array
+
+running 94 tests
+test vortex-array/src/arrays/assertions.rs - arrays::assertions::assert_nth_scalar (line 46) ... ignored
+test vortex-array/src/arrays/assertions.rs - arrays::assertions::assert_nth_scalar_is_null (line 65) ... ignored
+test vortex-array/src/arrays/varbin/builder.rs - arrays::varbin::builder::match_each_varbin_builder (line 638) ... ignored
+test vortex-array/src/arrays/decimal/array.rs - arrays::decimal::array::DecimalData (line 95) ... ok
+test vortex-array/src/compute/conformance/binary_numeric.rs - compute::conformance::binary_numeric::test_binary_numeric_array (line 226) ... ignored
+test vortex-array/src/buffer.rs - buffer::BufferHandle::slice_typed (line 208) ... ok
+test vortex-array/src/arrays/fixed_size_list/array.rs - arrays::fixed_size_list::array::FixedSizeListData (line 62) ... ok
+test vortex-array/src/buffer.rs - buffer::BufferHandle::slice (line 190) ... ok
+test vortex-array/src/builders/primitive.rs - builders::primitive::PrimitiveBuilder<T>::uninit_range (line 82) ... ok
+test vortex-array/src/arrays/primitive/array/mod.rs - arrays::primitive::array::PrimitiveData (line 72) ... ok
+test vortex-array/src/arrays/struct_/array.rs - arrays::struct_::array::StructDataParts (line 139) ... ok
+test vortex-array/src/arrays/bool/array.rs - arrays::bool::array::BoolData (line 54) ... ok
+test vortex-array/src/arrays/listview/array.rs - arrays::listview::array::ListViewData (line 92) ... ok
+test vortex-array/src/builders/mod.rs - builders (line 17) ... ok
+test vortex-array/src/arrays/null/mod.rs - arrays::null::Null (line 147) ... ok
+test vortex-array/src/arrays/varbinview/array.rs - arrays::varbinview::array::VarBinViewData (line 90) ... ok
+test vortex-array/src/arrays/list/array.rs - arrays::list::array::ListData (line 81) ... ok
+test vortex-array/src/display/mod.rs - display::ArrayRef (line 331) ... ok
+test vortex-array/src/arrays/struct_/array.rs - arrays::struct_::array::StructDataParts (line 63) ... ok
+test vortex-array/src/arrays/struct_/array.rs - arrays::struct_::array::StructDataParts (line 97) ... ok
+test vortex-array/src/builders/mod.rs - builders::builder_with_capacity (line 368) ... ok
+test vortex-array/src/display/mod.rs - display::ArrayRef::display_tree (line 418) ... ok
+test vortex-array/src/display/mod.rs - display::ArrayRef::display_table (line 499) ... ok
+test vortex-array/src/display/mod.rs - display::ArrayRef::display_tree_encodings_only (line 387) ... ok
+test vortex-array/src/dtype/decimal/macros.rs - dtype::decimal::macros::match_each_decimal_value (line 8) ... ignored
+test vortex-array/src/display/mod.rs - display::ArrayRef::display_values (line 355) ... ok
+test vortex-array/src/display/mod.rs - display::ArrayRef::tree_display_builder (line 460) ... ok
+test vortex-array/src/display/mod.rs - display::ArrayRef::tree_display (line 439) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 179) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::MetadataOnly (line 34) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 255) ... ok
+test vortex-array/src/executor.rs - executor::require_child (line 836) ... ignored
+test vortex-array/src/executor.rs - executor::require_opt_child (line 860) ... ignored
+test vortex-array/src/executor.rs - executor::require_patches (line 877) ... ignored
+test vortex-array/src/executor.rs - executor::require_validity (line 912) ... ignored
+test vortex-array/src/display/mod.rs - display::DisplayOptions::CommaSeparatedScalars (line 47) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 232) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 153) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 205) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 123) ... ok
+test vortex-array/src/dtype/field.rs - dtype::field::FieldPath (line 81) ... ok
+test vortex-array/src/display/tree_display.rs - display::tree_display::TreeDisplay (line 24) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 96) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TableDisplay (line 284) ... ok
+test vortex-array/src/display/mod.rs - display::DisplayOptions::TreeDisplay (line 66) ... ok
+test vortex-array/src/dtype/struct_.rs - dtype::struct_::StructFields (line 129) ... ok
+test vortex-array/src/dtype/nullability.rs - dtype::nullability::Nullability::is_nullable (line 25) ... ok
+test vortex-array/src/dtype/field.rs - dtype::field::FieldPath::resolve (line 162) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::between (line 672) ... ok
+test vortex-array/src/dtype/union.rs - dtype::union::UnionVariants (line 42) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::cast (line 802) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::byte_length (line 1124) ... ok
+test vortex-array/src/expr/expression.rs - expr::expression::Expression::display_tree (line 190) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::col (line 114) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::ext_storage (line 1143) ... ok
+test vortex-array/src/expr/expression.rs - expr::expression::Expression::contains (line 242) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::fill_null (line 822) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::and (line 553) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::get_item (line 131) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::eq (line 310) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::is_null (line 843) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::is_not_null (line 864) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::checked_add (line 620) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::list_length (line 1164) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::list_sum (line 1189) ... ok
+test vortex-array/src/scalar/proto.rs - scalar::proto::ScalarValue::to_proto (line 53) ... ignored
+test vortex-array/src/expr/exprs.rs - expr::exprs::gt (line 406) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::list_contains (line 1104) ... ok
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::visit (line 91) ... ignored
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::visit (line 97) ... ignored
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::visit_deferred (line 280) ... ignored
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::visit_into (line 182) ... ignored
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::visit_prepared (line 141) ... ignored
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::visit_prepared_deferred (line 349) ... ignored
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::visit_prepared_into (line 225) ... ignored
+test vortex-array/src/scalar_fn/unstable/row/visitor/row_visitor.rs - scalar_fn::unstable::row::visitor::row_visitor::RowVisitor::with_output_dtype (line 66) ... ignored
+test vortex-array/src/test_harness/trace/mod.rs - test_harness::trace (line 53) ... ignored
+test vortex-array/src/test_harness/trace/mod.rs - test_harness::trace::trace_op (line 204) ... ignored
+test vortex-array/src/validity.rs - validity::Validity::trivially_cast_nullability (line 491) ... ignored
+test vortex-array/src/expr/exprs.rs - expr::exprs::gt_eq (line 374) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::lit (line 85) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::merge (line 981) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::pack (line 755) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::select (line 710) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::lt (line 470) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::not (line 651) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::lt_eq (line 438) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::not_eq (line 342) ... ok
+test vortex-array/src/scalar/scalar_impl.rs - scalar::scalar_impl::Scalar::partial_cmp (line 359) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::select_exclude (line 731) ... ok
+test vortex-array/src/scalar/typed_view/primitive/scalar.rs - scalar::typed_view::primitive::scalar::PrimitiveScalar<'a>::as_opt (line 241) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::zip_expr (line 1021) ... ok
+test vortex-array/src/expr/exprs.rs - expr::exprs::or (line 502) ... ok
+test vortex-array/src/scalar/typed_view/primitive/scalar.rs - scalar::typed_view::primitive::scalar::PrimitiveScalar<'a>::as_ (line 207) - should panic ... ok
+
+test result: ok. 73 passed; 0 failed; 21 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+
+running 1 test
+test vortex-array/src/scalar_fn/unstable/row/types/sink/uninit_element.rs - scalar_fn::unstable::row::types::sink::uninit_element::InitializedElement (line 22) - compile fail ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+all doctests ran in 1.07s; merged doctests compilation took 0.50s
+   Doc-tests vortex_file
+
+running 1 test
+test vortex-file/src/multi/mod.rs - multi::MultiFileDataSource (line 44) ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.24s; merged doctests compilation took 0.11s
+   Doc-tests vortex_layout
+
+running 4 tests
+test vortex-layout/src/layouts/table.rs - layouts::table::TableStrategy::new (line 96) ... ignored
+test vortex-layout/src/layouts/table.rs - layouts::table::TableStrategy::with_field_writer (line 121) ... ignored
+test vortex-layout/src/layouts/zoned/aggregates/bloom_filter/partial/mod.rs - layouts::zoned::aggregates::bloom_filter::partial::BloomPartial (line 93) ... ok
+test vortex-layout/src/layouts/zoned/skip_index/mod.rs - layouts::zoned::skip_index::SkipIndex (line 53) ... ok
+
+test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 0.51s; merged doctests compilation took 0.38s

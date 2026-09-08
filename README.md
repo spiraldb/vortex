@@ -1,247 +1,61 @@
-# 🌪️ Vortex
+# Skip-index API research
 
-[![Build Status](https://github.com/vortex-data/vortex/actions/workflows/ci.yml/badge.svg)](https://github.com/vortex-data/vortex/actions)
-[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/10567/badge)](https://www.bestpractices.dev/projects/10567)
-[![Documentation](https://docs.rs/vortex/badge.svg)](https://docs.vortex.dev)
-[![CodSpeed Badge](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://codspeed.io/vortex-data/vortex)
-[![Crates.io](https://img.shields.io/crates/v/vortex.svg)](https://crates.io/crates/vortex)
-[![PyPI - Version](https://img.shields.io/pypi/v/vortex-data)](https://pypi.org/project/vortex-data/)
-[![Maven - Version](https://img.shields.io/maven-central/v/dev.vortex/vortex-spark_2.13)](https://central.sonatype.com/artifact/dev.vortex/vortex-spark_2.13)
-[![codecov](https://codecov.io/github/vortex-data/vortex/graph/badge.svg)](https://codecov.io/github/vortex-data/vortex)
-[![Cite](https://img.shields.io/badge/cite-CITATION.cff-blue)](CITATION.cff)
+This branch contains findings and working prototypes for [Vortex PR
+#9413](https://github.com/vortex-data/vortex/pull/9413), the skip-index write interface. It
+evaluates whether the proposed APIs fit the rest of Vortex. It also examines existing `AggregateFn`
+contracts that affect indexes.
 
-[Join the community on Slack!](https://vortex.dev/slack) | [Documentation](https://docs.vortex.dev/) | [Performance Benchmarks](https://bench.vortex.dev)
+**Main finding: one aggregate per index is enough.** The abstraction can compose with the system.
+The surrounding APIs need clearer contracts for registration, writer configuration, and aggregate
+state conversion. Independent handling of unknown aggregates within one shared summary table
+requires a metadata change.
 
-If you are interested in closer collaboration, please email info@vortex.dev
+The source on this branch contains the combined experiment. It is a research reference, not a single
+change proposed for production. The separate alternatives remain available as patches.
 
-## Overview
+## Start here
 
-Vortex is a next-generation columnar file format and toolkit designed for high-performance data processing.
-It is the fastest and most extensible format for building data systems backed by object storage. It provides:
+1. Read [How skip indexes work in Vortex](research/skip-index/background.md) for the terminology and
+   the path from input rows to query pruning. No Vortex maintainer knowledge is assumed.
+2. Use the findings table below to find the component relevant to your work.
+3. Read [Implementation map and next steps](research/skip-index/implementation.md) to connect the
+   recommendations to source files and tests.
+4. Use [Validation and reproduction](research/skip-index/validation.md) to run the experiments.
 
-- **Blazing Fast Performance**
-  - 100x faster random access reads (vs. modern Apache Parquet)
-  - 10-20x faster scans
-  - 5x faster writes
-  - Similar compression ratios
-  - Efficient support for wide tables with zero-copy/zero-parse metadata
+## Findings
 
-- **Extensible Architecture**
-  - Modeled after Apache DataFusion's extensible approach
-  - Pluggable encoding system, type system, compression strategy, & layout strategy
-  - Zero-copy compatibility with Apache Arrow
+| Component | Recommendation | Detail |
+| --- | --- | --- |
+| Registration | Replace each index's rewrite group together. An existing aggregate does not prove that the whole index is registered. | [Alternatives and failure cases](research/skip-index/findings/registration.md) |
+| Writer configuration | Distinguish defaults, replacements, and additions. Reject unsupported explicit requests. | [API and tradeoffs](research/skip-index/findings/writer-policy.md) |
+| Writer composition and probes | Select the natural data writer before wrapping it with indexing. Make custom probes optional. | [Nested fields, lists, and custom writers](research/skip-index/findings/composition.md) |
+| Aggregate contracts | Return both compatibility and the expression that converts a stored partial into the requested representation. | [Reproduced bugs and the proposed contract](research/skip-index/findings/aggregate-contracts.md) |
+| Reader and rewrite context | Keep persisted aggregate instances with explicit input scope. | [Reader behavior and unknown plugins](research/skip-index/findings/read-rewrite.md) |
 
-- **Open Source, Neutral Governance**
-  - A Linux Foundation (LF AI & Data) Project
-  - Apache-2.0 Licensed
+The prototype exposes additive indexing without requiring callers to reconstruct default statistics:
 
-- **Integrations**
-  - Arrow, DataFusion, DuckDB, Spark, Pandas, Polars, & more
-  - Apache Iceberg (coming soon)
+```rust
+let bloom = BloomSkipIndex::new(options);
+session.register_skip_index(&bloom);
 
-> 🟢 **Development Status**: Library APIs may change from version to version, but we now consider
-> the file format <ins>_stable_</ins>. From release 0.36.0, all future releases of Vortex should
-> maintain backwards compatibility of the file format (i.e., be able to read files written by
-> any earlier version >= 0.36.0).
-
-## Key Features
-
-### Core Capabilities
-
-- **Logical Types** - Clean separation between logical schema and physical layout
-- **Zero-Copy Arrow Integration** - Seamless conversion to/from Apache Arrow arrays
-- **Extensible Encodings** - Pluggable physical layouts with built-in optimizations
-- **Cascading Compression** - Support for nested encoding schemes
-- **High-Performance Computing** - Optimized compute kernels for encoded data
-- **Rich Statistics** - Lazy-loaded summary statistics for optimization
-
-### Technical Architecture
-
-#### Logical vs Physical Design
-
-Vortex strictly separates logical and physical concerns:
-
-- **Logical Layer**: Defines data types and schema
-- **Physical Layer**: Handles encoding and storage implementation
-- **Built-in Encodings**: Compatible with Apache Arrow's memory format
-- **Extension Encodings**: Optimized compression schemes (RLE, dictionary, etc.)
-
-## Quick Start
-
-### Installation
-
-#### Rust Crate
-
-All features are exported through the main `vortex` crate.
-
-```bash
-cargo add vortex
+let strategy = WriteStrategyBuilder::default()
+    .with_field_aggregate_additions(field_path!(id), [bloom.aggregate_fn()])
+    .with_field_data_writer(field_path!(id), custom_data_writer)
+    .try_build()?;
 ```
 
-#### Python Package
+This abbreviated example assumes existing `options` and `custom_data_writer` values. The linked
+[integration tests](vortex-file/tests/bloom_skip_index.rs) contain complete examples.
 
-```bash
-uv add vortex-data
-```
+## Evidence and scope
 
-#### Command Line UI (vx)
+The combined experiment passed 929 tests, 76 doctests, and workspace Clippy with all targets and
+features. [Commands, counts, and logs](research/skip-index/validation.md) describe the coverage.
+There are no performance measurements or implemented file-format migrations in this research.
 
-For browsing the structure of Vortex files, you can use the `vx` command-line tool.
-
-```bash
-# Install pre-built binary (fast, recommended)
-cargo binstall vortex-tui
-
-# Or build from source
-cargo install vortex-tui --locked
-
-# Or run via Python without installing
-uvx --from vortex-data vx --help
-
-# Usage
-vx browse <file>
-```
-
-### Development Setup
-
-#### Prerequisites (macOS)
-
-```bash
-# Optional but recommended dependencies
-brew install flatbuffers protobuf  # For .fbs and .proto files
-brew install duckdb               # For benchmarks
-
-# Install Rust toolchain
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# or
-brew install rustup
-
-# Initialize submodules
-git submodule update --init --recursive
-
-# Setup dependencies with uv
-uv sync --all-packages
-```
-
-See the [development workflows](CONTRIBUTING.md#development-workflows) for Python binding and
-documentation development, including Maturin rebuilds, targeted tests, and documentation checks.
-
-`rust-toolchain.toml` pins the toolchain used for development and CI, and is kept on the latest
-stable release. Building Vortex as a dependency only requires a toolchain that satisfies the
-[Rust version compatibility policy](#rust-version-compatibility-policy).
-
-### Benchmarking
-
-Use `vx-bench` to run benchmarks comparing engines (DataFusion, DuckDB) and formats (Parquet, Vortex):
-
-```bash
-# Install the benchmark orchestrator
-uv tool install "bench_orchestrator @ ./bench-orchestrator/"
-
-# Run TPC-H benchmarks
-vx-bench run tpch --engine datafusion,duckdb --format parquet,vortex
-
-# Compare results
-vx-bench compare --run latest
-```
-
-See [bench-orchestrator/README.md](bench-orchestrator/README.md) for full documentation.
-
-### Performance Optimization
-
-For optimal performance, we suggest using [MiMalloc](https://github.com/microsoft/mimalloc):
-
-```rust,ignore
-#[global_allocator]
-static GLOBAL_ALLOC: MiMalloc = MiMalloc;
-```
-
-## Project Information
-
-### Rust Version Compatibility Policy
-
-**The policy: Vortex supports the four most recent stable minor releases.** Writing the latest
-stable release as `1.N`, that means `1.N`, `1.N-1`, `1.N-2`, and `1.N-3` all build Vortex, so the
-three minor releases older than the latest stable release. Only the minor version is constrained;
-Minimum Supported Rust Version (MSRV) declared in `Cargo.toml` must be **no newer than `1.N-3`**,
-patch releases are never a factor.
-
-An MSRV *older* than `1.N-3` is always acceptable — supporting extra releases cannot break the
-guarantee. An MSRV *newer* than `1.N-3` does not meet the policy. For example, once `1.98` is the
-latest stable release:
-
-| Declared MSRV | Status |
-| --- | --- |
-| `1.94` or older | Acceptable — supports more releases than required |
-| `1.95` | Exactly on policy |
-| `1.96` or newer | Does not meet the policy |
-
-The MSRV is raised in occasional deliberate steps rather than on every Rust release, so it drifts
-relative to that bound.
-
-How the policy is applied:
-
-- The MSRV is declared once, as `rust-version` in the root `Cargo.toml`, and inherited by every
-  crate in the workspace. That value, not this document, is the source of truth.
-- The toolchain pinned in `rust-toolchain.toml` tracks the latest stable release and is independent
-  of the MSRV. It is what contributors and most CI jobs build with.
-- CI enforces the declared MSRV in the `Rust (MSRV)` job, which builds the publishable crates with
-  exactly that toolchain. When it fails, the first choices are to express the code without the
-  newer Rust feature, or to hold back the dependency update that raised the requirement. Raising
-  `rust-version` is a last resort.
-
-### License
-
-Licensed under the Apache License, Version 2.0.
-
-### Governance
-
-Vortex is an independent open-source project and not controlled by any single company. The Vortex Project is a
-sub-project of the Linux Foundation Projects. The governance model is documented in
-[CONTRIBUTING.md](CONTRIBUTING.md) and is subject to the terms of
-the [Technical Charter](https://vortex.dev/charter.pdf).
-
-### Contributing
-
-Please **do** read [CONTRIBUTING.md](CONTRIBUTING.md) before you contribute.
-
-### Reporting Vulnerabilities
-
-If you discover a security vulnerability, please email <vuln-report@vortex.dev>.
-
-### Trademarks
-
-Copyright © Vortex a Series of LF Projects, LLC.
-For terms of use, trademark policy, and other project policies please see <https://lfprojects.org>
-
-## Acknowledgments
-
-The Vortex project benefits enormously from groundbreaking work from the academic & open-source communities.
-
-### Research in Vortex
-
-- [BtrBlocks](https://www.cs.cit.tum.de/fileadmin/w00cfj/dis/papers/btrblocks.pdf) - Efficient columnar compression
-- [FastLanes](https://www.vldb.org/pvldb/vol16/p2132-afroozeh.pdf) & [FastLanes on GPU](https://dbdbd2023.ugent.be/abstracts/felius_fastlanes.pdf) - High-performance integer compression
-- [FSST](https://www.vldb.org/pvldb/vol13/p2649-boncz.pdf) - Fast random access string compression
-- [ALP](https://ir.cwi.nl/pub/33334/33334.pdf) & [G-ALP](https://dl.acm.org/doi/pdf/10.1145/3736227.3736242) - Adaptive lossless floating-point compression
-- [Procella](https://dl.acm.org/citation.cfm?id=3360438) - YouTube's unified data system
-- [Anyblob](https://www.durner.dev/app/media/papers/anyblob-vldb23.pdf) - High-performance access to object storage
-- [ClickHouse](https://www.vldb.org/pvldb/vol17/p3731-schulze.pdf) - Fast analytics for everyone
-- [MonetDB/X100](https://www.cidrdb.org/cidr2005/papers/P19.pdf) - Hyper-Pipelining Query Execution
-- [Morsel-Driven Parallelism](https://db.in.tum.de/~leis/papers/morsels.pdf): A NUMA-Aware Query Evaluation Format for the Many-Core Age
-- [The FastLanes File Format](https://github.com/cwida/FastLanes/blob/dev/docs/specification.pdf) - Expression Operators
-
-### Vortex in Research
-
-- [Anyblox](https://gienieczko.com/anyblox-paper) - A Framework for Self-Decoding Datasets
-- [F3](https://dl.acm.org/doi/pdf/10.1145/3749163) - Open-Source Data File Format for the Future
-
-### Open Source Inspiration
-
-- [Apache Arrow](https://arrow.apache.org)
-- [Apache DataFusion](https://github.com/apache/datafusion)
-- [parquet2](https://github.com/jorgecarleitao/parquet2) by Jorge Leitao
-- [DuckDB](https://github.com/duckdb/duckdb)
-- [Velox](https://github.com/facebookincubator/velox) & [Nimble](https://github.com/facebookincubator/nimble)
-
-#### Thanks to all contributors who have shared their knowledge and code with the community! 🚀
+All findings refer to PR head
+[`97fa19c640ff`](https://github.com/vortex-data/vortex/commit/97fa19c640ffcb80e06608b0d64d358b8049c004),
+reviewed on September 8, 2026. Later changes to the PR can change these conclusions. The [original
+Vortex
+README](https://github.com/vortex-data/vortex/blob/97fa19c640ffcb80e06608b0d64d358b8049c004/README.md)
+contains the general project introduction.

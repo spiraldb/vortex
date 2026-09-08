@@ -1,0 +1,487 @@
+diff --git i/vortex-array/src/stats/rewrite.rs w/vortex-array/src/stats/rewrite.rs
+index 5bac85c070..91307c7ab0 100644
+--- i/vortex-array/src/stats/rewrite.rs
++++ w/vortex-array/src/stats/rewrite.rs
+@@ -164,7 +164,7 @@ fn rewrite(
+ 
+     let mut rewrites = Vec::new();
+     for rule in rules.iter() {
+-        if let Some(rewrite) = apply(rule.as_ref(), expr, ctx)? {
++        if let Some(rewrite) = apply(rule.rule.as_ref(), expr, ctx)? {
+             rewrites.push(rewrite);
+         }
+     }
+diff --git i/vortex-array/src/stats/session.rs w/vortex-array/src/stats/session.rs
+index 588a99ec37..6f064877f3 100644
+--- i/vortex-array/src/stats/session.rs
++++ w/vortex-array/src/stats/session.rs
+@@ -4,6 +4,7 @@
+ //! Session state for stats APIs.
+ 
+ use std::any::Any;
++use std::any::TypeId;
+ use std::sync::Arc;
+ 
+ use parking_lot::RwLock;
+@@ -17,7 +18,13 @@ use crate::stats::rewrite::StatsRewriteRule;
+ use crate::stats::rewrite::StatsRewriteRuleRef;
+ use crate::stats::rewrite::register_builtins;
+ 
+-type StatsRewriteRuleSet = Arc<[StatsRewriteRuleRef]>;
++type StatsRewriteRuleSet = Arc<[RegisteredStatsRewriteRule]>;
++
++#[derive(Clone, Debug)]
++pub(super) struct RegisteredStatsRewriteRule {
++    group: Option<TypeId>,
++    pub(super) rule: StatsRewriteRuleRef,
++}
+ 
+ /// Session state for stats APIs.
+ #[derive(Clone, Debug)]
+@@ -49,12 +56,47 @@ impl StatsSession {
+             .get(&rule_id)
+             .map(|rules| rules.iter().cloned().collect::<Vec<_>>())
+             .unwrap_or_default();
+-        updated_rules.push(rule);
++        updated_rules.push(RegisteredStatsRewriteRule { group: None, rule });
+         rules.insert(rule_id, updated_rules.into());
+     }
+ 
++    /// Registers a group of rewrite rules, replacing the previous group for `G`.
++    ///
++    /// The group identity is local to this process and is never serialized. A provider should
++    /// use its implementation type for `G`; its rules must support every persisted configuration.
++    /// Rules registered through [`Self::register_rewrite`] or by other groups are preserved.
++    /// Concurrent calls replace the whole group under one lock, so readers see one complete group.
++    pub fn register_rewrite_group<G: 'static>(&self, group: Vec<StatsRewriteRuleRef>) {
++        let id = TypeId::of::<G>();
++        let group = group
++            .into_iter()
++            .map(|rule| (rule.scalar_fn_id(), rule))
++            .collect::<Vec<_>>();
++        let mut rules = self.rewrite_rules.write();
++        for registered in rules.values_mut() {
++            if registered.iter().any(|rule| rule.group == Some(id)) {
++                *registered = registered
++                    .iter()
++                    .filter(|rule| rule.group != Some(id))
++                    .cloned()
++                    .collect();
++            }
++        }
++        for (scalar_fn_id, rule) in group {
++            let mut updated_rules = rules
++                .get(&scalar_fn_id)
++                .map(|rules| rules.to_vec())
++                .unwrap_or_default();
++            updated_rules.push(RegisteredStatsRewriteRule {
++                group: Some(id),
++                rule,
++            });
++            rules.insert(scalar_fn_id, updated_rules.into());
++        }
++    }
++
+     /// Return the rewrite rules registered for `scalar_fn_id`.
+-    pub(crate) fn rewrite_rules_for(
++    pub(super) fn rewrite_rules_for(
+         &self,
+         scalar_fn_id: ScalarFnId,
+     ) -> Option<StatsRewriteRuleSet> {
+diff --git i/vortex-file/tests/bloom_skip_index.rs w/vortex-file/tests/bloom_skip_index.rs
+index 1e660ed8e9..0514dfe7a8 100644
+--- i/vortex-file/tests/bloom_skip_index.rs
++++ w/vortex-file/tests/bloom_skip_index.rs
+@@ -72,14 +72,14 @@ fn bloom_with_options(options: BloomOptions) -> BloomSkipIndex {
+     BloomSkipIndex::new(options)
+ }
+ 
+-fn session(index: &BloomSkipIndex, register_index: bool) -> VortexSession {
++fn session(register_index: bool) -> VortexSession {
+     let session = vortex_array::array_session()
+         .with::<LayoutSession>()
+         .with::<RuntimeSession>();
+     vortex_file::register_default_encodings(&session);
+ 
+     if register_index {
+-        session.register_skip_index(index);
++        session.register_skip_index::<BloomSkipIndex>();
+     }
+ 
+     session
+@@ -164,13 +164,13 @@ async fn write_file(
+ #[tokio::test]
+ async fn bloom_roundtrip_prunes_and_unknown_reader_matches_full_scan() -> VortexResult<()> {
+     let index = bloom();
+-    let write_session = session(&index, true);
++    let write_session = session(true);
+     let input = data();
+     let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
+ 
+     // Reconstruct every read-side extension from a fresh session rather than accidentally relying
+     // on state retained by the writer.
+-    let read_session = session(&index, true);
++    let read_session = session(true);
+     let file = read_session.open_options().open_buffer(bytes.clone())?;
+     let reader = file.layout_reader()?;
+     let row_count = file.row_count();
+@@ -212,7 +212,7 @@ async fn bloom_roundtrip_prunes_and_unknown_reader_matches_full_scan() -> Vortex
+     // An allow-unknown reader without Bloom registration bypasses the unavailable zone map and
+     // scans the data child. This both supplies the reference result and verifies that an optional
+     // index does not become a hard read-time dependency.
+-    let full_scan_session = session(&index, false);
++    let full_scan_session = session(false);
+     full_scan_session.allow_unknown();
+     let full_scan_file = full_scan_session.open_options().open_buffer(bytes)?;
+ 
+@@ -252,13 +252,13 @@ async fn reader_uses_bloom_options_serialized_in_file() -> VortexResult<()> {
+         HashFn::XxHash3_64,
+     );
+     let index = bloom_with_options(options);
+-    let write_session = session(&index, true);
++    let write_session = session(true);
+     let input = data();
+     let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
+ 
+     // The reader registers only the implementation type and does not receive
+     // the options used by the writer.
+-    let read_session = session(&index, true);
++    let read_session = session(true);
+     let file = read_session.open_options().open_buffer(bytes)?;
+     let reader = file.layout_reader()?;
+     let row_count = file.row_count();
+@@ -281,7 +281,7 @@ async fn reader_uses_bloom_options_serialized_in_file() -> VortexResult<()> {
+ #[tokio::test]
+ async fn unsupported_bloom_dtype_is_omitted_and_roundtrips() -> VortexResult<()> {
+     let index = bloom();
+-    let write_session = session(&index, true);
++    let write_session = session(true);
+     let decimals = DecimalArray::new(
+         buffer![100i32, -250, 0, 375, 999, -1],
+         DecimalDType::new(5, 2),
+@@ -292,7 +292,7 @@ async fn unsupported_bloom_dtype_is_omitted_and_roundtrips() -> VortexResult<()>
+ 
+     // Bloom index is not necessary because
+     // the stats are not written.
+-    let read_session = session(&index, false);
++    let read_session = session(false);
+     let file = read_session.open_options().open_buffer(bytes)?;
+     assert_eq!(file.row_count(), 6);
+ 
+diff --git i/vortex-layout/src/layouts/zoned/skip_index/bloom.rs w/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
+index 1f36a8bc2e..03acc609cb 100644
+--- i/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
+@@ -18,7 +18,7 @@ use crate::layouts::zoned::skip_index::SkipIndex;
+ ///
+ /// Instances carry the options used when writing the index. Register Bloom
+ /// support with a session using
+-/// `session.register_skip_index(&index)`, where `index` is a [`BloomSkipIndex`].
++/// `session.register_skip_index::<BloomSkipIndex>()`.
+ ///
+ /// # Writing
+ ///
+@@ -43,11 +43,11 @@ impl SkipIndex for BloomSkipIndex {
+     type Aggregate = BloomFilter;
+     type Scalar = BloomContains;
+ 
+-    fn aggregate_vtable(&self) -> Self::Aggregate {
++    fn aggregate_vtable() -> Self::Aggregate {
+         BloomFilter
+     }
+ 
+-    fn scalar_vtable(&self) -> Self::Scalar {
++    fn scalar_vtable() -> Self::Scalar {
+         BloomContains
+     }
+ 
+@@ -55,53 +55,7 @@ impl SkipIndex for BloomSkipIndex {
+         self.options.clone()
+     }
+ 
+-    fn rewrite_rules(&self) -> Vec<StatsRewriteRuleRef> {
++    fn rewrite_rules() -> Vec<StatsRewriteRuleRef> {
+         vec![Arc::new(BloomEqRewrite)]
+     }
+ }
+-
+-#[cfg(test)]
+-mod tests {
+-    use vortex_array::aggregate_fn::AggregateFnVTableExt;
+-    use vortex_array::dtype::DType;
+-    use vortex_array::dtype::Nullability;
+-    use vortex_array::dtype::PType;
+-    use vortex_array::expr::bound::eq;
+-    use vortex_array::expr::bound::lit;
+-    use vortex_array::expr::bound::root;
+-    use vortex_array::stats::rewrite::StatsRewriteCtx;
+-    use vortex_error::VortexResult;
+-    use vortex_error::vortex_err;
+-
+-    use super::*;
+-    use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomContains;
+-    use crate::layouts::zoned::skip_index::SkipIndexSessionExt;
+-
+-    #[test]
+-    fn repeated_registration_installs_one_bloom_rewrite() -> VortexResult<()> {
+-        let session = vortex_array::array_session();
+-        let aggregate_fns = [BloomFilter.bind(BloomOptions::default())];
+-        let predicate = eq(
+-            root(DType::Primitive(PType::I64, Nullability::NonNullable)),
+-            lit(42i64),
+-        );
+-
+-        for registration_session in [&session, &session.clone()] {
+-            let skip_index = BloomSkipIndex::default();
+-            registration_session.register_skip_index(&skip_index);
+-            let proof = StatsRewriteCtx::new(&session)
+-                .with_aggregate_fns(&aggregate_fns)
+-                .falsify(&predicate)?
+-                .ok_or_else(|| vortex_err!("expected an equality falsifier"))?;
+-
+-            let mut pending = vec![&proof];
+-            let mut bloom_probes = 0;
+-            while let Some(expr) = pending.pop() {
+-                bloom_probes += usize::from(expr.is::<BloomContains>());
+-                pending.extend(expr.children());
+-            }
+-            assert_eq!(bloom_probes, 1);
+-        }
+-        Ok(())
+-    }
+-}
+diff --git i/vortex-layout/src/layouts/zoned/skip_index/mod.rs w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+index ade8171dab..4c865e8023 100644
+--- i/vortex-layout/src/layouts/zoned/skip_index/mod.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+@@ -56,8 +56,7 @@ pub mod bloom;
+ /// use vortex_session::VortexSession;
+ ///
+ /// fn register_index(session: &VortexSession) {
+-///     let index = BloomSkipIndex::default();
+-///     session.register_skip_index(&index);
++///     session.register_skip_index::<BloomSkipIndex>();
+ /// }
+ /// ```
+ ///
+@@ -72,57 +71,46 @@ pub trait SkipIndex: Send + Sync + 'static {
+     type Scalar: ScalarFnVTable;
+ 
+     /// Returns the aggregate implementation, without binding write options.
+-    fn aggregate_vtable(&self) -> Self::Aggregate;
++    fn aggregate_vtable() -> Self::Aggregate;
+ 
+     /// Returns the scalar implementation.
+-    fn scalar_vtable(&self) -> Self::Scalar;
++    fn scalar_vtable() -> Self::Scalar;
+ 
+     /// Returns the options to bind when writing this index.
+     fn options(&self) -> <Self::Aggregate as AggregateFnVTable>::Options;
+ 
+     /// Returns the rules that turn query predicates into proofs over the summary.
+-    fn rewrite_rules(&self) -> Vec<StatsRewriteRuleRef>;
++    fn rewrite_rules() -> Vec<StatsRewriteRuleRef>;
+ 
+     /// Binds this index's write options into an aggregate for the zoned writer.
+     ///
+     /// Binding does not register components or check input dtype compatibility. The zoned writer
+     /// omits aggregates that do not support its input dtype.
+     fn aggregate_fn(&self) -> AggregateFnRef {
+-        self.aggregate_vtable().bind(self.options())
++        Self::aggregate_vtable().bind(self.options())
+     }
+ }
+ 
+ /// Extension trait for registering skipping indexes with a Vortex session.
+ pub trait SkipIndexSessionExt: SessionExt {
+     /// Registers the aggregate, probe scalar functions, and rewrite rules
+-    /// supplied by an skip index.
++    /// supplied by a skip index.
+     ///
+-    /// If the aggregate ID is already registered, this
+-    /// method skips all components to avoid appending duplicate rewrite rules.
++    /// Repeated calls replace this implementation's components and rewrite group. Registration
++    /// must support every persisted configuration.
+     ///
+     /// For more information about skip indexes, see [`SkipIndex`].
+-    fn register_skip_index<I: SkipIndex>(&self, index: &I) {
++    fn register_skip_index<I: SkipIndex>(&self) {
+         let session = self.session();
+-        let aggregate = index.aggregate_vtable();
+-
+-        // The idea is to avoid duplicating rewrite rules.
+-        // Since neither they nor the skip index carry an ID,
+-        // this uses the aggregate ID instead.
+-        if session
+-            .aggregate_fns()
+-            .find_plugin(&aggregate.id())
+-            .is_some()
+-        {
+-            return;
+-        }
+-
+-        session.aggregate_fns().register(aggregate);
+-        session.scalar_fns().register(index.scalar_vtable());
+-
+-        for rule in index.rewrite_rules() {
+-            session.stats().register_rewrite_ref(rule);
+-        }
++        session.aggregate_fns().register(I::aggregate_vtable());
++        session.scalar_fns().register(I::scalar_vtable());
++        session
++            .stats()
++            .register_rewrite_group::<I>(I::rewrite_rules());
+     }
+ }
+ 
+ impl<S: SessionExt> SkipIndexSessionExt for S {}
++
++#[cfg(test)]
++mod tests;
+diff --git i/vortex-layout/src/layouts/zoned/skip_index/tests.rs w/vortex-layout/src/layouts/zoned/skip_index/tests.rs
+new file mode 100644
+index 0000000000..f7a1541295
+--- /dev/null
++++ w/vortex-layout/src/layouts/zoned/skip_index/tests.rs
+@@ -0,0 +1,141 @@
++// SPDX-License-Identifier: Apache-2.0
++// SPDX-FileCopyrightText: Copyright the Vortex contributors
++
++use std::num::NonZeroU32;
++use std::thread;
++
++use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
++use vortex_array::dtype::DType;
++use vortex_array::dtype::Nullability;
++use vortex_array::dtype::PType;
++use vortex_array::expr::bound::eq;
++use vortex_array::expr::bound::lit;
++use vortex_array::expr::bound::root;
++use vortex_array::scalar_fn::ScalarFnVTable;
++use vortex_array::scalar_fn::session::ScalarFnSessionExt;
++use vortex_array::stats::StatsSession;
++use vortex_array::stats::StatsSessionExt;
++use vortex_array::stats::rewrite::StatsRewriteCtx;
++use vortex_error::VortexResult;
++use vortex_error::vortex_err;
++use vortex_session::VortexSession;
++
++use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
++use crate::layouts::zoned::aggregates::bloom_filter::BloomOptions;
++use crate::layouts::zoned::aggregates::bloom_filter::HashFn;
++use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomContains;
++use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomEqRewrite;
++use crate::layouts::zoned::skip_index::SkipIndex;
++use crate::layouts::zoned::skip_index::SkipIndexSessionExt;
++use crate::layouts::zoned::skip_index::bloom::BloomSkipIndex;
++
++fn bloom_probe_options(
++    session: &VortexSession,
++    index: &BloomSkipIndex,
++) -> VortexResult<Vec<BloomOptions>> {
++    let aggregate_fns = [index.aggregate_fn()];
++    let predicate = eq(
++        root(DType::Primitive(PType::I64, Nullability::NonNullable)),
++        lit(42i64),
++    );
++    let proof = StatsRewriteCtx::new(session)
++        .with_aggregate_fns(&aggregate_fns)
++        .falsify(&predicate)?
++        .ok_or_else(|| vortex_err!("expected an equality falsifier"))?;
++    let mut pending = vec![&proof];
++    let mut options = Vec::new();
++    while let Some(expr) = pending.pop() {
++        if let Some(probe_options) = expr.as_opt::<BloomContains>() {
++            options.push(probe_options.clone());
++        }
++        pending.extend(expr.children());
++    }
++    Ok(options)
++}
++
++#[test]
++fn registration_after_aggregate_registration_installs_components() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.aggregate_fns().register(BloomFilter);
++    session.register_skip_index::<BloomSkipIndex>();
++
++    assert!(
++        session
++            .scalar_fns()
++            .registry()
++            .get(&BloomContains.id())
++            .is_some()
++    );
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++#[expect(
++    clippy::redundant_clone,
++    reason = "Registration must be shared across session clones."
++)]
++fn repeated_registration_installs_one_bloom_rewrite() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.register_skip_index::<BloomSkipIndex>();
++    session.clone().register_skip_index::<BloomSkipIndex>();
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn concurrent_registration_installs_one_bloom_rewrite() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    thread::scope(|scope| {
++        for _ in 0..16 {
++            scope.spawn(|| session.register_skip_index::<BloomSkipIndex>());
++        }
++    });
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn registration_uses_persisted_options() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    session.register_skip_index::<BloomSkipIndex>();
++    let index = BloomSkipIndex::new(BloomOptions::new(
++        NonZeroU32::new(8).ok_or_else(|| vortex_err!("block count must be nonzero"))?,
++        HashFn::XxHash3_64,
++    ));
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn registration_after_stats_replacement_restores_rewrite() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.register_skip_index::<BloomSkipIndex>();
++    session.register(StatsSession::default());
++    session.register_skip_index::<BloomSkipIndex>();
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn registration_preserves_independently_registered_rule() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.stats().register_rewrite(BloomEqRewrite);
++    session.register_skip_index::<BloomSkipIndex>();
++    session.register_skip_index::<BloomSkipIndex>();
++
++    assert_eq!(
++        bloom_probe_options(&session, &index)?,
++        [index.options(), index.options()]
++    );
++    Ok(())
++}

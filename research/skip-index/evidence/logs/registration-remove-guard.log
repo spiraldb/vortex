@@ -1,0 +1,38 @@
+   Compiling vortex-layout v0.1.0 ($REPO/vortex-layout)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.96s
+     Running unittests src/lib.rs (target/debug/deps/vortex_layout-459aae580f062a0d)
+
+running 6 tests
+
+thread 'layouts::zoned::skip_index::bloom::tests::repeated_registration_installs_one_bloom_rewrite' (1050809) panicked at vortex-layout/src/layouts/zoned/skip_index/bloom_tests.rs:67:5:
+assertion `left == right` failed
+  left: [BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }]
+ right: [BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'layouts::zoned::skip_index::bloom::tests::concurrent_registration_installs_one_bloom_rewrite' (1050804) panicked at vortex-layout/src/layouts/zoned/skip_index/bloom_tests.rs:81:5:
+assertion `left == right` failed
+  left: [BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }]
+ right: [BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }]
+test layouts::zoned::skip_index::bloom::tests::registration_after_aggregate_registration_installs_components ... ok
+
+thread 'layouts::zoned::skip_index::bloom::tests::registration_preserves_independently_registered_rule' (1050807) panicked at vortex-layout/src/layouts/zoned/skip_index/bloom_tests.rs:118:5:
+assertion `left == right` failed
+  left: [BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }]
+ right: [BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }, BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }]
+test layouts::zoned::skip_index::bloom::tests::registration_uses_persisted_options ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_after_stats_replacement_restores_rewrite ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_preserves_independently_registered_rule ... FAILED
+test layouts::zoned::skip_index::bloom::tests::concurrent_registration_installs_one_bloom_rewrite ... FAILED
+test layouts::zoned::skip_index::bloom::tests::repeated_registration_installs_one_bloom_rewrite ... FAILED
+
+failures:
+
+failures:
+    layouts::zoned::skip_index::bloom::tests::concurrent_registration_installs_one_bloom_rewrite
+    layouts::zoned::skip_index::bloom::tests::registration_preserves_independently_registered_rule
+    layouts::zoned::skip_index::bloom::tests::repeated_registration_installs_one_bloom_rewrite
+
+test result: FAILED. 3 passed; 3 failed; 0 ignored; 0 measured; 300 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p vortex-layout --lib`

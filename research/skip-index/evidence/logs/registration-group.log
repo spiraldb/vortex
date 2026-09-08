@@ -1,0 +1,45 @@
+   Compiling vortex-array v0.1.0 ($REPO/vortex-array)
+warning: type `RegisteredStatsRewriteRule` is more private than the item `StatsSession::rewrite_rules_for`
+  --> vortex-array/src/stats/session.rs:87:5
+   |
+87 | /     pub(crate) fn rewrite_rules_for(
+88 | |         &self,
+89 | |         scalar_fn_id: ScalarFnId,
+90 | |     ) -> Option<StatsRewriteRuleSet> {
+   | |____________________________________^ method `StatsSession::rewrite_rules_for` is reachable at visibility `pub(crate)`
+   |
+note: but type `RegisteredStatsRewriteRule` is only usable at visibility `pub(in crate::stats)`
+  --> vortex-array/src/stats/session.rs:24:1
+   |
+24 | pub(super) struct RegisteredStatsRewriteRule {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = note: `#[warn(private_interfaces)]` on by default
+
+   Compiling vortex-runend v0.1.0 ($REPO/encodings/runend)
+   Compiling vortex-fastlanes v0.1.0 ($REPO/encodings/fastlanes)
+   Compiling vortex-decimal-byte-parts v0.1.0 ($REPO/encodings/decimal-byte-parts)
+warning: `vortex-array` (lib) generated 1 warning
+   Compiling vortex-compressor v0.1.0 ($REPO/vortex-compressor)
+   Compiling vortex-fsst v0.1.0 ($REPO/encodings/fsst)
+   Compiling vortex-sparse v0.1.0 ($REPO/encodings/sparse)
+   Compiling vortex-zigzag v0.1.0 ($REPO/encodings/zigzag)
+   Compiling vortex-sequence v0.1.0 ($REPO/encodings/sequence)
+   Compiling vortex-datetime-parts v0.1.0 ($REPO/encodings/datetime-parts)
+   Compiling vortex-arrow v0.1.0 ($REPO/vortex-arrow)
+   Compiling vortex-io v0.1.0 ($REPO/vortex-io)
+   Compiling vortex-scan v0.1.0 ($REPO/vortex-scan)
+   Compiling vortex-alp v0.1.0 ($REPO/encodings/alp)
+   Compiling vortex-btrblocks v0.1.0 ($REPO/vortex-btrblocks)
+   Compiling vortex-layout v0.1.0 ($REPO/vortex-layout)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 58.02s
+     Running unittests src/lib.rs (target/debug/deps/vortex_layout-459aae580f062a0d)
+
+running 6 tests
+test layouts::zoned::skip_index::bloom::tests::repeated_registration_installs_one_bloom_rewrite ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_preserves_independently_registered_rule ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_after_aggregate_registration_installs_components ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_uses_persisted_options ... ok
+test layouts::zoned::skip_index::bloom::tests::concurrent_registration_installs_one_bloom_rewrite ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_after_stats_replacement_restores_rewrite ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 300 filtered out; finished in 0.01s

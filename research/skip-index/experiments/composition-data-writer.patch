@@ -1,0 +1,194 @@
+diff --git i/vortex-file/src/strategy.rs w/vortex-file/src/strategy.rs
+index a2ea29f388..c644366434 100644
+--- i/vortex-file/src/strategy.rs
++++ w/vortex-file/src/strategy.rs
+@@ -12,6 +12,8 @@ use vortex_btrblocks::BtrBlocksCompressorBuilder;
+ use vortex_btrblocks::SchemeExt;
+ use vortex_btrblocks::schemes::integer::IntDictScheme;
+ use vortex_error::VortexExpect;
++use vortex_error::VortexResult;
++use vortex_error::vortex_ensure;
+ use vortex_layout::LayoutStrategy;
+ use vortex_layout::layouts::buffered::BufferedStrategy;
+ use vortex_layout::layouts::chunked::writer::ChunkedLayoutStrategy;
+@@ -58,6 +60,7 @@ pub struct WriteStrategyBuilder {
+     data_block_target_bytes: Option<u64>,
+     field_writers: HashMap<FieldPath, Arc<dyn LayoutStrategy>>,
+     field_aggregates: HashMap<FieldPath, Arc<[AggregateFnRef]>>,
++    field_data_writers: HashMap<FieldPath, Arc<dyn LayoutStrategy>>,
+     flat_strategy: Option<Arc<dyn LayoutStrategy>>,
+     probe_compressor: Option<Arc<dyn CompressorPlugin>>,
+     /// Whether to write list fields using [`ListLayoutStrategy`].
+@@ -76,6 +79,7 @@ impl Default for WriteStrategyBuilder {
+             data_block_target_bytes: Some(ONE_MEG),
+             field_writers: HashMap::new(),
+             field_aggregates: HashMap::new(),
++            field_data_writers: HashMap::new(),
+             flat_strategy: None,
+             probe_compressor: None,
+             use_list_layout: use_experimental_list_layout(),
+@@ -129,6 +133,23 @@ impl WriteStrategyBuilder {
+         self
+     }
+ 
++    /// Replace the data strategy beneath row repartitioning and zoned statistics for a field.
++    ///
++    /// The supplied strategy receives the original field values in row blocks. It must preserve
++    /// their order and count. It replaces dictionary encoding, byte coalescing, compression, and
++    /// leaf writing. Statistics continue to use the builder's configured compressor.
++    ///
++    /// This can be combined with [`Self::with_field_aggregates`] at the same path. A complete
++    /// override through [`Self::with_field_writer`] conflicts with both operations.
++    pub fn with_field_data_writer(
++        mut self,
++        field: impl Into<FieldPath>,
++        writer: Arc<dyn LayoutStrategy>,
++    ) -> Self {
++        self.field_data_writers.insert(field.into(), writer);
++        self
++    }
++
+     /// Override default aggregates with custom zoned aggregates for a field.
+     ///
+     /// **Note** Calling [`Self::build`] panics if this path conflicts with another field
+@@ -179,6 +200,38 @@ impl WriteStrategyBuilder {
+     /// Builds the canonical [`LayoutStrategy`] implementation, with the configured overrides
+     /// applied.
+     pub fn build(self) -> Arc<dyn LayoutStrategy> {
++        self.try_build()
++            .vortex_expect("valid field writer configuration")
++    }
++
++    /// Build the strategy, returning an error for root paths or overlapping field overrides.
++    pub fn try_build(self) -> VortexResult<Arc<dyn LayoutStrategy>> {
++        let mut paths = Vec::new();
++        for path in self.field_writers.keys() {
++            paths.push(path);
++        }
++        for path in self.field_aggregates.keys() {
++            paths.push(path);
++        }
++        for path in self.field_data_writers.keys() {
++            if !self.field_aggregates.contains_key(path) {
++                paths.push(path);
++            }
++            vortex_ensure!(
++                !self.field_writers.contains_key(path),
++                "Expected a data writer or complete writer for {path}, got both"
++            );
++        }
++        for (index, path) in paths.iter().enumerate() {
++            vortex_ensure!(!path.is_root(), "Expected a field path, got root");
++            for other in &paths[..index] {
++                vortex_ensure!(
++                    !path.overlap(other),
++                    "Expected independent field overrides, got {path} and {other}"
++                );
++            }
++        }
++
+         let flat: Arc<dyn LayoutStrategy> = if let Some(flat) = self.flat_strategy {
+             flat
+         } else {
+@@ -248,47 +301,54 @@ impl WriteStrategyBuilder {
+         let row_block_size = NonZeroUsize::new(self.row_block_size).vortex_expect("must be non 0");
+ 
+         // Default and per-field aggregates share the same zoning and repartitioning pipeline.
+-        let build_repartition =
+-            |zone_layout_options: ZonedLayoutOptions| -> Arc<dyn LayoutStrategy> {
+-                // 2. calculate stats for each row group
+-                let stats = ZonedStrategy::new(
+-                    dict.clone(),
+-                    compress_then_flat.clone(),
+-                    zone_layout_options,
+-                );
++        let build_repartition = |zone_layout_options: ZonedLayoutOptions,
++                                 data: Arc<dyn LayoutStrategy>|
++         -> Arc<dyn LayoutStrategy> {
++            // 2. calculate stats for each row group
++            let stats = ZonedStrategy::new(data, compress_then_flat.clone(), zone_layout_options);
+ 
+-                // 1. repartition each column to fixed row counts
+-                Arc::new(RepartitionStrategy::new(
+-                    stats,
+-                    RepartitionWriterOptions {
+-                        // No minimum block size in bytes
+-                        block_size_minimum: 0,
+-                        block_len_multiple: row_block_size.get(),
+-                        block_size_target: None,
+-                        canonicalize: false,
+-                    },
+-                ))
++            // 1. repartition each column to fixed row counts
++            Arc::new(RepartitionStrategy::new(
++                stats,
++                RepartitionWriterOptions {
++                    // No minimum block size in bytes
++                    block_size_minimum: 0,
++                    block_len_multiple: row_block_size.get(),
++                    block_size_target: None,
++                    canonicalize: false,
++                },
++            ))
++        };
++
++        let default_data: Arc<dyn LayoutStrategy> = Arc::new(dict);
++        let repartition_strategy = build_repartition(
++            ZonedLayoutOptions {
++                block_size: row_block_size,
++                ..Default::default()
++            },
++            Arc::clone(&default_data),
++        );
++
++        let mut data_writers = self.field_data_writers;
++        let mut field_writers = self.field_writers;
++        for (field, aggregates) in self.field_aggregates {
++            let data = data_writers
++                .remove(&field)
++                .unwrap_or_else(|| Arc::clone(&default_data));
++            let options = ZonedLayoutOptions {
++                block_size: row_block_size,
++                aggregate_fns: Some(aggregates),
++                ..Default::default()
+             };
+-
+-        let repartition_strategy = build_repartition(ZonedLayoutOptions {
+-            block_size: row_block_size,
+-            ..Default::default()
+-        });
+-
+-        // Field aggregates and field writers use the same field-path namespace.
+-        // Conflicting overrides are unexpected and are rejected by TableStrategy.
+-        let field_writers = self
+-            .field_aggregates
+-            .into_iter()
+-            .map(|(field, aggregates)| {
+-                let options = ZonedLayoutOptions {
+-                    block_size: row_block_size,
+-                    aggregate_fns: Some(aggregates),
+-                    ..Default::default()
+-                };
+-                (field, build_repartition(options))
+-            })
+-            .chain(self.field_writers);
++            field_writers.insert(field, build_repartition(options, data));
++        }
++        for (field, data) in data_writers {
++            let options = ZonedLayoutOptions {
++                block_size: row_block_size,
++                ..Default::default()
++            };
++            field_writers.insert(field, build_repartition(options, data));
++        }
+ 
+         // 0. start with splitting columns
+         let validity_strategy = CollectStrategy::new(compress_then_flat.clone());
+@@ -323,6 +383,6 @@ impl WriteStrategyBuilder {
+             );
+         }
+ 
+-        Arc::new(table_strategy)
++        Ok(Arc::new(table_strategy))
+     }
+ }

@@ -1,0 +1,88 @@
+diff --git i/vortex-layout/src/layouts/zoned/skip_index/mod.rs w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+index ade8171dab..3017a35f86 100644
+--- i/vortex-layout/src/layouts/zoned/skip_index/mod.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+@@ -12,6 +12,11 @@
+ //! Unlike a locating index, a skip index summarizes a zone. It does not locate
+ //! matching rows. It can only prove that a zone cannot match a predicate.
+ 
++use std::any::Any;
++use std::any::TypeId;
++use std::sync::Arc;
++use std::sync::OnceLock;
++
+ use vortex_array::aggregate_fn::AggregateFnRef;
+ use vortex_array::aggregate_fn::AggregateFnVTable;
+ use vortex_array::aggregate_fn::AggregateFnVTableExt;
+@@ -20,7 +25,9 @@ use vortex_array::scalar_fn::ScalarFnVTable;
+ use vortex_array::scalar_fn::session::ScalarFnSessionExt;
+ use vortex_array::stats::StatsSessionExt;
+ use vortex_array::stats::rewrite::StatsRewriteRuleRef;
++use vortex_session::ArcSwapMap;
+ use vortex_session::SessionExt;
++use vortex_session::SessionVar;
+ 
+ pub mod bloom;
+ 
+@@ -97,32 +104,41 @@ pub trait SkipIndexSessionExt: SessionExt {
+     /// Registers the aggregate, probe scalar functions, and rewrite rules
+     /// supplied by an skip index.
+     ///
+-    /// If the aggregate ID is already registered, this
+-    /// method skips all components to avoid appending duplicate rewrite rules.
++    /// Repeated calls for the same index implementation share one initialization, including
++    /// concurrent calls through session clones. Registration must not depend on write options.
+     ///
+     /// For more information about skip indexes, see [`SkipIndex`].
+     fn register_skip_index<I: SkipIndex>(&self, index: &I) {
+         let session = self.session();
+-        let aggregate = index.aggregate_vtable();
++        let registrations = session.get::<SkipIndexRegistrations>();
++        let id = TypeId::of::<I>();
++        registrations.completed.insert_if_absent(id, Arc::default());
++        let completed = registrations.completed.get(&id)
++            .expect("registration state was inserted and cannot be removed");
+ 
+-        // The idea is to avoid duplicating rewrite rules.
+-        // Since neither they nor the skip index carry an ID,
+-        // this uses the aggregate ID instead.
+-        if session
+-            .aggregate_fns()
+-            .find_plugin(&aggregate.id())
+-            .is_some()
+-        {
+-            return;
+-        }
+-
+-        session.aggregate_fns().register(aggregate);
+-        session.scalar_fns().register(index.scalar_vtable());
+-
+-        for rule in index.rewrite_rules() {
+-            session.stats().register_rewrite_ref(rule);
+-        }
++        completed.get_or_init(|| {
++            session.aggregate_fns().register(index.aggregate_vtable());
++            session.scalar_fns().register(index.scalar_vtable());
++            for rule in index.rewrite_rules() {
++                session.stats().register_rewrite_ref(rule);
++            }
++        });
+     }
+ }
+ 
+ impl<S: SessionExt> SkipIndexSessionExt for S {}
++
++#[derive(Clone, Debug, Default)]
++struct SkipIndexRegistrations {
++    completed: ArcSwapMap<TypeId, Arc<OnceLock<()>>>,
++}
++
++impl SessionVar for SkipIndexRegistrations {
++    fn as_any(&self) -> &dyn Any {
++        self
++    }
++
++    fn as_any_mut(&mut self) -> &mut dyn Any {
++        self
++    }
++}

@@ -1,0 +1,2894 @@
+diff --git c/vortex-array/src/aggregate_fn/erased.rs w/vortex-array/src/aggregate_fn/erased.rs
+index c512ea81b7..7b2556479f 100644
+--- c/vortex-array/src/aggregate_fn/erased.rs
++++ w/vortex-array/src/aggregate_fn/erased.rs
+@@ -16,13 +16,14 @@ use vortex_utils::debug_with::DebugWith;
+ 
+ use crate::aggregate_fn::AccumulatorRef;
+ use crate::aggregate_fn::AggregateFnId;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::GroupedAccumulatorRef;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::options::AggregateFnOptions;
+ use crate::aggregate_fn::typed::AggregateFnInner;
+ use crate::aggregate_fn::typed::DynAggregateFn;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ 
+ /// A type-erased aggregate function, pairing a vtable with bound options behind a trait object.
+ ///
+@@ -75,9 +76,13 @@ impl AggregateFnRef {
+         AggregateFnOptions { inner: &*self.0 }
+     }
+ 
+-    /// Return whether this stored aggregate can satisfy `requested`.
+-    pub fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction {
+-        self.0.can_satisfy(requested)
++    /// Resolve a stored partial expression into a requested statistic's partial representation.
++    pub fn resolve_stat(
++        &self,
++        requested: &AggregateFnRef,
++        partial: Expression,
++    ) -> Option<StatMatch> {
++        self.0.resolve_stat(requested, partial)
+     }
+ 
+     /// Compute the return [`DType`] per group given the input element type.
+diff --git c/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs w/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs
+index bb27d9f9ab..657e9d1d6a 100644
+--- c/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs
++++ w/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs
+@@ -21,9 +21,9 @@ use crate::ExecutionCtx;
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::fns::max::Max;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+@@ -32,6 +32,8 @@ use crate::dtype::DType;
+ use crate::dtype::FieldNames;
+ use crate::dtype::Nullability;
+ use crate::dtype::StructFields;
++use crate::expr::Expression;
++use crate::expr::get_item;
+ use crate::partial_ord::partial_max;
+ use crate::scalar::Scalar;
+ use crate::scalar::ScalarTruncation;
+@@ -159,30 +161,27 @@ impl AggregateFnVTable for BoundedMax {
+         supported_dtype(options, input_dtype).map(DType::as_nullable)
+     }
+ 
+-    fn can_satisfy(
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         if let Some(other) = requested.as_opt::<Self>() {
+             return if other == options {
+-                AggregateFnSatisfaction::Exact
++                Some(StatMatch::Exact(partial))
+             } else if options.max_bytes >= other.max_bytes {
+-                AggregateFnSatisfaction::Approximate
++                Some(StatMatch::Approximate(partial))
+             } else {
+-                AggregateFnSatisfaction::No
++                None
+             };
+         }
+ 
+         // The stored bound skips NaNs, so it cannot stand in for a NaN-including maximum.
+-        if requested
++        requested
+             .as_opt::<Max>()
+             .is_some_and(|options| options.skip_nans)
+-        {
+-            AggregateFnSatisfaction::Approximate
+-        } else {
+-            AggregateFnSatisfaction::No
+-        }
++            .then(|| StatMatch::Approximate(get_item(BOUNDED_MAX_BOUND, partial)))
+     }
+ 
+     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
+@@ -325,11 +324,11 @@ mod tests {
+     use crate::IntoArray;
+     use crate::VortexSessionExecute;
+     use crate::aggregate_fn::Accumulator;
+-    use crate::aggregate_fn::AggregateFnSatisfaction;
+     use crate::aggregate_fn::AggregateFnVTable;
+     use crate::aggregate_fn::AggregateFnVTableExt;
+     use crate::aggregate_fn::DynAccumulator;
+     use crate::aggregate_fn::NumericalAggregateOpts;
++    use crate::aggregate_fn::StatMatch;
+     use crate::aggregate_fn::fns::bounded_max::BoundedMax;
+     use crate::aggregate_fn::fns::bounded_max::BoundedMaxOptions;
+     use crate::aggregate_fn::fns::bounded_max::make_bounded_max_partial_dtype;
+@@ -339,6 +338,7 @@ mod tests {
+     use crate::arrays::PrimitiveArray;
+     use crate::arrays::VarBinViewArray;
+     use crate::dtype::Nullability;
++    use crate::expr::root;
+     use crate::scalar::Scalar;
+     use crate::validity::Validity;
+ 
+@@ -515,36 +515,38 @@ mod tests {
+             max_bytes: max_bytes(6),
+         });
+ 
+-        assert_eq!(stored.can_satisfy(&same), AggregateFnSatisfaction::Exact);
+-        assert_eq!(
+-            stored.can_satisfy(&looser_bounded),
+-            AggregateFnSatisfaction::Approximate
++        assert!(matches!(
++            stored.resolve_stat(&same, root()),
++            Some(StatMatch::Exact(_))
++        ));
++        assert!(matches!(
++            stored.resolve_stat(&looser_bounded, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(stored.resolve_stat(&tighter_bounded, root()).is_none());
++        assert!(matches!(
++            stored.resolve_stat(&Max.bind(NumericalAggregateOpts::default()), root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Max.bind(NumericalAggregateOpts::include_nans()), root())
++                .is_none()
+         );
+-        assert_eq!(
+-            stored.can_satisfy(&tighter_bounded),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::include_nans())),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
++        assert!(
+             Max.bind(NumericalAggregateOpts::include_nans())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::No
++                .resolve_stat(&stored, root())
++                .is_none()
+         );
+-        assert_eq!(
++        assert!(matches!(
+             Max.bind(NumericalAggregateOpts::default())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Min.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::No
++                .resolve_stat(&stored, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Min.bind(NumericalAggregateOpts::default()), root())
++                .is_none()
+         );
+     }
+ 
+diff --git c/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs w/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs
+index 7a72442550..09ac059c01 100644
+--- c/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs
++++ w/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs
+@@ -19,13 +19,14 @@ use crate::ExecutionCtx;
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::fns::min::Min;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ use crate::partial_ord::partial_min;
+ use crate::scalar::Scalar;
+ use crate::scalar::ScalarTruncation;
+@@ -113,30 +114,27 @@ impl AggregateFnVTable for BoundedMin {
+         supported_dtype(options, input_dtype).map(DType::as_nullable)
+     }
+ 
+-    fn can_satisfy(
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         if let Some(other) = requested.as_opt::<Self>() {
+             return if other == options {
+-                AggregateFnSatisfaction::Exact
++                Some(StatMatch::Exact(partial))
+             } else if options.max_bytes >= other.max_bytes {
+-                AggregateFnSatisfaction::Approximate
++                Some(StatMatch::Approximate(partial))
+             } else {
+-                AggregateFnSatisfaction::No
++                None
+             };
+         }
+ 
+         // The stored bound skips NaNs, so it cannot stand in for a NaN-including minimum.
+-        if requested
++        requested
+             .as_opt::<Min>()
+             .is_some_and(|options| options.skip_nans)
+-        {
+-            AggregateFnSatisfaction::Approximate
+-        } else {
+-            AggregateFnSatisfaction::No
+-        }
++            .then_some(StatMatch::Approximate(partial))
+     }
+ 
+     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
+@@ -242,11 +240,11 @@ mod tests {
+     use crate::IntoArray;
+     use crate::VortexSessionExecute;
+     use crate::aggregate_fn::Accumulator;
+-    use crate::aggregate_fn::AggregateFnSatisfaction;
+     use crate::aggregate_fn::AggregateFnVTable;
+     use crate::aggregate_fn::AggregateFnVTableExt;
+     use crate::aggregate_fn::DynAccumulator;
+     use crate::aggregate_fn::NumericalAggregateOpts;
++    use crate::aggregate_fn::StatMatch;
+     use crate::aggregate_fn::fns::bounded_min::BoundedMin;
+     use crate::aggregate_fn::fns::bounded_min::BoundedMinOptions;
+     use crate::aggregate_fn::fns::max::Max;
+@@ -255,6 +253,7 @@ mod tests {
+     use crate::arrays::PrimitiveArray;
+     use crate::arrays::VarBinViewArray;
+     use crate::dtype::Nullability;
++    use crate::expr::root;
+     use crate::scalar::Scalar;
+     use crate::validity::Validity;
+ 
+@@ -346,36 +345,38 @@ mod tests {
+             max_bytes: max_bytes(6),
+         });
+ 
+-        assert_eq!(stored.can_satisfy(&same), AggregateFnSatisfaction::Exact);
+-        assert_eq!(
+-            stored.can_satisfy(&looser_bounded),
+-            AggregateFnSatisfaction::Approximate
++        assert!(matches!(
++            stored.resolve_stat(&same, root()),
++            Some(StatMatch::Exact(_))
++        ));
++        assert!(matches!(
++            stored.resolve_stat(&looser_bounded, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(stored.resolve_stat(&tighter_bounded, root()).is_none());
++        assert!(matches!(
++            stored.resolve_stat(&Min.bind(NumericalAggregateOpts::default()), root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Min.bind(NumericalAggregateOpts::include_nans()), root())
++                .is_none()
+         );
+-        assert_eq!(
+-            stored.can_satisfy(&tighter_bounded),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Min.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Min.bind(NumericalAggregateOpts::include_nans())),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
++        assert!(
+             Min.bind(NumericalAggregateOpts::include_nans())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::No
++                .resolve_stat(&stored, root())
++                .is_none()
+         );
+-        assert_eq!(
++        assert!(matches!(
+             Min.bind(NumericalAggregateOpts::default())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::No
++                .resolve_stat(&stored, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Max.bind(NumericalAggregateOpts::default()), root())
++                .is_none()
+         );
+     }
+ 
+diff --git c/vortex-array/src/aggregate_fn/fns/max/mod.rs w/vortex-array/src/aggregate_fn/fns/max/mod.rs
+index ccf9f4d899..40c01255ca 100644
+--- c/vortex-array/src/aggregate_fn/fns/max/mod.rs
++++ w/vortex-array/src/aggregate_fn/fns/max/mod.rs
+@@ -12,15 +12,23 @@ use crate::ExecutionCtx;
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
++use crate::aggregate_fn::fns::bounded_max::BOUNDED_MAX_BOUND;
++use crate::aggregate_fn::fns::bounded_max::BOUNDED_MAX_UNKNOWN;
+ use crate::aggregate_fn::fns::bounded_max::BoundedMax;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+ use crate::aggregate_fn::fns::min_max::nan_scalar;
+ use crate::aggregate_fn::fns::min_max::scalar_is_nan;
+ use crate::dtype::DType;
++use crate::dtype::Nullability;
++use crate::expr::Expression;
++use crate::expr::is_not_null;
++use crate::expr::lit;
++use crate::expr::mask;
++use crate::expr::pack;
+ use crate::expr::stats::Precision;
+ use crate::expr::stats::Stat;
+ use crate::expr::stats::StatsProvider;
+@@ -99,21 +107,30 @@ impl AggregateFnVTable for Max {
+             .map(|_| input_dtype.as_nullable())
+     }
+ 
+-    fn can_satisfy(
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         if requested
+             .as_opt::<Self>()
+             .is_some_and(|other| other == options)
+         {
+-            AggregateFnSatisfaction::Exact
++            Some(StatMatch::Exact(partial))
+         } else if requested.is::<BoundedMax>() && options.skip_nans {
+-            // A NaN-including maximum may be NaN, which is not a usable upper bound.
+-            AggregateFnSatisfaction::Approximate
++            // A NaN-including maximum cannot provide a usable bound.
++            let valid = is_not_null(partial.clone());
++            let state = pack(
++                [
++                    (BOUNDED_MAX_BOUND, partial),
++                    (BOUNDED_MAX_UNKNOWN, lit(false)),
++                ],
++                Nullability::Nullable,
++            );
++            Some(StatMatch::Approximate(mask(state, valid)))
+         } else {
+-            AggregateFnSatisfaction::No
++            None
+         }
+     }
+ 
+diff --git c/vortex-array/src/aggregate_fn/fns/min/mod.rs w/vortex-array/src/aggregate_fn/fns/min/mod.rs
+index 488405e8f1..7f0fd99b60 100644
+--- c/vortex-array/src/aggregate_fn/fns/min/mod.rs
++++ w/vortex-array/src/aggregate_fn/fns/min/mod.rs
+@@ -12,15 +12,16 @@ use crate::ExecutionCtx;
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::fns::bounded_min::BoundedMin;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+ use crate::aggregate_fn::fns::min_max::nan_scalar;
+ use crate::aggregate_fn::fns::min_max::scalar_is_nan;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ use crate::expr::stats::Precision;
+ use crate::expr::stats::Stat;
+ use crate::expr::stats::StatsProvider;
+@@ -99,21 +100,22 @@ impl AggregateFnVTable for Min {
+             .map(|_| input_dtype.as_nullable())
+     }
+ 
+-    fn can_satisfy(
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         if requested
+             .as_opt::<Self>()
+             .is_some_and(|other| other == options)
+         {
+-            AggregateFnSatisfaction::Exact
++            Some(StatMatch::Exact(partial))
+         } else if requested.is::<BoundedMin>() && options.skip_nans {
+-            // A NaN-including minimum may be NaN, which is not a usable lower bound.
+-            AggregateFnSatisfaction::Approximate
++            // A NaN-including minimum cannot provide a usable bound.
++            Some(StatMatch::Approximate(partial))
+         } else {
+-            AggregateFnSatisfaction::No
++            None
+         }
+     }
+ 
+diff --git c/vortex-array/src/aggregate_fn/foreign.rs w/vortex-array/src/aggregate_fn/foreign.rs
+index feb07e4717..eafaf0e8c3 100644
+--- c/vortex-array/src/aggregate_fn/foreign.rs
++++ w/vortex-array/src/aggregate_fn/foreign.rs
+@@ -124,3 +124,31 @@ pub fn new_foreign_aggregate_fn(id: AggregateFnId, metadata: Vec<u8>) -> Aggrega
+     )
+     .erased()
+ }
++
++#[cfg(test)]
++mod tests {
++    use vortex_session::registry::CachedId;
++
++    use super::new_foreign_aggregate_fn;
++    use crate::expr::root;
++
++    #[test]
++    fn aggregate_contract_distinct_ids_do_not_satisfy() {
++        static LEFT: CachedId = CachedId::new("test.left");
++        static RIGHT: CachedId = CachedId::new("test.right");
++        let left = new_foreign_aggregate_fn(*LEFT, vec![1]);
++        let right = new_foreign_aggregate_fn(*RIGHT, vec![1]);
++        assert_ne!(left, right);
++        assert!(left.resolve_stat(&right, root()).is_none());
++    }
++
++    #[test]
++    fn aggregate_contract_display_is_not_identity() {
++        static ID: CachedId = CachedId::new("test.foreign");
++        let left = new_foreign_aggregate_fn(*ID, vec![1]);
++        let right = new_foreign_aggregate_fn(*ID, vec![2]);
++        assert_ne!(left, right);
++        assert_eq!(left.to_string(), right.to_string());
++        assert!(left.resolve_stat(&right, root()).is_none());
++    }
++}
+diff --git c/vortex-array/src/aggregate_fn/mod.rs w/vortex-array/src/aggregate_fn/mod.rs
+index 820001d3a5..97a01208c8 100644
+--- c/vortex-array/src/aggregate_fn/mod.rs
++++ w/vortex-array/src/aggregate_fn/mod.rs
+@@ -11,8 +11,8 @@ use vortex_session::registry::Id;
+ mod accumulator;
+ pub use accumulator::*;
+ 
+-mod satisfaction;
+-pub use satisfaction::*;
++mod stat_match;
++pub use stat_match::*;
+ 
+ mod accumulator_grouped;
+ pub use accumulator_grouped::*;
+diff --git c/vortex-array/src/aggregate_fn/satisfaction.rs w/vortex-array/src/aggregate_fn/satisfaction.rs
+deleted file mode 100644
+index ffbe346d2d..0000000000
+--- c/vortex-array/src/aggregate_fn/satisfaction.rs
++++ /dev/null
+@@ -1,26 +0,0 @@
+-// SPDX-License-Identifier: Apache-2.0
+-// SPDX-FileCopyrightText: Copyright the Vortex contributors
+-
+-/// Whether a stored aggregate function can satisfy a requested aggregate function.
+-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+-pub enum AggregateFnSatisfaction {
+-    /// The stored aggregate cannot satisfy the requested aggregate.
+-    #[default]
+-    No,
+-    /// The stored aggregate can satisfy the request as an approximate bound.
+-    Approximate,
+-    /// The stored aggregate exactly satisfies the request.
+-    Exact,
+-}
+-
+-impl AggregateFnSatisfaction {
+-    /// Returns whether the stored aggregate can satisfy the requested aggregate.
+-    pub fn is_satisfied(self) -> bool {
+-        !matches!(self, Self::No)
+-    }
+-
+-    /// Returns whether the stored aggregate exactly satisfies the requested aggregate.
+-    pub fn is_exact(self) -> bool {
+-        matches!(self, Self::Exact)
+-    }
+-}
+diff --git c/vortex-array/src/aggregate_fn/stat_match.rs w/vortex-array/src/aggregate_fn/stat_match.rs
+new file mode 100644
+index 0000000000..2d809d81dd
+--- /dev/null
++++ w/vortex-array/src/aggregate_fn/stat_match.rs
+@@ -0,0 +1,21 @@
++// SPDX-License-Identifier: Apache-2.0
++// SPDX-FileCopyrightText: Copyright the Vortex contributors
++
++//! Matches between stored aggregate partials and requested statistics.
++
++use crate::expr::Expression;
++
++/// An expression that resolves a requested statistic from a stored aggregate partial.
++///
++/// Each expression has the requested aggregate's partial-state dtype. Its outer nullability may
++/// be widened to nullable for unavailable statistics; nested fields retain their declared types.
++/// Expressions must preserve the requested partial's representation of empty and unknown states.
++/// Approximate expressions must preserve the requested bound's direction, and consumers must use
++/// them only in proofs that remain valid for a conservative bound.
++#[derive(Clone, Debug)]
++pub enum StatMatch {
++    /// The expression provides the requested partial exactly.
++    Exact(Expression),
++    /// The expression provides a conservative bound in the requested partial representation.
++    Approximate(Expression),
++}
+diff --git c/vortex-array/src/aggregate_fn/typed.rs w/vortex-array/src/aggregate_fn/typed.rs
+index b5e95febea..f834085fab 100644
+--- c/vortex-array/src/aggregate_fn/typed.rs
++++ w/vortex-array/src/aggregate_fn/typed.rs
+@@ -24,11 +24,12 @@ use crate::aggregate_fn::Accumulator;
+ use crate::aggregate_fn::AccumulatorRef;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::GroupedAccumulator;
+ use crate::aggregate_fn::GroupedAccumulatorRef;
++use crate::aggregate_fn::StatMatch;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ 
+ /// An object-safe, sealed trait for bound aggregate function dispatch.
+ ///
+@@ -39,7 +40,7 @@ pub(super) trait DynAggregateFn: 'static + Send + Sync + super::sealed::Sealed {
+     fn id(&self) -> AggregateFnId;
+     fn options_any(&self) -> &dyn Any;
+ 
+-    fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction;
++    fn resolve_stat(&self, requested: &AggregateFnRef, partial: Expression) -> Option<StatMatch>;
+     fn return_dtype(&self, input_dtype: &DType) -> Option<DType>;
+     fn state_dtype(&self, input_dtype: &DType) -> Option<DType>;
+     fn accumulator(&self, input_dtype: &DType) -> VortexResult<AccumulatorRef>;
+@@ -79,8 +80,8 @@ impl<V: AggregateFnVTable> DynAggregateFn for AggregateFnInner<V> {
+         &self.options
+     }
+ 
+-    fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction {
+-        V::can_satisfy(&self.vtable, &self.options, requested)
++    fn resolve_stat(&self, requested: &AggregateFnRef, partial: Expression) -> Option<StatMatch> {
++        V::resolve_stat(&self.vtable, &self.options, requested, partial)
+     }
+ 
+     fn return_dtype(&self, input_dtype: &DType) -> Option<DType> {
+diff --git c/vortex-array/src/aggregate_fn/vtable.rs w/vortex-array/src/aggregate_fn/vtable.rs
+index 24449bc757..471e9b4e2c 100644
+--- c/vortex-array/src/aggregate_fn/vtable.rs
++++ w/vortex-array/src/aggregate_fn/vtable.rs
+@@ -19,8 +19,9 @@ use crate::ExecutionCtx;
+ use crate::aggregate_fn::AggregateFn;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
++use crate::aggregate_fn::StatMatch;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ use crate::scalar::Scalar;
+ 
+ /// Defines the interface for aggregate function vtables.
+@@ -60,23 +61,22 @@ pub trait AggregateFnVTable: 'static + Sized + Clone + Send + Sync {
+         vortex_bail!("Aggregate function {} is not deserializable", self.id());
+     }
+ 
+-    /// Return whether this stored aggregate can satisfy `requested`.
++    /// Resolve a stored partial expression into the representation requested by a statistic.
+     ///
+-    /// The default implementation only treats exactly equal aggregate functions as satisfying the
+-    /// request. Approximate pruning aggregates can override this to expose looser-but-sound bounds.
+-    fn can_satisfy(
++    /// Returns `None` when this aggregate cannot provide the requested statistic. The default
++    /// implementation matches equal aggregate IDs and options and returns the partial unchanged.
++    /// Custom implementations must uphold the representation and bound contracts of [`StatMatch`].
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
+-        if requested
+-            .as_opt::<Self>()
+-            .is_some_and(|other| other == options)
+-        {
+-            AggregateFnSatisfaction::Exact
+-        } else {
+-            AggregateFnSatisfaction::No
+-        }
++        partial: Expression,
++    ) -> Option<StatMatch> {
++        let same_aggregate = self.id() == requested.id()
++            && requested
++                .as_opt::<Self>()
++                .is_some_and(|other| other == options);
++        same_aggregate.then_some(StatMatch::Exact(partial))
+     }
+ 
+     /// The return [`DType`] of the aggregate.
+diff --git c/vortex-array/src/stats/rewrite.rs w/vortex-array/src/stats/rewrite.rs
+index 5bac85c070..9474dc3507 100644
+--- c/vortex-array/src/stats/rewrite.rs
++++ w/vortex-array/src/stats/rewrite.rs
+@@ -132,15 +132,25 @@ impl<'a> StatsRewriteCtx<'a> {
+         Ok(())
+     }
+ 
+-    /// Sets the aggregate functions available to stats rewrite rules.
++    /// Sets the stored aggregate functions for the root input of this rewrite scope.
++    ///
++    /// Options must describe the stored summaries, including their file-specific configuration.
++    /// These functions do not describe statistics of arbitrary child expressions.
+     pub fn with_aggregate_fns(mut self, aggregate_fns: &'a [AggregateFnRef]) -> Self {
+         self.aggregate_fns = aggregate_fns;
+         self
+     }
+ 
+-    /// Returns the aggregate functions available to stats rewrite rules.
+-    pub fn aggregate_fns(&self) -> &'a [AggregateFnRef] {
+-        self.aggregate_fns
++    /// Returns the stored aggregates computed over `input`.
++    ///
++    /// This context currently describes only the root input. Derived expressions have no stored
++    /// aggregates, even when their dtype matches the root dtype.
++    pub fn aggregate_fns_for(&self, input: &BoundExpression) -> &'a [AggregateFnRef] {
++        if input.is_root() {
++            self.aggregate_fns
++        } else {
++            &[]
++        }
+     }
+ }
+ 
+@@ -164,7 +174,7 @@ fn rewrite(
+ 
+     let mut rewrites = Vec::new();
+     for rule in rules.iter() {
+-        if let Some(rewrite) = apply(rule.as_ref(), expr, ctx)? {
++        if let Some(rewrite) = apply(rule.rule.as_ref(), expr, ctx)? {
+             rewrites.push(rewrite);
+         }
+     }
+diff --git c/vortex-array/src/stats/session.rs w/vortex-array/src/stats/session.rs
+index 588a99ec37..6f064877f3 100644
+--- c/vortex-array/src/stats/session.rs
++++ w/vortex-array/src/stats/session.rs
+@@ -4,6 +4,7 @@
+ //! Session state for stats APIs.
+ 
+ use std::any::Any;
++use std::any::TypeId;
+ use std::sync::Arc;
+ 
+ use parking_lot::RwLock;
+@@ -17,7 +18,13 @@ use crate::stats::rewrite::StatsRewriteRule;
+ use crate::stats::rewrite::StatsRewriteRuleRef;
+ use crate::stats::rewrite::register_builtins;
+ 
+-type StatsRewriteRuleSet = Arc<[StatsRewriteRuleRef]>;
++type StatsRewriteRuleSet = Arc<[RegisteredStatsRewriteRule]>;
++
++#[derive(Clone, Debug)]
++pub(super) struct RegisteredStatsRewriteRule {
++    group: Option<TypeId>,
++    pub(super) rule: StatsRewriteRuleRef,
++}
+ 
+ /// Session state for stats APIs.
+ #[derive(Clone, Debug)]
+@@ -49,12 +56,47 @@ impl StatsSession {
+             .get(&rule_id)
+             .map(|rules| rules.iter().cloned().collect::<Vec<_>>())
+             .unwrap_or_default();
+-        updated_rules.push(rule);
++        updated_rules.push(RegisteredStatsRewriteRule { group: None, rule });
+         rules.insert(rule_id, updated_rules.into());
+     }
+ 
++    /// Registers a group of rewrite rules, replacing the previous group for `G`.
++    ///
++    /// The group identity is local to this process and is never serialized. A provider should
++    /// use its implementation type for `G`; its rules must support every persisted configuration.
++    /// Rules registered through [`Self::register_rewrite`] or by other groups are preserved.
++    /// Concurrent calls replace the whole group under one lock, so readers see one complete group.
++    pub fn register_rewrite_group<G: 'static>(&self, group: Vec<StatsRewriteRuleRef>) {
++        let id = TypeId::of::<G>();
++        let group = group
++            .into_iter()
++            .map(|rule| (rule.scalar_fn_id(), rule))
++            .collect::<Vec<_>>();
++        let mut rules = self.rewrite_rules.write();
++        for registered in rules.values_mut() {
++            if registered.iter().any(|rule| rule.group == Some(id)) {
++                *registered = registered
++                    .iter()
++                    .filter(|rule| rule.group != Some(id))
++                    .cloned()
++                    .collect();
++            }
++        }
++        for (scalar_fn_id, rule) in group {
++            let mut updated_rules = rules
++                .get(&scalar_fn_id)
++                .map(|rules| rules.to_vec())
++                .unwrap_or_default();
++            updated_rules.push(RegisteredStatsRewriteRule {
++                group: Some(id),
++                rule,
++            });
++            rules.insert(scalar_fn_id, updated_rules.into());
++        }
++    }
++
+     /// Return the rewrite rules registered for `scalar_fn_id`.
+-    pub(crate) fn rewrite_rules_for(
++    pub(super) fn rewrite_rules_for(
+         &self,
+         scalar_fn_id: ScalarFnId,
+     ) -> Option<StatsRewriteRuleSet> {
+diff --git c/vortex-file/src/strategy.rs w/vortex-file/src/strategy.rs
+index a2ea29f388..5005234eb0 100644
+--- c/vortex-file/src/strategy.rs
++++ w/vortex-file/src/strategy.rs
+@@ -12,6 +12,8 @@ use vortex_btrblocks::BtrBlocksCompressorBuilder;
+ use vortex_btrblocks::SchemeExt;
+ use vortex_btrblocks::schemes::integer::IntDictScheme;
+ use vortex_error::VortexExpect;
++use vortex_error::VortexResult;
++use vortex_error::vortex_ensure;
+ use vortex_layout::LayoutStrategy;
+ use vortex_layout::layouts::buffered::BufferedStrategy;
+ use vortex_layout::layouts::chunked::writer::ChunkedLayoutStrategy;
+@@ -20,11 +22,11 @@ use vortex_layout::layouts::compressed::CompressingStrategy;
+ use vortex_layout::layouts::compressed::CompressorPlugin;
+ use vortex_layout::layouts::dict::writer::DictStrategy;
+ use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
+-use vortex_layout::layouts::list::writer::ListLayoutStrategy;
+ use vortex_layout::layouts::repartition::RepartitionStrategy;
+ use vortex_layout::layouts::repartition::RepartitionWriterOptions;
+ use vortex_layout::layouts::table::TableStrategy;
+ use vortex_layout::layouts::table::use_experimental_list_layout;
++use vortex_layout::layouts::zoned::writer::ZonedAggregates;
+ use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
+ use vortex_layout::layouts::zoned::writer::ZonedStrategy;
+ use vortex_utils::aliases::hash_map::HashMap;
+@@ -57,7 +59,8 @@ pub struct WriteStrategyBuilder {
+     row_block_size: usize,
+     data_block_target_bytes: Option<u64>,
+     field_writers: HashMap<FieldPath, Arc<dyn LayoutStrategy>>,
+-    field_aggregates: HashMap<FieldPath, Arc<[AggregateFnRef]>>,
++    field_aggregates: HashMap<FieldPath, ZonedAggregates>,
++    field_data_writers: HashMap<FieldPath, Arc<dyn LayoutStrategy>>,
+     flat_strategy: Option<Arc<dyn LayoutStrategy>>,
+     probe_compressor: Option<Arc<dyn CompressorPlugin>>,
+     /// Whether to write list fields using [`ListLayoutStrategy`].
+@@ -76,6 +79,7 @@ impl Default for WriteStrategyBuilder {
+             data_block_target_bytes: Some(ONE_MEG),
+             field_writers: HashMap::new(),
+             field_aggregates: HashMap::new(),
++            field_data_writers: HashMap::new(),
+             flat_strategy: None,
+             probe_compressor: None,
+             use_list_layout: use_experimental_list_layout(),
+@@ -129,6 +133,23 @@ impl WriteStrategyBuilder {
+         self
+     }
+ 
++    /// Replace the data strategy beneath row repartitioning and zoned statistics for a field.
++    ///
++    /// The supplied strategy receives the original field values in row blocks. It must preserve
++    /// their order and count. It replaces dictionary encoding, byte coalescing, compression, and
++    /// leaf writing. Statistics continue to use the builder's configured compressor.
++    ///
++    /// This can be combined with [`Self::with_field_aggregates`] at the same path. A complete
++    /// override through [`Self::with_field_writer`] conflicts with both operations.
++    pub fn with_field_data_writer(
++        mut self,
++        field: impl Into<FieldPath>,
++        writer: Arc<dyn LayoutStrategy>,
++    ) -> Self {
++        self.field_data_writers.insert(field.into(), writer);
++        self
++    }
++
+     /// Override default aggregates with custom zoned aggregates for a field.
+     ///
+     /// **Note** Calling [`Self::build`] panics if this path conflicts with another field
+@@ -138,8 +159,33 @@ impl WriteStrategyBuilder {
+         field: impl Into<FieldPath>,
+         aggregates: impl IntoIterator<Item = AggregateFnRef>,
+     ) -> Self {
+-        self.field_aggregates
+-            .insert(field.into(), aggregates.into_iter().collect());
++        self.field_aggregates.insert(
++            field.into(),
++            ZonedAggregates::Replace(aggregates.into_iter().collect()),
++        );
++        self
++    }
++
++    /// Add zoned aggregates while retaining dtype-dependent defaults.
++    ///
++    /// Repeated calls append. Calling this after replacement appends to that replacement.
++    /// Calling [`Self::with_field_aggregates`] later replaces the complete selection.
++    pub fn with_field_aggregate_additions(
++        mut self,
++        field: impl Into<FieldPath>,
++        aggregates: impl IntoIterator<Item = AggregateFnRef>,
++    ) -> Self {
++        let selection = self.field_aggregates.entry(field.into()).or_default();
++        let additions = aggregates.into_iter().collect::<Vec<_>>();
++        *selection = match selection {
++            ZonedAggregates::Defaults => ZonedAggregates::Extend(additions.into()),
++            ZonedAggregates::Replace(existing) => {
++                ZonedAggregates::Replace(existing.iter().cloned().chain(additions).collect())
++            }
++            ZonedAggregates::Extend(existing) => {
++                ZonedAggregates::Extend(existing.iter().cloned().chain(additions).collect())
++            }
++        };
+         self
+     }
+ 
+@@ -179,6 +225,49 @@ impl WriteStrategyBuilder {
+     /// Builds the canonical [`LayoutStrategy`] implementation, with the configured overrides
+     /// applied.
+     pub fn build(self) -> Arc<dyn LayoutStrategy> {
++        self.try_build()
++            .vortex_expect("valid field writer configuration")
++    }
++
++    /// Build the strategy, returning an error for root paths or conflicting complete writers.
++    pub fn try_build(self) -> VortexResult<Arc<dyn LayoutStrategy>> {
++        let mut paths = Vec::new();
++        for path in self.field_writers.keys() {
++            paths.push(path);
++        }
++        for path in self.field_aggregates.keys() {
++            paths.push(path);
++        }
++        for path in self.field_data_writers.keys() {
++            if !self.field_aggregates.contains_key(path) {
++                paths.push(path);
++            }
++            vortex_ensure!(
++                !self.field_writers.contains_key(path),
++                "Expected a data writer or complete writer for {path}, got both"
++            );
++        }
++        for (index, path) in paths.iter().enumerate() {
++            vortex_ensure!(!path.is_root(), "Expected a field path, got root");
++            for other in &paths[..index] {
++                vortex_ensure!(
++                    !path.overlap(other)
++                        || (!self.field_writers.contains_key(*path)
++                            && !self.field_writers.contains_key(*other)),
++                    "Expected independent field overrides, got {path} and {other}"
++                );
++            }
++        }
++
++        for data_path in self.field_data_writers.keys() {
++            for path in &paths {
++                vortex_ensure!(
++                    !data_path.overlap(path) || data_path.parts().len() >= path.parts().len(),
++                    "Expected no descendant overrides below data writer {data_path}, got {path}"
++                );
++            }
++        }
++
+         let flat: Arc<dyn LayoutStrategy> = if let Some(flat) = self.flat_strategy {
+             flat
+         } else {
+@@ -247,82 +336,59 @@ impl WriteStrategyBuilder {
+ 
+         let row_block_size = NonZeroUsize::new(self.row_block_size).vortex_expect("must be non 0");
+ 
+-        // Default and per-field aggregates share the same zoning and repartitioning pipeline.
+-        let build_repartition =
+-            |zone_layout_options: ZonedLayoutOptions| -> Arc<dyn LayoutStrategy> {
+-                // 2. calculate stats for each row group
+-                let stats = ZonedStrategy::new(
+-                    dict.clone(),
+-                    compress_then_flat.clone(),
+-                    zone_layout_options,
+-                );
+-
+-                // 1. repartition each column to fixed row counts
+-                Arc::new(RepartitionStrategy::new(
+-                    stats,
+-                    RepartitionWriterOptions {
+-                        // No minimum block size in bytes
+-                        block_size_minimum: 0,
+-                        block_len_multiple: row_block_size.get(),
+-                        block_size_target: None,
+-                        canonicalize: false,
++        let stats_writer = compress_then_flat.clone();
++        let build_repartition = move |data: Arc<dyn LayoutStrategy>,
++                                      options: ZonedLayoutOptions|
++              -> Arc<dyn LayoutStrategy> {
++            let stats = ZonedStrategy::new(data, stats_writer.clone(), options);
++            Arc::new(RepartitionStrategy::new(
++                stats,
++                RepartitionWriterOptions {
++                    block_size_minimum: 0,
++                    block_len_multiple: row_block_size.get(),
++                    block_size_target: None,
++                    canonicalize: false,
++                },
++            ))
++        };
++        let validity_strategy = CollectStrategy::new(compress_then_flat);
++        let build_default = build_repartition.clone();
++        let mut table_strategy = TableStrategy::new(Arc::new(validity_strategy), Arc::new(dict))
++            .with_field_writers(self.field_writers)
++            .with_data_layout_factory(move |data| {
++                build_default(
++                    data,
++                    ZonedLayoutOptions {
++                        block_size: row_block_size,
++                        ..Default::default()
+                     },
+-                ))
+-            };
+-
+-        let repartition_strategy = build_repartition(ZonedLayoutOptions {
+-            block_size: row_block_size,
+-            ..Default::default()
+-        });
+-
+-        // Field aggregates and field writers use the same field-path namespace.
+-        // Conflicting overrides are unexpected and are rejected by TableStrategy.
+-        let field_writers = self
++                )
++            });
++        let mut field_options: HashMap<_, _> = self
+             .field_aggregates
+             .into_iter()
+-            .map(|(field, aggregates)| {
+-                let options = ZonedLayoutOptions {
+-                    block_size: row_block_size,
+-                    aggregate_fns: Some(aggregates),
+-                    ..Default::default()
+-                };
+-                (field, build_repartition(options))
+-            })
+-            .chain(self.field_writers);
+-
+-        // 0. start with splitting columns
+-        let validity_strategy = CollectStrategy::new(compress_then_flat.clone());
+-
+-        // Take any field overrides from the builder and apply them to the final strategy.
+-        let mut table_strategy =
+-            TableStrategy::new(Arc::new(validity_strategy), repartition_strategy)
+-                .with_field_writers(field_writers);
+-
++            .map(|(field, aggregates)| (field, (aggregates, None)))
++            .collect();
++        for (field, data) in self.field_data_writers {
++            field_options.entry(field).or_default().1 = Some(data);
++        }
++        for (field, (aggregates, data)) in field_options {
++            let build_field = build_repartition.clone();
++            table_strategy = table_strategy.with_field_data_layout_factory(field, move |natural| {
++                build_field(
++                    data.clone().unwrap_or(natural),
++                    ZonedLayoutOptions {
++                        block_size: row_block_size,
++                        aggregates: aggregates.clone(),
++                        ..Default::default()
++                    },
++                )
++            });
++        }
+         if self.use_list_layout {
+-            // We need a closure here to enable recursive application of list layout.
+-            table_strategy = table_strategy.with_list_layout_factory(
+-                move |list_layout: ListLayoutStrategy| -> Arc<dyn LayoutStrategy> {
+-                    let zoned = ZonedStrategy::new(
+-                        list_layout,
+-                        compress_then_flat.clone(),
+-                        ZonedLayoutOptions {
+-                            block_size: row_block_size,
+-                            ..Default::default()
+-                        },
+-                    );
+-                    Arc::new(RepartitionStrategy::new(
+-                        zoned,
+-                        RepartitionWriterOptions {
+-                            block_size_minimum: 0,
+-                            block_len_multiple: row_block_size.get(),
+-                            block_size_target: None,
+-                            canonicalize: false,
+-                        },
+-                    ))
+-                },
+-            );
++            table_strategy = table_strategy.with_list_layout();
+         }
+ 
+-        Arc::new(table_strategy)
++        Ok(Arc::new(table_strategy))
+     }
+ }
+diff --git c/vortex-file/src/tests.rs w/vortex-file/src/tests.rs
+index f69218e027..ca6e2bf78c 100644
+--- c/vortex-file/src/tests.rs
++++ w/vortex-file/src/tests.rs
+@@ -2804,7 +2804,6 @@ async fn repro_8166_binary_gt_all_ff_max() -> VortexResult<()> {
+ #[rstest]
+ #[case(true)]
+ #[case(false)]
+-#[should_panic(expected = "Override for field_path $a conflicts with existing override for $a")]
+ fn test_field_writer_conflicts_with_aggregates(#[case] writer_first: bool) {
+     let builder = crate::strategy::WriteStrategyBuilder::default();
+     let writer = Arc::new(FlatLayoutStrategy::default());
+@@ -2818,5 +2817,5 @@ fn test_field_writer_conflicts_with_aggregates(#[case] writer_first: bool) {
+             .with_field_writer(field_path!(a), writer)
+     };
+ 
+-    builder.build();
++    assert!(builder.try_build().is_err());
+ }
+diff --git c/vortex-file/tests/bloom_skip_index.rs w/vortex-file/tests/bloom_skip_index.rs
+index 1e660ed8e9..1b924c5713 100644
+--- c/vortex-file/tests/bloom_skip_index.rs
++++ w/vortex-file/tests/bloom_skip_index.rs
+@@ -20,11 +20,15 @@
+ #![expect(clippy::expect_used)]
+ 
+ use std::num::NonZeroU32;
++use std::num::NonZeroUsize;
+ use std::sync::Arc;
+ 
+ use vortex_array::ArrayRef;
+ use vortex_array::IntoArray;
+ use vortex_array::VortexSessionExecute;
++use vortex_array::aggregate_fn::AggregateFnVTableExt;
++use vortex_array::aggregate_fn::NumericalAggregateOpts;
++use vortex_array::aggregate_fn::fns::min::Min;
+ use vortex_array::arrays::ChunkedArray;
+ use vortex_array::arrays::DecimalArray;
+ use vortex_array::arrays::PrimitiveArray;
+@@ -38,6 +42,7 @@ use vortex_array::expr::BoundExpression;
+ use vortex_array::expr::bound::eq;
+ use vortex_array::expr::bound::get_item;
+ use vortex_array::expr::bound::lit;
++use vortex_array::expr::bound::lt;
+ use vortex_array::expr::bound::root;
+ use vortex_array::field_path;
+ use vortex_array::stream::ArrayStreamExt;
+@@ -49,12 +54,19 @@ use vortex_file::WriteOptionsSessionExt;
+ use vortex_file::WriteStrategyBuilder;
+ use vortex_io::session::RuntimeSession;
+ use vortex_layout::LayoutStrategy;
++use vortex_layout::layouts::chunked::writer::ChunkedLayoutStrategy;
++use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
++use vortex_layout::layouts::repartition::RepartitionStrategy;
++use vortex_layout::layouts::repartition::RepartitionWriterOptions;
+ use vortex_layout::layouts::zoned::Zoned;
+ use vortex_layout::layouts::zoned::aggregates::bloom_filter::BloomOptions;
+ use vortex_layout::layouts::zoned::aggregates::bloom_filter::HashFn;
+ use vortex_layout::layouts::zoned::skip_index::SkipIndex;
+ use vortex_layout::layouts::zoned::skip_index::SkipIndexSessionExt;
+ use vortex_layout::layouts::zoned::skip_index::bloom::BloomSkipIndex;
++use vortex_layout::layouts::zoned::writer::ZonedAggregates;
++use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
++use vortex_layout::layouts::zoned::writer::ZonedStrategy;
+ use vortex_layout::session::LayoutSession;
+ use vortex_mask::Mask;
+ use vortex_session::VortexSession;
+@@ -247,39 +259,41 @@ async fn bloom_roundtrip_prunes_and_unknown_reader_matches_full_scan() -> Vortex
+ #[expect(clippy::tests_outside_test_module)]
+ #[tokio::test]
+ async fn reader_uses_bloom_options_serialized_in_file() -> VortexResult<()> {
+-    let options = BloomOptions::new(
+-        NonZeroU32::new(512).expect("block count is non-zero"),
+-        HashFn::XxHash3_64,
+-    );
+-    let index = bloom_with_options(options);
+-    let write_session = session(&index, true);
++    let read_session = session(&BloomSkipIndex::default(), true);
+     let input = data();
+-    let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
+-
+-    // The reader registers only the implementation type and does not receive
+-    // the options used by the writer.
+-    let read_session = session(&index, true);
+-    let file = read_session.open_options().open_buffer(bytes)?;
+-    let reader = file.layout_reader()?;
+-    let row_count = file.row_count();
+-    let miss_mask = reader
+-        .pruning_evaluation(
+-            &(0..row_count),
+-            &filter(MISS),
+-            Mask::new_true(usize::try_from(row_count)?),
+-        )?
+-        .await?;
+-
+-    assert!(
+-        miss_mask.all_false(),
+-        "an absent value should be pruned using the serialized Bloom options"
+-    );
++    for blocks in [128, 512] {
++        let index = bloom_with_options(BloomOptions::new(
++            NonZeroU32::new(blocks).expect("block count is non-zero"),
++            HashFn::XxHash3_64,
++        ));
++        let write_session = session(&index, true);
++        let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
++        let file = read_session.open_options().open_buffer(bytes)?;
++        let reader = file.layout_reader()?;
++        let row_count = file.row_count();
++        let miss_mask = reader
++            .pruning_evaluation(
++                &(0..row_count),
++                &filter(MISS),
++                Mask::new_true(usize::try_from(row_count)?),
++            )?
++            .await?;
++        assert!(
++            miss_mask.all_false(),
++            "an absent value should be pruned using the serialized Bloom options"
++        );
++        let hit = scan(&file, HIT).await?;
++        let expected =
++            StructArray::from_fields(&[("id", PrimitiveArray::from_iter([HIT]).into_array())])?
++                .into_array();
++        assert_arrays_eq!(hit, expected, &mut read_session.create_execution_ctx());
++    }
+     Ok(())
+ }
+ 
+ #[expect(clippy::tests_outside_test_module)]
+ #[tokio::test]
+-async fn unsupported_bloom_dtype_is_omitted_and_roundtrips() -> VortexResult<()> {
++async fn unsupported_explicit_bloom_dtype_is_rejected() -> VortexResult<()> {
+     let index = bloom();
+     let write_session = session(&index, true);
+     let decimals = DecimalArray::new(
+@@ -288,25 +302,513 @@ async fn unsupported_bloom_dtype_is_omitted_and_roundtrips() -> VortexResult<()>
+         Validity::NonNullable,
+     );
+     let input = StructArray::from_fields(&[("id", decimals.into_array())])?.into_array();
+-    let bytes = write_file(&write_session, &input, &index, 3).await?;
+-
+-    // Bloom index is not necessary because
+-    // the stats are not written.
+-    let read_session = session(&index, false);
+-    let file = read_session.open_options().open_buffer(bytes)?;
+-    assert_eq!(file.row_count(), 6);
+-
+-    // Extra check
+-    let mut layouts = vec![Arc::clone(file.footer().layout())];
+-    while let Some(layout) = layouts.pop() {
+-        // Bloom replaces the default aggregates, and no stats are written.
+-        // Then, no aggregates should remain, so the writer should omit
+-        // the zoned layout.
+-        assert!(!layout.is::<Zoned>());
+-        layouts.extend(layout.children()?);
+-    }
+-
+-    let actual = file.scan()?.into_array_stream()?.read_all().await?;
+-    assert_arrays_eq!(actual, input, &mut read_session.create_execution_ctx());
++    let error = write_file(&write_session, &input, &index, 3)
++        .await
++        .expect_err("unsupported explicit index must fail");
++    assert!(error.to_string().contains("supported input dtype"));
+     Ok(())
+ }
++
++#[expect(clippy::tests_outside_test_module)]
++#[tokio::test]
++async fn additive_api_preserves_defaults() -> VortexResult<()> {
++    let index = bloom();
++    let session = session(&index, true);
++    let input = data();
++    let aggregate = index.aggregate_fn();
++    let additive = WriteStrategyBuilder::default()
++        .with_row_block_size(ZONE_LEN)
++        .with_field_aggregate_additions(field_path!(id), [aggregate.clone()])
++        .with_field_aggregate_additions(field_path!(id), [aggregate.clone()])
++        .build();
++    {
++        let strategy = additive;
++        let mut bytes = Vec::new();
++        session
++            .write_options()
++            .disable_editions()
++            .with_strategy(strategy)
++            .write(&mut bytes, input.to_array_stream())
++            .await?;
++        let file = session.open_options().open_buffer(bytes)?;
++        let mut layouts = vec![Arc::clone(file.footer().layout())];
++        let mut found = false;
++        while let Some(layout) = layouts.pop() {
++            let children = layout.children()?;
++            if layout.is::<Zoned>() {
++                let fields = children[1].dtype().as_struct_fields();
++                assert!(
++                    fields
++                        .names()
++                        .iter()
++                        .any(|name| name.as_ref() == aggregate.to_string())
++                );
++                assert!(
++                    fields
++                        .names()
++                        .iter()
++                        .any(|name| name.as_ref().starts_with("vortex.min("))
++                );
++                assert_eq!(
++                    fields
++                        .names()
++                        .iter()
++                        .filter(|name| name.as_ref() == aggregate.to_string())
++                        .count(),
++                    1
++                );
++                found = true;
++            }
++            layouts.extend(children);
++        }
++        assert!(found);
++    }
++    Ok(())
++}
++
++#[expect(clippy::tests_outside_test_module)]
++#[tokio::test]
++async fn missing_explicit_field_is_rejected() -> VortexResult<()> {
++    let index = bloom();
++    let session = session(&index, true);
++    let input = data();
++    let strategy = WriteStrategyBuilder::default()
++        .with_field_aggregate_additions(field_path!(typo), [index.aggregate_fn()])
++        .build();
++    let mut bytes = Vec::new();
++    let error = session
++        .write_options()
++        .disable_editions()
++        .with_strategy(strategy)
++        .write(&mut bytes, input.to_array_stream())
++        .await
++        .err()
++        .ok_or_else(|| vortex_error::vortex_err!("missing field must fail"))?;
++    assert!(error.to_string().contains("$typo"));
++    Ok(())
++}
++
++#[expect(clippy::tests_outside_test_module)]
++#[tokio::test]
++async fn unknown_aggregate_disables_known_pruning_in_same_zone_map() -> VortexResult<()> {
++    let index = bloom();
++    let write_session = session(&index, true);
++    let zoned = ZonedStrategy::new(
++        ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
++        FlatLayoutStrategy::default(),
++        ZonedLayoutOptions {
++            block_size: NonZeroUsize::new(ZONE_LEN).expect("positive test zone length"),
++            aggregates: ZonedAggregates::Replace(
++                vec![
++                    Min.bind(NumericalAggregateOpts::skip_nans()),
++                    index.aggregate_fn(),
++                ]
++                .into(),
++            ),
++            ..Default::default()
++        },
++    );
++    let strategy = WriteStrategyBuilder::default()
++        .with_field_writer(
++            field_path!(id),
++            Arc::new(RepartitionStrategy::new(
++                zoned,
++                RepartitionWriterOptions {
++                    block_size_minimum: 0,
++                    block_len_multiple: ZONE_LEN,
++                    block_size_target: None,
++                    canonicalize: false,
++                },
++            )),
++        )
++        .build();
++    let input = data();
++    let predicate = lt(get_item("id", root(input.dtype().clone())), lit(-1i64));
++    let mut bytes = Vec::new();
++    write_session
++        .write_options()
++        .disable_editions()
++        .with_strategy(strategy)
++        .write(&mut bytes, input.to_array_stream())
++        .await?;
++    for (register_bloom, expected_keep_count) in [(true, 0), (false, ZONE_LEN * NZONES)] {
++        let read_session = session(&index, register_bloom);
++        read_session.allow_unknown();
++        let file = read_session.open_options().open_buffer(bytes.clone())?;
++        let row_count = file.row_count();
++        let reader = file.footer().layout().new_reader(
++            "without-file-stats".into(),
++            file.segment_source(),
++            &read_session,
++            &Default::default(),
++        )?;
++        let keep = reader
++            .pruning_evaluation(
++                &(0..row_count),
++                &predicate,
++                Mask::new_true(usize::try_from(row_count)?),
++            )?
++            .await?;
++        assert_eq!(keep.true_count(), expected_keep_count);
++        let result = file
++            .scan()?
++            .with_filter(predicate.clone())
++            .into_array_stream()?
++            .read_all()
++            .await?;
++        assert_eq!(result.len(), 0);
++    }
++    Ok(())
++}
++
++#[cfg(test)]
++mod composition_tests {
++    use std::num::NonZeroUsize;
++
++    use rstest::rstest;
++    use vortex_array::aggregate_fn::AggregateFnVTableExt;
++    use vortex_array::aggregate_fn::EmptyOptions;
++    use vortex_array::aggregate_fn::NumericalAggregateOpts;
++    use vortex_array::aggregate_fn::fns::min::Min;
++    use vortex_array::aggregate_fn::fns::null_count::NullCount;
++    use vortex_array::arrays::ListArray;
++    use vortex_array::dtype::Field;
++    use vortex_array::dtype::FieldPath;
++    use vortex_array::expr::bound::lt;
++    use vortex_array::stats::rewrite::StatsRewriteRuleRef;
++    use vortex_layout::layouts::chunked::writer::ChunkedLayoutStrategy;
++    use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
++    use vortex_layout::layouts::list::List;
++    use vortex_layout::layouts::repartition::RepartitionStrategy;
++    use vortex_layout::layouts::repartition::RepartitionWriterOptions;
++    use vortex_layout::layouts::zoned::writer::ZonedAggregates;
++    use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
++    use vortex_layout::layouts::zoned::writer::ZonedStrategy;
++
++    use super::*;
++
++    struct MinIndex;
++
++    impl SkipIndex for MinIndex {
++        type Aggregate = Min;
++
++        fn aggregate_vtable(&self) -> Self::Aggregate {
++            Min
++        }
++
++        fn options(&self) -> NumericalAggregateOpts {
++            NumericalAggregateOpts::default()
++        }
++
++        fn rewrite_rules(&self) -> Vec<StatsRewriteRuleRef> {
++            Vec::new()
++        }
++    }
++
++    async fn write_with_strategy(
++        session: &VortexSession,
++        input: &ArrayRef,
++        strategy: Arc<dyn LayoutStrategy>,
++    ) -> VortexResult<vortex_file::VortexFile> {
++        let mut bytes = Vec::new();
++        session
++            .write_options()
++            .disable_editions()
++            .with_file_statistics(Vec::new())
++            .with_strategy(strategy)
++            .write(&mut bytes, input.to_array_stream())
++            .await?;
++        session.open_options().open_buffer(bytes)
++    }
++
++    #[rstest]
++    #[case::manual(false)]
++    #[case::data_writer_hook(true)]
++    #[tokio::test]
++    async fn custom_data_writer_keeps_bloom_pruning(#[case] use_hook: bool) -> VortexResult<()> {
++        let index = bloom();
++        let session = session(&index, true);
++        let input = data();
++        let data_writer: Arc<dyn LayoutStrategy> =
++            Arc::new(ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()));
++        let builder = WriteStrategyBuilder::default().with_row_block_size(ZONE_LEN);
++        let strategy = if use_hook {
++            builder
++                .with_field_data_writer(field_path!(id), data_writer)
++                .with_field_aggregates(field_path!(id), [index.aggregate_fn()])
++                .try_build()?
++        } else {
++            let zoned = ZonedStrategy::new(
++                data_writer,
++                FlatLayoutStrategy::default(),
++                ZonedLayoutOptions {
++                    block_size: NonZeroUsize::new(ZONE_LEN).expect("positive test zone length"),
++                    aggregates: ZonedAggregates::Replace(vec![index.aggregate_fn()].into()),
++                    ..Default::default()
++                },
++            );
++            let writer = RepartitionStrategy::new(
++                zoned,
++                RepartitionWriterOptions {
++                    block_size_minimum: 0,
++                    block_len_multiple: ZONE_LEN,
++                    block_size_target: None,
++                    canonicalize: false,
++                },
++            );
++            builder
++                .with_field_writer(field_path!(id), Arc::new(writer))
++                .try_build()?
++        };
++        let file = write_with_strategy(&session, &input, strategy).await?;
++        let count = file.row_count();
++        let keep = file
++            .layout_reader()?
++            .pruning_evaluation(
++                &(0..count),
++                &filter(HIT),
++                Mask::new_true(usize::try_from(count)?),
++            )?
++            .await?;
++        assert_eq!(keep.true_count(), ZONE_LEN);
++        let actual = file.scan()?.into_array_stream()?.read_all().await?;
++        assert_arrays_eq!(actual, input, &mut session.create_execution_ctx());
++        Ok(())
++    }
++
++    #[tokio::test]
++    async fn index_without_custom_probe_uses_builtin_rewrites() -> VortexResult<()> {
++        let session = session(&bloom(), false);
++        session.register_skip_index(&MinIndex);
++        let input = data();
++        let strategy = WriteStrategyBuilder::default()
++            .with_row_block_size(ZONE_LEN)
++            .with_field_aggregates(field_path!(id), [MinIndex.aggregate_fn()])
++            .try_build()?;
++        let file = write_with_strategy(&session, &input, strategy).await?;
++        let predicate = lt(get_item("id", root(input.dtype().clone())), lit(-1i64));
++        let count = file.row_count();
++        let keep = file
++            .layout_reader()?
++            .pruning_evaluation(
++                &(0..count),
++                &predicate,
++                Mask::new_true(usize::try_from(count)?),
++            )?
++            .await?;
++        assert!(keep.all_false());
++        Ok(())
++    }
++
++    #[test]
++    fn overlapping_complete_writer_returns_error() {
++        let index = bloom();
++        let result = WriteStrategyBuilder::default()
++            .with_field_writer(field_path!(nested), Arc::new(FlatLayoutStrategy::default()))
++            .with_field_aggregates(field_path!(nested.id), [index.aggregate_fn()])
++            .try_build();
++        assert!(result.is_err());
++    }
++
++    #[test]
++    fn data_writer_and_complete_writer_return_error() {
++        let result = WriteStrategyBuilder::default()
++            .with_field_writer(field_path!(id), Arc::new(FlatLayoutStrategy::default()))
++            .with_field_data_writer(field_path!(id), Arc::new(FlatLayoutStrategy::default()))
++            .try_build();
++        assert!(result.is_err());
++    }
++    #[tokio::test]
++    async fn aggregate_override_preserves_list_decomposition() -> VortexResult<()> {
++        let session = session(&bloom(), false);
++        let items = ListArray::try_new(
++            buffer![1i32, 2, 3, 4].into_array(),
++            buffer![0u32, 2, 4].into_array(),
++            Validity::NonNullable,
++        )?
++        .into_array();
++        let input = StructArray::from_fields(&[("items", items)])?.into_array();
++        for custom_aggregates in [false, true] {
++            let mut builder = WriteStrategyBuilder::default().with_list_layout();
++            if custom_aggregates {
++                builder = builder
++                    .with_field_aggregates(field_path!(items), [NullCount.bind(EmptyOptions)]);
++            }
++            let file = write_with_strategy(&session, &input, builder.try_build()?).await?;
++            let mut pending = vec![Arc::clone(file.footer().layout())];
++            let mut has_list_layout = false;
++            while let Some(layout) = pending.pop() {
++                has_list_layout |= layout.is::<List>();
++                pending.extend(layout.children()?);
++            }
++            assert!(has_list_layout);
++        }
++        Ok(())
++    }
++
++    #[tokio::test]
++    async fn list_element_aggregate_override_is_applied() -> VortexResult<()> {
++        let index = bloom();
++        let session = session(&index, true);
++        let items = ListArray::try_new(
++            buffer![1i64, 2, 3, 4].into_array(),
++            buffer![0u32, 2, 4].into_array(),
++            Validity::NonNullable,
++        )?
++        .into_array();
++        let input = StructArray::from_fields(&[("items", items)])?.into_array();
++        let path = FieldPath::from_iter([Field::from("items"), Field::ElementType]);
++        let strategy = WriteStrategyBuilder::default()
++            .with_list_layout()
++            .with_field_aggregates(path, [index.aggregate_fn()])
++            .try_build()?;
++        let file = write_with_strategy(&session, &input, strategy).await?;
++        let mut pending = vec![Arc::clone(file.footer().layout())];
++        let mut has_bloom = false;
++        while let Some(layout) = pending.pop() {
++            if let Some(zoned) = layout.as_opt::<Zoned>() {
++                has_bloom |= zoned
++                    .present_aggregates()
++                    .iter()
++                    .any(|name| name.contains("bloom"));
++            }
++            pending.extend(layout.children()?);
++        }
++        assert!(has_bloom);
++        Ok(())
++    }
++
++    #[rstest]
++    #[case::bloom_inside(true)]
++    #[case::bloom_outside(false)]
++    #[tokio::test]
++    async fn separate_zones_preserve_known_pruning(#[case] bloom_inside: bool) -> VortexResult<()> {
++        let index = bloom();
++        let write_session = session(&index, true);
++        let input = data();
++        let mut data_writer: Arc<dyn LayoutStrategy> =
++            Arc::new(ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()));
++        let aggregates = if bloom_inside {
++            [index.aggregate_fn(), MinIndex.aggregate_fn()]
++        } else {
++            [MinIndex.aggregate_fn(), index.aggregate_fn()]
++        };
++        for aggregate in aggregates {
++            data_writer = Arc::new(ZonedStrategy::new(
++                data_writer,
++                FlatLayoutStrategy::default(),
++                ZonedLayoutOptions {
++                    block_size: NonZeroUsize::new(ZONE_LEN).expect("positive test zone length"),
++                    aggregates: ZonedAggregates::Replace(vec![aggregate].into()),
++                    ..Default::default()
++                },
++            ));
++        }
++        let strategy = WriteStrategyBuilder::default()
++            .with_field_writer(
++                field_path!(id),
++                Arc::new(RepartitionStrategy::new(
++                    data_writer,
++                    RepartitionWriterOptions {
++                        block_size_minimum: 0,
++                        block_len_multiple: ZONE_LEN,
++                        block_size_target: None,
++                        canonicalize: false,
++                    },
++                )),
++            )
++            .try_build()?;
++        let mut bytes = Vec::new();
++        write_session
++            .write_options()
++            .disable_editions()
++            .with_file_statistics(Vec::new())
++            .with_strategy(strategy)
++            .write(&mut bytes, input.to_array_stream())
++            .await?;
++        let read_session = session(&index, false);
++        read_session.allow_unknown();
++        let file = read_session.open_options().open_buffer(bytes)?;
++        let predicate = lt(get_item("id", root(input.dtype().clone())), lit(-1i64));
++        let count = file.row_count();
++        let keep = file
++            .layout_reader()?
++            .pruning_evaluation(
++                &(0..count),
++                &predicate,
++                Mask::new_true(usize::try_from(count)?),
++            )?
++            .await?;
++        assert!(keep.all_false());
++        let actual = file.scan()?.into_array_stream()?.read_all().await?;
++        assert_arrays_eq!(actual, input, &mut read_session.create_execution_ctx());
++        Ok(())
++    }
++    #[tokio::test]
++    async fn parent_summary_and_nested_index_compose() -> VortexResult<()> {
++        let index = bloom();
++        let session = session(&index, true);
++        let input = StructArray::from_fields(&[("nested", data())])?.into_array();
++        let strategy = WriteStrategyBuilder::default()
++            .with_row_block_size(ZONE_LEN)
++            .with_field_aggregates(field_path!(nested), [NullCount.bind(EmptyOptions)])
++            .with_field_aggregates(field_path!(nested.id), [index.aggregate_fn()])
++            .try_build()?;
++        let file = write_with_strategy(&session, &input, strategy).await?;
++        let mut pending = vec![Arc::clone(file.footer().layout())];
++        let mut has_bloom = false;
++        while let Some(layout) = pending.pop() {
++            if let Some(zoned) = layout.as_opt::<Zoned>() {
++                has_bloom |= zoned
++                    .present_aggregates()
++                    .iter()
++                    .any(|name| name.contains("bloom"));
++            }
++            pending.extend(layout.children()?);
++        }
++        assert!(has_bloom);
++        let actual = file.scan()?.into_array_stream()?.read_all().await?;
++        assert_arrays_eq!(actual, input, &mut session.create_execution_ctx());
++        Ok(())
++    }
++    #[tokio::test]
++    async fn missing_field_index_returns_error() -> VortexResult<()> {
++        let index = bloom();
++        let session = session(&index, true);
++        let strategy = WriteStrategyBuilder::default()
++            .with_field_aggregates(field_path!(missing), [index.aggregate_fn()])
++            .try_build()?;
++        let result = write_with_strategy(&session, &data(), strategy).await;
++        assert!(result.is_err());
++        Ok(())
++    }
++
++    #[tokio::test]
++    async fn element_index_requires_list_decomposition() -> VortexResult<()> {
++        let index = bloom();
++        let session = session(&index, true);
++        let items = ListArray::try_new(
++            buffer![1i64, 2].into_array(),
++            buffer![0u32, 2].into_array(),
++            Validity::NonNullable,
++        )?
++        .into_array();
++        let input = StructArray::from_fields(&[("items", items)])?.into_array();
++        let path = FieldPath::from_iter([Field::from("items"), Field::ElementType]);
++        let strategy = WriteStrategyBuilder::default()
++            .with_field_aggregates(path, [index.aggregate_fn()])
++            .try_build()?;
++        let result = write_with_strategy(&session, &input, strategy).await;
++        assert!(result.is_err());
++        Ok(())
++    }
++    #[test]
++    fn opaque_parent_data_writer_rejects_nested_index() {
++        let index = bloom();
++        let result = WriteStrategyBuilder::default()
++            .with_field_data_writer(field_path!(nested), Arc::new(FlatLayoutStrategy::default()))
++            .with_field_aggregates(field_path!(nested.id), [index.aggregate_fn()])
++            .try_build();
++        assert!(result.is_err());
++    }
++}
+diff --git c/vortex-layout/src/layouts/table.rs w/vortex-layout/src/layouts/table.rs
+index 1a3c1adc52..67bef8dcb8 100644
+--- c/vortex-layout/src/layouts/table.rs
++++ w/vortex-layout/src/layouts/table.rs
+@@ -9,8 +9,9 @@
+ //! to those structural writers as the strategy for their children, arbitrarily nested struct/list
+ //! trees are written with no manual wiring.
+ //!
+-//! The dispatcher also owns field-path overrides, letting callers force a specific leaf field —
+-//! at any depth — onto a custom strategy.
++//! The dispatcher also owns field-path overrides. Complete writer overrides replace dispatch for
++//! a field. Data factories wrap its natural strategy, preserving structural decomposition and
++//! descendant field configuration.
+ 
+ use std::env;
+ use std::sync::Arc;
+@@ -21,6 +22,7 @@ use vortex_array::dtype::Field;
+ use vortex_array::dtype::FieldName;
+ use vortex_array::dtype::FieldPath;
+ use vortex_error::VortexResult;
++use vortex_error::vortex_ensure;
+ use vortex_session::VortexSession;
+ use vortex_utils::aliases::hash_map::HashMap;
+ use vortex_utils::aliases::hash_set::HashSet;
+@@ -46,6 +48,8 @@ pub fn use_experimental_list_layout() -> bool {
+ }
+ 
+ type ListLayoutFactory = Arc<dyn Fn(ListLayoutStrategy) -> Arc<dyn LayoutStrategy> + Send + Sync>;
++type DataLayoutFactory =
++    Arc<dyn Fn(Arc<dyn LayoutStrategy>) -> Arc<dyn LayoutStrategy> + Send + Sync>;
+ 
+ /// A configurable strategy for writing nested tabular data, dispatching each (sub)stream to the
+ /// structural writer for its dtype.
+@@ -74,6 +78,10 @@ pub struct TableStrategy {
+     ///
+     /// [`ListLayoutStrategy`]: ListLayoutStrategy
+     list_layout_factory: Option<ListLayoutFactory>,
++    /// Wraps each natural leaf or list strategy after structural dispatch.
++    data_layout_factory: Option<DataLayoutFactory>,
++    /// Wrappers relative to this dispatcher, with root selecting the current field.
++    field_data_layout_factories: HashMap<FieldPath, DataLayoutFactory>,
+ }
+ 
+ impl TableStrategy {
+@@ -101,6 +109,8 @@ impl TableStrategy {
+             validity,
+             leaf: fallback,
+             list_layout_factory: None,
++            data_layout_factory: None,
++            field_data_layout_factories: HashMap::default(),
+         }
+     }
+ 
+@@ -168,6 +178,41 @@ impl TableStrategy {
+         self
+     }
+ 
++    /// Wrap each leaf or decomposed list's natural data strategy before it writes the stream.
++    ///
++    /// The factory runs after structural dispatch. Structs recurse without a wrapper, so their
++    /// fields can each have their own row partitioning and summaries.
++    pub fn with_data_layout_factory(
++        mut self,
++        factory: impl Fn(Arc<dyn LayoutStrategy>) -> Arc<dyn LayoutStrategy> + Send + Sync + 'static,
++    ) -> Self {
++        self.data_layout_factory = Some(Arc::new(factory));
++        self
++    }
++
++    /// Override the data wrapper at one field, retaining natural struct and list decomposition.
++    ///
++    /// The wrapper also applies to struct fields, allowing a summary over the complete struct.
++    /// Descendant wrappers compose with their ancestor. Complete field-writer overrides cannot
++    /// overlap a wrapper path.
++    pub fn with_field_data_layout_factory(
++        mut self,
++        field: impl Into<FieldPath>,
++        factory: impl Fn(Arc<dyn LayoutStrategy>) -> Arc<dyn LayoutStrategy> + Send + Sync + 'static,
++    ) -> Self {
++        let field = field.into();
++        assert!(!field.is_root(), "Expected a non-root field wrapper path");
++        for path in self.leaf_writers.keys() {
++            assert!(
++                !field.overlap(path),
++                "Field wrapper {field} conflicts with writer {path}"
++            );
++        }
++        self.field_data_layout_factories
++            .insert(field, Arc::new(factory));
++        self
++    }
++
+     /// Enable writing list fields with [`ListLayoutStrategy`].
+     ///
+     /// **Note**: this is an unstable and experimental layout that is expected to change.
+@@ -201,7 +246,11 @@ impl TableStrategy {
+         // The distinct named first-segments of our override paths are the only fields that need
+         // anything other than the default dispatcher.
+         let mut named_first: HashSet<FieldName> = HashSet::default();
+-        for path in self.leaf_writers.keys() {
++        for path in self
++            .leaf_writers
++            .keys()
++            .chain(self.field_data_layout_factories.keys())
++        {
+             if let Some(Field::Name(name)) = path.parts().first() {
+                 named_first.insert(name.clone());
+             }
+@@ -225,14 +274,19 @@ impl TableStrategy {
+ 
+     /// Build the [`ListLayoutStrategy`] used to write a list field stream at this level.
+     ///
+-    /// The `elements` sub-column is routed back through a clean descended dispatcher so nested
+-    /// structs/lists recurse; `offsets` go straight to the leaf (they are always a primitive
+-    /// column); and `validity` uses the shared validity strategy.
++    /// The `elements` sub-column is routed through a descended dispatcher so its overrides and nested
++    /// structs/lists recurse; `offsets` use the default dispatcher (they are always primitive);
++    /// and `validity` uses the shared validity strategy.
+     fn list_strategy(&self) -> Option<Arc<dyn LayoutStrategy>> {
+         let factory = self.list_layout_factory.as_ref()?;
++        let elements = self
++            .leaf_writers
++            .get(&FieldPath::from_iter([Field::ElementType]))
++            .cloned()
++            .unwrap_or_else(|| Arc::new(self.descend(&Field::ElementType)));
+         let list_layout = ListLayoutStrategy::default()
+-            .with_elements(Arc::new(self.descend_clean()))
+-            .with_offsets(Arc::clone(&self.leaf))
++            .with_elements(elements)
++            .with_offsets(Arc::new(self.descend_clean()))
+             .with_validity(Arc::clone(&self.validity))
+             .with_fallback(Arc::clone(&self.leaf));
+         Some(factory(list_layout))
+@@ -257,6 +311,20 @@ impl TableStrategy {
+             validity: Arc::clone(&self.validity),
+             leaf: Arc::clone(&self.leaf),
+             list_layout_factory: self.list_layout_factory.clone(),
++            data_layout_factory: self.data_layout_factory.clone(),
++            field_data_layout_factories: self
++                .field_data_layout_factories
++                .iter()
++                .filter_map(|(path, factory)| {
++                    (path.parts().first() == Some(field))
++                        .then(|| {
++                            path.clone()
++                                .step_into()
++                                .map(|path| (path, Arc::clone(factory)))
++                        })
++                        .flatten()
++                })
++                .collect(),
+         }
+     }
+ 
+@@ -268,6 +336,8 @@ impl TableStrategy {
+             validity: Arc::clone(&self.validity),
+             leaf: Arc::clone(&self.leaf),
+             list_layout_factory: self.list_layout_factory.clone(),
++            data_layout_factory: self.data_layout_factory.clone(),
++            field_data_layout_factories: HashMap::default(),
+         }
+     }
+ 
+@@ -279,7 +349,11 @@ impl TableStrategy {
+ 
+         // Validate that the field path does not conflict with any overrides
+         // that we've added by overlapping.
+-        for field_path in self.leaf_writers.keys() {
++        for field_path in self
++            .leaf_writers
++            .keys()
++            .chain(self.field_data_layout_factories.keys())
++        {
+             assert!(
+                 !path.overlap(field_path),
+                 "Override for field_path {path} conflicts with existing override for {field_path}"
+@@ -303,23 +377,43 @@ impl LayoutStrategy for TableStrategy {
+     ) -> VortexResult<LayoutRef> {
+         let dtype = stream.dtype().clone();
+ 
+-        if dtype.is_struct() {
+-            return self
+-                .struct_strategy()
+-                .write_stream(ctx, segment_sink, stream, eof, session)
+-                .await;
++        for path in self
++            .leaf_writers
++            .keys()
++            .chain(self.field_data_layout_factories.keys())
++        {
++            vortex_ensure!(
++                path.exists_in(dtype.clone()),
++                "Expected field override {path} to exist, got dtype {dtype}"
++            );
++            vortex_ensure!(
++                self.list_layout_factory.is_some() || !path.parts().contains(&Field::ElementType),
++                "Expected list decomposition for override {path}, got disabled list layout"
++            );
+         }
+ 
+-        if dtype.is_list()
++        let natural: Arc<dyn LayoutStrategy> = if dtype.is_struct() {
++            Arc::new(self.struct_strategy())
++        } else if dtype.is_list()
+             && let Some(list_strategy) = self.list_strategy()
+         {
+-            return list_strategy
+-                .write_stream(ctx, segment_sink, stream, eof, session)
+-                .await;
+-        }
+-
+-        // Leaf: hand off to the leaf strategy.
+-        self.leaf
++            list_strategy
++        } else {
++            Arc::clone(&self.leaf)
++        };
++        let factory = self
++            .field_data_layout_factories
++            .get(&FieldPath::root())
++            .or_else(|| {
++                (!dtype.is_struct())
++                    .then_some(self.data_layout_factory.as_ref())
++                    .flatten()
++            });
++        let strategy = match factory {
++            Some(factory) => factory(natural),
++            None => natural,
++        };
++        strategy
+             .write_stream(ctx, segment_sink, stream, eof, session)
+             .await
+     }
+diff --git c/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs w/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs
+index d76e3f3729..801d880fef 100644
+--- c/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs
++++ w/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs
+@@ -15,7 +15,6 @@ use vortex_array::ArrayRef;
+ use vortex_array::ExecutionCtx;
+ use vortex_array::IntoArray;
+ use vortex_array::aggregate_fn::AggregateFnVTable;
+-use vortex_array::aggregate_fn::AggregateFnVTableExt;
+ use vortex_array::arrays::BoolArray;
+ use vortex_array::arrays::ConstantArray;
+ use vortex_array::arrays::VarBinViewArray;
+@@ -47,6 +46,7 @@ use vortex_error::vortex_ensure_eq;
+ use vortex_error::vortex_err;
+ use vortex_session::VortexSession;
+ use vortex_session::registry::CachedId;
++use vortex_utils::iter::ReduceBalancedIterExt;
+ 
+ use super::BloomFilter;
+ use super::BloomOptions;
+@@ -246,16 +246,6 @@ impl StatsRewriteRule for BloomEqRewrite {
+         expr: &BoundExpression,
+         ctx: &StatsRewriteCtx<'_>,
+     ) -> VortexResult<Option<BoundExpression>> {
+-        let Some(aggregate_fn) = ctx
+-            .aggregate_fns()
+-            .iter()
+-            .find(|aggregate_fn| aggregate_fn.is::<BloomFilter>())
+-        else {
+-            return Ok(None);
+-        };
+-
+-        let options = aggregate_fn.as_::<BloomFilter>().clone();
+-
+         if *expr.as_::<Binary>() != Operator::Eq {
+             return Ok(None);
+         }
+@@ -276,15 +266,26 @@ impl StatsRewriteRule for BloomEqRewrite {
+             return Ok(None);
+         }
+ 
+-        let filter = bound_stat(column.clone(), BloomFilter.bind(options.clone()));
+-        let contains = BloomContains.try_new_bound_expr(options, [filter, literal.clone()])?;
++        let mut proofs = Vec::new();
++        for aggregate_fn in ctx.aggregate_fns_for(column) {
++            let Some(options) = aggregate_fn.as_opt::<BloomFilter>() else {
++                continue;
++            };
++            let filter = bound_stat(column.clone(), aggregate_fn.clone());
++            let contains =
++                BloomContains.try_new_bound_expr(options.clone(), [filter, literal.clone()])?;
++            proofs.push(not(contains));
++        }
+ 
+-        Ok(Some(not(contains)))
++        proofs
++            .into_iter()
++            .try_reduce_balanced(|lhs, rhs| Binary.try_new_bound_expr(Operator::Or, [lhs, rhs]))
+     }
+ }
+ 
+ #[cfg(test)]
+ mod tests {
++    use std::num::NonZeroU32;
+     use std::sync::Arc;
+ 
+     use vortex_array::IntoArray;
+@@ -302,8 +303,11 @@ mod tests {
+     use vortex_array::dtype::DecimalDType;
+     use vortex_array::dtype::Nullability;
+     use vortex_array::dtype::PType;
++    use vortex_array::expr::bound::and;
+     use vortex_array::expr::bound::eq;
++    use vortex_array::expr::bound::get_item;
+     use vortex_array::expr::bound::lit;
++    use vortex_array::expr::bound::or;
+     use vortex_array::expr::bound::root;
+     use vortex_array::scalar::DecimalValue;
+     use vortex_array::scalar::Scalar;
+@@ -316,12 +320,14 @@ mod tests {
+     use vortex_array::stats::rewrite::StatsRewriteRule;
+     use vortex_array::validity::Validity;
+     use vortex_error::VortexResult;
++    use vortex_error::vortex_err;
+     use vortex_session::VortexSession;
+ 
+     use super::BloomContains;
+     use super::BloomOptions;
+     use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
+     use crate::layouts::zoned::aggregates::bloom_filter::BloomPartial;
++    use crate::layouts::zoned::aggregates::bloom_filter::HashFn;
+     use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomEqRewrite;
+     use crate::layouts::zoned::zone_map::ZoneMap;
+ 
+@@ -381,6 +387,82 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[test]
++    fn multiple_bloom_configurations_use_each_stored_filter() -> VortexResult<()> {
++        let small_options = BloomOptions::new(NonZeroU32::MIN, HashFn::XxHash3_64);
++        let large_options = BloomOptions::default();
++        let values = (0..256i64)
++            .map(|value| Scalar::primitive(value, Nullability::NonNullable))
++            .collect::<Vec<_>>();
++        let mut small = BloomPartial::from(&small_options);
++        let mut large = BloomPartial::from(&large_options);
++        for value in &values {
++            small.insert_scalar(value)?;
++            large.insert_scalar(value)?;
++        }
++        let needle = (256..4096i64)
++            .find(|value| {
++                small.contains(value.to_le_bytes()) && !large.contains(value.to_le_bytes())
++            })
++            .ok_or_else(|| {
++                vortex_err!("expected different false positives from different sizes")
++            })?;
++        let aggregates = [
++            BloomFilter.bind(small_options),
++            BloomFilter.bind(large_options),
++        ];
++        let zone_map = ZoneMap::try_new(
++            DType::Primitive(PType::I64, Nullability::NonNullable),
++            StructArray::from_fields(&[
++                (
++                    aggregates[0].to_string(),
++                    VarBinViewArray::from_iter_nullable_bin([Some(small.serialize())]).into_array(),
++                ),
++                (
++                    aggregates[1].to_string(),
++                    VarBinViewArray::from_iter_nullable_bin([Some(large.serialize())]).into_array(),
++                ),
++            ])?,
++            Arc::new(aggregates.clone()),
++            256,
++            256,
++        )?;
++        let session = array_session();
++        register(&session);
++        let rewrite = StatsRewriteCtx::new(&session).with_aggregate_fns(&aggregates);
++        let input = root(DType::Primitive(PType::I64, Nullability::NonNullable));
++        let missing = eq(input.clone(), lit(needle));
++        let present = eq(input, lit(42i64));
++        for (predicate, should_prune) in [
++            (missing.clone(), true),
++            (present.clone(), false),
++            (and(missing.clone(), present.clone()), true),
++            (or(missing, present), false),
++        ] {
++            let proof = rewrite
++                .falsify(&predicate)?
++                .ok_or_else(|| vortex_err!("expected a falsifier"))?;
++            assert_eq!(zone_map.prune(&proof, &session)?.all_true(), should_prune);
++        }
++        Ok(())
++    }
++
++    #[test]
++    fn stored_aggregate_lookup_is_scoped_to_root() {
++        let session = array_session();
++        let aggregates = [BloomFilter.bind(BloomOptions::default())];
++        let ctx = StatsRewriteCtx::new(&session).with_aggregate_fns(&aggregates);
++        let root = root(DType::struct_(
++            [(
++                "child",
++                DType::Primitive(PType::I64, Nullability::NonNullable),
++            )],
++            Nullability::NonNullable,
++        ));
++        assert_eq!(ctx.aggregate_fns_for(&root).len(), 1);
++        assert!(ctx.aggregate_fns_for(&get_item("child", root)).is_empty());
++    }
++
+     #[test]
+     fn bloom_rule_is_inconclusive_for_nulls() -> VortexResult<()> {
+         let dtype = DType::Primitive(PType::I64, Nullability::Nullable);
+diff --git c/vortex-layout/src/layouts/zoned/skip_index/bloom.rs w/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
+index 1f36a8bc2e..cddbcbd42f 100644
+--- c/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/bloom.rs
+@@ -6,6 +6,7 @@
+ use std::sync::Arc;
+ 
+ use vortex_array::aggregate_fn::AggregateFnVTable;
++use vortex_array::scalar_fn::ScalarFnPluginRef;
+ use vortex_array::stats::rewrite::StatsRewriteRuleRef;
+ 
+ use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
+@@ -41,14 +42,13 @@ impl BloomSkipIndex {
+ 
+ impl SkipIndex for BloomSkipIndex {
+     type Aggregate = BloomFilter;
+-    type Scalar = BloomContains;
+ 
+     fn aggregate_vtable(&self) -> Self::Aggregate {
+         BloomFilter
+     }
+ 
+-    fn scalar_vtable(&self) -> Self::Scalar {
+-        BloomContains
++    fn scalar_plugin(&self) -> Option<ScalarFnPluginRef> {
++        Some(Arc::new(BloomContains))
+     }
+ 
+     fn options(&self) -> <Self::Aggregate as AggregateFnVTable>::Options {
+@@ -59,49 +59,3 @@ impl SkipIndex for BloomSkipIndex {
+         vec![Arc::new(BloomEqRewrite)]
+     }
+ }
+-
+-#[cfg(test)]
+-mod tests {
+-    use vortex_array::aggregate_fn::AggregateFnVTableExt;
+-    use vortex_array::dtype::DType;
+-    use vortex_array::dtype::Nullability;
+-    use vortex_array::dtype::PType;
+-    use vortex_array::expr::bound::eq;
+-    use vortex_array::expr::bound::lit;
+-    use vortex_array::expr::bound::root;
+-    use vortex_array::stats::rewrite::StatsRewriteCtx;
+-    use vortex_error::VortexResult;
+-    use vortex_error::vortex_err;
+-
+-    use super::*;
+-    use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomContains;
+-    use crate::layouts::zoned::skip_index::SkipIndexSessionExt;
+-
+-    #[test]
+-    fn repeated_registration_installs_one_bloom_rewrite() -> VortexResult<()> {
+-        let session = vortex_array::array_session();
+-        let aggregate_fns = [BloomFilter.bind(BloomOptions::default())];
+-        let predicate = eq(
+-            root(DType::Primitive(PType::I64, Nullability::NonNullable)),
+-            lit(42i64),
+-        );
+-
+-        for registration_session in [&session, &session.clone()] {
+-            let skip_index = BloomSkipIndex::default();
+-            registration_session.register_skip_index(&skip_index);
+-            let proof = StatsRewriteCtx::new(&session)
+-                .with_aggregate_fns(&aggregate_fns)
+-                .falsify(&predicate)?
+-                .ok_or_else(|| vortex_err!("expected an equality falsifier"))?;
+-
+-            let mut pending = vec![&proof];
+-            let mut bloom_probes = 0;
+-            while let Some(expr) = pending.pop() {
+-                bloom_probes += usize::from(expr.is::<BloomContains>());
+-                pending.extend(expr.children());
+-            }
+-            assert_eq!(bloom_probes, 1);
+-        }
+-        Ok(())
+-    }
+-}
+diff --git c/vortex-layout/src/layouts/zoned/skip_index/mod.rs w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+index ade8171dab..5cf645aab3 100644
+--- c/vortex-layout/src/layouts/zoned/skip_index/mod.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+@@ -5,7 +5,7 @@
+ //!
+ //! This module also provides the session extension used to register skip index
+ //! implementations. Pass the bound aggregate returned by [`SkipIndex::aggregate_fn`]
+-//! to `WriteStrategyBuilder::with_field_aggregates` to index a field.
++//! to `WriteStrategyBuilder::with_field_aggregate_additions` to index a field while retaining defaults.
+ //!
+ //! # Difference from a locating index
+ //!
+@@ -16,7 +16,7 @@ use vortex_array::aggregate_fn::AggregateFnRef;
+ use vortex_array::aggregate_fn::AggregateFnVTable;
+ use vortex_array::aggregate_fn::AggregateFnVTableExt;
+ use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
+-use vortex_array::scalar_fn::ScalarFnVTable;
++use vortex_array::scalar_fn::ScalarFnPluginRef;
+ use vortex_array::scalar_fn::session::ScalarFnSessionExt;
+ use vortex_array::stats::StatsSessionExt;
+ use vortex_array::stats::rewrite::StatsRewriteRuleRef;
+@@ -35,8 +35,8 @@ pub mod bloom;
+ /// First, register the components needed to use the index through
+ /// [`SkipIndexSessionExt::register_skip_index`]. When writing, use
+ /// [`SkipIndex::aggregate_fn`] to bind the index options and pass the aggregate to
+-/// `WriteStrategyBuilder::with_field_aggregates` for the field to be indexed.
+-/// An explicit aggregate list replaces the writer's default aggregates. Zone length
++/// `WriteStrategyBuilder::with_field_aggregate_additions` for the field to be indexed.
++/// Use `WriteStrategyBuilder::with_field_aggregates` to replace the defaults instead. Zone length
+ /// is controlled by `WriteStrategyBuilder::with_row_block_size`.
+ ///
+ /// # Logical and physical representation
+@@ -63,19 +63,21 @@ pub mod bloom;
+ ///
+ /// For writes, create a configured index and use [`SkipIndex::aggregate_fn`] to
+ /// obtain its aggregate. Pass the field path and an aggregate list containing it to
+-/// `WriteStrategyBuilder::with_field_aggregates`. This list replaces the default
++/// `WriteStrategyBuilder::with_field_aggregate_additions`. This retains the default
+ /// aggregates for that field.
+ pub trait SkipIndex: Send + Sync + 'static {
+     /// The concrete aggregate implementation registered for this index.
+     type Aggregate: AggregateFnVTable;
+-    /// The concrete scalar implementation registered for this index.
+-    type Scalar: ScalarFnVTable;
+ 
+     /// Returns the aggregate implementation, without binding write options.
+     fn aggregate_vtable(&self) -> Self::Aggregate;
+ 
+-    /// Returns the scalar implementation.
+-    fn scalar_vtable(&self) -> Self::Scalar;
++    /// Returns a custom probe implementation, if the rewrite needs one.
++    ///
++    /// Indexes whose proofs use only built-in scalar functions can leave this unset.
++    fn scalar_plugin(&self) -> Option<ScalarFnPluginRef> {
++        None
++    }
+ 
+     /// Returns the options to bind when writing this index.
+     fn options(&self) -> <Self::Aggregate as AggregateFnVTable>::Options;
+@@ -86,7 +88,7 @@ pub trait SkipIndex: Send + Sync + 'static {
+     /// Binds this index's write options into an aggregate for the zoned writer.
+     ///
+     /// Binding does not register components or check input dtype compatibility. The zoned writer
+-    /// omits aggregates that do not support its input dtype.
++    /// rejects explicitly requested aggregates that do not support its input dtype.
+     fn aggregate_fn(&self) -> AggregateFnRef {
+         self.aggregate_vtable().bind(self.options())
+     }
+@@ -95,34 +97,25 @@ pub trait SkipIndex: Send + Sync + 'static {
+ /// Extension trait for registering skipping indexes with a Vortex session.
+ pub trait SkipIndexSessionExt: SessionExt {
+     /// Registers the aggregate, probe scalar functions, and rewrite rules
+-    /// supplied by an skip index.
++    /// supplied by a skip index.
+     ///
+-    /// If the aggregate ID is already registered, this
+-    /// method skips all components to avoid appending duplicate rewrite rules.
++    /// Repeated calls replace this implementation's components and rewrite group. Registration
++    /// must support every persisted configuration and must not depend on this instance's options.
+     ///
+     /// For more information about skip indexes, see [`SkipIndex`].
+     fn register_skip_index<I: SkipIndex>(&self, index: &I) {
+         let session = self.session();
+-        let aggregate = index.aggregate_vtable();
+-
+-        // The idea is to avoid duplicating rewrite rules.
+-        // Since neither they nor the skip index carry an ID,
+-        // this uses the aggregate ID instead.
+-        if session
+-            .aggregate_fns()
+-            .find_plugin(&aggregate.id())
+-            .is_some()
+-        {
+-            return;
+-        }
+-
+-        session.aggregate_fns().register(aggregate);
+-        session.scalar_fns().register(index.scalar_vtable());
+-
+-        for rule in index.rewrite_rules() {
+-            session.stats().register_rewrite_ref(rule);
++        session.aggregate_fns().register(index.aggregate_vtable());
++        if let Some(scalar) = index.scalar_plugin() {
++            session.scalar_fns().registry().insert(scalar.id(), scalar);
+         }
++        session
++            .stats()
++            .register_rewrite_group::<I>(index.rewrite_rules());
+     }
+ }
+ 
+ impl<S: SessionExt> SkipIndexSessionExt for S {}
++
++#[cfg(test)]
++mod tests;
+diff --git c/vortex-layout/src/layouts/zoned/skip_index/tests.rs w/vortex-layout/src/layouts/zoned/skip_index/tests.rs
+new file mode 100644
+index 0000000000..54c3921ab8
+--- /dev/null
++++ w/vortex-layout/src/layouts/zoned/skip_index/tests.rs
+@@ -0,0 +1,141 @@
++// SPDX-License-Identifier: Apache-2.0
++// SPDX-FileCopyrightText: Copyright the Vortex contributors
++
++use std::num::NonZeroU32;
++use std::thread;
++
++use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
++use vortex_array::dtype::DType;
++use vortex_array::dtype::Nullability;
++use vortex_array::dtype::PType;
++use vortex_array::expr::bound::eq;
++use vortex_array::expr::bound::lit;
++use vortex_array::expr::bound::root;
++use vortex_array::scalar_fn::ScalarFnVTable;
++use vortex_array::scalar_fn::session::ScalarFnSessionExt;
++use vortex_array::stats::StatsSession;
++use vortex_array::stats::StatsSessionExt;
++use vortex_array::stats::rewrite::StatsRewriteCtx;
++use vortex_error::VortexResult;
++use vortex_error::vortex_err;
++use vortex_session::VortexSession;
++
++use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
++use crate::layouts::zoned::aggregates::bloom_filter::BloomOptions;
++use crate::layouts::zoned::aggregates::bloom_filter::HashFn;
++use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomContains;
++use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomEqRewrite;
++use crate::layouts::zoned::skip_index::SkipIndex;
++use crate::layouts::zoned::skip_index::SkipIndexSessionExt;
++use crate::layouts::zoned::skip_index::bloom::BloomSkipIndex;
++
++fn bloom_probe_options(
++    session: &VortexSession,
++    index: &BloomSkipIndex,
++) -> VortexResult<Vec<BloomOptions>> {
++    let aggregate_fns = [index.aggregate_fn()];
++    let predicate = eq(
++        root(DType::Primitive(PType::I64, Nullability::NonNullable)),
++        lit(42i64),
++    );
++    let proof = StatsRewriteCtx::new(session)
++        .with_aggregate_fns(&aggregate_fns)
++        .falsify(&predicate)?
++        .ok_or_else(|| vortex_err!("expected an equality falsifier"))?;
++    let mut pending = vec![&proof];
++    let mut options = Vec::new();
++    while let Some(expr) = pending.pop() {
++        if let Some(probe_options) = expr.as_opt::<BloomContains>() {
++            options.push(probe_options.clone());
++        }
++        pending.extend(expr.children());
++    }
++    Ok(options)
++}
++
++#[test]
++fn registration_after_aggregate_registration_installs_components() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.aggregate_fns().register(BloomFilter);
++    session.register_skip_index(&index);
++
++    assert!(
++        session
++            .scalar_fns()
++            .registry()
++            .get(&BloomContains.id())
++            .is_some()
++    );
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++#[expect(
++    clippy::redundant_clone,
++    reason = "Registration must be shared across session clones."
++)]
++fn repeated_registration_installs_one_bloom_rewrite() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.register_skip_index(&index);
++    session.clone().register_skip_index(&index);
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn concurrent_registration_installs_one_bloom_rewrite() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    thread::scope(|scope| {
++        for _ in 0..16 {
++            scope.spawn(|| session.register_skip_index(&index));
++        }
++    });
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn registration_uses_persisted_options() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    session.register_skip_index(&BloomSkipIndex::default());
++    let index = BloomSkipIndex::new(BloomOptions::new(
++        NonZeroU32::new(8).ok_or_else(|| vortex_err!("block count must be nonzero"))?,
++        HashFn::XxHash3_64,
++    ));
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn registration_after_stats_replacement_restores_rewrite() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.register_skip_index(&index);
++    session.register(StatsSession::default());
++    session.register_skip_index(&index);
++
++    assert_eq!(bloom_probe_options(&session, &index)?, [index.options()]);
++    Ok(())
++}
++
++#[test]
++fn registration_preserves_independently_registered_rule() -> VortexResult<()> {
++    let session = vortex_array::array_session();
++    let index = BloomSkipIndex::default();
++    session.stats().register_rewrite(BloomEqRewrite);
++    session.register_skip_index(&index);
++    session.register_skip_index(&index);
++
++    assert_eq!(
++        bloom_probe_options(&session, &index)?,
++        [index.options(), index.options()]
++    );
++    Ok(())
++}
+diff --git c/vortex-layout/src/layouts/zoned/writer.rs w/vortex-layout/src/layouts/zoned/writer.rs
+index fbf3acf029..f5b1b42cb8 100644
+--- c/vortex-layout/src/layouts/zoned/writer.rs
++++ w/vortex-layout/src/layouts/zoned/writer.rs
+@@ -12,6 +12,7 @@ use parking_lot::Mutex;
+ use vortex_array::IntoArray;
+ use vortex_array::VortexSessionExecute;
+ use vortex_array::aggregate_fn::AggregateFnRef;
++use vortex_array::dtype::DType;
+ use vortex_error::VortexError;
+ use vortex_error::VortexResult;
+ use vortex_error::vortex_bail;
+@@ -33,6 +34,54 @@ use crate::sequence::SequentialArrayStreamExt;
+ use crate::sequence::SequentialStreamAdapter;
+ use crate::sequence::SequentialStreamExt;
+ 
++/// Selects aggregate instances after the input dtype and session are available.
++///
++/// Explicit requests must support the input dtype. Exact duplicate requests are stored once;
++/// different options describe different aggregates. Unsupported defaults are omitted.
++#[derive(Clone, Default)]
++pub enum ZonedAggregates {
++    /// Use the supported default pruning aggregates.
++    #[default]
++    Defaults,
++    /// Replace defaults with exactly these aggregates.
++    Replace(Arc<[AggregateFnRef]>),
++    /// Keep defaults and add these aggregates.
++    Extend(Arc<[AggregateFnRef]>),
++}
++
++impl ZonedAggregates {
++    fn resolve(&self, dtype: &DType, session: &VortexSession) -> VortexResult<Vec<AggregateFnRef>> {
++        let defaults = || {
++            default_zoned_aggregate_fns(dtype, session)
++                .iter()
++                .filter(|aggregate| {
++                    aggregate.state_dtype(dtype).is_some()
++                        && aggregate.return_dtype(dtype).is_some()
++                })
++                .cloned()
++                .collect::<Vec<_>>()
++        };
++
++        let (mut selected, requested) = match self {
++            Self::Defaults => (defaults(), Vec::new()),
++            Self::Replace(aggregates) => (Vec::new(), aggregates.to_vec()),
++            Self::Extend(aggregates) => (defaults(), aggregates.to_vec()),
++        };
++
++        for aggregate in requested {
++            if aggregate.state_dtype(dtype).is_none() || aggregate.return_dtype(dtype).is_none() {
++                vortex_bail!("Aggregate {aggregate} requires a supported input dtype, got {dtype}");
++            }
++
++            if !selected.contains(&aggregate) {
++                selected.push(aggregate);
++            }
++        }
++
++        Ok(selected)
++    }
++}
++
+ /// Configuration for building zoned layouts.
+ ///
+ /// The input stream is assumed to already be partitioned into one chunk per zone, except
+@@ -41,12 +90,8 @@ use crate::sequence::SequentialStreamExt;
+ pub struct ZonedLayoutOptions {
+     /// The size of a statistics block
+     pub block_size: NonZeroUsize,
+-    /// The aggregate partials to collect for each block.
+-    ///
+-    /// If unset, the writer chooses pruning aggregates from the input dtype. An explicit list
+-    /// replaces those defaults. Unsupported aggregates are omitted. If none remain, the writer
+-    /// returns the child layout without zoned statistics.
+-    pub aggregate_fns: Option<Arc<[AggregateFnRef]>>,
++    /// Selects defaults, replacements, or additions after the input dtype is known.
++    pub aggregates: ZonedAggregates,
+     /// Number of chunks to compute aggregate partials in parallel.
+     pub concurrency: NonZeroUsize,
+ }
+@@ -55,7 +100,7 @@ impl Default for ZonedLayoutOptions {
+     fn default() -> Self {
+         Self {
+             block_size: unsafe { NonZeroUsize::new_unchecked(8192) },
+-            aggregate_fns: None,
++            aggregates: ZonedAggregates::Defaults,
+             concurrency: unsafe {
+                 NonZeroUsize::new_unchecked(get_available_parallelism().unwrap_or(1))
+             },
+@@ -94,12 +139,7 @@ impl LayoutStrategy for ZonedStrategy {
+         mut eof: SequencePointer,
+         session: &VortexSession,
+     ) -> VortexResult<LayoutRef> {
+-        let aggregate_fns = self
+-            .options
+-            .aggregate_fns
+-            .clone()
+-            .unwrap_or_else(|| default_zoned_aggregate_fns(stream.dtype(), session))
+-            .to_vec();
++        let aggregate_fns = self.options.aggregates.resolve(stream.dtype(), session)?;
+ 
+         let compute_session = session.clone();
+ 
+@@ -107,10 +147,7 @@ impl LayoutStrategy for ZonedStrategy {
+             stream.dtype(),
+             &aggregate_fns,
+         )));
+-        // The accumulator has dropped the aggregates this dtype cannot hold, leaving the ones
+-        // this write would record. An aggregate the context forbids fails the write, like a
+-        // forbidden array or layout: dropping it silently would leave a file that prunes worse
+-        // than the caller asked for, with nothing in the output saying so.
++        // Edition restrictions apply to the resolved selection, including supported defaults.
+         let aggregate_fns = stats_accumulator.lock().aggregate_fns();
+         for aggregate_fn in aggregate_fns.iter() {
+             if !ctx.allows_aggregate(&aggregate_fn.id()) {
+@@ -193,6 +230,8 @@ impl LayoutStrategy for ZonedStrategy {
+ 
+ #[cfg(test)]
+ mod tests {
++    use std::num::NonZeroU32;
++
+     use rstest::rstest;
+     use vortex_array::ArrayContext;
+     use vortex_array::IntoArray;
+@@ -206,6 +245,7 @@ mod tests {
+     use vortex_array::aggregate_fn::fns::sum::Sum;
+     use vortex_array::arrays::ChunkedArray;
+     use vortex_array::dtype::DType;
++    use vortex_array::dtype::DecimalDType;
+     use vortex_array::dtype::Nullability;
+     use vortex_array::dtype::PType;
+     use vortex_array::extension::datetime::TimeUnit;
+@@ -223,6 +263,8 @@ mod tests {
+     use crate::layouts::flat::writer::FlatLayoutStrategy;
+     use crate::layouts::zoned::Zoned;
+     use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
++    use crate::layouts::zoned::aggregates::bloom_filter::BloomOptions;
++    use crate::layouts::zoned::aggregates::bloom_filter::HashFn;
+     use crate::layouts::zoned::schema::default_bounded_stat_max_bytes;
+     use crate::layouts::zoned::skip_index::SkipIndex;
+     use crate::layouts::zoned::skip_index::bloom::BloomSkipIndex;
+@@ -378,7 +420,7 @@ mod tests {
+     fn writer_appends_skip_index_aggregate() -> VortexResult<()> {
+         let mut options = ZonedLayoutOptions::default();
+         let bloom_index = BloomSkipIndex::default();
+-        options.aggregate_fns = Some(vec![bloom_index.aggregate_fn()].into());
++        options.aggregates = ZonedAggregates::Replace(vec![bloom_index.aggregate_fn()].into());
+ 
+         let written =
+             write_zones_with_options(LayoutWriterContext::new(ArrayContext::empty()), options)?;
+@@ -390,4 +432,65 @@ mod tests {
+         );
+         Ok(())
+     }
++    #[test]
++    fn additions_preserve_defaults_and_deduplicate_exact_instances() -> VortexResult<()> {
++        let bloom = BloomSkipIndex::default().aggregate_fn();
++        let selection = ZonedAggregates::Extend(vec![bloom.clone(), bloom.clone()].into());
++        let selected = selection.resolve(&PType::I32.into(), &vortex_array::array_session())?;
++        assert!(selected.iter().any(|aggregate| aggregate.is::<Min>()));
++        assert!(selected.iter().any(|aggregate| aggregate.is::<Max>()));
++        assert_eq!(
++            selected
++                .iter()
++                .filter(|aggregate| *aggregate == &bloom)
++                .count(),
++            1
++        );
++
++        let written = write_zones_with_options(
++            LayoutWriterContext::new(ArrayContext::empty()),
++            ZonedLayoutOptions {
++                aggregates: selection,
++                ..Default::default()
++            },
++        )?;
++        assert!(written.contains(&Min.id().to_string()));
++        assert!(written.contains(&BloomFilter.id().to_string()));
++        Ok(())
++    }
++
++    #[test]
++    fn different_bloom_options_are_distinct_requests() -> VortexResult<()> {
++        let small = BloomSkipIndex::new(BloomOptions::new(
++            NonZeroU32::new(8).vortex_expect("nonzero test constant"),
++            HashFn::XxHash3_64,
++        ))
++        .aggregate_fn();
++        let large = BloomSkipIndex::default().aggregate_fn();
++        let selected = ZonedAggregates::Replace(vec![small, large].into())
++            .resolve(&PType::I32.into(), &vortex_array::array_session())?;
++        assert_eq!(selected.len(), 2);
++        assert_ne!(selected[0].to_string(), selected[1].to_string());
++        Ok(())
++    }
++
++    #[test]
++    fn unsupported_explicit_requests_fail() -> VortexResult<()> {
++        let dtype = DType::Decimal(DecimalDType::new(5, 2), Nullability::NonNullable);
++        let selection =
++            ZonedAggregates::Extend(vec![BloomSkipIndex::default().aggregate_fn()].into());
++        let session = vortex_array::array_session();
++        assert!(selection.resolve(&dtype, &session).is_err());
++        let defaults = ZonedAggregates::Defaults.resolve(&dtype, &session)?;
++        assert!(defaults.iter().any(|aggregate| aggregate.is::<Min>()));
++        Ok(())
++    }
++
++    #[test]
++    fn empty_replacement_disables_zoning_selection() -> VortexResult<()> {
++        let selected = ZonedAggregates::Replace(Arc::new([]))
++            .resolve(&PType::I32.into(), &vortex_array::array_session())?;
++        assert!(selected.is_empty());
++        Ok(())
++    }
+ }
+diff --git c/vortex-layout/src/layouts/zoned/zone_map.rs w/vortex-layout/src/layouts/zoned/zone_map.rs
+index c84c0b443d..a545fb4a44 100644
+--- c/vortex-layout/src/layouts/zoned/zone_map.rs
++++ w/vortex-layout/src/layouts/zoned/zone_map.rs
+@@ -9,13 +9,11 @@ use vortex_array::ArrayRef;
+ use vortex_array::IntoArray;
+ use vortex_array::VortexSessionExecute;
+ use vortex_array::aggregate_fn::AggregateFnRef;
+-use vortex_array::aggregate_fn::AggregateFnSatisfaction;
++use vortex_array::aggregate_fn::StatMatch;
+ use vortex_array::aggregate_fn::fns::all_nan::AllNan;
+ use vortex_array::aggregate_fn::fns::all_non_nan::AllNonNan;
+ use vortex_array::aggregate_fn::fns::all_non_null::AllNonNull;
+ use vortex_array::aggregate_fn::fns::all_null::AllNull;
+-use vortex_array::aggregate_fn::fns::bounded_max::BOUNDED_MAX_BOUND;
+-use vortex_array::aggregate_fn::fns::bounded_max::BoundedMax;
+ use vortex_array::arrays::ConstantArray;
+ use vortex_array::arrays::PrimitiveArray;
+ use vortex_array::arrays::StructArray;
+@@ -242,14 +240,6 @@ impl ZoneMapStatsBinder<'_> {
+ 
+ impl ZoneMap {
+     fn aggregate_field_expr(&self, requested: &AggregateFnRef) -> Option<Expression> {
+-        let field_name = requested.to_string();
+-        if self.array.unmasked_field_by_name_opt(&field_name).is_some() {
+-            return Some(aggregate_result_expr(
+-                requested,
+-                get_item(field_name, root()),
+-            ));
+-        }
+-
+         let mut approximate = None;
+         for stored in self.aggregate_fns.iter() {
+             let field_name = stored.to_string();
+@@ -257,14 +247,13 @@ impl ZoneMap {
+                 continue;
+             }
+ 
+-            match stored.can_satisfy(requested) {
+-                AggregateFnSatisfaction::Exact => {
+-                    return Some(aggregate_result_expr(stored, get_item(field_name, root())));
+-                }
+-                AggregateFnSatisfaction::Approximate => {
+-                    approximate = Some(aggregate_result_expr(stored, get_item(field_name, root())));
+-                }
+-                AggregateFnSatisfaction::No => {}
++            let Some(stat_match) = stored.resolve_stat(requested, get_item(field_name, root()))
++            else {
++                continue;
++            };
++            match stat_match {
++                StatMatch::Exact(expression) => return Some(expression),
++                StatMatch::Approximate(expression) => approximate = Some(expression),
+             }
+         }
+ 
+@@ -290,14 +279,6 @@ impl ZoneMap {
+     }
+ }
+ 
+-fn aggregate_result_expr(stored: &AggregateFnRef, state_expr: Expression) -> Expression {
+-    if stored.is::<BoundedMax>() {
+-        get_item(BOUNDED_MAX_BOUND, state_expr)
+-    } else {
+-        state_expr
+-    }
+-}
+-
+ fn row_count_expr() -> Expression {
+     RowCount.new_expr(EmptyOptions, [])
+ }
+@@ -344,6 +325,7 @@ mod tests {
+     use vortex_array::aggregate_fn::AggregateFnVTableExt;
+     use vortex_array::aggregate_fn::EmptyOptions;
+     use vortex_array::aggregate_fn::NumericalAggregateOpts;
++    use vortex_array::aggregate_fn::combined::PairOptions;
+     use vortex_array::aggregate_fn::fns::all_non_null::AllNonNull;
+     use vortex_array::aggregate_fn::fns::all_null::AllNull;
+     use vortex_array::aggregate_fn::fns::bounded_max::BOUNDED_MAX_BOUND;
+@@ -353,7 +335,9 @@ mod tests {
+     use vortex_array::aggregate_fn::fns::bounded_min::BoundedMin;
+     use vortex_array::aggregate_fn::fns::bounded_min::BoundedMinOptions;
+     use vortex_array::aggregate_fn::fns::max::Max;
++    use vortex_array::aggregate_fn::fns::mean::Mean;
+     use vortex_array::aggregate_fn::fns::min::Min;
++    use vortex_array::aggregate_fn::fns::min_max::MinMax;
+     use vortex_array::aggregate_fn::fns::nan_count::NanCount;
+     use vortex_array::aggregate_fn::fns::null_count::NullCount;
+     use vortex_array::arrays::BoolArray;
+@@ -992,4 +976,112 @@ mod tests {
+             &mut SESSION.create_execution_ctx()
+         );
+     }
++
++    #[test]
++    fn aggregate_contract_mean_exposes_struct_partial() -> VortexResult<()> {
++        let aggregate = Mean::combined().bind(PairOptions(
++            NumericalAggregateOpts::default(),
++            NumericalAggregateOpts::default(),
++        ));
++        let data = buffer![1.0f64, 3.0].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let partial = partial.cast(&partial.dtype().as_nullable())?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = gt(vortex_array::expr::get_item("sum", summary), lit(1.0f64));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
++    #[test]
++    fn aggregate_contract_struct_summary_prunes() -> VortexResult<()> {
++        let aggregate = MinMax.bind(NumericalAggregateOpts::default());
++        let data = buffer![1i32, 3].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = lt(vortex_array::expr::get_item("max", summary), lit(5i32));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
++    #[test]
++    fn aggregate_contract_bounded_max_exposes_struct_partial() -> VortexResult<()> {
++        let aggregate = BoundedMax.bind(BoundedMaxOptions {
++            max_bytes: default_bounded_stat_max_bytes(),
++        });
++        let data = buffer![1i32, 3].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = lt(vortex_array::expr::get_item("bound", summary), lit(5i32));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
++    #[test]
++    fn aggregate_contract_max_satisfies_bounded_max() -> VortexResult<()> {
++        let stored = Max.bind(NumericalAggregateOpts::default());
++        let requested = BoundedMax.bind(BoundedMaxOptions {
++            max_bytes: default_bounded_stat_max_bytes(),
++        });
++        let zone_map = ZoneMap::try_new(
++            PType::I32.into(),
++            StructArray::from_fields(&[(
++                stored.to_string(),
++                PrimitiveArray::from_option_iter([Some(3i32), None]).into_array(),
++            )])?,
++            Arc::new([stored]),
++            2,
++            4,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), requested);
++        let predicate = lt(
++            vortex_array::expr::get_item("bound", summary.clone()),
++            lit(5i32),
++        );
++        assert_eq!(prune(&zone_map, &predicate)?.true_count(), 1);
++        assert_eq!(prune(&zone_map, &is_null(summary))?.true_count(), 1);
++        Ok(())
++    }
+ }

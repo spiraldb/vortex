@@ -1,0 +1,956 @@
+    Blocking waiting for file lock on build directory
+   Compiling vortex-array v0.1.0 ($REPO/vortex-array)
+   Compiling vortex-fastlanes v0.1.0 ($REPO/encodings/fastlanes)
+   Compiling vortex-runend v0.1.0 ($REPO/encodings/runend)
+   Compiling vortex-fsst v0.1.0 ($REPO/encodings/fsst)
+   Compiling vortex-sequence v0.1.0 ($REPO/encodings/sequence)
+   Compiling vortex-sparse v0.1.0 ($REPO/encodings/sparse)
+   Compiling vortex-datetime-parts v0.1.0 ($REPO/encodings/datetime-parts)
+   Compiling vortex-decimal-byte-parts v0.1.0 ($REPO/encodings/decimal-byte-parts)
+   Compiling vortex-zigzag v0.1.0 ($REPO/encodings/zigzag)
+   Compiling vortex-compressor v0.1.0 ($REPO/vortex-compressor)
+   Compiling vortex-arrow v0.1.0 ($REPO/vortex-arrow)
+   Compiling vortex-io v0.1.0 ($REPO/vortex-io)
+   Compiling vortex-scan v0.1.0 ($REPO/vortex-scan)
+   Compiling vortex-bytebool v0.1.0 ($REPO/encodings/bytebool)
+   Compiling vortex-onpair v0.1.0 ($REPO/encodings/onpair)
+   Compiling vortex-pco v0.1.0 ($REPO/encodings/pco)
+   Compiling vortex-alp v0.1.0 ($REPO/encodings/alp)
+   Compiling vortex-btrblocks v0.1.0 ($REPO/vortex-btrblocks)
+   Compiling vortex-layout v0.1.0 ($REPO/vortex-layout)
+   Compiling vortex-file v0.1.0 ($REPO/vortex-file)
+    Finished `test` profile [unoptimized] target(s) in 1m 03s
+────────────
+ Nextest run ID fb412643-09bd-4d87-b698-bf48481c90ee with nextest profile: default
+    Starting 929 tests across 7 binaries (3001 tests skipped)
+        PASS [   0.012s] (  1/929) vortex-array aggregate_fn::fns::all_nan::tests::all_nan_unsupported_for_non_float_values
+        PASS [   0.014s] (  2/929) vortex-array aggregate_fn::accumulator_grouped::tests::test_flush_without_partials_returns_empty_chunked_array
+        PASS [   0.014s] (  3/929) vortex-array aggregate_fn::fns::all_nan::tests::all_nan_true_for_empty_float_values
+        PASS [   0.014s] (  4/929) vortex-array aggregate_fn::accumulator_grouped::tests::test_flush_multiple_partials_returns_chunked_array
+        PASS [   0.014s] (  5/929) vortex-array aggregate_fn::accumulator_grouped::tests::test_flush_single_partial_returns_original_array
+        PASS [   0.017s] (  6/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::all_nulls_both_sides
+        PASS [   0.018s] (  7/929) vortex-array aggregate_fn::fns::all_nan::tests::all_nan_false_with_non_nan
+        PASS [   0.019s] (  8/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_1_identical
+        PASS [   0.019s] (  9/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::alternating_nulls_different_value
+        PASS [   0.019s] ( 10/929) vortex-array aggregate_fn::accumulator::tests::child_kernel_fires_through_combined
+        PASS [   0.019s] ( 11/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_2_different
+        PASS [   0.019s] ( 12/929) vortex-array aggregate_fn::fns::all_nan::tests::all_nan_false_with_null
+        PASS [   0.019s] ( 13/929) vortex-array aggregate_fn::fns::all_nan::tests::all_nan_aggregate_fn
+        PASS [   0.020s] ( 14/929) vortex-array aggregate_fn::accumulator::tests::fallback_when_kernel_declines
+        PASS [   0.019s] ( 15/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::alternating_nulls_identical
+        PASS [   0.020s] ( 16/929) vortex-array aggregate_fn::accumulator::tests::combined_kernel_fires
+        PASS [   0.011s] ( 17/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_6_single_mismatch
+        PASS [   0.011s] ( 18/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_5_single_false
+        PASS [   0.014s] ( 19/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_3_empty
+        PASS [   0.012s] ( 20/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_7_all_true
+        PASS [   0.012s] ( 21/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_4_single_true
+        PASS [   0.011s] ( 22/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_nullable::case_4_all_null
+        PASS [   0.011s] ( 23/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::chunked_different_chunk_boundaries
+        PASS [   0.011s] ( 24/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::chunked_different
+        PASS [   0.012s] ( 25/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_nullable::case_2_different_under_null
+        PASS [   0.013s] ( 26/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_non_nullable::case_8_all_false
+        PASS [   0.013s] ( 27/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_nullable::case_1_same_nulls
+        PASS [   0.011s] ( 28/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::chunked_empty
+        PASS [   0.012s] ( 29/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::bool_nullable::case_3_null_vs_value
+        PASS [   0.012s] ( 30/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::chunked_vs_primitive
+        PASS [   0.013s] ( 31/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::chunked_identical
+        PASS [   0.013s] ( 32/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::chunked_vs_primitive_different
+        PASS [   0.010s] ( 33/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::decimal_identical
+        PASS [   0.010s] ( 34/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::decimal_nullable
+        PASS [   0.011s] ( 35/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::decimal_different_value_types
+        PASS [   0.014s] ( 36/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::decimal_different
+        PASS [   0.014s] ( 37/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::chunked_with_nullable
+        PASS [   0.010s] ( 38/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::fixed_size_list_nullable_ignores_garbage
+        PASS [   0.010s] ( 39/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::large_array_identical
+        PASS [   0.011s] ( 40/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::first_element_different
+        PASS [   0.011s] ( 41/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::fixed_size_list_identical
+        PASS [   0.011s] ( 42/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::last_element_different
+        PASS [   0.012s] ( 43/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::fixed_size_list_different
+        PASS [   0.012s] ( 44/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::large_array_last_differs
+        PASS [   0.012s] ( 45/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::list_different_elements
+        PASS [   0.013s] ( 46/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::leading_nulls
+        PASS [   0.010s] ( 47/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::list_nullable_ignores_garbage
+        PASS [   0.015s] ( 48/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::list_different_lengths
+        PASS [   0.012s] ( 49/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::middle_element_different
+        PASS [   0.017s] ( 50/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::list_different_offset_dtypes
+        PASS [   0.015s] ( 51/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::list_identical
+        PASS [   0.012s] ( 52/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::null_arrays_empty
+        PASS [   0.012s] ( 53/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::null_arrays_identical
+        PASS [   0.011s] ( 54/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_f64_different
+        PASS [   0.010s] ( 55/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_i64
+        PASS [   0.011s] ( 56/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_i32::case_2_i32_different
+        PASS [   0.011s] ( 57/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_i32::case_4_i32_single
+        PASS [   0.012s] ( 58/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_i32::case_1_i32_identical
+        PASS [   0.012s] ( 59/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_i32::case_3_i32_empty
+        PASS [   0.014s] ( 60/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_f64
+        PASS [   0.012s] ( 61/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_nullable::case_1_same_nulls
+        PASS [   0.012s] ( 62/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_nullable::case_3_different_values_under_valid
+        PASS [   0.014s] ( 63/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_nullable::case_2_null_vs_value
+        PASS [   0.011s] ( 64/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_nullable::case_4_all_null
+        PASS [   0.012s] ( 65/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_nullable::case_5_single_null
+        PASS [   0.012s] ( 66/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::primitive_u8
+        PASS [   0.011s] ( 67/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::single_element_identical
+        PASS [   0.013s] ( 68/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::single_element_different
+        PASS [   0.011s] ( 69/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_non_nullable::case_6_long_strings_different
+        PASS [   0.012s] ( 70/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_non_nullable::case_2_different
+        PASS [   0.013s] ( 71/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_non_nullable::case_1_identical
+        PASS [   0.012s] ( 72/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_non_nullable::case_4_single
+        PASS [   0.010s] ( 73/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::struct_different
+        PASS [   0.012s] ( 74/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_non_nullable::case_5_long_strings
+        PASS [   0.012s] ( 75/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_non_nullable::case_3_empty_strings
+        PASS [   0.012s] ( 76/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_nullable::case_2_null_vs_value
+        PASS [   0.014s] ( 77/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::strings_nullable::case_1_same_nulls
+        PASS [   0.011s] ( 78/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::struct_nullable_ignores_garbage_under_nulls
+        PASS [   0.012s] ( 79/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::struct_identical
+        PASS [   0.012s] ( 80/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::struct_nested_nullable_fields
+        PASS [   0.010s] ( 81/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::trailing_nulls
+        PASS [   0.010s] ( 82/929) vortex-array aggregate_fn::fns::all_non_nan::tests::all_non_nan_aggregate_fn
+        PASS [   0.009s] ( 83/929) vortex-array aggregate_fn::fns::all_non_nan::tests::all_non_nan_true_for_empty_float
+        PASS [   0.014s] ( 84/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::struct_with_nullable_string_field
+        PASS [   0.010s] ( 85/929) vortex-array aggregate_fn::fns::all_non_null::tests::all_non_null_aggregate_fn
+        PASS [   0.011s] ( 86/929) vortex-array aggregate_fn::fns::all_non_null::tests::all_non_null_false_with_nulls
+        PASS [   0.011s] ( 87/929) vortex-array aggregate_fn::fns::all_non_nan::tests::all_non_nan_false_with_nan
+        PASS [   0.014s] ( 88/929) vortex-array aggregate_fn::fns::all_non_distinct::tests::struct_with_nullable_string_field_different
+        PASS [   0.011s] ( 89/929) vortex-array aggregate_fn::fns::all_non_nan::tests::all_non_nan_true_with_nulls
+        PASS [   0.011s] ( 90/929) vortex-array aggregate_fn::fns::all_non_null::tests::all_non_null_true_for_empty_input
+        PASS [   0.012s] ( 91/929) vortex-array aggregate_fn::fns::all_non_nan::tests::all_non_nan_unsupported_for_non_float
+        PASS [   0.012s] ( 92/929) vortex-array aggregate_fn::fns::all_null::tests::all_null_aggregate_fn
+        PASS [   0.012s] ( 93/929) vortex-array aggregate_fn::fns::all_null::tests::all_null_false_with_non_nulls
+        PASS [   0.009s] ( 94/929) vortex-array aggregate_fn::fns::all_null::tests::all_null_true_for_empty_input
+        PASS [   0.008s] ( 95/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_options_round_trip
+        PASS [   0.012s] ( 96/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_empty_does_not_poison_later_values
+        PASS [   0.012s] ( 97/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_empty_partial_does_not_poison_existing_bound
+        PASS [   0.010s] ( 98/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_keeps_fixed_width_values_exact
+        PASS [   0.010s] ( 99/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_satisfies_max_bounds
+        PASS [   0.009s] (100/929) vortex-array aggregate_fn::fns::bounded_min::tests::bounded_min_options_round_trip
+        PASS [   0.009s] (101/929) vortex-array aggregate_fn::fns::bounded_min::tests::bounded_min_satisfies_min_bounds
+        PASS [   0.011s] (102/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_unknown_partial_poisons_existing_bound
+        PASS [   0.012s] (103/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_truncates_utf8_to_upper_bound
+        PASS [   0.011s] (104/929) vortex-array aggregate_fn::fns::bounded_min::tests::bounded_min_keeps_fixed_width_values_exact
+        PASS [   0.011s] (105/929) vortex-array aggregate_fn::fns::bounded_min::tests::bounded_min_null_partial_does_not_poison_existing_bound
+        PASS [   0.012s] (106/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_unknown_poisons_later_values
+        PASS [   0.013s] (107/929) vortex-array aggregate_fn::fns::bounded_max::tests::bounded_max_unknown_upper_bound_returns_null
+        PASS [   0.011s] (108/929) vortex-array aggregate_fn::fns::count::grouped::tests::fixed_size_counts_float_nans
+        PASS [   0.011s] (109/929) vortex-array aggregate_fn::fns::count::grouped::tests::fixed_size_counts_with_nulls
+        PASS [   0.013s] (110/929) vortex-array aggregate_fn::fns::bounded_min::tests::bounded_min_truncates_utf8_to_lower_bound
+        PASS [   0.012s] (111/929) vortex-array aggregate_fn::fns::count::grouped::tests::listview_counts_varbinview_with_nulls
+        PASS [   0.011s] (112/929) vortex-array aggregate_fn::fns::count::tests::count_all_null
+        PASS [   0.013s] (113/929) vortex-array aggregate_fn::fns::count::grouped::tests::listview_counts_all_valid
+        PASS [   0.013s] (114/929) vortex-array aggregate_fn::fns::count::grouped::tests::listview_counts_with_nulls
+        PASS [   0.011s] (115/929) vortex-array aggregate_fn::fns::count::tests::count_all_valid
+        PASS [   0.009s] (116/929) vortex-array aggregate_fn::fns::count::tests::count_constant_null
+        PASS [   0.010s] (117/929) vortex-array aggregate_fn::fns::count::tests::count_constant_nan
+        PASS [   0.011s] (118/929) vortex-array aggregate_fn::fns::count::tests::count_chunked
+        PASS [   0.010s] (119/929) vortex-array aggregate_fn::fns::count::tests::count_finish_resets_state
+        PASS [   0.010s] (120/929) vortex-array aggregate_fn::fns::count::tests::count_empty
+        PASS [   0.011s] (121/929) vortex-array aggregate_fn::fns::count::tests::count_constant_non_null
+        PASS [   0.012s] (122/929) vortex-array aggregate_fn::fns::count::tests::count_float_excludes_nans_by_default
+        PASS [   0.012s] (123/929) vortex-array aggregate_fn::fns::count::tests::count_float_shortcircuits_on_exact_nan_count_stat
+        PASS [   0.011s] (124/929) vortex-array aggregate_fn::fns::count::tests::count_state_merge
+        PASS [   0.015s] (125/929) vortex-array aggregate_fn::fns::count::tests::count_float_includes_nans_when_not_skipping
+        PASS [   0.012s] (126/929) vortex-array aggregate_fn::fns::count::tests::count_multi_batch
+        PASS [   0.009s] (127/929) vortex-array aggregate_fn::fns::first::tests::first_chunked
+        PASS [   0.011s] (128/929) vortex-array aggregate_fn::fns::count::tests::count_with_nulls
+        PASS [   0.011s] (129/929) vortex-array aggregate_fn::fns::first::tests::first_all_null
+        PASS [   0.010s] (130/929) vortex-array aggregate_fn::fns::first::tests::first_constant
+        PASS [   0.010s] (131/929) vortex-array aggregate_fn::fns::first::tests::first_empty
+        PASS [   0.011s] (132/929) vortex-array aggregate_fn::fns::first::tests::first_finish_resets_state
+        PASS [   0.011s] (133/929) vortex-array aggregate_fn::fns::first::tests::first_constant_null
+        PASS [   0.011s] (134/929) vortex-array aggregate_fn::fns::first::tests::first_non_null
+        PASS [   0.011s] (135/929) vortex-array aggregate_fn::fns::first::tests::first_state_merge
+        PASS [   0.012s] (136/929) vortex-array aggregate_fn::fns::first::tests::first_multi_batch_picks_earliest_non_null
+        PASS [   0.011s] (137/929) vortex-array aggregate_fn::fns::first::tests::first_skips_leading_nulls
+        PASS [   0.011s] (138/929) vortex-array aggregate_fn::fns::is_constant::tests::is_constant_min_max_with_nan
+        PASS [   0.010s] (139/929) vortex-array aggregate_fn::fns::is_constant::tests::test_bool_is_constant::case_1
+        PASS [   0.016s] (140/929) vortex-array aggregate_fn::fns::first::tests::first_varbin
+        PASS [   0.012s] (141/929) vortex-array aggregate_fn::fns::is_constant::tests::is_constant_min_max_no_nan
+        PASS [   0.010s] (142/929) vortex-array aggregate_fn::fns::is_constant::tests::test_decimal_is_constant
+        PASS [   0.014s] (143/929) vortex-array aggregate_fn::fns::is_constant::tests::empty_chunk_is_constant
+        PASS [   0.012s] (144/929) vortex-array aggregate_fn::fns::is_constant::tests::test_is_constant_nested_list
+        PASS [   0.013s] (145/929) vortex-array aggregate_fn::fns::is_constant::tests::test_bool_is_constant::case_3
+        PASS [   0.015s] (146/929) vortex-array aggregate_fn::fns::is_constant::tests::test_bool_is_constant::case_2
+        PASS [   0.013s] (147/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant::case_1
+        PASS [   0.011s] (148/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant_nested_lists
+        PASS [   0.012s] (149/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant::case_4
+        PASS [   0.013s] (150/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant::case_3
+        PASS [   0.013s] (151/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant::case_2
+        PASS [   0.013s] (152/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant_with_threshold::case_1
+        PASS [   0.009s] (153/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_decimal_is_sorted
+        PASS [   0.016s] (154/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant_with_threshold::case_2
+        PASS [   0.009s] (155/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_decimal_is_strict_sorted
+        PASS [   0.010s] (156/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_is_sorted
+        PASS [   0.013s] (157/929) vortex-array aggregate_fn::fns::is_constant::tests::test_map_is_constant
+        PASS [   0.011s] (158/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_is_strict_sorted
+        PASS [   0.009s] (159/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_sorted::case_2
+        PASS [   0.010s] (160/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_sorted::case_1
+        PASS [   0.008s] (161/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_strict_sorted::case_1
+        PASS [   0.015s] (162/929) vortex-array aggregate_fn::fns::is_constant::tests::test_list_is_constant_with_threshold::case_3
+        PASS [   0.009s] (163/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_strict_sorted::case_2
+        PASS [   0.010s] (164/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_sorted::case_4
+        PASS [   0.011s] (165/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_sorted::case_3
+        PASS [   0.011s] (166/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_sorted::case_5
+        PASS [   0.011s] (167/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_strict_sorted::case_4
+        PASS [   0.009s] (168/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_strict_sorted::case_5
+        PASS [   0.013s] (169/929) vortex-array aggregate_fn::fns::is_sorted::tests::test_primitive_is_strict_sorted::case_3
+        PASS [   0.010s] (170/929) vortex-array aggregate_fn::fns::last::tests::last_chunked
+        PASS [   0.008s] (171/929) vortex-array aggregate_fn::fns::last::tests::last_empty
+        PASS [   0.011s] (172/929) vortex-array aggregate_fn::fns::last::tests::last_all_null
+        PASS [   0.010s] (173/929) vortex-array aggregate_fn::fns::last::tests::last_constant
+        PASS [   0.007s] (174/929) vortex-array aggregate_fn::fns::last::tests::last_state_merge
+        PASS [   0.010s] (175/929) vortex-array aggregate_fn::fns::last::tests::last_finish_resets_state
+        PASS [   0.010s] (176/929) vortex-array aggregate_fn::fns::last::tests::last_non_null
+        PASS [   0.011s] (177/929) vortex-array aggregate_fn::fns::last::tests::last_multi_batch_picks_latest_non_null
+        PASS [   0.010s] (178/929) vortex-array aggregate_fn::fns::last::tests::last_varbin
+        PASS [   0.012s] (179/929) vortex-array aggregate_fn::fns::last::tests::last_constant_null
+        PASS [   0.011s] (180/929) vortex-array aggregate_fn::fns::last::tests::last_skips_trailing_nulls
+        PASS [   0.010s] (181/929) vortex-array aggregate_fn::fns::max::tests::max_aggregate_fn
+        PASS [   0.008s] (182/929) vortex-array aggregate_fn::fns::max::tests::max_empty_group_returns_null
+        PASS [   0.010s] (183/929) vortex-array aggregate_fn::fns::max::tests::max_casts_nonnullable_legacy_stat_to_nullable_partial
+        PASS [   0.011s] (184/929) vortex-array aggregate_fn::fns::max::tests::max_nan_including_nullable_cached_stat
+        PASS [   0.010s] (185/929) vortex-array aggregate_fn::fns::max::tests::max_not_skipping_shortcircuits_on_exact_nan_count_stat
+        PASS [   0.010s] (186/929) vortex-array aggregate_fn::fns::max::tests::max_with_nan_not_skipping
+        PASS [   0.011s] (187/929) vortex-array aggregate_fn::fns::mean::tests::mean_bool
+        PASS [   0.012s] (188/929) vortex-array aggregate_fn::fns::mean::tests::mean_all_null_returns_null
+        PASS [   0.012s] (189/929) vortex-array aggregate_fn::fns::mean::tests::mean_all_valid
+        PASS [   0.011s] (190/929) vortex-array aggregate_fn::fns::mean::tests::mean_combined_partials
+        PASS [   0.009s] (191/929) vortex-array aggregate_fn::fns::mean::tests::mean_decimal_chunked
+        PASS [   0.010s] (192/929) vortex-array aggregate_fn::fns::mean::tests::mean_decimal_33
+        PASS [   0.013s] (193/929) vortex-array aggregate_fn::fns::mean::tests::mean_chunked
+        PASS [   0.011s] (194/929) vortex-array aggregate_fn::fns::mean::tests::mean_constant_non_null
+        PASS [   0.010s] (195/929) vortex-array aggregate_fn::fns::mean::tests::mean_integers
+        PASS [   0.011s] (196/929) vortex-array aggregate_fn::fns::mean::tests::mean_grouped_finalize
+        PASS [   0.012s] (197/929) vortex-array aggregate_fn::fns::mean::tests::mean_decimal
+        PASS [   0.012s] (198/929) vortex-array aggregate_fn::fns::mean::tests::mean_decimal_null
+        PASS [   0.012s] (199/929) vortex-array aggregate_fn::fns::mean::tests::mean_multi_batch
+        PASS [   0.010s] (200/929) vortex-array aggregate_fn::fns::mean::tests::mean_skips_nans_by_default
+        PASS [   0.010s] (201/929) vortex-array aggregate_fn::fns::mean::tests::mean_with_nulls
+        PASS [   0.010s] (202/929) vortex-array aggregate_fn::fns::min::tests::min_aggregate_fn
+        PASS [   0.010s] (203/929) vortex-array aggregate_fn::fns::min::tests::min_casts_nonnullable_legacy_stat_to_nullable_partial
+        PASS [   0.013s] (204/929) vortex-array aggregate_fn::fns::mean::tests::mean_with_nan_not_skipping
+        PASS [   0.008s] (205/929) vortex-array aggregate_fn::fns::min_max::tests::list_and_fixed_size_list_return_dtype
+        PASS [   0.009s] (206/929) vortex-array aggregate_fn::fns::min::tests::min_empty_group_returns_null
+        PASS [   0.009s] (207/929) vortex-array aggregate_fn::fns::min::tests::min_nan_including_nullable_cached_stat
+        PASS [   0.008s] (208/929) vortex-array aggregate_fn::fns::min_max::tests::test_all_null
+        PASS [   0.010s] (209/929) vortex-array aggregate_fn::fns::min::tests::min_with_nan_not_skipping
+        PASS [   0.011s] (210/929) vortex-array aggregate_fn::fns::min_max::tests::list_and_fixed_size_list_min_max_returns_none
+        PASS [   0.013s] (211/929) vortex-array aggregate_fn::fns::min::tests::min_not_skipping_shortcircuits_on_exact_nan_count_stat
+        PASS [   0.012s] (212/929) vortex-array aggregate_fn::fns::min_max::tests::test_accumulator_nan_including_nullable_cached_stats
+        PASS [   0.011s] (213/929) vortex-array aggregate_fn::fns::min_max::tests::test_bool_min_max
+        PASS [   0.011s] (214/929) vortex-array aggregate_fn::fns::min_max::tests::test_bool_chunked_with_empty_chunk
+        PASS [   0.010s] (215/929) vortex-array aggregate_fn::fns::min_max::tests::test_chunked
+        PASS [   0.011s] (216/929) vortex-array aggregate_fn::fns::min_max::tests::test_bool_with_nulls
+        PASS [   0.009s] (217/929) vortex-array aggregate_fn::fns::min_max::tests::test_constant_nan_not_skipping
+        PASS [   0.010s] (218/929) vortex-array aggregate_fn::fns::min_max::tests::test_constant_nan
+        PASS [   0.012s] (219/929) vortex-array aggregate_fn::fns::min_max::tests::test_chunked_with_empty_constant_chunk
+        PASS [   0.010s] (220/929) vortex-array aggregate_fn::fns::min_max::tests::test_finish_resets_state
+        PASS [   0.010s] (221/929) vortex-array aggregate_fn::fns::min_max::tests::test_multi_batch
+        PASS [   0.011s] (222/929) vortex-array aggregate_fn::fns::min_max::tests::test_decimal
+        PASS [   0.011s] (223/929) vortex-array aggregate_fn::fns::min_max::tests::test_multi_batch_nan_poisoning
+        PASS [   0.011s] (224/929) vortex-array aggregate_fn::fns::min_max::tests::test_not_skipping_shortcircuits_on_exact_nan_count_stat
+        PASS [   0.011s] (225/929) vortex-array aggregate_fn::fns::min_max::tests::test_not_skipping_uses_cached_stats_when_nan_free
+        PASS [   0.011s] (226/929) vortex-array aggregate_fn::fns::min_max::tests::test_null_array
+        PASS [   0.012s] (227/929) vortex-array aggregate_fn::fns::min_max::tests::test_prim_min_max
+        PASS [   0.011s] (228/929) vortex-array aggregate_fn::fns::min_max::tests::test_prim_no_nan_not_skipping
+        PASS [   0.011s] (229/929) vortex-array aggregate_fn::fns::min_max::tests::test_prim_nan_not_skipping
+        PASS [   0.012s] (230/929) vortex-array aggregate_fn::fns::min_max::tests::test_prim_min_max_multiple_null_runs
+        PASS [   0.014s] (231/929) vortex-array aggregate_fn::fns::min_max::tests::test_prim_inf
+        PASS [   0.012s] (232/929) vortex-array aggregate_fn::fns::min_max::tests::test_prim_nan
+        PASS [   0.010s] (233/929) vortex-array aggregate_fn::fns::min_max::tests::test_state_merge
+        PASS [   0.011s] (234/929) vortex-array aggregate_fn::fns::min_max::tests::test_varbin
+        PASS [   0.010s] (235/929) vortex-array aggregate_fn::fns::nan_count::primitive::tests::primitive_nan_count
+        PASS [   0.008s] (236/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_chunked
+        PASS [   0.011s] (237/929) vortex-array aggregate_fn::fns::nan_count::primitive::tests::primitive_nan_count_all_valid_no_nans
+        PASS [   0.014s] (238/929) vortex-array aggregate_fn::fns::min_max::tests::test_varbin_all_nulls
+        PASS [   0.012s] (239/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_all_null
+        PASS [   0.012s] (240/929) vortex-array aggregate_fn::fns::nan_count::primitive::tests::primitive_nan_count_with_nulls
+        PASS [   0.008s] (241/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_state_merge
+        PASS [   0.008s] (242/929) vortex-array aggregate_fn::fns::null_count::tests::null_count_multi_batch
+        PASS [   0.010s] (243/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_finish_resets_state
+        PASS [   0.013s] (244/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_constant_non_nan
+        PASS [   0.014s] (245/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_constant_nan
+        PASS [   0.011s] (246/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_empty
+        PASS [   0.009s] (247/929) vortex-array aggregate_fn::fns::null_count::tests::null_count_with_nulls
+        PASS [   0.011s] (248/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_all_false
+        PASS [   0.010s] (249/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_all_true
+        PASS [   0.013s] (250/929) vortex-array aggregate_fn::fns::nan_count::tests::nan_count_multi_batch
+        PASS [   0.009s] (251/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_return_dtype
+        PASS [   0.010s] (252/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_empty_produces_zero
+        PASS [   0.013s] (253/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_all_null
+        PASS [   0.012s] (254/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_mixed
+        PASS [   0.010s] (255/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_boolean_from_iter
+        PASS [   0.012s] (256/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_with_nulls
+        PASS [   0.015s] (257/929) vortex-array aggregate_fn::fns::sum::bool::tests::sum_bool_finish_resets_state
+        PASS [   0.009s] (258/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_decimal_null
+        PASS [   0.010s] (259/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_bool_null
+        PASS [   0.011s] (260/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_decimal
+        PASS [   0.013s] (261/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_decimal_large_value
+        PASS [   0.013s] (262/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_bool_true
+        PASS [   0.014s] (263/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_bool_false
+        PASS [   0.010s] (264/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_unsigned
+        PASS [   0.011s] (265/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_signed
+        PASS [   0.013s] (266/929) vortex-array aggregate_fn::fns::sum::constant::tests::sum_constant_nullable_value
+        PASS [   0.010s] (267/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_basic
+        PASS [   0.011s] (268/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_all_nulls_except_one
+        PASS [   0.007s] (269/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_near_precision_boundary
+        PASS [   0.012s] (270/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_accumulate_precision_overflow
+        PASS [   0.010s] (271/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_i256_overflow
+        PASS [   0.009s] (272/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_negative_values
+        PASS [   0.010s] (273/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_near_i32_max
+        PASS [   0.011s] (274/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_large_i64_values
+        PASS [   0.009s] (275/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_precision_overflow_negative
+        PASS [   0.008s] (276/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_precision_overflow_within_i256
+        PASS [   0.012s] (277/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_overflow_detection
+        PASS [   0.010s] (278/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_single_value
+        PASS [   0.011s] (279/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_preserves_scale
+        PASS [   0.012s] (280/929) vortex-array aggregate_fn::fns::sum::grouped::tests::fixed_size_overflow_and_nan
+        PASS [   0.013s] (281/929) vortex-array aggregate_fn::fns::sum::decimal::tests::sum_decimal_with_nulls
+        PASS [   0.011s] (282/929) vortex-array aggregate_fn::fns::sum::grouped::tests::listview_out_of_order_offsets_with_null_group
+        PASS [   0.012s] (283/929) vortex-array aggregate_fn::fns::sum::grouped::tests::listview_matches_reference_unsigned
+        PASS [   0.013s] (284/929) vortex-array aggregate_fn::fns::sum::grouped::tests::listview_float_nan_not_skipping
+        PASS [   0.013s] (285/929) vortex-array aggregate_fn::fns::sum::grouped::tests::listview_interior_and_full_nulls
+        PASS [   0.011s] (286/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_all_nan
+        PASS [   0.014s] (287/929) vortex-array aggregate_fn::fns::sum::grouped::tests::listview_float_nan_and_inf
+        PASS [   0.012s] (288/929) vortex-array aggregate_fn::fns::sum::grouped::tests::listview_overflow_group_is_null
+        PASS [   0.012s] (289/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_all_invalid_float
+        PASS [   0.011s] (290/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_all_null
+        PASS [   0.010s] (291/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_checked_overflow
+        PASS [   0.013s] (292/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_buffer_f64
+        PASS [   0.013s] (293/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_buffer_i32
+        PASS [   0.008s] (294/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_empty_produces_zero
+        PASS [   0.009s] (295/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_empty_f64_produces_zero
+        PASS [   0.014s] (296/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_checked_overflow_is_saturated
+        PASS [   0.014s] (297/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_constant_nan
+        PASS [   0.010s] (298/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_f64_with_nan
+        PASS [   0.010s] (299/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_f64_with_nan_not_skipping
+        PASS [   0.011s] (300/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_f64_with_infinity
+        PASS [   0.012s] (301/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_f32_with_nan
+        PASS [   0.012s] (302/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_f64_with_nan_and_nulls
+        PASS [   0.010s] (303/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_multiple_null_runs
+        PASS [   0.012s] (304/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_f64
+        PASS [   0.010s] (305/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_not_skipping_shortcircuits_on_exact_nan_count_stat
+        PASS [   0.011s] (306/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_i32
+        PASS [   0.012s] (307/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_f64_without_nan_not_skipping
+        PASS [   0.012s] (308/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_not_skipping_uses_cached_sum_when_nan_free
+        PASS [   0.011s] (309/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_u8
+        PASS [   0.012s] (310/929) vortex-array aggregate_fn::fns::sum::primitive::tests::sum_with_nulls
+        PASS [   0.014s] (311/929) vortex-array aggregate_fn::fns::sum::tests::grouped_sum_all_null_elements_in_group
+        PASS [   0.011s] (312/929) vortex-array aggregate_fn::fns::sum::tests::grouped_sum_bool
+        PASS [   0.012s] (313/929) vortex-array aggregate_fn::fns::sum::tests::grouped_sum_finish_resets
+        PASS [   0.011s] (314/929) vortex-array aggregate_fn::fns::sum::tests::grouped_sum_with_null_group
+        PASS [   0.010s] (315/929) vortex-array aggregate_fn::fns::sum::tests::sum_chunked_decimals_with_nulls
+        PASS [   0.010s] (316/929) vortex-array aggregate_fn::fns::sum::tests::sum_chunked_floats_empty_chunks
+        PASS [   0.011s] (317/929) vortex-array aggregate_fn::fns::sum::tests::sum_chunked_decimals_large
+        PASS [   0.012s] (318/929) vortex-array aggregate_fn::fns::sum::tests::grouped_sum_with_null_elements
+        PASS [   0.013s] (319/929) vortex-array aggregate_fn::fns::sum::tests::grouped_sum_listview_out_of_order_offsets_with_null_group
+        PASS [   0.015s] (320/929) vortex-array aggregate_fn::fns::sum::tests::grouped_sum_fixed_size_list
+        PASS [   0.013s] (321/929) vortex-array aggregate_fn::fns::sum::tests::sum_chunked_decimals
+        PASS [   0.013s] (322/929) vortex-array aggregate_fn::fns::sum::tests::sum_chunked_floats_all_nulls_is_zero
+        PASS [   0.012s] (323/929) vortex-array aggregate_fn::fns::sum::tests::sum_chunked_floats_with_nulls
+        PASS [   0.010s] (324/929) vortex-array aggregate_fn::fns::sum::tests::sum_chunked_int_almost_all_null
+        PASS [   0.008s] (325/929) vortex-array aggregate_fn::fns::sum::tests::sum_state_merge
+        PASS [   0.009s] (326/929) vortex-array aggregate_fn::fns::sum::tests::sum_multi_batch
+        PASS [   0.013s] (327/929) vortex-array aggregate_fn::fns::sum::tests::sum_constant_float_non_multiply
+        PASS [   0.013s] (328/929) vortex-array aggregate_fn::fns::sum::tests::sum_finish_resets_state
+        PASS [   0.010s] (329/929) vortex-array aggregate_fn::fns::sum::tests::sum_stats
+        PASS [   0.011s] (330/929) vortex-array aggregate_fn::fns::sum_v2::tests::all_null_is_null::case_4_constant
+        PASS [   0.011s] (331/929) vortex-array aggregate_fn::fns::sum_v2::tests::all_null_is_null::case_2_float
+        PASS [   0.012s] (332/929) vortex-array aggregate_fn::fns::sum_v2::tests::all_nan_is_nonempty_zero_when_skipped
+        PASS [   0.012s] (333/929) vortex-array aggregate_fn::fns::sum_v2::tests::all_null_is_null::case_1_primitive
+        PASS [   0.013s] (334/929) vortex-array aggregate_fn::fns::sum_v2::tests::all_null_is_null::case_3_bool
+        PASS [   0.012s] (335/929) vortex-array aggregate_fn::fns::sum_v2::tests::all_null_is_null::case_5_decimal
+        PASS [   0.011s] (336/929) vortex-array aggregate_fn::fns::sum_v2::tests::distinct_id_and_struct_partial
+        PASS [   0.012s] (337/929) vortex-array aggregate_fn::fns::sum_v2::tests::combine_partials_empty_is_identity
+        PASS [   0.012s] (338/929) vortex-array aggregate_fn::fns::sum_v2::tests::empty_chunk_is_a_merge_identity
+        PASS [   0.013s] (339/929) vortex-array aggregate_fn::fns::sum_v2::tests::combine_partials_overflow_is_absorbing
+        PASS [   0.012s] (340/929) vortex-array aggregate_fn::fns::sum_v2::tests::finalize_struct_applies_partial_and_struct_validity::case_2_all_invalid
+        PASS [   0.011s] (341/929) vortex-array aggregate_fn::fns::sum_v2::tests::finalize_struct_applies_partial_and_struct_validity::case_3_some_invalid
+        PASS [   0.013s] (342/929) vortex-array aggregate_fn::fns::sum_v2::tests::finalize_struct_applies_partial_and_struct_validity::case_1_all_valid
+        PASS [   0.011s] (343/929) vortex-array aggregate_fn::fns::sum_v2::tests::grouped_bool_fallback_tracks_empty_groups
+        PASS [   0.010s] (344/929) vortex-array aggregate_fn::fns::sum_v2::tests::ignores_ambiguous_legacy_sum_stat
+        PASS [   0.009s] (345/929) vortex-array aggregate_fn::fns::sum_v2::tests::legacy_sum_is_unchanged
+        PASS [   0.009s] (346/929) vortex-array aggregate_fn::fns::sum_v2::tests::overflow_is_explicit_and_absorbing
+        PASS [   0.013s] (347/929) vortex-array aggregate_fn::fns::sum_v2::tests::grouped_primitive_tracks_empty_overflow_and_null_groups
+        PASS [   0.010s] (348/929) vortex-array aggregate_fn::fns::sum_v2::tests::valid_zero_is_not_empty
+        PASS [   0.010s] (349/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::all_invalid_bool_matches_materialized_size
+        PASS [   0.009s] (350/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::all_invalid_primitive_matches_materialized_size
+        PASS [   0.010s] (351/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::bool_matches_materialized_size
+        PASS [   0.011s] (352/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::chunked_sums_chunk_sizes
+        PASS [   0.011s] (353/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::constant_matches_materialized_size
+        PASS [   0.011s] (354/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::extension_matches_materialized_size
+        PASS [   0.013s] (355/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::decimal_matches_materialized_size
+        PASS [   0.012s] (356/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::helper_caches_result
+        PASS [   0.012s] (357/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::nullable_bool_matches_materialized_size
+        PASS [   0.012s] (358/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::list_matches_materialized_size
+        PASS [   0.012s] (359/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::null_matches_materialized_size
+        PASS [   0.010s] (360/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::struct_matches_materialized_size
+        PASS [   0.016s] (361/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::fixed_size_list_matches_materialized_size
+        PASS [   0.011s] (362/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::state_merge
+        PASS [   0.012s] (363/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::primitive_matches_materialized_size
+        PASS [   0.013s] (364/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::nullable_primitive_matches_materialized_size
+        PASS [   0.009s] (365/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::variant_stat_is_unsupported
+        PASS [   0.011s] (366/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::uses_cached_exact_stat
+        PASS [   0.012s] (367/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::union_sums_type_ids_and_sparse_children
+        PASS [   0.008s] (368/929) vortex-array aggregate_fn::foreign::tests::aggregate_contract_distinct_ids_do_not_satisfy
+        PASS [   0.010s] (369/929) vortex-array aggregate_fn::foreign::tests::aggregate_contract_display_is_not_identity
+        PASS [   0.012s] (370/929) vortex-array aggregate_fn::fns::uncompressed_size_in_bytes::tests::varbinview_matches_materialized_size
+        PASS [   0.011s] (371/929) vortex-array aggregate_fn::proto::tests::aggregate_fn_serde
+        PASS [   0.011s] (372/929) vortex-array aggregate_fn::proto::tests::numeric_aggregate_options_round_trip::case_1
+        PASS [   0.008s] (373/929) vortex-array expr::stats::bound::tests::test_upper_bound_intersection
+        PASS [   0.009s] (374/929) vortex-array expr::stats::bound::tests::test_upper_bound_cmp
+        PASS [   0.009s] (375/929) vortex-array expr::stats::test::has_same_dtype_as_array
+        PASS [   0.013s] (376/929) vortex-array aggregate_fn::proto::tests::numeric_aggregate_options_round_trip::case_2
+        PASS [   0.009s] (377/929) vortex-array stats::bind::tests::all_non_nan_does_not_derive_from_nan_count
+        PASS [   0.010s] (378/929) vortex-array expr::stats::bound::tests::test_upper_bound_union
+        PASS [   0.011s] (379/929) vortex-array aggregate_fn::proto::tests::unknown_aggregate_fn_id_allow_unknown
+        PASS [   0.010s] (380/929) vortex-array expr::stats::test::min_of_nulls_is_not_panic
+        PASS [   0.011s] (381/929) vortex-array expr::stats::bound::tests::test_lower_bound_intersection
+        PASS [   0.009s] (382/929) vortex-array stats::bind::tests::missing_stats_bind_to_null_without_reducing
+        PASS [   0.010s] (383/929) vortex-array stats::bind::tests::nan_count_binds_to_direct_stat_slot
+        PASS [   0.010s] (384/929) vortex-array stats::bind::tests::unrelated_expressions_do_not_request_nan_count
+        PASS [   0.011s] (385/929) vortex-array stats::expr::tests::bound_stats_constructor_preserves_child_and_dtype
+        PASS [   0.014s] (386/929) vortex-array stats::expr::tests::stat_expr_reads_cached_all_nan_false_from_inexact_low_nan_count
+        PASS [   0.011s] (387/929) vortex-array stats::expr::tests::stat_expr_reads_cached_all_nan_from_nan_count
+        PASS [   0.011s] (388/929) vortex-array stats::expr::tests::stat_expr_reads_cached_all_non_nan_true_from_inexact_zero_nan_count
+        PASS [   0.010s] (389/929) vortex-array stats::expr::tests::stat_expr_reads_cached_all_null_false_from_inexact_low_null_count
+        PASS [   0.012s] (390/929) vortex-array stats::expr::tests::stat_expr_reads_cached_all_non_null_true_from_inexact_zero_null_count
+        PASS [   0.011s] (391/929) vortex-array stats::expr::tests::stat_expr_reads_cached_min_and_max
+        PASS [   0.011s] (392/929) vortex-array stats::expr::tests::stat_expr_reads_cached_all_null_from_null_count
+        PASS [   0.010s] (393/929) vortex-array stats::expr::tests::stat_expr_rejects_all_nan_for_non_float
+        PASS [   0.011s] (394/929) vortex-array stats::expr::tests::stat_expr_reads_cached_sum
+        PASS [   0.014s] (395/929) vortex-array stats::expr::tests::stat_expr_reads_cached_all_non_null_from_null_count
+        PASS [   0.011s] (396/929) vortex-array stats::expr::tests::stat_expr_returns_null_for_inexact_full_null_count_as_all_null
+        PASS [   0.011s] (397/929) vortex-array stats::expr::tests::stat_expr_reads_cached_sum_per_chunk
+        PASS [   0.013s] (398/929) vortex-array stats::expr::tests::stat_expr_reads_cached_null_count
+        PASS [   0.014s] (399/929) vortex-array stats::expr::tests::stat_expr_returns_null_for_inexact_full_nan_count_as_all_nan
+        PASS [   0.013s] (400/929) vortex-array stats::expr::tests::stat_expr_returns_null_for_inexact_nonzero_nan_count_as_all_non_nan
+        PASS [   0.012s] (401/929) vortex-array stats::expr::tests::stat_expr_returns_null_for_inexact_nonzero_null_count_as_all_non_null
+        PASS [   0.012s] (402/929) vortex-array stats::expr::tests::stat_expr_returns_null_when_sum_is_missing
+        PASS [   0.011s] (403/929) vortex-array stats::rewrite::builtins::tests::nan_guard_tracks_cast_source_dtype
+        PASS [   0.014s] (404/929) vortex-array stats::rewrite::builtins::tests::forwards_min_max_through_safe_cast
+        PASS [   0.009s] (405/929) vortex-array stats::rewrite::builtins::tests::rewrites_list_contains_falsifier
+        PASS [   0.011s] (406/929) vortex-array stats::rewrite::builtins::tests::rewrites_between_falsifier
+        PASS [   0.010s] (407/929) vortex-array stats::rewrite::builtins::tests::rewrites_like_falsifier
+        PASS [   0.010s] (408/929) vortex-array stats::rewrite::builtins::tests::rewrites_null_satisfiers
+        PASS [   0.010s] (409/929) vortex-array stats::rewrite::builtins::tests::rewrites_dynamic_comparison_falsifier
+        PASS [   0.011s] (410/929) vortex-array stats::rewrite::builtins::tests::rewrites_boolean_falsifiers
+        PASS [   0.010s] (411/929) vortex-array stats::rewrite::builtins::tests::rewrites_null_falsifiers
+        PASS [   0.013s] (412/929) vortex-array stats::rewrite::builtins::tests::or_chain_falsify_visits_each_node_once
+        PASS [   0.013s] (413/929) vortex-array stats::rewrite::builtins::tests::rewrites_comparison_falsifier
+        PASS [   0.011s] (414/929) vortex-array stats::rewrite::builtins::tests::skips_falsifier_when_min_max_unsupported_for_dtype
+        PASS [   0.010s] (415/929) vortex-array stats::rewrite::tests::combines_multiple_falsifiers_with_or
+        PASS [   0.010s] (416/929) vortex-array stats::rewrite::tests::non_predicate_expression_errors
+        PASS [   0.011s] (417/929) vortex-array stats::rewrite::tests::combines_multiple_satisfiers_with_or
+        PASS [   0.010s] (418/929) vortex-array stats::rewrite::tests::unregistered_expression_has_no_rewrite
+        PASS [   0.008s] (419/929) vortex-array stats::stats_set::test::merge_into_bound_max
+        PASS [   0.008s] (420/929) vortex-array stats::stats_set::test::merge_from_sortedness
+        PASS [   0.009s] (421/929) vortex-array stats::stats_set::test::merge_from_max
+        PASS [   0.008s] (422/929) vortex-array stats::stats_set::test::merge_into_min
+        PASS [   0.010s] (423/929) vortex-array stats::stats_set::test::merge_constant
+        PASS [   0.010s] (424/929) vortex-array stats::stats_set::test::merge_decimal_sums_out_of_precision_clears
+        PASS [   0.011s] (425/929) vortex-array stats::stats_set::test::into_iter
+        PASS [   0.010s] (426/929) vortex-array stats::stats_set::test::merge_from_min
+        PASS [   0.009s] (427/929) vortex-array stats::stats_set::test::merge_into_scalar
+        PASS [   0.010s] (428/929) vortex-array stats::stats_set::test::merge_from_scalar
+        PASS [   0.008s] (429/929) vortex-array stats::stats_set::test::merge_into_sortedness
+        PASS [   0.010s] (430/929) vortex-array stats::stats_set::test::merge_maxes_bound
+        PASS [   0.009s] (431/929) vortex-array stats::stats_set::test::merge_min_bound_same
+        PASS [   0.011s] (432/929) vortex-array stats::stats_set::test::merge_maxes
+        PASS [   0.008s] (433/929) vortex-array stats::stats_set::test::merge_sortedness_bound_min
+        PASS [   0.008s] (434/929) vortex-array stats::stats_set::test::merge_sums_overflow_clears
+        PASS [   0.013s] (435/929) vortex-array stats::stats_set::test::merge_min_bound_bound_lower
+        PASS [   0.009s] (436/929) vortex-array stats::stats_set::test::merge_sortedness_only_one_sorted
+        PASS [   0.010s] (437/929) vortex-array stats::stats_set::test::merge_sortedness
+        PASS [   0.009s] (438/929) vortex-array stats::stats_set::test::merge_sortedness_out_of_order
+        PASS [   0.012s] (439/929) vortex-array stats::stats_set::test::merge_mins
+        PASS [   0.011s] (440/929) vortex-array stats::stats_set::test::merge_scalars
+        PASS [   0.011s] (441/929) vortex-array stats::stats_set::test::merge_sortedness_missing_min
+        PASS [   0.010s] (442/929) vortex-array stats::stats_set::test::test_combine_sets_with_inexact
+        PASS [   0.012s] (443/929) vortex-array stats::stats_set::test::merge_unordered
+        PASS [   0.009s] (444/929) vortex-array stats::stats_set::test::test_combine_sets_with_missing_stats
+        PASS [   0.009s] (445/929) vortex-array stats::stats_set::test::test_iter
+        PASS [   0.014s] (446/929) vortex-array stats::stats_set::test::test_combine_is_constant
+        PASS [   0.014s] (447/929) vortex-array stats::stats_set::test::test_combine_sets_boolean_conflict
+        PASS [   0.010s] (448/929) vortex-file footer::deserializer::tests::in_bounds_segment_slice
+        PASS [   0.011s] (449/929) vortex-file footer::deserializer::tests::out_of_bounds_segment_slice::case_3_offset_past_buffer
+        PASS [   0.013s] (450/929) vortex-file footer::deserializer::tests::out_of_bounds_segment_slice::case_2_end_past_buffer
+        PASS [   0.013s] (451/929) vortex-file footer::deserializer::tests::out_of_bounds_segment_slice::case_4_end_overflows_usize
+        PASS [   0.014s] (452/929) vortex-file footer::deserializer::tests::out_of_bounds_segment_slice::case_1_offset_before_read_start
+        PASS [   0.016s] (453/929) vortex-file footer::deserializer::tests::deserialize_rejects_out_of_bounds_footer_segment::case_2_offset_overflow
+        PASS [   0.017s] (454/929) vortex-file footer::deserializer::tests::deserialize_rejects_out_of_bounds_footer_segment::case_1_length_past_eof
+        PASS [   0.017s] (455/929) vortex-file footer::deserializer::tests::deserialize_rejects_buffer_larger_than_declared_size
+        PASS [   0.013s] (456/929) vortex-file footer::postscript::tests::empty_metadata_keys_are_rejected
+        PASS [   0.014s] (457/929) vortex-file footer::postscript::tests::duplicate_metadata_keys_are_rejected
+        PASS [   0.012s] (458/929) vortex-file footer::postscript::tests::metadata_limit_boundaries_roundtrip
+        PASS [   0.022s] (459/929) vortex-file default_encoding_tests::register_default_encodings_registers_external_execute_parent_kernels
+        PASS [   0.010s] (460/929) vortex-file footer::postscript::tests::too_many_metadata_segments_are_rejected
+        PASS [   0.014s] (461/929) vortex-file footer::postscript::tests::long_metadata_keys_are_rejected
+        PASS [   0.011s] (462/929) vortex-file footer::segment::tests::rejects_excessive_alignment_exponent
+        PASS [   0.010s] (463/929) vortex-file footer::tests::rejects_segment_extending_past_end_of_file
+        PASS [   0.011s] (464/929) vortex-file footer::segment::tests::rejects_out_of_range_alignment_exponent
+        PASS [   0.011s] (465/929) vortex-file footer::tests::accepts_segments_within_file
+        PASS [   0.009s] (466/929) vortex-file forever_constant::test::never_change_these_constants
+        PASS [   0.011s] (467/929) vortex-file footer::tests::rejects_segment_offset_length_overflow
+        PASS [   0.023s] (468/929) vortex-file footer::field_sizes::tests::non_struct_file_reports_single_column
+        PASS [   0.010s] (469/929) vortex-file multi::uri::tests::test_absolute_path
+        PASS [   0.009s] (470/929) vortex-file multi::uri::tests::test_dot_normalization::case_2
+        PASS [   0.009s] (471/929) vortex-file multi::uri::tests::test_dot_normalization::case_3
+        PASS [   0.014s] (472/929) vortex-file multi::tests::test_cached_footer_default_then_metadata_is_order_independent
+        PASS [   0.028s] (473/929) vortex-file footer::field_sizes::tests::nested_field_sizes
+        PASS [   0.011s] (474/929) vortex-file multi::uri::tests::test_dot_normalization::case_1
+        PASS [   0.029s] (475/929) vortex-file footer::field_sizes::tests::column_sizes_in_schema_order
+        PASS [   0.014s] (476/929) vortex-file multi::tests::test_cached_footer_metadata_then_default_is_order_independent
+        PASS [   0.009s] (477/929) vortex-file multi::uri::tests::test_dot_normalization::case_4
+        PASS [   0.008s] (478/929) vortex-file multi::uri::tests::test_dot_normalization::case_6
+        PASS [   0.009s] (479/929) vortex-file multi::uri::tests::test_dot_normalization::case_5
+        PASS [   0.016s] (480/929) vortex-file multi::tests::test_multi_file_metadata_isolated_per_uri
+        PASS [   0.010s] (481/929) vortex-file multi::uri::tests::test_dot_normalization::case_7
+        PASS [   0.010s] (482/929) vortex-file multi::uri::tests::test_file_scheme
+        PASS [   0.009s] (483/929) vortex-file multi::uri::tests::test_relative_path_resolves_against_cwd
+        PASS [   0.008s] (484/929) vortex-file multi::uri::tests::test_single_letter_scheme_is_path
+        PASS [   0.009s] (485/929) vortex-file multi::uri::tests::test_full_url
+        PASS [   0.009s] (486/929) vortex-file read::driver::tests::test_cancelled_requests
+        PASS [   0.011s] (487/929) vortex-file read::driver::tests::test_bounded_request_batches
+        PASS [   0.008s] (488/929) vortex-file read::driver::tests::test_dropped_requests
+        PASS [   0.010s] (489/929) vortex-file read::driver::tests::test_coalesce_expansion_around_polled
+        PASS [   0.008s] (490/929) vortex-file read::driver::tests::test_empty_stream
+        PASS [   0.011s] (491/929) vortex-file read::driver::tests::test_coalesce_adjacent
+        PASS [   0.009s] (492/929) vortex-file read::driver::tests::test_coalesce_with_gap
+        PASS [   0.014s] (493/929) vortex-file open::tests::test_with_footer_include_metadata_open_buffer_resolves
+        PASS [   0.016s] (494/929) vortex-file open::tests::collect_initial_segments_rejects_out_of_bounds_segment
+        PASS [   0.012s] (495/929) vortex-file read::driver::tests::test_coalesce_alignment_adjustment
+        PASS [   0.016s] (496/929) vortex-file open::tests::test_metadata_outside_initial_read_uses_targeted_read
+        PASS [   0.011s] (497/929) vortex-file read::driver::tests::test_metrics_individual_only
+        PASS [   0.011s] (498/929) vortex-file read::driver::tests::test_metrics_tracking
+        PASS [   0.010s] (499/929) vortex-file read::driver::tests::test_on_event_cleans_cancelled_requests_early
+        PASS [   0.010s] (500/929) vortex-file read::driver::tests::test_poll_order_priority
+        PASS [   0.010s] (501/929) vortex-file read::driver::tests::test_partial_batch_emits_without_waiting_for_more_events
+        PASS [   0.013s] (502/929) vortex-file read::driver::tests::test_mixed_coalesced_and_single
+        PASS [   0.011s] (503/929) vortex-file read::driver::tests::test_unpolled_requests_ignored
+        PASS [   0.012s] (504/929) vortex-file segments::source::tests::file_segment_source_propagates_read_driver_panic
+        PASS [   0.013s] (505/929) vortex-file read::driver::tests::test_single_request
+        PASS [   0.011s] (506/929) vortex-file segments::source::tests::read_driver_keeps_slots_full_while_a_straggler_is_in_flight
+        PASS [   0.013s] (507/929) vortex-file segments::source::tests::read_driver_batches_ready_requests
+        PASS [   0.012s] (508/929) vortex-file segments::source::tests::read_driver_concurrent_reads_make_progress
+        PASS [   0.028s] (509/929) vortex-file open::tests::test_open_path_uses_memory_session_allocator
+        PASS [   0.015s] (510/929) vortex-file segments::source::tests::file_segment_source_panic_propagates_to_all_concurrent_readers
+        PASS [   0.013s] (511/929) vortex-file segments::source::tests::read_driver_refills_global_concurrency_across_batches
+        PASS [   0.009s] (512/929) vortex-file segments::source::tests::read_range_results_matches_results_and_reports_missing_requests
+        PASS [   0.015s] (513/929) vortex-file tests::basic_file_roundtrip
+        PASS [   0.015s] (514/929) vortex-file tests::file_excluding_dtype
+        PASS [   0.018s] (515/929) vortex-file tests::file_take
+        PASS [   0.019s] (516/929) vortex-file tests::filter_string
+        PASS [   0.019s] (517/929) vortex-file tests::issue_5385_filter_casted_column
+        PASS [   0.021s] (518/929) vortex-file tests::filter_and
+        PASS [   0.020s] (519/929) vortex-file tests::filter_string_chunked
+        PASS [   0.017s] (520/929) vortex-file tests::repro_8166_binary_gt_all_ff_max
+        PASS [   0.050s] (521/929) vortex-file open::tests::standalone_footer_round_trip
+        PASS [   0.022s] (522/929) vortex-file tests::nested_list_of_list_roundtrip
+        PASS [   0.024s] (523/929) vortex-file tests::filter_or
+        PASS [   0.026s] (524/929) vortex-file tests::nested_struct_list_struct_roundtrip
+        PASS [   0.044s] (525/929) vortex-file segments::source::tests::file_segment_source_read_driver_panic_propagates_deterministically
+        PASS [   0.010s] (526/929) vortex-file tests::test_eof_values
+        PASS [   0.021s] (527/929) vortex-file tests::scan_empty_fields
+        PASS [   0.010s] (528/929) vortex-file tests::test_field_writer_conflicts_with_aggregates::case_2
+        PASS [   0.011s] (529/929) vortex-file tests::test_field_writer_conflicts_with_aggregates::case_1
+        PASS [   0.015s] (530/929) vortex-file tests::test_encoding_registered_after_write_options
+        PASS [   0.016s] (531/929) vortex-file tests::test_empty_varbin_array_roundtrip
+        PASS [   0.022s] (532/929) vortex-file tests::test_array_stream_no_double_dict_encode
+        PASS [   0.018s] (533/929) vortex-file tests::test_buffered_bytes_are_writer_scoped
+        PASS [   0.026s] (534/929) vortex-file tests::struct_with_map_column_roundtrip
+        PASS [   0.016s] (535/929) vortex-file tests::test_file_metadata_malformed_alignment_returns_error_on_default_open
+        PASS [   0.020s] (536/929) vortex-file tests::test_can_prune_composite_predicates
+        PASS [   0.015s] (537/929) vortex-file tests::test_file_metadata_roundtrip
+        PASS [   0.022s] (538/929) vortex-file tests::test_into_tokio_array_stream
+        PASS [   0.022s] (539/929) vortex-file tests::test_read_projection
+        PASS [   0.025s] (540/929) vortex-file tests::test_pruning_with_or
+        PASS [   0.022s] (541/929) vortex-file tests::test_read_simple
+        PASS [   0.028s] (542/929) vortex-file tests::test_read_simple_with_spawn
+        PASS [   0.028s] (543/929) vortex-file tests::test_repeated_projection
+        PASS [   0.035s] (544/929) vortex-file tests::test_flat_chunk_scan_with_row_count_splits::case_2_exceeds_file
+        PASS [   0.036s] (545/929) vortex-file tests::test_flat_chunk_scan_with_row_count_splits::case_1_unaligned
+        PASS [   0.063s] (546/929) vortex-file tests::probe_compressor_override_is_independent
+        PASS [   0.029s] (547/929) vortex-file tests::test_round_trip_many_types
+        PASS [   0.036s] (548/929) vortex-file tests::test_large_flat_chunk_scan_subdivides_splits
+        PASS [   0.023s] (549/929) vortex-file tests::test_with_indices_and_with_row_filter_simple
+        PASS [   0.012s] (550/929) vortex-file tests::test_writer_buffered_bytes::case_4_struct_default
+        PASS [   0.020s] (551/929) vortex-file tests::test_writer_basic_push
+        PASS [   0.016s] (552/929) vortex-file tests::test_writer_buffered_bytes::case_1_table_one_leaf
+        PASS [   0.014s] (553/929) vortex-file tests::test_writer_bytes_written
+        PASS [   0.016s] (554/929) vortex-file tests::test_writer_buffered_bytes::case_3_table_field_override
+        PASS [   0.024s] (555/929) vortex-file tests::test_with_indices_on_two_columns
+        PASS [   0.024s] (556/929) vortex-file tests::test_with_indices_simple
+        PASS [   0.019s] (557/929) vortex-file tests::test_writer_buffered_bytes::case_2_table_two_shared_leaves
+        PASS [   0.016s] (558/929) vortex-file tests::test_writer_mixed_push_and_stream
+        PASS [   0.018s] (559/929) vortex-file tests::test_writer_empty_chunks
+        PASS [   0.091s] (560/929) vortex-file tests::dict_probe_honours_configured_compressor
+        PASS [   0.016s] (561/929) vortex-file tests::test_writer_multiple_pushes
+        PASS [   0.019s] (562/929) vortex-file tests::test_writer_push_stream
+        PASS [   0.018s] (563/929) vortex-file tests::timestamp_unit_mismatch
+        PASS [   0.017s] (564/929) vortex-file tests::timestamp_unit_mismatch_errors_with_constant_children
+        PASS [   0.018s] (565/929) vortex-file tests::test_writer_with_statistics
+        PASS [   0.014s] (566/929) vortex-file v2::file_stats_reader::tests::is_null_pruning_on_nullable_timestamp_column
+        PASS [   0.012s] (567/929) vortex-file v2::file_stats_reader::tests::no_pruning_for_computed_expression_stats
+        PASS [   0.014s] (568/929) vortex-file tests::write_nullable_nested_struct
+        PASS [   0.015s] (569/929) vortex-file tests::write_nullable_top_level_struct
+        PASS [   0.023s] (570/929) vortex-file tests::test_writer_with_complex_types
+        PASS [   0.022s] (571/929) vortex-file tests::unequal_batches
+        PASS [   0.012s] (572/929) vortex-file v2::file_stats_reader::tests::no_pruning_when_filter_in_range
+        PASS [   0.024s] (573/929) vortex-file tests::write_chunked
+        PASS [   0.008s] (574/929) vortex-file writer::tests::disabling_editions_allows_all_registered_array_ids
+        PASS [   0.010s] (575/929) vortex-file writer::tests::array_context_only_permits_enabled_encodings
+        PASS [   0.011s] (576/929) vortex-file v2::file_stats_reader::tests::pruning_when_filter_out_of_range
+        PASS [   0.011s] (577/929) vortex-file writer::tests::validate_metadata_accepts_no_metadata
+        PASS [   0.011s] (578/929) vortex-file writer::tests::dtype_filter_checks_nested_extension_dtypes
+        PASS [   0.014s] (579/929) vortex-file v2::file_stats_reader::tests::pruning_is_not_null_when_file_is_all_null
+        PASS [   0.012s] (580/929) vortex-file writer::tests::kind_filters_are_active_when_empty
+        PASS [   0.010s] (581/929) vortex-file writer::tests::validate_metadata_rejects::case_1_empty_key
+        PASS [   0.013s] (582/929) vortex-file writer::tests::validate_metadata_accepts_the_limits
+        PASS [   0.012s] (583/929) vortex-file writer::tests::validate_metadata_rejects::case_2_oversized_key
+        PASS [   0.010s] (584/929) vortex-file writer::tests::validate_metadata_rejects::case_3_oversized_multibyte_key
+        PASS [   0.012s] (585/929) vortex-file writer::tests::validate_metadata_rejects::case_4_too_many_segments
+        PASS [   0.014s] (586/929) vortex-file::bloom_skip_index composition_tests::data_writer_and_complete_writer_return_error
+        PASS [   0.012s] (587/929) vortex-file::bloom_skip_index composition_tests::opaque_parent_data_writer_rejects_nested_index
+        PASS [   0.014s] (588/929) vortex-file::bloom_skip_index composition_tests::overlapping_complete_writer_returns_error
+        PASS [   0.022s] (589/929) vortex-file::bloom_skip_index composition_tests::element_index_requires_list_decomposition
+        PASS [   0.020s] (590/929) vortex-file::bloom_skip_index composition_tests::missing_field_index_returns_error
+        PASS [   0.027s] (591/929) vortex-file::bloom_skip_index composition_tests::index_without_custom_probe_uses_builtin_rewrites
+        PASS [   0.032s] (592/929) vortex-file::bloom_skip_index additive_api_preserves_defaults
+        PASS [   0.027s] (593/929) vortex-file::bloom_skip_index composition_tests::list_element_aggregate_override_is_applied
+        PASS [   0.032s] (594/929) vortex-file::bloom_skip_index composition_tests::custom_data_writer_keeps_bloom_pruning::case_1_manual
+        PASS [   0.031s] (595/929) vortex-file::bloom_skip_index composition_tests::custom_data_writer_keeps_bloom_pruning::case_2_data_writer_hook
+        PASS [   0.012s] (596/929) vortex-file::bloom_skip_index missing_explicit_field_is_rejected
+        PASS [   0.037s] (597/929) vortex-file::bloom_skip_index composition_tests::aggregate_override_preserves_list_decomposition
+        PASS [   0.024s] (598/929) vortex-file::bloom_skip_index composition_tests::parent_summary_and_nested_index_compose
+        PASS [   0.041s] (599/929) vortex-file::bloom_skip_index bloom_roundtrip_prunes_and_unknown_reader_matches_full_scan
+        PASS [   0.023s] (600/929) vortex-file::bloom_skip_index composition_tests::separate_zones_preserve_known_pruning::case_1_bloom_inside
+        PASS [   0.013s] (601/929) vortex-file::bloom_skip_index unsupported_explicit_bloom_dtype_is_rejected
+        PASS [   0.021s] (602/929) vortex-file::bloom_skip_index composition_tests::separate_zones_preserve_known_pruning::case_2_bloom_outside
+        PASS [   0.023s] (603/929) vortex-file::bloom_skip_index unknown_aggregate_disables_known_pruning_in_same_zone_map
+        PASS [   0.128s] (604/929) vortex-file tests::test_segment_ordering_dict_codes_before_values
+        PASS [   0.022s] (605/929) vortex-file::test_write_table test_write_empty_nullable_struct_column
+        PASS [   0.032s] (606/929) vortex-file::bloom_skip_index reader_uses_bloom_options_serialized_in_file
+        PASS [   0.016s] (607/929) vortex-layout display::tests::test_display_tree_without_inline_node
+        PASS [   0.020s] (608/929) vortex-layout display::tests::test_display_array_tree_with_inline_node
+        PASS [   0.016s] (609/929) vortex-layout flatbuffers::tests::unknown_layout_encoding_allow_unknown
+        PASS [   0.018s] (610/929) vortex-layout display::tests::test_display_tree_with_segment_source
+        PASS [   0.021s] (611/929) vortex-layout display::tests::test_display_tree_inline_array_tree
+        PASS [   0.031s] (612/929) vortex-file::issue_8819_footer_segment_oob open_buffer_rejects_out_of_bounds_footer_segment
+        PASS [   0.012s] (613/929) vortex-layout layout::tests::layout_child_type_names_and_offsets
+        PASS [   0.028s] (614/929) vortex-file::test_write_table test_file_roundtrip
+        PASS [   0.033s] (615/929) vortex-file::test_write_table test_dict_listview_validity_roundtrip
+        PASS [   0.011s] (616/929) vortex-layout layouts::chunked::reader::test::test_nested_chunked_layout_splits::case_2
+        PASS [   0.037s] (617/929) vortex-file::single_thread_runtime roundtrip_on_single_thread_runtime
+        PASS [   0.012s] (618/929) vortex-layout layouts::chunked::reader::test::test_nested_chunked_layout_splits::case_1
+        PASS [   0.015s] (619/929) vortex-layout layouts::chunked::reader::test::test_chunked_evaluator
+        PASS [   0.017s] (620/929) vortex-layout layouts::dict::reader::tests::reading_is_null_works
+        PASS [   0.012s] (621/929) vortex-layout layouts::dict::reader::tests::split_expr_root
+        PASS [   0.014s] (622/929) vortex-layout layouts::dict::reader::tests::split_expr_no_pushdown
+        PASS [   0.018s] (623/929) vortex-layout layouts::dict::reader::tests::reading_nested_packs_works
+        PASS [   0.019s] (624/929) vortex-layout layouts::dict::reader::tests::reading_byte_length_pushdown_works
+        PASS [   0.015s] (625/929) vortex-layout layouts::dict::reader::tests::split_expr_partial_pushdown
+        PASS [   0.018s] (626/929) vortex-layout layouts::dict::reader::tests::shortpathes_filtering::case_2_all_false_case
+        PASS [   0.019s] (627/929) vortex-layout layouts::dict::reader::tests::shortpathes_filtering::case_1_all_true_case
+        PASS [   0.018s] (628/929) vortex-layout layouts::dict::reader::tests::split_expr_full_pushdown
+        PASS [   0.013s] (629/929) vortex-layout layouts::dict::writer::tests::test_dict_transformer_uses_u8_for_small_dictionaries
+        PASS [   0.014s] (630/929) vortex-layout layouts::dict::writer::tests::test_dict_transformer_uses_u16_for_large_dictionaries
+        PASS [   0.013s] (631/929) vortex-layout layouts::file_stats::tests::fixed_width_stats_omit_is_truncated_columns
+        PASS [   0.014s] (632/929) vortex-layout layouts::file_stats::tests::truncated_accumulated_stats_are_inexact::case_1
+        PASS [   0.011s] (633/929) vortex-layout layouts::file_stats::tests::truncated_accumulated_stats_are_inexact::case_2
+        PASS [   0.013s] (634/929) vortex-layout layouts::file_stats::tests::truncates_accumulated_stats::case_1
+        PASS [   0.013s] (635/929) vortex-layout layouts::file_stats::tests::truncates_accumulated_stats::case_2
+        PASS [   0.013s] (636/929) vortex-layout layouts::flat::reader::test::flat_expr
+        PASS [   0.013s] (637/929) vortex-layout layouts::flat::reader::test::flat_identity
+        PASS [   0.012s] (638/929) vortex-layout layouts::flat::writer::tests::truncates_variable_size_stats
+        PASS [   0.013s] (639/929) vortex-layout layouts::flat::writer::tests::flat_stats
+        PASS [   0.015s] (640/929) vortex-layout layouts::flat::writer::tests::struct_array_round_trip
+        PASS [   0.016s] (641/929) vortex-layout layouts::flat::reader::test::flat_unaligned_row_mask
+        PASS [   0.015s] (642/929) vortex-layout layouts::list::reader::tests::chunked_elements_produces_chunked_layout
+        PASS [   0.016s] (643/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_02_subrange_all_true
+        PASS [   0.017s] (644/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_01_full_all_true
+        PASS [   0.014s] (645/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_04_partial_start
+        PASS [   0.012s] (646/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_05_partial_end
+        PASS [   0.012s] (647/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_07_single_empty_row
+        PASS [   0.017s] (648/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_03_subrange_sparse
+        PASS [   0.014s] (649/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_06_single_non_empty
+        PASS [   0.014s] (650/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_08_empty_range
+        PASS [   0.015s] (651/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_09_subrange_all_false
+        PASS [   0.012s] (652/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_12_partial_end_nullable
+        PASS [   0.015s] (653/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_10_subrange_single_interior
+        PASS [   0.015s] (654/929) vortex-layout layouts::list::reader::tests::chunked_elements_round_trips::case_11_subrange_sparse_nullable
+        PASS [   0.014s] (655/929) vortex-layout layouts::list::reader::tests::fetch_offsets_includes_extra_endpoint
+        PASS [   0.012s] (656/929) vortex-layout layouts::list::reader::tests::filter_evaluation_sparse_mask_maps_by_rank
+        PASS [   0.014s] (657/929) vortex-layout layouts::list::reader::tests::filter_evaluation_intersects_with_input_mask
+        PASS [   0.008s] (658/929) vortex-layout layouts::list::reader::tests::maps_element_splits_to_outer_grid
+        PASS [   0.013s] (659/929) vortex-layout layouts::list::reader::tests::filter_evaluation_validity_class::case_3_is_null_nullable
+        PASS [   0.014s] (660/929) vortex-layout layouts::list::reader::tests::filter_evaluation_validity_class::case_1_is_not_null_nullable
+        PASS [   0.011s] (661/929) vortex-layout layouts::list::reader::tests::filter_evaluation_validity_class::case_4_is_null_non_nullable
+        PASS [   0.014s] (662/929) vortex-layout layouts::list::reader::tests::filter_evaluation_validity_class::case_2_is_not_null_non_nullable
+        PASS [   0.017s] (663/929) vortex-layout layouts::list::reader::tests::filter_evaluation_list_length
+        PASS [   0.014s] (664/929) vortex-layout layouts::list::reader::tests::full_range_sparse_mask_crops_element_read
+        PASS [   0.017s] (665/929) vortex-layout layouts::list::reader::tests::projection_cast_list_length
+        PASS [   0.015s] (666/929) vortex-layout layouts::list::reader::tests::projection_evaluation_applies_mask
+        PASS [   0.018s] (667/929) vortex-layout layouts::list::reader::tests::nested_list_propagates_element_splits
+        PASS [   0.014s] (668/929) vortex-layout layouts::list::reader::tests::projection_evaluation_partial_range_bounded
+        PASS [   0.012s] (669/929) vortex-layout layouts::list::reader::tests::projection_evaluation_round_trips::case_3_partial_end
+        PASS [   0.015s] (670/929) vortex-layout layouts::list::reader::tests::projection_evaluation_round_trips::case_1_full_range
+        PASS [   0.012s] (671/929) vortex-layout layouts::list::reader::tests::projection_evaluation_round_trips::case_4_middle_single
+        PASS [   0.013s] (672/929) vortex-layout layouts::list::reader::tests::projection_evaluation_round_trips::case_5_empty_range
+        PASS [   0.014s] (673/929) vortex-layout layouts::list::reader::tests::projection_evaluation_sparse_mask_round_trips::case_1_single_middle
+        PASS [   0.017s] (674/929) vortex-layout layouts::list::reader::tests::projection_evaluation_round_trips::case_2_partial_start
+        PASS [   0.015s] (675/929) vortex-layout layouts::list::reader::tests::projection_evaluation_round_trips::case_6_full_range_null
+        PASS [   0.013s] (676/929) vortex-layout layouts::list::reader::tests::projection_evaluation_sparse_mask_round_trips::case_3_boundaries
+        PASS [   0.016s] (677/929) vortex-layout layouts::list::reader::tests::projection_evaluation_sparse_mask_round_trips::case_2_two_far_apart
+        PASS [   0.012s] (678/929) vortex-layout layouts::list::reader::tests::projection_evaluation_sparse_mask_round_trips::case_6_all_false
+        PASS [   0.013s] (679/929) vortex-layout layouts::list::reader::tests::projection_list_length_applies_sparse_mask
+        PASS [   0.015s] (680/929) vortex-layout layouts::list::reader::tests::projection_evaluation_sparse_mask_round_trips::case_4_kept_empty_row
+        PASS [   0.015s] (681/929) vortex-layout layouts::list::reader::tests::projection_evaluation_sparse_mask_round_trips::case_5_sparse_nullable
+        PASS [   0.013s] (682/929) vortex-layout layouts::list::reader::tests::projection_list_length_preserves_validity
+        PASS [   0.013s] (683/929) vortex-layout layouts::list::reader::tests::projection_list_length_reads_offsets
+        PASS [   0.011s] (684/929) vortex-layout layouts::list::writer::tests::empty_stream_errors
+        PASS [   0.017s] (685/929) vortex-layout layouts::list::reader::tests::projection_validity_class::case_1_nullable
+        PASS [   0.018s] (686/929) vortex-layout layouts::list::reader::tests::projection_validity_class::case_2_non_nullable
+        PASS [   0.008s] (687/929) vortex-layout layouts::repartition::tests::effective_block_len_large_elements
+        PASS [   0.011s] (688/929) vortex-layout layouts::repartition::tests::effective_block_len_small_elements
+        PASS [   0.014s] (689/929) vortex-layout layouts::repartition::tests::chunks_buffer_pop_front_no_panic_after_shared_execution
+        PASS [   0.009s] (690/929) vortex-layout layouts::repartition::tests::effective_block_len_variable_width
+        PASS [   0.009s] (691/929) vortex-layout layouts::repartition::tests::effective_block_len_very_large_elements
+        PASS [   0.014s] (692/929) vortex-layout layouts::repartition::tests::repartition_small_element_type_unchanged
+        PASS [   0.014s] (693/929) vortex-layout layouts::row_idx::tests::flat_expr_row_id
+        PASS [   0.015s] (694/929) vortex-layout layouts::row_idx::tests::flat_expr_no_row_id
+        PASS [   0.015s] (695/929) vortex-layout layouts::row_idx::tests::flat_expr_or
+        PASS [   0.016s] (696/929) vortex-layout layouts::struct_::reader::tests::test_empty_struct
+        PASS [   0.027s] (697/929) vortex-layout layouts::repartition::tests::repartition_large_element_type_produces_small_blocks
+        PASS [   0.013s] (698/929) vortex-layout layouts::struct_::reader::tests::test_struct_filter_dtype_mismatch_fails_binding
+        PASS [   0.013s] (699/929) vortex-layout layouts::struct_::reader::tests::test_struct_layout
+        PASS [   0.015s] (700/929) vortex-layout layouts::struct_::reader::tests::test_struct_layout_nulls
+        PASS [   0.014s] (701/929) vortex-layout layouts::struct_::reader::tests::test_struct_layout_or
+        PASS [   0.016s] (702/929) vortex-layout layouts::struct_::reader::tests::test_struct_layout_nested
+        PASS [   0.016s] (703/929) vortex-layout layouts::struct_::reader::tests::test_struct_layout_row_mask
+        PASS [   0.015s] (704/929) vortex-layout layouts::struct_::reader::tests::test_struct_layout_select
+        PASS [   0.015s] (705/929) vortex-layout layouts::struct_::tests::field_slots_are_stable_across_nullability
+        PASS [   0.271s] (706/929) vortex-file tests::test_segment_ordering_zonemaps_after_data
+        PASS [   0.081s] (707/929) vortex-layout layouts::list::writer::tests::list_of_list_of_list_tree
+        PASS [   0.084s] (708/929) vortex-layout layouts::list::writer::tests::basic_non_nullable_input
+        PASS [   0.088s] (709/929) vortex-layout layouts::list::writer::tests::list_of_struct_tree
+        PASS [   0.012s] (710/929) vortex-layout layouts::table::tests::test_overlapping_paths_fail
+        PASS [   0.015s] (711/929) vortex-layout layouts::table::tests::table_fanout_panic_propagates
+        PASS [   0.096s] (712/929) vortex-layout layouts::list::writer::tests::non_list_input_routes_to_fallback
+        PASS [   0.104s] (713/929) vortex-layout layouts::list::writer::tests::basic_nullable_input
+        PASS [   0.013s] (714/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::bool::tests::membership::case_1_inserts_each_valid_boolean_value
+        PASS [   0.016s] (715/929) vortex-layout layouts::table::tests::test_root_override
+        PASS [   0.017s] (716/929) vortex-layout layouts::table::tests::wraps_list_strategy_before_decomposition
+        PASS [   0.114s] (717/929) vortex-layout layouts::list::writer::tests::chunked_list_input_with_chunked_strategy_succeeds
+        PASS [   0.016s] (718/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::bool::tests::membership::case_2_inserts_only_false
+        PASS [   0.019s] (719/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::bool::tests::membership::case_3_inserts_only_true
+        PASS [   0.014s] (720/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::bool::tests::membership::case_4_ignores_null_boolean_values
+        PASS [   0.015s] (721/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::bool::tests::membership::case_5_all_null_booleans_leave_the_filter_empty
+        PASS [   0.122s] (722/929) vortex-layout layouts::list::writer::tests::list_of_list_tree
+        PASS [   0.016s] (723/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::extension::tests::hashes_extension_values_through_storage
+        PASS [   0.016s] (724/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::extension::tests::ignores_null_extension_values
+        PASS [   0.015s] (725/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::membership::case_1
+        PASS [   0.015s] (726/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::membership::case_2
+        PASS [   0.014s] (727/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::membership::case_3
+        PASS [   0.012s] (728/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::membership::case_4
+        PASS [   0.011s] (729/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::nan_bit_patterns_are_distinct_members
+        PASS [   0.014s] (730/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::membership::case_5
+        PASS [   0.090s] (731/929) vortex-layout layouts::table::tests::dispatches_nested_list
+        PASS [   0.015s] (732/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::membership::case_6
+        PASS [   0.093s] (733/929) vortex-layout layouts::table::tests::dispatches_chunked_list
+        PASS [   0.014s] (734/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::validity_all_false::case_1
+        PASS [   0.010s] (735/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::validity_mixed::case_1
+        PASS [   0.091s] (736/929) vortex-layout layouts::table::tests::dispatches_struct_list_struct
+        PASS [   0.012s] (737/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::primitive::tests::validity_all_true::case_1
+        PASS [   0.013s] (738/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::varbin::tests::roundtrips_options_and_membership_varbin::case_1_inlined
+        PASS [   0.009s] (739/929) vortex-layout layouts::zoned::aggregates::bloom_filter::constant::tests::nulls_are_omitted
+        PASS [   0.085s] (740/929) vortex-layout layouts::table::tests::non_struct_input_uses_leaf
+        PASS [   0.012s] (741/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::varbin::tests::roundtrips_options_and_membership_varbin::case_2_buffered
+        PASS [   0.095s] (742/929) vortex-layout layouts::table::tests::dispatches_struct
+        PASS [   0.012s] (743/929) vortex-layout layouts::zoned::aggregates::bloom_filter::constant::tests::null_always_returns_false
+        PASS [   0.014s] (744/929) vortex-layout layouts::zoned::aggregates::bloom_filter::canonical::varbin::tests::roundtrips_options_and_membership_varbin_mixed_with_nulls
+        PASS [   0.011s] (745/929) vortex-layout layouts::zoned::aggregates::bloom_filter::partial::scalar::tests::hash_invalid_scalar_panics
+        PASS [   0.013s] (746/929) vortex-layout layouts::zoned::aggregates::bloom_filter::constant::tests::valid_extension_is_a_member
+        PASS [   0.358s] (747/929) vortex-file tests::test_string_chunks_stay_fine_grained_under_split_cap
+        PASS [   0.107s] (748/929) vortex-layout layouts::table::tests::chunked_struct
+        PASS [   0.011s] (749/929) vortex-layout layouts::zoned::aggregates::bloom_filter::partial::tests::bigger_filter_size
+        PASS [   0.011s] (750/929) vortex-layout layouts::zoned::aggregates::bloom_filter::partial::serde::tests::valid_serde
+        PASS [   0.013s] (751/929) vortex-layout layouts::zoned::aggregates::bloom_filter::partial::serde::tests::invalid_serde
+        PASS [   0.009s] (752/929) vortex-layout layouts::zoned::aggregates::bloom_filter::partial::tests::hash_output_is_stable::case_1
+        PASS [   0.098s] (753/929) vortex-layout layouts::table::tests::field_override_is_used
+        PASS [   0.011s] (754/929) vortex-layout layouts::zoned::aggregates::bloom_filter::partial::tests::serialized_bits_are_stable
+        PASS [   0.011s] (755/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::bloom_rule_is_inconclusive_for_nulls
+        PASS [   0.010s] (756/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::malformed_filter_is_an_error
+        PASS [   0.013s] (757/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::bloom_rule_prunes_ok
+        PASS [   0.014s] (758/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::check_nullability_validity_is_correct
+        PASS [   0.014s] (759/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::invalid_needle_is_an_error
+        PASS [   0.011s] (760/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::mismatched_filter_block_count_is_an_error
+        PASS [   0.010s] (761/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::null_needle_is_inconclusive
+        PASS [   0.011s] (762/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::missing_bloom_stat_stays_inconclusive
+        PASS [   0.009s] (763/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::bloom_options_equality_compares_all_fields
+        PASS [   0.013s] (764/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::stored_aggregate_lookup_is_scoped_to_root
+        PASS [   0.012s] (765/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::validity_all_true
+        PASS [   0.009s] (766/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::combine_partials_rejects_mismatched_block_counts
+        PASS [   0.014s] (767/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::multiple_bloom_configurations_use_each_stored_filter
+        PASS [   0.008s] (768/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::invalid_options_error::case_3_invalid_zero_blocks
+        PASS [   0.009s] (769/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::invalid_options_error::case_2_invalid_len_too_short
+        PASS [   0.015s] (770/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::validity_all_false
+        PASS [   0.012s] (771/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::combine_partials_unions_two_disjoint_partials
+        PASS [   0.015s] (772/929) vortex-layout layouts::zoned::aggregates::bloom_filter::scalar_fn::tests::validity_mixed
+        PASS [   0.011s] (773/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::invalid_options_error::case_1_empty
+        PASS [   0.009s] (774/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::options_roundtrip
+        PASS [   0.010s] (775/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::saturation_false_when_empty
+        PASS [   0.011s] (776/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::invalid_options_error::case_4_unknown_hash_fn
+        PASS [   0.010s] (777/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::saturation_true_when_every_block_is_full
+        PASS [   0.010s] (778/929) vortex-layout layouts::zoned::aggregates::bloom_filter::test_utils::test_bloom_metadata
+        PASS [   0.009s] (779/929) vortex-layout layouts::zoned::aggregates::min_max::tests::fixed_width_min_max_are_exact
+        PASS [   0.011s] (780/929) vortex-layout layouts::zoned::aggregates::min_max::tests::variable_length_min_max_are_bounded
+        PASS [   0.012s] (781/929) vortex-layout layouts::zoned::aggregates::tests::default_aggregates_exclude_bloom_filter
+        PASS [   0.012s] (782/929) vortex-layout layouts::zoned::aggregates::tests::default_aggregates_skip_sum_for_non_summable_dtype
+        PASS [   0.010s] (783/929) vortex-layout layouts::zoned::schema::tests::stats_table_dtype_uses_storage_dtype_for_extensions
+        PASS [   0.012s] (784/929) vortex-layout layouts::zoned::schema::tests::aggregate_stats_table_dtype_uses_display_names
+        PASS [   0.013s] (785/929) vortex-layout layouts::zoned::reader::test::test_stats_evaluator
+        PASS [   0.014s] (786/929) vortex-layout layouts::zoned::reader::test::test_legacy_zoned_reader::case_1_zero_zone_len
+        PASS [   0.014s] (787/929) vortex-layout layouts::zoned::reader::test::test_stats_pruning_mask
+        PASS [   0.015s] (788/929) vortex-layout layouts::zoned::reader::test::test_default_zoned_null_count_pruning_mask
+        PASS [   0.015s] (789/929) vortex-layout layouts::zoned::reader::test::test_legacy_zoned_reader::case_2_zoned_reader
+        PASS [   0.012s] (790/929) vortex-layout layouts::zoned::schema::tests::unknown_aggregate_is_none_with_allow_unknown
+        PASS [   0.013s] (791/929) vortex-layout layouts::zoned::schema::tests::stats_table_dtype_adds_truncation_flags
+        PASS [   0.012s] (792/929) vortex-layout layouts::zoned::schema::tests::unknown_aggregate_errors_without_allow_unknown
+        PASS [   0.011s] (793/929) vortex-layout layouts::zoned::skip_index::tests::registration_after_aggregate_registration_installs_components
+        PASS [   0.014s] (794/929) vortex-layout layouts::zoned::skip_index::tests::concurrent_registration_installs_one_bloom_rewrite
+        PASS [   0.011s] (795/929) vortex-layout layouts::zoned::skip_index::tests::registration_preserves_independently_registered_rule
+        PASS [   0.012s] (796/929) vortex-layout layouts::zoned::skip_index::tests::registration_after_stats_replacement_restores_rewrite
+        PASS [   0.013s] (797/929) vortex-layout layouts::zoned::skip_index::tests::registration_uses_persisted_options
+        PASS [   0.009s] (798/929) vortex-layout layouts::zoned::tests::test_deserialize_legacy_stat_bitset_as_legacy_stats
+        PASS [   0.010s] (799/929) vortex-layout layouts::zoned::tests::test_build_allows_zero_zone_len_for_backcompat
+        PASS [   0.011s] (800/929) vortex-layout layouts::zoned::skip_index::tests::repeated_registration_installs_one_bloom_rewrite
+        PASS [   0.010s] (801/929) vortex-layout layouts::zoned::tests::test_build_unknown_aggregate_disables_pruning_when_allowed
+        PASS [   0.009s] (802/929) vortex-layout layouts::zoned::tests::test_deserialize_short_metadata_errors::case_3_missing_proto
+        PASS [   0.009s] (803/929) vortex-layout layouts::zoned::tests::test_deserialize_short_metadata_errors::case_2_unsupported_version
+        PASS [   0.009s] (804/929) vortex-layout layouts::zoned::tests::test_deserialize_short_metadata_errors::case_4_malformed_proto
+        PASS [   0.009s] (805/929) vortex-layout layouts::zoned::tests::test_deserialize_short_metadata_returns_error_not_panic
+        PASS [   0.011s] (806/929) vortex-layout layouts::zoned::tests::test_deserialize_short_metadata_errors::case_1_empty
+        PASS [   0.013s] (807/929) vortex-layout layouts::zoned::tests::test_build_rejects_invalid_child_count
+        PASS [   0.015s] (808/929) vortex-layout layouts::zoned::tests::test_build_unknown_aggregate_errors_without_allow_unknown
+        PASS [   0.011s] (809/929) vortex-layout layouts::zoned::tests::test_deserialize_zero_zone_len_is_allowed_for_backcompat
+        PASS [   0.010s] (810/929) vortex-layout layouts::zoned::tests::test_metadata_serialization::case_3_bloom
+        PASS [   0.012s] (811/929) vortex-layout layouts::zoned::tests::test_metadata_serialization::case_2_min_max
+        PASS [   0.011s] (812/929) vortex-layout layouts::zoned::tests::test_metadata_serialization_preserves_aggregate_options
+        PASS [   0.013s] (813/929) vortex-layout layouts::zoned::tests::test_metadata_serialization::case_1
+        PASS [   0.010s] (814/929) vortex-layout layouts::zoned::writer::tests::default_aggregates_bound_variable_length_min_max
+        PASS [   0.009s] (815/929) vortex-layout layouts::zoned::writer::tests::default_aggregates_never_record_sum::case_1_summable
+        PASS [   0.012s] (816/929) vortex-layout layouts::zoned::writer::tests::a_forbidden_aggregate_fails_the_write
+        PASS [   0.009s] (817/929) vortex-layout layouts::zoned::writer::tests::empty_replacement_disables_zoning_selection
+        PASS [   0.012s] (818/929) vortex-layout layouts::zoned::writer::tests::a_permitted_set_covering_the_defaults_writes_them
+        PASS [   0.012s] (819/929) vortex-layout layouts::zoned::writer::tests::default_aggregates_keep_fixed_width_min_max_exact
+        PASS [   0.011s] (820/929) vortex-layout layouts::zoned::writer::tests::default_aggregates_never_record_sum::case_2_not_summable
+        PASS [   0.014s] (821/929) vortex-layout layouts::zoned::writer::tests::additions_preserve_defaults_and_deduplicate_exact_instances
+        PASS [   0.012s] (822/929) vortex-layout layouts::zoned::writer::tests::different_bloom_options_are_distinct_requests
+        PASS [   0.013s] (823/929) vortex-layout layouts::zoned::writer::tests::unrestricted_context_writes_the_default_aggregates
+        PASS [   0.011s] (824/929) vortex-layout layouts::zoned::zone_map::tests::aggregate_contract_bounded_max_exposes_struct_partial
+        PASS [   0.015s] (825/929) vortex-layout layouts::zoned::writer::tests::unsupported_explicit_requests_fail
+        PASS [   0.013s] (826/929) vortex-layout layouts::zoned::zone_map::tests::aggregate_contract_mean_exposes_struct_partial
+        PASS [   0.013s] (827/929) vortex-layout layouts::zoned::zone_map::tests::aggregate_contract_struct_summary_prunes
+        PASS [   0.012s] (828/929) vortex-layout layouts::zoned::zone_map::tests::all_non_null_stat_fn_lowers_to_aggregate_field
+        PASS [   0.014s] (829/929) vortex-layout layouts::zoned::zone_map::tests::aggregate_contract_max_satisfies_bounded_max
+        PASS [   0.015s] (830/929) vortex-layout layouts::zoned::writer::tests::writer_appends_skip_index_aggregate
+        PASS [   0.011s] (831/929) vortex-layout layouts::zoned::zone_map::tests::all_null_stat_fn_lowers_to_null_count_and_row_count
+        PASS [   0.014s] (832/929) vortex-layout layouts::zoned::zone_map::tests::all_nan_stat_fn_lowers_to_nan_count_field
+        PASS [   0.011s] (833/929) vortex-layout layouts::zoned::zone_map::tests::all_null_stat_fn_lowers_to_null_count_field
+        PASS [   0.014s] (834/929) vortex-layout layouts::zoned::zone_map::tests::all_non_null_stat_fn_lowers_to_null_count
+        PASS [   0.014s] (835/929) vortex-layout layouts::zoned::zone_map::tests::all_null_stat_fn_lowers_to_aggregate_field
+        PASS [   0.012s] (836/929) vortex-layout layouts::zoned::zone_map::tests::fixed_size_list_min_max_stat_fn_lowers_to_unknown_mask
+        PASS [   0.015s] (837/929) vortex-layout layouts::zoned::zone_map::tests::bounded_display_names_satisfy_min_max_rewrites
+        PASS [   0.014s] (838/929) vortex-layout layouts::zoned::zone_map::tests::float_cast_min_max_stat_fn_uses_source_nan_count
+        PASS [   0.009s] (839/929) vortex-layout layouts::zoned::zone_map::tests::non_float_nan_stat_fns_fail_to_bind
+        PASS [   0.010s] (840/929) vortex-layout layouts::zoned::zone_map::tests::test_zone_map_prunes
+        PASS [   0.010s] (841/929) vortex-layout layouts::zoned::zone_map::tests::unsupported_aggregate_input_dtype_errors
+        PASS [   0.013s] (842/929) vortex-layout layouts::zoned::zone_map::tests::is_null_falsification_uses_null_count
+        PASS [   0.011s] (843/929) vortex-layout layouts::zoned::zone_map::tests::row_count_prunes_short_trailing_zone
+        PASS [   0.014s] (844/929) vortex-layout layouts::zoned::zone_map::tests::float_min_max_stat_fn_requires_nan_count
+        PASS [   0.011s] (845/929) vortex-layout layouts::zoned::zone_map::tests::unavailable_stat_fn_lowers_to_unknown_mask
+        PASS [   0.013s] (846/929) vortex-layout layouts::zoned::zone_map::tests::row_count_prunes_all_null_uniform_zones
+        PASS [   0.010s] (847/929) vortex-layout plan::tests::chunked_plan_lowers_each_chunk_on_access
+        PASS [   0.011s] (848/929) vortex-layout plan::tests::chunked_plan_exposes_chunks
+        PASS [   0.014s] (849/929) vortex-layout layouts::zoned::zone_map::tests::row_count_substitution_handles_empty_zone_map
+        PASS [   0.011s] (850/929) vortex-layout plan::tests::dict_plan_orders_codes_before_values
+        PASS [   0.011s] (851/929) vortex-layout plan::tests::dictionary_pushdown_rejects_unsafe_expressions
+        PASS [   0.010s] (852/929) vortex-layout plan::tests::eval_try_new_validates_expression_root_dtype
+        PASS [   0.010s] (853/929) vortex-layout plan::tests::empty_projection_prunes_row_idx_child_fields
+        PASS [   0.011s] (854/929) vortex-layout plan::tests::flat_plan_has_no_children
+        PASS [   0.011s] (855/929) vortex-layout plan::tests::nullable_struct_keeps_expression_above_parent_validity
+        PASS [   0.017s] (856/929) vortex-layout plan::tests::list_plan_appends_validity_when_nullable
+        PASS [   0.011s] (857/929) vortex-layout plan::tests::optimize_drops_identity_expressions
+        PASS [   0.020s] (858/929) vortex-layout plan::tests::optimize_rewrites_nested_children
+        PASS [   0.016s] (859/929) vortex-layout plan::tests::repeated_cross_field_expressions_reach_a_fixed_point
+        PASS [   0.086s] (860/929) vortex-layout plan::tests::compound_expression_pushes_through_nested_struct_and_dictionary
+        PASS [   0.090s] (861/929) vortex-layout plan::tests::chunked_plan_display_names_chunks
+        PASS [   0.083s] (862/929) vortex-layout plan::tests::expression_partitions_across_row_idx_and_struct
+        PASS [   0.084s] (863/929) vortex-layout plan::tests::expression_pushes_through_struct_field_and_dictionary_values
+        PASS [   0.011s] (864/929) vortex-layout plan::tests::struct_plan_appends_validity_when_nullable
+        PASS [   0.091s] (865/929) vortex-layout plan::tests::expression_pushes_through_single_field_nested_structs
+        PASS [   0.008s] (866/929) vortex-layout plan::tests::unsupported_layout_has_no_plan
+        PASS [   0.010s] (867/929) vortex-layout plan::tests::struct_plan_lowers_each_field_on_access
+        PASS [   0.096s] (868/929) vortex-layout plan::tests::expression_pushes_through_three_single_field_structs
+        PASS [   0.103s] (869/929) vortex-layout plan::tests::dict_plan_display_names_logical_children
+        PASS [   0.009s] (870/929) vortex-layout plan::tests::with_children_rejects_mismatched_arity
+        PASS [   0.101s] (871/929) vortex-layout plan::tests::expression_pushes_through_dictionary_of_struct_values
+        PASS [   0.009s] (872/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_02
+        PASS [   0.011s] (873/929) vortex-layout plan::tests::with_children_replaces_children_in_order
+        PASS [   0.095s] (874/929) vortex-layout plan::tests::list_plan_display_handles_optional_validity
+        PASS [   0.011s] (875/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_01
+        PASS [   0.010s] (876/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_04
+        PASS [   0.011s] (877/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_03
+        PASS [   0.110s] (878/929) vortex-layout plan::tests::expression_pushes_through_nested_struct_fields_in_one_pass
+        PASS [   0.009s] (879/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_06
+        PASS [   0.109s] (880/929) vortex-layout plan::tests::expression_pushes_through_struct_field_with_heterogeneous_chunks
+        PASS [   0.011s] (881/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_05
+        PASS [   0.010s] (882/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_08
+        PASS [   0.009s] (883/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_09
+        PASS [   0.104s] (884/929) vortex-layout plan::tests::multi_field_struct_expression_pushes_into_each_field
+        PASS [   0.012s] (885/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_07
+        PASS [   0.011s] (886/929) vortex-layout reader::tests::into_sorted_deduped_matches_model::case_10
+        PASS [   0.106s] (887/929) vortex-layout plan::tests::multi_field_struct_expression_keeps_cross_field_refinement
+        PASS [   0.011s] (888/929) vortex-layout scan::arrow::tests::test_error_in_iterator
+        PASS [   0.011s] (889/929) vortex-layout scan::arrow::tests::test_mixed_success_and_error
+        PASS [   0.010s] (890/929) vortex-layout scan::filter::tests::waits_for_all_conjuncts_before_reordering
+        PASS [   0.010s] (891/929) vortex-layout scan::filter::tests::bound_conjuncts_preserve_order_and_types
+        PASS [   0.009s] (892/929) vortex-layout scan::multi::tests::byte_size_precision::case_1_all_known
+        PASS [   0.012s] (893/929) vortex-layout scan::arrow::tests::test_record_batch_iterator_adapter
+        PASS [   0.012s] (894/929) vortex-layout scan::arrow::tests::test_record_batch_conversion
+        PASS [   0.009s] (895/929) vortex-layout scan::multi::tests::filter_binding_errors_are_deferred
+        PASS [   0.089s] (896/929) vortex-layout plan::tests::plan_display_matches_array_tree_display_shape
+        PASS [   0.010s] (897/929) vortex-layout scan::multi::tests::byte_size_precision::case_4_no_children
+        PASS [   0.012s] (898/929) vortex-layout scan::multi::tests::byte_size_precision::case_2_some_known_extrapolates
+        PASS [   0.014s] (899/929) vortex-layout scan::multi::tests::byte_size_precision::case_3_none_known
+        PASS [   0.009s] (900/929) vortex-layout scan::scan_builder::test::filter_path_covers_nested_projection_path
+        PASS [   0.014s] (901/929) vortex-layout scan::scan_builder::test::bound_setters_preserve_identity
+        PASS [   0.010s] (902/929) vortex-layout scan::scan_builder::test::full_file_splits_ignore_row_range
+        PASS [   0.010s] (903/929) vortex-layout scan::scan_builder::test::into_stream_first_poll_does_not_block
+        PASS [   0.012s] (904/929) vortex-layout scan::scan_builder::test::into_stream_is_lazy
+        PASS [   0.014s] (905/929) vortex-layout scan::scan_builder::test::into_stream_executes_after_prepare
+        PASS [   0.010s] (906/929) vortex-layout scan::split_by::test::subdivide_below_threshold_is_noop
+        PASS [   0.012s] (907/929) vortex-layout scan::scan_builder::test::root_projection_produces_all_mask
+        PASS [   0.013s] (908/929) vortex-layout scan::scan_builder::test::parent_projection_path_covers_nested_filter_path
+        PASS [   0.015s] (909/929) vortex-layout scan::scan_builder::test::into_stream_with_row_range
+        PASS [   0.010s] (910/929) vortex-layout scan::split_by::test::subdivide_near_u64_max_does_not_overflow
+        PASS [   0.015s] (911/929) vortex-layout scan::scan_builder::test::nested_projection_preserves_field_path_in_split_mask
+        PASS [   0.013s] (912/929) vortex-layout scan::scan_builder::test::supplied_natural_splits_skip_layout_walk
+        PASS [   0.010s] (913/929) vortex-layout scan::split_by::test::subdivide_only_large_gaps
+        PASS [   0.009s] (914/929) vortex-layout scan::split_by::test::subdivide_preserves_exact_coverage
+        PASS [   0.010s] (915/929) vortex-layout scan::split_by::test::subdivide_splits_large_single_chunk
+        PASS [   0.009s] (916/929) vortex-layout scan::split_by::test::test_layout_splits_dedup
+        PASS [   0.008s] (917/929) vortex-layout segments::shared::tests::test_shared_source_deduplicates_concurrent_requests
+        PASS [   0.012s] (918/929) vortex-layout scan::split_by::test::test_layout_splits_flat
+        PASS [   0.009s] (919/929) vortex-layout scan::splits::tests::split_ranges_empty_intersection
+        PASS [   0.010s] (920/929) vortex-layout scan::splits::tests::restrictive_row_range_enables_sparse_splits
+        PASS [   0.008s] (921/929) vortex-layout strategy::tests::clones_share_the_same_counter
+        PASS [   0.009s] (922/929) vortex-layout scan::splits::tests::split_ranges_intersect_row_range
+        PASS [   0.009s] (923/929) vortex-layout scan::tasks::tests::selectivity_is_relative_to_the_input_mask
+        PASS [   0.012s] (924/929) vortex-layout scan::split_by::test::test_row_count_splits
+        PASS [   0.010s] (925/929) vortex-layout segments::shared::tests::test_shared_source_handles_dropped_futures
+        PASS [   0.010s] (926/929) vortex-layout strategy::tests::reservations_accumulate_and_release
+        PASS [   0.093s] (927/929) vortex-layout plan::tests::row_idx_and_data_expression_pushes_data_into_chunks
+        PASS [   0.078s] (928/929) vortex-layout plan::tests::row_idx_only_expression_uses_row_idx_source
+        PASS [   0.779s] (929/929) vortex-file open::tests::test_initial_read_size
+────────────
+     Summary [   1.131s] 929 tests run: 929 passed, 3001 skipped

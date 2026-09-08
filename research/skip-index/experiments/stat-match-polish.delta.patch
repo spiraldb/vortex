@@ -1,0 +1,748 @@
+diff --git a/vortex-array/src/aggregate_fn/vtable.rs b/vortex-array/src/aggregate_fn/vtable.rs
+--- a/vortex-array/src/aggregate_fn/vtable.rs
++++ b/vortex-array/src/aggregate_fn/vtable.rs
+@@ -19,8 +19,9 @@
+ use crate::aggregate_fn::AggregateFn;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
++use crate::aggregate_fn::StatMatch;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ use crate::scalar::Scalar;
+ 
+ /// Defines the interface for aggregate function vtables.
+@@ -60,40 +61,22 @@
+         vortex_bail!("Aggregate function {} is not deserializable", self.id());
+     }
+ 
+-    /// Return whether this stored aggregate can satisfy `requested`.
+-    ///
+-    /// The default implementation only treats exactly equal aggregate functions as satisfying the
+-    /// request. Approximate pruning aggregates can override this to expose looser-but-sound bounds.
+-    fn can_satisfy(
++    /// Resolve a stored partial expression into the representation requested by a statistic.
++    ///
++    /// Returns `None` when this aggregate cannot provide the requested statistic. The default
++    /// implementation matches equal aggregate IDs and options and returns the partial unchanged.
++    /// Custom implementations must uphold the representation and bound contracts of [`StatMatch`].
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
+-        if self.id() == requested.id()
++        partial: Expression,
++    ) -> Option<StatMatch> {
++        let same_aggregate = self.id() == requested.id()
+             && requested
+                 .as_opt::<Self>()
+-                .is_some_and(|other| other == options)
+-        {
+-            AggregateFnSatisfaction::Exact
+-        } else {
+-            AggregateFnSatisfaction::No
+-        }
+-    }
+-
+-    /// Resolve a stored partial expression into the representation requested by a statistic.
+-    ///
+-    /// The returned expression must have the requested aggregate's partial dtype, with nullable
+-    /// output permitted. Approximate results must preserve the requested bound's direction.
+-    fn resolve_stat(
+-        &self,
+-        options: &Self::Options,
+-        requested: &AggregateFnRef,
+-        partial: crate::expr::Expression,
+-    ) -> Option<(AggregateFnSatisfaction, crate::expr::Expression)> {
+-        let satisfaction = self.can_satisfy(options, requested);
+-        satisfaction
+-            .is_satisfied()
+-            .then_some((satisfaction, partial))
++                .is_some_and(|other| other == options);
++        same_aggregate.then_some(StatMatch::Exact(partial))
+     }
+ 
+     /// The return [`DType`] of the aggregate.
+diff --git a/vortex-array/src/aggregate_fn/erased.rs b/vortex-array/src/aggregate_fn/erased.rs
+--- a/vortex-array/src/aggregate_fn/erased.rs
++++ b/vortex-array/src/aggregate_fn/erased.rs
+@@ -16,13 +16,14 @@
+ 
+ use crate::aggregate_fn::AccumulatorRef;
+ use crate::aggregate_fn::AggregateFnId;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::GroupedAccumulatorRef;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::options::AggregateFnOptions;
+ use crate::aggregate_fn::typed::AggregateFnInner;
+ use crate::aggregate_fn::typed::DynAggregateFn;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ 
+ /// A type-erased aggregate function, pairing a vtable with bound options behind a trait object.
+ ///
+@@ -75,17 +76,12 @@
+         AggregateFnOptions { inner: &*self.0 }
+     }
+ 
+-    /// Return whether this stored aggregate can satisfy `requested`.
+-    pub fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction {
+-        self.0.can_satisfy(requested)
+-    }
+-
+     /// Resolve a stored partial expression into a requested statistic's partial representation.
+     pub fn resolve_stat(
+         &self,
+         requested: &AggregateFnRef,
+-        partial: crate::expr::Expression,
+-    ) -> Option<(AggregateFnSatisfaction, crate::expr::Expression)> {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         self.0.resolve_stat(requested, partial)
+     }
+ 
+diff --git a/vortex-array/src/aggregate_fn/typed.rs b/vortex-array/src/aggregate_fn/typed.rs
+--- a/vortex-array/src/aggregate_fn/typed.rs
++++ b/vortex-array/src/aggregate_fn/typed.rs
+@@ -24,11 +24,12 @@
+ use crate::aggregate_fn::AccumulatorRef;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::GroupedAccumulator;
+ use crate::aggregate_fn::GroupedAccumulatorRef;
++use crate::aggregate_fn::StatMatch;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ 
+ /// An object-safe, sealed trait for bound aggregate function dispatch.
+ ///
+@@ -39,12 +40,7 @@
+     fn id(&self) -> AggregateFnId;
+     fn options_any(&self) -> &dyn Any;
+ 
+-    fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction;
+-    fn resolve_stat(
+-        &self,
+-        requested: &AggregateFnRef,
+-        partial: crate::expr::Expression,
+-    ) -> Option<(AggregateFnSatisfaction, crate::expr::Expression)>;
++    fn resolve_stat(&self, requested: &AggregateFnRef, partial: Expression) -> Option<StatMatch>;
+     fn return_dtype(&self, input_dtype: &DType) -> Option<DType>;
+     fn state_dtype(&self, input_dtype: &DType) -> Option<DType>;
+     fn accumulator(&self, input_dtype: &DType) -> VortexResult<AccumulatorRef>;
+@@ -84,15 +80,7 @@
+         &self.options
+     }
+ 
+-    fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction {
+-        V::can_satisfy(&self.vtable, &self.options, requested)
+-    }
+-
+-    fn resolve_stat(
+-        &self,
+-        requested: &AggregateFnRef,
+-        partial: crate::expr::Expression,
+-    ) -> Option<(AggregateFnSatisfaction, crate::expr::Expression)> {
++    fn resolve_stat(&self, requested: &AggregateFnRef, partial: Expression) -> Option<StatMatch> {
+         V::resolve_stat(&self.vtable, &self.options, requested, partial)
+     }
+ 
+diff --git a/vortex-array/src/aggregate_fn/satisfaction.rs b/vortex-array/src/aggregate_fn/satisfaction.rs
+deleted file mode 100644
+--- a/vortex-array/src/aggregate_fn/satisfaction.rs
++++ /dev/null
+@@ -1,26 +0,0 @@
+-// SPDX-License-Identifier: Apache-2.0
+-// SPDX-FileCopyrightText: Copyright the Vortex contributors
+-
+-/// Whether a stored aggregate function can satisfy a requested aggregate function.
+-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+-pub enum AggregateFnSatisfaction {
+-    /// The stored aggregate cannot satisfy the requested aggregate.
+-    #[default]
+-    No,
+-    /// The stored aggregate can satisfy the request as an approximate bound.
+-    Approximate,
+-    /// The stored aggregate exactly satisfies the request.
+-    Exact,
+-}
+-
+-impl AggregateFnSatisfaction {
+-    /// Returns whether the stored aggregate can satisfy the requested aggregate.
+-    pub fn is_satisfied(self) -> bool {
+-        !matches!(self, Self::No)
+-    }
+-
+-    /// Returns whether the stored aggregate exactly satisfies the requested aggregate.
+-    pub fn is_exact(self) -> bool {
+-        matches!(self, Self::Exact)
+-    }
+-}
+diff --git a/vortex-array/src/aggregate_fn/stat_match.rs b/vortex-array/src/aggregate_fn/stat_match.rs
+new file mode 100644
+--- /dev/null
++++ b/vortex-array/src/aggregate_fn/stat_match.rs
+@@ -0,0 +1,21 @@
++// SPDX-License-Identifier: Apache-2.0
++// SPDX-FileCopyrightText: Copyright the Vortex contributors
++
++//! Matches between stored aggregate partials and requested statistics.
++
++use crate::expr::Expression;
++
++/// An expression that resolves a requested statistic from a stored aggregate partial.
++///
++/// Each expression has the requested aggregate's partial-state dtype. Its outer nullability may
++/// be widened to nullable for unavailable statistics; nested fields retain their declared types.
++/// Expressions must preserve the requested partial's representation of empty and unknown states.
++/// Approximate expressions must preserve the requested bound's direction, and consumers must use
++/// them only in proofs that remain valid for a conservative bound.
++#[derive(Clone, Debug)]
++pub enum StatMatch {
++    /// The expression provides the requested partial exactly.
++    Exact(Expression),
++    /// The expression provides a conservative bound in the requested partial representation.
++    Approximate(Expression),
++}
+diff --git a/vortex-array/src/aggregate_fn/mod.rs b/vortex-array/src/aggregate_fn/mod.rs
+--- a/vortex-array/src/aggregate_fn/mod.rs
++++ b/vortex-array/src/aggregate_fn/mod.rs
+@@ -11,8 +11,8 @@
+ mod accumulator;
+ pub use accumulator::*;
+ 
+-mod satisfaction;
+-pub use satisfaction::*;
++mod stat_match;
++pub use stat_match::*;
+ 
+ mod accumulator_grouped;
+ pub use accumulator_grouped::*;
+diff --git a/vortex-array/src/aggregate_fn/foreign.rs b/vortex-array/src/aggregate_fn/foreign.rs
+--- a/vortex-array/src/aggregate_fn/foreign.rs
++++ b/vortex-array/src/aggregate_fn/foreign.rs
+@@ -130,7 +130,7 @@
+     use vortex_session::registry::CachedId;
+ 
+     use super::new_foreign_aggregate_fn;
+-    use crate::aggregate_fn::AggregateFnSatisfaction;
++    use crate::expr::root;
+ 
+     #[test]
+     fn aggregate_contract_distinct_ids_do_not_satisfy() {
+@@ -139,7 +139,7 @@
+         let left = new_foreign_aggregate_fn(*LEFT, vec![1]);
+         let right = new_foreign_aggregate_fn(*RIGHT, vec![1]);
+         assert_ne!(left, right);
+-        assert_eq!(left.can_satisfy(&right), AggregateFnSatisfaction::No);
++        assert!(left.resolve_stat(&right, root()).is_none());
+     }
+ 
+     #[test]
+@@ -149,6 +149,6 @@
+         let right = new_foreign_aggregate_fn(*ID, vec![2]);
+         assert_ne!(left, right);
+         assert_eq!(left.to_string(), right.to_string());
+-        assert_eq!(left.can_satisfy(&right), AggregateFnSatisfaction::No);
++        assert!(left.resolve_stat(&right, root()).is_none());
+     }
+ }
+diff --git a/vortex-array/src/aggregate_fn/fns/min/mod.rs b/vortex-array/src/aggregate_fn/fns/min/mod.rs
+--- a/vortex-array/src/aggregate_fn/fns/min/mod.rs
++++ b/vortex-array/src/aggregate_fn/fns/min/mod.rs
+@@ -12,15 +12,16 @@
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::fns::bounded_min::BoundedMin;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+ use crate::aggregate_fn::fns::min_max::nan_scalar;
+ use crate::aggregate_fn::fns::min_max::scalar_is_nan;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ use crate::expr::stats::Precision;
+ use crate::expr::stats::Stat;
+ use crate::expr::stats::StatsProvider;
+@@ -99,21 +100,22 @@
+             .map(|_| input_dtype.as_nullable())
+     }
+ 
+-    fn can_satisfy(
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         if requested
+             .as_opt::<Self>()
+             .is_some_and(|other| other == options)
+         {
+-            AggregateFnSatisfaction::Exact
++            Some(StatMatch::Exact(partial))
+         } else if requested.is::<BoundedMin>() && options.skip_nans {
+-            // A NaN-including minimum may be NaN, which is not a usable lower bound.
+-            AggregateFnSatisfaction::Approximate
++            // A NaN-including minimum cannot provide a usable bound.
++            Some(StatMatch::Approximate(partial))
+         } else {
+-            AggregateFnSatisfaction::No
++            None
+         }
+     }
+ 
+diff --git a/vortex-array/src/aggregate_fn/fns/max/mod.rs b/vortex-array/src/aggregate_fn/fns/max/mod.rs
+--- a/vortex-array/src/aggregate_fn/fns/max/mod.rs
++++ b/vortex-array/src/aggregate_fn/fns/max/mod.rs
+@@ -12,15 +12,23 @@
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
++use crate::aggregate_fn::fns::bounded_max::BOUNDED_MAX_BOUND;
++use crate::aggregate_fn::fns::bounded_max::BOUNDED_MAX_UNKNOWN;
+ use crate::aggregate_fn::fns::bounded_max::BoundedMax;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+ use crate::aggregate_fn::fns::min_max::nan_scalar;
+ use crate::aggregate_fn::fns::min_max::scalar_is_nan;
+ use crate::dtype::DType;
++use crate::dtype::Nullability;
++use crate::expr::Expression;
++use crate::expr::is_not_null;
++use crate::expr::lit;
++use crate::expr::mask;
++use crate::expr::pack;
+ use crate::expr::stats::Precision;
+ use crate::expr::stats::Stat;
+ use crate::expr::stats::StatsProvider;
+@@ -99,45 +107,31 @@
+             .map(|_| input_dtype.as_nullable())
+     }
+ 
+-    fn can_satisfy(
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         if requested
+             .as_opt::<Self>()
+             .is_some_and(|other| other == options)
+         {
+-            AggregateFnSatisfaction::Exact
++            Some(StatMatch::Exact(partial))
+         } else if requested.is::<BoundedMax>() && options.skip_nans {
+-            // A NaN-including maximum may be NaN, which is not a usable upper bound.
+-            AggregateFnSatisfaction::Approximate
++            // A NaN-including maximum cannot provide a usable bound.
++            let valid = is_not_null(partial.clone());
++            let state = pack(
++                [
++                    (BOUNDED_MAX_BOUND, partial),
++                    (BOUNDED_MAX_UNKNOWN, lit(false)),
++                ],
++                Nullability::Nullable,
++            );
++            Some(StatMatch::Approximate(mask(state, valid)))
+         } else {
+-            AggregateFnSatisfaction::No
+-        }
+-    }
+-
+-    fn resolve_stat(
+-        &self,
+-        options: &Self::Options,
+-        requested: &AggregateFnRef,
+-        partial: crate::expr::Expression,
+-    ) -> Option<(AggregateFnSatisfaction, crate::expr::Expression)> {
+-        let satisfaction = self.can_satisfy(options, requested);
+-        if !satisfaction.is_satisfied() {
+-            return None;
+-        }
+-        let expression = if requested.is::<BoundedMax>() {
+-            let valid = crate::expr::is_not_null(partial.clone());
+-            let state = crate::expr::pack(
+-                [("bound", partial), ("unknown", crate::expr::lit(false))],
+-                crate::dtype::Nullability::Nullable,
+-            );
+-            crate::expr::mask(state, valid)
+-        } else {
+-            partial
+-        };
+-        Some((satisfaction, expression))
++            None
++        }
+     }
+ 
+     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
+diff --git a/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs b/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs
+--- a/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs
++++ b/vortex-array/src/aggregate_fn/fns/bounded_min/mod.rs
+@@ -19,13 +19,14 @@
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::fns::min::Min;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+ use crate::dtype::DType;
++use crate::expr::Expression;
+ use crate::partial_ord::partial_min;
+ use crate::scalar::Scalar;
+ use crate::scalar::ScalarTruncation;
+@@ -113,30 +114,27 @@
+         supported_dtype(options, input_dtype).map(DType::as_nullable)
+     }
+ 
+-    fn can_satisfy(
++    fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
++        partial: Expression,
++    ) -> Option<StatMatch> {
+         if let Some(other) = requested.as_opt::<Self>() {
+             return if other == options {
+-                AggregateFnSatisfaction::Exact
++                Some(StatMatch::Exact(partial))
+             } else if options.max_bytes >= other.max_bytes {
+-                AggregateFnSatisfaction::Approximate
++                Some(StatMatch::Approximate(partial))
+             } else {
+-                AggregateFnSatisfaction::No
++                None
+             };
+         }
+ 
+         // The stored bound skips NaNs, so it cannot stand in for a NaN-including minimum.
+-        if requested
++        requested
+             .as_opt::<Min>()
+             .is_some_and(|options| options.skip_nans)
+-        {
+-            AggregateFnSatisfaction::Approximate
+-        } else {
+-            AggregateFnSatisfaction::No
+-        }
++            .then_some(StatMatch::Approximate(partial))
+     }
+ 
+     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
+@@ -242,11 +240,11 @@
+     use crate::IntoArray;
+     use crate::VortexSessionExecute;
+     use crate::aggregate_fn::Accumulator;
+-    use crate::aggregate_fn::AggregateFnSatisfaction;
+     use crate::aggregate_fn::AggregateFnVTable;
+     use crate::aggregate_fn::AggregateFnVTableExt;
+     use crate::aggregate_fn::DynAccumulator;
+     use crate::aggregate_fn::NumericalAggregateOpts;
++    use crate::aggregate_fn::StatMatch;
+     use crate::aggregate_fn::fns::bounded_min::BoundedMin;
+     use crate::aggregate_fn::fns::bounded_min::BoundedMinOptions;
+     use crate::aggregate_fn::fns::max::Max;
+@@ -255,6 +253,7 @@
+     use crate::arrays::PrimitiveArray;
+     use crate::arrays::VarBinViewArray;
+     use crate::dtype::Nullability;
++    use crate::expr::root;
+     use crate::scalar::Scalar;
+     use crate::validity::Validity;
+ 
+@@ -346,36 +345,38 @@
+             max_bytes: max_bytes(6),
+         });
+ 
+-        assert_eq!(stored.can_satisfy(&same), AggregateFnSatisfaction::Exact);
+-        assert_eq!(
+-            stored.can_satisfy(&looser_bounded),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&tighter_bounded),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Min.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Min.bind(NumericalAggregateOpts::include_nans())),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
++        assert!(matches!(
++            stored.resolve_stat(&same, root()),
++            Some(StatMatch::Exact(_))
++        ));
++        assert!(matches!(
++            stored.resolve_stat(&looser_bounded, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(stored.resolve_stat(&tighter_bounded, root()).is_none());
++        assert!(matches!(
++            stored.resolve_stat(&Min.bind(NumericalAggregateOpts::default()), root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Min.bind(NumericalAggregateOpts::include_nans()), root())
++                .is_none()
++        );
++        assert!(
+             Min.bind(NumericalAggregateOpts::include_nans())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
++                .resolve_stat(&stored, root())
++                .is_none()
++        );
++        assert!(matches!(
+             Min.bind(NumericalAggregateOpts::default())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::No
++                .resolve_stat(&stored, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Max.bind(NumericalAggregateOpts::default()), root())
++                .is_none()
+         );
+     }
+ 
+diff --git a/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs b/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs
+--- a/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs
++++ b/vortex-array/src/aggregate_fn/fns/bounded_max/mod.rs
+@@ -21,9 +21,9 @@
+ use crate::IntoArray;
+ use crate::aggregate_fn::AggregateFnId;
+ use crate::aggregate_fn::AggregateFnRef;
+-use crate::aggregate_fn::AggregateFnSatisfaction;
+ use crate::aggregate_fn::AggregateFnVTable;
+ use crate::aggregate_fn::NumericalAggregateOpts;
++use crate::aggregate_fn::StatMatch;
+ use crate::aggregate_fn::fns::max::Max;
+ use crate::aggregate_fn::fns::min_max::MinMax;
+ use crate::aggregate_fn::fns::min_max::min_max;
+@@ -32,6 +32,8 @@
+ use crate::dtype::FieldNames;
+ use crate::dtype::Nullability;
+ use crate::dtype::StructFields;
++use crate::expr::Expression;
++use crate::expr::get_item;
+ use crate::partial_ord::partial_max;
+ use crate::scalar::Scalar;
+ use crate::scalar::ScalarTruncation;
+@@ -159,48 +161,27 @@
+         supported_dtype(options, input_dtype).map(DType::as_nullable)
+     }
+ 
+-    fn can_satisfy(
+-        &self,
+-        options: &Self::Options,
+-        requested: &AggregateFnRef,
+-    ) -> AggregateFnSatisfaction {
+-        if let Some(other) = requested.as_opt::<Self>() {
+-            return if other == options {
+-                AggregateFnSatisfaction::Exact
+-            } else if options.max_bytes >= other.max_bytes {
+-                AggregateFnSatisfaction::Approximate
+-            } else {
+-                AggregateFnSatisfaction::No
+-            };
+-        }
+-
+-        // The stored bound skips NaNs, so it cannot stand in for a NaN-including maximum.
+-        if requested
+-            .as_opt::<Max>()
+-            .is_some_and(|options| options.skip_nans)
+-        {
+-            AggregateFnSatisfaction::Approximate
+-        } else {
+-            AggregateFnSatisfaction::No
+-        }
+-    }
+-
+     fn resolve_stat(
+         &self,
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+-        partial: crate::expr::Expression,
+-    ) -> Option<(AggregateFnSatisfaction, crate::expr::Expression)> {
+-        let satisfaction = self.can_satisfy(options, requested);
+-        if !satisfaction.is_satisfied() {
+-            return None;
+-        }
+-        let expression = if requested.is::<Max>() {
+-            crate::expr::get_item(BOUNDED_MAX_BOUND, partial)
+-        } else {
+-            partial
+-        };
+-        Some((satisfaction, expression))
++        partial: Expression,
++    ) -> Option<StatMatch> {
++        if let Some(other) = requested.as_opt::<Self>() {
++            return if other == options {
++                Some(StatMatch::Exact(partial))
++            } else if options.max_bytes >= other.max_bytes {
++                Some(StatMatch::Approximate(partial))
++            } else {
++                None
++            };
++        }
++
++        // The stored bound skips NaNs, so it cannot stand in for a NaN-including maximum.
++        requested
++            .as_opt::<Max>()
++            .is_some_and(|options| options.skip_nans)
++            .then(|| StatMatch::Approximate(get_item(BOUNDED_MAX_BOUND, partial)))
+     }
+ 
+     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
+@@ -343,11 +324,11 @@
+     use crate::IntoArray;
+     use crate::VortexSessionExecute;
+     use crate::aggregate_fn::Accumulator;
+-    use crate::aggregate_fn::AggregateFnSatisfaction;
+     use crate::aggregate_fn::AggregateFnVTable;
+     use crate::aggregate_fn::AggregateFnVTableExt;
+     use crate::aggregate_fn::DynAccumulator;
+     use crate::aggregate_fn::NumericalAggregateOpts;
++    use crate::aggregate_fn::StatMatch;
+     use crate::aggregate_fn::fns::bounded_max::BoundedMax;
+     use crate::aggregate_fn::fns::bounded_max::BoundedMaxOptions;
+     use crate::aggregate_fn::fns::bounded_max::make_bounded_max_partial_dtype;
+@@ -357,6 +338,7 @@
+     use crate::arrays::PrimitiveArray;
+     use crate::arrays::VarBinViewArray;
+     use crate::dtype::Nullability;
++    use crate::expr::root;
+     use crate::scalar::Scalar;
+     use crate::validity::Validity;
+ 
+@@ -533,36 +515,38 @@
+             max_bytes: max_bytes(6),
+         });
+ 
+-        assert_eq!(stored.can_satisfy(&same), AggregateFnSatisfaction::Exact);
+-        assert_eq!(
+-            stored.can_satisfy(&looser_bounded),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&tighter_bounded),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::include_nans())),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
++        assert!(matches!(
++            stored.resolve_stat(&same, root()),
++            Some(StatMatch::Exact(_))
++        ));
++        assert!(matches!(
++            stored.resolve_stat(&looser_bounded, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(stored.resolve_stat(&tighter_bounded, root()).is_none());
++        assert!(matches!(
++            stored.resolve_stat(&Max.bind(NumericalAggregateOpts::default()), root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Max.bind(NumericalAggregateOpts::include_nans()), root())
++                .is_none()
++        );
++        assert!(
+             Max.bind(NumericalAggregateOpts::include_nans())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::No
+-        );
+-        assert_eq!(
++                .resolve_stat(&stored, root())
++                .is_none()
++        );
++        assert!(matches!(
+             Max.bind(NumericalAggregateOpts::default())
+-                .can_satisfy(&stored),
+-            AggregateFnSatisfaction::Approximate
+-        );
+-        assert_eq!(
+-            stored.can_satisfy(&Min.bind(NumericalAggregateOpts::default())),
+-            AggregateFnSatisfaction::No
++                .resolve_stat(&stored, root()),
++            Some(StatMatch::Approximate(_))
++        ));
++        assert!(
++            stored
++                .resolve_stat(&Min.bind(NumericalAggregateOpts::default()), root())
++                .is_none()
+         );
+     }
+ 
+diff --git a/vortex-layout/src/layouts/zoned/zone_map.rs b/vortex-layout/src/layouts/zoned/zone_map.rs
+--- a/vortex-layout/src/layouts/zoned/zone_map.rs
++++ b/vortex-layout/src/layouts/zoned/zone_map.rs
+@@ -9,7 +9,7 @@
+ use vortex_array::IntoArray;
+ use vortex_array::VortexSessionExecute;
+ use vortex_array::aggregate_fn::AggregateFnRef;
+-use vortex_array::aggregate_fn::AggregateFnSatisfaction;
++use vortex_array::aggregate_fn::StatMatch;
+ use vortex_array::aggregate_fn::fns::all_nan::AllNan;
+ use vortex_array::aggregate_fn::fns::all_non_nan::AllNonNan;
+ use vortex_array::aggregate_fn::fns::all_non_null::AllNonNull;
+@@ -247,15 +247,13 @@
+                 continue;
+             }
+ 
+-            let Some((satisfaction, expression)) =
+-                stored.resolve_stat(requested, get_item(field_name, root()))
++            let Some(stat_match) = stored.resolve_stat(requested, get_item(field_name, root()))
+             else {
+                 continue;
+             };
+-            match satisfaction {
+-                AggregateFnSatisfaction::Exact => return Some(expression),
+-                AggregateFnSatisfaction::Approximate => approximate = Some(expression),
+-                AggregateFnSatisfaction::No => {}
++            match stat_match {
++                StatMatch::Exact(expression) => return Some(expression),
++                StatMatch::Approximate(expression) => approximate = Some(expression),
+             }
+         }
+ 

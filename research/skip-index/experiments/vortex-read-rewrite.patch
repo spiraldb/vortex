@@ -1,0 +1,397 @@
+diff --git i/vortex-array/src/stats/rewrite.rs w/vortex-array/src/stats/rewrite.rs
+index 5bac85c070..e6f83aa408 100644
+--- i/vortex-array/src/stats/rewrite.rs
++++ w/vortex-array/src/stats/rewrite.rs
+@@ -132,15 +132,25 @@ impl<'a> StatsRewriteCtx<'a> {
+         Ok(())
+     }
+ 
+-    /// Sets the aggregate functions available to stats rewrite rules.
++    /// Sets the stored aggregate functions for the root input of this rewrite scope.
++    ///
++    /// Options must describe the stored summaries, including their file-specific configuration.
++    /// These functions do not describe statistics of arbitrary child expressions.
+     pub fn with_aggregate_fns(mut self, aggregate_fns: &'a [AggregateFnRef]) -> Self {
+         self.aggregate_fns = aggregate_fns;
+         self
+     }
+ 
+-    /// Returns the aggregate functions available to stats rewrite rules.
+-    pub fn aggregate_fns(&self) -> &'a [AggregateFnRef] {
+-        self.aggregate_fns
++    /// Returns the stored aggregates computed over `input`.
++    ///
++    /// This context currently describes only the root input. Derived expressions have no stored
++    /// aggregates, even when their dtype matches the root dtype.
++    pub fn aggregate_fns_for(&self, input: &BoundExpression) -> &'a [AggregateFnRef] {
++        if input.is_root() {
++            self.aggregate_fns
++        } else {
++            &[]
++        }
+     }
+ }
+ 
+diff --git i/vortex-file/tests/bloom_skip_index.rs w/vortex-file/tests/bloom_skip_index.rs
+index 1e660ed8e9..6ff54a1157 100644
+--- i/vortex-file/tests/bloom_skip_index.rs
++++ w/vortex-file/tests/bloom_skip_index.rs
+@@ -20,11 +20,15 @@
+ #![expect(clippy::expect_used)]
+ 
+ use std::num::NonZeroU32;
++use std::num::NonZeroUsize;
+ use std::sync::Arc;
+ 
+ use vortex_array::ArrayRef;
+ use vortex_array::IntoArray;
+ use vortex_array::VortexSessionExecute;
++use vortex_array::aggregate_fn::AggregateFnVTableExt;
++use vortex_array::aggregate_fn::NumericalAggregateOpts;
++use vortex_array::aggregate_fn::fns::min::Min;
+ use vortex_array::arrays::ChunkedArray;
+ use vortex_array::arrays::DecimalArray;
+ use vortex_array::arrays::PrimitiveArray;
+@@ -38,6 +42,7 @@ use vortex_array::expr::BoundExpression;
+ use vortex_array::expr::bound::eq;
+ use vortex_array::expr::bound::get_item;
+ use vortex_array::expr::bound::lit;
++use vortex_array::expr::bound::lt;
+ use vortex_array::expr::bound::root;
+ use vortex_array::field_path;
+ use vortex_array::stream::ArrayStreamExt;
+@@ -49,12 +54,18 @@ use vortex_file::WriteOptionsSessionExt;
+ use vortex_file::WriteStrategyBuilder;
+ use vortex_io::session::RuntimeSession;
+ use vortex_layout::LayoutStrategy;
++use vortex_layout::layouts::chunked::writer::ChunkedLayoutStrategy;
++use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
++use vortex_layout::layouts::repartition::RepartitionStrategy;
++use vortex_layout::layouts::repartition::RepartitionWriterOptions;
+ use vortex_layout::layouts::zoned::Zoned;
+ use vortex_layout::layouts::zoned::aggregates::bloom_filter::BloomOptions;
+ use vortex_layout::layouts::zoned::aggregates::bloom_filter::HashFn;
+ use vortex_layout::layouts::zoned::skip_index::SkipIndex;
+ use vortex_layout::layouts::zoned::skip_index::SkipIndexSessionExt;
+ use vortex_layout::layouts::zoned::skip_index::bloom::BloomSkipIndex;
++use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
++use vortex_layout::layouts::zoned::writer::ZonedStrategy;
+ use vortex_layout::session::LayoutSession;
+ use vortex_mask::Mask;
+ use vortex_session::VortexSession;
+@@ -247,33 +258,35 @@ async fn bloom_roundtrip_prunes_and_unknown_reader_matches_full_scan() -> Vortex
+ #[expect(clippy::tests_outside_test_module)]
+ #[tokio::test]
+ async fn reader_uses_bloom_options_serialized_in_file() -> VortexResult<()> {
+-    let options = BloomOptions::new(
+-        NonZeroU32::new(512).expect("block count is non-zero"),
+-        HashFn::XxHash3_64,
+-    );
+-    let index = bloom_with_options(options);
+-    let write_session = session(&index, true);
++    let read_session = session(&BloomSkipIndex::default(), true);
+     let input = data();
+-    let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
+-
+-    // The reader registers only the implementation type and does not receive
+-    // the options used by the writer.
+-    let read_session = session(&index, true);
+-    let file = read_session.open_options().open_buffer(bytes)?;
+-    let reader = file.layout_reader()?;
+-    let row_count = file.row_count();
+-    let miss_mask = reader
+-        .pruning_evaluation(
+-            &(0..row_count),
+-            &filter(MISS),
+-            Mask::new_true(usize::try_from(row_count)?),
+-        )?
+-        .await?;
+-
+-    assert!(
+-        miss_mask.all_false(),
+-        "an absent value should be pruned using the serialized Bloom options"
+-    );
++    for blocks in [128, 512] {
++        let index = bloom_with_options(BloomOptions::new(
++            NonZeroU32::new(blocks).expect("block count is non-zero"),
++            HashFn::XxHash3_64,
++        ));
++        let write_session = session(&index, true);
++        let bytes = write_file(&write_session, &input, &index, ZONE_LEN).await?;
++        let file = read_session.open_options().open_buffer(bytes)?;
++        let reader = file.layout_reader()?;
++        let row_count = file.row_count();
++        let miss_mask = reader
++            .pruning_evaluation(
++                &(0..row_count),
++                &filter(MISS),
++                Mask::new_true(usize::try_from(row_count)?),
++            )?
++            .await?;
++        assert!(
++            miss_mask.all_false(),
++            "an absent value should be pruned using the serialized Bloom options"
++        );
++        let hit = scan(&file, HIT).await?;
++        let expected =
++            StructArray::from_fields(&[("id", PrimitiveArray::from_iter([HIT]).into_array())])?
++                .into_array();
++        assert_arrays_eq!(hit, expected, &mut read_session.create_execution_ctx());
++    }
+     Ok(())
+ }
+ 
+@@ -310,3 +323,76 @@ async fn unsupported_bloom_dtype_is_omitted_and_roundtrips() -> VortexResult<()>
+     assert_arrays_eq!(actual, input, &mut read_session.create_execution_ctx());
+     Ok(())
+ }
++
++#[expect(clippy::tests_outside_test_module)]
++#[tokio::test]
++async fn unknown_aggregate_disables_known_pruning_in_same_zone_map() -> VortexResult<()> {
++    let index = bloom();
++    let write_session = session(&index, true);
++    let zoned = ZonedStrategy::new(
++        ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
++        FlatLayoutStrategy::default(),
++        ZonedLayoutOptions {
++            block_size: NonZeroUsize::new(ZONE_LEN).expect("positive test zone length"),
++            aggregate_fns: Some(
++                vec![
++                    Min.bind(NumericalAggregateOpts::skip_nans()),
++                    index.aggregate_fn(),
++                ]
++                .into(),
++            ),
++            ..Default::default()
++        },
++    );
++    let strategy = WriteStrategyBuilder::default()
++        .with_field_writer(
++            field_path!(id),
++            Arc::new(RepartitionStrategy::new(
++                zoned,
++                RepartitionWriterOptions {
++                    block_size_minimum: 0,
++                    block_len_multiple: ZONE_LEN,
++                    block_size_target: None,
++                    canonicalize: false,
++                },
++            )),
++        )
++        .build();
++    let input = data();
++    let predicate = lt(get_item("id", root(input.dtype().clone())), lit(-1i64));
++    let mut bytes = Vec::new();
++    write_session
++        .write_options()
++        .disable_editions()
++        .with_strategy(strategy)
++        .write(&mut bytes, input.to_array_stream())
++        .await?;
++    for (register_bloom, expected_keep_count) in [(true, 0), (false, ZONE_LEN * NZONES)] {
++        let read_session = session(&index, register_bloom);
++        read_session.allow_unknown();
++        let file = read_session.open_options().open_buffer(bytes.clone())?;
++        let row_count = file.row_count();
++        let reader = file.footer().layout().new_reader(
++            "without-file-stats".into(),
++            file.segment_source(),
++            &read_session,
++            &Default::default(),
++        )?;
++        let keep = reader
++            .pruning_evaluation(
++                &(0..row_count),
++                &predicate,
++                Mask::new_true(usize::try_from(row_count)?),
++            )?
++            .await?;
++        assert_eq!(keep.true_count(), expected_keep_count);
++        let result = file
++            .scan()?
++            .with_filter(predicate.clone())
++            .into_array_stream()?
++            .read_all()
++            .await?;
++        assert_eq!(result.len(), 0);
++    }
++    Ok(())
++}
+diff --git i/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs w/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs
+index d76e3f3729..801d880fef 100644
+--- i/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs
++++ w/vortex-layout/src/layouts/zoned/aggregates/bloom_filter/scalar_fn.rs
+@@ -15,7 +15,6 @@ use vortex_array::ArrayRef;
+ use vortex_array::ExecutionCtx;
+ use vortex_array::IntoArray;
+ use vortex_array::aggregate_fn::AggregateFnVTable;
+-use vortex_array::aggregate_fn::AggregateFnVTableExt;
+ use vortex_array::arrays::BoolArray;
+ use vortex_array::arrays::ConstantArray;
+ use vortex_array::arrays::VarBinViewArray;
+@@ -47,6 +46,7 @@ use vortex_error::vortex_ensure_eq;
+ use vortex_error::vortex_err;
+ use vortex_session::VortexSession;
+ use vortex_session::registry::CachedId;
++use vortex_utils::iter::ReduceBalancedIterExt;
+ 
+ use super::BloomFilter;
+ use super::BloomOptions;
+@@ -246,16 +246,6 @@ impl StatsRewriteRule for BloomEqRewrite {
+         expr: &BoundExpression,
+         ctx: &StatsRewriteCtx<'_>,
+     ) -> VortexResult<Option<BoundExpression>> {
+-        let Some(aggregate_fn) = ctx
+-            .aggregate_fns()
+-            .iter()
+-            .find(|aggregate_fn| aggregate_fn.is::<BloomFilter>())
+-        else {
+-            return Ok(None);
+-        };
+-
+-        let options = aggregate_fn.as_::<BloomFilter>().clone();
+-
+         if *expr.as_::<Binary>() != Operator::Eq {
+             return Ok(None);
+         }
+@@ -276,15 +266,26 @@ impl StatsRewriteRule for BloomEqRewrite {
+             return Ok(None);
+         }
+ 
+-        let filter = bound_stat(column.clone(), BloomFilter.bind(options.clone()));
+-        let contains = BloomContains.try_new_bound_expr(options, [filter, literal.clone()])?;
++        let mut proofs = Vec::new();
++        for aggregate_fn in ctx.aggregate_fns_for(column) {
++            let Some(options) = aggregate_fn.as_opt::<BloomFilter>() else {
++                continue;
++            };
++            let filter = bound_stat(column.clone(), aggregate_fn.clone());
++            let contains =
++                BloomContains.try_new_bound_expr(options.clone(), [filter, literal.clone()])?;
++            proofs.push(not(contains));
++        }
+ 
+-        Ok(Some(not(contains)))
++        proofs
++            .into_iter()
++            .try_reduce_balanced(|lhs, rhs| Binary.try_new_bound_expr(Operator::Or, [lhs, rhs]))
+     }
+ }
+ 
+ #[cfg(test)]
+ mod tests {
++    use std::num::NonZeroU32;
+     use std::sync::Arc;
+ 
+     use vortex_array::IntoArray;
+@@ -302,8 +303,11 @@ mod tests {
+     use vortex_array::dtype::DecimalDType;
+     use vortex_array::dtype::Nullability;
+     use vortex_array::dtype::PType;
++    use vortex_array::expr::bound::and;
+     use vortex_array::expr::bound::eq;
++    use vortex_array::expr::bound::get_item;
+     use vortex_array::expr::bound::lit;
++    use vortex_array::expr::bound::or;
+     use vortex_array::expr::bound::root;
+     use vortex_array::scalar::DecimalValue;
+     use vortex_array::scalar::Scalar;
+@@ -316,12 +320,14 @@ mod tests {
+     use vortex_array::stats::rewrite::StatsRewriteRule;
+     use vortex_array::validity::Validity;
+     use vortex_error::VortexResult;
++    use vortex_error::vortex_err;
+     use vortex_session::VortexSession;
+ 
+     use super::BloomContains;
+     use super::BloomOptions;
+     use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
+     use crate::layouts::zoned::aggregates::bloom_filter::BloomPartial;
++    use crate::layouts::zoned::aggregates::bloom_filter::HashFn;
+     use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomEqRewrite;
+     use crate::layouts::zoned::zone_map::ZoneMap;
+ 
+@@ -381,6 +387,82 @@ mod tests {
+         Ok(())
+     }
+ 
++    #[test]
++    fn multiple_bloom_configurations_use_each_stored_filter() -> VortexResult<()> {
++        let small_options = BloomOptions::new(NonZeroU32::MIN, HashFn::XxHash3_64);
++        let large_options = BloomOptions::default();
++        let values = (0..256i64)
++            .map(|value| Scalar::primitive(value, Nullability::NonNullable))
++            .collect::<Vec<_>>();
++        let mut small = BloomPartial::from(&small_options);
++        let mut large = BloomPartial::from(&large_options);
++        for value in &values {
++            small.insert_scalar(value)?;
++            large.insert_scalar(value)?;
++        }
++        let needle = (256..4096i64)
++            .find(|value| {
++                small.contains(value.to_le_bytes()) && !large.contains(value.to_le_bytes())
++            })
++            .ok_or_else(|| {
++                vortex_err!("expected different false positives from different sizes")
++            })?;
++        let aggregates = [
++            BloomFilter.bind(small_options),
++            BloomFilter.bind(large_options),
++        ];
++        let zone_map = ZoneMap::try_new(
++            DType::Primitive(PType::I64, Nullability::NonNullable),
++            StructArray::from_fields(&[
++                (
++                    aggregates[0].to_string(),
++                    VarBinViewArray::from_iter_nullable_bin([Some(small.serialize())]).into_array(),
++                ),
++                (
++                    aggregates[1].to_string(),
++                    VarBinViewArray::from_iter_nullable_bin([Some(large.serialize())]).into_array(),
++                ),
++            ])?,
++            Arc::new(aggregates.clone()),
++            256,
++            256,
++        )?;
++        let session = array_session();
++        register(&session);
++        let rewrite = StatsRewriteCtx::new(&session).with_aggregate_fns(&aggregates);
++        let input = root(DType::Primitive(PType::I64, Nullability::NonNullable));
++        let missing = eq(input.clone(), lit(needle));
++        let present = eq(input, lit(42i64));
++        for (predicate, should_prune) in [
++            (missing.clone(), true),
++            (present.clone(), false),
++            (and(missing.clone(), present.clone()), true),
++            (or(missing, present), false),
++        ] {
++            let proof = rewrite
++                .falsify(&predicate)?
++                .ok_or_else(|| vortex_err!("expected a falsifier"))?;
++            assert_eq!(zone_map.prune(&proof, &session)?.all_true(), should_prune);
++        }
++        Ok(())
++    }
++
++    #[test]
++    fn stored_aggregate_lookup_is_scoped_to_root() {
++        let session = array_session();
++        let aggregates = [BloomFilter.bind(BloomOptions::default())];
++        let ctx = StatsRewriteCtx::new(&session).with_aggregate_fns(&aggregates);
++        let root = root(DType::struct_(
++            [(
++                "child",
++                DType::Primitive(PType::I64, Nullability::NonNullable),
++            )],
++            Nullability::NonNullable,
++        ));
++        assert_eq!(ctx.aggregate_fns_for(&root).len(), 1);
++        assert!(ctx.aggregate_fns_for(&get_item("child", root)).is_empty());
++    }
++
+     #[test]
+     fn bloom_rule_is_inconclusive_for_nulls() -> VortexResult<()> {
+         let dtype = DType::Primitive(PType::I64, Nullability::Nullable);

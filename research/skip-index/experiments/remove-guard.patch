@@ -1,0 +1,22 @@
+diff --git i/vortex-layout/src/layouts/zoned/skip_index/mod.rs w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+index ade8171dab..bd82dee06d 100644
+--- i/vortex-layout/src/layouts/zoned/skip_index/mod.rs
++++ w/vortex-layout/src/layouts/zoned/skip_index/mod.rs
+@@ -105,17 +105,6 @@ pub trait SkipIndexSessionExt: SessionExt {
+         let session = self.session();
+         let aggregate = index.aggregate_vtable();
+ 
+-        // The idea is to avoid duplicating rewrite rules.
+-        // Since neither they nor the skip index carry an ID,
+-        // this uses the aggregate ID instead.
+-        if session
+-            .aggregate_fns()
+-            .find_plugin(&aggregate.id())
+-            .is_some()
+-        {
+-            return;
+-        }
+-
+         session.aggregate_fns().register(aggregate);
+         session.scalar_fns().register(index.scalar_vtable());
+ 

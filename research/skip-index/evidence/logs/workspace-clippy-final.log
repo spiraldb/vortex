@@ -1,0 +1,548 @@
+    Blocking waiting for file lock on build directory
+    Checking vortex-array v0.1.0 ($REPO/vortex-array)
+   Compiling icu_normalizer v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling custom-labels v0.4.6
+   Compiling idna_adapter v1.2.2
+    Checking polling v3.11.0
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+    Checking async-io v2.6.0
+   Compiling tower-http v0.6.11
+   Compiling reqwest v0.13.4
+    Checking async-signal v0.2.14
+    Checking async-process v2.5.0
+    Checking async-net v2.0.0
+    Checking tokio-stream v0.1.19
+    Checking smol v2.0.2
+    Checking num-bigint v0.4.8
+    Checking sha1 v0.11.0
+   Compiling crunchy v0.2.4
+   Compiling tiny-keccak v2.0.2
+    Checking hmac v0.13.0
+    Checking reqsign-core v3.2.0
+    Checking xxhash-rust v0.8.18
+   Compiling const-random-macro v0.1.16
+    Checking lru v0.18.1
+    Checking hyper-timeout v0.5.2
+    Checking mea v0.6.5
+    Checking const-random v0.1.18
+    Checking quick-xml v0.41.0
+    Checking dlv-list v0.5.2
+    Checking ordered-multimap v0.7.3
+    Checking tonic v0.14.6
+    Checking opendal-core v0.58.1
+    Checking console v0.16.4
+   Compiling object v0.39.1
+   Compiling goosefs-sdk v0.1.9
+    Checking tonic-prost v0.14.6
+    Checking rust-ini v0.21.3
+    Checking reqsign-file-read-tokio v3.0.3
+    Checking hostname v0.4.2
+    Checking reqsign-aliyun-oss v3.1.2
+    Checking vortex-runend v0.1.0 ($REPO/encodings/runend)
+    Checking vortex-arrow v0.1.0 ($REPO/vortex-arrow)
+    Checking vortex-fastlanes v0.1.0 ($REPO/encodings/fastlanes)
+    Checking vortex-fsst v0.1.0 ($REPO/encodings/fsst)
+    Checking vortex-onpair v0.1.0 ($REPO/encodings/onpair)
+    Checking vortex-alp v0.1.0 ($REPO/encodings/alp)
+    Checking vortex-zstd v0.1.0 ($REPO/encodings/zstd)
+    Checking vortex-compressor v0.1.0 ($REPO/vortex-compressor)
+    Checking vortex-sparse v0.1.0 ($REPO/encodings/sparse)
+    Checking vortex-datetime-parts v0.1.0 ($REPO/encodings/datetime-parts)
+    Checking vortex-pco v0.1.0 ($REPO/encodings/pco)
+    Checking vortex-decimal-byte-parts v0.1.0 ($REPO/encodings/decimal-byte-parts)
+    Checking vortex-zigzag v0.1.0 ($REPO/encodings/zigzag)
+    Checking vortex-sequence v0.1.0 ($REPO/encodings/sequence)
+    Checking vortex-scan v0.1.0 ($REPO/vortex-scan)
+    Checking vortex-io v0.1.0 ($REPO/vortex-io)
+    Checking vortex-btrblocks v0.1.0 ($REPO/vortex-btrblocks)
+    Checking vortex-tensor v0.1.0 ($REPO/vortex-tensor)
+    Checking vortex-layout v0.1.0 ($REPO/vortex-layout)
+    Checking vortex-bytebool v0.1.0 ($REPO/encodings/bytebool)
+    Checking reqsign-tencent-cos v3.0.3
+    Checking opendal-service-goosefs v0.58.1
+    Checking opendal-service-cos v0.58.1
+    Checking vortex-json v0.1.0 ($REPO/vortex-json)
+   Compiling ar_archive_writer v0.5.3
+    Checking opendal-service-oss v0.58.1
+    Checking parquet-variant v59.2.0
+   Compiling psm v0.1.32
+    Checking opendal v0.58.1
+    Checking parquet-variant-json v59.2.0
+    Checking object_store_opendal v0.58.0
+    Checking parquet-variant-compute v59.2.0
+   Compiling stacker v0.1.25
+   Compiling rustix v1.1.4
+    Checking vortex-file v0.1.0 ($REPO/vortex-file)
+   Compiling errno v0.3.14
+    Checking vortex-cloud v0.1.0 ($REPO/vortex-cloud)
+    Checking vortex-parquet-variant v0.1.0 ($REPO/encodings/parquet-variant)
+    Checking vortex-ipc v0.1.0 ($REPO/vortex-ipc)
+   Compiling recursive-proc-macro-impl v0.1.1
+    Checking vortex v0.1.0 ($REPO/vortex)
+   Compiling sqlparser_derive v0.5.0
+    Checking rustls-platform-verifier v0.7.0
+    Checking recursive v0.1.1
+   Compiling crossbeam-deque v0.8.7
+    Checking sqlparser v0.62.0
+   Compiling rayon-core v1.13.0
+    Checking alloc-no-stdlib v2.0.4
+   Compiling snap v1.1.2
+    Checking alloc-stdlib v0.2.4
+    Checking foldhash v0.1.5
+    Checking hashbrown v0.15.5
+    Checking brotli-decompressor v5.0.3
+    Checking rayon v1.12.0
+    Checking fixedbitset v0.5.7
+    Checking petgraph v0.8.3
+    Checking brotli v8.0.4
+   Compiling blake3 v1.8.5
+    Checking arrayref v0.3.9
+    Checking constant_time_eq v0.4.2
+    Checking blake2 v0.10.6
+    Checking insta v1.48.0
+    Checking parquet v59.2.0
+    Checking arrow-buffer v58.4.0
+    Checking arrow-schema v58.4.0
+    Checking arrow-data v58.4.0
+    Checking thread_local v1.1.10
+    Checking arrow-array v58.4.0
+   Compiling heapless v0.8.0
+    Checking hash32 v0.3.1
+   Compiling thiserror v2.0.19
+   Compiling ping v0.7.1
+    Checking arrow-select v58.4.0
+   Compiling thiserror v1.0.69
+   Compiling test-with-derive v0.16.3
+    Checking rstar v0.12.2
+    Checking uzers v0.12.2
+   Compiling thiserror-impl v1.0.69
+    Checking lazy_static v1.5.0
+   Compiling strsim v0.11.1
+    Checking sharded-slab v0.1.7
+    Checking geo-types v0.7.20
+    Checking test-with v0.16.3
+    Checking matchers v0.2.0
+    Checking tracing-serde v0.2.0
+    Checking tracing-log v0.2.0
+    Checking nu-ansi-term v0.50.3
+    Checking arrow-ord v58.4.0
+    Checking tracing-subscriber v0.3.23
+   Compiling vortex-bench-support v0.1.0 ($REPO/benchmarks/bench-support)
+    Checking arrow-cast v58.4.0
+   Compiling liblzma-sys v0.4.7
+    Checking libloading v0.8.9
+   Compiling getrandom v0.4.3
+    Checking lz4_flex v0.13.1
+    Checking geo-traits v0.3.0
+    Checking arrow-row v58.4.0
+    Checking arrow-ipc v58.4.0
+   Compiling xattr v1.6.1
+   Compiling filetime v0.2.29
+   Compiling liblzma v0.4.7
+    Checking i_float v1.15.0
+   Compiling tar v0.4.46
+   Compiling vortex-cuda-macros v0.1.0 ($REPO/vortex-cuda/macros)
+   Compiling tempfile v3.27.0
+    Checking i_shape v1.14.0
+    Checking arrow-json v58.4.0
+    Checking arrow-csv v58.4.0
+   Compiling vortex-nvcomp v0.1.0 ($REPO/vortex-cuda/nvcomp)
+    Checking arrow-string v58.4.0
+    Checking arrow-arith v58.4.0
+   Compiling vortex-cub v0.1.0 ($REPO/vortex-cuda/cub)
+    Checking itertools v0.11.0
+    Checking i_tree v0.16.0
+    Checking i_key_sort v0.6.0
+    Checking robust v1.2.0
+   Compiling fastlanes v0.7.0
+    Checking spade v2.15.1
+    Checking earcutr v0.4.3
+    Checking i_overlay v4.0.7
+    Checking arrow v58.4.0
+    Checking wkb v0.9.2
+    Checking wkt v0.14.0
+    Checking geoarrow-schema v0.8.0 (https://github.com/geoarrow/geoarrow-rs?rev=855d2e138e54ce503c4488d5bb795ca1ea880d1f#855d2e13)
+    Checking geographiclib-rs v0.2.7
+    Checking float_next_after v1.0.0
+    Checking geo v0.31.0
+    Checking geoarrow-array v0.8.0 (https://github.com/geoarrow/geoarrow-rs?rev=855d2e138e54ce503c4488d5bb795ca1ea880d1f#855d2e13)
+    Checking serde_test v1.0.177
+    Checking datafusion-common v54.1.0
+    Checking datafusion-expr-common v54.1.0
+    Checking geoarrow v0.8.0 (https://github.com/geoarrow/geoarrow-rs?rev=855d2e138e54ce503c4488d5bb795ca1ea880d1f#855d2e13)
+    Checking geoarrow-cast v0.8.0 (https://github.com/geoarrow/geoarrow-rs?rev=855d2e138e54ce503c4488d5bb795ca1ea880d1f#855d2e13)
+    Checking vortex-spatial v0.1.0 ($REPO/vortex-spatial)
+    Checking datafusion-physical-expr-common v54.1.0
+   Compiling bigdecimal v0.4.10
+   Compiling serde_core v1.0.229
+   Compiling target-lexicon v0.13.5
+    Checking datafusion-functions-aggregate-common v54.1.0
+    Checking datafusion-functions-window-common v54.1.0
+   Compiling vortex-cuda v0.1.0 ($REPO/vortex-cuda)
+    Checking datafusion-common v55.0.0
+    Checking datafusion-doc v54.1.0
+    Checking datafusion-expr v54.1.0
+    Checking datafusion-expr-common v55.0.0
+    Checking datafusion-physical-expr-common v55.0.0
+   Compiling datafusion-macros v54.1.0
+    Checking datafusion-physical-expr v54.1.0
+    Checking datafusion-functions-aggregate-common v55.0.0
+    Checking datafusion-functions-window-common v55.0.0
+    Checking num-rational v0.4.2
+    Checking num-iter v0.1.46
+    Checking datafusion-doc v55.0.0
+    Checking datafusion-expr v55.0.0
+    Checking num v0.4.3
+    Checking datafusion-execution v54.1.0
+   Compiling serde_json v1.0.151
+    Checking arrow-buffer v56.2.1
+    Checking arrow-schema v56.2.1
+    Checking datafusion-functions v54.1.0
+    Checking arrow-data v56.2.1
+    Checking unit-prefix v0.5.2
+   Compiling datafusion-macros v55.0.0
+    Checking indicatif v0.18.6
+    Checking arrow-array v56.2.1
+    Checking datafusion-physical-expr v55.0.0
+   Compiling ident_case v1.0.1
+    Checking tpchgen v3.0.0
+    Checking tpchgen-arrow v3.0.0
+    Checking datafusion-execution v55.0.0
+    Checking datafusion-functions v55.0.0
+    Checking arrow-select v56.2.1
+   Compiling strum_macros v0.28.0
+   Compiling itertools v0.12.1
+   Compiling prost v0.14.4
+    Checking datafusion-common-runtime v55.0.0
+    Checking bstr v1.13.0
+    Checking datafusion-physical-plan v55.0.0
+   Compiling prost-derive v0.12.6
+    Checking noodles-core v0.20.0
+   Compiling prost-types v0.14.4
+    Checking prost v0.12.6
+    Checking arrow-cast v56.2.1
+    Checking noodles-bgzf v0.47.0
+    Checking ordered-float v2.10.1
+    Checking thread-id v4.2.2
+    Checking integer-encoding v3.0.4
+   Compiling geozero v0.14.0
+   Compiling multimap v0.10.1
+   Compiling prost-build v0.14.4
+    Checking tracing-perfetto v0.1.5
+    Checking thrift v0.17.0
+    Checking noodles-csi v0.56.0
+    Checking datafusion-physical-expr-adapter v55.0.0
+    Checking arrow-ord v56.2.1
+    Checking datafusion-session v55.0.0
+    Checking arrow-string v56.2.1
+    Checking arrow-row v56.2.1
+    Checking arrow-arith v56.2.1
+    Checking wkt v0.11.1
+    Checking geojson v0.24.2
+    Checking scroll v0.11.0
+    Checking arrow v56.2.1
+    Checking noodles-tabix v0.62.0
+    Checking arrow-ipc v56.2.1
+    Checking datafusion-datasource v55.0.0
+    Checking spatialbench v0.2.0
+    Checking lz4_flex v0.11.6
+    Checking parquet v56.2.1
+    Checking spatialbench-arrow v0.2.0
+    Checking noodles-vcf v0.88.0
+    Checking datafusion-common-runtime v54.1.0
+    Checking get_dir v0.5.0
+    Checking datafusion-physical-plan v54.1.0
+    Checking datafusion-functions-aggregate v54.1.0
+   Compiling typenum v1.20.1
+   Compiling hybrid-array v0.4.14
+    Checking vortex-bench v0.1.0 ($REPO/vortex-bench)
+    Checking datafusion-session v54.1.0
+    Checking datafusion-functions-nested v54.1.0
+    Checking datafusion-physical-expr-adapter v54.1.0
+    Checking ordered-float v5.3.0
+    Checking nom v8.0.0
+    Checking fast-float2 v0.2.3
+   Compiling utf8parse v0.2.2
+    Checking ethnum v1.5.3
+   Compiling anstyle-parse v1.0.0
+    Checking datafusion-sql v54.1.0
+    Checking jsonb v0.5.6
+    Checking datafusion-datasource v54.1.0
+   Compiling snafu-derive v0.9.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstream v1.0.0
+    Checking lance-arrow v10.0.0
+   Compiling darling_core v0.23.0
+    Checking snafu v0.9.2
+    Checking quick_cache v0.6.24
+   Compiling lance-derive v10.0.0
+   Compiling serde v1.0.229
+   Compiling clap_builder v4.6.5
+   Compiling darling_macro v0.23.0
+    Checking lance-core v10.0.0
+   Compiling crypto-common v0.2.2
+   Compiling serde_spanned v1.1.1
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling cbindgen v0.29.4
+   Compiling winnow v0.7.15
+   Compiling clap v4.6.5
+   Compiling darling v0.23.0
+   Compiling cmov v0.5.4
+   Compiling ctutils v0.4.2
+   Compiling serde_with_macros v3.21.0
+   Compiling block-buffer v0.12.1
+    Checking datafusion-catalog v55.0.0
+   Compiling toml v0.9.12+spec-1.1.0
+    Checking datafusion-pruning v55.0.0
+    Checking datafusion-functions-aggregate v55.0.0
+    Checking ciborium-io v0.2.2
+    Checking crc-catalog v2.5.0
+    Checking plotters-backend v0.3.7
+   Compiling const-oid v0.10.2
+   Compiling digest v0.11.3
+    Checking plotters-svg v0.3.7
+    Checking crc v3.4.0
+    Checking ciborium-ll v0.2.2
+    Checking datafusion-functions-nested v55.0.0
+    Checking serde_with v3.21.0
+    Checking itertools v0.10.5
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling lz4-sys v1.11.1+lz4-1.10.0
+   Compiling serde_repr v0.1.21
+    Checking cast v0.3.0
+    Checking criterion-plot v0.5.0
+    Checking lance-namespace-reqwest-client v0.8.6
+    Checking ciborium v0.2.2
+    Checking arrow-avro v59.2.0
+    Checking plotters v0.3.7
+    Checking datafusion-catalog v54.1.0
+    Checking strum v0.28.0
+    Checking tinytemplate v1.2.1
+   Compiling cpufeatures v0.3.0
+    Checking is-terminal v0.4.17
+    Checking anes v0.1.6
+    Checking stfu8 v0.2.7
+    Checking std_prelude v0.2.12
+    Checking oorandom v11.1.5
+   Compiling icu_locale_data v2.2.0
+    Checking codspeed-criterion-compat-walltime v5.0.1
+    Checking path_abs v0.5.1
+    Checking datafusion-datasource-avro v55.0.0
+    Checking lance-namespace v10.0.0
+    Checking datafusion-sql v55.0.0
+    Checking datafusion-datasource-parquet v55.0.0
+    Checking datafusion-physical-optimizer v55.0.0
+    Checking datafusion-pruning v54.1.0
+    Checking datafusion-datasource-json v55.0.0
+    Checking datafusion-functions-table v55.0.0
+    Checking datafusion-catalog-listing v55.0.0
+    Checking datafusion-datasource-arrow v55.0.0
+    Checking datafusion-datasource-csv v55.0.0
+   Compiling lance-encoding v10.0.0
+    Checking datafusion-optimizer v55.0.0
+    Checking datafusion-functions-window v55.0.0
+   Compiling zstd-safe v7.2.4
+   Compiling icu_segmenter_data v2.2.0
+    Checking datafusion-physical-optimizer v54.1.0
+    Checking lance-io v10.0.0
+    Checking lz4 v1.28.1
+    Checking datafusion-datasource-arrow v54.1.0
+    Checking datafusion-datasource-csv v54.1.0
+    Checking datafusion-datasource-json v54.1.0
+   Compiling inout v0.2.2
+   Compiling lance-file v10.0.0
+   Compiling stop-words v0.10.0
+    Checking datafusion-functions-window v54.1.0
+    Checking datafusion-optimizer v54.1.0
+    Checking datafusion v55.0.0
+    Checking fsst v10.0.0
+    Checking lance-bitpacking v10.0.0
+    Checking datafusion-functions-table v54.1.0
+    Checking datafusion-catalog-listing v54.1.0
+    Checking hyperloglogplus v0.4.1
+   Compiling matrixmultiply v0.3.11
+    Checking tinyvec_macros v0.1.1
+    Checking tinyvec v1.12.0
+    Checking datafusion v54.1.0
+   Compiling cipher v0.5.2
+    Checking icu_locale v2.2.0
+   Compiling sha2 v0.11.0
+    Checking lance-select v10.0.0
+   Compiling lance-datafusion v10.0.0
+   Compiling lance-table v10.0.0
+    Checking thread-tree v0.3.3
+   Compiling crc32fast v1.5.0
+    Checking rand_xoshiro v0.7.0
+   Compiling lance-linalg v10.0.0
+   Compiling async-recursion v1.1.1
+   Compiling cpubits v0.1.1
+    Checking option-ext v0.2.0
+   Compiling fst v0.4.7
+   Compiling deranged v0.5.8
+   Compiling libsais-rs v0.2.2
+    Checking rawpointer v0.2.1
+   Compiling zlib-rs v0.6.6
+   Compiling time-core v0.1.9
+   Compiling powerfmt v0.2.0
+   Compiling libbz2-rs-sys v0.2.5
+   Compiling simd-adler32 v0.3.10
+   Compiling num-conv v0.2.2
+   Compiling bumpalo v3.20.3
+   Compiling time v0.3.55
+   Compiling zopfli v0.8.3
+   Compiling bzip2 v0.6.1
+   Compiling flate2 v1.1.9
+    Checking dirs-sys v0.5.0
+   Compiling aes v0.9.2
+    Checking lance-datagen v10.0.0
+   Compiling pyo3-build-config v0.29.1
+   Compiling pbkdf2 v0.13.0
+   Compiling lzma-rust2 v0.16.5
+    Checking icu_segmenter v2.2.0
+   Compiling zstd v0.13.3
+    Checking unicode-normalization v0.1.25
+   Compiling lance-index v10.0.0
+    Checking lance-arrow-scalar v58.0.0
+    Checking rust-stemmers v1.2.0
+    Checking utf8-ranges v1.0.5
+    Checking semver v1.0.28
+   Compiling ppmd-rust v1.4.0
+    Checking rangemap v1.7.1
+   Compiling typed-path v0.12.3
+   Compiling deflate64 v0.1.12
+    Checking lance-tokenizer v10.0.0
+   Compiling zip v8.6.0
+    Checking lance-arrow-stats v58.0.0
+    Checking lance-index-core v10.0.0
+    Checking dirs v6.0.0
+    Checking ndarray v0.16.1
+   Compiling lance v10.0.0
+    Checking crossbeam-queue v0.3.13
+    Checking unicode-ident v1.0.24
+    Checking proc-macro2 v1.0.107
+   Compiling vortex-duckdb v0.1.0 ($REPO/vortex-duckdb)
+   Compiling pyo3-ffi v0.29.1
+    Checking vortex-datafusion v0.1.0 ($REPO/vortex-datafusion)
+    Checking crossbeam-skiplist v0.1.3
+    Checking permutation v0.4.1
+    Checking async_cell v0.2.3
+    Checking quote v1.0.47
+    Checking parquet v58.4.0
+   Compiling darling_core v0.24.0
+   Compiling signal-hook v0.3.18
+   Compiling convert_case v0.10.0
+   Compiling darling_macro v0.24.0
+   Compiling pyo3 v0.29.1
+    Checking castaway v0.2.4
+   Compiling libfuzzer-sys v0.4.13
+   Compiling instability v0.3.13
+    Checking compact_str v0.9.1
+   Compiling darling v0.24.0
+   Compiling derive_more-impl v2.1.1
+    Checking vortex-row v0.1.0 ($REPO/vortex-row)
+    Checking kasuari v0.4.12
+    Checking unicode-truncate v2.0.1
+   Compiling pyo3-macros-backend v0.29.1
+   Compiling indoc v2.0.7
+   Compiling litrs v1.0.0
+   Compiling document-features v0.2.12
+   Compiling pyo3-macros v0.29.1
+    Checking ratatui-core v0.1.2
+    Checking derive_more v2.1.1
+    Checking signal-hook-mio v0.2.5
+   Compiling slotmap v1.1.1
+    Checking crossterm v0.29.0
+    Checking opentelemetry v0.32.0
+    Checking line-clipping v0.3.8
+   Compiling vcpkg v0.2.15
+   Compiling libz-sys v1.1.29
+    Checking ratatui-widgets v0.3.2
+    Checking ratatui-crossterm v0.1.2
+    Checking vortex-fuzz v0.1.0 ($REPO/fuzz)
+    Checking env_filter v2.0.0
+   Compiling fs-err v3.3.1
+   Compiling enum-ordinalize-derive v4.4.2
+   Compiling owo-colors v4.3.0
+    Checking grid v1.0.1
+    Checking taffy v0.12.2
+   Compiling enum-ordinalize v4.4.2
+    Checking env_logger v0.11.11
+    Checking ratatui v0.30.2
+    Checking opentelemetry_sdk v0.32.1
+    Checking syn v3.0.3
+   Compiling vortex-ffi v0.1.0 ($REPO/vortex-ffi)
+    Checking fuzzy-matcher v0.3.7
+    Checking escape8259 v0.5.3
+   Compiling same-file v1.0.6
+    Checking unicode-width v0.1.14
+    Checking subst v0.3.8
+   Compiling walkdir v2.5.0
+    Checking libtest-mimic v0.8.2
+   Compiling datafusion-bench v0.1.0 ($REPO/benchmarks/datafusion-bench)
+    Checking opentelemetry-proto v0.32.0
+   Compiling educe v0.6.0
+    Checking opentelemetry-http v0.32.0
+   Compiling jni-macros v0.22.4
+    Checking itertools v0.13.0
+   Compiling libgit2-sys v0.18.7+1.9.6
+   Compiling simdutf8 v0.1.5
+   Compiling duckdb-bench v0.1.0 ($REPO/benchmarks/duckdb-bench)
+   Compiling prettyplease v0.2.37
+   Compiling simd_cesu8 v1.2.0
+    Checking sqllogictest v0.29.1
+    Checking opentelemetry-otlp v0.32.0
+   Compiling jni v0.22.4
+    Checking vortex-tui v0.1.0 ($REPO/vortex-tui)
+    Checking syn v2.0.119
+    Checking lance-bench v0.1.0 ($REPO/benchmarks/lance-bench)
+    Checking datafusion-spark v55.0.0
+   Compiling jni-sys-macros v0.4.1
+    Checking base16ct v1.0.0
+    Checking winnow v1.0.4
+    Checking similar v3.1.1
+   Compiling vortex-sqllogictest v0.1.0 ($REPO/vortex-sqllogictest)
+    Checking vortex-python-abi v0.1.0 ($REPO/vortex-python-abi)
+    Checking toml_parser v1.1.3+spec-1.1.0
+    Checking jni-sys v0.4.1
+    Checking datafusion-sqllogictest v55.0.0
+    Checking pyo3-async-runtimes v0.29.0
+    Checking java-locator v0.1.9
+    Checking combine v4.6.7
+   Compiling serial_test_derive v4.0.1
+    Checking toml_writer v1.1.2+spec-1.1.0
+   Compiling vortex-python v0.1.0 ($REPO/vortex-python)
+   Compiling xshell-macros v0.2.7
+    Checking heck v0.5.0
+    Checking xshell v0.2.7
+    Checking serial_test v4.0.1
+    Checking pyo3-object_store v0.11.0
+    Checking git2 v0.21.0
+    Checking compress-bench v0.1.0 ($REPO/benchmarks/compress-bench)
+    Checking random-access-bench v0.1.0 ($REPO/benchmarks/random-access-bench)
+    Checking vortex-compat v0.1.0 ($REPO/vortex-test/compat-gen)
+    Checking pyo3-log v0.13.4
+    Checking pyo3-bytes v0.7.1
+    Checking string-bench v0.1.0 ($REPO/benchmarks/string-bench)
+    Checking vortex-jni v0.1.0 ($REPO/vortex-jni)
+    Checking xtask v0.1.0 ($REPO/xtask)
+    Checking vortex-error v0.1.0 ($REPO/vortex-error)
+    Checking vortex-cuda-ffi v0.1.0 ($REPO/vortex-cuda/ffi)
+    Checking vortex-python-cuda v0.1.0 ($REPO/vortex-python-cuda)
+    Checking vortex-array-macros v0.1.0 ($REPO/vortex-array-macros)
+    Checking gpu-scan-cli v0.1.0 ($REPO/vortex-cuda/gpu-scan-cli)
+    Checking vortex-test-e2e-cuda v0.1.0 ($REPO/vortex-test/e2e-cuda)
+    Checking vortex-buffer v0.1.0 ($REPO/vortex-buffer)
+    Checking vortex-compute v0.1.0 ($REPO/vortex-compute)
+    Checking vortex-web-wasm v0.1.0 ($REPO/vortex-web/crate)
+    Checking vortex-metrics v0.1.0 ($REPO/vortex-metrics)
+    Checking vortex-mask v0.1.0 ($REPO/vortex-mask)
+    Checking vortex-edition v0.1.0 ($REPO/vortex-edition)
+    Checking vortex-session v0.1.0 ($REPO/vortex-session)
+    Checking vortex-proto v0.1.0 ($REPO/vortex-proto)
+    Checking vortex-flatbuffers v0.1.0 ($REPO/vortex-flatbuffers)
+    Checking vortex-utils v0.1.0 ($REPO/vortex-utils)
+    Finished `dev` profile [unoptimized] target(s) in 3m 10s

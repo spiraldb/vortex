@@ -1,0 +1,122 @@
+diff --git i/vortex-array/src/aggregate_fn/foreign.rs w/vortex-array/src/aggregate_fn/foreign.rs
+index feb07e4717..fb2e055ec6 100644
+--- i/vortex-array/src/aggregate_fn/foreign.rs
++++ w/vortex-array/src/aggregate_fn/foreign.rs
+@@ -124,3 +124,22 @@ pub fn new_foreign_aggregate_fn(id: AggregateFnId, metadata: Vec<u8>) -> Aggrega
+     )
+     .erased()
+ }
++
++
++#[cfg(test)]
++mod tests {
++    use vortex_session::registry::CachedId;
++
++    use super::new_foreign_aggregate_fn;
++    use crate::aggregate_fn::AggregateFnSatisfaction;
++
++    #[test]
++    fn aggregate_contract_distinct_ids_do_not_satisfy() {
++        static LEFT: CachedId = CachedId::new("test.left");
++        static RIGHT: CachedId = CachedId::new("test.right");
++        let left = new_foreign_aggregate_fn(*LEFT, vec![1]);
++        let right = new_foreign_aggregate_fn(*RIGHT, vec![1]);
++        assert_ne!(left, right);
++        assert_eq!(left.can_satisfy(&right), AggregateFnSatisfaction::No);
++    }
++}
+diff --git i/vortex-layout/src/layouts/zoned/zone_map.rs w/vortex-layout/src/layouts/zoned/zone_map.rs
+index c84c0b443d..1b53d4a925 100644
+--- i/vortex-layout/src/layouts/zoned/zone_map.rs
++++ w/vortex-layout/src/layouts/zoned/zone_map.rs
+@@ -992,4 +992,90 @@ mod tests {
+             &mut SESSION.create_execution_ctx()
+         );
+     }
++
++    #[test]
++    fn aggregate_contract_mean_exposes_struct_partial() -> VortexResult<()> {
++        let aggregate = vortex_array::aggregate_fn::fns::mean::Mean::combined().bind(
++            vortex_array::aggregate_fn::combined::PairOptions(
++                NumericalAggregateOpts::default(),
++                NumericalAggregateOpts::default(),
++            ),
++        );
++        let data = buffer![1.0f64, 3.0].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let partial = partial.cast(&partial.dtype().as_nullable())?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = gt(vortex_array::expr::get_item("sum", summary), lit(1.0f64));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
++    #[test]
++    fn aggregate_contract_struct_summary_prunes() -> VortexResult<()> {
++        let aggregate = vortex_array::aggregate_fn::fns::min_max::MinMax
++            .bind(NumericalAggregateOpts::default());
++        let data = buffer![1i32, 3].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = lt(vortex_array::expr::get_item("max", summary), lit(5i32));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
++
++    #[test]
++    fn aggregate_contract_bounded_max_exposes_struct_partial() -> VortexResult<()> {
++        let aggregate = BoundedMax.bind(BoundedMaxOptions {
++            max_bytes: default_bounded_stat_max_bytes(),
++        });
++        let data = buffer![1i32, 3].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = lt(vortex_array::expr::get_item("bound", summary), lit(5i32));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
+ }

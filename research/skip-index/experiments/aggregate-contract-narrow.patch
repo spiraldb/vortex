@@ -1,0 +1,175 @@
+--- a/vortex-array/src/aggregate_fn/vtable.rs
++++ b/vortex-array/src/aggregate_fn/vtable.rs
+@@ -69,7 +69,7 @@
+         options: &Self::Options,
+         requested: &AggregateFnRef,
+     ) -> AggregateFnSatisfaction {
+-        if requested
++        if self.id() == requested.id() && requested
+             .as_opt::<Self>()
+             .is_some_and(|other| other == options)
+         {
+--- a/vortex-array/src/aggregate_fn/foreign.rs
++++ b/vortex-array/src/aggregate_fn/foreign.rs
+@@ -124,3 +124,31 @@
+     )
+     .erased()
+ }
++
++#[cfg(test)]
++mod tests {
++    use vortex_session::registry::CachedId;
++
++    use super::new_foreign_aggregate_fn;
++    use crate::aggregate_fn::AggregateFnSatisfaction;
++
++    #[test]
++    fn aggregate_contract_distinct_ids_do_not_satisfy() {
++        static LEFT: CachedId = CachedId::new("test.left");
++        static RIGHT: CachedId = CachedId::new("test.right");
++        let left = new_foreign_aggregate_fn(*LEFT, vec![1]);
++        let right = new_foreign_aggregate_fn(*RIGHT, vec![1]);
++        assert_ne!(left, right);
++        assert_eq!(left.can_satisfy(&right), AggregateFnSatisfaction::No);
++    }
++
++    #[test]
++    fn aggregate_contract_display_is_not_identity() {
++        static ID: CachedId = CachedId::new("test.foreign");
++        let left = new_foreign_aggregate_fn(*ID, vec![1]);
++        let right = new_foreign_aggregate_fn(*ID, vec![2]);
++        assert_ne!(left, right);
++        assert_eq!(left.to_string(), right.to_string());
++        assert_eq!(left.can_satisfy(&right), AggregateFnSatisfaction::No);
++    }
++}
+--- a/vortex-layout/src/layouts/zoned/zone_map.rs
++++ b/vortex-layout/src/layouts/zoned/zone_map.rs
+@@ -246,6 +246,7 @@
+         if self.array.unmasked_field_by_name_opt(&field_name).is_some() {
+             return Some(aggregate_result_expr(
+                 requested,
++                requested,
+                 get_item(field_name, root()),
+             ));
+         }
+@@ -259,10 +260,10 @@
+ 
+             match stored.can_satisfy(requested) {
+                 AggregateFnSatisfaction::Exact => {
+-                    return Some(aggregate_result_expr(stored, get_item(field_name, root())));
++                    return Some(aggregate_result_expr(stored, requested, get_item(field_name, root())));
+                 }
+                 AggregateFnSatisfaction::Approximate => {
+-                    approximate = Some(aggregate_result_expr(stored, get_item(field_name, root())));
++                    approximate = Some(aggregate_result_expr(stored, requested, get_item(field_name, root())));
+                 }
+                 AggregateFnSatisfaction::No => {}
+             }
+@@ -290,8 +291,8 @@
+     }
+ }
+ 
+-fn aggregate_result_expr(stored: &AggregateFnRef, state_expr: Expression) -> Expression {
+-    if stored.is::<BoundedMax>() {
++fn aggregate_result_expr(stored: &AggregateFnRef, requested: &AggregateFnRef, state_expr: Expression) -> Expression {
++    if stored.is::<BoundedMax>() && requested.is::<vortex_array::aggregate_fn::fns::max::Max>() {
+         get_item(BOUNDED_MAX_BOUND, state_expr)
+     } else {
+         state_expr
+@@ -342,6 +343,9 @@
+     use vortex_array::IntoArray;
+     use vortex_array::VortexSessionExecute;
+     use vortex_array::aggregate_fn::AggregateFnVTableExt;
++    use vortex_array::aggregate_fn::combined::PairOptions;
++    use vortex_array::aggregate_fn::fns::mean::Mean;
++    use vortex_array::aggregate_fn::fns::min_max::MinMax;
+     use vortex_array::aggregate_fn::EmptyOptions;
+     use vortex_array::aggregate_fn::NumericalAggregateOpts;
+     use vortex_array::aggregate_fn::fns::all_non_null::AllNonNull;
+@@ -992,4 +996,85 @@
+             &mut SESSION.create_execution_ctx()
+         );
+     }
++
++    #[test]
++    fn aggregate_contract_mean_exposes_struct_partial() -> VortexResult<()> {
++        let aggregate = Mean::combined().bind(PairOptions(
++            NumericalAggregateOpts::default(),
++            NumericalAggregateOpts::default(),
++        ));
++        let data = buffer![1.0f64, 3.0].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let partial = partial.cast(&partial.dtype().as_nullable())?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = gt(vortex_array::expr::get_item("sum", summary), lit(1.0f64));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
++    #[test]
++    fn aggregate_contract_struct_summary_prunes() -> VortexResult<()> {
++        let aggregate = MinMax.bind(NumericalAggregateOpts::default());
++        let data = buffer![1i32, 3].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = lt(vortex_array::expr::get_item("max", summary), lit(5i32));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
++
++    #[test]
++    fn aggregate_contract_bounded_max_exposes_struct_partial() -> VortexResult<()> {
++        let aggregate = BoundedMax.bind(BoundedMaxOptions {
++            max_bytes: default_bounded_stat_max_bytes(),
++        });
++        let data = buffer![1i32, 3].into_array();
++        let mut accumulator = aggregate.accumulator(data.dtype())?;
++        accumulator.accumulate(&data, &mut SESSION.create_execution_ctx())?;
++        let partial = accumulator.partial_scalar()?;
++        let zone_map = ZoneMap::try_new(
++            data.dtype().clone(),
++            StructArray::from_fields(&[(
++                aggregate.to_string(),
++                vortex_array::arrays::ConstantArray::new(partial, 1).into_array(),
++            )])?,
++            Arc::new([aggregate.clone()]),
++            2,
++            2,
++        )?;
++
++        let summary = vortex_array::stats::stat(root(), aggregate);
++        let predicate = lt(vortex_array::expr::get_item("bound", summary), lit(5i32));
++        let mask = prune(&zone_map, &predicate)?;
++        assert_eq!(mask.true_count(), 1);
++        Ok(())
++    }
+ }

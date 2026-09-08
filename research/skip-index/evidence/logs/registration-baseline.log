@@ -1,0 +1,30 @@
+   Compiling vortex-layout v0.1.0 ($REPO/vortex-layout)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.77s
+     Running unittests src/lib.rs (target/debug/deps/vortex_layout-459aae580f062a0d)
+
+running 6 tests
+
+thread 'layouts::zoned::skip_index::bloom::tests::registration_after_aggregate_registration_installs_components' (1029313) panicked at vortex-layout/src/layouts/zoned/skip_index/bloom_tests.rs:55:5:
+assertion failed: session.scalar_fns().registry().get(&BloomContains.id()).is_some()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test layouts::zoned::skip_index::bloom::tests::registration_after_aggregate_registration_installs_components ... FAILED
+
+thread 'layouts::zoned::skip_index::bloom::tests::registration_after_stats_replacement_restores_rewrite' (1029314) panicked at vortex-layout/src/layouts/zoned/skip_index/bloom_tests.rs:106:5:
+assertion `left == right` failed
+  left: []
+ right: [BloomOptions { blocks_count: 256, hash_fn: XxHash3_64 }]
+test layouts::zoned::skip_index::bloom::tests::repeated_registration_installs_one_bloom_rewrite ... ok
+test layouts::zoned::skip_index::bloom::tests::concurrent_registration_installs_one_bloom_rewrite ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_uses_persisted_options ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_preserves_independently_registered_rule ... ok
+test layouts::zoned::skip_index::bloom::tests::registration_after_stats_replacement_restores_rewrite ... FAILED
+
+failures:
+
+failures:
+    layouts::zoned::skip_index::bloom::tests::registration_after_aggregate_registration_installs_components
+    layouts::zoned::skip_index::bloom::tests::registration_after_stats_replacement_restores_rewrite
+
+test result: FAILED. 4 passed; 2 failed; 0 ignored; 0 measured; 300 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `-p vortex-layout --lib`
