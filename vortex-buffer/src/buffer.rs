@@ -104,21 +104,6 @@ impl<T> Buffer<T> {
         }
     }
 
-    fn from_owner(owner: impl crate::BufferOwner, length: usize, alignment: Alignment) -> Self {
-        let owner: Box<dyn crate::BufferOwner> = Box::new(owner);
-        let ptr = if length == 0 {
-            empty_ptr()
-        } else {
-            NonNull::new(owner.as_ptr().cast_mut().cast()).vortex_expect("owner pointer is null")
-        };
-        Self {
-            ptr,
-            length,
-            alignment,
-            backing: Some(Arc::new(BufferBacking::External { _owner: owner })),
-        }
-    }
-
     fn from_bytes(bytes: Bytes, alignment: Alignment) -> Self {
         let length = bytes.len() / size_of::<T>();
         if length == 0 {
@@ -815,16 +800,6 @@ impl<T> FromIterator<T> for Buffer<T> {
     }
 }
 
-// Helper struct that preserves drop glue for non-native Vec elements.
-#[repr(transparent)]
-struct Wrapper<T>(Vec<T>);
-
-impl<T: Send + Sync + 'static> crate::BufferOwner for Wrapper<T> {
-    fn as_ptr(&self) -> *const u8 {
-        self.0.as_ptr().cast()
-    }
-}
-
 impl<T> From<Vec<T>> for Buffer<T>
 where
     T: Send + Sync + 'static,
@@ -833,10 +808,35 @@ where
         let length = value.len();
         let alignment = Alignment::of::<T>();
         if std::mem::needs_drop::<T>() {
-            Self::from_owner(Wrapper(value), length, alignment)
+            // Keep the typed owner so its elements are dropped, including zero-sized elements.
+            Self {
+                ptr: NonNull::new(value.as_ptr().cast_mut())
+                    .vortex_expect("a Vec always has a non-null pointer"),
+                length,
+                alignment,
+                backing: Some(Arc::new(BufferBacking::External {
+                    _owner: Box::new(value),
+                })),
+            }
         } else {
             Self::from_allocation(Allocation::from_vec(value), 0, length, alignment)
         }
+    }
+}
+
+impl ByteBuffer {
+    /// Takes zero-copy ownership of a byte slice, retaining its owner until the last view is dropped.
+    ///
+    /// The buffer's length comes from the owner's byte slice. Typed buffers must instead be
+    /// constructed from typed values or through the checked byte-buffer conversion APIs.
+    ///
+    /// ```compile_fail
+    /// use vortex_buffer::Buffer;
+    ///
+    /// let buffer = Buffer::<u32>::from_owner(vec![0u8; 4]);
+    /// ```
+    pub fn from_owner(owner: impl AsRef<[u8]> + Send + 'static) -> Self {
+        Self::from(Bytes::from_owner(owner))
     }
 }
 
@@ -1101,6 +1101,42 @@ mod test {
         buffer.extend(6..=32);
         assert_eq!(buffer.as_slice(), (1..=32).collect::<Vec<_>>());
         assert_eq!(buffer.allocation.alignment(), align_of::<u32>());
+    }
+
+    #[test]
+    fn byte_owner_preserves_slice_and_lifetime() {
+        struct Owner {
+            values: Vec<u8>,
+            drops: Arc<AtomicUsize>,
+        }
+
+        impl AsRef<[u8]> for Owner {
+            fn as_ref(&self) -> &[u8] {
+                &self.values[1..4]
+            }
+        }
+
+        impl Drop for Owner {
+            fn drop(&mut self) {
+                self.drops.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        let drops = Arc::new(AtomicUsize::new(0));
+        let owner = Owner {
+            values: vec![0, 1, 2, 3, 4],
+            drops: Arc::clone(&drops),
+        };
+        let ptr = owner.as_ref().as_ptr();
+        let buffer = ByteBuffer::from_owner(owner);
+        assert_eq!(buffer.as_ptr(), ptr);
+        assert_eq!(buffer.as_slice(), [1, 2, 3]);
+        let view = buffer.slice(1..);
+        drop(buffer);
+        assert_eq!(drops.load(Ordering::Relaxed), 0);
+        assert_eq!(view.as_slice(), [2, 3]);
+        drop(view);
+        assert_eq!(drops.load(Ordering::Relaxed), 1);
     }
 
     #[test]

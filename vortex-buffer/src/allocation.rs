@@ -4,6 +4,7 @@
 //! Allocator-backed storage for Vortex buffers.
 
 use std::alloc::Layout;
+use std::any::Any;
 use std::fmt;
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
@@ -340,26 +341,13 @@ impl Drop for Allocation {
     }
 }
 
-pub(crate) trait BufferOwner: Send + Sync + 'static {
-    fn as_ptr(&self) -> *const u8;
-}
-
-impl<T> BufferOwner for T
-where
-    T: AsRef<[u8]> + Send + Sync + 'static,
-{
-    fn as_ptr(&self) -> *const u8 {
-        self.as_ref().as_ptr()
-    }
-}
-
 pub(crate) enum BufferBacking {
     Owned(Allocation),
     Bytes(bytes::Bytes),
     #[cfg(feature = "arrow")]
     Arrow(arrow_buffer::Buffer),
     External {
-        _owner: Box<dyn BufferOwner>,
+        _owner: Box<dyn Any + Send + Sync>,
     },
 }
 
