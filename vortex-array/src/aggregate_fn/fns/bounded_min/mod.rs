@@ -57,7 +57,6 @@ enum BoundedMinState {
 pub struct BoundedMinPartial {
     state: BoundedMinState,
     element_dtype: DType,
-    max_bytes: NonZeroUsize,
 }
 
 impl BoundedMinPartial {
@@ -145,22 +144,26 @@ impl AggregateFnVTable for BoundedMin {
 
     fn empty_partial(
         &self,
-        options: &Self::Options,
+        _options: &Self::Options,
         input_dtype: &DType,
     ) -> VortexResult<Self::Partial> {
         Ok(BoundedMinPartial {
             state: BoundedMinState::Empty,
             element_dtype: input_dtype.clone(),
-            max_bytes: options.max_bytes,
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         partial.merge(other);
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         let dtype = partial.element_dtype.as_nullable();
         match &partial.state {
             BoundedMinState::Empty => Ok(Scalar::null(dtype)),
@@ -168,16 +171,17 @@ impl AggregateFnVTable for BoundedMin {
         }
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.state = BoundedMinState::Empty;
     }
 
-    fn is_saturated(&self, _partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
         false
     }
 
     fn accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -191,18 +195,22 @@ impl AggregateFnVTable for BoundedMin {
         let Some(result) = min_max(&array, ctx, NumericalAggregateOpts::default())? else {
             return Ok(());
         };
-        if let Some(bound) = truncate_min(result.min, partial.max_bytes.get())? {
+        if let Some(bound) = truncate_min(result.min, options.max_bytes.get())? {
             partial.merge(bound);
         }
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 

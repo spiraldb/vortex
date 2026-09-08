@@ -4,6 +4,7 @@
 #![expect(clippy::missing_safety_doc)]
 #![forbid(clippy::todo)]
 #![forbid(clippy::unimplemented)]
+extern crate alloc;
 
 use std::ffi::c_char;
 use std::ffi::c_void;

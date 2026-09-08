@@ -303,7 +303,12 @@ impl AggregateFnVTable for BloomFilter {
     }
 
     // Combination happens by doing an OR between both filters bits
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         if other.is_null() {
             return Ok(());
         }
@@ -322,24 +327,25 @@ impl AggregateFnVTable for BloomFilter {
     /// Returns the non-nullable binary representation of a bloom filter
     ///
     /// Basically turns each block into a single byte sequence.
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         let bytes: Vec<u8> = partial.serialize();
         Ok(Scalar::binary(bytes, Nullability::NonNullable))
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.reset();
     }
 
     /// Returns true if all the blocks are full.
     ///
     /// When a bloom filter is saturated, it cannot rule out any values.
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         partial.is_saturated()
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -353,12 +359,16 @@ impl AggregateFnVTable for BloomFilter {
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 
@@ -422,7 +432,7 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
         let options = BloomOptions::default();
         let partial =
             BloomFilter.empty_partial(&options, &DType::Binary(Nullability::NonNullable))?;
-        assert!(!BloomFilter.is_saturated(&partial));
+        assert!(!BloomFilter.is_saturated(&options, &partial));
         Ok(())
     }
 
@@ -431,22 +441,22 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
         let blocks = vec![[u32::MAX; 8]; 4];
         let partial = BloomPartial::from(blocks);
 
-        assert!(BloomFilter.is_saturated(&partial));
+        let options = BloomOptions::new(NonZeroU32::new(4).unwrap(), HashFn::XxHash3_64);
+        assert!(BloomFilter.is_saturated(&options, &partial));
     }
 
     #[test]
     fn combine_partials_rejects_mismatched_block_counts() -> VortexResult<()> {
-        let mut smaller = BloomFilter.empty_partial(
-            &BloomOptions::new(NonZeroU32::new(4).unwrap(), HashFn::XxHash3_64),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+        let smaller_options = BloomOptions::new(NonZeroU32::new(4).unwrap(), HashFn::XxHash3_64);
+        let mut smaller = BloomFilter
+            .empty_partial(&smaller_options, &DType::Binary(Nullability::NonNullable))?;
         let bigger = BloomFilter.empty_partial(
             &BloomOptions::default(),
             &DType::Binary(Nullability::NonNullable),
         )?;
 
-        let bigger_scalar = BloomFilter.to_scalar(&bigger)?;
-        let result = BloomFilter.combine_partials(&mut smaller, bigger_scalar);
+        let bigger_scalar = BloomFilter.to_scalar(&BloomOptions::default(), &bigger)?;
+        let result = BloomFilter.combine_partials(&smaller_options, &mut smaller, bigger_scalar);
 
         assert!(
             result.is_err(),
@@ -483,8 +493,13 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
             expected.insert(i.to_le_bytes());
         }
 
-        let secondary_partial_as_scalar = BloomFilter.to_scalar(&secondary_partial)?;
-        BloomFilter.combine_partials(&mut partial, secondary_partial_as_scalar)?;
+        let secondary_partial_as_scalar =
+            BloomFilter.to_scalar(&BloomOptions::default(), &secondary_partial)?;
+        BloomFilter.combine_partials(
+            &BloomOptions::default(),
+            &mut partial,
+            secondary_partial_as_scalar,
+        )?;
 
         assert!(
             partial == expected,

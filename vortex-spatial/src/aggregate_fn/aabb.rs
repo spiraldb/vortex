@@ -9,9 +9,7 @@ use vortex_array::Columnar;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::aggregate_fn::AggregateFnId;
-use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::aggregate_fn::AggregateFnVTable;
-use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::EmptyOptions;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
@@ -34,7 +32,7 @@ use crate::extension::is_native_geometry;
 
 /// Aggregates a native geometry column's 2D axis-aligned bounding box (AABB) as a native
 /// `geoarrow.box`, the spatial analogue of min/max. Also the default zone statistic for such
-/// columns (via `zone_stat_default`).
+/// columns via the statistics session.
 #[derive(Clone, Debug)]
 pub struct GeometryAabb;
 
@@ -145,10 +143,6 @@ impl AggregateFnVTable for GeometryAabb {
         is_native_geometry(input_dtype).then(aabb_dtype)
     }
 
-    fn zone_stat_default(&self, input_dtype: &DType) -> Option<AggregateFnRef> {
-        is_native_geometry(input_dtype).then(|| self.bind(EmptyOptions))
-    }
-
     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
         self.return_dtype(options, input_dtype)
     }
@@ -161,31 +155,37 @@ impl AggregateFnVTable for GeometryAabb {
         Ok(AabbPartial { rect: None })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         if let Some(rect) = rect_from_storage(&other)? {
             partial.merge(rect);
         }
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         Ok(match partial.rect {
             Some(rect) => rect_to_storage(rect),
             None => Scalar::null(aabb_dtype()),
         })
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.rect = None;
     }
 
-    fn is_saturated(&self, _partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
         // An AABB can always grow, so it is never saturated.
         false
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -217,13 +217,17 @@ impl AggregateFnVTable for GeometryAabb {
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         // The stored partial is already the AABB struct, so finalizing is the identity.
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 
@@ -236,11 +240,11 @@ mod tests {
     use vortex_array::aggregate_fn::AggregateFnVTable;
     use vortex_array::aggregate_fn::DynAccumulator;
     use vortex_array::aggregate_fn::EmptyOptions;
-    use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
     use vortex_array::scalar::Scalar;
+    use vortex_array::stats::session::StatsSessionExt;
     use vortex_error::VortexResult;
 
     use super::AabbPartial;
@@ -397,15 +401,17 @@ mod tests {
         };
         let mut partial = AabbPartial { rect: None };
         GeometryAabb.combine_partials(
+            &EmptyOptions,
             &mut partial,
-            GeometryAabb.to_scalar(&bbox(0.0, 0.0, 1.0, 1.0))?,
+            GeometryAabb.to_scalar(&EmptyOptions, &bbox(0.0, 0.0, 1.0, 1.0))?,
         )?;
         GeometryAabb.combine_partials(
+            &EmptyOptions,
             &mut partial,
-            GeometryAabb.to_scalar(&bbox(5.0, -2.0, 7.0, 3.0))?,
+            GeometryAabb.to_scalar(&EmptyOptions, &bbox(5.0, -2.0, 7.0, 3.0))?,
         )?;
         assert_eq!(
-            aabb(&GeometryAabb.to_scalar(&partial)?)?,
+            aabb(&GeometryAabb.to_scalar(&EmptyOptions, &partial)?)?,
             (0.0, -2.0, 7.0, 3.0)
         );
         Ok(())
@@ -417,9 +423,9 @@ mod tests {
         let mut partial = AabbPartial {
             rect: Some(SpatialRect::new((0.0, 0.0), (1.0, 1.0))),
         };
-        GeometryAabb.combine_partials(&mut partial, Scalar::null(aabb_dtype()))?;
+        GeometryAabb.combine_partials(&EmptyOptions, &mut partial, Scalar::null(aabb_dtype()))?;
         assert_eq!(
-            aabb(&GeometryAabb.to_scalar(&partial)?)?,
+            aabb(&GeometryAabb.to_scalar(&EmptyOptions, &partial)?)?,
             (0.0, 0.0, 1.0, 1.0)
         );
         Ok(())
@@ -460,7 +466,7 @@ mod tests {
         for column in every_native_column(&[(0.0, 0.0), (1.0, 1.0)])? {
             assert!(
                 !session
-                    .aggregate_fns()
+                    .stats()
                     .zone_stat_defaults(column.dtype())
                     .is_empty(),
                 "a geometry zone-stat default should be discovered for {}",
@@ -469,10 +475,7 @@ mod tests {
         }
         let i32_dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         assert!(
-            session
-                .aggregate_fns()
-                .zone_stat_defaults(&i32_dtype)
-                .is_empty(),
+            session.stats().zone_stat_defaults(&i32_dtype).is_empty(),
             "no geometry zone-stat default should apply to numeric columns"
         );
         Ok(())

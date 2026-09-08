@@ -39,11 +39,10 @@ pub struct Min;
 pub struct MinPartial {
     min: Option<Scalar>,
     element_dtype: DType,
-    skip_nans: bool,
 }
 
 impl MinPartial {
-    fn merge(&mut self, min: Scalar) {
+    fn merge(&mut self, options: &NumericalAggregateOpts, min: Scalar) {
         if min.is_null() {
             return;
         }
@@ -51,7 +50,7 @@ impl MinPartial {
         // NaN scalars are incomparable under `partial_min`; they poison the minimum when NaNs
         // participate, and are dropped when they are skipped.
         if scalar_is_nan(&min) || self.is_poisoned() {
-            if !self.skip_nans {
+            if !options.skip_nans {
                 self.poison();
             }
             return;
@@ -123,22 +122,26 @@ impl AggregateFnVTable for Min {
 
     fn empty_partial(
         &self,
-        options: &Self::Options,
+        _options: &Self::Options,
         input_dtype: &DType,
     ) -> VortexResult<Self::Partial> {
         Ok(MinPartial {
             min: None,
             element_dtype: input_dtype.clone(),
-            skip_nans: options.skip_nans,
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
-        partial.merge(other);
+    fn combine_partials(
+        &self,
+        options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
+        partial.merge(options, other);
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         let dtype = partial.element_dtype.as_nullable();
         match &partial.min {
             Some(min) => min.cast(&dtype),
@@ -146,24 +149,25 @@ impl AggregateFnVTable for Min {
         }
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.min = None;
     }
 
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         // A poisoned NaN-including minimum is fully determined.
         partial.is_poisoned()
     }
 
     fn try_accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &ArrayRef,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<bool> {
         // NaN-aware shortcircuits only apply to the NaN-including float minimum; everything else
         // takes the default dispatch path.
-        if partial.skip_nans || !partial.element_dtype.is_float() {
+        if options.skip_nans || !partial.element_dtype.is_float() {
             return Ok(false);
         }
         match batch.statistics().get_as::<u64>(Stat::NaNCount) {
@@ -171,7 +175,7 @@ impl AggregateFnVTable for Min {
                 // NaN-free batch: the cached NaN-skipping minimum (if any) is valid. `to_scalar`
                 // re-casts to the result dtype, so the cached scalar can merge as-is.
                 if let Some(min) = batch.statistics().get(Stat::Min).as_exact() {
-                    partial.merge(min);
+                    partial.merge(options, min);
                     return Ok(true);
                 }
                 Ok(false)
@@ -186,6 +190,7 @@ impl AggregateFnVTable for Min {
 
     fn accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -196,21 +201,22 @@ impl AggregateFnVTable for Min {
             Columnar::Canonical(canonical) => canonical.clone().into_array(),
             Columnar::Constant(constant) => constant.clone().into_array(),
         };
-        let options = NumericalAggregateOpts {
-            skip_nans: partial.skip_nans,
-        };
-        if let Some(result) = min_max(&array, ctx, options)? {
-            partial.merge(result.min);
+        if let Some(result) = min_max(&array, ctx, *options)? {
+            partial.merge(options, result.min);
         }
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 

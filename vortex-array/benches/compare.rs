@@ -63,13 +63,10 @@ fn bench_compare(bencher: Bencher, lhs: ArrayRef, rhs: ArrayRef, op: Operator) {
     bencher
         .counter(ItemsCount::new(len))
         .with_inputs(|| (&lhs, &rhs, session.create_execution_ctx()))
-        .bench_refs(|input| {
-            input
-                .0
-                .clone()
-                .binary(input.1.clone(), op)
+        .bench_refs(|(lhs, rhs, session)| {
+            lhs.binary(ArrayRef::clone(rhs), op)
                 .unwrap()
-                .execute::<Canonical>(&mut input.2)
+                .execute::<Canonical>(session)
         });
 }
 

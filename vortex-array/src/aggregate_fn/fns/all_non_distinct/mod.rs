@@ -157,7 +157,12 @@ impl AggregateFnVTable for AllNonDistinct {
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         if !partial.all_non_distinct {
             return Ok(());
         }
@@ -168,24 +173,25 @@ impl AggregateFnVTable for AllNonDistinct {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         Ok(Scalar::bool(
             partial.all_non_distinct,
             Nullability::NonNullable,
         ))
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.all_non_distinct = true;
     }
 
     #[inline]
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         !partial.all_non_distinct
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -235,11 +241,15 @@ impl AggregateFnVTable for AllNonDistinct {
         }
     }
 
-    fn finalize(&self, _partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, _partials: ArrayRef) -> VortexResult<ArrayRef> {
         vortex_bail!("AllNonDistinct does not support array finalization");
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn finalize_scalar(
+        &self,
+        _options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         Ok(Scalar::bool(
             partial.all_non_distinct,
             Nullability::NonNullable,

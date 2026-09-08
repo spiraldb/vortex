@@ -155,11 +155,15 @@ impl AggregateFnVTable for Sum {
         Ok(SumPartial {
             return_dtype,
             current: Some(initial),
-            skip_nans: options.skip_nans,
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         if other.is_null() {
             // A null partial means the sub-accumulator saturated (overflow).
             partial.current = None;
@@ -211,7 +215,7 @@ impl AggregateFnVTable for Sum {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         Ok(match &partial.current {
             None => Scalar::null(partial.return_dtype.as_nullable()),
             Some(SumState::Unsigned(v)) => Scalar::primitive(*v, Nullability::Nullable),
@@ -227,12 +231,12 @@ impl AggregateFnVTable for Sum {
         })
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.current = Some(make_zero_state(&partial.return_dtype));
     }
 
     #[inline]
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         match partial.current.as_ref() {
             None => true,
             Some(SumState::Float(v)) => v.is_nan(),
@@ -242,13 +246,14 @@ impl AggregateFnVTable for Sum {
 
     fn try_accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &ArrayRef,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<bool> {
         // NaN-aware shortcircuits only apply to NaN-including float sums; everything else takes
         // the default dispatch path.
-        if partial.skip_nans || !matches!(partial.current, Some(SumState::Float(_))) {
+        if options.skip_nans || !matches!(partial.current, Some(SumState::Float(_))) {
             return Ok(false);
         }
         match batch.statistics().get_as::<u64>(Stat::NaNCount) {
@@ -261,7 +266,7 @@ impl AggregateFnVTable for Sum {
                     } else {
                         sum.cast(&partial.return_dtype)?
                     };
-                    self.combine_partials(partial, sum)?;
+                    self.combine_partials(options, partial, sum)?;
                     return Ok(true);
                 }
                 Ok(false)
@@ -279,6 +284,7 @@ impl AggregateFnVTable for Sum {
 
     fn accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -286,16 +292,16 @@ impl AggregateFnVTable for Sum {
         // Constants compute scalar * len and combine via combine_partials.
         if let Columnar::Constant(c) = batch {
             // NaN constants are treated as missing when skipping NaNs.
-            if partial.skip_nans && c.scalar().as_primitive_opt().is_some_and(|p| p.is_nan()) {
+            if options.skip_nans && c.scalar().as_primitive_opt().is_some_and(|p| p.is_nan()) {
                 return Ok(());
             }
             if let Some(product) = multiply_constant(c.scalar(), c.len(), &partial.return_dtype)? {
-                self.combine_partials(partial, product)?;
+                self.combine_partials(options, partial, product)?;
             }
             return Ok(());
         }
 
-        let skip_nans = partial.skip_nans;
+        let skip_nans = options.skip_nans;
         let mut inner = match partial.current.take() {
             Some(inner) => inner,
             None => return Ok(()),
@@ -322,12 +328,16 @@ impl AggregateFnVTable for Sum {
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 
@@ -337,8 +347,6 @@ pub struct SumPartial {
     return_dtype: DType,
     /// The current accumulated state, or `None` if saturated (checked overflow).
     current: Option<SumState>,
-    /// Whether NaN values in float inputs are skipped.
-    skip_nans: bool,
 }
 
 /// The accumulated sum value.
@@ -539,13 +547,13 @@ mod tests {
         let mut state = Sum.empty_partial(&NumericalAggregateOpts::default(), &dtype)?;
 
         let scalar1 = Scalar::primitive(100i64, Nullable);
-        Sum.combine_partials(&mut state, scalar1)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar1)?;
 
         let scalar2 = Scalar::primitive(50i64, Nullable);
-        Sum.combine_partials(&mut state, scalar2)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, scalar2)?;
 
-        let result = Sum.to_scalar(&state)?;
-        Sum.reset(&mut state);
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
+        Sum.reset(&NumericalAggregateOpts::default(), &mut state);
         assert_eq!(result.as_primitive().typed_value::<i64>(), Some(150));
         Ok(())
     }

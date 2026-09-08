@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 
+use vortex_array::aggregate_fn::AggregateFnVTableExt;
+use vortex_array::aggregate_fn::EmptyOptions;
 use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
 use vortex_array::dtype::session::DTypeSessionExt;
 use vortex_array::scalar_fn::session::ScalarFnSessionExt;
@@ -85,9 +87,11 @@ pub fn initialize(session: &VortexSession) {
     session.scalar_fns().register(SpatialMakeLine);
     session.scalar_fns().register(SpatialLength);
 
-    // The axis-aligned bounding-box (AABB) aggregate; self-declares as a per-chunk zone stat for
-    // geometry columns.
+    // Register the AABB aggregate and opt in to storing it as a geometry zone statistic.
     session.aggregate_fns().register(GeometryAabb);
+    session
+        .stats()
+        .register_zone_stat_default(GeometryAabb.bind(EmptyOptions));
 
     // Register the spatial pruning rules that use that AABB.
     session.stats().register_rewrite(SpatialDistancePrune);

@@ -373,7 +373,7 @@ fn finalize_struct_applies_partial_and_struct_validity(
     )?
     .into_array();
 
-    let result = SumV2.finalize(partials)?;
+    let result = SumV2.finalize(&NumericalAggregateOpts::default(), partials)?;
     let expected = PrimitiveArray::from_option_iter(expected).into_array();
     assert_arrays_eq!(
         &result,

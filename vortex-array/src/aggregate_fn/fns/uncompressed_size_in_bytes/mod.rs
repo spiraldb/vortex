@@ -139,7 +139,12 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
         Ok(0)
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         let size = other
             .as_primitive()
             .typed_value::<u64>()
@@ -150,21 +155,22 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         Ok(Scalar::primitive(*partial, NonNullable))
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         *partial = 0;
     }
 
     #[inline]
-    fn is_saturated(&self, _partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
         false
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -181,12 +187,16 @@ impl AggregateFnVTable for UncompressedSizeInBytes {
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 
@@ -685,16 +695,18 @@ mod tests {
         let mut state = UncompressedSizeInBytes.empty_partial(&EmptyOptions, &dtype)?;
 
         UncompressedSizeInBytes.combine_partials(
+            &EmptyOptions,
             &mut state,
             Scalar::primitive(5u64, Nullability::NonNullable),
         )?;
         UncompressedSizeInBytes.combine_partials(
+            &EmptyOptions,
             &mut state,
             Scalar::primitive(3u64, Nullability::NonNullable),
         )?;
 
-        let result = UncompressedSizeInBytes.to_scalar(&state)?;
-        UncompressedSizeInBytes.reset(&mut state);
+        let result = UncompressedSizeInBytes.to_scalar(&EmptyOptions, &state)?;
+        UncompressedSizeInBytes.reset(&EmptyOptions, &mut state);
         assert_eq!(result.as_primitive().typed_value::<u64>(), Some(8));
         Ok(())
     }

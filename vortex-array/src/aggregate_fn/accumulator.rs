@@ -27,6 +27,8 @@ pub type AccumulatorRef = Box<dyn DynAccumulator>;
 pub struct Accumulator<V: AggregateFnVTable> {
     /// The vtable of the aggregate function.
     vtable: V,
+    /// The options of the aggregate function.
+    options: V::Options,
     /// Type-erased aggregate function used for kernel dispatch.
     aggregate_fn: AggregateFnRef,
     /// The DType of the input.
@@ -56,10 +58,11 @@ impl<V: AggregateFnVTable> Accumulator<V> {
             )
         })?;
         let partial = vtable.empty_partial(&options, &dtype)?;
-        let aggregate_fn = AggregateFn::new(vtable.clone(), options).erased();
+        let aggregate_fn = AggregateFn::new(vtable.clone(), options.clone()).erased();
 
         Ok(Self {
             vtable,
+            options,
             aggregate_fn,
             dtype,
             return_dtype,
@@ -137,7 +140,8 @@ impl<V: AggregateFnVTable> DynAccumulator for Accumulator<V> {
                 );
                 partial.cast(&self.partial_dtype)?
             };
-            self.vtable.combine_partials(&mut self.partial, partial)?;
+            self.vtable
+                .combine_partials(&self.options, &mut self.partial, partial)?;
             return Ok(());
         }
 
@@ -161,13 +165,17 @@ impl<V: AggregateFnVTable> DynAccumulator for Accumulator<V> {
                     result.dtype(),
                     self.partial_dtype,
                 );
-                self.vtable.combine_partials(&mut self.partial, result)?;
+                self.vtable
+                    .combine_partials(&self.options, &mut self.partial, result)?;
                 return Ok(());
             }
         }
 
         // 2. Allow the vtable to short-circuit on the raw array before decompression.
-        if self.vtable.try_accumulate(&mut self.partial, batch, ctx)? {
+        if self
+            .vtable
+            .try_accumulate(&self.options, &mut self.partial, batch, ctx)?
+        {
             return Ok(());
         }
 
@@ -193,7 +201,8 @@ impl<V: AggregateFnVTable> DynAccumulator for Accumulator<V> {
                     result.dtype(),
                     self.partial_dtype,
                 );
-                self.vtable.combine_partials(&mut self.partial, result)?;
+                self.vtable
+                    .combine_partials(&self.options, &mut self.partial, result)?;
                 return Ok(());
             }
 
@@ -203,23 +212,25 @@ impl<V: AggregateFnVTable> DynAccumulator for Accumulator<V> {
         // 4. Otherwise, execute the batch until it is columnar and accumulate it into the state.
         let columnar = batch.execute::<Columnar>(ctx)?;
 
-        self.vtable.accumulate(&mut self.partial, &columnar, ctx)
+        self.vtable
+            .accumulate(&self.options, &mut self.partial, &columnar, ctx)
     }
 
     fn combine_partials(&mut self, other: Scalar) -> VortexResult<()> {
-        self.vtable.combine_partials(&mut self.partial, other)
+        self.vtable
+            .combine_partials(&self.options, &mut self.partial, other)
     }
 
     fn is_saturated(&self) -> bool {
-        self.vtable.is_saturated(&self.partial)
+        self.vtable.is_saturated(&self.options, &self.partial)
     }
 
     fn reset(&mut self) {
-        self.vtable.reset(&mut self.partial);
+        self.vtable.reset(&self.options, &mut self.partial);
     }
 
     fn partial_scalar(&self) -> VortexResult<Scalar> {
-        let partial = self.vtable.to_scalar(&self.partial)?;
+        let partial = self.vtable.to_scalar(&self.options, &self.partial)?;
 
         #[cfg(debug_assertions)]
         {
@@ -235,7 +246,7 @@ impl<V: AggregateFnVTable> DynAccumulator for Accumulator<V> {
     }
 
     fn final_scalar(&self) -> VortexResult<Scalar> {
-        let result = self.vtable.finalize_scalar(&self.partial)?;
+        let result = self.vtable.finalize_scalar(&self.options, &self.partial)?;
 
         vortex_ensure!(
             result.dtype() == &self.return_dtype,

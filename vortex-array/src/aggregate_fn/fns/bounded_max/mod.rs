@@ -72,7 +72,6 @@ enum BoundedMaxState {
 pub struct BoundedMaxPartial {
     state: BoundedMaxState,
     element_dtype: DType,
-    max_bytes: NonZeroUsize,
 }
 
 impl BoundedMaxPartial {
@@ -191,17 +190,21 @@ impl AggregateFnVTable for BoundedMax {
 
     fn empty_partial(
         &self,
-        options: &Self::Options,
+        _options: &Self::Options,
         input_dtype: &DType,
     ) -> VortexResult<Self::Partial> {
         Ok(BoundedMaxPartial {
             state: BoundedMaxState::Empty,
             element_dtype: input_dtype.clone(),
-            max_bytes: options.max_bytes,
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         if other.is_null() {
             return Ok(());
         }
@@ -227,7 +230,7 @@ impl AggregateFnVTable for BoundedMax {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         let dtype = make_bounded_max_partial_dtype(&partial.element_dtype);
         let bound_dtype = partial.element_dtype.as_nullable();
         match &partial.state {
@@ -249,16 +252,17 @@ impl AggregateFnVTable for BoundedMax {
         }
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.state = BoundedMaxState::Empty;
     }
 
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         matches!(partial.state, BoundedMaxState::Unknown)
     }
 
     fn accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -272,18 +276,22 @@ impl AggregateFnVTable for BoundedMax {
         let Some(result) = min_max(&array, ctx, NumericalAggregateOpts::default())? else {
             return Ok(());
         };
-        match truncate_max(result.max, partial.max_bytes.get())? {
+        match truncate_max(result.max, options.max_bytes.get())? {
             Some(bound) => partial.merge_bound(bound),
             None => partial.unknown(),
         }
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         partials.get_item(BOUNDED_MAX_BOUND)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn finalize_scalar(
+        &self,
+        _options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         partial.final_scalar()
     }
 }

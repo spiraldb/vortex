@@ -32,6 +32,9 @@ pub use typed::*;
 mod erased;
 pub use erased::*;
 
+#[cfg(test)]
+mod options_tests;
+
 mod options;
 pub use options::*;
 

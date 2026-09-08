@@ -170,7 +170,12 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
         ))
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         if other.is_null() {
             return Ok(());
         }
@@ -188,7 +193,7 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         let l_scalar = partial.0.partial_scalar()?;
         let r_scalar = partial.1.partial_scalar()?;
         let dtype = self
@@ -197,12 +202,12 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
         Ok(Scalar::struct_(dtype, vec![l_scalar, r_scalar]))
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.0.reset();
         partial.1.reset();
     }
 
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         partial.0.is_saturated() && partial.1.is_saturated()
     }
 
@@ -213,6 +218,7 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
     /// `true` so [`Self::accumulate`] is unreachable.
     fn try_accumulate(
         &self,
+        _options: &Self::Options,
         state: &mut Self::Partial,
         batch: &ArrayRef,
         ctx: &mut ExecutionCtx,
@@ -224,6 +230,7 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         _state: &mut Self::Partial,
         _batch: &Columnar,
         _ctx: &mut ExecutionCtx,
@@ -231,15 +238,19 @@ impl<T: BinaryCombined> AggregateFnVTable for Combined<T> {
         unreachable!("Combined::try_accumulate handles all batches")
     }
 
-    fn finalize(&self, states: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, options: &Self::Options, states: ArrayRef) -> VortexResult<ArrayRef> {
         let l_field = states.get_item(FieldName::from(self.0.left_name()))?;
         let r_field = states.get_item(FieldName::from(self.0.right_name()))?;
-        let l_finalized = self.0.left().finalize(l_field)?;
-        let r_finalized = self.0.right().finalize(r_field)?;
+        let l_finalized = self.0.left().finalize(&options.0, l_field)?;
+        let r_finalized = self.0.right().finalize(&options.1, r_field)?;
         BinaryCombined::finalize(&self.0, l_finalized, r_finalized)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn finalize_scalar(
+        &self,
+        _options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         let l_scalar = partial.0.final_scalar()?;
         let r_scalar = partial.1.final_scalar()?;
         BinaryCombined::finalize_scalar(&self.0, l_scalar, r_scalar)

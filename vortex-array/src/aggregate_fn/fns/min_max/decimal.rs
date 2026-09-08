@@ -8,6 +8,7 @@ use vortex_mask::Mask;
 use super::MinMaxPartial;
 use super::MinMaxResult;
 use crate::ExecutionCtx;
+use crate::aggregate_fn::NumericalAggregateOpts;
 use crate::arrays::DecimalArray;
 use crate::dtype::DecimalDType;
 use crate::dtype::NativeDecimalType;
@@ -17,13 +18,14 @@ use crate::scalar::DecimalValue;
 use crate::scalar::Scalar;
 
 pub(super) fn accumulate_decimal(
+    options: &NumericalAggregateOpts,
     partial: &mut MinMaxPartial,
     array: &DecimalArray,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<()> {
     match_each_decimal_value_type!(array.values_type(), |T| {
         let local = compute_min_max_with_validity::<T>(array, ctx)?;
-        partial.merge(local);
+        partial.merge(options, local);
         Ok(())
     })
 }

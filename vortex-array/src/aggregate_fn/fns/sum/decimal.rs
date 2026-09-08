@@ -364,13 +364,13 @@ mod tests {
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&mut state, near_limit)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
 
         // Add a small value that keeps us just under 10^14.
         let small = Scalar::decimal(DecimalValue::from(9i64), DecimalDType::new(14, 0), Nullable);
-        Sum.combine_partials(&mut state, small)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, small)?;
 
-        let result = Sum.to_scalar(&state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
         assert!(!result.is_null());
         assert_eq!(
             result.as_decimal().decimal_value(),
@@ -394,14 +394,14 @@ mod tests {
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&mut state, near_limit)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
 
         // Push the sum to exactly 10^14, exceeding precision 14.
         let one_more =
             Scalar::decimal(DecimalValue::from(1i64), DecimalDType::new(14, 0), Nullable);
-        Sum.combine_partials(&mut state, one_more)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, one_more)?;
 
-        let result = Sum.to_scalar(&state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
         assert!(result.is_null());
         assert_eq!(
             result.dtype(),
@@ -421,16 +421,16 @@ mod tests {
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&mut state, near_limit)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
 
         let one_more = Scalar::decimal(
             DecimalValue::from(-1i64),
             DecimalDType::new(14, 0),
             Nullable,
         );
-        Sum.combine_partials(&mut state, one_more)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, one_more)?;
 
-        let result = Sum.to_scalar(&state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
         assert!(result.is_null());
         Ok(())
     }
@@ -452,7 +452,7 @@ mod tests {
         let near_limit_val: i128 = 10i128.pow(37) - 1;
         let near_limit =
             Scalar::decimal(DecimalValue::from(near_limit_val), return_dtype, Nullable);
-        Sum.combine_partials(&mut state, near_limit)?;
+        Sum.combine_partials(&NumericalAggregateOpts::default(), &mut state, near_limit)?;
 
         // Now accumulate a real i128 array with a single element = 1 to overflow precision.
         let decimal =
@@ -461,9 +461,14 @@ mod tests {
         // Drive accumulate through the vtable directly.
         let columnar = crate::Columnar::Canonical(crate::Canonical::Decimal(decimal));
         let mut ctx = array_session().create_execution_ctx();
-        Sum.accumulate(&mut state, &columnar, &mut ctx)?;
+        Sum.accumulate(
+            &NumericalAggregateOpts::default(),
+            &mut state,
+            &columnar,
+            &mut ctx,
+        )?;
 
-        let result = Sum.to_scalar(&state)?;
+        let result = Sum.to_scalar(&NumericalAggregateOpts::default(), &state)?;
         assert!(result.is_null());
         Ok(())
     }

@@ -123,7 +123,12 @@ impl AggregateFnVTable for NanCount {
         Ok(0u64)
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         let val = other
             .as_primitive()
             .typed_value::<u64>()
@@ -132,21 +137,22 @@ impl AggregateFnVTable for NanCount {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         Ok(Scalar::primitive(*partial, NonNullable))
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         *partial = 0;
     }
 
     #[inline]
-    fn is_saturated(&self, _partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
         false
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -172,12 +178,16 @@ impl AggregateFnVTable for NanCount {
         }
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 
@@ -250,13 +260,13 @@ mod tests {
         let mut state = NanCount.empty_partial(&EmptyOptions, &dtype)?;
 
         let scalar1 = Scalar::primitive(5u64, Nullability::NonNullable);
-        NanCount.combine_partials(&mut state, scalar1)?;
+        NanCount.combine_partials(&EmptyOptions, &mut state, scalar1)?;
 
         let scalar2 = Scalar::primitive(3u64, Nullability::NonNullable);
-        NanCount.combine_partials(&mut state, scalar2)?;
+        NanCount.combine_partials(&EmptyOptions, &mut state, scalar2)?;
 
-        let result = NanCount.to_scalar(&state)?;
-        NanCount.reset(&mut state);
+        let result = NanCount.to_scalar(&EmptyOptions, &state)?;
+        NanCount.reset(&EmptyOptions, &mut state);
         assert_eq!(result.as_primitive().typed_value::<u64>(), Some(8));
         Ok(())
     }

@@ -23,8 +23,8 @@ use vortex_array::aggregate_fn::fns::max::Max;
 use vortex_array::aggregate_fn::fns::min::Min;
 use vortex_array::aggregate_fn::fns::nan_count::NanCount;
 use vortex_array::aggregate_fn::fns::null_count::NullCount;
-use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
 use vortex_array::dtype::DType;
+use vortex_array::stats::session::StatsSessionExt;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -227,7 +227,7 @@ fn default_zoned_aggregate_fns(dtype: &DType, session: &VortexSession) -> Arc<[A
     ];
 
     // Stats from spatial extension types are discovered from the registry at runtime instead.
-    aggregate_fns.extend(session.aggregate_fns().zone_stat_defaults(dtype));
+    aggregate_fns.extend(session.stats().zone_stat_defaults(dtype));
 
     aggregate_fns.into()
 }

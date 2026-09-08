@@ -71,6 +71,10 @@ mod ops;
 mod rules;
 mod slice;
 
+#[cfg(test)]
+#[cfg(not(codspeed))]
+mod trace_tests;
+
 use vortex_array::aggregate_fn::AggregateFnVTable as _;
 use vortex_array::aggregate_fn::fns::is_constant::IsConstant;
 use vortex_array::aggregate_fn::fns::min_max::MinMax;

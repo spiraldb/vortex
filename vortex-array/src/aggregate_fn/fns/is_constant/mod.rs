@@ -295,7 +295,12 @@ impl AggregateFnVTable for IsConstant {
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         if !partial.is_constant {
             return Ok(());
         }
@@ -325,7 +330,7 @@ impl AggregateFnVTable for IsConstant {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         let dtype = make_is_constant_partial_dtype(&partial.element_dtype);
         Ok(match &partial.first_value {
             None => {
@@ -344,18 +349,19 @@ impl AggregateFnVTable for IsConstant {
         })
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.is_constant = true;
         partial.first_value = None;
     }
 
     #[inline]
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         !partial.is_constant
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -426,11 +432,15 @@ impl AggregateFnVTable for IsConstant {
         }
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         partials.get_item(NAMES.get(0).vortex_expect("out of bounds").clone())
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn finalize_scalar(
+        &self,
+        _options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         if partial.first_value.is_none() {
             // Empty accumulator → return false.
             return Ok(Scalar::bool(false, Nullability::NonNullable));

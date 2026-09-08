@@ -14,6 +14,7 @@ use crate::dtype::Nullability;
 use crate::scalar::Scalar;
 
 pub(super) fn accumulate_extension(
+    options: &NumericalAggregateOpts,
     partial: &mut MinMaxPartial,
     array: &ExtensionArray,
     ctx: &mut ExecutionCtx,
@@ -28,6 +29,6 @@ pub(super) fn accumulate_extension(
         min: Scalar::extension_ref(non_nullable_ext_dtype.clone(), min),
         max: Scalar::extension_ref(non_nullable_ext_dtype, max),
     });
-    partial.merge(local);
+    partial.merge(options, local);
     Ok(())
 }

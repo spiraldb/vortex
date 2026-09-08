@@ -124,24 +124,30 @@ mod tests {
 
         fn combine_partials(
             &self,
+            _options: &Self::Options,
             _partial: &mut Self::Partial,
             _other: Scalar,
         ) -> VortexResult<()> {
             Ok(())
         }
 
-        fn to_scalar(&self, _partial: &Self::Partial) -> VortexResult<Scalar> {
+        fn to_scalar(
+            &self,
+            _options: &Self::Options,
+            _partial: &Self::Partial,
+        ) -> VortexResult<Scalar> {
             vortex_panic!("TestAgg is for serde tests only");
         }
 
-        fn reset(&self, _partial: &mut Self::Partial) {}
+        fn reset(&self, _options: &Self::Options, _partial: &mut Self::Partial) {}
 
-        fn is_saturated(&self, _partial: &Self::Partial) -> bool {
+        fn is_saturated(&self, _options: &Self::Options, _partial: &Self::Partial) -> bool {
             true
         }
 
         fn accumulate(
             &self,
+            _options: &Self::Options,
             _state: &mut Self::Partial,
             _batch: &Columnar,
             _ctx: &mut ExecutionCtx,
@@ -149,11 +155,15 @@ mod tests {
             Ok(())
         }
 
-        fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+        fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
             Ok(partials)
         }
 
-        fn finalize_scalar(&self, _partial: &Self::Partial) -> VortexResult<Scalar> {
+        fn finalize_scalar(
+            &self,
+            _options: &Self::Options,
+            _partial: &Self::Partial,
+        ) -> VortexResult<Scalar> {
             vortex_panic!("TestAgg is for serde tests only");
         }
     }

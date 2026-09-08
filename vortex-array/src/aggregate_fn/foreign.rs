@@ -85,22 +85,32 @@ impl AggregateFnVTable for ForeignAggregateFnVTable {
         vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
     }
 
-    fn combine_partials(&self, _partial: &mut Self::Partial, _other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        _partial: &mut Self::Partial,
+        _other: Scalar,
+    ) -> VortexResult<()> {
         vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
     }
 
-    fn to_scalar(&self, _partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        _partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
     }
 
-    fn reset(&self, _partial: &mut Self::Partial) {}
+    fn reset(&self, _options: &Self::Options, _partial: &mut Self::Partial) {}
 
-    fn is_saturated(&self, _state: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, _state: &Self::Partial) -> bool {
         false
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         _state: &mut Self::Partial,
         _batch: &Columnar,
         _ctx: &mut ExecutionCtx,
@@ -108,11 +118,15 @@ impl AggregateFnVTable for ForeignAggregateFnVTable {
         vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
     }
 
-    fn finalize(&self, _states: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, _states: ArrayRef) -> VortexResult<ArrayRef> {
         vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
     }
 
-    fn finalize_scalar(&self, _partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn finalize_scalar(
+        &self,
+        _options: &Self::Options,
+        _partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
     }
 }

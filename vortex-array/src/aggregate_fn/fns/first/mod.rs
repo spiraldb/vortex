@@ -68,7 +68,12 @@ impl AggregateFnVTable for First {
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         // Only the first non-null partial wins; later ones are ignored.
         if partial.value.is_none() && !other.is_null() {
             partial.value = Some(other);
@@ -76,24 +81,25 @@ impl AggregateFnVTable for First {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         Ok(match &partial.value {
             Some(v) => v.clone(),
             None => Scalar::null(partial.return_dtype.clone()),
         })
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.value = None;
     }
 
     #[inline]
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         partial.value.is_some()
     }
 
     fn try_accumulate(
         &self,
+        _options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &ArrayRef,
         ctx: &mut ExecutionCtx,
@@ -110,6 +116,7 @@ impl AggregateFnVTable for First {
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
         _partial: &mut Self::Partial,
         _batch: &Columnar,
         _ctx: &mut ExecutionCtx,
@@ -117,12 +124,16 @@ impl AggregateFnVTable for First {
         unreachable!("First::try_accumulate handles all arrays")
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, partial)
     }
 }
 
@@ -262,15 +273,18 @@ mod tests {
         let mut state = First.empty_partial(&EmptyOptions, &dtype)?;
 
         // A null partial means the sub-accumulator saw nothing valid - should be ignored.
-        First.combine_partials(&mut state, Scalar::null(dtype.as_nullable()))?;
-        assert!(!First.is_saturated(&state));
+        First.combine_partials(&EmptyOptions, &mut state, Scalar::null(dtype.as_nullable()))?;
+        assert!(!First.is_saturated(&EmptyOptions, &state));
 
-        First.combine_partials(&mut state, Scalar::primitive(5i32, Nullable))?;
-        assert!(First.is_saturated(&state));
+        First.combine_partials(&EmptyOptions, &mut state, Scalar::primitive(5i32, Nullable))?;
+        assert!(First.is_saturated(&EmptyOptions, &state));
 
         // Subsequent valid partials are dropped.
-        First.combine_partials(&mut state, Scalar::primitive(7i32, Nullable))?;
-        assert_eq!(First.to_scalar(&state)?, Scalar::primitive(5i32, Nullable));
+        First.combine_partials(&EmptyOptions, &mut state, Scalar::primitive(7i32, Nullable))?;
+        assert_eq!(
+            First.to_scalar(&EmptyOptions, &state)?,
+            Scalar::primitive(5i32, Nullable)
+        );
         Ok(())
     }
 

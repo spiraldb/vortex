@@ -118,11 +118,15 @@ impl AggregateFnVTable for SumV2 {
             sum,
             is_overflow: false,
             is_empty: true,
-            skip_nans: options.skip_nans,
         })
     }
 
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
+    fn combine_partials(
+        &self,
+        _options: &Self::Options,
+        partial: &mut Self::Partial,
+        other: Scalar,
+    ) -> VortexResult<()> {
         let (other_sum, other_is_overflow, other_is_empty) = decode_partial_scalar(other)?;
         validate_sum_field_dtype(&other_sum, &partial.return_dtype)?;
 
@@ -143,7 +147,7 @@ impl AggregateFnVTable for SumV2 {
         Ok(())
     }
 
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(&self, _options: &Self::Options, partial: &Self::Partial) -> VortexResult<Scalar> {
         Ok(Scalar::struct_(
             sum_v2_partial_dtype(partial.return_dtype.clone()),
             vec![
@@ -154,23 +158,24 @@ impl AggregateFnVTable for SumV2 {
         ))
     }
 
-    fn reset(&self, partial: &mut Self::Partial) {
+    fn reset(&self, _options: &Self::Options, partial: &mut Self::Partial) {
         partial.sum = make_zero_state(&partial.return_dtype);
         partial.is_overflow = false;
         partial.is_empty = true;
     }
 
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(&self, _options: &Self::Options, partial: &Self::Partial) -> bool {
         partial.is_overflow || matches!(&partial.sum, SumState::Float(value) if value.is_nan())
     }
 
     fn try_accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &ArrayRef,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<bool> {
-        if partial.skip_nans || !matches!(&partial.sum, SumState::Float(_)) {
+        if options.skip_nans || !matches!(&partial.sum, SumState::Float(_)) {
             return Ok(false);
         }
 
@@ -190,6 +195,7 @@ impl AggregateFnVTable for SumV2 {
 
     fn accumulate(
         &self,
+        options: &Self::Options,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -202,7 +208,7 @@ impl AggregateFnVTable for SumV2 {
             if !constant.scalar().is_null() && !constant.is_empty() {
                 partial.is_empty = false;
             }
-            if partial.skip_nans
+            if options.skip_nans
                 && constant
                     .scalar()
                     .as_primitive_opt()
@@ -228,7 +234,7 @@ impl AggregateFnVTable for SumV2 {
         let result = match batch {
             Columnar::Canonical(canonical) => match canonical {
                 Canonical::Primitive(array) => {
-                    accumulate_primitive(&mut partial.sum, array, ctx, partial.skip_nans)
+                    accumulate_primitive(&mut partial.sum, array, ctx, options.skip_nans)
                 }
                 Canonical::Bool(array) => accumulate_bool(&mut partial.sum, array, ctx),
                 Canonical::Decimal(array) => accumulate_decimal(&mut partial.sum, array, ctx),
@@ -247,7 +253,7 @@ impl AggregateFnVTable for SumV2 {
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(&self, _options: &Self::Options, partials: ArrayRef) -> VortexResult<ArrayRef> {
         if let Some(partials) = partials.as_opt::<Struct>() {
             return finalize_struct(partials);
         }
@@ -260,7 +266,11 @@ impl AggregateFnVTable for SumV2 {
         sum.mask(is_invalid.not()?)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn finalize_scalar(
+        &self,
+        _options: &Self::Options,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         if partial.is_overflow || partial.is_empty {
             return Ok(Scalar::null(partial.return_dtype.as_nullable()));
         }
@@ -293,7 +303,6 @@ pub struct SumV2Partial {
     sum: SumState,
     is_overflow: bool,
     is_empty: bool,
-    skip_nans: bool,
 }
 
 fn has_valid_value(batch: &Columnar, ctx: &mut ExecutionCtx) -> VortexResult<bool> {
