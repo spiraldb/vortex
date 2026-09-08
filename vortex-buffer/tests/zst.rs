@@ -137,3 +137,35 @@ fn bytes_cannot_determine_zero_sized_length(#[case] use_byte_buffer: bool) {
         Buffer::<()>::from_bytes_aligned(Bytes::new(), Alignment::of::<()>());
     }
 }
+
+#[rstest]
+#[case(0)]
+#[case(1)]
+#[case(4)]
+fn zero_sized_owned_iterator(#[case] len: usize) {
+    let mut iter = Buffer::<AlignedZst>::zeroed(len).into_iter();
+    assert_eq!(iter.size_hint(), (len, Some(len)));
+    for remaining in (0..len).rev() {
+        assert_eq!(iter.next(), Some(AlignedZst));
+        assert_eq!(iter.len(), remaining);
+    }
+    assert_eq!(iter.next(), None);
+    assert_eq!(iter.next(), None);
+    assert_eq!(iter.size_hint(), (0, Some(0)));
+}
+
+#[test]
+fn zero_sized_owned_iterator_retains_count_when_collected() {
+    let buffer = Buffer::<AlignedZst>::zeroed(5).slice(1..);
+    let buffer = Buffer::from_trusted_len_iter(buffer.into_iter());
+    assert_eq!(buffer.len(), 4);
+    assert_eq!(buffer.into_iter().collect::<Vec<_>>(), vec![AlignedZst; 4]);
+}
+
+#[test]
+fn zero_sized_owned_iterator_supports_maximum_length() {
+    let mut iter = Buffer::<AlignedZst>::zeroed(usize::MAX).into_iter();
+    assert_eq!(iter.len(), usize::MAX);
+    assert_eq!(iter.next(), Some(AlignedZst));
+    assert_eq!(iter.len(), usize::MAX - 1);
+}

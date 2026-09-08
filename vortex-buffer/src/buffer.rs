@@ -882,7 +882,7 @@ fn empty_ptr<T>() -> NonNull<T> {
 
 /// Owned iterator over a [`Buffer`].
 pub struct BufferIterator<T: Copy> {
-    // Keep the buffer alive for the duration of the iteration.
+    // Keep the buffer alive; its length also counts the remaining zero-sized elements.
     _buffer: Buffer<T>,
     ptr: *const T,
     end: *const T,
@@ -898,6 +898,11 @@ impl<T: Copy> Iterator for BufferIterator<T> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
+        if size_of::<T>() == 0 {
+            let value = self._buffer.as_slice().last().copied()?;
+            self._buffer.length -= 1;
+            return Some(value);
+        }
         if self.ptr == self.end {
             None
         } else {
@@ -910,7 +915,12 @@ impl<T: Copy> Iterator for BufferIterator<T> {
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = unsafe { self.end.offset_from(self.ptr) } as usize;
+        let remaining = if size_of::<T>() == 0 {
+            self._buffer.length
+        } else {
+            // SAFETY: both cursors belong to the buffer and T is not zero-sized.
+            (unsafe { self.end.offset_from(self.ptr) }) as usize
+        };
         (remaining, Some(remaining))
     }
 }
