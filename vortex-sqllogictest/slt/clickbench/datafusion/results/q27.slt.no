@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q27.slt.no explains the upstream query unchanged.
+query IRI
+SELECT "CounterID", AVG(OCTET_LENGTH("URL")) AS l, COUNT(*) AS c FROM hits WHERE "URL" <> '' GROUP BY "CounterID" HAVING COUNT(*) > 100000 ORDER BY l DESC, "CounterID" LIMIT 25;
+----
+62 94.04974722821 413812
+38 76.436656360163 507770

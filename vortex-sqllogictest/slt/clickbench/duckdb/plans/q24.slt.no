@@ -1,0 +1,334 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN (FORMAT json)
+SELECT "SearchPhrase" FROM hits WHERE "SearchPhrase" <> '' ORDER BY "EventTime" LIMIT 10;
+----
+logical_plan [
+    {
+        "name": "PROJECTION",
+        "children": [
+            {
+                "name": "LIMIT",
+                "children": [
+                    {
+                        "name": "ORDER_BY",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "FILTER",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Filters": "",
+                                                            "Function": "Vortex Scan"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "WatchID",
+                                                        "JavaEnable",
+                                                        "Title",
+                                                        "GoodEvent",
+                                                        "EventTime",
+                                                        "EventDate",
+                                                        "CounterID",
+                                                        "ClientIP",
+                                                        "RegionID",
+                                                        "UserID",
+                                                        "CounterClass",
+                                                        "OS",
+                                                        "UserAgent",
+                                                        "URL",
+                                                        "Referer",
+                                                        "IsRefresh",
+                                                        "RefererCategoryID",
+                                                        "RefererRegionID",
+                                                        "URLCategoryID",
+                                                        "URLRegionID",
+                                                        "ResolutionWidth",
+                                                        "ResolutionHeight",
+                                                        "ResolutionDepth",
+                                                        "FlashMajor",
+                                                        "FlashMinor",
+                                                        "FlashMinor2",
+                                                        "NetMajor",
+                                                        "NetMinor",
+                                                        "UserAgentMajor",
+                                                        "UserAgentMinor",
+                                                        "CookieEnable",
+                                                        "JavascriptEnable",
+                                                        "IsMobile",
+                                                        "MobilePhone",
+                                                        "MobilePhoneModel",
+                                                        "Params",
+                                                        "IPNetworkID",
+                                                        "TraficSourceID",
+                                                        "SearchEngineID",
+                                                        "SearchPhrase",
+                                                        "AdvEngineID",
+                                                        "IsArtifical",
+                                                        "WindowClientWidth",
+                                                        "WindowClientHeight",
+                                                        "ClientTimeZone",
+                                                        "ClientEventTime",
+                                                        "SilverlightVersion1",
+                                                        "SilverlightVersion2",
+                                                        "SilverlightVersion3",
+                                                        "SilverlightVersion4",
+                                                        "PageCharset",
+                                                        "CodeVersion",
+                                                        "IsLink",
+                                                        "IsDownload",
+                                                        "IsNotBounce",
+                                                        "FUniqID",
+                                                        "OriginalURL",
+                                                        "HID",
+                                                        "IsOldCounter",
+                                                        "IsEvent",
+                                                        "IsParameter",
+                                                        "DontCountHits",
+                                                        "WithHash",
+                                                        "HitColor",
+                                                        "LocalEventTime",
+                                                        "Age",
+                                                        "Sex",
+                                                        "Income",
+                                                        "Interests",
+                                                        "Robotness",
+                                                        "RemoteIP",
+                                                        "WindowName",
+                                                        "OpenerName",
+                                                        "HistoryLength",
+                                                        "BrowserLanguage",
+                                                        "BrowserCountry",
+                                                        "SocialNetwork",
+                                                        "SocialAction",
+                                                        "HTTPError",
+                                                        "SendTiming",
+                                                        "DNSTiming",
+                                                        "ConnectTiming",
+                                                        "ResponseStartTiming",
+                                                        "ResponseEndTiming",
+                                                        "FetchTiming",
+                                                        "SocialSourceNetworkID",
+                                                        "SocialSourcePage",
+                                                        "ParamPrice",
+                                                        "ParamOrderID",
+                                                        "ParamCurrency",
+                                                        "ParamCurrencyID",
+                                                        "OpenstatServiceName",
+                                                        "OpenstatCampaignID",
+                                                        "OpenstatAdID",
+                                                        "OpenstatSourceID",
+                                                        "UTMSource",
+                                                        "UTMMedium",
+                                                        "UTMCampaign",
+                                                        "UTMContent",
+                                                        "UTMTerm",
+                                                        "FromTag",
+                                                        "HasGCLID",
+                                                        "RefererHash",
+                                                        "URLHash",
+                                                        "CLID"
+                                                    ]
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": "(SearchPhrase != CAST('' AS VARCHAR))"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "SearchPhrase",
+                                        "EventTime"
+                                    ]
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Order By": "#[7.1]"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": ""
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": "#[7.0]"
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "PROJECTION",
+        "children": [
+            {
+                "name": "ORDER_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "COMPARISON_JOIN",
+                                "children": [
+                                    {
+                                        "name": "READ_VORTEX",
+                                        "children": [],
+                                        "extra_info": {
+                                            "Filters": "",
+                                            "Function": "Vortex Scan"
+                                        }
+                                    },
+                                    {
+                                        "name": "TOP_N",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "READ_VORTEX",
+                                                                "children": [],
+                                                                "extra_info": {
+                                                                    "Filters": "($.SearchPhrase != \"\")",
+                                                                    "Function": "Vortex Scan",
+                                                                    "Estimated Cardinality": "200000"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "EventTime",
+                                                                "file_index",
+                                                                "file_row_number"
+                                                            ],
+                                                            "Estimated Cardinality": "200000"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "EventTime",
+                                                        "file_index",
+                                                        "file_row_number"
+                                                    ],
+                                                    "Estimated Cardinality": "200000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": "",
+                                            "Estimated Cardinality": "10"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Join Type": "SEMI",
+                                    "Conditions": [
+                                        "(file_index = file_index)",
+                                        "(file_row_number = file_row_number)"
+                                    ]
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expressions": [
+                                "SearchPhrase",
+                                "EventTime"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Order By": "#1"
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": "#0",
+            "Estimated Cardinality": "10"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "HASH_JOIN",
+                        "children": [
+                            {
+                                "name": "READ_VORTEX",
+                                "children": [],
+                                "extra_info": {
+                                    "Function": "Vortex Scan",
+                                    "Projections": [
+                                        "EventTime",
+                                        "SearchPhrase"
+                                    ],
+                                    "Estimated Cardinality": "200000"
+                                }
+                            },
+                            {
+                                "name": "TOP_N",
+                                "children": [
+                                    {
+                                        "name": "READ_VORTEX",
+                                        "children": [],
+                                        "extra_info": {
+                                            "Function": "Vortex Scan",
+                                            "Filters": "optional: Dynamic Filter (EventTime)",
+                                            "Projections": "EventTime",
+                                            "Estimated Cardinality": "200000"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Top": "10",
+                                    "Order By": "#0 ASC"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Join Type": "SEMI",
+                            "Conditions": [
+                                "file_index = file_index",
+                                "file_row_number = file_row_number"
+                            ],
+                            "Estimated Cardinality": "0"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Projections": [
+                        "SearchPhrase",
+                        "EventTime"
+                    ],
+                    "Estimated Cardinality": "0"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "#1 ASC"
+        }
+    }
+]

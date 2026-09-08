@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q10.slt.no explains the upstream query unchanged.
+query TI
+SELECT "MobilePhoneModel", COUNT(DISTINCT "UserID") AS u FROM hits WHERE "MobilePhoneModel" <> '' GROUP BY "MobilePhoneModel" ORDER BY u DESC, "MobilePhoneModel" LIMIT 10;
+----
+iPad 2303
+iPhone 107
+A500 34
+GT-P7300B 12
+N8-00 12
+iPho 11
+3110000 6
+IQ245Plus 5
+eagle75 4
+GT-S5830 3

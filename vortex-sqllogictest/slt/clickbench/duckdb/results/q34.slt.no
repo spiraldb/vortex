@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q34.slt.no explains the upstream query unchanged.
+query ITI
+SELECT 1, "URL", COUNT(*) AS c FROM hits GROUP BY 1, "URL" ORDER BY c DESC, "URL" LIMIT 10;
+----
+1 http://irr.ru/index.php?showalbum/login-leniya7777294,938303130 58976
+1 http://komme%2F27.0.1453.116 29585
+1 https://produkty%2Fproduct 11464
+1 http://irr.ru/index.php?showalbum/login-kapusta-advert2668]=0&order_by=0 10480
+1 http://irr.ru/index.php?showalbum/login-kapustic/product_name 10128
+1 http://irr.ru/index.php 7758
+1 https://produkty%2F 6649
+1 http://irr.ru/index.php?showalbum/login 6141
+1 https://produkty/kurortmag 5764
+1 https://produkty%2Fpulove.ru/album/login 5495

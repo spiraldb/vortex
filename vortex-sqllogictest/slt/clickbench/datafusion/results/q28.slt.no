@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q28.slt.no explains the upstream query unchanged.
+# `control substitution on` (see setup.slt.no) treats `\` as an escape and `$` as a
+# variable, so both are escaped here; the engine receives the upstream `\.`, `$` and `\1`.
+query TRIT
+SELECT REGEXP_REPLACE("Referer", '^https?://(?:www\\.)?([^/]+)/.*\$', '\\1') AS k, AVG(OCTET_LENGTH("Referer")) AS l, COUNT(*) AS c, MIN("Referer") FROM hits WHERE "Referer" <> '' GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC, k LIMIT 25;
+----
+state=19945206 107.026012243508 287826 http://state=19945206/foto-4/login%20NoTs3M&where=all&filmId=u8aGGqtWs3M&where=all&server=sc.cheloveplanet.ru/forum.little&categoriya/muzhskaya_istory.com/demii-malchik_148_4055074241537][to]=&input_activalry: A Love&where=all&text=купить florer&aktion/loansert перевозобности&site_id=197&text=добавь   лазерногорский  тайская полупая автомобильника&v=1414-resp_desyachnyeprague
+tambov.irr.ru 77.987005193381 308277 http://tambov.irr.ru/0/c1/tgFtaeLDK0yb01A7xvQF08sjCFqQxn51

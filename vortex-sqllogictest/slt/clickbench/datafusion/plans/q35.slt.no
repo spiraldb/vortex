@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "ClientIP", "ClientIP" - 1, "ClientIP" - 2, "ClientIP" - 3, COUNT(*) AS c FROM hits GROUP BY "ClientIP", "ClientIP" - 1, "ClientIP" - 2, "ClientIP" - 3 ORDER BY c DESC LIMIT 10;
+----
+logical_plan
+01)Sort: c DESC NULLS FIRST, fetch=10
+02)--Projection: hits.ClientIP, __common_expr_1 - Int64(1) AS hits.ClientIP - Int64(1), __common_expr_1 - Int64(2) AS hits.ClientIP - Int64(2), __common_expr_1 - Int64(3) AS hits.ClientIP - Int64(3), count(Int64(1)) AS c
+03)----Projection: CAST(hits.ClientIP AS Int64) AS __common_expr_1, hits.ClientIP, count(Int64(1))
+04)------Aggregate: groupBy=[[hits.ClientIP]], aggr=[[count(Int64(1))]]
+05)--------TableScan: hits projection=[ClientIP]
+physical_plan
+01)SortPreservingMergeExec: [c@4 DESC], fetch=10
+02)--SortExec: TopK(fetch=10), expr=[c@4 DESC], preserve_partitioning=[true]
+03)----ProjectionExec: expr=[ClientIP@1 as ClientIP, __common_expr_1@0 - 1 as hits.ClientIP - Int64(1), __common_expr_1@0 - 2 as hits.ClientIP - Int64(2), __common_expr_1@0 - 3 as hits.ClientIP - Int64(3), count(Int64(1))@2 as c]
+04)------ProjectionExec: expr=[CAST(ClientIP@0 AS Int64) as __common_expr_1, ClientIP@0 as ClientIP, count(Int64(1))@1 as count(Int64(1))]
+05)--------AggregateExec: mode=FinalPartitioned, gby=[ClientIP@0 as ClientIP], aggr=[count(Int64(1))]
+06)----------RepartitionExec: partitioning=Hash([ClientIP@0], 4), input_partitions=4
+07)------------AggregateExec: mode=Partial, gby=[ClientIP@0 as ClientIP], aggr=[count(Int64(1))]
+08)--------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[ClientIP], file_type=vortex

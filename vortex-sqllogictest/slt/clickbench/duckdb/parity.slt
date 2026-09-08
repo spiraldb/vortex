@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# Checks that the Vortex file produced by generate_data.sh holds exactly the
+# same rows as the Parquet shard it was converted from. generate_data.sh runs
+# this file right after the conversion, and it also runs as part of the suite.
+
+include ../../setup.slt.no
+
+statement ok
+CREATE VIEW hits_parquet AS SELECT * FROM read_parquet('slt/clickbench/data/hits.parquet');
+
+statement ok
+CREATE VIEW hits_vortex AS SELECT * FROM read_vortex('slt/clickbench/data/hits.vortex');
+
+# Same schema.
+query TT rowsort
+SELECT column_name, column_type FROM (DESCRIBE hits_parquet)
+EXCEPT
+SELECT column_name, column_type FROM (DESCRIBE hits_vortex);
+----
+
+query TT rowsort
+SELECT column_name, column_type FROM (DESCRIBE hits_vortex)
+EXCEPT
+SELECT column_name, column_type FROM (DESCRIBE hits_parquet);
+----
+
+# Same row count.
+query I
+SELECT (SELECT COUNT(*) FROM hits_parquet) - (SELECT COUNT(*) FROM hits_vortex);
+----
+0
+
+# Same rows, including duplicates, in both directions.
+query I
+SELECT COUNT(*) FROM (SELECT * FROM hits_parquet EXCEPT ALL SELECT * FROM hits_vortex);
+----
+0
+
+query I
+SELECT COUNT(*) FROM (SELECT * FROM hits_vortex EXCEPT ALL SELECT * FROM hits_parquet);
+----
+0
+
+statement ok
+DROP VIEW hits_vortex;
+
+statement ok
+DROP VIEW hits_parquet;

@@ -700,6 +700,7 @@ jobs:
       - name: Run sqllogictest tests
         run: |
           ./vortex-sqllogictest/slt/tpch/generate_data.sh
+          VORTEX_SLT_PROFILE=ci ./vortex-sqllogictest/slt/clickbench/generate_data.sh
           cargo nextest run --cargo-profile ci -p vortex-sqllogictest
       - uses: ./.github/actions/check-rebuild
         with:

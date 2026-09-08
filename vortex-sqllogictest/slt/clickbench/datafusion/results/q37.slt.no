@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q37.slt.no explains the upstream query unchanged.
+query TI
+SELECT "Title", COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-01' AND "EventDate" <= '2013-07-31' AND "DontCountHits" = 0 AND "IsRefresh" = 0 AND "Title" <> '' GROUP BY "Title" ORDER BY PageViews DESC, "Title" LIMIT 10;
+----
+Тест (Россия) - Яндекс 67550
+Шарарай), Выбрать! - обсуждаются на голд: Шоубиз - Свободная историс 46675
+Приморск - IRR.ru 46530
+Брюки New Era H (Асус) 258 общая выплаток, горшечными 21167
+Теплоску на 13432
+Приморск (Россия) - Яндекс.Видео 8260
+AUTO.ria.ua ™ - Аппер 8116
+Dave and Hotpoint sport – самые вещие 7867
+OWAProfessign), продать 5755
+Труси - Шоубиз 5692

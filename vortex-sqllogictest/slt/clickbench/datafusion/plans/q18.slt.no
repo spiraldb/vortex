@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "UserID", extract(minute FROM "EventTime") AS m, "SearchPhrase", COUNT(*) FROM hits GROUP BY "UserID", m, "SearchPhrase" ORDER BY COUNT(*) DESC LIMIT 10;
+----
+logical_plan
+01)Sort: count(*) DESC NULLS FIRST, fetch=10
+02)--Projection: hits.UserID, date_part(Utf8("MINUTE"),hits.EventTime) AS m, hits.SearchPhrase, count(Int64(1)) AS count(*)
+03)----Aggregate: groupBy=[[hits.UserID, date_part(Utf8("MINUTE"), hits.EventTime), hits.SearchPhrase]], aggr=[[count(Int64(1))]]
+04)------TableScan: hits projection=[EventTime, UserID, SearchPhrase]
+physical_plan
+01)SortPreservingMergeExec: [count(*)@3 DESC], fetch=10
+02)--ProjectionExec: expr=[UserID@0 as UserID, date_part(Utf8("MINUTE"),hits.EventTime)@1 as m, SearchPhrase@2 as SearchPhrase, count(Int64(1))@3 as count(*)]
+03)----SortExec: TopK(fetch=10), expr=[count(Int64(1))@3 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[UserID@0 as UserID, date_part(Utf8("MINUTE"),hits.EventTime)@1 as date_part(Utf8("MINUTE"),hits.EventTime), SearchPhrase@2 as SearchPhrase], aggr=[count(Int64(1))]
+05)--------RepartitionExec: partitioning=Hash([UserID@0, date_part(Utf8("MINUTE"),hits.EventTime)@1, SearchPhrase@2], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[UserID@1 as UserID, date_part(MINUTE, EventTime@0) as date_part(Utf8("MINUTE"),hits.EventTime), SearchPhrase@2 as SearchPhrase], aggr=[count(Int64(1))]
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[EventTime, UserID, SearchPhrase], file_type=vortex

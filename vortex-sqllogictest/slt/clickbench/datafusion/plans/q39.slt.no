@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "TraficSourceID", "SearchEngineID", "AdvEngineID", CASE WHEN ("SearchEngineID" = 0 AND "AdvEngineID" = 0) THEN "Referer" ELSE '' END AS Src, "URL" AS Dst, COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-01' AND "EventDate" <= '2013-07-31' AND "IsRefresh" = 0 GROUP BY "TraficSourceID", "SearchEngineID", "AdvEngineID", Src, Dst ORDER BY PageViews DESC LIMIT 10 OFFSET 1000;
+----
+logical_plan
+01)Limit: skip=1000, fetch=10
+02)--Sort: pageviews DESC NULLS FIRST, fetch=1010
+03)----Projection: hits.TraficSourceID, hits.SearchEngineID, hits.AdvEngineID, CASE WHEN hits.SearchEngineID = Int64(0) AND hits.AdvEngineID = Int64(0) THEN hits.Referer ELSE Utf8("") END AS src, hits.URL AS dst, count(Int64(1)) AS count(*) AS pageviews
+04)------Aggregate: groupBy=[[hits.TraficSourceID, hits.SearchEngineID, hits.AdvEngineID, CASE WHEN hits.SearchEngineID = Int16(0) AND hits.AdvEngineID = Int16(0) THEN hits.Referer ELSE Utf8View("") END AS CASE WHEN hits.SearchEngineID = Int64(0) AND hits.AdvEngineID = Int64(0) THEN hits.Referer ELSE Utf8("") END, hits.URL]], aggr=[[count(Int64(1))]]
+05)--------Projection: hits.URL, hits.Referer, hits.TraficSourceID, hits.SearchEngineID, hits.AdvEngineID
+06)----------Filter: hits.CounterID = Int32(62) AND hits.EventDate >= TimestampMicrosecond(1372636800000000, None) AND hits.EventDate <= TimestampMicrosecond(1375228800000000, None) AND hits.IsRefresh = Int16(0)
+07)------------TableScan: hits projection=[EventDate, CounterID, URL, Referer, IsRefresh, TraficSourceID, SearchEngineID, AdvEngineID], partial_filters=[hits.CounterID = Int32(62), hits.EventDate >= TimestampMicrosecond(1372636800000000, None), hits.EventDate <= TimestampMicrosecond(1375228800000000, None), hits.IsRefresh = Int16(0)]
+physical_plan
+01)GlobalLimitExec: skip=1000, fetch=10
+02)--SortPreservingMergeExec: [pageviews@5 DESC], fetch=1010
+03)----ProjectionExec: expr=[TraficSourceID@0 as TraficSourceID, SearchEngineID@1 as SearchEngineID, AdvEngineID@2 as AdvEngineID, CASE WHEN hits.SearchEngineID = Int64(0) AND hits.AdvEngineID = Int64(0) THEN hits.Referer ELSE Utf8("") END@3 as src, URL@4 as dst, count(Int64(1))@5 as pageviews]
+04)------SortExec: TopK(fetch=1010), expr=[count(Int64(1))@5 DESC], preserve_partitioning=[true]
+05)--------AggregateExec: mode=FinalPartitioned, gby=[TraficSourceID@0 as TraficSourceID, SearchEngineID@1 as SearchEngineID, AdvEngineID@2 as AdvEngineID, CASE WHEN hits.SearchEngineID = Int64(0) AND hits.AdvEngineID = Int64(0) THEN hits.Referer ELSE Utf8("") END@3 as CASE WHEN hits.SearchEngineID = Int64(0) AND hits.AdvEngineID = Int64(0) THEN hits.Referer ELSE Utf8("") END, URL@4 as URL], aggr=[count(Int64(1))]
+06)----------RepartitionExec: partitioning=Hash([TraficSourceID@0, SearchEngineID@1, AdvEngineID@2, CASE WHEN hits.SearchEngineID = Int64(0) AND hits.AdvEngineID = Int64(0) THEN hits.Referer ELSE Utf8("") END@3, URL@4], 4), input_partitions=4
+07)------------AggregateExec: mode=Partial, gby=[TraficSourceID@2 as TraficSourceID, SearchEngineID@3 as SearchEngineID, AdvEngineID@4 as AdvEngineID, CASE WHEN SearchEngineID@3 = 0 AND AdvEngineID@4 = 0 THEN Referer@1 ELSE  END as CASE WHEN hits.SearchEngineID = Int64(0) AND hits.AdvEngineID = Int64(0) THEN hits.Referer ELSE Utf8("") END, URL@0 as URL], aggr=[count(Int64(1))]
+08)--------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[URL, Referer, TraficSourceID, SearchEngineID, AdvEngineID], file_type=vortex, predicate: CounterID@6 = 62 AND EventDate@5 >= 1372636800000000 AND EventDate@5 <= 1375228800000000 AND IsRefresh@15 = 0
