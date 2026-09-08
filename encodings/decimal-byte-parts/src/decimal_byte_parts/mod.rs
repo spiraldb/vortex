@@ -9,6 +9,10 @@ use vortex_array::Array;
 use vortex_array::ArrayParts;
 use vortex_array::ArrayView;
 pub(crate) mod compute;
+mod limbs;
+pub use limbs::DecimalParts;
+pub use limbs::MAX_LOWER_PARTS;
+pub use limbs::split_decimal;
 mod rules;
 mod slice;
 
@@ -22,13 +26,11 @@ use vortex_array::ExecutionCtx;
 use vortex_array::ExecutionResult;
 use vortex_array::IntoArray;
 use vortex_array::array_slots;
-use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::PType;
-use vortex_array::match_each_signed_integer_ptype;
 use vortex_array::scalar::DecimalValue;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar::ScalarValue;
@@ -46,6 +48,7 @@ use vortex_error::vortex_panic;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
+use crate::decimal_byte_parts::limbs::assemble_decimal;
 use crate::decimal_byte_parts::rules::PARENT_RULES;
 
 /// A [`DecimalByteParts`]-encoded Vortex array.
@@ -266,26 +269,12 @@ fn to_canonical_decimal(
     array: &DecimalBytePartsArray,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
-    // TODO(joe): support parts len != 1
-    let prim = array.msp().clone().execute::<PrimitiveArray>(ctx)?;
-    // Depending on the decimal type and the min/max of the primitive array we can choose
-    // the correct buffer size
-
-    Ok(match_each_signed_integer_ptype!(prim.ptype(), |P| {
-        // SAFETY: The primitive array's buffer is already validated with correct type.
-        // The decimal dtype matches the array's dtype, and validity is preserved.
-        unsafe {
-            DecimalArray::new_unchecked(
-                prim.to_buffer::<P>(),
-                *array
-                    .dtype()
-                    .as_decimal_opt()
-                    .vortex_expect("must be a decimal dtype"),
-                prim.validity()?,
-            )
-        }
-        .into_array()
-    }))
+    let msp = array.msp().clone().execute::<PrimitiveArray>(ctx)?;
+    let decimal_dtype = *array
+        .dtype()
+        .as_decimal_opt()
+        .vortex_expect("must be a decimal dtype");
+    Ok(assemble_decimal(&msp, &[], decimal_dtype)?.into_array())
 }
 
 impl OperationsVTable<DecimalByteParts> for DecimalByteParts {
