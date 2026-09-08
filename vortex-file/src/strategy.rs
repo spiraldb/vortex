@@ -257,8 +257,6 @@ impl WriteStrategyBuilder {
         // but with different options, so this helper builds that shared part for both cases.
         let build_repartition =
             |zone_layout_options: ZonedLayoutOptions| -> Arc<dyn LayoutStrategy> {
-                let zone_block_size = zone_layout_options.block_size.get();
-
                 // 2. calculate stats for each row group
                 let stats = ZonedStrategy::new(
                     dict.clone(),
