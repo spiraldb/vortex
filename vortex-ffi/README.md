@@ -33,9 +33,10 @@ ctest --test-dir build/ffi --output-on-failure
 
 By default, calling threads drive the shared runtime with no Vortex workers.
 
-`vx_runtime_set_worker_threads(n)` adds background workers for parallelism within a call.
-The setting is process-global. Zero signals workers to stop and restores caller-driven execution.
-Leave it at zero if your application already provides concurrency.
+`vx_runtime_set_worker_threads(n)` configures a library-local pool of background workers that
+drive the shared runtime. The pool is shared by all FFI sessions in that library instance and
+persists across calls for the lifetime of the library. Passing zero signals the workers to stop
+and restores caller-driven execution. Leave it at zero if your application already provides concurrency.
 
 ## Update the C header
 

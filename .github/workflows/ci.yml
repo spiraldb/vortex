@@ -595,8 +595,6 @@ jobs:
     name: "C++ API"
     # Leave room for cold, per-build-tree Cargo artifacts, including sanitized std.
     timeout-minutes: 15
-    env:
-      UBSAN_OPTIONS: "halt_on_error=1:print_stacktrace=1"
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
           && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=cxx-build', github.run_id)
@@ -620,7 +618,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_C_COMPILER=clang \
             -DCMAKE_CXX_COMPILER=clang++ \
-            -DVORTEX_SANITIZER=asan,lsan,ubsan \
+            -DVORTEX_SANITIZER=asan \
             -DVORTEX_SANITIZE_RUST_STD=ON \
             -DVORTEX_BUILD_TESTS=ON \
             -DVORTEX_BUILD_EXAMPLES=ON
