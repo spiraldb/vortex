@@ -23,6 +23,7 @@ use crate::arrays::varbinview::build_views::MAX_BUFFER_LEN;
 use crate::buffer::BufferHandle;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
+use crate::scalar_fn::unstable::row::FillDefault;
 use crate::scalar_fn::unstable::row::ViewLen;
 use crate::validity::Validity;
 
@@ -42,6 +43,11 @@ impl ViewLen for Utf8Rows<'_> {
     fn len(&self) -> usize {
         self.views.len()
     }
+}
+
+// Every view starts as the empty string, which is already the default placeholder.
+impl FillDefault for Utf8Rows<'_> {
+    fn fill_default(&mut self) {}
 }
 
 /// The handle used to write one UTF-8 output row.
@@ -91,10 +97,6 @@ unsafe impl OutputSink for Utf8Sink {
     type Rows<'a> = Utf8Rows<'a>;
     type Row<'a> = Utf8Writer<'a>;
     type WriteToken = ();
-
-    fn skipped_rows_initializer() -> Option<fn(&mut Self::Rows<'_>)> {
-        Some(|_| {})
-    }
 
     fn storage_dtype(_params: &Self::Params) -> DType {
         DType::Utf8(Nullability::NonNullable)
@@ -199,9 +201,9 @@ mod tests {
         assert!(empty.is_empty());
 
         let mut skipped = <Utf8Sink as OutputSink>::with_capacity(2, &())?;
-        let initializer = <Utf8Sink as OutputSink>::skipped_rows_initializer()
-            .expect("the UTF-8 sink initializes skipped rows");
-        initializer(&mut <Utf8Sink as OutputSink>::rows(&mut skipped));
+        <Utf8Sink as OutputSink>::initialize_skipped_rows(&mut <Utf8Sink as OutputSink>::rows(
+            &mut skipped,
+        ));
         // SAFETY: the skipped-row initializer initialized every row.
         let skipped = unsafe { <Utf8Sink as OutputSink>::finish(skipped) }?;
         let mut ctx = VortexSession::empty().create_execution_ctx();
