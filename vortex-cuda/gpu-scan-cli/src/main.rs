@@ -233,7 +233,7 @@ async fn recompress_for_gpu(
     let mut out = ByteBufferMut::empty();
     let result = session
         .write_options()
-        .with_strategy(cuda_write_strategy(&session))
+        .with_strategy(cuda_write_strategy(session))
         .write(&mut out, scan)
         .await?;
 
