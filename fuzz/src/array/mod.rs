@@ -346,8 +346,12 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                         .clone()
                         .execute::<Canonical>(&mut ctx)
                         .vortex_expect("execute canonical should succeed in fuzz test");
-                    let sum_result = sum_canonical_array(current_array_canonical, &mut ctx)
-                        .vortex_expect("sum_canonical_array should succeed in fuzz test");
+                    // Skip sums whose result depends on how the array is partitioned.
+                    let Some(sum_result) = sum_canonical_array(&current_array_canonical, &mut ctx)
+                        .vortex_expect("sum_canonical_array should succeed in fuzz test")
+                    else {
+                        return Err(EmptyChoose);
+                    };
                     (Action::Sum, ExpectedValue::Scalar(sum_result))
                 }
                 ActionType::MinMax => {
