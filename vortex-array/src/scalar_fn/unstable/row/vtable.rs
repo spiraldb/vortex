@@ -35,6 +35,7 @@ use crate::scalar_fn::unstable::row::execute::DenseAttempt;
 
 impl<F: RowFn> ScalarFnVTable for F {
     type Options = F::Options;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         RowFn::id(self)

@@ -58,6 +58,7 @@ struct BloomContains;
 
 impl ScalarFnVTable for BloomContains {
     type Options = BloomOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.bloom_filter.sbbf.contains");

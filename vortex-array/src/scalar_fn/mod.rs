@@ -20,6 +20,9 @@ use crate::scalar_fn::fns::ext_storage::ExtStorage;
 use crate::scalar_fn::fns::get_item::GetItem;
 use crate::scalar_fn::fns::literal::Literal;
 
+mod optimize;
+pub use optimize::*;
+
 mod vtable;
 pub use vtable::*;
 

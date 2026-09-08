@@ -40,6 +40,7 @@ use crate::scalar::Scalar;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::SimplifyCtx;
@@ -83,6 +84,7 @@ pub struct CaseWhen;
 
 impl ScalarFnVTable for CaseWhen {
     type Options = CaseWhenOptions;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.case_when");
@@ -256,9 +258,20 @@ impl ScalarFnVTable for CaseWhen {
         merge_case_branches(branches, else_value, ctx)
     }
 
+    fn is_strict(&self, _options: &Self::Options) -> bool {
+        // A null in an unselected branch does not force a null output.
+        false
+    }
+
+    fn is_infallible(&self, _options: &Self::Options) -> bool {
+        true
+    }
+}
+
+impl OptimizeVTable<CaseWhen> for CaseWhen {
     fn simplify(
-        &self,
-        options: &Self::Options,
+        _vtable: &Self,
+        options: &CaseWhenOptions,
         expr: &Expression,
         _ctx: &dyn SimplifyCtx,
     ) -> VortexResult<Option<Expression>> {
@@ -299,15 +312,6 @@ impl ScalarFnVTable for CaseWhen {
         }
 
         Ok(Some(crate::expr::fill_null(x.clone(), fill.clone())))
-    }
-
-    fn is_strict(&self, _options: &Self::Options) -> bool {
-        // A null in an unselected branch does not force a null output.
-        false
-    }
-
-    fn is_infallible(&self, _options: &Self::Options) -> bool {
-        true
     }
 }
 

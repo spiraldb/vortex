@@ -28,6 +28,7 @@ use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::EmptyOptions;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
@@ -49,6 +50,7 @@ impl FillNull {
 
 impl ScalarFnVTable for FillNull {
     type Options = EmptyOptions;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.fill_null");
@@ -120,21 +122,6 @@ impl ScalarFnVTable for FillNull {
         }
     }
 
-    fn simplify(
-        &self,
-        _options: &Self::Options,
-        expr: &Expression,
-        ctx: &dyn crate::scalar_fn::SimplifyCtx,
-    ) -> VortexResult<Option<Expression>> {
-        let input_dtype = ctx.return_dtype(expr.child(0))?;
-
-        if !input_dtype.is_nullable() {
-            return Ok(Some(expr.child(0).clone()));
-        }
-
-        Ok(None)
-    }
-
     fn validity(
         &self,
         _options: &Self::Options,
@@ -152,6 +139,23 @@ impl ScalarFnVTable for FillNull {
 
     fn is_infallible(&self, _options: &Self::Options) -> bool {
         true
+    }
+}
+
+impl OptimizeVTable<FillNull> for FillNull {
+    fn simplify(
+        _vtable: &Self,
+        _options: &EmptyOptions,
+        expr: &Expression,
+        ctx: &dyn crate::scalar_fn::SimplifyCtx,
+    ) -> VortexResult<Option<Expression>> {
+        let input_dtype = ctx.return_dtype(expr.child(0))?;
+
+        if !input_dtype.is_nullable() {
+            return Ok(Some(expr.child(0).clone()));
+        }
+
+        Ok(None)
     }
 }
 

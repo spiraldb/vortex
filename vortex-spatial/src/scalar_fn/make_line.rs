@@ -175,6 +175,7 @@ impl SpatialMakeLine {
 
 impl ScalarFnVTable for SpatialMakeLine {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.st.make_line");

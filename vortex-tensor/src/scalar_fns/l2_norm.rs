@@ -80,6 +80,7 @@ impl L2Norm {
 
 impl ScalarFnVTable for L2Norm {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.tensor.l2_norm");

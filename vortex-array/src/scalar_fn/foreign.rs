@@ -65,6 +65,7 @@ impl ForeignScalarFnVTable {
 
 impl ScalarFnVTable for ForeignScalarFnVTable {
     type Options = ForeignScalarFnOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         self.id

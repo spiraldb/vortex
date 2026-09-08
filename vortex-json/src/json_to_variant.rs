@@ -81,6 +81,7 @@ impl JsonToVariant {
 
 impl ScalarFnVTable for JsonToVariant {
     type Options = JsonToVariantOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.json_to_variant");

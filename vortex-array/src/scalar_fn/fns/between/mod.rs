@@ -204,6 +204,7 @@ impl Between {
 
 impl ScalarFnVTable for Between {
     type Options = BetweenOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.between");

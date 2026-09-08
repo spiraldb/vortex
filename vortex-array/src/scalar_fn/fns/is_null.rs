@@ -38,6 +38,7 @@ impl IsNull {
 
 impl ScalarFnVTable for IsNull {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.is_null");

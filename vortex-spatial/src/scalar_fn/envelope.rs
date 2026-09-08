@@ -205,6 +205,7 @@ fn execute_envelope(
 
 impl ScalarFnVTable for SpatialEnvelope {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.st.envelope");

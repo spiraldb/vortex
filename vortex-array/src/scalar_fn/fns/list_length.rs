@@ -45,6 +45,7 @@ pub struct ListLength;
 
 impl ScalarFnVTable for ListLength {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.list.length");

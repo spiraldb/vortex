@@ -34,6 +34,7 @@ use crate::expr::pack;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::SimplifyCtx;
@@ -50,6 +51,7 @@ pub struct Select;
 
 impl ScalarFnVTable for Select {
     type Options = FieldSelection;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.select");
@@ -181,8 +183,19 @@ impl ScalarFnVTable for Select {
         result.into_array().execute(ctx)
     }
 
+    fn is_strict(&self, _options: &FieldSelection) -> bool {
+        true
+    }
+
+    fn is_infallible(&self, _instance: &FieldSelection) -> bool {
+        // If this type-checks, it is infallible.
+        true
+    }
+}
+
+impl OptimizeVTable<Select> for Select {
     fn simplify(
-        &self,
+        _vtable: &Self,
         selection: &FieldSelection,
         expr: &Expression,
         ctx: &dyn SimplifyCtx,
@@ -245,15 +258,6 @@ impl ScalarFnVTable for Select {
         }
 
         Ok(None)
-    }
-
-    fn is_strict(&self, _options: &FieldSelection) -> bool {
-        true
-    }
-
-    fn is_infallible(&self, _instance: &FieldSelection) -> bool {
-        // If this type-checks, it is infallible.
-        true
     }
 }
 

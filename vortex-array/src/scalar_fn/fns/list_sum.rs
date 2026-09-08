@@ -40,6 +40,7 @@ pub struct ListSum;
 
 impl ScalarFnVTable for ListSum {
     type Options = NumericalAggregateOpts;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.list.sum");

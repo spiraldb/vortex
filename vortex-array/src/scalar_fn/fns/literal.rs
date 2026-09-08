@@ -35,6 +35,7 @@ pub struct Literal;
 
 impl ScalarFnVTable for Literal {
     type Options = Scalar;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.literal");

@@ -189,6 +189,7 @@ pub(crate) fn row_size_struct_dtype() -> DType {
 
 impl ScalarFnVTable for RowSize {
     type Options = RowEncodingOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         ScalarFnId::from("vortex.row_size")

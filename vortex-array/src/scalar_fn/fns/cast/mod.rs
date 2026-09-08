@@ -42,6 +42,7 @@ use crate::expr::lit;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ReduceNode;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
@@ -63,6 +64,7 @@ impl Cast {
 
 impl ScalarFnVTable for Cast {
     type Options = DType;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.cast");
@@ -154,28 +156,6 @@ impl ScalarFnVTable for Cast {
         }
     }
 
-    fn reduce<T: ReduceNode>(&self, target_dtype: &DType, node: &T) -> VortexResult<Option<T>> {
-        // Collapse node if child is already the target type
-        let child = node.child(0);
-        if &child.node_dtype()? == target_dtype {
-            return Ok(Some(child));
-        }
-        Ok(None)
-    }
-
-    fn simplify_untyped(
-        &self,
-        target_dtype: &DType,
-        expr: &Expression,
-    ) -> VortexResult<Option<Expression>> {
-        let Some(scalar) = expr.child(0).as_opt::<Literal>() else {
-            return Ok(None);
-        };
-        // A failing cast (e.g. null to a non-nullable dtype) is left in place so the error
-        // surfaces at execution time rather than during optimization.
-        Ok(scalar.cast(target_dtype).ok().map(lit))
-    }
-
     fn validity(&self, dtype: &DType, expression: &Expression) -> VortexResult<Option<Expression>> {
         Ok(Some(if dtype.is_nullable() {
             expression.child(0).validity()?
@@ -187,6 +167,34 @@ impl ScalarFnVTable for Cast {
     fn is_strict(&self, _instance: &DType) -> bool {
         // Cast options can pin a non-nullable output dtype instead of propagating nullability.
         false
+    }
+}
+
+impl OptimizeVTable<Cast> for Cast {
+    fn reduce<T: ReduceNode>(
+        _vtable: &Self,
+        target_dtype: &DType,
+        node: &T,
+    ) -> VortexResult<Option<T>> {
+        // Collapse node if child is already the target type
+        let child = node.child(0);
+        if &child.node_dtype()? == target_dtype {
+            return Ok(Some(child));
+        }
+        Ok(None)
+    }
+
+    fn simplify_untyped(
+        _vtable: &Self,
+        target_dtype: &DType,
+        expr: &Expression,
+    ) -> VortexResult<Option<Expression>> {
+        let Some(scalar) = expr.child(0).as_opt::<Literal>() else {
+            return Ok(None);
+        };
+        // A failing cast (e.g. null to a non-nullable dtype) is left in place so the error
+        // surfaces at execution time rather than during optimization.
+        Ok(scalar.cast(target_dtype).ok().map(lit))
     }
 }
 

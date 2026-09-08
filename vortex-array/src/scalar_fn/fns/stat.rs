@@ -81,6 +81,7 @@ pub struct StatFn;
 
 impl ScalarFnVTable for StatFn {
     type Options = StatOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.stat");

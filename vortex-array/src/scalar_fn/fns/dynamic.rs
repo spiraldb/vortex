@@ -45,6 +45,7 @@ pub struct DynamicComparison;
 
 impl ScalarFnVTable for DynamicComparison {
     type Options = DynamicComparisonExpr;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.dynamic");

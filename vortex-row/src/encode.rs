@@ -49,6 +49,7 @@ pub struct RowEncode;
 
 impl ScalarFnVTable for RowEncode {
     type Options = RowEncodingOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         ScalarFnId::from("vortex.row_encode")

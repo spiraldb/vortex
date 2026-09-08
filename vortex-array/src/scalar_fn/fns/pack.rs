@@ -55,6 +55,7 @@ impl Display for PackOptions {
 
 impl ScalarFnVTable for Pack {
     type Options = PackOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.pack");

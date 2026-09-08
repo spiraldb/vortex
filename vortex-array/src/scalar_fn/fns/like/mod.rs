@@ -82,6 +82,7 @@ impl Like {
 
 impl ScalarFnVTable for Like {
     type Options = LikeOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.like");

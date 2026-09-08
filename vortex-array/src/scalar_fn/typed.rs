@@ -30,6 +30,7 @@ use crate::scalar_fn::ArrayReduceNode;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::ExecutionArgs;
 use crate::scalar_fn::ExpressionReduceNode;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnRef;
 use crate::scalar_fn::ScalarFnVTable;
@@ -172,14 +173,14 @@ impl<V: ScalarFnVTable> DynScalarFn for TypedScalarFnInstance<V> {
         &self,
         node: &ExpressionReduceNode<'a>,
     ) -> VortexResult<Option<ExpressionReduceNode<'a>>> {
-        V::reduce(&self.vtable, &self.options, node)
+        V::OptimizeVTable::reduce(&self.vtable, &self.options, node)
     }
 
     fn reduce_array<'a>(
         &self,
         node: &ArrayReduceNode<'a>,
     ) -> VortexResult<Option<ArrayReduceNode<'a>>> {
-        V::reduce(&self.vtable, &self.options, node)
+        V::OptimizeVTable::reduce(&self.vtable, &self.options, node)
     }
 
     fn arity(&self) -> Arity {
@@ -207,11 +208,11 @@ impl<V: ScalarFnVTable> DynScalarFn for TypedScalarFnInstance<V> {
         expression: &Expression,
         ctx: &dyn SimplifyCtx,
     ) -> VortexResult<Option<Expression>> {
-        V::simplify(&self.vtable, &self.options, expression, ctx)
+        V::OptimizeVTable::simplify(&self.vtable, &self.options, expression, ctx)
     }
 
     fn simplify_untyped(&self, expression: &Expression) -> VortexResult<Option<Expression>> {
-        V::simplify_untyped(&self.vtable, &self.options, expression)
+        V::OptimizeVTable::simplify_untyped(&self.vtable, &self.options, expression)
     }
 
     fn validity(&self, expression: &Expression) -> VortexResult<Option<Expression>> {

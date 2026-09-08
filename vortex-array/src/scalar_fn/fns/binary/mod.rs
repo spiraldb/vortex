@@ -27,6 +27,7 @@ use crate::expr::lit;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
@@ -70,6 +71,7 @@ impl Binary {
 
 impl ScalarFnVTable for Binary {
     type Options = Operator;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.binary");
@@ -180,8 +182,50 @@ impl ScalarFnVTable for Binary {
         }
     }
 
-    fn simplify_untyped(
+    fn validity(
         &self,
+        operator: &Operator,
+        expression: &Expression,
+    ) -> VortexResult<Option<Expression>> {
+        let lhs = expression.child(0).validity()?;
+        let rhs = expression.child(1).validity()?;
+
+        Ok(match operator {
+            // AND and OR are kleene logic.
+            Operator::And => None,
+            Operator::Or => None,
+            _ => {
+                // All other binary operators are null if either side is null.
+                Some(and(lhs, rhs))
+            }
+        })
+    }
+
+    fn is_strict(&self, operator: &Operator) -> bool {
+        // Kleene AND/OR is not strict (`false AND null = false`, `true OR null = true`), which is
+        // consistent with `validity` returning `None` for these operators above.
+        !matches!(operator, Operator::And | Operator::Or)
+    }
+
+    fn is_infallible(&self, operator: &Operator) -> bool {
+        // Arithmetic operations could be better modelled here.
+        matches!(
+            operator,
+            Operator::Eq
+                | Operator::NotEq
+                | Operator::Gt
+                | Operator::Gte
+                | Operator::Lt
+                | Operator::Lte
+                | Operator::And
+                | Operator::Or
+        )
+    }
+}
+
+impl OptimizeVTable<Binary> for Binary {
+    fn simplify_untyped(
+        _vtable: &Self,
         operator: &Operator,
         expr: &Expression,
     ) -> VortexResult<Option<Expression>> {
@@ -229,7 +273,7 @@ impl ScalarFnVTable for Binary {
     }
 
     fn simplify(
-        &self,
+        _vtable: &Self,
         operator: &Operator,
         expr: &Expression,
         ctx: &dyn SimplifyCtx,
@@ -247,46 +291,6 @@ impl ScalarFnVTable for Binary {
         }
 
         Ok(None)
-    }
-
-    fn validity(
-        &self,
-        operator: &Operator,
-        expression: &Expression,
-    ) -> VortexResult<Option<Expression>> {
-        let lhs = expression.child(0).validity()?;
-        let rhs = expression.child(1).validity()?;
-
-        Ok(match operator {
-            // AND and OR are kleene logic.
-            Operator::And => None,
-            Operator::Or => None,
-            _ => {
-                // All other binary operators are null if either side is null.
-                Some(and(lhs, rhs))
-            }
-        })
-    }
-
-    fn is_strict(&self, operator: &Operator) -> bool {
-        // Kleene AND/OR is not strict (`false AND null = false`, `true OR null = true`), which is
-        // consistent with `validity` returning `None` for these operators above.
-        !matches!(operator, Operator::And | Operator::Or)
-    }
-
-    fn is_infallible(&self, operator: &Operator) -> bool {
-        // Arithmetic operations could be better modelled here.
-        matches!(
-            operator,
-            Operator::Eq
-                | Operator::NotEq
-                | Operator::Gt
-                | Operator::Gte
-                | Operator::Lt
-                | Operator::Lte
-                | Operator::And
-                | Operator::Or
-        )
     }
 }
 

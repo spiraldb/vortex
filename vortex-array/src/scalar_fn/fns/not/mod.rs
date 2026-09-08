@@ -45,6 +45,7 @@ impl Not {
 
 impl ScalarFnVTable for Not {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.not");

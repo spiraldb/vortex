@@ -70,6 +70,7 @@ impl InnerProduct {
 
 impl ScalarFnVTable for InnerProduct {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.tensor.inner_product");

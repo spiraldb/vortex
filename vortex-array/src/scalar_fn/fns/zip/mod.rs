@@ -33,6 +33,7 @@ use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::EmptyOptions;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
@@ -68,6 +69,7 @@ impl Zip {
 
 impl ScalarFnVTable for Zip {
     type Options = EmptyOptions;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.zip");
@@ -156,9 +158,20 @@ impl ScalarFnVTable for Zip {
         zip_impl(&if_true, &if_false, &mask, ctx)
     }
 
+    fn is_strict(&self, _options: &Self::Options) -> bool {
+        // A null in an unselected branch does not force a null output.
+        false
+    }
+
+    fn is_infallible(&self, _options: &Self::Options) -> bool {
+        true
+    }
+}
+
+impl OptimizeVTable<Zip> for Zip {
     fn simplify(
-        &self,
-        _options: &Self::Options,
+        _vtable: &Self,
+        _options: &EmptyOptions,
         expr: &Expression,
         _ctx: &dyn SimplifyCtx,
     ) -> VortexResult<Option<Expression>> {
@@ -175,15 +188,6 @@ impl ScalarFnVTable for Zip {
         }
 
         Ok(None)
-    }
-
-    fn is_strict(&self, _options: &Self::Options) -> bool {
-        // A null in an unselected branch does not force a null output.
-        false
-    }
-
-    fn is_infallible(&self, _options: &Self::Options) -> bool {
-        true
     }
 }
 

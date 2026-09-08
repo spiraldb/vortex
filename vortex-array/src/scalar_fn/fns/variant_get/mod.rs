@@ -57,6 +57,7 @@ impl VariantGet {
 
 impl ScalarFnVTable for VariantGet {
     type Options = VariantGetOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.variant_get");

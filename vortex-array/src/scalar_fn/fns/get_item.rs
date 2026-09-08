@@ -32,6 +32,7 @@ use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::EmptyOptions;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ReduceNode;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
@@ -59,6 +60,7 @@ impl GetItem {
 
 impl ScalarFnVTable for GetItem {
     type Options = FieldName;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.get_item");
@@ -162,7 +164,22 @@ impl ScalarFnVTable for GetItem {
         }
     }
 
-    fn reduce<T: ReduceNode>(&self, field_name: &FieldName, node: &T) -> VortexResult<Option<T>> {
+    fn is_strict(&self, _field_name: &FieldName) -> bool {
+        true
+    }
+
+    fn is_infallible(&self, _field_name: &FieldName) -> bool {
+        // If this type-checks, it is infallible.
+        true
+    }
+}
+
+impl OptimizeVTable<GetItem> for GetItem {
+    fn reduce<T: ReduceNode>(
+        _vtable: &Self,
+        field_name: &FieldName,
+        node: &T,
+    ) -> VortexResult<Option<T>> {
         let child = node.child(0);
         if let Some(child_fn) = child.scalar_fn()
             && let Some(pack) = child_fn.as_opt::<Pack>()
@@ -185,7 +202,7 @@ impl ScalarFnVTable for GetItem {
     }
 
     fn simplify_untyped(
-        &self,
+        _vtable: &Self,
         field_name: &FieldName,
         expr: &Expression,
     ) -> VortexResult<Option<Expression>> {
@@ -220,15 +237,6 @@ impl ScalarFnVTable for GetItem {
         }
 
         Ok(None)
-    }
-
-    fn is_strict(&self, _field_name: &FieldName) -> bool {
-        true
-    }
-
-    fn is_infallible(&self, _field_name: &FieldName) -> bool {
-        // If this type-checks, it is infallible.
-        true
     }
 }
 

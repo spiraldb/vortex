@@ -160,6 +160,7 @@ impl SpatialLength {
 
 impl ScalarFnVTable for SpatialLength {
     type Options = EmptyOptions;
+    type OptimizeVTable = ();
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.st.length");

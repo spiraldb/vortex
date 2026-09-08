@@ -28,6 +28,7 @@ use crate::expr::lit;
 use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ReduceNode;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
@@ -48,6 +49,7 @@ pub struct Merge;
 
 impl ScalarFnVTable for Merge {
     type Options = DuplicateHandling;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.merge");
@@ -173,7 +175,29 @@ impl ScalarFnVTable for Merge {
         )
     }
 
-    fn reduce<T: ReduceNode>(&self, options: &Self::Options, node: &T) -> VortexResult<Option<T>> {
+    fn validity(
+        &self,
+        _options: &Self::Options,
+        _expression: &Expression,
+    ) -> VortexResult<Option<Expression>> {
+        Ok(Some(lit(true)))
+    }
+
+    fn is_strict(&self, _options: &Self::Options) -> bool {
+        true
+    }
+
+    fn is_infallible(&self, instance: &Self::Options) -> bool {
+        !matches!(instance, DuplicateHandling::Error)
+    }
+}
+
+impl OptimizeVTable<Merge> for Merge {
+    fn reduce<T: ReduceNode>(
+        _vtable: &Self,
+        options: &DuplicateHandling,
+        node: &T,
+    ) -> VortexResult<Option<T>> {
         let mut names = Vec::with_capacity(node.child_count() * 2);
         let mut children = Vec::with_capacity(node.child_count() * 2);
         let mut duplicate_names = HashSet::<_>::new();
@@ -224,22 +248,6 @@ impl ScalarFnVTable for Merge {
         )?;
 
         Ok(Some(pack_expr))
-    }
-
-    fn validity(
-        &self,
-        _options: &Self::Options,
-        _expression: &Expression,
-    ) -> VortexResult<Option<Expression>> {
-        Ok(Some(lit(true)))
-    }
-
-    fn is_strict(&self, _options: &Self::Options) -> bool {
-        true
-    }
-
-    fn is_infallible(&self, instance: &Self::Options) -> bool {
-        !matches!(instance, DuplicateHandling::Error)
     }
 }
 

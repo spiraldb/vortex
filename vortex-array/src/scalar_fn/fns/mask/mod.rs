@@ -30,6 +30,7 @@ use crate::scalar_fn::Arity;
 use crate::scalar_fn::ChildName;
 use crate::scalar_fn::EmptyOptions;
 use crate::scalar_fn::ExecutionArgs;
+use crate::scalar_fn::OptimizeVTable;
 use crate::scalar_fn::ScalarFnId;
 use crate::scalar_fn::ScalarFnVTable;
 use crate::scalar_fn::ScalarFnVTableExt;
@@ -57,6 +58,7 @@ impl Mask {
 
 impl ScalarFnVTable for Mask {
     type Options = EmptyOptions;
+    type OptimizeVTable = Self;
 
     fn id(&self) -> ScalarFnId {
         static ID: CachedId = CachedId::new("vortex.mask");
@@ -112,9 +114,26 @@ impl ScalarFnVTable for Mask {
         execute_canonical(input, mask_array, ctx)
     }
 
-    fn simplify(
+    fn validity(
         &self,
         _options: &Self::Options,
+        expression: &Expression,
+    ) -> VortexResult<Option<Expression>> {
+        Ok(Some(and(
+            expression.child(0).validity()?,
+            expression.child(1).clone(),
+        )))
+    }
+
+    fn is_strict(&self, _options: &Self::Options) -> bool {
+        true
+    }
+}
+
+impl OptimizeVTable<Mask> for Mask {
+    fn simplify(
+        _vtable: &Self,
+        _options: &EmptyOptions,
         expr: &Expression,
         ctx: &dyn SimplifyCtx,
     ) -> VortexResult<Option<Expression>> {
@@ -135,21 +154,6 @@ impl ScalarFnVTable for Mask {
             let input_dtype = ctx.return_dtype(expr.child(0))?;
             Ok(Some(lit(Scalar::null(input_dtype.as_nullable()))))
         }
-    }
-
-    fn validity(
-        &self,
-        _options: &Self::Options,
-        expression: &Expression,
-    ) -> VortexResult<Option<Expression>> {
-        Ok(Some(and(
-            expression.child(0).validity()?,
-            expression.child(1).clone(),
-        )))
-    }
-
-    fn is_strict(&self, _options: &Self::Options) -> bool {
-        true
     }
 }
 
