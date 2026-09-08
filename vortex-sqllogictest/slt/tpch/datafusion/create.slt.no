@@ -1,6 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+# Keep fixture paths under WORK_DIR so EXPLAIN output can normalize them.
+# Plans ignore byte ranges because they depend on the generated fixture sizes.
+system ok
+cp slt/tpch/data/*.vortex "$WORK_DIR/"
+
 statement ok
 CREATE EXTERNAL TABLE IF NOT EXISTS supplier (
         s_suppkey  BIGINT,
@@ -12,7 +17,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS supplier (
         s_comment VARCHAR,
         s_rev VARCHAR,
 ) STORED AS VORTEX 
-LOCATION 'slt/tpch/data/supplier.vortex';
+LOCATION '${WORK_DIR}/supplier.vortex';
 
 statement ok
 CREATE EXTERNAL TABLE IF NOT EXISTS part (
@@ -27,7 +32,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS part (
         p_comment VARCHAR,
         p_rev VARCHAR,
 ) STORED AS VORTEX 
-LOCATION 'slt/tpch/data/part.vortex';
+LOCATION '${WORK_DIR}/part.vortex';
 
 
 statement ok
@@ -39,7 +44,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS partsupp (
         ps_comment VARCHAR,
         ps_rev VARCHAR,
 ) STORED AS VORTEX 
-LOCATION 'slt/tpch/data/partsupp.vortex';
+LOCATION '${WORK_DIR}/partsupp.vortex';
 
 statement ok
 CREATE EXTERNAL TABLE IF NOT EXISTS customer (
@@ -53,7 +58,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS customer (
         c_comment VARCHAR,
         c_rev VARCHAR,
 ) STORED AS VORTEX 
-LOCATION 'slt/tpch/data/customer.vortex';
+LOCATION '${WORK_DIR}/customer.vortex';
 
 statement ok
 CREATE EXTERNAL TABLE IF NOT EXISTS orders (
@@ -68,7 +73,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS orders (
         o_comment VARCHAR,
         o_rev VARCHAR,
 ) STORED AS VORTEX 
-LOCATION 'slt/tpch/data/orders.vortex';
+LOCATION '${WORK_DIR}/orders.vortex';
 
 statement ok
 CREATE EXTERNAL TABLE IF NOT EXISTS lineitem (
@@ -90,7 +95,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS lineitem (
         l_comment VARCHAR,
         l_rev VARCHAR,
 ) STORED AS VORTEX 
-LOCATION 'slt/tpch/data/lineitem.vortex';
+LOCATION '${WORK_DIR}/lineitem.vortex';
 
 statement ok
 CREATE EXTERNAL TABLE IF NOT EXISTS nation (
@@ -100,7 +105,7 @@ CREATE EXTERNAL TABLE IF NOT EXISTS nation (
         n_comment VARCHAR,
         n_rev VARCHAR,
 ) STORED AS VORTEX
-LOCATION 'slt/tpch/data/nation.vortex';
+LOCATION '${WORK_DIR}/nation.vortex';
 
 statement ok
 CREATE EXTERNAL TABLE IF NOT EXISTS region (
@@ -109,4 +114,4 @@ CREATE EXTERNAL TABLE IF NOT EXISTS region (
         r_comment VARCHAR,
         r_rev VARCHAR,
 ) STORED AS VORTEX
-LOCATION 'slt/tpch/data/region.vortex';
+LOCATION '${WORK_DIR}/region.vortex';

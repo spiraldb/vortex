@@ -124,16 +124,16 @@ physical_plan
 06)----------AggregateExec: mode=Partial, gby=[supp_nation@0 as supp_nation, cust_nation@1 as cust_nation, l_year@2 as l_year], aggr=[sum(shipping.volume)]
 07)------------ProjectionExec: expr=[n_name@0 as supp_nation, n_name@1 as cust_nation, date_part(YEAR, l_shipdate@2) as l_year, l_extendedprice@3 * (1 - l_discount@4) as volume]
 08)--------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(n_nationkey@0, c_nationkey@3)], filter=n_name@0 = FRANCE AND n_name@1 = GERMANY OR n_name@0 = GERMANY AND n_name@1 = FRANCE, projection=[n_name@6, n_name@1, l_shipdate@4, l_extendedprice@2, l_discount@3]
-09)----------------DataSourceExec: file_groups={<slt:ignore>}, projection=[n_nationkey, n_name], file_type=vortex, predicate: n_name@1 = GERMANY OR n_name@1 = FRANCE
+09)----------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/nation.vortex]]}, projection=[n_nationkey, n_name], file_type=vortex, predicate: n_name@1 = GERMANY OR n_name@1 = FRANCE
 10)----------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(n_nationkey@0, s_nationkey@0)], projection=[l_extendedprice@3, l_discount@4, l_shipdate@5, c_nationkey@6, n_name@1]
-11)------------------DataSourceExec: file_groups={<slt:ignore>}, projection=[n_nationkey, n_name], file_type=vortex, predicate: n_name@1 = FRANCE OR n_name@1 = GERMANY
+11)------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/nation.vortex]]}, projection=[n_nationkey, n_name], file_type=vortex, predicate: n_name@1 = FRANCE OR n_name@1 = GERMANY
 12)------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(c_custkey@0, o_custkey@4)], projection=[s_nationkey@2, l_extendedprice@3, l_discount@4, l_shipdate@5, c_nationkey@1]
 13)--------------------CoalescePartitionsExec
-14)----------------------DataSourceExec: file_groups={<slt:ignore>}, projection=[c_custkey, c_nationkey], file_type=vortex
+14)----------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>]]}, projection=[c_custkey, c_nationkey], file_type=vortex
 15)--------------------HashJoinExec: mode=Partitioned, join_type=Inner, on=[(o_orderkey@0, l_orderkey@1)], projection=[s_nationkey@2, l_extendedprice@4, l_discount@5, l_shipdate@6, o_custkey@1]
 16)----------------------RepartitionExec: partitioning=Hash([o_orderkey@0], 4), input_partitions=4
-17)------------------------DataSourceExec: file_groups={<slt:ignore>}, projection=[o_orderkey, o_custkey], file_type=vortex
+17)------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>]]}, projection=[o_orderkey, o_custkey], file_type=vortex
 18)----------------------RepartitionExec: partitioning=Hash([l_orderkey@1], 4), input_partitions=4
 19)------------------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s_suppkey@0, l_suppkey@1)], projection=[s_nationkey@1, l_orderkey@2, l_extendedprice@4, l_discount@5, l_shipdate@6]
-20)--------------------------DataSourceExec: file_groups={<slt:ignore>}, projection=[s_suppkey, s_nationkey], file_type=vortex
-21)--------------------------DataSourceExec: file_groups={<slt:ignore>}, projection=[l_orderkey, l_suppkey, l_extendedprice, l_discount, l_shipdate], file_type=vortex, predicate: l_shipdate@10 >= 1995-01-01 AND l_shipdate@10 <= 1996-12-31
+20)--------------------------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/supplier.vortex]]}, projection=[s_suppkey, s_nationkey], file_type=vortex
+21)--------------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>]]}, projection=[l_orderkey, l_suppkey, l_extendedprice, l_discount, l_shipdate], file_type=vortex, predicate: l_shipdate@10 >= 1995-01-01 AND l_shipdate@10 <= 1996-12-31
