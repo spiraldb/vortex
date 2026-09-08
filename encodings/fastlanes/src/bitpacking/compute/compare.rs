@@ -14,6 +14,7 @@
 use fastlanes::BitPacking;
 use fastlanes::BitPackingCompare;
 use fastlanes::FastLanesComparable;
+use num_traits::CheckedAdd;
 use vortex_array::ArrayRef;
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
@@ -28,6 +29,7 @@ use vortex_error::VortexResult;
 
 use crate::BitPacked;
 use crate::bitpacking::compute::compare_fused::stream_compare_fused;
+use crate::bitpacking::compute::stream_predicate::stream_predicate;
 use crate::unpack_iter::BitPacked as BitPackedIter;
 
 impl CompareKernel for BitPacked {
@@ -65,8 +67,11 @@ impl CompareKernel for BitPacked {
 
 /// Compare every value against the constant via the fused FastLanes `unpack_cmp` kernel.
 ///
-/// `NativePType::is_eq` / `is_lt` etc. provide total comparison (matching the primitive between
-/// kernel's dispatch shape). `NotEq` has no direct method, so use `!is_eq`.
+/// The fused kernel is monomorphised per packed width, type and predicate, so only `==` and `<`
+/// are handed to it. The other operators are their complements (`!=`, `>=`) or the complement
+/// after shifting the constant by one (`<=` is `< rhs + 1`, `>` is `!(< rhs + 1)`); when the
+/// shift would overflow, the answer is the same for every value and the scalar streaming path
+/// handles it.
 fn compare_constant_typed<T>(
     lhs: ArrayView<'_, BitPacked>,
     rhs: T,
@@ -76,30 +81,30 @@ fn compare_constant_typed<T>(
 ) -> VortexResult<ArrayRef>
 where
     T: NativePType
+        + CheckedAdd
         + BitPackedIter
         + FastLanesComparable<Bitpacked = <T as PhysicalPType>::Physical>,
     <T as PhysicalPType>::Physical: BitPacking + NativePType + BitPackingCompare,
 {
-    match operator {
+    let (rhs, negate) = match operator {
         CompareOperator::Eq => {
-            stream_compare_fused::<T, _>(lhs, rhs, nullability, |a, b| a.is_eq(b), ctx)
+            return stream_compare_fused::<T, _>(lhs, rhs, nullability, T::is_eq, false, ctx);
         }
         CompareOperator::NotEq => {
-            stream_compare_fused::<T, _>(lhs, rhs, nullability, |a, b| !a.is_eq(b), ctx)
+            return stream_compare_fused::<T, _>(lhs, rhs, nullability, T::is_eq, true, ctx);
         }
-        CompareOperator::Lt => {
-            stream_compare_fused::<T, _>(lhs, rhs, nullability, |a, b| a.is_lt(b), ctx)
-        }
-        CompareOperator::Lte => {
-            stream_compare_fused::<T, _>(lhs, rhs, nullability, |a, b| a.is_le(b), ctx)
-        }
-        CompareOperator::Gt => {
-            stream_compare_fused::<T, _>(lhs, rhs, nullability, |a, b| a.is_gt(b), ctx)
-        }
-        CompareOperator::Gte => {
-            stream_compare_fused::<T, _>(lhs, rhs, nullability, |a, b| a.is_ge(b), ctx)
-        }
-    }
+        CompareOperator::Lt => (rhs, false),
+        CompareOperator::Gte => (rhs, true),
+        CompareOperator::Lte => match rhs.checked_add(&T::one()) {
+            Some(bound) => (bound, false),
+            None => return stream_predicate::<T, _>(lhs, nullability, |v| v.is_le(rhs), ctx),
+        },
+        CompareOperator::Gt => match rhs.checked_add(&T::one()) {
+            Some(bound) => (bound, true),
+            None => return stream_predicate::<T, _>(lhs, nullability, |v| v.is_gt(rhs), ctx),
+        },
+    };
+    stream_compare_fused::<T, _>(lhs, rhs, nullability, T::is_lt, negate, ctx)
 }
 
 #[cfg(test)]
@@ -115,9 +120,12 @@ mod tests {
     use vortex_array::arrays::slice::SliceKernel;
     use vortex_array::assert_arrays_eq;
     use vortex_array::builtins::ArrayBuiltins;
+    use vortex_array::dtype::NativePType;
+    use vortex_array::scalar::Scalar;
     use vortex_array::scalar_fn::fns::binary::CompareKernel;
     use vortex_array::scalar_fn::fns::operators::CompareOperator;
     use vortex_array::scalar_fn::fns::operators::Operator;
+    use vortex_error::VortexExpect;
     use vortex_error::VortexResult;
     use vortex_session::VortexSession;
 
@@ -153,6 +161,50 @@ mod tests {
         assert_arrays_eq!(result, BoolArray::from_iter(expected), &mut ctx);
     }
 
+    /// Constants at the edges of the type: `<=` and `>` shift the constant by one, which is not
+    /// possible at `MAX`, and `<` / `>=` against `MIN` are trivially all-false / all-true. Every
+    /// operator must agree with the primitive fallback for each of them.
+    #[rstest]
+    #[case::unsigned(
+        (0..2048u32).map(|i| (i % 128) as u8).collect(),
+        vec![0, 1, 127, 128, u8::MAX]
+    )]
+    #[case::signed(
+        (0..2048i32).map(|i| (i % 128) as i8).collect(),
+        vec![i8::MIN, -1, 0, 1, 127, i8::MAX]
+    )]
+    fn constant_at_type_bounds<T: NativePType + Into<Scalar>>(
+        #[case] values: Vec<T>,
+        #[case] constants: Vec<T>,
+    ) -> VortexResult<()> {
+        let mut ctx = SESSION.create_execution_ctx();
+        let prim = PrimitiveArray::from_iter(values);
+        let packed = BitPackedData::encode(&prim.clone().into_array(), 7, &mut ctx)?;
+        for constant in constants {
+            let rhs = ConstantArray::new(constant, prim.len()).into_array();
+            for op in [
+                CompareOperator::Eq,
+                CompareOperator::NotEq,
+                CompareOperator::Lt,
+                CompareOperator::Lte,
+                CompareOperator::Gt,
+                CompareOperator::Gte,
+            ] {
+                let got =
+                    <BitPacked as CompareKernel>::compare(packed.as_view(), &rhs, op, &mut ctx)?
+                        .vortex_expect("compare kernel must engage")
+                        .execute::<BoolArray>(&mut ctx)?;
+                let want = prim
+                    .clone()
+                    .into_array()
+                    .binary(rhs.clone(), Operator::from(op))?
+                    .execute::<BoolArray>(&mut ctx)?;
+                assert_arrays_eq!(got, want, &mut ctx);
+            }
+        }
+        Ok(())
+    }
+
     /// Sweep every native int type across several bit-widths. 2048 elements spans two
     /// FastLanes blocks, exercising the per-type monomorphised inner loop. The kernel is
     /// invoked *directly* and asserted `Some`, proving the streaming path engages (rather
@@ -170,7 +222,14 @@ mod tests {
                     let packed = BitPackedData::encode(&prim.clone().into_array(), bw, &mut ctx)?;
                     let rhs_val = (cap.min(2048) / 2) as $T;
                     let rhs = ConstantArray::new(rhs_val, prim.len()).into_array();
-                    for op in [CompareOperator::Eq, CompareOperator::Lt, CompareOperator::Gte] {
+                    for op in [
+                        CompareOperator::Eq,
+                        CompareOperator::NotEq,
+                        CompareOperator::Lt,
+                        CompareOperator::Lte,
+                        CompareOperator::Gt,
+                        CompareOperator::Gte,
+                    ] {
                         let got = <BitPacked as CompareKernel>::compare(
                             packed.as_view(), &rhs, op, &mut ctx,
                         )?
