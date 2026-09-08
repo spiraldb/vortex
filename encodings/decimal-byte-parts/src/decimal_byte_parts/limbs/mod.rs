@@ -16,6 +16,7 @@
 //! 64-bit window of the magnitude.
 
 use vortex_array::ArrayRef;
+use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::PrimitiveArray;
@@ -33,6 +34,7 @@ use vortex_buffer::BufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
+use vortex_mask::Mask;
 
 /// The maximum number of lower parts an encoded decimal can carry.
 ///
@@ -86,11 +88,13 @@ pub(crate) fn assembled_values_type(
 /// Values narrower than 128 bits are already a single signed part, so they are returned
 /// with no lower parts. `i128` values split into an `i64` MSP and one lower part, `i256`
 /// values into an `i64` MSP and three lower parts.
+/// Lower parts are non-nullable, with zeroes at null positions so arbitrary null-slot bytes
+/// do not affect their compression. The MSP retains the decimal's validity.
 ///
 /// # Errors
 ///
-/// Returns an error if the array's validity cannot be derived.
-pub fn split_decimal(decimal: &DecimalArray) -> VortexResult<DecimalParts> {
+/// Returns an error if the array's validity cannot be derived or executed.
+pub fn split_decimal(decimal: &DecimalArray, ctx: &mut ExecutionCtx) -> VortexResult<DecimalParts> {
     let validity = decimal.validity()?;
     Ok(match decimal.values_type() {
         DecimalType::I8 => DecimalParts::flat(decimal.buffer::<i8>(), validity),
@@ -98,11 +102,13 @@ pub fn split_decimal(decimal: &DecimalArray) -> VortexResult<DecimalParts> {
         DecimalType::I32 => DecimalParts::flat(decimal.buffer::<i32>(), validity),
         DecimalType::I64 => DecimalParts::flat(decimal.buffer::<i64>(), validity),
         DecimalType::I128 => {
-            let (msp, lower) = split_i128(&decimal.buffer::<i128>());
+            let mask = validity.execute_mask(decimal.len(), ctx)?;
+            let (msp, lower) = split_i128(&decimal.buffer::<i128>(), &mask);
             DecimalParts::new(msp, [lower], validity)
         }
         DecimalType::I256 => {
-            let (msp, lower) = split_i256(&decimal.buffer::<i256>());
+            let mask = validity.execute_mask(decimal.len(), ctx)?;
+            let (msp, lower) = split_i256(&decimal.buffer::<i256>(), &mask);
             DecimalParts::new(msp, lower, validity)
         }
     })
@@ -249,32 +255,71 @@ impl DecimalParts {
     clippy::cast_sign_loss,
     reason = "splitting a wide integer into 64-bit windows truncates by construction"
 )]
-fn split_i128(values: &Buffer<i128>) -> (Buffer<i64>, Buffer<u64>) {
-    let mut msp = BufferMut::<i64>::with_capacity(values.len());
-    let mut lower = BufferMut::<u64>::with_capacity(values.len());
-    for value in values.iter() {
-        msp.push((value >> LOWER_PART_BITS) as i64);
-        lower.push(*value as u64);
+fn split_i128(values: &Buffer<i128>, validity: &Mask) -> (Buffer<i64>, Buffer<u64>) {
+    if validity.all_true() {
+        let mut msp = BufferMut::<i64>::with_capacity(values.len());
+        let mut lower = BufferMut::<u64>::with_capacity(values.len());
+        for value in values.iter() {
+            msp.push((value >> LOWER_PART_BITS) as i64);
+            lower.push(*value as u64);
+        }
+        return (msp.freeze(), lower.freeze());
+    }
+
+    let mut msp = BufferMut::<i64>::zeroed(values.len());
+    let mut lower = BufferMut::<u64>::zeroed(values.len());
+    if let Mask::Values(valid) = validity {
+        let msp = msp.as_mut_slice();
+        let lower = lower.as_mut_slice();
+        valid.bit_buffer().for_each_set_index(|i| {
+            let value = values[i];
+            msp[i] = (value >> LOWER_PART_BITS) as i64;
+            lower[i] = value as u64;
+        });
     }
     (msp.freeze(), lower.freeze())
 }
 
 /// The inverse of [`assemble_i256`] at `K == MAX_LOWER_PARTS`: word 3 becomes the signed MSP,
 /// and words 2, 1, 0 become the lower parts, most significant first.
-fn split_i256(values: &Buffer<i256>) -> (Buffer<i64>, [Buffer<u64>; MAX_LOWER_PARTS]) {
-    let mut msp = BufferMut::<i64>::with_capacity(values.len());
-    let mut lower = std::array::from_fn::<_, MAX_LOWER_PARTS, _>(|_| {
-        BufferMut::<u64>::with_capacity(values.len())
-    });
-    for value in values.iter() {
-        let words = i256_to_words(*value);
-        msp.push(words[MAX_LOWER_PARTS].cast_signed());
-        for (part, word) in lower
-            .iter_mut()
-            .zip(words.iter().take(MAX_LOWER_PARTS).rev())
-        {
-            part.push(*word);
+fn split_i256(
+    values: &Buffer<i256>,
+    validity: &Mask,
+) -> (Buffer<i64>, [Buffer<u64>; MAX_LOWER_PARTS]) {
+    if validity.all_true() {
+        let mut msp = BufferMut::<i64>::with_capacity(values.len());
+        let mut lower = std::array::from_fn::<_, MAX_LOWER_PARTS, _>(|_| {
+            BufferMut::<u64>::with_capacity(values.len())
+        });
+        for value in values.iter() {
+            let words = i256_to_words(*value);
+            msp.push(words[MAX_LOWER_PARTS].cast_signed());
+            for (part, word) in lower
+                .iter_mut()
+                .zip(words.iter().take(MAX_LOWER_PARTS).rev())
+            {
+                part.push(*word);
+            }
         }
+        return (msp.freeze(), lower.map(BufferMut::freeze));
+    }
+
+    let mut msp = BufferMut::<i64>::zeroed(values.len());
+    let mut lower =
+        std::array::from_fn::<_, MAX_LOWER_PARTS, _>(|_| BufferMut::<u64>::zeroed(values.len()));
+    if let Mask::Values(valid) = validity {
+        let msp = msp.as_mut_slice();
+        let mut lower = lower.each_mut().map(BufferMut::as_mut_slice);
+        valid.bit_buffer().for_each_set_index(|i| {
+            let words = i256_to_words(values[i]);
+            msp[i] = words[MAX_LOWER_PARTS].cast_signed();
+            for (part, word) in lower
+                .iter_mut()
+                .zip(words.iter().take(MAX_LOWER_PARTS).rev())
+            {
+                part[i] = *word;
+            }
+        });
     }
     (msp.freeze(), lower.map(BufferMut::freeze))
 }
@@ -330,110 +375,4 @@ fn assemble_i256<const K: usize>(msp: &PrimitiveArray, lower: [&[u64]; K]) -> Bu
 }
 
 #[cfg(test)]
-mod tests {
-    use rstest::rstest;
-    use vortex_array::VortexSessionExecute;
-    use vortex_array::array_session;
-    use vortex_array::arrays::DecimalArray;
-    use vortex_array::dtype::DecimalDType;
-    use vortex_array::dtype::i256;
-    use vortex_array::validity::Validity;
-    use vortex_buffer::Buffer;
-    use vortex_buffer::buffer;
-    use vortex_error::VortexResult;
-
-    use super::*;
-
-    fn round_trip(decimal: DecimalArray) -> VortexResult<DecimalArray> {
-        let mut ctx = array_session().create_execution_ctx();
-        let parts = split_decimal(&decimal)?;
-        let msp = parts.msp.execute::<PrimitiveArray>(&mut ctx)?;
-        let lower = parts
-            .lower_parts
-            .into_iter()
-            .map(|part| part.execute::<PrimitiveArray>(&mut ctx))
-            .collect::<VortexResult<Vec<_>>>()?;
-        assemble_decimal(&msp, &lower, decimal.decimal_dtype())
-    }
-
-    #[rstest]
-    #[case::zero(0)]
-    #[case::one(1)]
-    #[case::minus_one(-1)]
-    #[case::limb_boundary(1i128 << 64)]
-    #[case::just_below_limb_boundary((1i128 << 64) - 1)]
-    #[case::negative_limb_boundary(-(1i128 << 64))]
-    #[case::max(i128::MAX)]
-    #[case::min(i128::MIN)]
-    fn test_split_assemble_i128(#[case] value: i128) -> VortexResult<()> {
-        let decimal = DecimalArray::new(
-            Buffer::from(vec![value]),
-            DecimalDType::new(38, 2),
-            Validity::NonNullable,
-        );
-        let round_tripped = round_trip(decimal)?;
-        assert_eq!(round_tripped.buffer::<i128>().as_slice(), &[value]);
-        Ok(())
-    }
-
-    #[rstest]
-    #[case::zero(i256::ZERO)]
-    #[case::one(i256::ONE)]
-    #[case::minus_one(i256::ZERO - i256::ONE)]
-    #[case::max(i256::MAX)]
-    #[case::min(i256::MIN)]
-    #[case::word_1(i256::from_parts(1u128 << 64, 0))]
-    #[case::word_2(i256::from_parts(0, 1))]
-    #[case::word_3(i256::from_parts(0, 1i128 << 64))]
-    #[case::mixed(i256::from_parts(u128::MAX, -3))]
-    fn test_split_assemble_i256(#[case] value: i256) -> VortexResult<()> {
-        let decimal = DecimalArray::new(
-            Buffer::from(vec![value]),
-            DecimalDType::new(76, 2),
-            Validity::NonNullable,
-        );
-        let round_tripped = round_trip(decimal)?;
-        assert_eq!(round_tripped.buffer::<i256>().as_slice(), &[value]);
-        Ok(())
-    }
-
-    #[test]
-    fn test_split_narrow_decimal_has_no_lower_parts() -> VortexResult<()> {
-        let decimal = DecimalArray::new(
-            buffer![1i32, 2, 3],
-            DecimalDType::new(9, 2),
-            Validity::NonNullable,
-        );
-        let parts = split_decimal(&decimal)?;
-        assert!(parts.lower_parts.is_empty());
-        assert_eq!(parts.msp.dtype().as_ptype(), PType::I32);
-        Ok(())
-    }
-
-    #[test]
-    fn test_split_i256_part_count_and_types() -> VortexResult<()> {
-        let decimal = DecimalArray::new(
-            Buffer::from(vec![i256::from_i128(i128::MAX), i256::MIN]),
-            DecimalDType::new(76, 0),
-            Validity::NonNullable,
-        );
-        let parts = split_decimal(&decimal)?;
-        assert_eq!(parts.lower_parts.len(), MAX_LOWER_PARTS);
-        assert_eq!(parts.msp.dtype().as_ptype(), PType::I64);
-        for part in &parts.lower_parts {
-            assert_eq!(part.dtype(), &LOWER_PART_DTYPE);
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn test_assembled_values_type() -> VortexResult<()> {
-        assert_eq!(assembled_values_type(PType::I32, 0)?, DecimalType::I32);
-        assert_eq!(assembled_values_type(PType::I64, 1)?, DecimalType::I128);
-        assert_eq!(assembled_values_type(PType::I8, 1)?, DecimalType::I128);
-        assert_eq!(assembled_values_type(PType::I8, 2)?, DecimalType::I256);
-        assert_eq!(assembled_values_type(PType::I64, 3)?, DecimalType::I256);
-        assert!(assembled_values_type(PType::I64, 4).is_err());
-        Ok(())
-    }
-}
+mod tests;
