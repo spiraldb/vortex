@@ -23,6 +23,9 @@ use vortex_duckdb::duckdb::LogicalTypeRef;
 use vortex_duckdb::duckdb::Value;
 use vortex_duckdb::initialize;
 
+use crate::explain::is_explain;
+use crate::explain::render_explain_rows;
+
 #[derive(Debug, thiserror::Error)]
 pub enum DuckDBTestError {
     #[error("Other: {0}")]
@@ -187,6 +190,14 @@ impl AsyncDB for DuckDB {
                     rows.push(current_row);
                 }
             }
+
+            // JSON plans are rendered as DataFusion-style text so that expected plans in
+            // `.slt` files stay readable; see `crate::explain`.
+            let rows = if is_explain(sql) {
+                render_explain_rows(rows)
+            } else {
+                rows
+            };
 
             Ok(DBOutput::Rows { types, rows })
         }

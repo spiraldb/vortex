@@ -27,7 +27,7 @@ Hi
 query TT
 EXPLAIN (FORMAT json) SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex';
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 # we need an "order by" for test output to be deterministic
 query I
@@ -41,7 +41,7 @@ SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex' ORDER BY strlen(str);
 query TT
 EXPLAIN (FORMAT json) SELECT strlen(str) AS l FROM '${WORK_DIR}/pe-pushdown.vortex';
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 query I
 SELECT strlen(str) AS l FROM '${WORK_DIR}/pe-pushdown.vortex' ORDER BY strlen(str);
@@ -56,7 +56,7 @@ EXPLAIN (FORMAT json)
 SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex'
 WHERE strlen(str) > 2;
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 query I
 SELECT strlen(str) AS l FROM '${WORK_DIR}/pe-pushdown.vortex'
@@ -97,7 +97,7 @@ query TT
 EXPLAIN (FORMAT json)
 SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex' WHERE len(str) > 2;
 ----
-<!REGEX>:SELECT projections
+<!REGEX>:select_projections=
 
 # strlen with str, no pushdown
 query TI
@@ -111,7 +111,7 @@ query TT
 EXPLAIN (FORMAT json)
 SELECT str, strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex';
 ----
-<!REGEX>:SELECT projections
+<!REGEX>:select_projections=
 
 
 # pushdown of prefix() not supported
@@ -158,7 +158,7 @@ query TT
 EXPLAIN (FORMAT json)
 SELECT strlen(str), str || '!' FROM '${WORK_DIR}/pe-pushdown.vortex';
 ----
-<!REGEX>:SELECT projections
+<!REGEX>:select_projections=
 
 # strlen() and a different multi-arg use of str (substr): no pushdown
 query IT
@@ -219,7 +219,7 @@ query TT
 EXPLAIN (FORMAT JSON)
 SELECT strlen(str) FROM pe1;
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 # nested view
 query I
@@ -306,7 +306,7 @@ query TT
 EXPLAIN (FORMAT JSON)
 SELECT strlen(str) FROM pe2;
 ----
-<!REGEX>:SELECT projections
+<!REGEX>:select_projections=
 
 # cte -> view -> pe2
 query I
@@ -340,7 +340,7 @@ EXPLAIN (FORMAT JSON)
 SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex'
 WHERE str != '';
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 query I
 SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex'
@@ -394,7 +394,7 @@ query TT
 EXPLAIN (FORMAT JSON)
 SELECT strlen(str), strlen(str) * 2 FROM '${WORK_DIR}/pe-pushdown.vortex';
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 query I
 SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex'
@@ -406,10 +406,10 @@ query TT
 EXPLAIN (FORMAT json)
 SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex' WHERE str = 'Hello';
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 query TT
 EXPLAIN (FORMAT json)
 SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex' WHERE prefix(str, 'H');
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=

@@ -37,7 +37,8 @@ TPC-H scripts live under `slt/tpch/datafusion/` and `slt/tpch/duckdb/`, ClickBen
 `slt/clickbench/datafusion/` and `slt/clickbench/duckdb/`. Each engine has its own
 `create.slt.no`, `results/q*.slt.no` (`q1` to `q22` for TPC-H, `q0` to `q42` for ClickBench,
 matching the upstream numbering), and `drop.slt.no`. Its `tpch.slt`/`clickbench.slt` runs these
-against Vortex and asserts EXPLAIN output from the matching `plans/q*.slt.no`. Its `parquet.slt`
+against Vortex and asserts EXPLAIN output from the matching `plans/q*.slt.no` (DuckDB's JSON plans
+rendered as text, see below). Its `parquet.slt`
 runs the same queries against the original Parquet fixtures and checks the same expected results.
 DataFusion uses external tables; DuckDB uses views over files. The `FILE_FORMAT` substitution
 variable selects the format in each engine's table setup.
@@ -96,6 +97,27 @@ There are two complementary mechanisms:
   Hello,Hey
   ```
 
+## DuckDB plan rendering
+
+DuckDB's `EXPLAIN (FORMAT json)` output is rendered as text before it is compared or completed, so
+expected DuckDB plans read like the DataFusion ones. Each plan row `(kind, json)` becomes `kind` on
+its own line followed by one numbered line per operator, indented with `--` per level of nesting,
+with the operator's `extra_info` inlined as `key=value` pairs: keys are snake-cased, lists are
+bracketed, and empty entries are dropped. With `SET explain_output = 'all'`, the `logical_plan`,
+`logical_opt` and `physical_plan` follow each other:
+
+```text
+query TT
+EXPLAIN (FORMAT json) SELECT * FROM '${WORK_DIR}/explain.vortex';
+----
+physical_plan
+01)READ_VORTEX: function=Vortex Scan, projections=str, estimated_cardinality=3
+```
+
+The rendering (`src/explain.rs`) is deliberately lossy: it keeps the operator tree and what each
+operator does and drops the JSON syntax around it. DuckDB's default tree-drawing `EXPLAIN` output
+is passed through untouched.
+
 ## Regex assertions (DuckDB only)
 
 For volatile output such as `EXPLAIN` plans, the DuckDB validator supports regex directives,
@@ -110,7 +132,7 @@ one of these markers, the actual output (rows joined by newlines) is matched aga
 query TT
 EXPLAIN (FORMAT json) SELECT strlen(str) FROM '${WORK_DIR}/pe-pushdown.vortex';
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 ```
 
 These markers are only honored by the DuckDB validator, which is why regex-based plan assertions

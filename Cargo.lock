@@ -11558,6 +11558,8 @@ dependencies = [
  "indicatif",
  "regex",
  "rstest",
+ "serde",
+ "serde_json",
  "sqllogictest",
  "thiserror 2.0.20",
  "tokio",

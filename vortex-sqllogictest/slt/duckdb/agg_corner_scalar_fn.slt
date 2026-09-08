@@ -29,7 +29,7 @@ EXPLAIN SELECT sum(strlen(s)) FROM '${WORK_DIR}/c5.vortex';
 query TT
 EXPLAIN (FORMAT json) SELECT sum(strlen(s)) FROM '${WORK_DIR}/c5.vortex';
 ----
-<REGEX>:SELECT projections
+<REGEX>:select_projections=
 
 query I
 SELECT sum(strlen(s)) FROM '${WORK_DIR}/c5.vortex';

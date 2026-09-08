@@ -20,6 +20,8 @@ bigdecimal = { workspace = true }
 datafusion-sqllogictest = { workspace = true }
 regex = { workspace = true }
 rstest = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 sqllogictest = "0.29.1"
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

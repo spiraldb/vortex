@@ -11,14 +11,5 @@ COPY (SELECT * FROM (VALUES ('Hello'), ('Hi'), ('Hey')) AS t(str)) TO '${WORK_DI
 query TT
 EXPLAIN (FORMAT json) SELECT * FROM '${WORK_DIR}/explain.vortex';
 ----
-physical_plan [
-    {
-        "name": "READ_VORTEX",
-        "children": [],
-        "extra_info": {
-            "Function": "Vortex Scan",
-            "Projections": "str",
-            "Estimated Cardinality": "3"
-        }
-    }
-]
+physical_plan
+01)READ_VORTEX: function=Vortex Scan, projections=str, estimated_cardinality=3

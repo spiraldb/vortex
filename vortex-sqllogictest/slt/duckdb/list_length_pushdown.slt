@@ -19,13 +19,13 @@ INSERT INTO list_test VALUES
 statement ok
 COPY (SELECT * FROM list_test) TO '$__TEST_DIR__/list-length.vortex';
 
-# array_length projection is pushed into the scan. The "SELECT projections"
+# array_length projection is pushed into the scan. The select_projections=
 # marker in the Vortex EXPLAIN output indicates pushdown succeeded.
 query TT
 EXPLAIN (FORMAT json)
 SELECT array_length(a) FROM '$__TEST_DIR__/list-length.vortex';
 ----
-<REGEX>:"SELECT projections".*vortex\.list\.length
+<REGEX>:select_projections=.*vortex\.list\.length
 
 # len/length/array_length all map to list_length for list arguments.
 query I
@@ -41,7 +41,7 @@ query TT
 EXPLAIN (FORMAT json)
 SELECT len(a) FROM '$__TEST_DIR__/list-length.vortex';
 ----
-<REGEX>:"SELECT projections".*vortex\.list\.length
+<REGEX>:select_projections=.*vortex\.list\.length
 
 query I
 SELECT len(a) FROM '$__TEST_DIR__/list-length.vortex' ORDER BY id;
@@ -56,7 +56,7 @@ query TT
 EXPLAIN (FORMAT json)
 SELECT length(a) FROM '$__TEST_DIR__/list-length.vortex';
 ----
-<REGEX>:"SELECT projections".*vortex\.list\.length
+<REGEX>:select_projections=.*vortex\.list\.length
 
 query I
 SELECT length(a) FROM '$__TEST_DIR__/list-length.vortex' ORDER BY id;
@@ -72,7 +72,7 @@ query TT
 EXPLAIN (FORMAT json)
 SELECT array_length(b) FROM '$__TEST_DIR__/list-length.vortex';
 ----
-<REGEX>:"SELECT projections".*vortex\.list\.length
+<REGEX>:select_projections=.*vortex\.list\.length
 
 query I
 SELECT array_length(b) FROM '$__TEST_DIR__/list-length.vortex' ORDER BY id;
@@ -84,13 +84,13 @@ SELECT array_length(b) FROM '$__TEST_DIR__/list-length.vortex' ORDER BY id;
 0
 
 # array_length in WHERE is pushed into the scan as a complex filter: it shows up under the
-# scan's "Filters" as a list_length expression (and DuckDB drops its own filter operator). The
+# scan's filters= as a list_length expression (and DuckDB drops its own filter operator). The
 # SELECT here is a plain column, so `list.length` can only appear via the pushed-down filter.
 query TT
 EXPLAIN (FORMAT json) SELECT id FROM '$__TEST_DIR__/list-length.vortex'
 WHERE array_length(a) >= 4;
 ----
-<REGEX>:"Filters".*vortex\.list\.length
+<REGEX>:filters=.*vortex\.list\.length
 
 # array_length in WHERE on the same column used in the SELECT projection.
 query TT
@@ -98,7 +98,7 @@ EXPLAIN (FORMAT json)
 SELECT array_length(a) FROM '$__TEST_DIR__/list-length.vortex'
 WHERE array_length(a) >= 4;
 ----
-<REGEX>:"Filters".*vortex\.list\.length.*"SELECT projections".*vortex\.list\.length
+<REGEX>:filters=.*vortex\.list\.length.*select_projections=.*vortex\.list\.length
 
 query I
 SELECT array_length(a) FROM '$__TEST_DIR__/list-length.vortex'
@@ -114,7 +114,7 @@ EXPLAIN (FORMAT json)
 SELECT id, array_length(a) FROM '$__TEST_DIR__/list-length.vortex'
 WHERE array_length(b) >= 3;
 ----
-<REGEX>:"Filters".*vortex\.list\.length.*"SELECT projections".*vortex\.list\.length
+<REGEX>:filters=.*vortex\.list\.length.*select_projections=.*vortex\.list\.length
 
 query II
 SELECT id, array_length(a) FROM '$__TEST_DIR__/list-length.vortex'
@@ -125,14 +125,14 @@ ORDER BY id;
 4 5
 
 # array_length over different columns in both SELECT and WHERE is pushed on both sides: the
-# projection on `a` appears under "SELECT projections" and the filter on `b` under "Filters",
+# projection on `a` appears under select_projections= and the filter on `b` under filters=,
 # both as list_length expressions.
 query TT
 EXPLAIN (FORMAT json)
 SELECT array_length(a) FROM '$__TEST_DIR__/list-length.vortex'
 WHERE array_length(b) >= 2;
 ----
-<REGEX>:"Filters".*vortex\.list\.length.*"SELECT projections".*vortex\.list\.length
+<REGEX>:filters=.*vortex\.list\.length.*select_projections=.*vortex\.list\.length
 
 # array_length over different columns in both SELECT and WHERE.
 query TT
@@ -140,7 +140,7 @@ EXPLAIN (FORMAT json)
 SELECT array_length(a), array_length(b) FROM '$__TEST_DIR__/list-length.vortex'
 WHERE array_length(b) >= 2;
 ----
-<REGEX>:"Filters".*vortex\.list\.length.*"SELECT projections".*vortex\.list\.length
+<REGEX>:filters=.*vortex\.list\.length.*select_projections=.*vortex\.list\.length
 
 query II
 SELECT array_length(a), array_length(b) FROM '$__TEST_DIR__/list-length.vortex'
@@ -157,7 +157,7 @@ EXPLAIN (FORMAT json)
 SELECT len(a) FROM '$__TEST_DIR__/list-length.vortex'
 WHERE length(b) >= 2;
 ----
-<REGEX>:"Filters".*vortex\.list\.length.*"SELECT projections".*vortex\.list\.length
+<REGEX>:filters=.*vortex\.list\.length.*select_projections=.*vortex\.list\.length
 
 query I
 SELECT len(a) FROM '$__TEST_DIR__/list-length.vortex'
