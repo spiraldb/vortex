@@ -396,9 +396,6 @@ impl DefaultExpressionConvertor {
         };
         let mut comparisons = Vec::with_capacity(in_list.len());
         for element in in_list.list() {
-            if !supported_data_types(&element.data_type(schema)?) {
-                return Ok(None);
-            }
             let Some(element) = self.convert_expr(element, schema, input_dtype)? else {
                 return Ok(None);
             };
@@ -525,6 +522,9 @@ impl ExpressionConvertor for DefaultExpressionConvertor {
         expr: &Arc<dyn PhysicalExpr>,
         schema: &Schema,
     ) -> DFResult<Option<Expression>> {
+        if DynamicFilterTracking::classify(expr).contains_dynamic_filter() {
+            return Ok(None);
+        }
         for column in collect_columns(expr) {
             let field = schema.fields().get(column.index()).ok_or_else(|| {
                 exec_datafusion_err!(
@@ -541,9 +541,6 @@ impl ExpressionConvertor for DefaultExpressionConvertor {
                     field.name()
                 ));
             }
-        }
-        if DynamicFilterTracking::classify(expr).contains_dynamic_filter() {
-            return Ok(None);
         }
         let Ok(input_dtype) = self.session.arrow().from_arrow_schema(schema) else {
             return Ok(None);

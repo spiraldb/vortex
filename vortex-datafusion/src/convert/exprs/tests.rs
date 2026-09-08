@@ -23,6 +23,7 @@ use datafusion_expr::Operator as DFOperator;
 use datafusion_expr::ScalarUDF;
 use datafusion_functions::core::coalesce::CoalesceFunc;
 use datafusion_physical_expr::PhysicalExpr;
+use datafusion_physical_expr::expressions::DynamicFilterPhysicalExpr;
 use datafusion_physical_plan::expressions as df_expr;
 use insta::assert_snapshot;
 use rstest::rstest;
@@ -1544,7 +1545,7 @@ fn test_malformed_get_field_returns_error(
 }
 
 #[test]
-fn test_mismatched_column_identity_returns_error() {
+fn test_column_identity_validation_skips_dynamic_filters() -> DFResult<()> {
     let schema = Schema::new(vec![
         Field::new("a", DataType::Int32, true),
         Field::new("b", DataType::Int32, true),
@@ -1555,6 +1556,17 @@ fn test_mismatched_column_identity_returns_error() {
             .try_convert(&expr, &schema)
             .is_err()
     );
+    let expr = Arc::new(DynamicFilterPhysicalExpr::new(
+        vec![expr],
+        Arc::new(df_expr::Literal::new(ScalarValue::Boolean(Some(true)))),
+    )) as Arc<dyn PhysicalExpr>;
+
+    assert!(
+        DefaultExpressionConvertor::default()
+            .try_convert(&expr, &schema)?
+            .is_none()
+    );
+    Ok(())
 }
 
 #[rstest]

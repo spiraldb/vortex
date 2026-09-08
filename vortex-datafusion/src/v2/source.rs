@@ -603,13 +603,22 @@ impl DataSource for VortexDataSource {
         }
 
         let convertor = DefaultExpressionConvertor::default();
-        let input_schema = self.initial_schema.as_ref();
+        let filters = filters
+            .into_iter()
+            .map(|filter| {
+                let filter = match &self.leftover_projection {
+                    Some(projection) => projection.unproject_expr(&filter)?,
+                    None => filter,
+                };
+                reassign_expr_columns(filter, &self.projected_schema)
+            })
+            .collect::<DFResult<Vec<_>>>()?;
 
         // Classify each filter: pushable filters are passed into the ScanRequest in open(),
         // so we can safely claim PushedDown::Yes for them.
         let converted = filters
             .iter()
-            .map(|expr| convertor.try_convert(expr, input_schema))
+            .map(|expr| convertor.try_convert(expr, &self.projected_schema))
             .collect::<DFResult<Vec<_>>>()?;
         let pushdown_results: Vec<PushedDown> = converted
             .iter()
@@ -630,7 +639,8 @@ impl DataSource for VortexDataSource {
         }
 
         // Convert to Vortex conjunction.
-        let vortex_pred = vortex::expr::and_collect(converted.into_iter().flatten());
+        let vortex_pred = vortex::expr::and_collect(converted.into_iter().flatten())
+            .map(|expr| replace(expr, &root(), self.projected_projection.clone()));
 
         // Combine with existing filter.
         let new_filter = match (&self.filter, vortex_pred) {
