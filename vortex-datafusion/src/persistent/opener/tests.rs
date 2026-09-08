@@ -1404,7 +1404,7 @@ impl ExpressionConvertor for ResidualConvertor {
 
 #[rstest]
 #[tokio::test]
-async fn test_physical_in_list_residual(
+async fn test_physical_in_list(
     #[values(false, true)] negated: bool,
     #[values(0, 1, 2)] list_kind: usize,
 ) -> anyhow::Result<()> {
@@ -1429,10 +1429,11 @@ async fn test_physical_in_list_residual(
         negated,
         &batch.schema(),
     )?);
-    assert!(
+    assert_eq!(
         DefaultExpressionConvertor::default()
             .try_convert(&filter, &batch.schema())?
-            .is_none()
+            .is_some(),
+        list_kind == 2,
     );
     let expected = batch_filter(&batch, &filter)?.project(&[0])?;
     let opener = make_opener(store, TableSchema::from(batch.schema()), Some(filter));

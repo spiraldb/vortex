@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use arrow_array::Array;
 use arrow_array::FixedSizeBinaryArray;
+use arrow_array::RecordBatch;
 use arrow_array::StructArray;
 use arrow_schema::DataType;
 use arrow_schema::Field;
@@ -173,7 +174,11 @@ fn test_predicate_rejects_cast_over_modulo(test_schema: Schema) {
 #[rstest]
 #[case::empty(false)]
 #[case::column(true)]
-fn test_predicate_rejects_in_list(test_schema: Schema, #[case] nonempty: bool) -> DFResult<()> {
+fn test_predicate_rejects_unsupported_in_list(
+    test_schema: Schema,
+    #[case] nonempty: bool,
+    #[values(false, true)] negated: bool,
+) -> DFResult<()> {
     let column: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new("id", 0));
     let list = if nonempty {
         vec![Arc::clone(&column)]
@@ -183,13 +188,240 @@ fn test_predicate_rejects_in_list(test_schema: Schema, #[case] nonempty: bool) -
     let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::InListExpr::try_new(
         column,
         list,
-        false,
+        negated,
         &test_schema,
     )?);
     assert!(
         !DefaultExpressionConvertor::default()
             .try_convert(&expr, &test_schema)?
             .is_some()
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::values(vec![Some(1), Some(3)])]
+#[case::with_null(vec![Some(1), None])]
+#[case::null_only(vec![None])]
+#[case::singleton(vec![Some(1)])]
+#[case::duplicates(vec![Some(1), Some(1), None, None])]
+fn test_native_in_list(
+    #[case] list: Vec<Option<i32>>,
+    #[values(false, true)] negated: bool,
+) -> anyhow::Result<()> {
+    let batch = arrow_array::record_batch!(("a", Int32, vec![Some(1), Some(2), Some(3), None]))?;
+    let expr = df_expr::InListExpr::try_new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        list.into_iter()
+            .map(|value| Arc::new(df_expr::Literal::new(ScalarValue::Int32(value))) as _)
+            .collect(),
+        negated,
+        &batch.schema(),
+    )?;
+    expr.evaluate(&batch)?;
+    assert_native_matches(Arc::new(expr), batch)
+}
+
+#[rstest]
+#[case::boolean(ScalarValue::Boolean(Some(true)), ScalarValue::Boolean(Some(false)))]
+#[case::unsigned(ScalarValue::UInt64(Some(u64::MAX)), ScalarValue::UInt64(Some(0)))]
+#[case::utf8(ScalarValue::Utf8(Some("a".into())), ScalarValue::Utf8(Some("b".into())))]
+#[case::utf8_view(ScalarValue::Utf8View(Some("a".into())), ScalarValue::Utf8View(Some("b".into())))]
+#[case::large_utf8(ScalarValue::LargeUtf8(Some("a".into())), ScalarValue::LargeUtf8(Some("b".into())))]
+#[case::binary(ScalarValue::Binary(Some(vec![0])), ScalarValue::Binary(Some(vec![1])))]
+#[case::binary_view(ScalarValue::BinaryView(Some(vec![0])), ScalarValue::BinaryView(Some(vec![1])))]
+#[case::large_binary(ScalarValue::LargeBinary(Some(vec![0])), ScalarValue::LargeBinary(Some(vec![1])))]
+#[case::decimal32(
+    ScalarValue::Decimal32(Some(1234), 5, 2),
+    ScalarValue::Decimal32(Some(5678), 5, 2)
+)]
+#[case::decimal64(
+    ScalarValue::Decimal64(Some(1234), 10, 2),
+    ScalarValue::Decimal64(Some(5678), 10, 2)
+)]
+#[case::decimal128(
+    ScalarValue::Decimal128(Some(1234), 20, 2),
+    ScalarValue::Decimal128(Some(5678), 20, 2)
+)]
+#[case::decimal256(
+    ScalarValue::Decimal256(Some(arrow_i256::from_i128(1234)), 50, 2),
+    ScalarValue::Decimal256(Some(arrow_i256::from_i128(5678)), 50, 2)
+)]
+#[case::date(ScalarValue::Date32(Some(1)), ScalarValue::Date32(Some(2)))]
+#[case::time(
+    ScalarValue::Time64Microsecond(Some(1)),
+    ScalarValue::Time64Microsecond(Some(2))
+)]
+#[case::timestamp(ScalarValue::TimestampNanosecond(Some(1), Some("UTC".into())), ScalarValue::TimestampNanosecond(Some(2), Some("UTC".into())))]
+#[case::dictionary(ScalarValue::Dictionary(Box::new(DataType::Int8), Box::new(ScalarValue::Utf8(Some("a".into())))), ScalarValue::Dictionary(Box::new(DataType::Int8), Box::new(ScalarValue::Utf8(Some("b".into())))))]
+fn test_native_in_list_data_types(
+    #[case] member: ScalarValue,
+    #[case] absent: ScalarValue,
+    #[values(false, true)] negated: bool,
+) -> anyhow::Result<()> {
+    let null = ScalarValue::try_new_null(&member.data_type())?;
+    let batch = RecordBatch::try_from_iter([(
+        "a",
+        ScalarValue::iter_to_array([member.clone(), absent, null.clone()])?,
+    )])?;
+    let expr = df_expr::InListExpr::try_new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        vec![
+            Arc::new(df_expr::Literal::new(member)),
+            Arc::new(df_expr::Literal::new(null)),
+        ],
+        negated,
+        &batch.schema(),
+    )?;
+    expr.evaluate(&batch)?;
+    assert_native_matches(Arc::new(expr), batch)
+}
+
+#[rstest]
+fn test_native_in_list_untyped_null(
+    #[values(false, true)] negated: bool,
+    #[values(false, true)] mixed: bool,
+    #[values(false, true)] literal_input: bool,
+) -> anyhow::Result<()> {
+    let batch = arrow_array::record_batch!(("a", Int32, vec![Some(1), Some(2), None]))?;
+    let mut list: Vec<Arc<dyn PhysicalExpr>> =
+        vec![Arc::new(df_expr::Literal::new(ScalarValue::Null))];
+    if mixed {
+        list.push(Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(1)))));
+    }
+    let value: Arc<dyn PhysicalExpr> = if literal_input {
+        Arc::new(df_expr::Literal::new(ScalarValue::Int32(None)))
+    } else {
+        Arc::new(df_expr::Column::new("a", 0))
+    };
+    let expr = df_expr::InListExpr::try_new(value, list, negated, &batch.schema())?;
+    expr.evaluate(&batch)?;
+    assert_native_matches(Arc::new(expr), batch)
+}
+
+#[rstest]
+fn test_native_in_list_large(#[values(false, true)] negated: bool) -> anyhow::Result<()> {
+    let batch =
+        arrow_array::record_batch!(("a", Int32, vec![Some(0), Some(1023), Some(1024), None]))?;
+    let expr = df_expr::InListExpr::try_new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        (0..1024)
+            .map(|i| Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(i)))) as _)
+            .collect(),
+        negated,
+        &batch.schema(),
+    )?;
+    expr.evaluate(&batch)?;
+    assert_native_matches(Arc::new(expr), batch)
+}
+
+#[rstest]
+fn test_native_in_list_float(
+    #[values(false, true)] negated: bool,
+    #[values(DataType::Float32, DataType::Float64)] data_type: DataType,
+) -> anyhow::Result<()> {
+    let values = [
+        Some(-0.0),
+        Some(0.0),
+        Some(f64::NAN),
+        Some(f64::from_bits(f64::NAN.to_bits() + (1 << 29))),
+        Some(f64::INFINITY),
+        None,
+    ];
+    let scalar = |value| ScalarValue::Float64(value).cast_to(&data_type);
+    let batch = RecordBatch::try_from_iter([(
+        "a",
+        ScalarValue::iter_to_array(
+            values
+                .into_iter()
+                .map(scalar)
+                .collect::<DFResult<Vec<_>>>()?,
+        )?,
+    )])?;
+    let expr = df_expr::InListExpr::try_new(
+        Arc::new(df_expr::Column::new("a", 0)),
+        vec![
+            Arc::new(df_expr::Literal::new(scalar(Some(-0.0))?)),
+            Arc::new(df_expr::Literal::new(scalar(Some(f64::NAN))?)),
+        ],
+        negated,
+        &batch.schema(),
+    )?;
+    expr.evaluate(&batch)?;
+    assert_native_matches(Arc::new(expr), batch)
+}
+
+#[rstest]
+#[case::unsupported(DFOperator::Modulo)]
+#[case::fallible(DFOperator::Divide)]
+fn test_in_list_unsupported_input(
+    #[case] operator: DFOperator,
+    #[values(false, true)] negated: bool,
+) -> anyhow::Result<()> {
+    let batch = arrow_array::record_batch!(("a", Int32, vec![0, 1]))?;
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::InListExpr::try_new(
+        Arc::new(df_expr::BinaryExpr::new(
+            Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(12)))),
+            operator,
+            Arc::new(df_expr::Column::new("a", 0)),
+        )),
+        vec![Arc::new(df_expr::Literal::new(ScalarValue::Null))],
+        negated,
+        &batch.schema(),
+    )?);
+    assert!(expr.evaluate(&batch).is_err());
+    assert!(
+        DefaultExpressionConvertor::default()
+            .try_convert(&expr, &batch.schema())?
+            .is_none()
+    );
+    Ok(())
+}
+
+#[test]
+fn test_in_list_unsupported_type() -> DFResult<()> {
+    let value: Arc<dyn PhysicalExpr> =
+        Arc::new(df_expr::Literal::new(ScalarValue::DurationSecond(Some(1))));
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::InListExpr::try_new(
+        Arc::clone(&value),
+        vec![value],
+        false,
+        &Schema::empty(),
+    )?);
+    assert!(
+        DefaultExpressionConvertor::default()
+            .try_convert(&expr, &Schema::empty())?
+            .is_none()
+    );
+    Ok(())
+}
+
+#[test]
+fn test_in_list_malformed_literal() -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("a", DataType::Decimal128(10, 2), false)]);
+    let column: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new("a", 0));
+    let expr = Arc::new(df_expr::InListExpr::try_new(
+        Arc::clone(&column),
+        vec![Arc::new(df_expr::Literal::new(ScalarValue::Decimal128(
+            Some(1),
+            10,
+            2,
+        )))],
+        false,
+        &schema,
+    )?);
+    let expr = expr.with_new_children(vec![
+        column,
+        Arc::new(df_expr::Literal::new(ScalarValue::Decimal128(
+            Some(1),
+            0,
+            0,
+        ))),
+    ])?;
+    assert!(
+        DefaultExpressionConvertor::default()
+            .try_convert(&expr, &schema)
+            .is_err()
     );
     Ok(())
 }
@@ -951,10 +1183,7 @@ fn test_case_when_datafusion_vortex_equivalence() {
     assert_eq!(vortex_as_arrow, df_as_arrow);
 }
 
-fn assert_native_matches(
-    expr: Arc<dyn PhysicalExpr>,
-    batch: arrow_array::RecordBatch,
-) -> anyhow::Result<()> {
+fn assert_native_matches(expr: Arc<dyn PhysicalExpr>, batch: RecordBatch) -> anyhow::Result<()> {
     let session = VortexSession::default();
     let converted = DefaultExpressionConvertor::new(session.clone())
         .try_convert(&expr, &batch.schema())?
@@ -1184,7 +1413,7 @@ fn test_native_integer_arithmetic(
 #[case::mul(DFOperator::Multiply)]
 #[case::div(DFOperator::Divide)]
 fn test_native_decimal_arithmetic(#[case] op: DFOperator) -> anyhow::Result<()> {
-    let batch = arrow_array::RecordBatch::try_from_iter([
+    let batch = RecordBatch::try_from_iter([
         (
             "a",
             Arc::new(
@@ -1350,7 +1579,7 @@ fn test_native_nested_list_length(
         payload.data_type().clone(),
         nullable_parent,
     )]));
-    let batch = arrow_array::RecordBatch::try_new(schema, vec![payload])?;
+    let batch = RecordBatch::try_new(schema, vec![payload])?;
     let get_field: Arc<dyn PhysicalExpr> = Arc::new(ScalarFunctionExpr::try_new(
         Arc::new(ScalarUDF::from(GetFieldFunc::new())),
         vec![

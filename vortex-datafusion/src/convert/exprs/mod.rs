@@ -28,6 +28,7 @@ use vortex::dtype::DType;
 use vortex::dtype::Nullability;
 use vortex::expr::Expression;
 use vortex::expr::analysis::label_infallible;
+use vortex::expr::and_collect;
 use vortex::expr::byte_length;
 use vortex::expr::cast;
 use vortex::expr::get_item;
@@ -36,6 +37,7 @@ use vortex::expr::is_null;
 use vortex::expr::list_length;
 use vortex::expr::lit;
 use vortex::expr::nested_case_when;
+use vortex::expr::or_collect;
 use vortex::expr::pack;
 use vortex::expr::root;
 use vortex::scalar_fn::ScalarFnVTableExt;
@@ -320,9 +322,8 @@ impl DefaultExpressionConvertor {
                 },
                 [child, pattern],
             )
-        } else if expr.downcast_ref::<df_expr::InListExpr>().is_some() {
-            // list_contains does not implement SQL IN/NOT IN null semantics.
-            return Ok(None);
+        } else if let Some(in_list) = expr.downcast_ref::<df_expr::InListExpr>() {
+            return self.convert_in_list(in_list, schema, input_dtype);
         } else if let Some(scalar_fn) = expr.downcast_ref::<ScalarFunctionExpr>() {
             return self.convert_scalar_function(scalar_fn, schema, input_dtype);
         } else if let Some(case_expr) = expr.downcast_ref::<df_expr::CaseExpr>() {
@@ -361,6 +362,63 @@ impl DefaultExpressionConvertor {
             return Ok(None);
         };
         Ok(Some(converted))
+    }
+
+    fn convert_in_list(
+        &self,
+        in_list: &df_expr::InListExpr,
+        schema: &Schema,
+        input_dtype: &DType,
+    ) -> DFResult<Option<Expression>> {
+        if in_list.is_empty()
+            || !in_list
+                .list()
+                .iter()
+                .all(|expr| expr.is::<df_expr::Literal>())
+            || !supported_data_types(&in_list.expr().data_type(schema)?)
+        {
+            return Ok(None);
+        }
+        let Some(value) = self.convert_expr(in_list.expr(), schema, input_dtype)? else {
+            return Ok(None);
+        };
+        // Boolean rewrites may skip evaluating the input, particularly for all-null lists.
+        if label_infallible(&value).get(&value) != Some(&true) {
+            return Ok(None);
+        }
+        let Ok(value_dtype) = value.return_dtype(input_dtype) else {
+            return Ok(None);
+        };
+        let operator = if in_list.negated() {
+            Operator::NotEq
+        } else {
+            Operator::Eq
+        };
+        let mut comparisons = Vec::with_capacity(in_list.len());
+        for element in in_list.list() {
+            if !supported_data_types(&element.data_type(schema)?) {
+                return Ok(None);
+            }
+            let Some(element) = self.convert_expr(element, schema, input_dtype)? else {
+                return Ok(None);
+            };
+            let Ok(element_dtype) = element.return_dtype(input_dtype) else {
+                return Ok(None);
+            };
+            if element_dtype == DType::Null {
+                comparisons.push(lit(None::<bool>));
+            } else if value_dtype.eq_ignore_nullability(&element_dtype) {
+                comparisons.push(Binary.new_expr(operator, [value.clone(), element]));
+            } else {
+                return Ok(None);
+            }
+        }
+        // Kleene AND/OR preserve SQL IN/NOT IN nulls; list_contains does not.
+        Ok(if in_list.negated() {
+            and_collect(comparisons)
+        } else {
+            or_collect(comparisons)
+        })
     }
 
     fn convert_scalar_function(
