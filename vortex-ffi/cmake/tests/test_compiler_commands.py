@@ -50,8 +50,8 @@ class CompilerCommandTests(CMakeTest):
         self.env.update(CARGO_NET_OFFLINE="true", CARGO_BUILD_JOBS="2")
         self.command("cargo", "generate-lockfile", "--offline", cwd=self.source)
 
-    def configure(self, value=7, argument=7, policy=True, instrumentation=False, generator="Ninja"):
-        self.build_dir = self.work / f"{generator} build directory's"
+    def configure(self, value=7, argument=7, policy=True, instrumentation=False, generator="Ninja", build_name=None):
+        self.build_dir = self.work / (build_name or f"{generator} build directory's")
         self.target_dir = self.build_dir / "ffi/cargo-target"
         options = []
         include = self.source / "native-helper/include directory's"
@@ -109,7 +109,9 @@ class CompilerCommandTests(CMakeTest):
         for generator in ("Ninja", "Unix Makefiles"):
             with self.subTest(generator=generator):
                 version = self.write(self.source / "vortex-ffi/header-version", "1\n")
-                self.configure(generator=generator)
+                # Ninja < 1.13 splits apostrophes in compiler depfiles. Other tests retain
+                # apostrophe-containing build paths to cover the Cargo compiler handoff.
+                self.configure(generator=generator, build_name=f"{generator} build directory")
                 consumer = self.build_dir / "header_consumer"
                 source_header = self.source / "vortex-ffi/cinclude/vortex.h"
                 staged = self.build_dir / "ffi/vortex-artifacts/include/vortex.h"
