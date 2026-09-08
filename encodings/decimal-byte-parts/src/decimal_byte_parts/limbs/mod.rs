@@ -253,10 +253,6 @@ pub fn assemble_decimal(
     let lower: Vec<&[u64]> = lower_parts
         .iter()
         .map(|part| {
-            vortex_ensure!(
-                part.dtype() == &LOWER_PART_DTYPE,
-                "lower part must be non-nullable u64"
-            );
             let part = part.as_slice::<u64>();
             vortex_ensure!(
                 part.len() == len,
@@ -288,6 +284,30 @@ pub fn assemble_decimal(
             lower.len()
         ),
     })
+}
+
+/// Combine a single row's parts into an `i128`.
+#[inline]
+pub(crate) fn combine_i128(msp: i64, lower: impl IntoIterator<Item = u64>) -> i128 {
+    lower.into_iter().fold(i128::from(msp), |acc, part| {
+        (acc << LOWER_PART_BITS) | i128::from(part)
+    })
+}
+
+/// Combine a signed MSP and two or three lower parts into an `i256`.
+#[inline]
+pub(crate) fn combine_i256(msp: i64, lower: impl ExactSizeIterator<Item = u64>) -> i256 {
+    let count = lower.len();
+    let mut high = i128::from(msp);
+    let mut low = 0u128;
+    for (index, part) in lower.enumerate() {
+        if count == 3 && index == 0 {
+            high = (high << LOWER_PART_BITS) | i128::from(part);
+        } else {
+            low = (low << LOWER_PART_BITS) | u128::from(part);
+        }
+    }
+    i256::from_parts(low, high)
 }
 
 /// Reassemble a signed MSP and `K` unsigned lower parts into wide integers.
