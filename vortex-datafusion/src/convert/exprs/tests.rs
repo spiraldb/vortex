@@ -9,6 +9,7 @@ use arrow_array::RecordBatch;
 use arrow_array::StructArray;
 use arrow_schema::DataType;
 use arrow_schema::Field;
+use arrow_schema::IntervalUnit;
 use arrow_schema::Schema;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::extension::Uuid as ArrowUuid;
@@ -759,6 +760,148 @@ fn test_can_be_pushed_down_column_supported(test_schema: Schema) {
             .unwrap()
             .is_some()
     );
+}
+
+#[rstest]
+#[case::duration(DataType::Duration(ArrowTimeUnit::Second))]
+#[case::interval(DataType::Interval(IntervalUnit::YearMonth))]
+#[case::fixed_size_binary(DataType::FixedSizeBinary(16))]
+#[case::decimal32(DataType::Decimal32(1, 2))]
+#[case::decimal64(DataType::Decimal64(1, 2))]
+#[case::decimal128(DataType::Decimal128(1, 2))]
+#[case::decimal256(DataType::Decimal256(1, 2))]
+fn test_filter_ignores_unreferenced_unsupported_field(
+    #[case] unsupported: DataType,
+) -> DFResult<()> {
+    let schema = Schema::new(vec![
+        Field::new("unsupported", unsupported, true),
+        Field::new("id", DataType::Int32, false),
+    ]);
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::BinaryExpr::new(
+        Arc::new(df_expr::Column::new("id", 1)),
+        DFOperator::Eq,
+        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))),
+    ));
+    assert_eq!(
+        DefaultExpressionConvertor::default().try_convert(&expr, &schema)?,
+        Some(Binary.new_expr(Operator::Eq, [get_item("id", root()), lit(42i32)])),
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case::duration(DataType::Duration(ArrowTimeUnit::Second))]
+#[case::interval(DataType::Interval(IntervalUnit::YearMonth))]
+#[case::fixed_size_binary(DataType::FixedSizeBinary(16))]
+#[case::decimal32(DataType::Decimal32(1, 2))]
+#[case::decimal64(DataType::Decimal64(1, 2))]
+#[case::decimal128(DataType::Decimal128(1, 2))]
+#[case::decimal256(DataType::Decimal256(1, 2))]
+fn test_referenced_unsupported_field_is_declined(#[case] unsupported: DataType) -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new("unsupported", unsupported, true)]);
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::IsNotNullExpr::new(Arc::new(
+        df_expr::Column::new("unsupported", 0),
+    )));
+    assert!(
+        DefaultExpressionConvertor::default()
+            .try_convert(&expr, &schema)?
+            .is_none()
+    );
+    Ok(())
+}
+
+#[test]
+fn test_literal_ignores_unreferenced_malformed_decimal() -> DFResult<()> {
+    let schema = Schema::new(vec![Field::new(
+        "invalid",
+        DataType::Decimal128(1, 2),
+        true,
+    )]);
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42))));
+    assert_eq!(
+        DefaultExpressionConvertor::default().try_convert(&expr, &schema)?,
+        Some(lit(42i32)),
+    );
+    Ok(())
+}
+
+#[test]
+fn test_projection_ignores_unreferenced_unsupported_field() -> DFResult<()> {
+    let schema = Schema::new(vec![
+        Field::new("a", DataType::Int32, false),
+        Field::new(
+            "unsupported",
+            DataType::Duration(ArrowTimeUnit::Second),
+            true,
+        ),
+        Field::new("b", DataType::Int32, false),
+    ]);
+    let projection = ProjectionExprs::from(vec![ProjectionExpr {
+        expr: Arc::new(df_expr::BinaryExpr::new(
+            Arc::new(df_expr::Column::new("b", 2)),
+            DFOperator::Plus,
+            Arc::new(df_expr::BinaryExpr::new(
+                Arc::new(df_expr::Column::new("a", 0)),
+                DFOperator::Plus,
+                Arc::new(df_expr::Column::new("b", 2)),
+            )),
+        )),
+        alias: "sum".into(),
+    }]);
+    let output_schema = projection.project_schema(&schema)?;
+    let processed = DefaultExpressionConvertor::default().split_projection(
+        projection,
+        &schema,
+        &output_schema,
+    )?;
+    let a = get_item("a", root());
+    let b = get_item("b", root());
+    assert_eq!(
+        processed.scan_projection,
+        pack(
+            [(
+                "sum",
+                Binary.new_expr(
+                    Operator::Add,
+                    [b.clone(), Binary.new_expr(Operator::Add, [a, b])]
+                )
+            )],
+            Nullability::NonNullable,
+        ),
+    );
+    assert_eq!(processed.scan_reference_schema, output_schema);
+    assert_eq!(
+        processed.leftover_projection,
+        ProjectionExprs::from(vec![ProjectionExpr {
+            expr: Arc::new(df_expr::Column::new("sum", 0)),
+            alias: "sum".into(),
+        }]),
+    );
+    Ok(())
+}
+
+#[rstest]
+fn test_referenced_field_preserves_extension_metadata(
+    #[values(false, true)] nested: bool,
+) -> DFResult<()> {
+    let mut uuid_field = Field::new("id", DataType::FixedSizeBinary(16), true);
+    uuid_field.try_with_extension_type(ArrowUuid)?;
+    let field = if nested {
+        Field::new("nested", DataType::Struct(vec![uuid_field].into()), false)
+    } else {
+        uuid_field
+    };
+    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new(field.name(), 1));
+    let expected = get_item(field.name().as_str(), root());
+    let schema = Schema::new(vec![
+        Field::new("unsupported", DataType::FixedSizeBinary(16), true),
+        field,
+    ]);
+    assert_eq!(
+        DefaultExpressionConvertor::default().try_convert(&expr, &schema)?,
+        Some(expected),
+    );
+    Ok(())
 }
 
 #[rstest]

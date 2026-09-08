@@ -525,7 +525,9 @@ impl ExpressionConvertor for DefaultExpressionConvertor {
         if DynamicFilterTracking::classify(expr).contains_dynamic_filter() {
             return Ok(None);
         }
-        for column in collect_columns(expr) {
+        let columns = collect_columns(expr);
+        let mut column_indices = Vec::with_capacity(columns.len());
+        for column in columns {
             let field = schema.fields().get(column.index()).ok_or_else(|| {
                 exec_datafusion_err!(
                     "Column {}@{} is out of bounds",
@@ -541,8 +543,12 @@ impl ExpressionConvertor for DefaultExpressionConvertor {
                     field.name()
                 ));
             }
+            column_indices.push(column.index());
         }
-        let Ok(input_dtype) = self.session.arrow().from_arrow_schema(schema) else {
+        column_indices.sort_unstable();
+        column_indices.dedup();
+        let referenced_schema = schema.project(&column_indices)?;
+        let Ok(input_dtype) = self.session.arrow().from_arrow_schema(&referenced_schema) else {
             return Ok(None);
         };
         let Some(converted) = self.convert_expr(expr, schema, &input_dtype)? else {
