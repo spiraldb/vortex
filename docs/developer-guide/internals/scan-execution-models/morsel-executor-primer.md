@@ -148,7 +148,7 @@ pub trait ExecNode: Send {
 
 - `reset` prepares the node for a new morsel in its own local coordinates.
 - `next_plan` *names* reads by registering `IoUse`s and receiving tickets. It never reads. It is
-  budget-bounded (`PLAN_BUDGET = 64` uses per quantum) and resumable from its own cursor.
+  resumable from its own cursor when a child yields.
 - `execute` produces a value that is dense over the node's range. The row hint in the context
   is advice about which rows the parent will look at; it never changes the value's shape. It
   may try one inline probe through `ExecCx::ready`; otherwise a missing dependency must return
@@ -169,7 +169,7 @@ The three contexts are the only way a node touches the world.
 
 | Context | What it offers |
 | --- | --- |
-| `PlanCx` | `hint()`, `budget()`, `register(IoBatch) -> VortexResult<Vec<IoTicket>>`, `decoded_available(key)`, `plan_child(..)` |
+| `PlanCx` | `hint()`, `register(IoBatch) -> VortexResult<Vec<IoTicket>>`, `decoded_available(key)`, `plan_child(..)` |
 | `ExecCx` | `hint()`, `session()`, `ready(ticket) -> VortexResult<Option<BufferHandle>>`, `shared_decoded(key)`, `publish_decoded(key, array)`, `child_value/array/mask(..)` |
 | `RetireCx` | `retire_child(id)`, `release_use(key)` |
 
@@ -340,7 +340,7 @@ thread (DuckDB) drive morsels itself, ticking its own runtime while it waits.
 | --- | --- | --- |
 | `IoPriority` | `io.rs` | `Required` or `Speculative`, carried by every `IoRequest`. |
 | `Wait`, `WaitSet` | `node.rs` | What `ExecPoll::Blocked` carries: the exact tickets to park on. |
-| `PlanPoll`, `PlanItem`, `ExecPoll`, `ChildPoll` | `node.rs` | The poll results of planning, execution, and child calls. |
+| `PlanPoll`, `ExecPoll`, `ChildPoll` | `node.rs` | The poll results of planning, execution, and child calls. |
 | `Value`, `ValueBatch` | `node.rs` | An array or a mask produced by `execute`, with its row count. |
 | `Arena`, `NodeId` | `node.rs` | One worker's node state and the index that names a node in it. |
 | `ConjunctMode` | `nodes/conjunct.rs` | `Cascade` (default) or `Parallel` predicate evaluation. |

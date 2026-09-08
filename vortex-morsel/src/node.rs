@@ -133,21 +133,12 @@ pub(crate) fn filter_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef>
     array.filter(keep)
 }
 
-/// What a node's planning stream produced.
-pub enum PlanItem {
-    /// A batch of named IO uses, already registered with the IO plane.
-    Io(IoBatch),
-    /// The node yielded before refining further; call `next_plan` again to resume.
-    Plan,
-}
-
-/// The result of polling a node's planning stream.
+/// The result of polling a node's planning.
 pub enum PlanPoll {
-    /// An item was produced.
-    Item(PlanItem),
-    /// Planning is suspended on the given waits; no worker thread is parked.
+    /// The node cannot name more reads until these waits are satisfied. It keeps its own
+    /// cursor and is polled again afterwards; no worker thread is parked.
     Blocked(WaitSet),
-    /// Planning has finished. This forfeits any further refinement of this node's IO.
+    /// Every read this subtree needs for the morsel has been named.
     Complete,
 }
 
@@ -227,10 +218,13 @@ pub trait ExecNode: Send {
     /// Reset this node for a new morsel covering `range` (in this node's local coordinates).
     fn reset(&mut self, range: Range<u64>);
 
-    /// Advance this node's planning stream.
+    /// Advance this node's planning.
     ///
-    /// Planning only names IO; it never reads. A node that has more planning to do than its
-    /// budget allows returns [`PlanItem::Plan`] and resumes from its own cursor.
+    /// Planning only names IO; it never reads. A node that needs something before it can name
+    /// more, a child's reads or a wait of its own, returns [`PlanPoll::Blocked`] and keeps its
+    /// cursor; it is polled again once the waits are satisfied. A parent drives all of its
+    /// children on every poll: a child that has already finished answers `Complete` at once,
+    /// so only a node that can block needs a cursor.
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll>;
 
     /// Advance this node's execution, producing values under the demand in `cx`.
@@ -251,13 +245,19 @@ pub trait ExecNode: Send {
 /// An arena of nodes, owned by one worker and recycled across its morsels.
 pub struct Arena {
     nodes: Vec<Option<Box<dyn ExecNode>>>,
+    /// The morsel being worked on; a node whose stamp differs has not been reset for it yet.
+    epoch: u64,
+    stamps: Vec<u64>,
 }
 
 impl Arena {
     /// Build an arena from a list of nodes.
     pub fn new(nodes: Vec<Box<dyn ExecNode>>) -> Self {
+        let stamps = vec![0; nodes.len()];
         Self {
             nodes: nodes.into_iter().map(Some).collect(),
+            epoch: 0,
+            stamps,
         }
     }
 
@@ -286,11 +286,22 @@ impl Arena {
         self.nodes[id as usize] = Some(node);
     }
 
-    /// Reset the subtree rooted at `id` for a morsel covering `range`.
-    pub fn reset_subtree(&mut self, id: NodeId, range: Range<u64>) {
-        let mut node = self.take(id);
+    /// Start a new morsel: the root is reset now, every other node the first time its parent
+    /// plans it, so a parent re-driving its children after a block never resets one twice.
+    pub fn begin_morsel(&mut self, root: NodeId, range: Range<u64>) {
+        self.epoch += 1;
+        let mut node = self.take(root);
         node.reset(range);
-        self.put(id, node);
+        self.stamps[root as usize] = self.epoch;
+        self.put(root, node);
+    }
+
+    /// Reset `node` (taken out of slot `id`) for the current morsel unless it already was.
+    fn reset_once(&mut self, id: NodeId, node: &mut Box<dyn ExecNode>, range: Range<u64>) {
+        if self.stamps[id as usize] != self.epoch {
+            node.reset(range);
+            self.stamps[id as usize] = self.epoch;
+        }
     }
 }
 
@@ -301,8 +312,6 @@ pub struct PlanCx<'a> {
     caches: ScanCaches<'a>,
     stats: &'a mut ScanStats,
     demand: Mask,
-    /// Remaining IO uses this planning quantum may emit before the node should yield.
-    budget: u32,
     priority: IoPriority,
 }
 
@@ -313,16 +322,6 @@ impl<'a> PlanCx<'a> {
     /// selection the scan finally applies.
     pub fn hint(&self) -> &Mask {
         &self.demand
-    }
-
-    /// The remaining planning budget, in IO uses.
-    pub fn budget(&self) -> u32 {
-        self.budget
-    }
-
-    /// Whether the planning quantum is exhausted.
-    pub fn out_of_budget(&self) -> bool {
-        self.budget == 0
     }
 
     /// Whether a shared cell already holds the decoded value for a unit.
@@ -338,11 +337,8 @@ impl<'a> PlanCx<'a> {
         self.caches.dictionaries[id as usize].get().is_some()
     }
 
-    /// Register a batch of IO uses, spending budget and returning tickets.
+    /// Register a batch of IO uses, returning one ticket per use.
     pub fn register(&mut self, batch: IoBatch) -> VortexResult<Vec<IoTicket>> {
-        self.budget = self
-            .budget
-            .saturating_sub(u32::try_from(batch.uses().len()).unwrap_or(u32::MAX));
         self.stats.io_uses += batch.uses().len() as u64;
         self.io.register(batch, self.priority, self.stats)
     }
@@ -352,52 +348,37 @@ impl<'a> PlanCx<'a> {
         &mut self,
         id: NodeId,
         range: Range<u64>,
-        fresh: bool,
         priority: IoPriority,
-    ) -> VortexResult<bool> {
+    ) -> VortexResult<PlanPoll> {
         let previous = std::mem::replace(&mut self.priority, priority);
-        let result = self.plan_child(id, range, fresh);
+        let result = self.plan_child(id, range);
         self.priority = previous;
         result
     }
 
-    /// Drive a child's planning stream to completion, cutting it to `range` first.
+    /// Plan a child over `range` (its local coordinates) under this node's hint.
     ///
-    /// Returns `true` when the child completed, `false` when the shared budget ran out and the
-    /// caller should yield and resume at this child.
-    pub fn plan_child(&mut self, id: NodeId, range: Range<u64>, fresh: bool) -> VortexResult<bool> {
-        self.plan_child_with_hint(id, range, fresh, self.demand.clone())
+    /// The child is reset the first time it is planned for the morsel and resumed afterwards,
+    /// so a parent calls this for every child on every poll. `Blocked` is the child's to
+    /// propagate; `Complete` means every read below it is named.
+    pub fn plan_child(&mut self, id: NodeId, range: Range<u64>) -> VortexResult<PlanPoll> {
+        self.plan_child_with_hint(id, range, self.demand.clone())
     }
 
-    /// Drive a child under a transformed row hint.
+    /// Plan a child under a transformed row hint.
     pub(crate) fn plan_child_with_hint(
         &mut self,
         id: NodeId,
         range: Range<u64>,
-        fresh: bool,
-        demand: Mask,
-    ) -> VortexResult<bool> {
+        hint: Mask,
+    ) -> VortexResult<PlanPoll> {
         let mut node = self.arena.take(id);
-        let saved = std::mem::replace(&mut self.demand, demand);
-        let result = (|| {
-            if fresh {
-                node.reset(range);
-            }
-            loop {
-                match node.next_plan(self)? {
-                    PlanPoll::Item(PlanItem::Io(_)) => continue,
-                    PlanPoll::Item(PlanItem::Plan) => return Ok(false),
-                    PlanPoll::Blocked(_) => {
-                        // P1 has no gated planning: nothing can park a planning stream.
-                        return Ok(false);
-                    }
-                    PlanPoll::Complete => return Ok(true),
-                }
-            }
-        })();
+        self.arena.reset_once(id, &mut node, range);
+        let saved = std::mem::replace(&mut self.demand, hint);
+        let poll = node.next_plan(self);
         self.demand = saved;
         self.arena.put(id, node);
-        result
+        poll
     }
 }
 
@@ -530,12 +511,9 @@ impl<'a> RetireCx<'a> {
     }
 }
 
-/// The number of IO uses one planning quantum may emit before a node should yield.
-pub const PLAN_BUDGET: u32 = 64;
-
 /// Reset an arena for one morsel before its planning continuation is queued.
 pub(crate) fn begin_morsel(arena: &mut Arena, root: NodeId, range: Range<u64>) {
-    arena.reset_subtree(root, range);
+    arena.begin_morsel(root, range);
 }
 
 /// Advance one planning quantum for a morsel.
@@ -553,7 +531,6 @@ pub(crate) fn poll_plan_morsel(
         caches,
         stats,
         demand: demand.clone(),
-        budget: PLAN_BUDGET,
         priority: IoPriority::Required,
     };
     let mut node = cx.arena.take(root);

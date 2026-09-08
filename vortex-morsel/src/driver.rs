@@ -883,7 +883,6 @@ impl<'a> LocalMorsel<'a> {
                     matches!(poll, PlanPoll::Blocked(_)),
                 );
                 match poll {
-                    PlanPoll::Item(_) => Ok(LocalPoll::Runnable),
                     PlanPoll::Blocked(waits) => Ok(LocalPoll::Blocked(waits)),
                     PlanPoll::Complete => {
                         self.stats.morsels += 1;

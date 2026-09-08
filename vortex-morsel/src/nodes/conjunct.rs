@@ -18,7 +18,6 @@ use crate::node::ExecNode;
 use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
@@ -78,8 +77,6 @@ pub struct ConjunctExec {
 
     // Per-morsel state.
     range: Range<u64>,
-    plan_cursor: usize,
-    plan_started: bool,
     exec_cursor: usize,
     incoming: Option<Mask>,
     mask: Option<Mask>,
@@ -95,8 +92,6 @@ impl ConjunctExec {
             slots,
             mode,
             range: 0..0,
-            plan_cursor: 0,
-            plan_started: false,
             exec_cursor: 0,
             incoming: None,
             mask: None,
@@ -155,8 +150,6 @@ impl ConjunctExec {
 impl ExecNode for ConjunctExec {
     fn reset(&mut self, range: Range<u64>) {
         self.range = range;
-        self.plan_cursor = 0;
-        self.plan_started = false;
         self.exec_cursor = 0;
         self.incoming = None;
         self.mask = None;
@@ -168,21 +161,9 @@ impl ExecNode for ConjunctExec {
         // cascade a later conjunct may turn out not to be needed, but a use is named before its
         // demand is known — refining it after emission is P2's cancellation path, not a reason
         // to defer naming it here.
-        while self.plan_cursor < self.slots.len() {
-            if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
-            }
-            let fresh = !self.plan_started;
-            self.plan_started = true;
-            if cx.plan_child(
-                self.slots[self.plan_cursor].input,
-                self.range.clone(),
-                fresh,
-            )? {
-                self.plan_cursor += 1;
-                self.plan_started = false;
-            } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+        for slot in &self.slots {
+            if let PlanPoll::Blocked(waits) = cx.plan_child(slot.input, self.range.clone())? {
+                return Ok(PlanPoll::Blocked(waits));
             }
         }
         Ok(PlanPoll::Complete)

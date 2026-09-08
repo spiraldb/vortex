@@ -19,7 +19,6 @@ use crate::node::ExecNode;
 use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
@@ -56,8 +55,6 @@ pub struct StructExec {
 
     // Per-morsel state.
     range: Range<u64>,
-    plan_cursor: usize,
-    plan_started: bool,
     exec_cursor: usize,
     fields: Vec<ArrayRef>,
     validity_array: Option<ArrayRef>,
@@ -73,8 +70,6 @@ impl StructExec {
             children,
             validity,
             range: 0..0,
-            plan_cursor: 0,
-            plan_started: false,
             exec_cursor: 0,
             fields: Vec::new(),
             validity_array: None,
@@ -86,8 +81,6 @@ impl StructExec {
 impl ExecNode for StructExec {
     fn reset(&mut self, range: Range<u64>) {
         self.range = range;
-        self.plan_cursor = 0;
-        self.plan_started = false;
         self.exec_cursor = 0;
         self.fields.clear();
         self.validity_array = None;
@@ -95,24 +88,9 @@ impl ExecNode for StructExec {
     }
 
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
-        let child_count = self.children.len() + usize::from(self.validity.is_some());
-        while self.plan_cursor < child_count {
-            if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
-            }
-            let fresh = !self.plan_started;
-            self.plan_started = true;
-            let child = if self.plan_cursor < self.children.len() {
-                self.children[self.plan_cursor]
-            } else {
-                self.validity
-                    .ok_or_else(|| vortex_err!("struct validity child is missing"))?
-            };
-            if cx.plan_child(child, self.range.clone(), fresh)? {
-                self.plan_cursor += 1;
-                self.plan_started = false;
-            } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+        for child in self.children.iter().copied().chain(self.validity) {
+            if let PlanPoll::Blocked(waits) = cx.plan_child(child, self.range.clone())? {
+                return Ok(PlanPoll::Blocked(waits));
             }
         }
         Ok(PlanPoll::Complete)

@@ -14,8 +14,9 @@
 //!
 //! * [`ExecNode::next_plan`] — planning. A node *names* the IO it will need by registering
 //!   [`IoUse`](io::IoUse)s against the [`IoPlane`](io::IoPlane), which hands back tickets. Nodes
-//!   do not read during planning. Planning is budget-bounded and resumable: a node that exhausts
-//!   its quantum yields [`PlanItem::Plan`] and resumes from its own cursor on the next call.
+//!   do not read during planning. Planning can block: a node that needs a read before it can
+//!   name more returns [`PlanPoll::Blocked`](node::PlanPoll::Blocked) with the wait, keeps its
+//!   cursor, and is polled again once the wait is satisfied.
 //! * [`ExecNode::execute`] — value production. When a named required cell is still unissued,
 //!   [`ExecCx::ready`](node::ExecCx::ready) may attempt one caller-provided probe guaranteed not
 //!   to wait on storage (Linux files use `preadv2(RWF_NOWAIT)`). A hit is consumed inline. A
@@ -91,7 +92,6 @@ pub use node::ExecCx;
 pub use node::ExecNode;
 pub use node::ExecPoll;
 pub use node::PlanCx;
-pub use node::PlanItem;
 pub use node::PlanPoll;
 pub use node::Value;
 pub use node::ValueBatch;

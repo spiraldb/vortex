@@ -20,7 +20,6 @@ use crate::node::ExecNode;
 use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
@@ -64,8 +63,6 @@ pub struct FilterExec {
 
     // Per-morsel state.
     range: Range<u64>,
-    plan_stage: u8,
-    plan_started: bool,
     mask: Option<Mask>,
     done: bool,
     children: Vec<NodeId>,
@@ -86,8 +83,6 @@ impl FilterExec {
             projection_expr,
             output_dtype,
             range: 0..0,
-            plan_stage: 0,
-            plan_started: false,
             mask: None,
             done: false,
             children,
@@ -98,40 +93,25 @@ impl FilterExec {
 impl ExecNode for FilterExec {
     fn reset(&mut self, range: Range<u64>) {
         self.range = range;
-        self.plan_stage = 0;
-        self.plan_started = false;
         self.mask = None;
         self.done = false;
     }
 
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
-        loop {
-            let child = match (self.plan_stage, self.predicate) {
-                (0, Some(predicate)) => predicate,
-                (0, None) | (1, _) => self.projection,
-                _ => return Ok(PlanPoll::Complete),
-            };
-            if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
-            }
-            let fresh = !self.plan_started;
-            self.plan_started = true;
-            let priority = if self.predicate.is_some() && self.plan_stage > 0 {
-                IoPriority::Speculative
-            } else {
-                IoPriority::Required
-            };
-            if cx.plan_child_with_priority(child, self.range.clone(), fresh, priority)? {
-                self.plan_stage += if self.plan_stage == 0 && self.predicate.is_none() {
-                    2
-                } else {
-                    1
-                };
-                self.plan_started = false;
-            } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
-            }
+        // The predicate's reads are required; the projection's are speculative until the mask
+        // proves them needed.
+        if let Some(predicate) = self.predicate
+            && let PlanPoll::Blocked(waits) =
+                cx.plan_child_with_priority(predicate, self.range.clone(), IoPriority::Required)?
+        {
+            return Ok(PlanPoll::Blocked(waits));
         }
+        let priority = if self.predicate.is_some() {
+            IoPriority::Speculative
+        } else {
+            IoPriority::Required
+        };
+        cx.plan_child_with_priority(self.projection, self.range.clone(), priority)
     }
 
     fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {

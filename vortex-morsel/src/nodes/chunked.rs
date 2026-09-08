@@ -21,7 +21,6 @@ use crate::node::ExecNode;
 use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
@@ -76,9 +75,8 @@ pub struct ChunkedExec {
     range: Range<u64>,
     cuts: Vec<Cut>,
     /// Index into `cuts` of the child currently being planned.
+    /// The cut whose child is being planned; a blocked child leaves it in place.
     plan_cursor: usize,
-    /// Whether `plan_cursor`'s child has already been reset for this morsel.
-    plan_started: bool,
     exec_cursor: usize,
     parts: Vec<ArrayRef>,
     missing_chunk: Option<usize>,
@@ -103,7 +101,6 @@ impl ChunkedExec {
             range: 0..0,
             cuts: Vec::new(),
             plan_cursor: 0,
-            plan_started: false,
             exec_cursor: 0,
             parts: Vec::new(),
             missing_chunk: None,
@@ -153,7 +150,6 @@ impl ExecNode for ChunkedExec {
     fn reset(&mut self, range: Range<u64>) {
         self.range = range;
         self.plan_cursor = 0;
-        self.plan_started = false;
         self.exec_cursor = 0;
         self.parts.clear();
         self.missing_chunk = None;
@@ -168,24 +164,14 @@ impl ExecNode for ChunkedExec {
                 self.range
             ));
         }
+        // The cursor is what makes a block resumable: a cut whose child cannot name its reads
+        // yet leaves the cursor on it, and the next poll continues there.
         while self.plan_cursor < self.cuts.len() {
-            if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
-            }
             let cut = self.cuts[self.plan_cursor].clone();
             let child_hint = slice_mask(cx.hint(), cut.mask_range.clone());
-            let fresh = !self.plan_started;
-            self.plan_started = true;
-            if cx.plan_child_with_hint(
-                self.children[cut.child],
-                cut.chunk_range,
-                fresh,
-                child_hint,
-            )? {
-                self.plan_cursor += 1;
-                self.plan_started = false;
-            } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+            match cx.plan_child_with_hint(self.children[cut.child], cut.chunk_range, child_hint)? {
+                PlanPoll::Complete => self.plan_cursor += 1,
+                PlanPoll::Blocked(waits) => return Ok(PlanPoll::Blocked(waits)),
             }
         }
         Ok(PlanPoll::Complete)

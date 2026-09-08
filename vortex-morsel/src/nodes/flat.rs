@@ -28,7 +28,6 @@ use crate::node::ExecNode;
 use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
@@ -88,8 +87,9 @@ pub struct FlatExec {
     lease_range: Range<u64>,
     estimated_bytes: usize,
     producer: ProducerId,
-    /// The value placeholder rows carry; never observed, but it must have the right dtype.
-    placeholder: Scalar,
+    /// The value placeholder rows carry, built on first use; never observed, but it must have
+    /// the right dtype.
+    placeholder: Option<Scalar>,
 
     // Per-morsel state.
     range: Range<u64>,
@@ -118,7 +118,7 @@ impl FlatExec {
             lease_range,
             estimated_bytes,
             producer,
-            placeholder: Scalar::default_value(layout.dtype()),
+            placeholder: None,
             range: 0..0,
             ticket: None,
             planned: false,
@@ -175,9 +175,6 @@ impl ExecNode for FlatExec {
         if self.planned || self.range.is_empty() {
             return Ok(PlanPoll::Complete);
         }
-        if cx.out_of_budget() {
-            return Ok(PlanPoll::Item(PlanItem::Plan));
-        }
 
         // Nothing in this range is wanted: name no read. Execution stands in placeholder rows.
         if cx.hint().all_false() {
@@ -203,10 +200,10 @@ impl ExecNode for FlatExec {
             producer: self.producer,
             estimated_bytes: self.estimated_bytes,
         });
-        let tickets = cx.register(batch.clone())?;
+        let tickets = cx.register(batch)?;
         self.ticket = tickets.first().copied();
         self.planned = true;
-        Ok(PlanPoll::Item(PlanItem::Io(batch)))
+        Ok(PlanPoll::Complete)
     }
 
     fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
@@ -220,7 +217,11 @@ impl ExecNode for FlatExec {
         if cx.hint().all_false() {
             let rows = usize::try_from(self.range.end - self.range.start)
                 .vortex_expect("flat range fits usize");
-            let array = ConstantArray::new(self.placeholder.clone(), rows).into_array();
+            let scalar = self
+                .placeholder
+                .get_or_insert_with(|| placeholder_scalar(&self.dtype))
+                .clone();
+            let array = ConstantArray::new(scalar, rows).into_array();
             cx.stats().rows_placeholder += rows as u64;
             self.done = true;
             return Ok(ExecPoll::Value(ValueBatch {
@@ -262,6 +263,16 @@ impl ExecNode for FlatExec {
 
     fn children(&self) -> &[NodeId] {
         &[]
+    }
+}
+
+/// A value of `dtype` to stand in for rows nobody will look at: null where the type allows it,
+/// otherwise the type's zero value (an extension type's is its storage type's).
+fn placeholder_scalar(dtype: &DType) -> Scalar {
+    if dtype.is_nullable() {
+        Scalar::null(dtype.clone())
+    } else {
+        Scalar::zero_value(dtype)
     }
 }
 

@@ -20,7 +20,7 @@ Everything up to value production is the same design, and most of it is the same
 - **Morsels.** Contiguous root row ranges cut at the union of every column's chunk boundaries,
   coalesced to a target size. One worker owns one morsel at a time.
 - **Planning.** `ExecNode::next_plan` names the reads a morsel will need by registering `IoUse`s
-  and receiving tickets. It never reads. It is budget-bounded and resumable.
+  and receiving tickets. It never reads. It can block on a wait and resumes from its cursor.
 - **I/O.** A scan-wide `IoService` dedupes reads into cells, hands them out as `IoDemand`, and
   is answered through `IoCompletions`. Blocked workers park on exact cells. Each morsel's reads
   are submitted as one sorted batch so a coalescing source sees neighbours; only the pull crate

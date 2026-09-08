@@ -17,7 +17,6 @@ use crate::node::ExecNode;
 use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::RetireCx;
 use crate::node::Value;
@@ -50,8 +49,6 @@ pub struct DictExec {
     values_len: usize,
 
     range: Range<u64>,
-    plan_cursor: usize,
-    plan_started: bool,
     values_array: Option<ArrayRef>,
     codes_array: Option<ArrayRef>,
     values_active: bool,
@@ -67,28 +64,10 @@ impl DictExec {
             codes,
             values_len,
             range: 0..0,
-            plan_cursor: 0,
-            plan_started: false,
             values_array: None,
             codes_array: None,
             values_active: false,
             done: false,
-        }
-    }
-
-    fn child_range(&self) -> Range<u64> {
-        if self.plan_cursor == 0 {
-            0..self.values_len as u64
-        } else {
-            self.range.clone()
-        }
-    }
-
-    fn child(&self) -> NodeId {
-        if self.plan_cursor == 0 {
-            self.values
-        } else {
-            self.codes
         }
     }
 }
@@ -96,8 +75,6 @@ impl DictExec {
 impl ExecNode for DictExec {
     fn reset(&mut self, range: Range<u64>) {
         self.range = range;
-        self.plan_cursor = 0;
-        self.plan_started = false;
         self.values_array = None;
         self.codes_array = None;
         self.values_active = false;
@@ -105,33 +82,17 @@ impl ExecNode for DictExec {
     }
 
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
-        while self.plan_cursor < 2 {
-            if self.plan_cursor == 0 && cx.dictionary_available(self.node) {
-                self.plan_cursor = 1;
-                self.plan_started = false;
-                continue;
-            }
-            if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
-            }
-            let fresh = !self.plan_started;
-            self.plan_started = true;
-            let hint = if self.plan_cursor == 0 {
-                Mask::new_true(self.values_len)
-            } else {
-                cx.hint().clone()
-            };
-            if cx.plan_child_with_hint(self.child(), self.child_range(), fresh, hint)? {
-                if self.plan_cursor == 0 {
-                    self.values_active = true;
-                }
-                self.plan_cursor += 1;
-                self.plan_started = false;
-            } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+        // The values are planned whole, unless this scan already decoded them; the codes
+        // follow under the morsel's own hint.
+        if !cx.dictionary_available(self.node) {
+            let whole = Mask::new_true(self.values_len);
+            match cx.plan_child_with_hint(self.values, 0..self.values_len as u64, whole)? {
+                PlanPoll::Blocked(waits) => return Ok(PlanPoll::Blocked(waits)),
+                PlanPoll::Complete => self.values_active = true,
             }
         }
-        Ok(PlanPoll::Complete)
+        let hint = cx.hint().clone();
+        cx.plan_child_with_hint(self.codes, self.range.clone(), hint)
     }
 
     fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
