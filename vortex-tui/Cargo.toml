@@ -14,22 +14,25 @@ rust-version = { workspace = true }
 version = { workspace = true }
 
 [features]
-default = ["native"]
+default = ["native", "parquet", "sql"]
+# The terminal `vx` CLI: `browse`, `tree`, `inspect` and `segments`.
 native = [
     "dep:arrow-array",
     "dep:arrow-schema",
     "dep:clap",
     "dep:crossterm",
-    "dep:datafusion",
     "dep:env_logger",
     "dep:indicatif",
-    "dep:parquet",
     "dep:tokio",
-    "dep:vortex-datafusion",
     "ratatui/crossterm",
     "vortex/tokio",
     "vortex/zstd",
 ]
+# `vx convert`, which reads Parquet.
+parquet = ["native", "dep:parquet"]
+# `vx query` and the Query tab of `vx browse`, executed by DataFusion. This is by far the
+# largest dependency of the crate, so embedders such as the Python wheel leave it out.
+sql = ["native", "dep:datafusion", "dep:vortex-datafusion"]
 unstable_encodings = ["vortex/unstable_encodings"]
 
 [lib]

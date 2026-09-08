@@ -128,12 +128,14 @@ Requires `wasm-pack` (`cargo install wasm-pack`).
 ### How it works
 
 - **Native** builds use `crossterm` for terminal I/O and `CurrentThreadRuntime` (smol-based) for
-  async execution. The `native` feature (enabled by default) pulls in DataFusion, crossterm, and
-  other native-only dependencies.
+  async execution. The `native` feature (enabled by default) pulls in crossterm, clap, and other
+  native-only dependencies. Two further default features layer on top of it: `parquet` adds
+  `vx convert`, and `sql` adds `vx query` and the Query tab, backed by DataFusion. The Python
+  wheel builds the CLI without `sql`, since DataFusion would more than double its size.
 - **WASM** builds use [ratzilla](https://github.com/ratatui/ratzilla) (the official ratatui web
   backend) for rendering and `WasmRuntime` for async execution. Building with
   `--no-default-features` excludes all native-only dependencies.
-- The Query tab (DataFusion SQL) is only available in native builds.
+- The Query tab (DataFusion SQL) is only available in native builds with the `sql` feature.
 
 ## Development
 

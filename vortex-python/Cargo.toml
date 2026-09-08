@@ -60,7 +60,12 @@ vortex = { workspace = true, features = [
 vortex-arrow = { workspace = true }
 vortex-cloud = { workspace = true, features = ["opendal"] }
 vortex-python-abi = { path = "../vortex-python-abi" }
-vortex-tui = { workspace = true, optional = true }
+# `sql` is deliberately left out: DataFusion would more than double the size of the extension
+# module, so the wheel's `vx` has no `query` subcommand and no Query tab.
+vortex-tui = { workspace = true, optional = true, default-features = false, features = [
+    "native",
+    "parquet",
+] }
 
 [dev-dependencies]
 rstest = { workspace = true }

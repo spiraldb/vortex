@@ -33,13 +33,13 @@
 pub mod browse;
 pub mod segment_tree;
 
-#[cfg(feature = "native")]
+#[cfg(feature = "parquet")]
 pub mod convert;
-#[cfg(feature = "native")]
+#[cfg(feature = "sql")]
 pub mod datafusion_helper;
 #[cfg(feature = "native")]
 pub mod inspect;
-#[cfg(feature = "native")]
+#[cfg(feature = "sql")]
 pub mod query;
 #[cfg(feature = "native")]
 pub mod segments;
@@ -71,12 +71,14 @@ mod native_cli {
         /// Print tree views of a Vortex file (layout tree or array tree)
         Tree(super::tree::TreeArgs),
         /// Convert a Parquet file to a Vortex file. Chunking occurs on Parquet RowGroup boundaries.
+        #[cfg(feature = "parquet")]
         Convert(#[command(flatten)] super::convert::ConvertArgs),
         /// Interactively browse the Vortex file.
         Browse { file: PathBuf },
         /// Inspect Vortex file footer and metadata
         Inspect(super::inspect::InspectArgs),
         /// Execute a SQL query against a Vortex file using DataFusion
+        #[cfg(feature = "sql")]
         Query(super::query::QueryArgs),
         /// Display segment information for a Vortex file
         Segments(super::segments::SegmentsArgs),
@@ -90,8 +92,10 @@ mod native_cli {
                     super::tree::TreeMode::Layout { file, .. } => file,
                 },
                 Commands::Browse { file } => file,
+                #[cfg(feature = "parquet")]
                 Commands::Convert(flags) => &flags.file,
                 Commands::Inspect(args) => &args.file,
+                #[cfg(feature = "sql")]
                 Commands::Query(args) => &args.file,
                 Commands::Segments(args) => &args.file,
             }
@@ -144,9 +148,11 @@ mod native_cli {
 
         match cli.command {
             Commands::Tree(args) => super::tree::exec_tree(session, args).await?,
+            #[cfg(feature = "parquet")]
             Commands::Convert(flags) => super::convert::exec_convert(session, flags).await?,
             Commands::Browse { file } => super::browse::exec_tui(session, file).await?,
             Commands::Inspect(args) => super::inspect::exec_inspect(session, args).await?,
+            #[cfg(feature = "sql")]
             Commands::Query(args) => super::query::exec_query(session, args).await?,
             Commands::Segments(args) => super::segments::exec_segments(session, args).await?,
         };

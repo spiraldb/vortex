@@ -58,7 +58,7 @@ fn navigate_layout_down(app: &mut AppState, amount: usize) {
 /// Returns [`HandleResult::Exit`] if the user pressed the quit key.
 pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> HandleResult {
     // Check if we're in Query tab with SQL input focus - handle text input first
-    #[cfg(feature = "native")]
+    #[cfg(feature = "sql")]
     {
         use ui::QueryFocus;
         use ui::SortDirection;
@@ -108,21 +108,21 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
         (InputKeyCode::Tab, ..) => {
             app.current_tab = match app.current_tab {
                 Tab::Layout => Tab::Segments,
-                #[cfg(feature = "native")]
+                #[cfg(feature = "sql")]
                 Tab::Segments => Tab::Query,
-                #[cfg(feature = "native")]
+                #[cfg(feature = "sql")]
                 Tab::Query => Tab::Layout,
-                #[cfg(not(feature = "native"))]
+                #[cfg(not(feature = "sql"))]
                 Tab::Segments => Tab::Layout,
             };
         }
 
-        #[cfg(feature = "native")]
+        #[cfg(feature = "sql")]
         (InputKeyCode::Char('['), false, false, _) if app.current_tab == Tab::Query => {
             app.query_state.prepare_prev_page();
         }
 
-        #[cfg(feature = "native")]
+        #[cfg(feature = "sql")]
         (InputKeyCode::Char(']'), false, false, _) if app.current_tab == Tab::Query => {
             app.query_state.prepare_next_page();
         }
@@ -132,7 +132,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
         | (InputKeyCode::Char('p'), true, ..) => match app.current_tab {
             Tab::Layout => navigate_layout_up(app, SCROLL_LINE),
             Tab::Segments => app.segment_grid_state.scroll_up(SEGMENT_SCROLL_LINE),
-            #[cfg(feature = "native")]
+            #[cfg(feature = "sql")]
             Tab::Query => {
                 app.query_state.table_state.select_previous();
             }
@@ -142,7 +142,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
         | (InputKeyCode::Char('n'), true, ..) => match app.current_tab {
             Tab::Layout => navigate_layout_down(app, SCROLL_LINE),
             Tab::Segments => app.segment_grid_state.scroll_down(SEGMENT_SCROLL_LINE),
-            #[cfg(feature = "native")]
+            #[cfg(feature = "sql")]
             Tab::Query => {
                 app.query_state.table_state.select_next();
             }
@@ -151,7 +151,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
             match app.current_tab {
                 Tab::Layout => navigate_layout_up(app, SCROLL_PAGE),
                 Tab::Segments => app.segment_grid_state.scroll_up(SEGMENT_SCROLL_PAGE),
-                #[cfg(feature = "native")]
+                #[cfg(feature = "sql")]
                 Tab::Query => {
                     app.query_state.prepare_prev_page();
                 }
@@ -161,7 +161,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
             match app.current_tab {
                 Tab::Layout => navigate_layout_down(app, SCROLL_PAGE),
                 Tab::Segments => app.segment_grid_state.scroll_down(SEGMENT_SCROLL_PAGE),
-                #[cfg(feature = "native")]
+                #[cfg(feature = "sql")]
                 Tab::Query => {
                     app.query_state.prepare_next_page();
                 }
@@ -172,7 +172,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
             Tab::Segments => app
                 .segment_grid_state
                 .scroll_left(SEGMENT_SCROLL_HORIZONTAL_JUMP),
-            #[cfg(feature = "native")]
+            #[cfg(feature = "sql")]
             Tab::Query => {
                 app.query_state.table_state.select_first();
             }
@@ -182,7 +182,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
             Tab::Segments => app
                 .segment_grid_state
                 .scroll_right(SEGMENT_SCROLL_HORIZONTAL_JUMP),
-            #[cfg(feature = "native")]
+            #[cfg(feature = "sql")]
             Tab::Query => {
                 app.query_state.table_state.select_last();
             }
@@ -204,7 +204,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
             Tab::Segments => app
                 .segment_grid_state
                 .scroll_left(SEGMENT_SCROLL_HORIZONTAL_STEP),
-            #[cfg(feature = "native")]
+            #[cfg(feature = "sql")]
             Tab::Query => {
                 app.query_state.horizontal_scroll =
                     app.query_state.horizontal_scroll.saturating_sub(1);
@@ -217,7 +217,7 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
             Tab::Segments => app
                 .segment_grid_state
                 .scroll_right(SEGMENT_SCROLL_HORIZONTAL_STEP),
-            #[cfg(feature = "native")]
+            #[cfg(feature = "sql")]
             Tab::Query => {
                 let max_col = app.query_state.column_count().saturating_sub(1);
                 if app.query_state.horizontal_scroll < max_col {
@@ -227,25 +227,25 @@ pub(crate) fn handle_normal_mode(app: &mut AppState, event: InputEvent) -> Handl
         },
 
         (InputKeyCode::Char('/'), ..) | (InputKeyCode::Char('s'), true, ..) => {
-            #[cfg(feature = "native")]
+            #[cfg(feature = "sql")]
             if app.current_tab == Tab::Query {
                 // Don't enter search mode from query tab
             } else {
                 app.key_mode = KeyMode::Search;
             }
-            #[cfg(not(feature = "native"))]
+            #[cfg(not(feature = "sql"))]
             {
                 app.key_mode = KeyMode::Search;
             }
         }
 
-        #[cfg(feature = "native")]
+        #[cfg(feature = "sql")]
         (InputKeyCode::Char('s'), false, false, _) if app.current_tab == Tab::Query => {
             let col = app.query_state.selected_column();
             app.query_state.prepare_sort(col);
         }
 
-        #[cfg(feature = "native")]
+        #[cfg(feature = "sql")]
         (InputKeyCode::Esc, ..) if app.current_tab == Tab::Query => {
             app.query_state.toggle_focus();
         }
@@ -362,9 +362,8 @@ mod native {
 
             // Take the pending query receiver so we can select! on it
             // without holding a mutable borrow on app.
-            let pending_rx = app.query_state.pending_rx.take();
-
-            let event = if let Some(mut rx) = pending_rx {
+            #[cfg(feature = "sql")]
+            let event = if let Some(mut rx) = app.query_state.pending_rx.take() {
                 tokio::select! {
                     event = events.next() => {
                         // No query result yet — put the receiver back.
@@ -382,6 +381,8 @@ mod native {
             } else {
                 events.next().await
             };
+            #[cfg(not(feature = "sql"))]
+            let event = events.next().await;
 
             let Some(raw_event) = event else {
                 break;
@@ -409,6 +410,7 @@ mod native {
                 }
 
                 // Spawn any pending query execution as a background task.
+                #[cfg(feature = "sql")]
                 app.query_state.spawn_pending(&app.session, &app.file_path);
             }
         }

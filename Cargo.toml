@@ -346,7 +346,7 @@ vortex-bench-support = { path = "./benchmarks/bench-support" }
 vortex-cuda = { path = "./vortex-cuda", default-features = false }
 vortex-cuda-macros = { path = "./vortex-cuda/macros" }
 vortex-duckdb = { path = "./vortex-duckdb", default-features = false }
-vortex-tui = { path = "./vortex-tui" }
+vortex-tui = { path = "./vortex-tui", default-features = false }
 
 [workspace.lints.rust]
 let_underscore_drop = "deny"

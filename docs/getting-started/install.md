@@ -12,13 +12,16 @@ the terminal. You have the following options:
 cargo binstall vortex-tui
 ```
 
-2. pip also installs the Python library; see the [Python quickstart](python.rst) for library usage:
+2. pip also installs the Python library; see the [Python quickstart](python.rst) for library usage.
+The `vx` shipped in the wheel omits `vx query` and the Query tab of `vx browse`, which would
+double the wheel's size. Use one of the other options if you need them:
 
 ```bash
 pip install vortex-data
 ```
 
-3. uvx runs the CLI without installing. Requires [uv](https://docs.astral.sh/uv/):
+3. uvx runs the CLI without installing, with the same limitation as pip. Requires
+[uv](https://docs.astral.sh/uv/):
 
 ```bash
 uvx --from vortex-data vx --help

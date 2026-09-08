@@ -40,7 +40,7 @@ pub enum Tab {
     Segments,
 
     /// SQL query interface powered by DataFusion.
-    #[cfg(feature = "native")]
+    #[cfg(feature = "sql")]
     Query,
 }
 
@@ -253,11 +253,11 @@ pub struct AppState {
     pub cached_flatbuffer_size: Option<usize>,
 
     /// State for the Query tab.
-    #[cfg(feature = "native")]
+    #[cfg(feature = "sql")]
     pub query_state: super::ui::QueryState,
 
     /// File path for use in query execution.
-    #[cfg(feature = "native")]
+    #[cfg(feature = "sql")]
     pub file_path: String,
 }
 
@@ -279,6 +279,7 @@ impl AppState {
 
         let cursor = LayoutCursor::new(vxf.footer().clone(), vxf.segment_source());
 
+        #[cfg(feature = "sql")]
         let file_path = path
             .as_ref()
             .to_str()
@@ -299,7 +300,9 @@ impl AppState {
             tree_scroll_offset: 0,
             cached_flat_array: None,
             cached_flatbuffer_size: None,
+            #[cfg(feature = "sql")]
             query_state: super::ui::QueryState::default(),
+            #[cfg(feature = "sql")]
             file_path,
         })
     }

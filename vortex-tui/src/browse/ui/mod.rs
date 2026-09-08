@@ -4,18 +4,18 @@
 //! UI rendering components for the TUI browser.
 
 mod layouts;
-#[cfg(feature = "native")]
+#[cfg(feature = "sql")]
 mod query;
 mod segments;
 
 use layouts::render_layouts;
-#[cfg(feature = "native")]
+#[cfg(feature = "sql")]
 pub use query::QueryFocus;
-#[cfg(feature = "native")]
+#[cfg(feature = "sql")]
 pub use query::QueryState;
-#[cfg(feature = "native")]
+#[cfg(feature = "sql")]
 pub use query::SortDirection;
-#[cfg(feature = "native")]
+#[cfg(feature = "sql")]
 use query::render_query;
 use ratatui::prelude::*;
 use ratatui::widgets::Block;
@@ -72,7 +72,7 @@ pub fn render_app(app: &mut AppState, frame: &mut Frame<'_>) {
     .areas(inner_area);
 
     // Display a tab indicator.
-    #[cfg(feature = "native")]
+    #[cfg(feature = "sql")]
     let (selected_tab, tab_names) = {
         let selected = match app.current_tab {
             Tab::Layout => 0,
@@ -82,7 +82,7 @@ pub fn render_app(app: &mut AppState, frame: &mut Frame<'_>) {
         (selected, vec!["File Layout", "Segments", "Query"])
     };
 
-    #[cfg(not(feature = "native"))]
+    #[cfg(not(feature = "sql"))]
     let (selected_tab, tab_names) = {
         let selected = match app.current_tab {
             Tab::Layout => 0,
@@ -109,7 +109,7 @@ pub fn render_app(app: &mut AppState, frame: &mut Frame<'_>) {
             render_layouts(app, app_view, frame.buffer_mut());
         }
         Tab::Segments => segments_ui(app, app_view, frame.buffer_mut()),
-        #[cfg(feature = "native")]
+        #[cfg(feature = "sql")]
         Tab::Query => render_query(app, app_view, frame.buffer_mut()),
     }
 }
