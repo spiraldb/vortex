@@ -1,30 +1,38 @@
 # Registration
 
-[Landing page](../../../README.md) | [Background](../background.md) | [Validation](../validation.md)
+[Research](../../../README.md) | [Design context](../background.md) | [Validation](../validation.md)
 
-The PR tests whether the aggregate is registered, then skips installing the entire index.
-Pre-registering the aggregate consequently prevents the probe and rewrite from being installed.
-Aggregate availability is not proof of bundle availability.
+The PR returns early from index registration when the aggregate is already registered. Registering
+the aggregate separately can therefore prevent the index's probe and rewrite rules from being
+installed.
 
-| Implemented alternative | Benefit relative to PR | Tradeoff |
+The prototype registers each component on every call. Aggregate and scalar registries already
+replace entries by ID. The new `StatsSession::register_rewrite_group::<I>(rules)` operation replaces
+one index implementation's rules while preserving other groups and independently appended rules.
+
+## Alternatives
+
+| Implemented alternative | Result | Tradeoff |
 | --- | --- | --- |
-| Remove the guard | Repairs partial registration | Repeated registration appends duplicate rewrite rules. 16 concurrent registrations produced 16 probes |
-| Private TypeId/OnceLock completion tracking | Installs once, handles concurrent registrars | Completion becomes stale if the public session API replaces StatsSession. Preserves the first instance while other registries replace by ID |
-| StatsSession rewrite-group upsert | Idempotent bundle replacement, repairs partial or replaced registries | Requires an explicit ownership concept for groups of rules |
+| Remove the guard | Installs missing components | Repeated calls append duplicate rules. Sixteen concurrent calls produced sixteen Bloom probes. |
+| Track completion with TypeId/OnceLock | Registers once and coordinates concurrent callers | The completion record becomes stale if the session replaces `StatsSession`. It also preserves the first instance while the other registries replace by ID. |
+| Replace a rewrite group | Repeated calls restore the complete registration | Adds group ownership to `StatsSession`. Each index type owns one group. |
 
-**Prefer rewrite groups.** `register_rewrite_group::<I>(rules)` replaces one implementation's rules
-and preserves independent groups and raw appended rules. Aggregate and scalar registries already
-replace entries by ID. The group update is atomic within StatsSession. Installation across all three
-registries is not a transaction for arbitrary concurrent readers.
+Group replacement expresses the operation needed here without a separate completion cache. The
+update is atomic within `StatsSession`. The existing session API does not provide a transaction
+across aggregate, scalar, and rewrite registries.
 
-Both `register_skip_index(&index)` and `register_skip_index::<BloomSkipIndex>()` were implemented
-and passed the same six tests. Associated functions express option-independent registration clearly,
-but prohibit instance-supplied dependencies that the existing vtable abstraction permits. Retain the
-instance API unless the project deliberately wants that restriction, and require its installed
-reader to support every persisted option set. A fresh default reader successfully opened files with
-two different writer configurations.
+## Instance or static registration
 
-Evidence: [comparison and six-case matrix](../evidence/registration-comparison.md), [group
-implementation](../experiments/group.patch), [private completion
-alternative](../experiments/private-state.patch), [static registration
-alternative](../experiments/group-static.patch).
+Both `register_skip_index(&index)` and `register_skip_index::<BloomSkipIndex>()` passed the same six
+tests. Static registration separates reader capabilities from writer configuration, but excludes
+instance-supplied dependencies permitted by the vtable interface.
+
+The combined prototype retains the instance API. Its registration must support every persisted
+configuration, rather than only the configuration held by that instance. A default reader
+successfully opened files written with two different Bloom configurations.
+
+[Comparison matrix](../evidence/registration-comparison.md), [group
+implementation](../experiments/group.patch), [completion
+tracking](../experiments/private-state.patch), [static
+registration](../experiments/group-static.patch).

@@ -1,10 +1,9 @@
-# Implementation map and next steps
+# Implementation map
 
 [Research landing page](../../README.md)
 
-The first research commit contains the combined implementation. The second commit contains this
-guide and the archived alternatives. The implementation starts at reviewed PR head
-`97fa19c640ffcb80e06608b0d64d358b8049c004`.
+The combined prototype is commit `3e481dfd16`, based on PR head
+`97fa19c640ffcb80e06608b0d64d358b8049c004`. The later commits contain documentation and evidence.
 
 ## Source map
 
@@ -20,7 +19,7 @@ guide and the archived alternatives. The implementation starts at reviewed PR he
 | Scoped metadata | [Rewrite context](../../vortex-array/src/stats/rewrite.rs) | Exposes aggregates only for the input that they summarize. |
 | Multiple Bloom configurations | [Bloom rewrite](../../vortex-layout/src/layouts/zoned/skip_index/bloom.rs) | Combines available proofs. This is an optional pruning-quality experiment. |
 
-## Tests that explain the contracts
+## Regression tests
 
 The [file integration tests](../../vortex-file/tests/bloom_skip_index.rs) provide concrete examples:
 
@@ -32,8 +31,8 @@ The [file integration tests](../../vortex-file/tests/bloom_skip_index.rs) provid
 - `aggregate_override_preserves_list_decomposition`: an index does not replace the list layout.
 - `list_element_aggregate_override_is_applied`: configuration reaches the element data.
 - `parent_summary_and_nested_index_compose`: a parent summary and child index coexist.
-- `opaque_parent_data_writer_rejects_nested_index`: opaque parent writers cannot promise child
-  behavior.
+- `opaque_parent_data_writer_rejects_nested_index`: rejects descendant configuration below an opaque
+  parent writer.
 - `unknown_aggregate_disables_known_pruning_in_same_zone_map`: an unknown plugin affects the whole
   shared map.
 - `separate_zones_preserve_known_pruning`: separate layers retain known-index pruning in either
@@ -44,20 +43,13 @@ and conversions between Max and BoundedMax. The tests use the `aggregate_contrac
 [registration tests](../../vortex-layout/src/layouts/zoned/skip_index/tests.rs) cover repeated
 registration, partial registration, concurrency, and replacement of session components.
 
-## Suggested review order
+## Separate changes
 
-The aggregate repairs and registration fix establish contracts that the writer API relies on. They
-can be reviewed separately from the broader writer changes.
+The aggregate matching repairs and registration fix can land independently of the writer API.
+Aggregate selection and structural dispatch form the writer changes. The multiple-Bloom proof policy
+is a separate pruning tradeoff and needs performance evidence.
 
-1. Review aggregate identity and partial-state conversion with their regression tests.
-2. Review rewrite-group ownership and registration behavior.
-3. Review optional probes and aggregate selection policy.
-4. Review structural dispatch and the distinction between complete writers and data writers.
-5. Decide whether the optional Bloom proof policy belongs in a separate change.
-
-These steps are a proposed division of the work, not approval to merge the research branch.
-
-## Work that remains outside the prototype
+## Remaining issues
 
 - Several existing aggregate serializers still panic for unsupported persistence. The report
   recommends the existing `Ok(None)` contract or real serialization with round-trip tests.
@@ -67,6 +59,4 @@ These steps are a proposed division of the work, not approval to merge the resea
 - Extra Bloom probes, nested zoned layers, and the changed dispatch need performance measurements
   before any performance default changes.
 
-The [alternative patches](experiments/README.md) preserve the narrower and competing designs. The
-combined implementation demonstrates composition. It does not establish that every included policy
-is the best production default.
+The [alternative patches](experiments/README.md) include narrower repairs and competing APIs.

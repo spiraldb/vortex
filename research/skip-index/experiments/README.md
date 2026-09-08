@@ -2,8 +2,7 @@
 
 [Research landing page](../../../README.md) | [Validation](../validation.md)
 
-The source tree already contains the combined experiment. These patches preserve the competing
-implementations for comparison. Do not apply them on top of the research branch.
+These patches preserve alternatives to the combined implementation on this branch.
 
 All patches target reviewed PR head `97fa19c640ffcb80e06608b0d64d358b8049c004`, except
 `stat-match-polish.delta.patch`. That delta applies after `aggregate-contract-generic.patch`. Patch
@@ -19,14 +18,14 @@ application against that base was checked before publication.
 | Structural composition | [dispatcher](composition-structured-dispatch.patch), [builder](composition-structured-builder.patch), [tests](composition-structured-tests.patch) | Apply these together with one custom-probe alternative. |
 | Aggregate contracts | [narrow fix](aggregate-contract-narrow.patch), [generic conversion](aggregate-contract-generic.patch) | Competing repair scopes. |
 | Single-method aggregate API | [stat-match-polish.delta.patch](stat-match-polish.delta.patch) | Apply after generic conversion to obtain the final StatMatch API. |
-| Baseline aggregate reproductions | [aggregate-contract-repros.patch](aggregate-contract-repros.patch) | Intentionally demonstrates failures in the reviewed code. |
+| Baseline aggregate reproductions | [aggregate-contract-repros.patch](aggregate-contract-repros.patch) | Regression tests against the reviewed code. |
 | Reader and rewrite context | [vortex-read-rewrite.patch](vortex-read-rewrite.patch) | Scoped lookup, independent reader tests, and multiple Bloom proof experiment. |
 
-Applying a patch does not prove that it is a standalone feature. The composition patches split
-related source files for comparison. Different alternatives overlap and are not a linear stack. The
-combined source includes integration adjustments between the selected alternatives.
+The composition patches split related files and must be applied together as listed above. Competing
+alternatives overlap. The combined source includes the adjustments needed to integrate the selected
+variants.
 
-## Inspect one alternative
+## Reproduce a variant
 
 From a checkout of the research branch, create a separate checkout at the reviewed base:
 
@@ -40,4 +39,4 @@ cargo test -p vortex-layout layouts::zoned::skip_index
 The example assumes that the research checkout directory is named `vortex`. The [validation
 page](../validation.md) lists the combined checks. The [registration
 matrix](../evidence/registration-comparison.md) compares successful and failing registration
-variants. A failure in an intentionally weaker variant is part of the evidence.
+variants.

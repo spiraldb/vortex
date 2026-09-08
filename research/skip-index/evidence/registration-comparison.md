@@ -1,89 +1,57 @@
-# Registration prototypes
+# Registration experiments
 
-[Landing page](../../../README.md) | [Validation](../validation.md)
+[Research](../../../README.md) | [Registration proposal](../findings/registration.md)
 
-All prototypes start at PR head `97fa19c640ffcb80e06608b0d64d358b8049c004`.
+Each variant starts at PR head `97fa19c640ffcb80e06608b0d64d358b8049c004`. The tests count Bloom
+probes in the resulting predicate after registration completes.
 
-| Behavior | PR | Remove guard | Private completion | Rule group |
+| Case | PR | Remove guard | Completion cache | Rewrite group |
 | --- | --- | --- | --- | --- |
-| Aggregate already registered | Missing probe | Pass | Pass | Pass |
-| Repeated registration through session clone | One probe | Two probes | One probe | One probe |
-| 16 concurrent registrations | One in this run. Guard is not atomic | 16 probes | One probe | One probe |
-| Writer uses different Bloom options | Pass | Pass | Pass | Pass |
-| Replace StatsSession and register again | Zero probes | Pass | Zero probes | Pass |
-| Independently append a Bloom rule, then register index twice | Two probes | Three probes | Two probes | Two probes |
+| Aggregate already registered | Probe missing | Pass | Pass | Pass |
+| Repeated registration through a session clone | One probe | Two probes | One probe | One probe |
+| Sixteen concurrent registrations | One probe in this run | Sixteen probes | One probe | One probe |
+| Different writer configurations | Pass | Pass | Pass | Pass |
+| Replace StatsSession, then register again | Zero probes | Pass | Zero probes | Pass |
+| Append an independent Bloom rule, then register twice | Two probes | Three probes | Two probes | Two probes |
 
-The concurrent test counts probes after all calls finish. The PR also has a race identified by
-source inspection. A second caller can return after aggregate insertion but before scalar and
-rewrite registration. The private OnceLock waits until the whole bundle is installed. Rule-group
-registration lets both callers complete all components and atomically replaces the rule group under
-the StatsSession lock. No variant makes arbitrary concurrent readers observe one transaction across
-aggregate, scalar, and stats registries. The existing session API has no such transaction.
+The PR's guard is not atomic. Source inspection identifies another race: a caller can return after
+aggregate insertion but before the first caller installs the scalar and rewrite rules. The
+concurrent test above does not exercise that intermediate state directly.
 
-## Recommendation
+`OnceLock` makes concurrent registrars wait for the bundle. Rewrite-group replacement lets each
+registrar install the components and replaces the group's rules under the `StatsSession` lock.
+Neither design gives arbitrary concurrent readers a transaction across all three registries.
 
-Use a rule-group upsert owned by StatsSession. `register_rewrite_group::<I>(rules)` replaces the
-rules supplied by one index implementation, leaving other groups and explicitly appended rules
-intact. The index can always register its aggregate and scalar using the existing replace-by-ID
-semantics, then upsert its rules. This needs no new persisted identifier and no completion cache
-that can disagree with replaced session state.
+## Session behavior
 
-The group API adds roughly 45 lines of registry implementation and changes one private
-representation used by the rewrite loop. It copies rule lists while registering, not while
-evaluating predicates. It preserves the existing append API, including multiple differently
-configured rules of the same Rust type. Global deduplication by each rule's TypeId changes those
-existing semantics.
+`VortexSession`, `AggregateFnSession`, and `StatsSession` clones share their mutable registry cells.
+`SessionMut` uses clone-and-replace semantics, so concurrent updates to a plain `HashSet` can lose
+registration records. The completion prototype uses `ArcSwapMap<TypeId, Arc<OnceLock<()>>>` instead.
 
-The public contract must state that an index's registration supports all persisted configurations. A
-group keyed by index type deliberately treats repeated registration as replacement of one universal
-implementation bundle. It does not support several independent instance-specific rule bundles under
-the same index type. The PR's aggregate-keyed early return already has that restriction implicitly.
+A separate completion cache becomes stale if a component registry is replaced. The group operation
+keeps ownership in the registry that holds the rules. It also preserves the append API, including
+independently configured rules of the same Rust type.
 
-Private completion tracking is smaller in registry scope and avoids work on repeated calls. It adds
-a cache invalidation contract around public VortexSession::register, since each registry can be
-replaced independently. It also preserves the first implementation instance, whereas existing
-aggregate and scalar registration APIs replace by ID. Use it only if the session deliberately
-forbids replacing component registries after index registration.
+The group key identifies an index implementation, not an instance configuration. Registration must
+support every persisted configuration of that implementation. Independent instance-specific rule
+bundles under one type are outside that contract.
 
-Deleting the guard is insufficient for an idempotent API: actual predicates grew from one Bloom
-probe to sixteen in the concurrent test.
+Both the instance API and `register_skip_index::<BloomSkipIndex>()` passed the six cases. The static
+API prevents instance-supplied registration dependencies. The combined prototype keeps the instance
+API and documents the configuration-independent registration contract.
 
-## Existing session observations
-
-VortexSession clones, AggregateFnSession clones, and StatsSession clones share their mutable
-registry cells. A fresh VortexSession::empty is independent. SessionMut uses clone-and-replace
-semantics. Concurrent get_mut calls that change a plain HashSet can lose updates. It is unsuitable
-for atomic registration tracking. The private completion prototype uses ArcSwapMap<TypeId,
-Arc<OnceLock<()>>> instead.
-
-The existing StatsSession supports append only. That is useful for several rules targeting the same
-scalar function, but does not express installing a plugin bundle idempotently. This missing
-operation is the underlying composition gap.
-
-AggregateFnSession::default registers CountGroupedKernel under Count.id() but omits the Count
-plugin. Count also has incomplete serialization. Missing default registration alone is not
-established as an index defect. The prototype does not change it.
+`AggregateFnSession::default` omits the Count plugin while registering its grouped kernel. Count
+also has incomplete serialization. The omission alone is not established as an index defect.
 
 ## Artifacts
 
-- [baseline.log](logs/registration-baseline.log),
-  [remove-guard.log](logs/registration-remove-guard.log),
-  [private-state.log](logs/registration-private-state.log),
-  [group.log](logs/registration-group.log): actual six-test outcomes.
-- [remove-guard.patch](../experiments/remove-guard.patch),
-  [private-state.patch](../experiments/private-state.patch),
-  [group.patch](../experiments/group.patch): independent alternatives against the PR head. The group
-  patch includes the tests.
+| Variant | Patch | Log |
+| --- | --- | --- |
+| PR baseline | Tests supplied by the group experiment | [Baseline](logs/registration-baseline.log) |
+| Remove guard | [Patch](../experiments/remove-guard.patch) | [Log](logs/registration-remove-guard.log) |
+| Completion cache | [Patch](../experiments/private-state.patch) | [Log](logs/registration-private-state.log) |
+| Rewrite group | [Patch](../experiments/group.patch) | [Log](logs/registration-group.log), [final run](logs/registration-group-final.log) |
+| Static registration | [Patch](../experiments/group-static.patch) | [Log](logs/registration-static.log) |
 
-`cargo +nightly fmt --all` completed. It also exposed unrelated existing format drift in DuckDB/FFI
-files, which was reverted in this isolated clone. The combined experiment subsequently passed full
-workspace Clippy.
-
-The associated-function alternative is in [group-static.patch](../experiments/group-static.patch).
-It also passed all six focused tests. Layout doctests passed (two active, two existing ignored).
-`cargo clippy -p vortex-layout --all-targets --all-features` passed after explicitly permitting the
-intentional cloned-session test. The static API is
-`session.register_skip_index::<BloomSkipIndex>()`. Configured index instances are needed only for
-writes. This removes a misleading registration-time options argument, but disallows
-instance-supplied registration dependencies. The plain group patch retains instance methods and
-documents the universal-registration contract instead.
+The group and static variants also passed layout doctests and affected-crate Clippy. The [combined
+prototype](../validation.md) subsequently passed workspace Clippy.

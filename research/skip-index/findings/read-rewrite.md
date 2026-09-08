@@ -1,41 +1,55 @@
-# Rewrite context and optional-reader behavior
+# Reading and rewrites
 
-[Landing page](../../../README.md) | [Background](../background.md) | [Validation](../validation.md)
+[Research](../../../README.md) | [Design context](../background.md) | [Validation](../validation.md)
 
-The existing two-stage design is useful: rules construct proofs using persisted aggregate options.
-The binder maps stat leaves to storage. Deferring all options to the binder requires it to rewrite
-the Bloom probe and stat leaf together. That is a larger protocol with no demonstrated benefit.
+## Persisted configuration
 
-**Keep persisted aggregate instances and make their scope explicit.** The implemented
-`aggregate_fns_for(input)` exposes them only for the root input. A `root_aggregate_fns()` rename is
-a simpler equivalent contract. A general provider trait can support computed-expression or
-multi-column summaries. The current metadata does not describe those summaries.
+Bloom needs its persisted configuration when the rewrite constructs a probe. The existing sequence
+fits that requirement: rewrite rules construct proofs, then the binder replaces stat leaves with
+storage expressions. Deferring configuration to the binder also requires it to rewrite the probe.
 
-The PR's first-matching Bloom configuration is sound. The experiment ORs proofs from every matching
-configuration. It prunes an absent value that produces a false positive in only the smaller filter.
-It also verifies retained hits and AND/OR composition. This costs extra summary reads and probes,
-and was not benchmarked. Choosing one, choosing the largest, and using all are index-specific
-quality policies. The recommendation is to expose all candidates and leave selection to the index
-rule. OR-all is included as an experiment, not a correctness requirement for this PR.
+The prototype keeps persisted aggregate instances in the rewrite context and exposes them through
+`aggregate_fns_for(input)`. The lookup returns aggregates only for the root input they summarize.
+Renaming the existing getter to `root_aggregate_fns()` expresses the same restriction with less API.
 
-### Unknown aggregate independence
+A general provider trait can describe computed-expression or multi-column summaries, but the current
+metadata cannot supply them. There is no demonstrated caller for that additional interface.
 
-The current metadata contains aggregate ID and options, and reconstructs the stats-table dtype
-through registered plugins. With one unknown plugin and `allow_unknown`, the entire map becomes
-unavailable. Known summaries in that map cannot prune, although scans remain correct and other
-file/layout pruning can still work.
+## Multiple Bloom configurations
 
-| Alternative | Benefit | Tradeoff / evidence |
+The PR uses the first matching configuration, which is sound but makes pruning quality depend on
+metadata order. The prototype ORs proofs from all matching configurations. A focused test prunes a
+value that is a false positive in only the smaller filter and retains values that are present.
+
+| Policy | Benefit | Tradeoff |
 | --- | --- | --- |
-| Preserve current combined map | No format change | Unknown plugin disables all summaries in that map. Reproduced with file statistics excluded |
-| Separate Zoned wrappers | Known wrapper still prunes | Extra layout nodes and stats streams. Tested in both nesting orders |
-| Persist complete stats-table dtype | Decode auxiliary schema without every plugin | Redundant metadata and validation against each known aggregate. Design only |
-| Persist per-aggregate slot and state dtype | Independently describable summaries. Decouples Display from storage | Coordinated metadata and binder change with format compatibility rules. Design only |
+| First match | One probe | Metadata order selects the filter. |
+| Largest filter | One probe with a Bloom-specific selection policy | Size is a probabilistic preference, not a universal quality ordering. |
+| OR all proofs | Uses evidence from every filter | Reads and probes every matching summary. |
 
-For independence inside a single combined map, prefer explicit slot/state metadata as the
-longer-term direction. The current format cannot provide that behavior through a cleaner Rust trait
-alone. Separate wrappers are a working option if avoiding a format change matters.
+The context can expose all candidates and leave selection to the index rule. OR-all is included in
+the combined experiment, but is not required for correctness and has no performance measurements.
 
-Evidence: [reader report](../evidence/reader-experiments.md), [reader/rewrite
-patch](../experiments/vortex-read-rewrite.patch), [isolated unknown-plugin
+## Unknown aggregates
+
+The current metadata stores aggregate IDs and configuration. The reader asks each registered plugin
+for its state dtype to reconstruct the summary table. With one unknown plugin and `allow_unknown`,
+the entire map becomes unavailable. Known aggregates in that map cannot prune.
+
+Scans remain correct. Other layout or file statistics can still prune, so the reproduction excludes
+file-level statistics to isolate this behavior.
+
+| Alternative | Result | Tradeoff and evidence |
+| --- | --- | --- |
+| Current combined map | Correct reads without the unknown plugin | All summaries in that map become unavailable. Reproduced. |
+| Separate zoned wrappers | The known wrapper still prunes | Extra layout nodes and summary streams. Tested in both orders. |
+| Persist the summary table dtype | Reconstructs the table without every plugin | Adds schema metadata and validation against known aggregates. Design only. |
+| Persist each aggregate's slot and state dtype | Describes entries independently and separates storage identity from Display | Requires coordinated metadata and binder changes. Design only. |
+
+Per-aggregate slots and state dtypes address both unknown-plugin independence and physical-name
+collisions. Separate wrappers provide independence with the existing format, at the cost of extra
+layout and summary streams.
+
+[Experiment details](../evidence/reader-experiments.md), [reader/rewrite
+patch](../experiments/vortex-read-rewrite.patch), [unknown-plugin
 test](../../../vortex-file/tests/bloom_skip_index.rs#L393).

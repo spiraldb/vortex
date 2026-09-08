@@ -1,44 +1,42 @@
-# Custom probes and writer composition
+# Writer composition and probes
 
-[Landing page](../../../README.md) | [Background](../background.md) | [Validation](../validation.md)
+[Research](../../../README.md) | [Design context](../background.md) | [Validation](../validation.md)
 
-### Probe registration
+## Field writers
 
-The PR requires a custom scalar vtable even when an index can express its proof using existing
-functions.
+The PR routes aggregate configuration through the complete-field override mechanism. Tests exposed
+three consequences: list decomposition is disabled, list-element requests are ignored, and a parent
+summary conflicts with a child summary.
 
-| Implemented alternative | Benefit | Tradeoff |
+The prototype selects the natural struct, list, or scalar writer before applying the index wrapper.
+`TableStrategy` owns traversal, while the wrapper adds repartitioning and zoning. This keeps
+aggregate policy out of `TableStrategy` and preserves nested field configuration.
+
+| Alternative | Result | Tradeoff |
 | --- | --- | --- |
-| Optional erased scalar plugin | Declarative and inspectable. No dummy function | One optional custom probe |
-| `register_scalar_fns(&ScalarFnSession)` hook | Can install several helper functions | Hides dependencies in executable code |
-| Mandatory associated scalar type | Statically named vtable | Imposes an unnecessary component on built-in-only proofs |
+| Manual `Repartition(Zoned(custom_data, stats_writer))` | Custom data storage and pruning compose | Callers must coordinate the zone length and repartitioning, including disabling byte-based coalescing. |
+| Merge aggregate and data-writer configuration at each field | Fixes the same-field case | Complete overrides still bypass structural traversal. |
+| Select the data writer, then apply a wrapper | Preserves lists, element indexes, and parent-plus-child summaries | Requires separate meanings for data-writer and complete-writer overrides. |
 
-**Prefer an optional plugin for demonstrated needs.** Both alternatives passed the same composition
-tests, including an index with no custom probe. Multiple helper registration can be introduced when
-a real consumer needs it. It does not imply multiple aggregates per index.
+The combined prototype uses the wrapper approach. `with_field_data_writer` replaces the data child
+below zoning. `with_field_writer` retains ownership of the whole field pipeline.
 
-### Choosing and wrapping data writers
+An opaque writer for a parent field does not expose traversal to child overrides. Combining it with
+child configuration therefore returns an error. A parent aggregate summary can still coexist with a
+child index because it wraps the normal traversal.
 
-Manual composition works: `Repartition(Zoned(custom_data, stats_writer))`. The tested example takes
-about 28 lines and must coordinate zone length and repartitioning, including disabling byte-based
-coalescing. A convenience method can hide those coordination requirements.
+## Custom probes
 
-Simply merging per-field writer options is insufficient. The PR routes aggregate overrides through
-the complete-field override mechanism. Experiments confirmed that this disables list decomposition,
-ignores list-element requests, and rejects a parent summary alongside a child summary.
+The PR requires a scalar vtable even when the rewrite can use existing scalar functions. An optional
+erased plugin removes that requirement. A registration hook also works and can install several
+helper functions, but leaves those dependencies inside executable registration code.
 
-The successful implementation selects the natural struct/list/scalar data strategy first, then
-applies a common wrapper factory. TableStrategy handles traversal. The wrapper adds partitioning and
-zoning. TableStrategy does not need to know about aggregates. The same mechanism supports both
-default and field-specific wrappers.
+Both variants passed the same composition tests, including an index with no custom probe. The
+combined prototype uses one optional plugin. The hook remains an alternative for indexes that need
+several helpers. Neither choice requires multiple aggregates per index.
 
-**Prefer structural dispatch followed by wrapping.** Tests cover list layouts, list-element indexes,
-parent-plus-child summaries, and custom data writers with working Bloom pruning. The tradeoff is an
-explicit distinction between a data-writer override and a complete-writer override. An opaque parent
-data writer cannot promise to apply child overrides, so that combination returns an error.
-
-Evidence: [structural dispatcher](../experiments/composition-structured-dispatch.patch), [builder
-implementation](../experiments/composition-structured-builder.patch), [behavior
-tests](../experiments/composition-structured-tests.patch), [optional
-probe](../experiments/composition-optional-probe.patch), [registration hook
-alternative](../experiments/composition-scalar-hook.patch).
+[Dispatcher](../experiments/composition-structured-dispatch.patch),
+[builder](../experiments/composition-structured-builder.patch),
+[tests](../experiments/composition-structured-tests.patch), [optional
+probe](../experiments/composition-optional-probe.patch), [registration
+hook](../experiments/composition-scalar-hook.patch).
