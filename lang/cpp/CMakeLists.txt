@@ -79,6 +79,7 @@ if(VORTEX_BUILD_TESTS OR VORTEX_BUILD_EXAMPLES)
         GIT_REPOSITORY https://github.com/apache/arrow-nanoarrow
         GIT_TAG apache-arrow-nanoarrow-0.8.0)
     FetchContent_MakeAvailable(Nanoarrow)
+    # Suppress Nanoarrow warnings.
     target_compile_options(nanoarrow_static PRIVATE -w)
     target_compile_options(nanoarrow_shared PRIVATE -w)
 
