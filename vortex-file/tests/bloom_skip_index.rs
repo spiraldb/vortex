@@ -20,7 +20,6 @@
 #![expect(clippy::expect_used)]
 
 use std::num::NonZeroU32;
-use std::num::NonZeroUsize;
 use std::sync::Arc;
 
 use vortex_array::ArrayRef;
@@ -56,7 +55,6 @@ use vortex_layout::layouts::zoned::aggregates::bloom_filter::HashFn;
 use vortex_layout::layouts::zoned::skip_index::SkipIndex;
 use vortex_layout::layouts::zoned::skip_index::SkipIndexSessionExt;
 use vortex_layout::layouts::zoned::skip_index::bloom::BloomSkipIndex;
-use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
 use vortex_layout::session::LayoutSession;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -131,14 +129,9 @@ fn filter(value: i64) -> BoundExpression {
 }
 
 fn strategy<T: SkipIndex>(index: &T, zone_len: usize) -> VortexResult<Arc<dyn LayoutStrategy>> {
-    let options = ZonedLayoutOptions {
-        block_size: NonZeroUsize::new(zone_len).expect("zone length is non-zero"),
-        aggregate_fns: Some(vec![index.aggregate_fn()].into()),
-        ..Default::default()
-    };
-
     Ok(WriteStrategyBuilder::default()
-        .with_field_zoned_options(field_path!(id), options)
+        .with_row_block_size(zone_len)
+        .with_field_aggregates(field_path!(id), [index.aggregate_fn()])
         .build())
 }
 

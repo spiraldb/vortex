@@ -383,10 +383,10 @@ mod tests {
         let written =
             write_zones_with_options(LayoutWriterContext::new(ArrayContext::empty()), options)?;
 
-        // Should include defaults, plus bloom filter.
+        // The aggregate list replaces the defaults with the Bloom filter.
         assert!(
             written == [BloomFilter {}.id().to_string()],
-            "expected bloom and defaults present, wrote {written:?}"
+            "expected only the Bloom aggregate, wrote {written:?}"
         );
         Ok(())
     }

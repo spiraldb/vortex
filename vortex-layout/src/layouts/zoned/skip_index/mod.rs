@@ -4,8 +4,8 @@
 //! Skipping-index interface and its implementations.
 //!
 //! This module also provides the session extension used to register skip index
-//! implementations. Writers collect the bound aggregate returned by [`SkipIndex::aggregate_fn`]
-//! through [`ZonedLayoutOptions::aggregate_fns`](super::writer::ZonedLayoutOptions::aggregate_fns).
+//! implementations. Pass the bound aggregate returned by [`SkipIndex::aggregate_fn`]
+//! to `WriteStrategyBuilder::with_field_aggregates` to index a field.
 //!
 //! # Difference from a locating index
 //!
@@ -34,10 +34,10 @@ pub mod bloom;
 ///
 /// First, register the components needed to use the index through
 /// [`SkipIndexSessionExt::register_skip_index`]. When writing, use
-/// [`SkipIndex::aggregate_fn`] to bind the index options and set
-/// [`ZonedLayoutOptions::aggregate_fns`](super::writer::ZonedLayoutOptions::aggregate_fns).
-/// An explicit aggregate list replaces the writer's default aggregates. Pass the resulting options to
-/// `WriteStrategyBuilder::with_field_zoned_options` for the field to be indexed.
+/// [`SkipIndex::aggregate_fn`] to bind the index options and pass the aggregate to
+/// `WriteStrategyBuilder::with_field_aggregates` for the field to be indexed.
+/// An explicit aggregate list replaces the writer's default aggregates. Zone length
+/// is controlled by `WriteStrategyBuilder::with_row_block_size`.
 ///
 /// # Logical and physical representation
 ///
@@ -61,24 +61,10 @@ pub mod bloom;
 /// }
 /// ```
 ///
-/// For writes, create a configured instance and select its aggregate for the field:
-///
-/// ```
-/// use vortex_layout::layouts::zoned::skip_index::bloom::BloomSkipIndex;
-/// use vortex_layout::layouts::zoned::skip_index::SkipIndex;
-/// use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
-///
-/// fn zoned_options() -> ZonedLayoutOptions {
-///     let index = BloomSkipIndex::default();
-///     ZonedLayoutOptions {
-///         aggregate_fns: Some(vec![index.aggregate_fn()].into()),
-///         ..Default::default()
-///     }
-/// }
-/// ```
-///
-/// Then use `WriteStrategyBuilder::with_field_zoned_options` to apply the
-/// options to the field you want to index.
+/// For writes, create a configured index and use [`SkipIndex::aggregate_fn`] to
+/// obtain its aggregate. Pass the field path and an aggregate list containing it to
+/// `WriteStrategyBuilder::with_field_aggregates`. This list replaces the default
+/// aggregates for that field.
 pub trait SkipIndex: Send + Sync + 'static {
     /// The concrete aggregate implementation registered for this index.
     type Aggregate: AggregateFnVTable;
