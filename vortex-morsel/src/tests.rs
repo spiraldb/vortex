@@ -1780,6 +1780,9 @@ fn trace_one_morsel() -> VortexResult<()> {
 
     println!("== morsel ==");
     for trace in &stats.morsel_traces {
+        for (n, outcome) in trace.polls.iter().enumerate() {
+            println!("  poll {}: {outcome}", n + 1);
+        }
         println!(
             "  morsel {} rows {}..{}: plan polls {}, execute polls {}, named uses {}, requests {}, \
              cell hits {}, blocked {} time(s), planning {}us, execution {}us, io wait {}us",

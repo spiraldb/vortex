@@ -5,12 +5,52 @@
 
 use std::time::Duration;
 
+use crate::io::IoKey;
+
+/// What one top-level poll of a morsel's root returned.
+#[derive(Clone, Debug)]
+pub enum PollOutcome {
+    /// `next_plan` could not name more reads until these cells are ready.
+    PlanBlocked(Vec<IoKey>),
+    /// `next_plan` named every read the morsel needs.
+    PlanComplete,
+    /// `execute` produced the morsel's value with this many rows.
+    ExecuteValue(u64),
+    /// `execute` is waiting on these cells.
+    ExecuteBlocked(Vec<IoKey>),
+    /// `execute` yielded without a value.
+    ExecuteYield,
+    /// `execute` had nothing left to produce.
+    ExecuteDone,
+}
+
+impl std::fmt::Display for PollOutcome {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        fn cells(keys: &[IoKey]) -> String {
+            keys.iter()
+                .map(|IoKey::Segment(id)| format!("segment {}", **id))
+                .collect::<Vec<_>>()
+                .join(", ")
+        }
+        match self {
+            Self::PlanBlocked(keys) => write!(f, "plan -> Blocked on {}", cells(keys)),
+            Self::PlanComplete => write!(f, "plan -> Complete"),
+            Self::ExecuteValue(rows) => write!(f, "execute -> Value({rows} rows)"),
+            Self::ExecuteBlocked(keys) => write!(f, "execute -> Blocked on {}", cells(keys)),
+            Self::ExecuteYield => write!(f, "execute -> Yield"),
+            Self::ExecuteDone => write!(f, "execute -> Done"),
+        }
+    }
+}
+
 /// Work attributed to one completed morsel when detailed observability is enabled.
 ///
 /// Segment reads are deduplicated scan-wide, so `segment_ids` records the exact logical segments
 /// named by this morsel while physical request and byte totals remain scan-level counters.
 #[derive(Clone, Debug, Default)]
 pub struct MorselTrace {
+    /// What every top-level `next_plan` and `execute` poll returned, in order.
+    pub polls: Vec<PollOutcome>,
     /// Stable index in scan output order.
     pub index: usize,
     /// Executor worker that drove the morsel.
@@ -229,6 +269,7 @@ impl ScanStats {
         selected_rows: u64,
     ) {
         self.morsel_traces.push(MorselTrace {
+            polls: Vec::new(),
             index,
             worker,
             row_start,
@@ -265,6 +306,13 @@ impl ScanStats {
         self.decode_reuses += 1;
         if let Some(trace) = self.morsel_traces.last_mut() {
             trace.reused_segment_ids.push(segment);
+        }
+    }
+
+    /// Record what a top-level poll returned, on the morsel trace being written.
+    pub(crate) fn record_poll(&mut self, outcome: PollOutcome) {
+        if let Some(trace) = self.morsel_traces.last_mut() {
+            trace.polls.push(outcome);
         }
     }
 

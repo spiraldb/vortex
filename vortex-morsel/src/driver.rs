@@ -54,6 +54,7 @@ use crate::node::Arena;
 use crate::node::ExecPoll;
 use crate::node::PlanPoll;
 use crate::node::ScanCaches;
+use crate::node::Value;
 use crate::node::Wait;
 use crate::node::WaitSet;
 use crate::node::begin_morsel;
@@ -61,6 +62,7 @@ use crate::node::poll_execute_morsel;
 use crate::node::poll_plan_morsel;
 use crate::node::retire_morsel;
 use crate::source::IoAnswerer;
+use crate::stats::PollOutcome;
 use crate::stats::ScanStats;
 
 /// The morsel row ranges for a plan.
@@ -876,6 +878,12 @@ impl<'a> LocalMorsel<'a> {
                 if let Some(phase_start) = phase_start {
                     self.stats.planning_time += phase_start.elapsed();
                 }
+                if scheduler.run.observe_morsels {
+                    self.stats.record_poll(match &poll {
+                        PlanPoll::Blocked(waits) => PollOutcome::PlanBlocked(wait_keys(waits)),
+                        PlanPoll::Complete => PollOutcome::PlanComplete,
+                    });
+                }
                 self.stats.io_batches += scheduler.submit_planning_reads(
                     self.index,
                     self.io.take_reads(),
@@ -907,6 +915,17 @@ impl<'a> LocalMorsel<'a> {
                 )?;
                 if let Some(phase_start) = phase_start {
                     self.stats.execution_time += phase_start.elapsed();
+                }
+                if scheduler.run.observe_morsels {
+                    self.stats.record_poll(match &poll {
+                        ExecPoll::Value(batch) => PollOutcome::ExecuteValue(match &batch.value {
+                            Value::Array(array) => array.len() as u64,
+                            Value::Mask(mask) => mask.true_count() as u64,
+                        }),
+                        ExecPoll::Blocked(waits) => PollOutcome::ExecuteBlocked(wait_keys(waits)),
+                        ExecPoll::Yield(_) => PollOutcome::ExecuteYield,
+                        ExecPoll::Done => PollOutcome::ExecuteDone,
+                    });
                 }
                 match poll {
                     ExecPoll::Value(batch) => {
@@ -1416,6 +1435,15 @@ impl MorselExecutor {
         }
         Ok((batches, stats, wall))
     }
+}
+
+/// The cells a wait set names, for the morsel trace.
+fn wait_keys(waits: &WaitSet) -> Vec<IoKey> {
+    waits
+        .waits()
+        .iter()
+        .map(|Wait::Io(ticket)| ticket.key())
+        .collect()
 }
 
 #[cfg(test)]
