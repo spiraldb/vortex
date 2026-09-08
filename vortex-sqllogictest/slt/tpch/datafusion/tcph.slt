@@ -7,4 +7,4 @@ include ../../setup.slt.no
 include ./create.slt.no
 
 include ../results/*.slt.no
-# include ../drop.slt.no
+include ../drop.slt.no

@@ -60,3 +60,56 @@ order by
 35 5
 1 2
 36 1
+
+onlyif datafusion
+query TT
+EXPLAIN
+select
+    c_count,
+    count(*) as custdist
+from
+    (
+        select
+            c_custkey,
+            count(o_orderkey)
+        from
+            customer left outer join orders on
+                        c_custkey = o_custkey
+                    and o_comment not like '%special%requests%'
+        group by
+            c_custkey
+    ) as c_orders (c_custkey, c_count)
+group by
+    c_count
+order by
+    custdist desc,
+    c_count desc;
+----
+logical_plan
+01)Sort: custdist DESC NULLS FIRST, c_orders.c_count DESC NULLS FIRST
+02)--Projection: c_orders.c_count, count(Int64(1)) AS count(*) AS custdist
+03)----Aggregate: groupBy=[[c_orders.c_count]], aggr=[[count(Int64(1))]]
+04)------SubqueryAlias: c_orders
+05)--------Projection: count(orders.o_orderkey) AS c_count
+06)----------Aggregate: groupBy=[[customer.c_custkey]], aggr=[[count(orders.o_orderkey)]]
+07)------------Projection: customer.c_custkey, orders.o_orderkey
+08)--------------Left Join: customer.c_custkey = orders.o_custkey
+09)----------------TableScan: customer projection=[c_custkey]
+10)----------------Projection: orders.o_orderkey, orders.o_custkey
+11)------------------Filter: orders.o_comment NOT LIKE Utf8View("%special%requests%")
+12)--------------------TableScan: orders projection=[o_orderkey, o_custkey, o_comment], partial_filters=[orders.o_comment NOT LIKE Utf8View("%special%requests%")]
+physical_plan
+01)SortPreservingMergeExec: [custdist@1 DESC, c_count@0 DESC]
+02)--ProjectionExec: expr=[c_count@0 as c_count, count(Int64(1))@1 as custdist]
+03)----SortExec: expr=[count(Int64(1))@1 DESC, c_count@0 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[c_count@0 as c_count], aggr=[count(Int64(1))]
+05)--------RepartitionExec: partitioning=Hash([c_count@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[c_count@0 as c_count], aggr=[count(Int64(1))]
+07)------------ProjectionExec: expr=[count(orders.o_orderkey)@1 as c_count]
+08)--------------AggregateExec: mode=FinalPartitioned, gby=[c_custkey@0 as c_custkey], aggr=[count(orders.o_orderkey)]
+09)----------------RepartitionExec: partitioning=Hash([c_custkey@0], 4), input_partitions=4
+10)------------------AggregateExec: mode=Partial, gby=[c_custkey@0 as c_custkey], aggr=[count(orders.o_orderkey)]
+11)--------------------HashJoinExec: mode=CollectLeft, join_type=Left, on=[(c_custkey@0, o_custkey@1)], projection=[c_custkey@0, o_orderkey@1]
+12)----------------------CoalescePartitionsExec
+13)------------------------DataSourceExec: file_groups={<slt:ignore>}, projection=[c_custkey], file_type=vortex
+14)----------------------DataSourceExec: file_groups={<slt:ignore>}, projection=[o_orderkey, o_custkey], file_type=vortex, predicate: o_comment@8 NOT LIKE %special%requests%
