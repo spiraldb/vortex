@@ -23,7 +23,8 @@ cargo test -p vortex-sqllogictest --test sqllogictests
 
 `generate_data.sh` accepts dataset names to generate only some of the fixtures, for example
 `./vortex-sqllogictest/slt/generate_data.sh tpch` or `... clickbench`. Run it with `--help` to list
-the datasets.
+the datasets. It runs each dataset's own script, `slt/tpch/generate_data.sh` or
+`slt/clickbench/generate_data.sh`, which can also be run directly.
 
 The generated Vortex and Parquet data lives under `slt/tpch/data/` and `slt/clickbench/data/`
 (git-ignored). Both formats are required; regenerate older fixtures if they only contain Vortex
@@ -43,11 +44,10 @@ variable selects the format in each engine's table setup.
 
 ClickBench plans explain the upstream queries unchanged. Where an upstream query leaves the order
 of tied rows unspecified, its result record adds tie-breaking `ORDER BY` columns so both formats
-and repeated runs produce the same rows. `generate_data.sh` also runs
-`slt/clickbench/duckdb/parity.slt` right after converting the ClickBench shard; it reads both files
-through DuckDB and fails if the Parquet and Vortex data differ. After completing ClickBench
-DataFusion plans, replace the byte ranges in `file_groups` with `<slt:ignore>`, as the TPC-H plans
-do:
+and repeated runs produce the same rows. The ClickBench generator also runs
+`slt/clickbench/duckdb/parity.slt` right after converting the shard; it reads both files through
+DuckDB and fails if the Parquet and Vortex data differ. After completing ClickBench DataFusion
+plans, replace the byte ranges in `file_groups` with `<slt:ignore>`, as the TPC-H plans do:
 
 ```shell
 sed -i -E 's/hits\.vortex:[0-9]+\.\.[0-9]+/hits.vortex:<slt:ignore>/g' vortex-sqllogictest/slt/clickbench/datafusion/plans/*.slt.no
