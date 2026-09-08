@@ -4,6 +4,7 @@
 //! Allocator-backed storage for Vortex buffers.
 
 use std::alloc::Layout;
+use std::any::Any;
 use std::fmt;
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
@@ -27,8 +28,15 @@ pub trait BufferAllocator: Allocator + Debug + Send + Sync + 'static {}
 impl<A> BufferAllocator for A where A: Allocator + Debug + Send + Sync + 'static {}
 
 /// A shared reference to a buffer allocator.
+///
+/// The static allocator does not need shared ownership, so it is stored without an [`Arc`]. This
+/// makes cloning the common static allocator a simple value copy.
 #[derive(Clone)]
-pub struct BufferAllocatorRef(Option<Arc<dyn BufferAllocator>>);
+pub struct BufferAllocatorRef(
+    // `None` selects the static allocator without allocating or updating an Arc reference count.
+    // `Some` keeps a custom allocator alive for as long as its buffers need it.
+    Option<Arc<dyn BufferAllocator>>,
+);
 
 impl BufferAllocatorRef {
     /// Wrap an allocator in a shared reference.
@@ -333,32 +341,13 @@ impl Drop for Allocation {
     }
 }
 
-pub(crate) trait BufferOwner: Send + Sync + 'static {
-    fn as_ptr(&self) -> *const u8;
-
-    fn len(&self) -> usize;
-}
-
-impl<T> BufferOwner for T
-where
-    T: AsRef<[u8]> + Send + Sync + 'static,
-{
-    fn as_ptr(&self) -> *const u8 {
-        self.as_ref().as_ptr()
-    }
-
-    fn len(&self) -> usize {
-        self.as_ref().len()
-    }
-}
-
 pub(crate) enum BufferBacking {
     Owned(Allocation),
     Bytes(bytes::Bytes),
     #[cfg(feature = "arrow")]
     Arrow(arrow_buffer::Buffer),
     External {
-        _owner: Box<dyn BufferOwner>,
+        _owner: Box<dyn Any + Send + Sync>,
     },
 }
 
@@ -386,9 +375,13 @@ mod tests {
     use allocator_api2::alloc::AllocError;
     use allocator_api2::alloc::Allocator;
     use allocator_api2::alloc::Global;
+    use rstest::rstest;
+    use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
 
     use crate::Alignment;
     use crate::BufferAllocatorRef;
+    use crate::BufferMut;
 
     #[derive(Clone, Debug, Default)]
     struct TrackingAllocator {
@@ -462,15 +455,18 @@ mod tests {
         assert_eq!(state.deallocations.load(Ordering::Relaxed), 1);
     }
 
-    #[test]
-    fn buffer_growth_uses_allocator_grow() {
+    #[rstest]
+    fn buffer_growth_uses_allocator_grow(#[values(4, 64, 4096)] alignment: usize) {
         let allocator = TrackingAllocator::default();
         let state = Arc::clone(&allocator.state);
-        let mut buffer = BufferAllocatorRef::new(allocator).with_capacity::<u32>(1);
+        let alignment = Alignment::new(alignment);
+        let mut buffer =
+            BufferAllocatorRef::new(allocator).with_capacity_aligned::<u32>(1, alignment);
         let initial_capacity = buffer.capacity();
         buffer.extend(std::iter::repeat_n(7, initial_capacity));
 
         buffer.push(u32::MAX);
+        assert!(alignment.is_ptr_aligned(buffer.as_ptr()));
 
         assert_eq!(&buffer[..initial_capacity], vec![7; initial_capacity]);
         assert_eq!(buffer[initial_capacity], u32::MAX);
@@ -497,5 +493,45 @@ mod tests {
         assert_eq!(buffer.as_slice(), [42]);
         assert_eq!(state.allocations.load(Ordering::Relaxed), 1);
         assert_eq!(state.grows.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn empty_buffers_preserve_allocator_without_allocating() -> VortexResult<()> {
+        let allocator = TrackingAllocator::default();
+        let state = Arc::clone(&allocator.state);
+        let allocator = BufferAllocatorRef::new(allocator);
+        let buffer = BufferMut::<u32>::zeroed_in(0, allocator.clone());
+        let buffer = buffer.freeze();
+        let copy = buffer.clone().into_mut();
+        assert!(copy.allocator().ptr_eq(&allocator));
+        let mut buffer = buffer
+            .try_into_mut()
+            .map_err(|_| vortex_err!("unique buffer"))?;
+        buffer.reserve(0);
+        assert!(buffer.is_empty());
+        assert!(buffer.allocator().ptr_eq(&allocator));
+        drop((copy, buffer));
+        assert_eq!(state.allocations.load(Ordering::Relaxed), 0);
+        assert_eq!(state.grows.load(Ordering::Relaxed), 0);
+        assert_eq!(state.deallocations.load(Ordering::Relaxed), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn shared_into_mut_preserves_allocator() {
+        let allocator = TrackingAllocator::default();
+        let state = Arc::clone(&allocator.state);
+        let allocator = BufferAllocatorRef::new(allocator);
+        let original = allocator.copy_from([1u32, 2, 3]).freeze();
+        let mut copy = original.clone().into_mut();
+        assert!(copy.allocator().ptr_eq(&allocator));
+        copy[0] = 42;
+        assert_eq!(original.as_slice(), [1, 2, 3]);
+        assert_eq!(copy.as_slice(), [42, 2, 3]);
+        assert_eq!(state.allocations.load(Ordering::Relaxed), 2);
+        drop(copy);
+        assert_eq!(state.deallocations.load(Ordering::Relaxed), 1);
+        drop(original);
+        assert_eq!(state.deallocations.load(Ordering::Relaxed), 2);
     }
 }
