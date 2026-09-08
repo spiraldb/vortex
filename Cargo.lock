@@ -7026,9 +7026,8 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "onpair"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e546e7cd983c9998a5a52e9c7eecaf38e518f2e6fc9c9ec649e8b53748a96bb0"
+version = "0.2.1"
+source = "git+https://github.com/spiraldb/onpair?rev=9a9b4b46c4df10fa8dbe8a9b9400727fde9f714b#9a9b4b46c4df10fa8dbe8a9b9400727fde9f714b"
 dependencies = [
  "hashbrown 0.16.1",
  "rand 0.9.5",
