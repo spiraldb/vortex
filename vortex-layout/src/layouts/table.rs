@@ -9,8 +9,9 @@
 //! to those structural writers as the strategy for their children, arbitrarily nested struct/list
 //! trees are written with no manual wiring.
 //!
-//! The dispatcher also owns field-path overrides, letting callers force a specific leaf field —
-//! at any depth — onto a custom strategy.
+//! The dispatcher also owns field-path overrides. Complete writer overrides replace dispatch for
+//! a field. Data factories wrap its natural strategy, preserving structural decomposition and
+//! descendant field configuration.
 
 use std::env;
 use std::sync::Arc;
@@ -21,6 +22,7 @@ use vortex_array::dtype::Field;
 use vortex_array::dtype::FieldName;
 use vortex_array::dtype::FieldPath;
 use vortex_error::VortexResult;
+use vortex_error::vortex_ensure;
 use vortex_session::VortexSession;
 use vortex_utils::aliases::hash_map::HashMap;
 use vortex_utils::aliases::hash_set::HashSet;
@@ -46,6 +48,8 @@ pub fn use_experimental_list_layout() -> bool {
 }
 
 type ListLayoutFactory = Arc<dyn Fn(ListLayoutStrategy) -> Arc<dyn LayoutStrategy> + Send + Sync>;
+type DataLayoutFactory =
+    Arc<dyn Fn(Arc<dyn LayoutStrategy>) -> Arc<dyn LayoutStrategy> + Send + Sync>;
 
 /// A configurable strategy for writing nested tabular data, dispatching each (sub)stream to the
 /// structural writer for its dtype.
@@ -74,6 +78,10 @@ pub struct TableStrategy {
     ///
     /// [`ListLayoutStrategy`]: ListLayoutStrategy
     list_layout_factory: Option<ListLayoutFactory>,
+    /// Wraps each natural leaf or list strategy after structural dispatch.
+    data_layout_factory: Option<DataLayoutFactory>,
+    /// Wrappers relative to this dispatcher, with root selecting the current field.
+    field_data_layout_factories: HashMap<FieldPath, DataLayoutFactory>,
 }
 
 impl TableStrategy {
@@ -101,6 +109,8 @@ impl TableStrategy {
             validity,
             leaf: fallback,
             list_layout_factory: None,
+            data_layout_factory: None,
+            field_data_layout_factories: HashMap::default(),
         }
     }
 
@@ -168,6 +178,41 @@ impl TableStrategy {
         self
     }
 
+    /// Wrap each leaf or decomposed list's natural data strategy before it writes the stream.
+    ///
+    /// The factory runs after structural dispatch. Structs recurse without a wrapper, so their
+    /// fields can each have their own row partitioning and summaries.
+    pub fn with_data_layout_factory(
+        mut self,
+        factory: impl Fn(Arc<dyn LayoutStrategy>) -> Arc<dyn LayoutStrategy> + Send + Sync + 'static,
+    ) -> Self {
+        self.data_layout_factory = Some(Arc::new(factory));
+        self
+    }
+
+    /// Override the data wrapper at one field, retaining natural struct and list decomposition.
+    ///
+    /// The wrapper also applies to struct fields, allowing a summary over the complete struct.
+    /// Descendant wrappers compose with their ancestor. Complete field-writer overrides cannot
+    /// overlap a wrapper path.
+    pub fn with_field_data_layout_factory(
+        mut self,
+        field: impl Into<FieldPath>,
+        factory: impl Fn(Arc<dyn LayoutStrategy>) -> Arc<dyn LayoutStrategy> + Send + Sync + 'static,
+    ) -> Self {
+        let field = field.into();
+        assert!(!field.is_root(), "Expected a non-root field wrapper path");
+        for path in self.leaf_writers.keys() {
+            assert!(
+                !field.overlap(path),
+                "Field wrapper {field} conflicts with writer {path}"
+            );
+        }
+        self.field_data_layout_factories
+            .insert(field, Arc::new(factory));
+        self
+    }
+
     /// Enable writing list fields with [`ListLayoutStrategy`].
     ///
     /// **Note**: this is an unstable and experimental layout that is expected to change.
@@ -201,7 +246,11 @@ impl TableStrategy {
         // The distinct named first-segments of our override paths are the only fields that need
         // anything other than the default dispatcher.
         let mut named_first: HashSet<FieldName> = HashSet::default();
-        for path in self.leaf_writers.keys() {
+        for path in self
+            .leaf_writers
+            .keys()
+            .chain(self.field_data_layout_factories.keys())
+        {
             if let Some(Field::Name(name)) = path.parts().first() {
                 named_first.insert(name.clone());
             }
@@ -225,14 +274,19 @@ impl TableStrategy {
 
     /// Build the [`ListLayoutStrategy`] used to write a list field stream at this level.
     ///
-    /// The `elements` sub-column is routed back through a clean descended dispatcher so nested
-    /// structs/lists recurse; `offsets` go straight to the leaf (they are always a primitive
-    /// column); and `validity` uses the shared validity strategy.
+    /// The `elements` sub-column is routed through a descended dispatcher so its overrides and nested
+    /// structs/lists recurse; `offsets` use the default dispatcher (they are always primitive);
+    /// and `validity` uses the shared validity strategy.
     fn list_strategy(&self) -> Option<Arc<dyn LayoutStrategy>> {
         let factory = self.list_layout_factory.as_ref()?;
+        let elements = self
+            .leaf_writers
+            .get(&FieldPath::from_iter([Field::ElementType]))
+            .cloned()
+            .unwrap_or_else(|| Arc::new(self.descend(&Field::ElementType)));
         let list_layout = ListLayoutStrategy::default()
-            .with_elements(Arc::new(self.descend_clean()))
-            .with_offsets(Arc::clone(&self.leaf))
+            .with_elements(elements)
+            .with_offsets(Arc::new(self.descend_clean()))
             .with_validity(Arc::clone(&self.validity))
             .with_fallback(Arc::clone(&self.leaf));
         Some(factory(list_layout))
@@ -257,6 +311,20 @@ impl TableStrategy {
             validity: Arc::clone(&self.validity),
             leaf: Arc::clone(&self.leaf),
             list_layout_factory: self.list_layout_factory.clone(),
+            data_layout_factory: self.data_layout_factory.clone(),
+            field_data_layout_factories: self
+                .field_data_layout_factories
+                .iter()
+                .filter_map(|(path, factory)| {
+                    (path.parts().first() == Some(field))
+                        .then(|| {
+                            path.clone()
+                                .step_into()
+                                .map(|path| (path, Arc::clone(factory)))
+                        })
+                        .flatten()
+                })
+                .collect(),
         }
     }
 
@@ -268,6 +336,8 @@ impl TableStrategy {
             validity: Arc::clone(&self.validity),
             leaf: Arc::clone(&self.leaf),
             list_layout_factory: self.list_layout_factory.clone(),
+            data_layout_factory: self.data_layout_factory.clone(),
+            field_data_layout_factories: HashMap::default(),
         }
     }
 
@@ -279,7 +349,11 @@ impl TableStrategy {
 
         // Validate that the field path does not conflict with any overrides
         // that we've added by overlapping.
-        for field_path in self.leaf_writers.keys() {
+        for field_path in self
+            .leaf_writers
+            .keys()
+            .chain(self.field_data_layout_factories.keys())
+        {
             assert!(
                 !path.overlap(field_path),
                 "Override for field_path {path} conflicts with existing override for {field_path}"
@@ -303,23 +377,43 @@ impl LayoutStrategy for TableStrategy {
     ) -> VortexResult<LayoutRef> {
         let dtype = stream.dtype().clone();
 
-        if dtype.is_struct() {
-            return self
-                .struct_strategy()
-                .write_stream(ctx, segment_sink, stream, eof, session)
-                .await;
+        for path in self
+            .leaf_writers
+            .keys()
+            .chain(self.field_data_layout_factories.keys())
+        {
+            vortex_ensure!(
+                path.exists_in(dtype.clone()),
+                "Expected field override {path} to exist, got dtype {dtype}"
+            );
+            vortex_ensure!(
+                self.list_layout_factory.is_some() || !path.parts().contains(&Field::ElementType),
+                "Expected list decomposition for override {path}, got disabled list layout"
+            );
         }
 
-        if dtype.is_list()
+        let natural: Arc<dyn LayoutStrategy> = if dtype.is_struct() {
+            Arc::new(self.struct_strategy())
+        } else if dtype.is_list()
             && let Some(list_strategy) = self.list_strategy()
         {
-            return list_strategy
-                .write_stream(ctx, segment_sink, stream, eof, session)
-                .await;
-        }
-
-        // Leaf: hand off to the leaf strategy.
-        self.leaf
+            list_strategy
+        } else {
+            Arc::clone(&self.leaf)
+        };
+        let factory = self
+            .field_data_layout_factories
+            .get(&FieldPath::root())
+            .or_else(|| {
+                (!dtype.is_struct())
+                    .then_some(self.data_layout_factory.as_ref())
+                    .flatten()
+            });
+        let strategy = match factory {
+            Some(factory) => factory(natural),
+            None => natural,
+        };
+        strategy
             .write_stream(ctx, segment_sink, stream, eof, session)
             .await
     }

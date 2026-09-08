@@ -15,7 +15,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::aggregate_fn::AggregateFnVTable;
-use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::VarBinViewArray;
@@ -47,6 +46,7 @@ use vortex_error::vortex_ensure_eq;
 use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
+use vortex_utils::iter::ReduceBalancedIterExt;
 
 use super::BloomFilter;
 use super::BloomOptions;
@@ -246,16 +246,6 @@ impl StatsRewriteRule for BloomEqRewrite {
         expr: &BoundExpression,
         ctx: &StatsRewriteCtx<'_>,
     ) -> VortexResult<Option<BoundExpression>> {
-        let Some(aggregate_fn) = ctx
-            .aggregate_fns()
-            .iter()
-            .find(|aggregate_fn| aggregate_fn.is::<BloomFilter>())
-        else {
-            return Ok(None);
-        };
-
-        let options = aggregate_fn.as_::<BloomFilter>().clone();
-
         if *expr.as_::<Binary>() != Operator::Eq {
             return Ok(None);
         }
@@ -276,15 +266,26 @@ impl StatsRewriteRule for BloomEqRewrite {
             return Ok(None);
         }
 
-        let filter = bound_stat(column.clone(), BloomFilter.bind(options.clone()));
-        let contains = BloomContains.try_new_bound_expr(options, [filter, literal.clone()])?;
+        let mut proofs = Vec::new();
+        for aggregate_fn in ctx.aggregate_fns_for(column) {
+            let Some(options) = aggregate_fn.as_opt::<BloomFilter>() else {
+                continue;
+            };
+            let filter = bound_stat(column.clone(), aggregate_fn.clone());
+            let contains =
+                BloomContains.try_new_bound_expr(options.clone(), [filter, literal.clone()])?;
+            proofs.push(not(contains));
+        }
 
-        Ok(Some(not(contains)))
+        proofs
+            .into_iter()
+            .try_reduce_balanced(|lhs, rhs| Binary.try_new_bound_expr(Operator::Or, [lhs, rhs]))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
     use std::sync::Arc;
 
     use vortex_array::IntoArray;
@@ -302,8 +303,11 @@ mod tests {
     use vortex_array::dtype::DecimalDType;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
+    use vortex_array::expr::bound::and;
     use vortex_array::expr::bound::eq;
+    use vortex_array::expr::bound::get_item;
     use vortex_array::expr::bound::lit;
+    use vortex_array::expr::bound::or;
     use vortex_array::expr::bound::root;
     use vortex_array::scalar::DecimalValue;
     use vortex_array::scalar::Scalar;
@@ -316,12 +320,14 @@ mod tests {
     use vortex_array::stats::rewrite::StatsRewriteRule;
     use vortex_array::validity::Validity;
     use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
     use vortex_session::VortexSession;
 
     use super::BloomContains;
     use super::BloomOptions;
     use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
     use crate::layouts::zoned::aggregates::bloom_filter::BloomPartial;
+    use crate::layouts::zoned::aggregates::bloom_filter::HashFn;
     use crate::layouts::zoned::aggregates::bloom_filter::scalar_fn::BloomEqRewrite;
     use crate::layouts::zoned::zone_map::ZoneMap;
 
@@ -379,6 +385,82 @@ mod tests {
             &mut ctx
         );
         Ok(())
+    }
+
+    #[test]
+    fn multiple_bloom_configurations_use_each_stored_filter() -> VortexResult<()> {
+        let small_options = BloomOptions::new(NonZeroU32::MIN, HashFn::XxHash3_64);
+        let large_options = BloomOptions::default();
+        let values = (0..256i64)
+            .map(|value| Scalar::primitive(value, Nullability::NonNullable))
+            .collect::<Vec<_>>();
+        let mut small = BloomPartial::from(&small_options);
+        let mut large = BloomPartial::from(&large_options);
+        for value in &values {
+            small.insert_scalar(value)?;
+            large.insert_scalar(value)?;
+        }
+        let needle = (256..4096i64)
+            .find(|value| {
+                small.contains(value.to_le_bytes()) && !large.contains(value.to_le_bytes())
+            })
+            .ok_or_else(|| {
+                vortex_err!("expected different false positives from different sizes")
+            })?;
+        let aggregates = [
+            BloomFilter.bind(small_options),
+            BloomFilter.bind(large_options),
+        ];
+        let zone_map = ZoneMap::try_new(
+            DType::Primitive(PType::I64, Nullability::NonNullable),
+            StructArray::from_fields(&[
+                (
+                    aggregates[0].to_string(),
+                    VarBinViewArray::from_iter_nullable_bin([Some(small.serialize())]).into_array(),
+                ),
+                (
+                    aggregates[1].to_string(),
+                    VarBinViewArray::from_iter_nullable_bin([Some(large.serialize())]).into_array(),
+                ),
+            ])?,
+            Arc::new(aggregates.clone()),
+            256,
+            256,
+        )?;
+        let session = array_session();
+        register(&session);
+        let rewrite = StatsRewriteCtx::new(&session).with_aggregate_fns(&aggregates);
+        let input = root(DType::Primitive(PType::I64, Nullability::NonNullable));
+        let missing = eq(input.clone(), lit(needle));
+        let present = eq(input, lit(42i64));
+        for (predicate, should_prune) in [
+            (missing.clone(), true),
+            (present.clone(), false),
+            (and(missing.clone(), present.clone()), true),
+            (or(missing, present), false),
+        ] {
+            let proof = rewrite
+                .falsify(&predicate)?
+                .ok_or_else(|| vortex_err!("expected a falsifier"))?;
+            assert_eq!(zone_map.prune(&proof, &session)?.all_true(), should_prune);
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn stored_aggregate_lookup_is_scoped_to_root() {
+        let session = array_session();
+        let aggregates = [BloomFilter.bind(BloomOptions::default())];
+        let ctx = StatsRewriteCtx::new(&session).with_aggregate_fns(&aggregates);
+        let root = root(DType::struct_(
+            [(
+                "child",
+                DType::Primitive(PType::I64, Nullability::NonNullable),
+            )],
+            Nullability::NonNullable,
+        ));
+        assert_eq!(ctx.aggregate_fns_for(&root).len(), 1);
+        assert!(ctx.aggregate_fns_for(&get_item("child", root)).is_empty());
     }
 
     #[test]

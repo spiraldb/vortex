@@ -24,11 +24,12 @@ use crate::aggregate_fn::Accumulator;
 use crate::aggregate_fn::AccumulatorRef;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnRef;
-use crate::aggregate_fn::AggregateFnSatisfaction;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::GroupedAccumulator;
 use crate::aggregate_fn::GroupedAccumulatorRef;
+use crate::aggregate_fn::StatMatch;
 use crate::dtype::DType;
+use crate::expr::Expression;
 
 /// An object-safe, sealed trait for bound aggregate function dispatch.
 ///
@@ -39,7 +40,7 @@ pub(super) trait DynAggregateFn: 'static + Send + Sync + super::sealed::Sealed {
     fn id(&self) -> AggregateFnId;
     fn options_any(&self) -> &dyn Any;
 
-    fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction;
+    fn resolve_stat(&self, requested: &AggregateFnRef, partial: Expression) -> Option<StatMatch>;
     fn return_dtype(&self, input_dtype: &DType) -> Option<DType>;
     fn state_dtype(&self, input_dtype: &DType) -> Option<DType>;
     fn accumulator(&self, input_dtype: &DType) -> VortexResult<AccumulatorRef>;
@@ -79,8 +80,8 @@ impl<V: AggregateFnVTable> DynAggregateFn for AggregateFnInner<V> {
         &self.options
     }
 
-    fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction {
-        V::can_satisfy(&self.vtable, &self.options, requested)
+    fn resolve_stat(&self, requested: &AggregateFnRef, partial: Expression) -> Option<StatMatch> {
+        V::resolve_stat(&self.vtable, &self.options, requested, partial)
     }
 
     fn return_dtype(&self, input_dtype: &DType) -> Option<DType> {

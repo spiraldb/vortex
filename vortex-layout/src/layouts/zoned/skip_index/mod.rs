@@ -5,7 +5,7 @@
 //!
 //! This module also provides the session extension used to register skip index
 //! implementations. Pass the bound aggregate returned by [`SkipIndex::aggregate_fn`]
-//! to `WriteStrategyBuilder::with_field_aggregates` to index a field.
+//! to `WriteStrategyBuilder::with_field_aggregate_additions` to index a field while retaining defaults.
 //!
 //! # Difference from a locating index
 //!
@@ -16,7 +16,7 @@ use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::aggregate_fn::AggregateFnVTable;
 use vortex_array::aggregate_fn::AggregateFnVTableExt;
 use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
-use vortex_array::scalar_fn::ScalarFnVTable;
+use vortex_array::scalar_fn::ScalarFnPluginRef;
 use vortex_array::scalar_fn::session::ScalarFnSessionExt;
 use vortex_array::stats::StatsSessionExt;
 use vortex_array::stats::rewrite::StatsRewriteRuleRef;
@@ -35,8 +35,8 @@ pub mod bloom;
 /// First, register the components needed to use the index through
 /// [`SkipIndexSessionExt::register_skip_index`]. When writing, use
 /// [`SkipIndex::aggregate_fn`] to bind the index options and pass the aggregate to
-/// `WriteStrategyBuilder::with_field_aggregates` for the field to be indexed.
-/// An explicit aggregate list replaces the writer's default aggregates. Zone length
+/// `WriteStrategyBuilder::with_field_aggregate_additions` for the field to be indexed.
+/// Use `WriteStrategyBuilder::with_field_aggregates` to replace the defaults instead. Zone length
 /// is controlled by `WriteStrategyBuilder::with_row_block_size`.
 ///
 /// # Logical and physical representation
@@ -63,19 +63,21 @@ pub mod bloom;
 ///
 /// For writes, create a configured index and use [`SkipIndex::aggregate_fn`] to
 /// obtain its aggregate. Pass the field path and an aggregate list containing it to
-/// `WriteStrategyBuilder::with_field_aggregates`. This list replaces the default
+/// `WriteStrategyBuilder::with_field_aggregate_additions`. This retains the default
 /// aggregates for that field.
 pub trait SkipIndex: Send + Sync + 'static {
     /// The concrete aggregate implementation registered for this index.
     type Aggregate: AggregateFnVTable;
-    /// The concrete scalar implementation registered for this index.
-    type Scalar: ScalarFnVTable;
 
     /// Returns the aggregate implementation, without binding write options.
     fn aggregate_vtable(&self) -> Self::Aggregate;
 
-    /// Returns the scalar implementation.
-    fn scalar_vtable(&self) -> Self::Scalar;
+    /// Returns a custom probe implementation, if the rewrite needs one.
+    ///
+    /// Indexes whose proofs use only built-in scalar functions can leave this unset.
+    fn scalar_plugin(&self) -> Option<ScalarFnPluginRef> {
+        None
+    }
 
     /// Returns the options to bind when writing this index.
     fn options(&self) -> <Self::Aggregate as AggregateFnVTable>::Options;
@@ -86,7 +88,7 @@ pub trait SkipIndex: Send + Sync + 'static {
     /// Binds this index's write options into an aggregate for the zoned writer.
     ///
     /// Binding does not register components or check input dtype compatibility. The zoned writer
-    /// omits aggregates that do not support its input dtype.
+    /// rejects explicitly requested aggregates that do not support its input dtype.
     fn aggregate_fn(&self) -> AggregateFnRef {
         self.aggregate_vtable().bind(self.options())
     }
@@ -95,34 +97,25 @@ pub trait SkipIndex: Send + Sync + 'static {
 /// Extension trait for registering skipping indexes with a Vortex session.
 pub trait SkipIndexSessionExt: SessionExt {
     /// Registers the aggregate, probe scalar functions, and rewrite rules
-    /// supplied by an skip index.
+    /// supplied by a skip index.
     ///
-    /// If the aggregate ID is already registered, this
-    /// method skips all components to avoid appending duplicate rewrite rules.
+    /// Repeated calls replace this implementation's components and rewrite group. Registration
+    /// must support every persisted configuration and must not depend on this instance's options.
     ///
     /// For more information about skip indexes, see [`SkipIndex`].
     fn register_skip_index<I: SkipIndex>(&self, index: &I) {
         let session = self.session();
-        let aggregate = index.aggregate_vtable();
-
-        // The idea is to avoid duplicating rewrite rules.
-        // Since neither they nor the skip index carry an ID,
-        // this uses the aggregate ID instead.
-        if session
-            .aggregate_fns()
-            .find_plugin(&aggregate.id())
-            .is_some()
-        {
-            return;
+        session.aggregate_fns().register(index.aggregate_vtable());
+        if let Some(scalar) = index.scalar_plugin() {
+            session.scalar_fns().registry().insert(scalar.id(), scalar);
         }
-
-        session.aggregate_fns().register(aggregate);
-        session.scalar_fns().register(index.scalar_vtable());
-
-        for rule in index.rewrite_rules() {
-            session.stats().register_rewrite_ref(rule);
-        }
+        session
+            .stats()
+            .register_rewrite_group::<I>(index.rewrite_rules());
     }
 }
 
 impl<S: SessionExt> SkipIndexSessionExt for S {}
+
+#[cfg(test)]
+mod tests;

@@ -16,13 +16,14 @@ use vortex_utils::debug_with::DebugWith;
 
 use crate::aggregate_fn::AccumulatorRef;
 use crate::aggregate_fn::AggregateFnId;
-use crate::aggregate_fn::AggregateFnSatisfaction;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::GroupedAccumulatorRef;
+use crate::aggregate_fn::StatMatch;
 use crate::aggregate_fn::options::AggregateFnOptions;
 use crate::aggregate_fn::typed::AggregateFnInner;
 use crate::aggregate_fn::typed::DynAggregateFn;
 use crate::dtype::DType;
+use crate::expr::Expression;
 
 /// A type-erased aggregate function, pairing a vtable with bound options behind a trait object.
 ///
@@ -75,9 +76,13 @@ impl AggregateFnRef {
         AggregateFnOptions { inner: &*self.0 }
     }
 
-    /// Return whether this stored aggregate can satisfy `requested`.
-    pub fn can_satisfy(&self, requested: &AggregateFnRef) -> AggregateFnSatisfaction {
-        self.0.can_satisfy(requested)
+    /// Resolve a stored partial expression into a requested statistic's partial representation.
+    pub fn resolve_stat(
+        &self,
+        requested: &AggregateFnRef,
+        partial: Expression,
+    ) -> Option<StatMatch> {
+        self.0.resolve_stat(requested, partial)
     }
 
     /// Compute the return [`DType`] per group given the input element type.

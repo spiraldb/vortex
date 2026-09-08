@@ -12,6 +12,7 @@ use parking_lot::Mutex;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::AggregateFnRef;
+use vortex_array::dtype::DType;
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -33,6 +34,54 @@ use crate::sequence::SequentialArrayStreamExt;
 use crate::sequence::SequentialStreamAdapter;
 use crate::sequence::SequentialStreamExt;
 
+/// Selects aggregate instances after the input dtype and session are available.
+///
+/// Explicit requests must support the input dtype. Exact duplicate requests are stored once;
+/// different options describe different aggregates. Unsupported defaults are omitted.
+#[derive(Clone, Default)]
+pub enum ZonedAggregates {
+    /// Use the supported default pruning aggregates.
+    #[default]
+    Defaults,
+    /// Replace defaults with exactly these aggregates.
+    Replace(Arc<[AggregateFnRef]>),
+    /// Keep defaults and add these aggregates.
+    Extend(Arc<[AggregateFnRef]>),
+}
+
+impl ZonedAggregates {
+    fn resolve(&self, dtype: &DType, session: &VortexSession) -> VortexResult<Vec<AggregateFnRef>> {
+        let defaults = || {
+            default_zoned_aggregate_fns(dtype, session)
+                .iter()
+                .filter(|aggregate| {
+                    aggregate.state_dtype(dtype).is_some()
+                        && aggregate.return_dtype(dtype).is_some()
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        };
+
+        let (mut selected, requested) = match self {
+            Self::Defaults => (defaults(), Vec::new()),
+            Self::Replace(aggregates) => (Vec::new(), aggregates.to_vec()),
+            Self::Extend(aggregates) => (defaults(), aggregates.to_vec()),
+        };
+
+        for aggregate in requested {
+            if aggregate.state_dtype(dtype).is_none() || aggregate.return_dtype(dtype).is_none() {
+                vortex_bail!("Aggregate {aggregate} requires a supported input dtype, got {dtype}");
+            }
+
+            if !selected.contains(&aggregate) {
+                selected.push(aggregate);
+            }
+        }
+
+        Ok(selected)
+    }
+}
+
 /// Configuration for building zoned layouts.
 ///
 /// The input stream is assumed to already be partitioned into one chunk per zone, except
@@ -41,12 +90,8 @@ use crate::sequence::SequentialStreamExt;
 pub struct ZonedLayoutOptions {
     /// The size of a statistics block
     pub block_size: NonZeroUsize,
-    /// The aggregate partials to collect for each block.
-    ///
-    /// If unset, the writer chooses pruning aggregates from the input dtype. An explicit list
-    /// replaces those defaults. Unsupported aggregates are omitted. If none remain, the writer
-    /// returns the child layout without zoned statistics.
-    pub aggregate_fns: Option<Arc<[AggregateFnRef]>>,
+    /// Selects defaults, replacements, or additions after the input dtype is known.
+    pub aggregates: ZonedAggregates,
     /// Number of chunks to compute aggregate partials in parallel.
     pub concurrency: NonZeroUsize,
 }
@@ -55,7 +100,7 @@ impl Default for ZonedLayoutOptions {
     fn default() -> Self {
         Self {
             block_size: unsafe { NonZeroUsize::new_unchecked(8192) },
-            aggregate_fns: None,
+            aggregates: ZonedAggregates::Defaults,
             concurrency: unsafe {
                 NonZeroUsize::new_unchecked(get_available_parallelism().unwrap_or(1))
             },
@@ -94,12 +139,7 @@ impl LayoutStrategy for ZonedStrategy {
         mut eof: SequencePointer,
         session: &VortexSession,
     ) -> VortexResult<LayoutRef> {
-        let aggregate_fns = self
-            .options
-            .aggregate_fns
-            .clone()
-            .unwrap_or_else(|| default_zoned_aggregate_fns(stream.dtype(), session))
-            .to_vec();
+        let aggregate_fns = self.options.aggregates.resolve(stream.dtype(), session)?;
 
         let compute_session = session.clone();
 
@@ -107,10 +147,7 @@ impl LayoutStrategy for ZonedStrategy {
             stream.dtype(),
             &aggregate_fns,
         )));
-        // The accumulator has dropped the aggregates this dtype cannot hold, leaving the ones
-        // this write would record. An aggregate the context forbids fails the write, like a
-        // forbidden array or layout: dropping it silently would leave a file that prunes worse
-        // than the caller asked for, with nothing in the output saying so.
+        // Edition restrictions apply to the resolved selection, including supported defaults.
         let aggregate_fns = stats_accumulator.lock().aggregate_fns();
         for aggregate_fn in aggregate_fns.iter() {
             if !ctx.allows_aggregate(&aggregate_fn.id()) {
@@ -193,6 +230,8 @@ impl LayoutStrategy for ZonedStrategy {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU32;
+
     use rstest::rstest;
     use vortex_array::ArrayContext;
     use vortex_array::IntoArray;
@@ -206,6 +245,7 @@ mod tests {
     use vortex_array::aggregate_fn::fns::sum::Sum;
     use vortex_array::arrays::ChunkedArray;
     use vortex_array::dtype::DType;
+    use vortex_array::dtype::DecimalDType;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
     use vortex_array::extension::datetime::TimeUnit;
@@ -223,6 +263,8 @@ mod tests {
     use crate::layouts::flat::writer::FlatLayoutStrategy;
     use crate::layouts::zoned::Zoned;
     use crate::layouts::zoned::aggregates::bloom_filter::BloomFilter;
+    use crate::layouts::zoned::aggregates::bloom_filter::BloomOptions;
+    use crate::layouts::zoned::aggregates::bloom_filter::HashFn;
     use crate::layouts::zoned::schema::default_bounded_stat_max_bytes;
     use crate::layouts::zoned::skip_index::SkipIndex;
     use crate::layouts::zoned::skip_index::bloom::BloomSkipIndex;
@@ -378,7 +420,7 @@ mod tests {
     fn writer_appends_skip_index_aggregate() -> VortexResult<()> {
         let mut options = ZonedLayoutOptions::default();
         let bloom_index = BloomSkipIndex::default();
-        options.aggregate_fns = Some(vec![bloom_index.aggregate_fn()].into());
+        options.aggregates = ZonedAggregates::Replace(vec![bloom_index.aggregate_fn()].into());
 
         let written =
             write_zones_with_options(LayoutWriterContext::new(ArrayContext::empty()), options)?;
@@ -388,6 +430,67 @@ mod tests {
             written == [BloomFilter {}.id().to_string()],
             "expected only the Bloom aggregate, wrote {written:?}"
         );
+        Ok(())
+    }
+    #[test]
+    fn additions_preserve_defaults_and_deduplicate_exact_instances() -> VortexResult<()> {
+        let bloom = BloomSkipIndex::default().aggregate_fn();
+        let selection = ZonedAggregates::Extend(vec![bloom.clone(), bloom.clone()].into());
+        let selected = selection.resolve(&PType::I32.into(), &vortex_array::array_session())?;
+        assert!(selected.iter().any(|aggregate| aggregate.is::<Min>()));
+        assert!(selected.iter().any(|aggregate| aggregate.is::<Max>()));
+        assert_eq!(
+            selected
+                .iter()
+                .filter(|aggregate| *aggregate == &bloom)
+                .count(),
+            1
+        );
+
+        let written = write_zones_with_options(
+            LayoutWriterContext::new(ArrayContext::empty()),
+            ZonedLayoutOptions {
+                aggregates: selection,
+                ..Default::default()
+            },
+        )?;
+        assert!(written.contains(&Min.id().to_string()));
+        assert!(written.contains(&BloomFilter.id().to_string()));
+        Ok(())
+    }
+
+    #[test]
+    fn different_bloom_options_are_distinct_requests() -> VortexResult<()> {
+        let small = BloomSkipIndex::new(BloomOptions::new(
+            NonZeroU32::new(8).vortex_expect("nonzero test constant"),
+            HashFn::XxHash3_64,
+        ))
+        .aggregate_fn();
+        let large = BloomSkipIndex::default().aggregate_fn();
+        let selected = ZonedAggregates::Replace(vec![small, large].into())
+            .resolve(&PType::I32.into(), &vortex_array::array_session())?;
+        assert_eq!(selected.len(), 2);
+        assert_ne!(selected[0].to_string(), selected[1].to_string());
+        Ok(())
+    }
+
+    #[test]
+    fn unsupported_explicit_requests_fail() -> VortexResult<()> {
+        let dtype = DType::Decimal(DecimalDType::new(5, 2), Nullability::NonNullable);
+        let selection =
+            ZonedAggregates::Extend(vec![BloomSkipIndex::default().aggregate_fn()].into());
+        let session = vortex_array::array_session();
+        assert!(selection.resolve(&dtype, &session).is_err());
+        let defaults = ZonedAggregates::Defaults.resolve(&dtype, &session)?;
+        assert!(defaults.iter().any(|aggregate| aggregate.is::<Min>()));
+        Ok(())
+    }
+
+    #[test]
+    fn empty_replacement_disables_zoning_selection() -> VortexResult<()> {
+        let selected = ZonedAggregates::Replace(Arc::new([]))
+            .resolve(&PType::I32.into(), &vortex_array::array_session())?;
+        assert!(selected.is_empty());
         Ok(())
     }
 }

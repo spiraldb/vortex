@@ -21,9 +21,9 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnRef;
-use crate::aggregate_fn::AggregateFnSatisfaction;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::NumericalAggregateOpts;
+use crate::aggregate_fn::StatMatch;
 use crate::aggregate_fn::fns::max::Max;
 use crate::aggregate_fn::fns::min_max::MinMax;
 use crate::aggregate_fn::fns::min_max::min_max;
@@ -32,6 +32,8 @@ use crate::dtype::DType;
 use crate::dtype::FieldNames;
 use crate::dtype::Nullability;
 use crate::dtype::StructFields;
+use crate::expr::Expression;
+use crate::expr::get_item;
 use crate::partial_ord::partial_max;
 use crate::scalar::Scalar;
 use crate::scalar::ScalarTruncation;
@@ -159,30 +161,27 @@ impl AggregateFnVTable for BoundedMax {
         supported_dtype(options, input_dtype).map(DType::as_nullable)
     }
 
-    fn can_satisfy(
+    fn resolve_stat(
         &self,
         options: &Self::Options,
         requested: &AggregateFnRef,
-    ) -> AggregateFnSatisfaction {
+        partial: Expression,
+    ) -> Option<StatMatch> {
         if let Some(other) = requested.as_opt::<Self>() {
             return if other == options {
-                AggregateFnSatisfaction::Exact
+                Some(StatMatch::Exact(partial))
             } else if options.max_bytes >= other.max_bytes {
-                AggregateFnSatisfaction::Approximate
+                Some(StatMatch::Approximate(partial))
             } else {
-                AggregateFnSatisfaction::No
+                None
             };
         }
 
         // The stored bound skips NaNs, so it cannot stand in for a NaN-including maximum.
-        if requested
+        requested
             .as_opt::<Max>()
             .is_some_and(|options| options.skip_nans)
-        {
-            AggregateFnSatisfaction::Approximate
-        } else {
-            AggregateFnSatisfaction::No
-        }
+            .then(|| StatMatch::Approximate(get_item(BOUNDED_MAX_BOUND, partial)))
     }
 
     fn partial_dtype(&self, options: &Self::Options, input_dtype: &DType) -> Option<DType> {
@@ -325,11 +324,11 @@ mod tests {
     use crate::IntoArray;
     use crate::VortexSessionExecute;
     use crate::aggregate_fn::Accumulator;
-    use crate::aggregate_fn::AggregateFnSatisfaction;
     use crate::aggregate_fn::AggregateFnVTable;
     use crate::aggregate_fn::AggregateFnVTableExt;
     use crate::aggregate_fn::DynAccumulator;
     use crate::aggregate_fn::NumericalAggregateOpts;
+    use crate::aggregate_fn::StatMatch;
     use crate::aggregate_fn::fns::bounded_max::BoundedMax;
     use crate::aggregate_fn::fns::bounded_max::BoundedMaxOptions;
     use crate::aggregate_fn::fns::bounded_max::make_bounded_max_partial_dtype;
@@ -339,6 +338,7 @@ mod tests {
     use crate::arrays::PrimitiveArray;
     use crate::arrays::VarBinViewArray;
     use crate::dtype::Nullability;
+    use crate::expr::root;
     use crate::scalar::Scalar;
     use crate::validity::Validity;
 
@@ -515,36 +515,38 @@ mod tests {
             max_bytes: max_bytes(6),
         });
 
-        assert_eq!(stored.can_satisfy(&same), AggregateFnSatisfaction::Exact);
-        assert_eq!(
-            stored.can_satisfy(&looser_bounded),
-            AggregateFnSatisfaction::Approximate
+        assert!(matches!(
+            stored.resolve_stat(&same, root()),
+            Some(StatMatch::Exact(_))
+        ));
+        assert!(matches!(
+            stored.resolve_stat(&looser_bounded, root()),
+            Some(StatMatch::Approximate(_))
+        ));
+        assert!(stored.resolve_stat(&tighter_bounded, root()).is_none());
+        assert!(matches!(
+            stored.resolve_stat(&Max.bind(NumericalAggregateOpts::default()), root()),
+            Some(StatMatch::Approximate(_))
+        ));
+        assert!(
+            stored
+                .resolve_stat(&Max.bind(NumericalAggregateOpts::include_nans()), root())
+                .is_none()
         );
-        assert_eq!(
-            stored.can_satisfy(&tighter_bounded),
-            AggregateFnSatisfaction::No
-        );
-        assert_eq!(
-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::default())),
-            AggregateFnSatisfaction::Approximate
-        );
-        assert_eq!(
-            stored.can_satisfy(&Max.bind(NumericalAggregateOpts::include_nans())),
-            AggregateFnSatisfaction::No
-        );
-        assert_eq!(
+        assert!(
             Max.bind(NumericalAggregateOpts::include_nans())
-                .can_satisfy(&stored),
-            AggregateFnSatisfaction::No
+                .resolve_stat(&stored, root())
+                .is_none()
         );
-        assert_eq!(
+        assert!(matches!(
             Max.bind(NumericalAggregateOpts::default())
-                .can_satisfy(&stored),
-            AggregateFnSatisfaction::Approximate
-        );
-        assert_eq!(
-            stored.can_satisfy(&Min.bind(NumericalAggregateOpts::default())),
-            AggregateFnSatisfaction::No
+                .resolve_stat(&stored, root()),
+            Some(StatMatch::Approximate(_))
+        ));
+        assert!(
+            stored
+                .resolve_stat(&Min.bind(NumericalAggregateOpts::default()), root())
+                .is_none()
         );
     }
 

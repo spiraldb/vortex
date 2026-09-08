@@ -11,8 +11,8 @@ use vortex_session::registry::Id;
 mod accumulator;
 pub use accumulator::*;
 
-mod satisfaction;
-pub use satisfaction::*;
+mod stat_match;
+pub use stat_match::*;
 
 mod accumulator_grouped;
 pub use accumulator_grouped::*;

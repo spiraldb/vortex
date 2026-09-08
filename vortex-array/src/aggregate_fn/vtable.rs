@@ -19,8 +19,9 @@ use crate::ExecutionCtx;
 use crate::aggregate_fn::AggregateFn;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnRef;
-use crate::aggregate_fn::AggregateFnSatisfaction;
+use crate::aggregate_fn::StatMatch;
 use crate::dtype::DType;
+use crate::expr::Expression;
 use crate::scalar::Scalar;
 
 /// Defines the interface for aggregate function vtables.
@@ -60,23 +61,22 @@ pub trait AggregateFnVTable: 'static + Sized + Clone + Send + Sync {
         vortex_bail!("Aggregate function {} is not deserializable", self.id());
     }
 
-    /// Return whether this stored aggregate can satisfy `requested`.
+    /// Resolve a stored partial expression into the representation requested by a statistic.
     ///
-    /// The default implementation only treats exactly equal aggregate functions as satisfying the
-    /// request. Approximate pruning aggregates can override this to expose looser-but-sound bounds.
-    fn can_satisfy(
+    /// Returns `None` when this aggregate cannot provide the requested statistic. The default
+    /// implementation matches equal aggregate IDs and options and returns the partial unchanged.
+    /// Custom implementations must uphold the representation and bound contracts of [`StatMatch`].
+    fn resolve_stat(
         &self,
         options: &Self::Options,
         requested: &AggregateFnRef,
-    ) -> AggregateFnSatisfaction {
-        if requested
-            .as_opt::<Self>()
-            .is_some_and(|other| other == options)
-        {
-            AggregateFnSatisfaction::Exact
-        } else {
-            AggregateFnSatisfaction::No
-        }
+        partial: Expression,
+    ) -> Option<StatMatch> {
+        let same_aggregate = self.id() == requested.id()
+            && requested
+                .as_opt::<Self>()
+                .is_some_and(|other| other == options);
+        same_aggregate.then_some(StatMatch::Exact(partial))
     }
 
     /// The return [`DType`] of the aggregate.

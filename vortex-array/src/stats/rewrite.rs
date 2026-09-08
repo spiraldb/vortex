@@ -132,15 +132,25 @@ impl<'a> StatsRewriteCtx<'a> {
         Ok(())
     }
 
-    /// Sets the aggregate functions available to stats rewrite rules.
+    /// Sets the stored aggregate functions for the root input of this rewrite scope.
+    ///
+    /// Options must describe the stored summaries, including their file-specific configuration.
+    /// These functions do not describe statistics of arbitrary child expressions.
     pub fn with_aggregate_fns(mut self, aggregate_fns: &'a [AggregateFnRef]) -> Self {
         self.aggregate_fns = aggregate_fns;
         self
     }
 
-    /// Returns the aggregate functions available to stats rewrite rules.
-    pub fn aggregate_fns(&self) -> &'a [AggregateFnRef] {
-        self.aggregate_fns
+    /// Returns the stored aggregates computed over `input`.
+    ///
+    /// This context currently describes only the root input. Derived expressions have no stored
+    /// aggregates, even when their dtype matches the root dtype.
+    pub fn aggregate_fns_for(&self, input: &BoundExpression) -> &'a [AggregateFnRef] {
+        if input.is_root() {
+            self.aggregate_fns
+        } else {
+            &[]
+        }
     }
 }
 
@@ -164,7 +174,7 @@ fn rewrite(
 
     let mut rewrites = Vec::new();
     for rule in rules.iter() {
-        if let Some(rewrite) = apply(rule.as_ref(), expr, ctx)? {
+        if let Some(rewrite) = apply(rule.rule.as_ref(), expr, ctx)? {
             rewrites.push(rewrite);
         }
     }

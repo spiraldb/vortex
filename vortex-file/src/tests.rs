@@ -2804,7 +2804,6 @@ async fn repro_8166_binary_gt_all_ff_max() -> VortexResult<()> {
 #[rstest]
 #[case(true)]
 #[case(false)]
-#[should_panic(expected = "Override for field_path $a conflicts with existing override for $a")]
 fn test_field_writer_conflicts_with_aggregates(#[case] writer_first: bool) {
     let builder = crate::strategy::WriteStrategyBuilder::default();
     let writer = Arc::new(FlatLayoutStrategy::default());
@@ -2818,5 +2817,5 @@ fn test_field_writer_conflicts_with_aggregates(#[case] writer_first: bool) {
             .with_field_writer(field_path!(a), writer)
     };
 
-    builder.build();
+    assert!(builder.try_build().is_err());
 }

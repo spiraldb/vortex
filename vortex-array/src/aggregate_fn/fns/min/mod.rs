@@ -12,15 +12,16 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnRef;
-use crate::aggregate_fn::AggregateFnSatisfaction;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::NumericalAggregateOpts;
+use crate::aggregate_fn::StatMatch;
 use crate::aggregate_fn::fns::bounded_min::BoundedMin;
 use crate::aggregate_fn::fns::min_max::MinMax;
 use crate::aggregate_fn::fns::min_max::min_max;
 use crate::aggregate_fn::fns::min_max::nan_scalar;
 use crate::aggregate_fn::fns::min_max::scalar_is_nan;
 use crate::dtype::DType;
+use crate::expr::Expression;
 use crate::expr::stats::Precision;
 use crate::expr::stats::Stat;
 use crate::expr::stats::StatsProvider;
@@ -99,21 +100,22 @@ impl AggregateFnVTable for Min {
             .map(|_| input_dtype.as_nullable())
     }
 
-    fn can_satisfy(
+    fn resolve_stat(
         &self,
         options: &Self::Options,
         requested: &AggregateFnRef,
-    ) -> AggregateFnSatisfaction {
+        partial: Expression,
+    ) -> Option<StatMatch> {
         if requested
             .as_opt::<Self>()
             .is_some_and(|other| other == options)
         {
-            AggregateFnSatisfaction::Exact
+            Some(StatMatch::Exact(partial))
         } else if requested.is::<BoundedMin>() && options.skip_nans {
-            // A NaN-including minimum may be NaN, which is not a usable lower bound.
-            AggregateFnSatisfaction::Approximate
+            // A NaN-including minimum cannot provide a usable bound.
+            Some(StatMatch::Approximate(partial))
         } else {
-            AggregateFnSatisfaction::No
+            None
         }
     }
 

@@ -4,6 +4,7 @@
 //! Session state for stats APIs.
 
 use std::any::Any;
+use std::any::TypeId;
 use std::sync::Arc;
 
 use parking_lot::RwLock;
@@ -17,7 +18,13 @@ use crate::stats::rewrite::StatsRewriteRule;
 use crate::stats::rewrite::StatsRewriteRuleRef;
 use crate::stats::rewrite::register_builtins;
 
-type StatsRewriteRuleSet = Arc<[StatsRewriteRuleRef]>;
+type StatsRewriteRuleSet = Arc<[RegisteredStatsRewriteRule]>;
+
+#[derive(Clone, Debug)]
+pub(super) struct RegisteredStatsRewriteRule {
+    group: Option<TypeId>,
+    pub(super) rule: StatsRewriteRuleRef,
+}
 
 /// Session state for stats APIs.
 #[derive(Clone, Debug)]
@@ -49,12 +56,47 @@ impl StatsSession {
             .get(&rule_id)
             .map(|rules| rules.iter().cloned().collect::<Vec<_>>())
             .unwrap_or_default();
-        updated_rules.push(rule);
+        updated_rules.push(RegisteredStatsRewriteRule { group: None, rule });
         rules.insert(rule_id, updated_rules.into());
     }
 
+    /// Registers a group of rewrite rules, replacing the previous group for `G`.
+    ///
+    /// The group identity is local to this process and is never serialized. A provider should
+    /// use its implementation type for `G`; its rules must support every persisted configuration.
+    /// Rules registered through [`Self::register_rewrite`] or by other groups are preserved.
+    /// Concurrent calls replace the whole group under one lock, so readers see one complete group.
+    pub fn register_rewrite_group<G: 'static>(&self, group: Vec<StatsRewriteRuleRef>) {
+        let id = TypeId::of::<G>();
+        let group = group
+            .into_iter()
+            .map(|rule| (rule.scalar_fn_id(), rule))
+            .collect::<Vec<_>>();
+        let mut rules = self.rewrite_rules.write();
+        for registered in rules.values_mut() {
+            if registered.iter().any(|rule| rule.group == Some(id)) {
+                *registered = registered
+                    .iter()
+                    .filter(|rule| rule.group != Some(id))
+                    .cloned()
+                    .collect();
+            }
+        }
+        for (scalar_fn_id, rule) in group {
+            let mut updated_rules = rules
+                .get(&scalar_fn_id)
+                .map(|rules| rules.to_vec())
+                .unwrap_or_default();
+            updated_rules.push(RegisteredStatsRewriteRule {
+                group: Some(id),
+                rule,
+            });
+            rules.insert(scalar_fn_id, updated_rules.into());
+        }
+    }
+
     /// Return the rewrite rules registered for `scalar_fn_id`.
-    pub(crate) fn rewrite_rules_for(
+    pub(super) fn rewrite_rules_for(
         &self,
         scalar_fn_id: ScalarFnId,
     ) -> Option<StatsRewriteRuleSet> {

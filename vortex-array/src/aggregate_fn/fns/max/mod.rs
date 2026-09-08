@@ -12,15 +12,23 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnRef;
-use crate::aggregate_fn::AggregateFnSatisfaction;
 use crate::aggregate_fn::AggregateFnVTable;
 use crate::aggregate_fn::NumericalAggregateOpts;
+use crate::aggregate_fn::StatMatch;
+use crate::aggregate_fn::fns::bounded_max::BOUNDED_MAX_BOUND;
+use crate::aggregate_fn::fns::bounded_max::BOUNDED_MAX_UNKNOWN;
 use crate::aggregate_fn::fns::bounded_max::BoundedMax;
 use crate::aggregate_fn::fns::min_max::MinMax;
 use crate::aggregate_fn::fns::min_max::min_max;
 use crate::aggregate_fn::fns::min_max::nan_scalar;
 use crate::aggregate_fn::fns::min_max::scalar_is_nan;
 use crate::dtype::DType;
+use crate::dtype::Nullability;
+use crate::expr::Expression;
+use crate::expr::is_not_null;
+use crate::expr::lit;
+use crate::expr::mask;
+use crate::expr::pack;
 use crate::expr::stats::Precision;
 use crate::expr::stats::Stat;
 use crate::expr::stats::StatsProvider;
@@ -99,21 +107,30 @@ impl AggregateFnVTable for Max {
             .map(|_| input_dtype.as_nullable())
     }
 
-    fn can_satisfy(
+    fn resolve_stat(
         &self,
         options: &Self::Options,
         requested: &AggregateFnRef,
-    ) -> AggregateFnSatisfaction {
+        partial: Expression,
+    ) -> Option<StatMatch> {
         if requested
             .as_opt::<Self>()
             .is_some_and(|other| other == options)
         {
-            AggregateFnSatisfaction::Exact
+            Some(StatMatch::Exact(partial))
         } else if requested.is::<BoundedMax>() && options.skip_nans {
-            // A NaN-including maximum may be NaN, which is not a usable upper bound.
-            AggregateFnSatisfaction::Approximate
+            // A NaN-including maximum cannot provide a usable bound.
+            let valid = is_not_null(partial.clone());
+            let state = pack(
+                [
+                    (BOUNDED_MAX_BOUND, partial),
+                    (BOUNDED_MAX_UNKNOWN, lit(false)),
+                ],
+                Nullability::Nullable,
+            );
+            Some(StatMatch::Approximate(mask(state, valid)))
         } else {
-            AggregateFnSatisfaction::No
+            None
         }
     }
 

@@ -124,3 +124,31 @@ pub fn new_foreign_aggregate_fn(id: AggregateFnId, metadata: Vec<u8>) -> Aggrega
     )
     .erased()
 }
+
+#[cfg(test)]
+mod tests {
+    use vortex_session::registry::CachedId;
+
+    use super::new_foreign_aggregate_fn;
+    use crate::expr::root;
+
+    #[test]
+    fn aggregate_contract_distinct_ids_do_not_satisfy() {
+        static LEFT: CachedId = CachedId::new("test.left");
+        static RIGHT: CachedId = CachedId::new("test.right");
+        let left = new_foreign_aggregate_fn(*LEFT, vec![1]);
+        let right = new_foreign_aggregate_fn(*RIGHT, vec![1]);
+        assert_ne!(left, right);
+        assert!(left.resolve_stat(&right, root()).is_none());
+    }
+
+    #[test]
+    fn aggregate_contract_display_is_not_identity() {
+        static ID: CachedId = CachedId::new("test.foreign");
+        let left = new_foreign_aggregate_fn(*ID, vec![1]);
+        let right = new_foreign_aggregate_fn(*ID, vec![2]);
+        assert_ne!(left, right);
+        assert_eq!(left.to_string(), right.to_string());
+        assert!(left.resolve_stat(&right, root()).is_none());
+    }
+}
