@@ -17,11 +17,14 @@ use vortex_array::arrays::Constant;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::Dict;
 use vortex_array::arrays::DictArray;
+use vortex_array::arrays::Primitive;
+use vortex_array::arrays::VarBinView;
 use vortex_array::arrays::dict::DictArraySlotsExt;
+use vortex_array::builders::dict::dict_encode;
 use vortex_array::matcher::Matcher;
-use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_ensure;
 
 use crate::ArrowArrayExecutor;
 
@@ -53,14 +56,15 @@ pub(super) fn to_arrow_dictionary(
         Err(array) => array,
     };
 
-    // Otherwise, we should try and build a dictionary.
-    // Arrow hides this functionality inside the cast module!
-    let array = array.execute_arrow(Some(values_type), ctx)?;
-    arrow_cast::cast(
-        &array,
-        &DataType::Dictionary(Box::new(codes_type.clone()), Box::new(values_type.clone())),
-    )
-    .map_err(VortexError::from)
+    // Otherwise, dictionary-encode in Vortex and export the result. Going through
+    // `arrow_cast::cast` instead would link Arrow's entire cast matrix into every binary.
+    vortex_ensure!(
+        array.is::<Primitive>() || array.is::<VarBinView>(),
+        "Cannot export {} array as an Arrow dictionary",
+        array.dtype()
+    );
+    let dict = dict_encode(&array, ctx)?;
+    dict_to_dict(dict, codes_type, values_type, ctx)
 }
 
 /// Convert a constant array to a dictionary with a single entry.
@@ -238,7 +242,16 @@ mod tests {
         #[case] expected: arrow_array::ArrayRef,
     ) -> VortexResult<()> {
         let actual = execute(input, &target_type)?;
-        assert_eq!(expected.as_ref(), actual.as_ref());
+        assert_eq!(expected.data_type(), actual.data_type());
+        // Nulls may live in either the codes or the values, so compare the flattened arrays.
+        let values_type = match &target_type {
+            DataType::Dictionary(_, values_type) => values_type.as_ref(),
+            _ => unreachable!("dictionary target type"),
+        };
+        assert_eq!(
+            arrow_cast::cast(&expected, values_type)?.as_ref(),
+            arrow_cast::cast(&actual, values_type)?.as_ref()
+        );
         Ok(())
     }
 

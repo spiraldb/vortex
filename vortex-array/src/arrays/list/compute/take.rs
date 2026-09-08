@@ -2,6 +2,8 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use itertools::Itertools as _;
+use num_traits::AsPrimitive;
+use vortex_buffer::Buffer;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -27,6 +29,7 @@ use crate::arrays::piecewise_sequence::constant_unsigned_usize;
 use crate::arrays::piecewise_sequence::maybe_contiguous_slices;
 use crate::arrays::primitive::PrimitiveArrayExt;
 use crate::dtype::IntegerPType;
+use crate::dtype::PType;
 use crate::dtype::UnsignedPType;
 use crate::executor::ExecutionCtx;
 use crate::match_each_unsigned_integer_ptype;
@@ -162,158 +165,61 @@ fn take_slices(
     let offsets = offsets.reinterpret_cast(offsets.ptype().to_unsigned());
     let output_len = indices_ref.len();
 
+    // Starts and lengths hold one entry per output row, so widening them to `u64` up front is a
+    // cheap pass. It keeps the gather kernels below monomorphized over the list offset width
+    // alone rather than over every combination of start, length, and offset width.
+    let starts = widen_to_u64(starts);
+
     let taken = match lengths {
         Columnar::Constant(lengths) => {
             let length = constant_unsigned_usize(&lengths);
-            take_slices_constant_start_dispatch(
-                array,
-                &starts,
-                length,
-                &offsets,
-                indices_ref,
-                output_len,
-                &data_validity,
-            )?
+            match_each_unsigned_integer_ptype!(offsets.ptype(), |O| {
+                take_slices_constant_length::<O>(
+                    array,
+                    starts.as_slice(),
+                    length,
+                    offsets.as_slice::<O>(),
+                    indices_ref,
+                    output_len,
+                    &data_validity,
+                )
+            })?
         }
         Columnar::Canonical(lengths) => {
-            let lengths = lengths.into_primitive();
-            take_slices_start_dispatch(
-                array,
-                &starts,
-                &lengths,
-                &offsets,
-                indices_ref,
-                output_len,
-                &data_validity,
-            )?
+            let lengths = widen_to_u64(lengths.into_primitive());
+            match_each_unsigned_integer_ptype!(offsets.ptype(), |O| {
+                take_slices_typed::<O>(
+                    array,
+                    starts.as_slice(),
+                    lengths.as_slice(),
+                    offsets.as_slice::<O>(),
+                    indices_ref,
+                    output_len,
+                    &data_validity,
+                )
+            })?
         }
     };
     Ok(Some(taken))
 }
 
-fn take_slices_constant_start_dispatch(
-    array: ArrayView<'_, List>,
-    starts: &PrimitiveArray,
-    length: usize,
-    offsets: &PrimitiveArray,
-    indices_ref: &ArrayRef,
-    output_len: usize,
-    data_validity: &Mask,
-) -> VortexResult<ArrayRef> {
-    match_each_unsigned_integer_ptype!(starts.ptype(), |S| {
-        take_slices_constant_offset_dispatch::<S>(
-            array,
-            starts,
-            length,
-            offsets,
-            indices_ref,
-            output_len,
-            data_validity,
-        )
+/// Widen an unsigned integer array to a `u64` buffer, without copying when it already is one.
+fn widen_to_u64(array: PrimitiveArray) -> Buffer<u64> {
+    if array.ptype() == PType::U64 {
+        return array.into_buffer::<u64>();
+    }
+    match_each_unsigned_integer_ptype!(array.ptype(), |T| {
+        array
+            .as_slice::<T>()
+            .iter()
+            .map(|&value| value.as_())
+            .collect()
     })
 }
 
-fn take_slices_constant_offset_dispatch<S>(
+fn take_slices_constant_length<Offset>(
     array: ArrayView<'_, List>,
-    starts: &PrimitiveArray,
-    length: usize,
-    offsets: &PrimitiveArray,
-    indices_ref: &ArrayRef,
-    output_len: usize,
-    data_validity: &Mask,
-) -> VortexResult<ArrayRef>
-where
-    S: UnsignedPType,
-{
-    match_each_unsigned_integer_ptype!(offsets.ptype(), |O| {
-        take_slices_constant_length::<S, O>(
-            array,
-            starts.as_slice::<S>(),
-            length,
-            offsets.as_slice::<O>(),
-            indices_ref,
-            output_len,
-            data_validity,
-        )
-    })
-}
-
-fn take_slices_start_dispatch(
-    array: ArrayView<'_, List>,
-    starts: &PrimitiveArray,
-    lengths: &PrimitiveArray,
-    offsets: &PrimitiveArray,
-    indices_ref: &ArrayRef,
-    output_len: usize,
-    data_validity: &Mask,
-) -> VortexResult<ArrayRef> {
-    match_each_unsigned_integer_ptype!(starts.ptype(), |S| {
-        take_slices_length_dispatch::<S>(
-            array,
-            starts,
-            lengths,
-            offsets,
-            indices_ref,
-            output_len,
-            data_validity,
-        )
-    })
-}
-
-fn take_slices_length_dispatch<S>(
-    array: ArrayView<'_, List>,
-    starts: &PrimitiveArray,
-    lengths: &PrimitiveArray,
-    offsets: &PrimitiveArray,
-    indices_ref: &ArrayRef,
-    output_len: usize,
-    data_validity: &Mask,
-) -> VortexResult<ArrayRef>
-where
-    S: UnsignedPType,
-{
-    match_each_unsigned_integer_ptype!(lengths.ptype(), |L| {
-        take_slices_offset_dispatch::<S, L>(
-            array,
-            starts,
-            lengths,
-            offsets,
-            indices_ref,
-            output_len,
-            data_validity,
-        )
-    })
-}
-
-fn take_slices_offset_dispatch<S, L>(
-    array: ArrayView<'_, List>,
-    starts: &PrimitiveArray,
-    lengths: &PrimitiveArray,
-    offsets: &PrimitiveArray,
-    indices_ref: &ArrayRef,
-    output_len: usize,
-    data_validity: &Mask,
-) -> VortexResult<ArrayRef>
-where
-    S: UnsignedPType,
-    L: UnsignedPType,
-{
-    match_each_unsigned_integer_ptype!(offsets.ptype(), |O| {
-        take_slices_typed::<S, L, O>(
-            array,
-            starts.as_slice::<S>(),
-            lengths.as_slice::<L>(),
-            offsets.as_slice::<O>(),
-            indices_ref,
-            output_len,
-            data_validity,
-        )
-    })
-}
-
-fn take_slices_constant_length<S, Offset>(
-    array: ArrayView<'_, List>,
-    starts: &[S],
+    starts: &[u64],
     length: usize,
     offsets: &[Offset],
     indices_ref: &ArrayRef,
@@ -321,7 +227,6 @@ fn take_slices_constant_length<S, Offset>(
     data_validity: &Mask,
 ) -> VortexResult<ArrayRef>
 where
-    S: UnsignedPType,
     Offset: UnsignedPType,
 {
     let computed_len = starts
@@ -342,7 +247,7 @@ where
 
     match_smallest_offset_type!(total_elements, |OutOffset| {
         let gathered = if all_valid {
-            gather_piecewise_list_constant_length::<S, Offset, OutOffset>(
+            gather_piecewise_list_constant_length::<Offset, OutOffset>(
                 array.elements(),
                 offsets,
                 starts,
@@ -351,7 +256,7 @@ where
                 total_elements,
             )?
         } else {
-            gather_piecewise_list_constant_length_validity::<S, Offset, OutOffset>(
+            gather_piecewise_list_constant_length_validity::<Offset, OutOffset>(
                 array.elements(),
                 offsets,
                 starts,
@@ -372,18 +277,16 @@ where
     })
 }
 
-fn take_slices_typed<S, L, Offset>(
+fn take_slices_typed<Offset>(
     array: ArrayView<'_, List>,
-    starts: &[S],
-    lengths: &[L],
+    starts: &[u64],
+    lengths: &[u64],
     offsets: &[Offset],
     indices_ref: &ArrayRef,
     output_len: usize,
     data_validity: &Mask,
 ) -> VortexResult<ArrayRef>
 where
-    S: UnsignedPType,
-    L: UnsignedPType,
     Offset: UnsignedPType,
 {
     let mut computed_len = 0usize;
@@ -406,7 +309,7 @@ where
 
     match_smallest_offset_type!(total_elements, |OutOffset| {
         let gathered = if all_valid {
-            gather_piecewise_list::<S, L, Offset, OutOffset>(
+            gather_piecewise_list::<Offset, OutOffset>(
                 array.elements(),
                 offsets,
                 starts,
@@ -415,7 +318,7 @@ where
                 total_elements,
             )?
         } else {
-            gather_piecewise_list_validity::<S, L, Offset, OutOffset>(
+            gather_piecewise_list_validity::<Offset, OutOffset>(
                 array.elements(),
                 offsets,
                 starts,
@@ -449,13 +352,12 @@ struct ValidPieceGather<OutOffset> {
     output_elements: usize,
 }
 
-fn piecewise_list_elements_len_constant<S, Offset>(
+fn piecewise_list_elements_len_constant<Offset>(
     offsets: &[Offset],
-    starts: &[S],
+    starts: &[u64],
     length: usize,
 ) -> VortexResult<usize>
 where
-    S: UnsignedPType,
     Offset: UnsignedPType,
 {
     if length == 0 {
@@ -463,7 +365,7 @@ where
     }
 
     let mut total = 0usize;
-    for start in starts {
+    for &start in starts {
         let start: usize = start.as_();
         let offset_range = &offsets[start..][..=length];
         let element_start: usize = offset_range[0].as_();
@@ -475,14 +377,13 @@ where
     Ok(total)
 }
 
-fn piecewise_list_elements_len_constant_validity<S, Offset>(
+fn piecewise_list_elements_len_constant_validity<Offset>(
     offsets: &[Offset],
-    starts: &[S],
+    starts: &[u64],
     length: usize,
     data_validity: &Mask,
 ) -> VortexResult<usize>
 where
-    S: UnsignedPType,
     Offset: UnsignedPType,
 {
     if length == 0 {
@@ -490,7 +391,7 @@ where
     }
 
     let mut total = 0usize;
-    for start in starts {
+    for &start in starts {
         let start: usize = start.as_();
         let additional = valid_piece_elements_len(offsets, data_validity, start, length)?;
         total = total
@@ -500,14 +401,12 @@ where
     Ok(total)
 }
 
-fn piecewise_list_elements_len<S, L, Offset>(
+fn piecewise_list_elements_len<Offset>(
     offsets: &[Offset],
-    starts: &[S],
-    lengths: &[L],
+    starts: &[u64],
+    lengths: &[u64],
 ) -> VortexResult<usize>
 where
-    S: UnsignedPType,
-    L: UnsignedPType,
     Offset: UnsignedPType,
 {
     let mut total = 0usize;
@@ -524,15 +423,13 @@ where
     Ok(total)
 }
 
-fn piecewise_list_elements_len_validity<S, L, Offset>(
+fn piecewise_list_elements_len_validity<Offset>(
     offsets: &[Offset],
-    starts: &[S],
-    lengths: &[L],
+    starts: &[u64],
+    lengths: &[u64],
     data_validity: &Mask,
 ) -> VortexResult<usize>
 where
-    S: UnsignedPType,
-    L: UnsignedPType,
     Offset: UnsignedPType,
 {
     let mut total = 0usize;
@@ -571,16 +468,15 @@ where
     Ok(total)
 }
 
-fn gather_piecewise_list_constant_length<S, Offset, OutOffset>(
+fn gather_piecewise_list_constant_length<Offset, OutOffset>(
     elements: &ArrayRef,
     offsets: &[Offset],
-    starts: &[S],
+    starts: &[u64],
     length: usize,
     output_len: usize,
     total_elements: usize,
 ) -> VortexResult<GatheredList>
 where
-    S: UnsignedPType,
     Offset: UnsignedPType,
     OutOffset: IntegerPType,
 {
@@ -593,7 +489,7 @@ where
     let mut output_elements = 0usize;
 
     new_offsets.push(OutOffset::zero());
-    for start in starts {
+    for &start in starts {
         let start: usize = start.as_();
         if length == 0 {
             continue;
@@ -633,17 +529,16 @@ where
     Ok(GatheredList { elements, offsets })
 }
 
-fn gather_piecewise_list_constant_length_validity<S, Offset, OutOffset>(
+fn gather_piecewise_list_constant_length_validity<Offset, OutOffset>(
     elements: &ArrayRef,
     offsets: &[Offset],
-    starts: &[S],
+    starts: &[u64],
     length: usize,
     output_len: usize,
     total_elements: usize,
     data_validity: &Mask,
 ) -> VortexResult<GatheredList>
 where
-    S: UnsignedPType,
     Offset: UnsignedPType,
     OutOffset: IntegerPType,
 {
@@ -658,7 +553,7 @@ where
     };
 
     gather.new_offsets.push(OutOffset::zero());
-    for start in starts {
+    for &start in starts {
         let start: usize = start.as_();
         if length == 0 {
             continue;
@@ -686,17 +581,15 @@ where
     Ok(GatheredList { elements, offsets })
 }
 
-fn gather_piecewise_list<S, L, Offset, OutOffset>(
+fn gather_piecewise_list<Offset, OutOffset>(
     elements: &ArrayRef,
     offsets: &[Offset],
-    starts: &[S],
-    lengths: &[L],
+    starts: &[u64],
+    lengths: &[u64],
     output_len: usize,
     total_elements: usize,
 ) -> VortexResult<GatheredList>
 where
-    S: UnsignedPType,
-    L: UnsignedPType,
     Offset: UnsignedPType,
     OutOffset: IntegerPType,
 {
@@ -750,18 +643,16 @@ where
     Ok(GatheredList { elements, offsets })
 }
 
-fn gather_piecewise_list_validity<S, L, Offset, OutOffset>(
+fn gather_piecewise_list_validity<Offset, OutOffset>(
     elements: &ArrayRef,
     offsets: &[Offset],
-    starts: &[S],
-    lengths: &[L],
+    starts: &[u64],
+    lengths: &[u64],
     output_len: usize,
     total_elements: usize,
     data_validity: &Mask,
 ) -> VortexResult<GatheredList>
 where
-    S: UnsignedPType,
-    L: UnsignedPType,
     Offset: UnsignedPType,
     OutOffset: IntegerPType,
 {

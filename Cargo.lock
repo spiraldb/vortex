@@ -10560,6 +10560,7 @@ dependencies = [
  "arrow-buffer 59.3.0",
  "arrow-cast 59.3.0",
  "arrow-data 59.3.0",
+ "arrow-ord 59.3.0",
  "arrow-schema 59.3.0",
  "arrow-select 59.3.0",
  "codspeed-divan-compat",

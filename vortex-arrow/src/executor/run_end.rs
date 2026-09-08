@@ -1,23 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::cmp::Ordering;
 use std::sync::Arc;
 
 use arrow_array::ArrayRef as ArrowArrayRef;
+use arrow_array::PrimitiveArray;
 use arrow_array::RunArray;
+use arrow_array::UInt64Array;
 use arrow_array::cast::AsArray;
 use arrow_array::new_null_array;
 use arrow_array::types::*;
 use arrow_buffer::ArrowNativeType;
+use arrow_ord::ord::make_comparator;
 use arrow_schema::DataType;
 use arrow_schema::Field;
+use arrow_schema::SortOptions;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::Constant;
 use vortex_array::arrays::ConstantArray;
+use vortex_array::arrays::Primitive;
 use vortex_array::matcher::Matcher;
-use vortex_error::VortexError;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -57,13 +62,65 @@ pub(super) fn to_arrow_run_end(
         Err(array) => array,
     };
 
-    // Fallback: canonicalize to flat Arrow, then cast to REE.
+    // Otherwise, run-end encode and export the result. Going through `arrow_cast::cast` instead
+    // would link Arrow's entire cast matrix into every binary.
+    if array.is::<Primitive>() {
+        let run_end = RunEnd::encode(array, ctx)?;
+        return run_end_to_arrow(run_end, ends_type, values_type, ctx);
+    }
     let flat = export_values(array, values_type, ctx)?;
-    let ree_type = DataType::RunEndEncoded(
-        Arc::new(Field::new("run_ends", ends_type.clone(), false)),
-        Arc::new(values_type.clone()),
-    );
-    arrow_cast::cast(&flat, &ree_type).map_err(VortexError::from)
+    run_end_encode_arrow(&flat, ends_type)
+}
+
+/// Run-end encode a flat Arrow array by collapsing adjacent equal values, nulls included.
+///
+/// This only serves types Vortex has no run-end encoder for, so it trades the per-element
+/// comparator call for covering every type Arrow can compare.
+fn run_end_encode_arrow(flat: &ArrowArrayRef, ends_type: &DataType) -> VortexResult<ArrowArrayRef> {
+    let len = flat.len();
+    let comparator = make_comparator(flat.as_ref(), flat.as_ref(), SortOptions::default())?;
+
+    let mut run_starts = Vec::new();
+    let mut run_ends = Vec::new();
+    for index in 0..len {
+        if index > 0 && comparator(index - 1, index) == Ordering::Equal {
+            continue;
+        }
+        if index > 0 {
+            run_ends.push(index);
+        }
+        run_starts.push(index as u64);
+    }
+    if len > 0 {
+        run_ends.push(len);
+    }
+
+    let values = arrow_select::take::take(flat.as_ref(), &UInt64Array::from(run_starts), None)?;
+    match ends_type {
+        DataType::Int16 => build_run_array_from_ends::<Int16Type>(&run_ends, &values, len),
+        DataType::Int32 => build_run_array_from_ends::<Int32Type>(&run_ends, &values, len),
+        DataType::Int64 => build_run_array_from_ends::<Int64Type>(&run_ends, &values, len),
+        _ => vortex_bail!("Unsupported run-end index type: {:?}", ends_type),
+    }
+}
+
+fn build_run_array_from_ends<R: RunEndIndexType>(
+    run_ends: &[usize],
+    values: &ArrowArrayRef,
+    length: usize,
+) -> VortexResult<ArrowArrayRef>
+where
+    R::Native: std::ops::Sub<Output = R::Native> + Ord,
+{
+    let ends = run_ends
+        .iter()
+        .map(|&end| {
+            R::Native::from_usize(end)
+                .ok_or_else(|| vortex_err!("Run end {end} exceeds run-end index capacity"))
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let ends = Arc::new(PrimitiveArray::<R>::from_iter_values(ends)) as ArrowArrayRef;
+    build_run_array::<R>(&ends, values, 0, length)
 }
 
 /// Export the values of a run-end array through the session, so extension metadata on the target
@@ -177,7 +234,7 @@ fn build_constant_run_array<R: RunEndIndexType>(
 ) -> VortexResult<ArrowArrayRef> {
     let end = R::Native::from_usize(len)
         .ok_or_else(|| vortex_err!("Array length {len} exceeds run-end index capacity"))?;
-    let run_ends = arrow_array::PrimitiveArray::<R>::from_value(end, 1);
+    let run_ends = PrimitiveArray::<R>::from_value(end, 1);
     Ok(Arc::new(RunArray::<R>::try_new(&run_ends, values)?) as ArrowArrayRef)
 }
 
@@ -190,6 +247,7 @@ mod tests {
     use arrow_array::Int32Array;
     use arrow_array::Int64Array;
     use arrow_array::RunArray;
+    use arrow_array::StringViewArray;
     use arrow_array::types::Int16Type;
     use arrow_array::types::Int32Type;
     use arrow_array::types::Int64Type;
@@ -200,6 +258,7 @@ mod tests {
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::SliceArray;
+    use vortex_array::arrays::VarBinViewArray;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability::Nullable;
     use vortex_array::dtype::PType;
@@ -254,7 +313,37 @@ mod tests {
         ) as arrow_array::ArrayRef
     }
 
+    fn runs_i32_with_i32_ends() -> arrow_array::ArrayRef {
+        Arc::new(
+            RunArray::<Int32Type>::try_new(
+                &Int32Array::from(vec![2, 3, 5, 6]),
+                &Int32Array::from(vec![Some(1), Some(2), None, Some(2)]),
+            )
+            .expect("valid run-end test array"),
+        ) as arrow_array::ArrayRef
+    }
+
+    fn runs_utf8_with_i16_ends() -> arrow_array::ArrayRef {
+        Arc::new(
+            RunArray::<Int16Type>::try_new(
+                &Int16Array::from(vec![1i16, 3, 4, 6]),
+                &StringViewArray::from(vec![Some("a"), None, Some("a"), Some("b")]),
+            )
+            .expect("valid run-end test array"),
+        ) as arrow_array::ArrayRef
+    }
+
     #[rstest]
+    #[case::primitive_fallback(
+        PrimitiveArray::from_option_iter([Some(1), Some(1), Some(2), None, None, Some(2)]).into_array(),
+        ree_type(DataType::Int32, DataType::Int32),
+        runs_i32_with_i32_ends(),
+    )]
+    #[case::utf8_fallback(
+        VarBinViewArray::from_iter_nullable_str([Some("a"), None, None, Some("a"), Some("b"), Some("b")]).into_array(),
+        ree_type(DataType::Int16, DataType::Utf8View),
+        runs_utf8_with_i16_ends(),
+    )]
     #[case::i32_with_i16_ends(
         ConstantArray::new(Scalar::from(42i32), 5).into_array(),
         ree_type(DataType::Int16, DataType::Int32),
