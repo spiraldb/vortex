@@ -59,7 +59,7 @@ fn build_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
         .build()?)
 }
 
-/// Runs or completes a single `.slt` file against DataFusion reading Vortex files.
+/// Runs or completes a single `.slt` file against DataFusion.
 fn drive_datafusion(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<()> {
     reset_dir(work_dir)?;
     let _guard = WorkDirGuard::new(work_dir.to_path_buf());
@@ -80,12 +80,12 @@ fn drive_datafusion(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<
             .with_table_factory(
                 factory.get_ext().to_uppercase(),
                 Arc::new(DefaultTableFactory::new()),
-            )
-            .with_file_formats(vec![factory]);
+            );
+        let mut session_state = session_state_builder.build();
+        session_state.register_file_format(factory, false)?;
         // The workspace builds `datafusion` without the `nested_expressions` feature, so array
         // functions (e.g. `make_array`, `array_length`) are not registered by default. Register
         // them explicitly so SLT files can construct and query list columns.
-        let mut session_state = session_state_builder.build();
         datafusion_functions_nested::register_all(&mut session_state)?;
         let session = SessionContext::new_with_state(session_state).enable_url_table();
 
@@ -105,7 +105,7 @@ fn drive_datafusion(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<
     })
 }
 
-/// Runs or completes a single `.slt` file against DuckDB reading Vortex files.
+/// Runs or completes a single `.slt` file against DuckDB.
 fn drive_duckdb(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<()> {
     reset_dir(work_dir)?;
     let _guard = WorkDirGuard::new(work_dir.to_path_buf());
@@ -222,7 +222,11 @@ fn main() -> anyhow::Result<ExitCode> {
     };
     let args = Arguments::from_iter(raw_args);
 
-    let has_tpch_data = SLT_ROOT.join("tpch/data/lineitem.vortex").exists();
+    let has_tpch_data = ["vortex", "parquet"].into_iter().all(|format| {
+        SLT_ROOT
+            .join(format!("tpch/data/lineitem.{format}"))
+            .exists()
+    });
 
     let mut files = list_files(SLT_ROOT.as_path())?;
     files.sort();

@@ -20,15 +20,18 @@ cargo nextest run -p vortex-sqllogictest
 cargo test -p vortex-sqllogictest --test sqllogictests
 ```
 
-The generated data lives under `slt/tpch/data/` (git-ignored). If it is missing, the TPC-H tests
-are reported as **ignored** rather than failing, so the rest of the suite still runs. The TPC-H
+The generated Vortex and Parquet data lives under `slt/tpch/data/` (git-ignored). Both formats
+are required; regenerate older fixtures if they only contain Vortex files. If either format is
+missing, the TPC-H tests are reported as **ignored**, so the rest of the suite still runs. The TPC-H
 `.slt` files load their tables through paths relative to the crate root, so run the tests via
 `cargo nextest`/`cargo test`, which set the working directory accordingly.
 
 TPC-H scripts live under `slt/tpch/datafusion/` and `slt/tpch/duckdb/`. Each engine has its own
-`create.slt.no`, `results/q1.slt.no` through `results/q22.slt.no`, and `drop.slt.no`, included by
-its `tpch.slt`. The result files assert query results and EXPLAIN plans. DataFusion uses external
-tables; DuckDB uses views over Vortex files so both suites exercise Vortex scans.
+`create.slt.no`, `results/q1.slt.no` through `results/q22.slt.no`, and `drop.slt.no`. Its `tpch.slt`
+runs these against Vortex and asserts EXPLAIN output from `plans/q1.slt.no` through `plans/q22.slt.no`.
+Its `parquet.slt` runs the same queries against the original Parquet fixtures and checks the same
+expected results. DataFusion uses external tables; DuckDB uses views over files. The `FILE_FORMAT`
+substitution variable selects the format in each engine's table setup.
 
 Because the harness is `libtest-mimic`-based, the standard test flags work, including
 `cargo nextest`, filtering, and listing:

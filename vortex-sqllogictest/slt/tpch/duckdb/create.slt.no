@@ -2,25 +2,25 @@
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 statement ok
-CREATE VIEW supplier AS SELECT * FROM read_vortex('slt/tpch/data/supplier.vortex');
+CREATE VIEW supplier AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/supplier.${FILE_FORMAT}');
 
 statement ok
-CREATE VIEW part AS SELECT * FROM read_vortex('slt/tpch/data/part.vortex');
+CREATE VIEW part AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/part.${FILE_FORMAT}');
 
 statement ok
-CREATE VIEW partsupp AS SELECT * FROM read_vortex('slt/tpch/data/partsupp.vortex');
+CREATE VIEW partsupp AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/partsupp.${FILE_FORMAT}');
 
 statement ok
-CREATE VIEW customer AS SELECT * FROM read_vortex('slt/tpch/data/customer.vortex');
+CREATE VIEW customer AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/customer.${FILE_FORMAT}');
 
 statement ok
-CREATE VIEW orders AS SELECT * FROM read_vortex('slt/tpch/data/orders.vortex');
+CREATE VIEW orders AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/orders.${FILE_FORMAT}');
 
 statement ok
-CREATE VIEW lineitem AS SELECT * FROM read_vortex('slt/tpch/data/lineitem.vortex');
+CREATE VIEW lineitem AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/lineitem.${FILE_FORMAT}');
 
 statement ok
-CREATE VIEW nation AS SELECT * FROM read_vortex('slt/tpch/data/nation.vortex');
+CREATE VIEW nation AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/nation.${FILE_FORMAT}');
 
 statement ok
-CREATE VIEW region AS SELECT * FROM read_vortex('slt/tpch/data/region.vortex');
+CREATE VIEW region AS SELECT * FROM read_${FILE_FORMAT}('slt/tpch/data/region.${FILE_FORMAT}');
