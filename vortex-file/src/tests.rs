@@ -2398,15 +2398,15 @@ async fn test_large_flat_chunk_scan_subdivides_splits() -> VortexResult<()> {
 
 #[tokio::test]
 #[cfg_attr(miri, ignore)]
-async fn test_no_sub_splitting_keeps_large_chunk_whole() -> VortexResult<()> {
-    // The same over-wide single chunk as above, scanned with sub-splitting disabled: the scan
-    // follows the layout's chunk boundaries exactly, so the file decodes as one batch.
+async fn test_layout_split_keeps_large_chunk_whole() -> VortexResult<()> {
+    // The same over-wide single chunk as above, scanned with `SplitBy::Layout`: the scan follows
+    // the layout's chunk boundaries exactly, so the file decodes as one batch.
     let mut ctx = SESSION.create_execution_ctx();
     let (file, values) = large_flat_file().await?;
 
     let mut chunks: Vec<ArrayRef> = file
         .scan()?
-        .with_no_sub_splitting()
+        .with_split_by(SplitBy::Layout)
         .into_array_stream()?
         .try_collect()
         .await?;
