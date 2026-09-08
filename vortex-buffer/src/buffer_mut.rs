@@ -845,7 +845,9 @@ impl<T> BufferMut<T> {
     fn extend_iter(&mut self, mut iter: impl Iterator<Item = T>) {
         // Pointer differences cannot count zero-sized elements.
         if size_of::<T>() == 0 {
-            iter.for_each(|item| self.push(item));
+            for item in iter {
+                self.push(item);
+            }
             return;
         }
 
@@ -901,7 +903,9 @@ impl<T> BufferMut<T> {
     pub fn extend_trusted<I: TrustedLen<Item = T>>(&mut self, iter: I) {
         // Pointer differences cannot count zero-sized elements.
         if size_of::<T>() == 0 {
-            iter.for_each(|item| self.push(item));
+            for item in iter {
+                self.push(item);
+            }
             return;
         }
 
