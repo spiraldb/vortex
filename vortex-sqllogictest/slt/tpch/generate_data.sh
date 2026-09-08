@@ -25,8 +25,4 @@ for f in "${DATA_DIR}"/*.parquet; do
   cargo run --release --package vortex-tui --bin vx -- convert "$f"
 done
 
-# 3. Remove parquet files
-echo "Cleaning up parquet files..."
-rm -f "${DATA_DIR}"/*.parquet
-
 echo "Done."

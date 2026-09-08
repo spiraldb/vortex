@@ -2,25 +2,25 @@
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 statement ok
-DROP TABLE supplier;
+DROP VIEW supplier;
 
 statement ok
-DROP TABLE region;
+DROP VIEW region;
 
 statement ok
-DROP TABLE  nation;
+DROP VIEW nation;
 
 statement ok
-DROP TABLE lineitem;
+DROP VIEW lineitem;
 
 statement ok
-DROP TABLE orders;
+DROP VIEW orders;
 
 statement ok
-DROP TABLE customer;
+DROP VIEW customer;
 
 statement ok
-DROP TABLE partsupp;
+DROP VIEW partsupp;
 
 statement ok
-DROP TABLE part;
+DROP VIEW part;
