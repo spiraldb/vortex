@@ -98,7 +98,7 @@ impl ScanBuilder<ArrayRef> {
             ordered: true,
             row_range: None,
             selection: Default::default(),
-            split_by: SplitBy::LayoutSubSplitting,
+            split_by: SplitBy::default(),
             natural_splits: None,
             // We default to four tasks per worker thread, which allows for some I/O lookahead
             // without too much impact on work-stealing.
@@ -227,10 +227,11 @@ impl<A: 'static + Send> ScanBuilder<A> {
 
     /// Split only at the layout's own chunk boundaries, without sub-dividing wide chunk spans.
     ///
-    /// By default ([`SplitBy::LayoutSubSplitting`]) spans between adjacent chunk boundaries that
-    /// are wider than the ideal split size are sub-divided, so a file with few, large chunks
-    /// decodes across multiple cores. This shorthand for `with_split_by(SplitBy::Layout)` disables
-    /// that sub-division, yielding fewer, larger splits that follow the file's chunking exactly.
+    /// By default ([`SplitBy::LayoutSubSplitting`]) spans between adjacent chunk boundaries wider
+    /// than [`DEFAULT_MAX_SPLIT_ROWS`](crate::scan::split_by::DEFAULT_MAX_SPLIT_ROWS) are
+    /// sub-divided, so a file with few, large chunks decodes across multiple cores. This shorthand
+    /// for `with_split_by(SplitBy::Layout)` disables that sub-division, yielding fewer, larger
+    /// splits that follow the file's chunking exactly.
     pub fn with_no_sub_splitting(self) -> Self {
         self.with_split_by(SplitBy::Layout)
     }
