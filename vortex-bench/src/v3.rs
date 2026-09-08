@@ -350,11 +350,7 @@ pub fn query_measurement_record(
         dataset,
         dataset_variant,
         scale_factor,
-        // Clamp at `i32::MAX`, not `u32::MAX`: the server's `query_idx`
-        // field is `i32`, so a saturated `u32::MAX` would fail serde
-        // deserialization. Real `query_idx` values are 0..200, so the
-        // saturation path is defensive rather than load-bearing.
-        query_idx: u32::try_from(qm.query_idx).unwrap_or(i32::MAX as u32),
+        query_idx: clamp_to_i32(qm.query_idx),
         storage: qm.storage.clone(),
         engine: engine_label(qm.target.engine).to_string(),
         format: qm.target.format.name().to_string(),
@@ -459,8 +455,7 @@ pub fn vector_search_record(
     rows_scanned: u64,
     bytes_scanned: u64,
 ) -> V3Record {
-    // The Postgres `iterations` column is `INTEGER`, so clamp at `i32::MAX`.
-    let iterations = u32::try_from(all_runs_ns.len()).unwrap_or(i32::MAX as u32);
+    let iterations = clamp_to_i32(all_runs_ns.len());
     V3Record::VectorSearchRun(VectorSearchRunRecord {
         commit_sha: GIT_COMMIT_ID.clone(),
         dataset: dims.dataset.to_string(),
@@ -498,16 +493,15 @@ pub fn write_jsonl_to_path(path: &std::path::Path, records: &[V3Record]) -> std:
     write_jsonl(&mut file, records)
 }
 
-/// Convert a `Duration` to `u64` nanoseconds, clamping at the largest
-/// value the server-side `value_ns: i64` deserializer can accept.
-///
-/// The wire field is `u64` (see `value_ns` on every record type below),
-/// but the server's records mirrors them as `i64`.
-/// Without the clamp, an overflowed measurement would land at `u64::MAX`
-/// here, fail serde deserialization on the server, and 400 the whole
-/// ingest envelope.
+/// Clamp unsigned wire values to the Postgres `INTEGER` limit enforced by `scripts/post-ingest.py`.
+fn clamp_to_i32(value: usize) -> u32 {
+    i32::try_from(value).unwrap_or(i32::MAX) as u32
+}
+
+/// Convert a duration to nanoseconds within the Postgres `BIGINT` limit enforced by
+/// `scripts/post-ingest.py`, preserving the unsigned wire field.
 fn duration_as_ns(d: std::time::Duration) -> u64 {
-    u64::try_from(d.as_nanos()).unwrap_or(i64::MAX as u64)
+    i64::try_from(d.as_nanos()).unwrap_or(i64::MAX) as u64
 }
 
 fn engine_label(engine: Engine) -> &'static str {
@@ -531,6 +525,7 @@ mod tests {
 
     use insta::assert_snapshot;
     use insta::with_settings;
+    use rstest::rstest;
 
     use super::*;
     use crate::Target;
@@ -545,6 +540,26 @@ mod tests {
     fn render(record: &V3Record) -> anyhow::Result<String> {
         let json = serde_json::to_string_pretty(record)?;
         Ok(redact_env(&json))
+    }
+
+    #[rstest]
+    #[case::zero(0, 0)]
+    #[case::below_limit(i32::MAX as usize - 1, i32::MAX as u32 - 1)]
+    #[case::at_limit(i32::MAX as usize, i32::MAX as u32)]
+    #[case::above_limit(i32::MAX as usize + 1, i32::MAX as u32)]
+    #[case::overflow(usize::MAX, i32::MAX as u32)]
+    fn test_clamp_to_i32(#[case] value: usize, #[case] expected: u32) {
+        assert_eq!(clamp_to_i32(value), expected);
+    }
+
+    #[rstest]
+    #[case::zero(Duration::ZERO, 0)]
+    #[case::below_limit(Duration::from_nanos(i64::MAX as u64 - 1), i64::MAX as u64 - 1)]
+    #[case::at_limit(Duration::from_nanos(i64::MAX as u64), i64::MAX as u64)]
+    #[case::above_limit(Duration::from_nanos(i64::MAX as u64 + 1), i64::MAX as u64)]
+    #[case::overflow(Duration::MAX, i64::MAX as u64)]
+    fn test_duration_as_ns(#[case] duration: Duration, #[case] expected: u64) {
+        assert_eq!(duration_as_ns(duration), expected);
     }
 
     #[test]
