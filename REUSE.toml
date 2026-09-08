@@ -37,6 +37,11 @@ SPDX-FileCopyrightText = "Copyright the Vortex contributors"
 SPDX-License-Identifier = "Apache-2.0"
 
 [[annotations]]
+path = "vortex-ffi/cmake/tests/fixtures/native/vortex-ffi/header-version"
+SPDX-FileCopyrightText = "Copyright the Vortex contributors"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
 path = ["vortex-cuda/kernels/src/bit_unpack_*"]
 precedence = "override"
 SPDX-FileCopyrightText = "Copyright the Vortex contributors"
