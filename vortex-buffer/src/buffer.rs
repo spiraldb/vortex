@@ -30,9 +30,13 @@ use crate::trusted_len::TrustedLen;
 /// An immutable buffer of items of `T`.
 #[derive(Clone)]
 pub struct Buffer<T> {
+    /// The first element in this view; may dangle for an empty buffer or zero-sized `T`.
     pub(crate) ptr: NonNull<T>,
+    /// The number of initialized `T` values visible from `ptr`.
     pub(crate) length: usize,
+    /// The minimum alignment promised for `ptr` and preserved by aligned slices.
     pub(crate) alignment: Alignment,
+    /// Shared ownership of the storage containing `ptr`, if any; `Buffer::empty` has no backing.
     pub(crate) backing: Option<Arc<BufferBacking>>,
 }
 
@@ -100,9 +104,8 @@ impl<T> Buffer<T> {
         }
     }
 
-    fn from_owner(owner: impl crate::BufferOwner, alignment: Alignment) -> Self {
+    fn from_owner(owner: impl crate::BufferOwner, length: usize, alignment: Alignment) -> Self {
         let owner: Box<dyn crate::BufferOwner> = Box::new(owner);
-        let length = owner.len() / size_of::<T>();
         let ptr = if length == 0 {
             empty_ptr()
         } else {
@@ -275,8 +278,12 @@ impl<T> Buffer<T> {
     /// ## Panics
     ///
     /// Panics if the buffer is not aligned to the given alignment, if the length is not a multiple
-    /// of the size of `T`, or if the given alignment is not aligned to that of `T`.
+    /// of the size of `T`, if `T` is zero-sized, or if the given alignment is not aligned to that of `T`.
     pub fn from_byte_buffer_aligned(buffer: ByteBuffer, alignment: Alignment) -> Self {
+        assert!(
+            size_of::<T>() != 0,
+            "cannot infer a zero-sized element count from bytes"
+        );
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -307,8 +314,12 @@ impl<T> Buffer<T> {
     /// ## Panics
     ///
     /// Panics if the buffer is not aligned to the size of `T`, or the length is not a multiple of
-    /// the size of `T`.
+    /// the size of `T`, or if `T` is zero-sized.
     pub fn from_bytes_aligned(bytes: Bytes, alignment: Alignment) -> Self {
+        assert!(
+            size_of::<T>() != 0,
+            "cannot infer a zero-sized element count from bytes"
+        );
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -559,7 +570,7 @@ impl<T> Buffer<T> {
         let subset_end = subset_start
             .checked_add(size_of_val(subset))
             .vortex_expect("slice_ref address overflow");
-        if subset_start < start || subset_end > end {
+        if subset.len() > self.len() || subset_start < start || subset_end > end {
             vortex_panic!("slice_ref subset must be contained in the buffer");
         }
 
@@ -631,7 +642,9 @@ impl<T> Buffer<T> {
         match Arc::try_unwrap(backing) {
             Ok(BufferBacking::Owned(allocation)) => {
                 let offset = ptr.addr().get() - allocation.ptr().addr().get();
-                let capacity = if allocation.size() == 0 {
+                let capacity = if size_of::<T>() == 0 {
+                    usize::MAX
+                } else if allocation.size() == 0 {
                     0
                 } else {
                     (allocation.size() - offset) / size_of::<T>()
@@ -810,10 +823,6 @@ impl<T: Send + Sync + 'static> crate::BufferOwner for Wrapper<T> {
     fn as_ptr(&self) -> *const u8 {
         self.0.as_ptr().cast()
     }
-
-    fn len(&self) -> usize {
-        self.0.len() * size_of::<T>()
-    }
 }
 
 impl<T> From<Vec<T>> for Buffer<T>
@@ -824,7 +833,7 @@ where
         let length = value.len();
         let alignment = Alignment::of::<T>();
         if std::mem::needs_drop::<T>() {
-            Self::from_owner(Wrapper(value), alignment)
+            Self::from_owner(Wrapper(value), length, alignment)
         } else {
             Self::from_allocation(Allocation::from_vec(value), 0, length, alignment)
         }
@@ -1151,9 +1160,15 @@ mod test {
         let Ok(mut sliced) = sliced.try_into_mut() else {
             panic!("uniquely owned slice should become mutable")
         };
+        let ptr = sliced.as_ptr();
         let capacity = sliced.capacity();
         sliced.push_n(0, capacity - sliced.len());
         assert_eq!(sliced.len(), capacity);
+        assert_eq!(sliced.as_ptr(), ptr);
+        sliced.push(42);
+        assert_eq!(&sliced[..32], (64u32..96).collect::<Vec<_>>());
+        assert_eq!(&sliced[32..capacity], vec![0; capacity - 32]);
+        assert_eq!(sliced[capacity], 42);
     }
 
     #[test]
