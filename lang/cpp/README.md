@@ -30,8 +30,6 @@ target_link_libraries(my_c_target PRIVATE Vortex::ffi_static)
 ```
 
 Vortex leaves parent build settings unchanged. Its archives are position-independent.
-When embedding them in a shared library, hide Vortex symbols (including `vx_*`) with your
-export policy, such as an ELF version script and `--exclude-libs,ALL`, or a macOS export allowlist.
 
 ## Build options
 
