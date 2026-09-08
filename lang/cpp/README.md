@@ -6,9 +6,8 @@ A C++20 API for reading and writing Vortex files. See the
 ## Build
 
 Requires CMake 3.25+, C/C++ compilers, and Cargo/rustc 1.95+ on `PATH`.
-Use a single-config generator: Ninja or Unix Makefiles.
 
-From a complete Vortex checkout:
+From a Vortex checkout:
 
 ```sh
 cmake -S lang/cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
@@ -29,10 +28,6 @@ add_subdirectory(path/to/vortex vortex)
 target_link_libraries(my_cpp_target PRIVATE Vortex::cpp_static)
 target_link_libraries(my_c_target PRIVATE Vortex::ffi_static)
 ```
-
-Link the targets, not raw archives: they carry headers and native dependencies.
-You can also add `lang/cpp` or `vortex-ffi` directly. There are no installation rules or
-`find_package(Vortex)` package.
 
 Vortex leaves parent build settings unchanged. Its archives are position-independent.
 When embedding them in a shared library, hide Vortex symbols (including `vx_*`) with your

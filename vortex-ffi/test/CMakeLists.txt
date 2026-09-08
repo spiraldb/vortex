@@ -11,10 +11,8 @@ FetchContent_MakeAvailable(Catch)
 # populated it, which may be a parent that fetched Catch2 first.
 include("${catch_SOURCE_DIR}/extras/Catch.cmake")
 
-# Catch2 enables std::string_view, optional, variant, and byte support from
-# C++17, in headers and compiled sources alike; build it with those on so it
-# matches the C++20 tests that include its headers.
-target_compile_features(Catch2 PRIVATE cxx_std_17)
+# Catch2's headers and library must agree on standard-dependent features.
+target_compile_features(Catch2 PRIVATE cxx_std_20)
 # https://github.com/catchorg/Catch2/issues/1833
 target_compile_definitions(Catch2 PRIVATE CATCH_CONFIG_NO_POSIX_SIGNALS)
 

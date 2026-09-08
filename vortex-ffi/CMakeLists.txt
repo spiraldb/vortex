@@ -30,8 +30,6 @@ if(_vortex_top_level AND NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Debug)
 endif()
 
-# Public options. Embedding parents set these before add_subdirectory(). The
-# testing and examples options are shared with lang/cpp.
 option(VORTEX_BUILD_TESTS "Build Vortex tests" OFF)
 option(VORTEX_BUILD_EXAMPLES "Build Vortex examples" OFF)
 option(VORTEX_ENABLE_CUDA "Build the CUDA-enabled Vortex FFI" OFF)
@@ -59,16 +57,16 @@ add_library(Vortex::ffi_static ALIAS vortex_ffi_static)
 if(VORTEX_BUILD_TESTS OR VORTEX_BUILD_EXAMPLES)
     include(FetchContent)
 
-    # Nanoarrow's developer warnings use -Werror and can reject newer compilers.
-    # Its headers are system headers when consumed by Vortex-owned targets.
-    set(NANOARROW_DEBUG_EXTRA_WARNINGS OFF CACHE BOOL
-        "Enable Nanoarrow's additional compiler warnings")
+    # Keep dependency warnings out of Vortex's warning policy.
+    set(NANOARROW_DEBUG_EXTRA_WARNINGS OFF)
     FetchContent_Declare(
         Nanoarrow
         SYSTEM
         GIT_REPOSITORY https://github.com/apache/arrow-nanoarrow
         GIT_TAG apache-arrow-nanoarrow-0.8.0)
     FetchContent_MakeAvailable(Nanoarrow)
+    target_compile_options(nanoarrow_static PRIVATE -w)
+    target_compile_options(nanoarrow_shared PRIVATE -w)
 
     # arrow-nanoarrow creates a self-referential symlink:
     # python/subprojects/arrow-nanoarrow -> ../..

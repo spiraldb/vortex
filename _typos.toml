@@ -16,5 +16,4 @@ extend-exclude = ["/vortex-bench/**", "/docs/references.bib", "benchmarks/**", "
 [type.py]
 extend-ignore-identifiers-re = [
     "Trafic", # Appears in some clickbench-related examples
-    "^DORDER$", # -D defines the ORDER macro in compiler flags.
 ]
