@@ -19,7 +19,7 @@ Run from the repository root. Tests use Catch2 and require a C++ compiler.
 
 ```sh
 cmake -S vortex-ffi -B build/ffi \
-    -DVORTEX_BUILD_EXAMPLES=ON -DVORTEX_BUILD_TESTING=ON
+    -DVORTEX_BUILD_EXAMPLES=ON -DVORTEX_BUILD_TESTS=ON
 cmake --build build/ffi --parallel
 ctest --test-dir build/ffi --output-on-failure
 
@@ -59,7 +59,7 @@ cmake -S vortex-ffi -B build/ffi-asan \
     -DCMAKE_BUILD_TYPE=Debug -DVORTEX_RUSTUP_TOOLCHAIN=nightly \
     -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
     -DVORTEX_SANITIZER=asan,ubsan -DVORTEX_SANITIZE_RUST_STD=ON \
-    -DVORTEX_BUILD_TESTING=ON
+    -DVORTEX_BUILD_TESTS=ON
 cmake --build build/ffi-asan --parallel
 ctest --test-dir build/ffi-asan --output-on-failure
 ```

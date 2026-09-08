@@ -32,7 +32,7 @@ endif()
 
 # Public options. Embedding parents set these before add_subdirectory(). The
 # Cargo, CUDA, and sanitizer options are defined by vortex-ffi/CMakeLists.txt.
-option(VORTEX_BUILD_TESTING "Build Vortex tests" OFF)
+option(VORTEX_BUILD_TESTS "Build Vortex tests" OFF)
 option(VORTEX_BUILD_EXAMPLES "Build Vortex examples" OFF)
 option(VORTEX_WARNINGS_AS_ERRORS
     "Treat warnings in Vortex-owned sources as errors"
@@ -70,7 +70,7 @@ endif()
 add_library(Vortex::cpp_static ALIAS vortex_cxx)
 
 # Test and example dependencies are fetched at configure time and never installed.
-if(VORTEX_BUILD_TESTING OR VORTEX_BUILD_EXAMPLES)
+if(VORTEX_BUILD_TESTS OR VORTEX_BUILD_EXAMPLES)
     include(FetchContent)
 
     # Nanoarrow's developer warnings use -Werror and can reject newer compilers.
@@ -91,7 +91,7 @@ if(VORTEX_BUILD_TESTING OR VORTEX_BUILD_EXAMPLES)
     endif()
 endif()
 
-if(VORTEX_BUILD_TESTING)
+if(VORTEX_BUILD_TESTS)
     FetchContent_Declare(
         Catch
         SYSTEM

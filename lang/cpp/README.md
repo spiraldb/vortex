@@ -15,7 +15,7 @@ cmake -S lang/cpp -B build/cpp -DCMAKE_BUILD_TYPE=Release
 cmake --build build/cpp --parallel
 ```
 
-CMake runs Cargo for you. Configure/build may download dependencies.
+CMake runs Cargo for you. Configuration and builds download uncached dependencies.
 
 **Native builds only:** GNU/Linux x86_64 and aarch64, plus macOS arm64 for standalone development.
 Cross-compilation, universal binaries, Windows, musl, and shared Vortex targets are unsupported.
@@ -45,7 +45,7 @@ options. Defaults below are for standalone builds.
 
 | Option                      | Default  | Purpose                                                     |
 | --------------------------- | -------- | ----------------------------------------------------------- |
-| `VORTEX_BUILD_TESTING`      | `OFF`    | C API and C++23 wrapper tests.                              |
+| `VORTEX_BUILD_TESTS`        | `OFF`    | C API and C++23 wrapper tests.                              |
 | `VORTEX_BUILD_EXAMPLES`     | `OFF`    | C/C++ examples.                                             |
 | `VORTEX_WARNINGS_AS_ERRORS` | `ON`     | Warnings as errors for Vortex targets only.                 |
 | `VORTEX_CARGO_PROFILE`      | Inferred | Override the mapping below.                                 |
@@ -73,9 +73,9 @@ Cargo's `test` and `bench` profiles are unsupported.
 
 ### Toolchain and build behavior
 
-- `VORTEX_RUSTUP_TOOLCHAIN` is cached. Initially it uses `RUSTUP_TOOLCHAIN`, otherwise `nightly`
-  for Rust sanitizers or the workspace `rust-toolchain.toml`. Set it explicitly to change toolchains.
-  An empty value selects the workspace toolchain.
+- On first configuration, `VORTEX_RUSTUP_TOOLCHAIN` defaults to `RUSTUP_TOOLCHAIN`, otherwise
+  `nightly` for Rust sanitizers or the workspace `rust-toolchain.toml`. CMake caches this choice.
+  Set it explicitly to change toolchains. An empty value selects the workspace toolchain.
 - Cargo/rustc are found on `PATH`. Override them with `VORTEX_CARGO_EXECUTABLE` and
   `VORTEX_RUSTC_EXECUTABLE`. CMake replaces environment/configuration Rust flags and builds with
   the lockfile and no optional FFI features.
@@ -92,8 +92,7 @@ Cargo's `test` and `bench` profiles are unsupported.
 ### Tests and examples
 
 ```sh
-cmake -S lang/cpp -B build/cpp-dev \
-    -DVORTEX_BUILD_TESTING=ON -DVORTEX_BUILD_EXAMPLES=ON
+cmake -S lang/cpp -B build/cpp-dev -DVORTEX_BUILD_TESTS=ON -DVORTEX_BUILD_EXAMPLES=ON
 cmake --build build/cpp-dev --parallel
 ctest --test-dir build/cpp-dev --output-on-failure
 ```
@@ -120,7 +119,7 @@ rustup toolchain install nightly
 cmake -S lang/cpp -B build/cpp-asan \
     -DCMAKE_BUILD_TYPE=Debug -DVORTEX_RUSTUP_TOOLCHAIN=nightly \
     -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-    -DVORTEX_SANITIZER=asan,ubsan -DVORTEX_BUILD_TESTING=ON
+    -DVORTEX_SANITIZER=asan,ubsan -DVORTEX_BUILD_TESTS=ON
 cmake --build build/cpp-asan --parallel
 ctest --test-dir build/cpp-asan --output-on-failure
 ```

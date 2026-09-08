@@ -633,7 +633,7 @@ jobs:
             -DCMAKE_CXX_COMPILER=clang++ \
             -DVORTEX_SANITIZER=asan,lsan,ubsan \
             -DVORTEX_SANITIZE_RUST_STD=ON \
-            -DVORTEX_BUILD_TESTING=ON \
+            -DVORTEX_BUILD_TESTS=ON \
             -DVORTEX_BUILD_EXAMPLES=ON
           cmake --build build --parallel "$(nproc)"
       - name: Run C++ tests
@@ -822,6 +822,6 @@ jobs:
         run: |
           cmake -S vortex-ffi -B vortex-ffi/build \
             -DVORTEX_CARGO_PROFILE=ci \
-            -DVORTEX_BUILD_TESTING=ON
+            -DVORTEX_BUILD_TESTS=ON
           cmake --build vortex-ffi/build --parallel "$(nproc)"
           ctest --test-dir vortex-ffi/build --output-on-failure

@@ -10,9 +10,12 @@ set -eu
 cd "$(dirname "$0")"
 
 cmake -S . -B build \
-    -DVORTEX_BUILD_TESTING=ON \
+    -DVORTEX_BUILD_TESTS=ON \
     -DCMAKE_CXX_FLAGS=--coverage
-cmake --build build --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN)}"
+
+# getconf works on Linux and macOS; nproc is not installed on stock macOS.
+cmake --build build \
+    --parallel "${CMAKE_BUILD_PARALLEL_LEVEL:-$(getconf _NPROCESSORS_ONLN)}"
 ctest --test-dir build --output-on-failure
 
 # lcov matches exclude globs against full source paths.

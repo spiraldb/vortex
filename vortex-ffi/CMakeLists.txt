@@ -32,7 +32,7 @@ endif()
 
 # Public options. Embedding parents set these before add_subdirectory(). The
 # testing and examples options are shared with lang/cpp.
-option(VORTEX_BUILD_TESTING "Build Vortex tests" OFF)
+option(VORTEX_BUILD_TESTS "Build Vortex tests" OFF)
 option(VORTEX_BUILD_EXAMPLES "Build Vortex examples" OFF)
 option(VORTEX_ENABLE_CUDA "Build the CUDA-enabled Vortex FFI" OFF)
 set(VORTEX_CARGO_PROFILE "" CACHE STRING "Override the Cargo profile selected from CMAKE_BUILD_TYPE")
@@ -56,7 +56,7 @@ include(cmake/Configure.cmake)
 add_library(Vortex::ffi_static ALIAS vortex_ffi_static)
 
 # Test and example dependencies are fetched at configure time and never installed.
-if(VORTEX_BUILD_TESTING OR VORTEX_BUILD_EXAMPLES)
+if(VORTEX_BUILD_TESTS OR VORTEX_BUILD_EXAMPLES)
     include(FetchContent)
 
     # Nanoarrow's developer warnings use -Werror and can reject newer compilers.
@@ -77,7 +77,7 @@ if(VORTEX_BUILD_TESTING OR VORTEX_BUILD_EXAMPLES)
     endif()
 endif()
 
-if(VORTEX_BUILD_TESTING)
+if(VORTEX_BUILD_TESTS)
     # Embedding parents must also call enable_testing() for ctest to find these.
     enable_testing()
     add_subdirectory(test)

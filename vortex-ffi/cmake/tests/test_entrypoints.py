@@ -104,7 +104,7 @@ class EntrypointTests(unittest.TestCase):
             f"-DVORTEX_RUSTC_EXECUTABLE={self.rustc}",
             f"-DVORTEX_CARGO_EXECUTABLE={self.cargo}",
             f"-DCMAKE_PROJECT_INCLUDE={self.hook}",
-            "-DVORTEX_BUILD_TESTING=OFF",
+            "-DVORTEX_BUILD_TESTS=OFF",
             "-DVORTEX_BUILD_EXAMPLES=OFF",
             "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
             *options,
