@@ -31,20 +31,24 @@ pub struct TimestampParts {
 ///
 /// Returns an error if `time_unit` is days, which cannot be split.
 pub fn split(timestamp: i64, time_unit: TimeUnit) -> VortexResult<TimestampParts> {
-    let divisor = match time_unit {
-        TimeUnit::Nanoseconds => 1_000_000_000,
-        TimeUnit::Microseconds => 1_000_000,
-        TimeUnit::Milliseconds => 1_000,
-        TimeUnit::Seconds => 1,
+    Ok(match time_unit {
+        TimeUnit::Nanoseconds => split_with_divisor::<1_000_000_000>(timestamp),
+        TimeUnit::Microseconds => split_with_divisor::<1_000_000>(timestamp),
+        TimeUnit::Milliseconds => split_with_divisor::<1_000>(timestamp),
+        TimeUnit::Seconds => split_with_divisor::<1>(timestamp),
         TimeUnit::Days => vortex_bail!("Cannot handle day-level data"),
-    };
-
-    let ticks_per_day = SECONDS_PER_DAY * divisor;
-    Ok(TimestampParts {
-        days: timestamp / ticks_per_day,
-        seconds: (timestamp % ticks_per_day) / divisor,
-        subseconds: (timestamp % ticks_per_day) % divisor,
     })
+}
+
+/// Split a Unix timestamp
+pub(crate) fn split_with_divisor<const DIVISOR: i64>(timestamp: i64) -> TimestampParts {
+    let days = timestamp / (SECONDS_PER_DAY * DIVISOR);
+    let total_seconds = timestamp / DIVISOR;
+    TimestampParts {
+        days,
+        seconds: total_seconds - days * SECONDS_PER_DAY,
+        subseconds: timestamp - total_seconds * DIVISOR,
+    }
 }
 
 /// Combines timestamp parts back into a Unix timestamp.
@@ -71,7 +75,38 @@ pub fn combine(ts_parts: TimestampParts, time_unit: TimeUnit) -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
+
+    #[rstest]
+    #[case(TimeUnit::Seconds, 1)]
+    #[case(TimeUnit::Milliseconds, 1_000)]
+    #[case(TimeUnit::Microseconds, 1_000_000)]
+    #[case(TimeUnit::Nanoseconds, 1_000_000_000)]
+    fn test_split_divmod(#[case] unit: TimeUnit, #[case] divisor: i64) -> VortexResult<()> {
+        let ticks_per_day = SECONDS_PER_DAY * divisor;
+        for ts in [
+            0,
+            1,
+            -1,
+            divisor - 1,
+            3723 * divisor + divisor / 2,
+            -(3723 * divisor + divisor / 2),
+            ticks_per_day - 1,
+            ticks_per_day,
+            -ticks_per_day,
+            i64::MAX,
+            i64::MIN,
+        ] {
+            let parts = split(ts, unit)?;
+            assert_eq!(parts.days, ts / ticks_per_day);
+            assert_eq!(parts.seconds, (ts % ticks_per_day) / divisor);
+            assert_eq!(parts.subseconds, (ts % ticks_per_day) % divisor);
+            assert_eq!(combine(parts, unit), ts);
+        }
+        Ok(())
+    }
 
     #[test]
     fn test_split_seconds() {
