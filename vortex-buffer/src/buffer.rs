@@ -824,22 +824,6 @@ where
     }
 }
 
-impl ByteBuffer {
-    /// Takes zero-copy ownership of a byte slice, retaining its owner until the last view is dropped.
-    ///
-    /// The buffer's length comes from the owner's byte slice. Typed buffers must instead be
-    /// constructed from typed values or through the checked byte-buffer conversion APIs.
-    ///
-    /// ```compile_fail
-    /// use vortex_buffer::Buffer;
-    ///
-    /// let buffer = Buffer::<u32>::from_owner(vec![0u8; 4]);
-    /// ```
-    pub fn from_owner(owner: impl AsRef<[u8]> + Send + 'static) -> Self {
-        Self::from(Bytes::from_owner(owner))
-    }
-}
-
 impl From<Bytes> for ByteBuffer {
     fn from(bytes: Bytes) -> Self {
         Self::from_bytes(bytes, Alignment::of::<u8>())
@@ -1128,7 +1112,7 @@ mod test {
             drops: Arc::clone(&drops),
         };
         let ptr = owner.as_ref().as_ptr();
-        let buffer = ByteBuffer::from_owner(owner);
+        let buffer = ByteBuffer::from(Bytes::from_owner(owner));
         assert_eq!(buffer.as_ptr(), ptr);
         assert_eq!(buffer.as_slice(), [1, 2, 3]);
         let view = buffer.slice(1..);
