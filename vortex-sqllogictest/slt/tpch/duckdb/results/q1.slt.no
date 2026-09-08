@@ -1,0 +1,334 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TTRRRRRRRI rowsort
+select
+    l_returnflag,
+    l_linestatus,
+    sum(l_quantity) as sum_qty,
+    sum(l_extendedprice) as sum_base_price,
+    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
+    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
+    avg(l_quantity) as avg_qty,
+    avg(l_extendedprice) as avg_price,
+    avg(l_discount) as avg_disc,
+    count(*) as count_order
+from
+    lineitem
+where
+        l_shipdate <= date '1998-09-02'
+group by
+    l_returnflag,
+    l_linestatus
+order by
+    l_returnflag,
+	l_linestatus;
+----
+A F 3774200 5320753880.69 5054096266.6828 5256751331.449234 25.537587116855 36002.12382901414 0.050144597063 147790
+N F 95257 133737795.84 127132372.6512 132286291.229445 25.300664010624 35521.32691633466 0.049394422311 3765
+N O 7459297 10512270008.9 9986238338.3847 10385578376.585467 25.545537671233 36000.9246880137 0.050095958904 292000
+R F 3785523 5337950526.47 5071818532.942 5274405503.049367 25.525943857425 35994.029214030925 0.049989278562 148301
+
+query TT
+EXPLAIN (FORMAT json)
+select
+    l_returnflag,
+    l_linestatus,
+    sum(l_quantity) as sum_qty,
+    sum(l_extendedprice) as sum_base_price,
+    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
+    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
+    avg(l_quantity) as avg_qty,
+    avg(l_extendedprice) as avg_price,
+    avg(l_discount) as avg_disc,
+    count(*) as count_order
+from
+    lineitem
+where
+        l_shipdate <= date '1998-09-02'
+group by
+    l_returnflag,
+    l_linestatus
+order by
+    l_returnflag,
+	l_linestatus;
+----
+logical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "FILTER",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Filters": "",
+                                                    "Function": "Vortex Scan"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "l_orderkey",
+                                                "l_partkey",
+                                                "l_suppkey",
+                                                "l_linenumber",
+                                                "l_quantity",
+                                                "l_extendedprice",
+                                                "l_discount",
+                                                "l_tax",
+                                                "l_returnflag",
+                                                "l_linestatus",
+                                                "l_shipdate",
+                                                "l_commitdate",
+                                                "l_receiptdate",
+                                                "l_shipinstruct",
+                                                "l_shipmode",
+                                                "l_comment"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": "(l_shipdate <= CAST('1998-09-02' AS DATE))"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": [
+                                "l_returnflag",
+                                "l_linestatus"
+                            ],
+                            "Expressions": [
+                                "sum(l_quantity)",
+                                "sum(l_extendedprice)",
+                                "sum((l_extendedprice * (CAST(1 AS DECIMAL(16,2)) - l_discount)))",
+                                "sum(((l_extendedprice * (CAST(1 AS DECIMAL(16,2)) - l_discount)) * (CAST(1 AS DECIMAL(16,2)) + l_tax)))",
+                                "avg(l_quantity)",
+                                "avg(l_extendedprice)",
+                                "avg(l_discount)",
+                                "count_star()"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "l_returnflag",
+                        "l_linestatus",
+                        "sum_qty",
+                        "sum_base_price",
+                        "sum_disc_price",
+                        "sum_charge",
+                        "avg_qty",
+                        "avg_price",
+                        "avg_disc",
+                        "count_order"
+                    ]
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": [
+                "memory.main.lineitem.l_returnflag",
+                "memory.main.lineitem.l_linestatus"
+            ]
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Filters": "($.l_shipdate <= 1998-09-02)",
+                                                    "Function": "Vortex Scan",
+                                                    "Estimated Cardinality": "120114"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "l_quantity",
+                                                "l_extendedprice",
+                                                "l_discount",
+                                                "l_tax",
+                                                "l_returnflag",
+                                                "l_linestatus"
+                                            ],
+                                            "Estimated Cardinality": "120114"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "l_returnflag",
+                                        "l_linestatus",
+                                        "l_quantity",
+                                        "l_extendedprice",
+                                        "(l_extendedprice * (1.00 - l_discount))",
+                                        "l_tax",
+                                        "l_discount"
+                                    ],
+                                    "Estimated Cardinality": "120114"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": [
+                                "l_returnflag",
+                                "l_linestatus"
+                            ],
+                            "Expressions": [
+                                "sum(l_quantity)",
+                                "sum(l_extendedprice)",
+                                "sum(#4)",
+                                "sum((#4 * (1.00 + l_tax)))",
+                                "avg(l_quantity)",
+                                "avg(l_extendedprice)",
+                                "avg(l_discount)",
+                                "count_star()"
+                            ],
+                            "Estimated Cardinality": "120113"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "l_returnflag",
+                        "l_linestatus",
+                        "sum_qty",
+                        "sum_base_price",
+                        "sum_disc_price",
+                        "sum_charge",
+                        "avg_qty",
+                        "avg_price",
+                        "avg_disc",
+                        "count_order"
+                    ],
+                    "Estimated Cardinality": "120113"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": [
+                "memory.main.lineitem.l_returnflag",
+                "memory.main.lineitem.l_linestatus"
+            ]
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "HASH_GROUP_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "READ_VORTEX",
+                                        "children": [],
+                                        "extra_info": {
+                                            "Function": "Vortex Scan",
+                                            "Filters": "($.l_shipdate <= 1998-09-02)",
+                                            "Projections": [
+                                                "l_quantity",
+                                                "l_extendedprice",
+                                                "l_discount",
+                                                "l_tax",
+                                                "l_returnflag",
+                                                "l_linestatus"
+                                            ],
+                                            "Estimated Cardinality": "120114"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Projections": [
+                                        "l_returnflag",
+                                        "l_linestatus",
+                                        "l_quantity",
+                                        "l_extendedprice",
+                                        "(l_extendedprice * (1.00 - l_discount))",
+                                        "l_tax",
+                                        "l_discount"
+                                    ],
+                                    "Estimated Cardinality": "120114"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Projections": [
+                                "l_returnflag",
+                                "l_linestatus",
+                                "l_quantity",
+                                "l_extendedprice",
+                                "#4",
+                                "(#4 * (1.00 + l_tax))",
+                                "l_quantity",
+                                "l_extendedprice",
+                                "l_discount"
+                            ],
+                            "Estimated Cardinality": "120114"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Groups": [
+                        "#0",
+                        "#1"
+                    ],
+                    "Aggregates": [
+                        "sum(#2)",
+                        "sum(#3)",
+                        "sum(#4)",
+                        "sum(#5)",
+                        "avg(#6)",
+                        "avg(#7)",
+                        "avg(#8)",
+                        "count_star()"
+                    ],
+                    "Estimated Cardinality": "120113"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": [
+                "memory.main.lineitem.l_returnflag ASC",
+                "memory.main.lineitem.l_linestatus ASC"
+            ]
+        }
+    }
+]

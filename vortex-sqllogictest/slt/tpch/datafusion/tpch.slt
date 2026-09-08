@@ -3,9 +3,6 @@
 
 include ../../setup.slt.no
 
-statement ok
-SET explain_output = 'all';
-
 include ./create.slt.no
 include ./results/*.slt.no
 include ./drop.slt.no

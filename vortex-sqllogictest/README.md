@@ -25,6 +25,11 @@ are reported as **ignored** rather than failing, so the rest of the suite still 
 `.slt` files load their tables through paths relative to the crate root, so run the tests via
 `cargo nextest`/`cargo test`, which set the working directory accordingly.
 
+TPC-H scripts live under `slt/tpch/datafusion/` and `slt/tpch/duckdb/`. Each engine has its own
+`create.slt.no`, `results/q1.slt.no` through `results/q22.slt.no`, and `drop.slt.no`, included by
+its `tpch.slt`. The result files assert query results and EXPLAIN plans. DataFusion uses external
+tables; DuckDB uses views over Vortex files so both suites exercise Vortex scans.
+
 Because the harness is `libtest-mimic`-based, the standard test flags work, including
 `cargo nextest`, filtering, and listing:
 
