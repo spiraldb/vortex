@@ -3,6 +3,10 @@
 
 include ../setup.slt.no
 
+# Keep each of the three inserted files in its own ordered scan partition.
+statement ok
+SET datafusion.execution.target_partitions = 3;
+
 statement ok
 CREATE EXTERNAL TABLE ordered_pushdown (
     c1 VARCHAR NOT NULL,
@@ -41,4 +45,4 @@ logical_plan
 02)--TableScan: ordered_pushdown projection=[c1, c2]
 physical_plan
 01)SortPreservingMergeExec: [c1@0 ASC NULLS LAST], fetch=3
-02)--DataSourceExec: file_groups={<slt:ignore>}, projection=[c1, c2], limit=3, output_ordering=[c1@0 ASC NULLS LAST], file_type=vortex
+02)--DataSourceExec: file_groups={3 groups: [[${WORK_DIR}/ordered_pushdown/<slt:ignore>_0.vortex], [${WORK_DIR}/ordered_pushdown/<slt:ignore>_0.vortex], [${WORK_DIR}/ordered_pushdown/<slt:ignore>_0.vortex]]}, projection=[c1, c2], limit=3, output_ordering=[c1@0 ASC NULLS LAST], file_type=vortex

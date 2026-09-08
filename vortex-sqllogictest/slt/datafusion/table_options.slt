@@ -37,7 +37,7 @@ logical_plan
 physical_plan
 01)SortExec: expr=[y@0 ASC NULLS LAST], preserve_partitioning=[false]
 02)--FilterExec: x@0 > 1, projection=[y@1]
-03)----DataSourceExec: file_groups={<slt:ignore>}, projection=[x, y], file_type=vortex
+03)----DataSourceExec: file_groups={1 group: [[${WORK_DIR}/session_disabled_pushdown/<slt:ignore>_0.vortex]]}, projection=[x, y], file_type=vortex
 
 statement ok
 CREATE EXTERNAL TABLE table_enabled_pushdown (
@@ -64,7 +64,7 @@ logical_plan
 04)------TableScan: table_enabled_pushdown projection=[x, y], partial_filters=[table_enabled_pushdown.x > Int64(1)]
 physical_plan
 01)SortExec: expr=[y@0 ASC NULLS LAST], preserve_partitioning=[false]
-02)--DataSourceExec: file_groups={<slt:ignore>}, projection=[y], file_type=vortex, predicate: x@0 > 1
+02)--DataSourceExec: file_groups={1 group: [[${WORK_DIR}/table_enabled_pushdown/<slt:ignore>_0.vortex]]}, projection=[y], file_type=vortex, predicate: x@0 > 1
 
 query I
 SELECT y FROM table_enabled_pushdown WHERE x > 1 ORDER BY y;
