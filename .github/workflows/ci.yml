@@ -574,24 +574,13 @@ jobs:
     timeout-minutes: 10
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/extras=s3-cache/tag=cmake-integration-test', github.run_id)
+          && format('runs-on={0}/runner=amd64-ci-medium/image=ubuntu24-full-x64-pre-v2/tag=cmake-integration-test', github.run_id)
           || 'ubuntu-latest' }}
     steps:
       - uses: runs-on/action@v2
         if: github.repository == 'vortex-data/vortex'
-        with:
-          sccache: s3
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
       - uses: ./.github/actions/setup-prebuild
-        with:
-          enable-sccache: "true"
-      - name: Install sccache for fork integration tests
-        if: github.repository != 'vortex-data/vortex'
-        uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696  # v0.0.10
-      - name: Pin rustup proxy to repository toolchain
-        run: |
-          TOOLCHAIN="$(grep '^channel' rust-toolchain.toml | cut -d '"' -f 2)"
-          echo "RUSTUP_TOOLCHAIN=$TOOLCHAIN" >> "$GITHUB_ENV"
       - name: Install Ninja for CMake integration tests
         run: |
           sudo apt-get update
@@ -600,7 +589,7 @@ jobs:
       - name: Fetch Cargo dependencies for offline fixtures
         run: cargo fetch --locked
       - name: Test CMake integration
-        run: python3 vortex-ffi/cmake/tests/run_tests.py --ci
+        run: python3 -m unittest discover -s vortex-ffi/cmake/tests -v
 
   cxx-api:
     name: "C++ API"

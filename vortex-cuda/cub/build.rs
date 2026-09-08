@@ -17,7 +17,19 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
-    println!("cargo:rerun-if-env-changed=CUDA_PATH");
+    // Keep CUB's architecture selection in sync with the embedded kernels.
+    for name in [
+        "CUDA_PATH",
+        "PATH",
+        "VORTEX_CUDA_ARCH_FLAGS",
+        "CUDA_VISIBLE_DEVICES",
+        "CUDA_DEVICE_ORDER",
+        "NVCC_PREPEND_FLAGS",
+        "NVCC_APPEND_FLAGS",
+        "NVCC_CCBIN",
+    ] {
+        println!("cargo:rerun-if-env-changed={name}");
+    }
     let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let kernels_dir = manifest_dir.join("kernels");
@@ -56,8 +68,11 @@ fn is_cuda_available() -> bool {
 
 fn compile_shared_library(kernel_dir: &Path, sources: &[PathBuf], out_dir: &Path) {
     let lib_path = out_dir.join("libvortex_cub.so");
+    let architecture_flags =
+        env::var("VORTEX_CUDA_ARCH_FLAGS").unwrap_or_else(|_| "-arch=native".to_owned());
     let mut cmd = Command::new("nvcc");
-    cmd.args(["-std=c++20", "-arch=native"]);
+    cmd.arg("-std=c++20")
+        .args(architecture_flags.split_whitespace());
 
     if env::var("PROFILE").unwrap() == "debug" {
         cmd.args(["-O0", "-g", "-G", "-lineinfo"]);

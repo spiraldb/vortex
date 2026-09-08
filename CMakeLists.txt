@@ -14,7 +14,7 @@
 # CMake 3.25 is required for block() and FetchContent SYSTEM.
 cmake_minimum_required(VERSION 3.25)
 
-project(VortexNative DESCRIPTION "Vortex native libraries" LANGUAGES NONE)
+project(Vortex DESCRIPTION "Vortex C and C++ libraries" LANGUAGES NONE)
 
 # Directory-scoped developer defaults; an embedded root resets inherited ownership.
 set(_vortex_top_level "${PROJECT_IS_TOP_LEVEL}")

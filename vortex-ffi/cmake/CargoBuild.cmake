@@ -153,9 +153,9 @@ function(_vortex_make_cargo_environment output)
     endif()
 
     if(VORTEX_CUDA_ROOT)
-        # Match CARGO_ENCODED_RUSTFLAGS. Even an empty value must override ambient
-        # flags: OFF means no architecture flags, while an absent env defaults to native.
-        string(JOIN "${_separator}" _cuda_arch_flags ${VORTEX_CUDA_ARCH_FLAGS})
+        # Architecture tokens contain no whitespace. Preserve an empty value for OFF;
+        # omitting it would inherit ambient flags or fall back to native.
+        string(JOIN " " _cuda_arch_flags ${VORTEX_CUDA_ARCH_FLAGS})
         list(APPEND _environment
             "CUDA_PATH=${VORTEX_CUDA_ROOT}"
             "VORTEX_CUDA_ARCH_FLAGS=${_cuda_arch_flags}")

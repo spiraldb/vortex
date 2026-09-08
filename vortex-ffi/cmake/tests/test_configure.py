@@ -1,166 +1,194 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-"""Exercise CMake configuration without compiling the Rust archive."""
+"""Configure real entrypoints and record Cargo handoffs without compiling Rust."""
 
-import platform
-import shutil
-import subprocess
-import sys
-import tempfile
+import json
+import os
 import tomllib
 import unittest
-from pathlib import Path
+
+from support import CMakeTest
 
 
-@unittest.skipUnless(shutil.which("cmake"), "CMake is required")
-class ConfigureTests(unittest.TestCase):
+class ConfigureTests(CMakeTest):
     def setUp(self):
-        self.repo = Path(__file__).resolve().parents[3]
-        temporary = tempfile.TemporaryDirectory(prefix="vortex-cmake-configure-")
-        self.addCleanup(temporary.cleanup)
-        self.work = Path(temporary.name).resolve()
-
-    def configure(self, name, *options):
-        return subprocess.run(
-            [
-                "cmake",
-                "-S",
-                str(self.repo / "vortex-ffi"),
-                "-B",
-                str(self.work / name),
-                "-DCMAKE_BUILD_TYPE=Debug",
-                *options,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
+        super().setUp()
+        for name in ("CMAKE_BUILD_TYPE", "RUSTUP_TOOLCHAIN"):
+            self.env.pop(name, None)
+        self.env["CARGO_NET_OFFLINE"] = "true"
+        self.cargo = self.recording_cargo()
+        self.rustc = self.fake_rustc()
+        # Defaults are directory-local variables, not necessarily cache entries.
+        self.hook = self.write(
+            "record-defaults.cmake",
+            r"""
+            function(record_defaults)
+                file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/defaults.txt"
+                    "${CMAKE_BUILD_TYPE}\n${VORTEX_WARNINGS_AS_ERRORS}\n")
+                if(PROJECT_NAME STREQUAL "VortexCXX")
+                    get_target_property(options vortex_cxx COMPILE_OPTIONS)
+                    file(APPEND "${CMAKE_CURRENT_BINARY_DIR}/defaults.txt" "${options}\n")
+                endif()
+            endfunction()
+            cmake_language(DEFER CALL record_defaults)
+            """,
         )
 
-    def build(self, name, *options):
-        result = subprocess.run(
-            ["cmake", "--build", str(self.work / name), *options],
-            capture_output=True,
-            text=True,
-            timeout=120,
-            check=False,
+    def configure(self, name, *options, source=None, success=True):
+        return self.cmake_configure(
+            source or self.repo / "vortex-ffi",
+            self.work / name,
+            f"-DVORTEX_CARGO_EXECUTABLE={self.cargo}",
+            f"-DVORTEX_RUSTC_EXECUTABLE={self.rustc}",
+            f"-DCMAKE_PROJECT_INCLUDE={self.hook}",
+            "-DVORTEX_BUILD_TESTS=OFF",
+            "-DVORTEX_BUILD_EXAMPLES=OFF",
+            "-DFETCHCONTENT_FULLY_DISCONNECTED=ON",
+            *options,
+            success=success,
         )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def recording_cargo(self):
-        cargo = self.work / "cargo"
-        cargo.write_text(
-            f"#!{sys.executable}\n"
-            "import os, pathlib, sys\n"
-            "args = sys.argv[1:]\n"
-            "root = pathlib.Path(args[args.index('--target-dir') + 1])\n"
-            "target = args[args.index('--target') + 1]\n"
-            "archive = root / target / 'debug/libvortex_ffi.a'\n"
-            "archive.parent.mkdir(parents=True, exist_ok=True)\n"
-            "archive.write_bytes(b'Cargo ran')\n"
-            "(root / 'rustflags.txt').write_text(os.environ['CARGO_ENCODED_RUSTFLAGS'])\n",
-            encoding="utf-8",
-        )
-        cargo.chmod(0o755)
-        return f"-DVORTEX_CARGO_EXECUTABLE={cargo}"
+    def test_standalone_defaults_and_ffi_default_build(self):
+        for name, source, directories in (
+            ("root", ".", ("ffi", "cpp")),
+            ("ffi", "vortex-ffi", (".",)),
+            ("cpp", "lang/cpp", ("ffi", ".")),
+        ):
+            with self.subTest(entrypoint=name):
+                self.configure(name, source=self.repo / source)
+                build = self.work / name
+                self.assertFalse(list(build.rglob("libvortex_ffi.a")), "Configure must not run Cargo")
+                for directory in directories:
+                    settings = (build / directory / "defaults.txt").read_text().splitlines()
+                    self.assertEqual(settings[:2], ["Debug", "ON"])
+                    if len(settings) == 3:
+                        self.assertIn("-Werror", settings[2].split(";"))
 
-    def fake_nightly_rustc(self):
-        # Native compiler policy tests must not depend on an installed nightly.
-        arch = {"arm64": "aarch64", "AMD64": "x86_64"}.get(platform.machine(), platform.machine())
-        host = f"{arch}-apple-darwin" if sys.platform == "darwin" else f"{arch}-unknown-linux-gnu"
-        rustc = self.work / "rustc"
-        rustc.write_text(
-            f"#!{sys.executable}\n"
-            "import sys\n"
-            "assert sys.argv[1:] == ['-vV'], sys.argv\n"
-            f"print('rustc 1.95.0-nightly\\nhost: {host}\\nrelease: 1.95.0-nightly')\n",
-            encoding="utf-8",
-        )
-        rustc.chmod(0o755)
-        return f"-DVORTEX_RUSTC_EXECUTABLE={rustc}"
-
-    def test_rust_flags_match_workspace_defaults(self):
-        result = self.configure("rustflags", self.recording_cargo())
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("environment or Cargo configuration rustflags", result.stdout)
-        self.build("rustflags")
-        actual = (self.work / "rustflags/cargo-target/rustflags.txt").read_text().split("\x1f")
+        build = self.work / "ffi"
+        self.cmake_build(build)
+        self.assertEqual((build / "vortex-artifacts/libvortex_ffi.a").read_bytes(), b"recorded archive")
+        recorded = self.cargo_recording(build / "cargo-target")
+        self.assertEqual(recorded["args"][recorded["args"].index("--profile") + 1], "dev")
         config = tomllib.loads((self.repo / ".cargo/config.toml").read_text())
         expected = config["target"]['cfg(target_family="unix")']["rustflags"] + ["-C", "relocation-model=pic"]
-        self.assertEqual(actual, expected, "Keep CMake's baseline Rust flags in sync with .cargo/config.toml")
+        self.assertEqual(recorded["env"]["CARGO_ENCODED_RUSTFLAGS"].split("\x1f"), expected)
 
-    def compiler_ids(self, c, cxx):
-        # Override IDs after project() so the policy is testable on non-Apple hosts.
-        hook = self.work / "compiler-ids.cmake"
-        hook.write_text(
-            f'set(CMAKE_C_COMPILER_ID "{c}")\nset(CMAKE_CXX_COMPILER_ID "{cxx}")\n',
-            encoding="utf-8",
-        )
-        return f"-DCMAKE_PROJECT_VortexFFI_INCLUDE={hook}"
+    def test_embedded_root_preserves_parent_variables(self):
+        source = self.write(
+            "parent/CMakeLists.txt",
+            f"""\
+            cmake_minimum_required(VERSION 3.25)
+            project(Parent LANGUAGES C CXX)
+            set(CMAKE_BUILD_TYPE "")
+            set(_vortex_top_level ON)
+            add_subdirectory("{self.repo}" vortex EXCLUDE_FROM_ALL)
+            if(NOT CMAKE_BUILD_TYPE STREQUAL "" OR NOT _vortex_top_level STREQUAL "ON")
+                message(FATAL_ERROR "Vortex changed parent variables")
+            endif()
+            """,
+        ).parent
+        self.configure("embedded", source=source)
+        build = self.work / "embedded"
+        for directory in ("ffi", "cpp"):
+            settings = (build / "vortex" / directory / "defaults.txt").read_text().splitlines()
+            self.assertEqual(settings[:2], ["", "OFF"])
+            if directory == "cpp":
+                self.assertNotIn("-Werror", settings[2].split(";"))
+        self.cmake_build(build)
+        self.assertFalse(list(build.rglob("libvortex_ffi.a")))
 
-    def test_rust_sanitizers_require_upstream_clang(self):
-        cases = (
-            ("AppleClang", "Clang", "asan"),
-            ("Clang", "AppleClang", "asan"),
-            ("AppleClang", "AppleClang", "asan,ubsan"),
-            ("AppleClang", "AppleClang", "lsan"),
-            ("AppleClang", "AppleClang", "tsan"),
-        )
-        for index, (c, cxx, sanitizer) in enumerate(cases):
-            with self.subTest(c=c, cxx=cxx, sanitizer=sanitizer):
-                result = self.configure(
-                    f"apple-rust-{index}",
-                    self.compiler_ids(c, cxx),
-                    f"-DVORTEX_SANITIZER={sanitizer}",
-                )
-                output = result.stdout + result.stderr
-                self.assertNotEqual(result.returncode, 0, output)
-                self.assertIn("Rust sanitizer builds require upstream LLVM Clang", output)
+    def test_unused_embedded_ffi_keeps_cargo_lazy(self):
+        source = self.write(
+            "parent/CMakeLists.txt",
+            f"""\
+            cmake_minimum_required(VERSION 3.25)
+            project(Parent LANGUAGES C CXX)
+            add_subdirectory("{self.repo}/vortex-ffi" ffi)
+            """,
+        ).parent
+        self.configure("lazy", source=source)
+        build = self.work / "lazy"
+        self.cmake_build(build)
+        self.assertFalse(list(build.rglob("libvortex_ffi.a")))
+        self.cmake_build(build, "--target", "vortex_ffi_cargo_build")
+        self.assertEqual((build / "ffi/vortex-artifacts/libvortex_ffi.a").read_bytes(), b"recorded archive")
 
-    def test_appleclang_without_rust_instrumentation(self):
-        for sanitizer in ("", "ubsan"):
-            with self.subTest(sanitizer=sanitizer):
-                result = self.configure(
-                    f"apple-native-{sanitizer}",
-                    self.compiler_ids("AppleClang", "AppleClang"),
-                    f"-DVORTEX_SANITIZER={sanitizer}",
-                )
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+    def test_profile_mapping_and_override(self):
+        for config, override, expected in (
+            ("Release", "", "release"),
+            ("RelWithDebInfo", "", "release_debug"),
+            ("Debug", "ci", "ci"),
+        ):
+            with self.subTest(config=config, override=override):
+                self.configure(config, f"-DCMAKE_BUILD_TYPE={config}", f"-DVORTEX_CARGO_PROFILE={override}")
+                build = self.work / config
+                self.cmake_build(build)
+                args = self.cargo_recording(build / "cargo-target")["args"]
+                self.assertEqual(args[args.index("--profile") + 1], expected)
+                self.assertEqual((build / "vortex-artifacts/libvortex_ffi.a").read_bytes(), b"recorded archive")
 
-    def test_sanitizer_list_whitespace_and_empty_items(self):
-        cases = (
-            (" ASAN , UBSAN, ", "-fsanitize=address,undefined"),
-            ("\t ubsan; ;\t", "-fsanitize=undefined"),
-            (" ; ,\t ", ""),
-        )
-        for index, (sanitizers, expected) in enumerate(cases):
-            with self.subTest(sanitizers=sanitizers):
-                hook = self.compiler_ids("Clang", "Clang")
-                with (self.work / "compiler-ids.cmake").open("a", encoding="utf-8") as script:
-                    script.write(
-                        'file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/sanitizer-flags.txt"\n'
-                        '    CONTENT "$<TARGET_PROPERTY:vortex_ffi_static,INTERFACE_COMPILE_OPTIONS>")\n'
-                    )
-                name = f"sanitizer-list-{index}"
-                result = self.configure(name, hook, f"-DVORTEX_SANITIZER={sanitizers}", self.fake_nightly_rustc())
-                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                flags = (self.work / name / "sanitizer-flags.txt").read_text(encoding="utf-8")
-                self.assertEqual(flags, expected)
-
-    def test_unknown_sanitizer_reports_trimmed_name(self):
-        result = self.configure("unknown-sanitizer", "-DVORTEX_SANITIZER=asan, typo ,")
-        self.assertNotEqual(result.returncode, 0)
+    def test_sanitizer_rejections(self):
+        result = self.configure("unknown", "-DVORTEX_SANITIZER=typo", success=False)
         self.assertIn("got 'typo'", result.stdout + result.stderr)
+        for compiler, message in (
+            ("AppleClang", "Rust sanitizer builds require upstream LLVM Clang"),
+            ("Clang", "Rust sanitizer builds require nightly rustc"),
+        ):
+            with self.subTest(compiler=compiler):
+                # Only override compiler identity; no sanitizer code is compiled.
+                hook = self.write(
+                    "compiler-ids.cmake",
+                    f"set(CMAKE_C_COMPILER_ID {compiler})\nset(CMAKE_CXX_COMPILER_ID {compiler})\n",
+                )
+                result = self.configure(
+                    compiler,
+                    f"-DCMAKE_PROJECT_VortexFFI_INCLUDE={hook}",
+                    "-DVORTEX_SANITIZER=asan",
+                    success=False,
+                )
+                self.assertIn(message, result.stdout + result.stderr)
 
-    def test_upstream_clang_accepts_rust_instrumentation(self):
-        result = self.configure(
-            "clang-asan",
-            self.compiler_ids("Clang", "Clang"),
-            self.fake_nightly_rustc(),
-            "-DVORTEX_SANITIZER=asan,ubsan",
-        )
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+    def test_toolchain_selection_survives_reconfigure_and_explicit_updates(self):
+        rustc_log = self.work / "rustc.json"
+        build = self.work / "toolchain"
+
+        def assert_selection(selected):
+            self.assertEqual(json.loads(rustc_log.read_text()), [selected, str(self.repo)])
+            recorded = self.cargo_recording(build / "cargo-target")
+            self.assertEqual(recorded["env"].get("RUSTUP_TOOLCHAIN"), selected)
+            self.assertIn(
+                f"VORTEX_RUSTUP_TOOLCHAIN:STRING={selected or ''}",
+                (build / "CMakeCache.txt").read_text().splitlines(),
+            )
+            rustc_log.unlink()
+            (build / "cargo-target/environment.json").unlink()
+
+        first, second = "nightly-2026-04-01", "nightly-2026-05-01"
+        self.env["RUSTUP_TOOLCHAIN"] = first
+        self.configure("toolchain")
+        self.env.pop("RUSTUP_TOOLCHAIN")
+        self.cmake_build(build)
+        assert_selection(first)
+
+        for ambient in (None, "ambient"):
+            self.env.pop("RUSTUP_TOOLCHAIN", None)
+            if ambient:
+                self.env["RUSTUP_TOOLCHAIN"] = ambient
+            # Make the manifest stale without clock-dependent waits or future-dated inputs.
+            os.utime(build / "build.ninja", (1, 1))
+            self.cmake_build(build)
+            assert_selection(first)
+
+        for selected in (second, None):
+            with self.subTest(toolchain=selected):
+                self.configure("toolchain", f"-DVORTEX_RUSTUP_TOOLCHAIN={selected or ''}")
+                self.cmake_build(build)
+                assert_selection(selected)
+
+        os.utime(build / "build.ninja", (1, 1))
+        self.cmake_build(build)
+        assert_selection(None)
 
 
 if __name__ == "__main__":
