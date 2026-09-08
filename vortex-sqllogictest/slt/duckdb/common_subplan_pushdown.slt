@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# Scans of the same file that differ only in their pushed-down filters must not
+# be merged by DuckDB's common-subplan optimizer (which compares scans by their
+# serialized form and cannot see the filters held in the Vortex bind data).
+
+include ../setup.slt.no
+
+query I
+COPY (SELECT range AS x, range * 10 AS y FROM range(1, 101)) TO '${WORK_DIR}/subplan.vortex';
+----
+100
+
+query II
+SELECT (SELECT count(*) FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 1 AND 20),
+       (SELECT count(*) FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 21 AND 50);
+----
+20 30
+
+query RR
+SELECT (SELECT avg(y) FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 1 AND 20),
+       (SELECT avg(y) FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 21 AND 50);
+----
+105 355
+
+query II
+SELECT (SELECT sum(y) FROM '${WORK_DIR}/subplan.vortex' WHERE x < 10),
+       (SELECT sum(y) FROM '${WORK_DIR}/subplan.vortex' WHERE x > 90);
+----
+450 9550
+
+query TT
+EXPLAIN (FORMAT json)
+SELECT (SELECT avg(y) FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 1 AND 20),
+       (SELECT avg(y) FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 21 AND 50);
+----
+<!REGEX>:__common_subplan

@@ -186,6 +186,13 @@ duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter
 
     fn.filter_pushdown = true;
     fn.filter_prune = true;
+    // DuckDB's common-subplan optimizer identifies scans by their serialized
+    // form, and a LogicalGet only takes part in it while verify_serialization
+    // is set. Our pushed-down filters, projections and aggregates live in the
+    // FFI bind data, which has no serializer, so two scans of the same file
+    // with different pushed-down filters serialize identically and would be
+    // merged into one shared CTE, returning the wrong rows for one of them.
+    fn.verify_serialization = false;
 
     fn.pushdown_expression = [](auto &, const auto &, Expression &expression) {
         return duckdb_table_function_pushdown_expression(reinterpret_cast<duckdb_vx_expr>(&expression));

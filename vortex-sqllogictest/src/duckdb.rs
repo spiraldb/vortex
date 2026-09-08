@@ -57,6 +57,42 @@ impl DuckDB {
         })
     }
 
+    fn query(conn: &Connection, sql: &str) -> Result<DBOutput<DFColumnType>, DuckDBTestError> {
+        let r = conn.query(sql)?;
+
+        if r.column_count() == 0 && r.row_count() == 0 {
+            Ok(DBOutput::StatementComplete(0))
+        } else {
+            let mut types = Vec::default();
+            let mut rows = Vec::default();
+
+            for col_idx in 0..r.column_count() {
+                let col_idx = usize::try_from(col_idx).map_err(VortexError::from)?;
+                let dtype = r.column_type(col_idx);
+                types.push(Self::normalize_column_type(&dtype));
+            }
+
+            for chunk in r.into_iter() {
+                for row_idx in 0..chunk.len() {
+                    let mut current_row = Vec::new();
+                    for col_idx in 0..chunk.column_count() {
+                        let vector = chunk.get_vector(col_idx);
+                        match vector.get_value(row_idx, chunk.len()) {
+                            Some(value) => current_row.push(ValueDisplayAdapter(value).to_string()),
+                            None => {
+                                current_row.push(Value::null(&vector.logical_type()).to_string())
+                            }
+                        }
+                    }
+
+                    rows.push(current_row);
+                }
+            }
+
+            Ok(DBOutput::Rows { types, rows })
+        }
+    }
+
     /// Turn the DuckDB logical type into a `DFColumnType`, which
     /// tells the runner what types they are. We use the one from DataFusion
     /// as its richer than the default one.
@@ -157,39 +193,18 @@ impl AsyncDB for DuckDB {
     type ColumnType = DFColumnType;
 
     async fn run(&mut self, sql: &str) -> Result<DBOutput<Self::ColumnType>, Self::Error> {
-        let r = self.inner.conn.query(sql)?;
-
-        if r.column_count() == 0 && r.row_count() == 0 {
-            Ok(DBOutput::StatementComplete(0))
-        } else {
-            let mut types = Vec::default();
-            let mut rows = Vec::default();
-
-            for col_idx in 0..r.column_count() {
-                let col_idx = usize::try_from(col_idx).map_err(VortexError::from)?;
-                let dtype = r.column_type(col_idx);
-                types.push(Self::normalize_column_type(&dtype));
-            }
-
-            for chunk in r.into_iter() {
-                for row_idx in 0..chunk.len() {
-                    let mut current_row = Vec::new();
-                    for col_idx in 0..chunk.column_count() {
-                        let vector = chunk.get_vector(col_idx);
-                        match vector.get_value(row_idx, chunk.len()) {
-                            Some(value) => current_row.push(ValueDisplayAdapter(value).to_string()),
-                            None => {
-                                current_row.push(Value::null(&vector.logical_type()).to_string())
-                            }
-                        }
-                    }
-
-                    rows.push(current_row);
-                }
-            }
-
-            Ok(DBOutput::Rows { types, rows })
-        }
+        // The runner drives this future from inside a tokio `block_on`. Run the query on a plain
+        // thread so the extension sees no tokio context: `object_store` reads local files through
+        // tokio's blocking pool whenever the calling thread has a tokio runtime, and awaiting those
+        // from the extension's own runtime nested inside tokio has stalled long query sequences.
+        // Real DuckDB clients never call in from a tokio thread, so this matches them.
+        let inner = &self.inner;
+        std::thread::scope(|scope| {
+            scope
+                .spawn(|| Self::query(&inner.conn, sql))
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        })
     }
 
     async fn shutdown(&mut self) {}
