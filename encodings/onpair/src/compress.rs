@@ -43,7 +43,7 @@ pub fn onpair_compress(
     }
 
     let views = array.views();
-    let mut uncompressed_lengths: BufferMut<u32> = BufferMut::with_capacity(len);
+    let mut uncompressed_lengths: BufferMut<u32> = BufferMut::zeroed(len);
     let mut total_bytes = 0usize;
     let buffers = array
         .data_buffers()
@@ -54,21 +54,21 @@ pub fn onpair_compress(
 
     match mask.bit_buffer() {
         AllOr::All => {
-            for view in views {
-                let length = view.len();
-                uncompressed_lengths.push(length);
-                total_bytes += length as usize;
+            for (view, length) in views.iter().zip(uncompressed_lengths.iter_mut()) {
+                *length = view.len();
+                total_bytes += *length as usize;
             }
         }
         AllOr::None => unreachable!("all-null input handled above"),
         AllOr::Some(validity) => {
-            for (view, valid) in views.iter().zip(validity.iter()) {
+            for ((view, length), valid) in views
+                .iter()
+                .zip(uncompressed_lengths.iter_mut())
+                .zip(validity.iter())
+            {
                 if valid {
-                    let length = view.len();
-                    uncompressed_lengths.push(length);
-                    total_bytes += length as usize;
-                } else {
-                    uncompressed_lengths.push(0);
+                    *length = view.len();
+                    total_bytes += *length as usize;
                 }
             }
         }
