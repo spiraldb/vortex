@@ -63,13 +63,13 @@ impl DeferredAdd {
 struct ValidOnlyIdentity;
 
 #[derive(Clone)]
-struct FilterAndScatterIdentity;
+struct FilteredIdentity;
 
 #[derive(Clone)]
 struct DenseRetryIncrement;
 
 #[derive(Clone)]
-struct FilterAndScatterRepeat;
+struct FilteredRepeat;
 
 #[derive(Clone)]
 struct InvalidKernelOutput;
@@ -78,7 +78,10 @@ struct InvalidKernelOutput;
 struct PackedPositive;
 
 #[derive(Clone)]
-struct PackedGreaterThan;
+struct PackedGreaterThan<const MULTIVERSIONED: bool>;
+
+#[derive(Clone)]
+struct DeferredGreaterThan<const MULTIVERSIONED: bool>;
 
 #[derive(Clone)]
 struct ValidOnlyPositive;
@@ -95,6 +98,7 @@ struct DenseRetryI64;
 // SAFETY: the view is a slice, and its reported length is the buffer length.
 unsafe impl InputElement for ValidOnlyI64 {
     type Column = Buffer<i64>;
+    type Constant = i64;
     type View<'a> = &'a [i64];
     type Elem<'a> = i64;
 
@@ -109,12 +113,20 @@ unsafe impl InputElement for ValidOnlyI64 {
         <i64 as InputElement>::decode(array, ctx)
     }
 
+    fn decode_constant(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Constant> {
+        <i64 as InputElement>::decode_constant(array, ctx)
+    }
+
     fn can_decode_null_tolerant(_array: &ArrayRef) -> VortexResult<bool> {
         Ok(true)
     }
 
     fn get(column: &Self::Column, index: usize) -> Self::Elem<'_> {
         column[index]
+    }
+
+    fn get_constant(constant: &Self::Constant) -> Self::Elem<'_> {
+        *constant
     }
 
     fn view(column: &Self::Column) -> Self::View<'_> {
@@ -129,6 +141,7 @@ unsafe impl InputElement for ValidOnlyI64 {
 // SAFETY: the view is a slice, and its reported length is the buffer length.
 unsafe impl InputElement for FilterOnlyI64 {
     type Column = Buffer<i64>;
+    type Constant = i64;
     type View<'a> = &'a [i64];
     type Elem<'a> = i64;
 
@@ -149,8 +162,19 @@ unsafe impl InputElement for FilterOnlyI64 {
         Ok(values)
     }
 
+    fn decode_constant(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Constant> {
+        let value = <i64 as InputElement>::decode_constant(array, ctx)?;
+        vortex_ensure!(value != i64::MIN, "test input contains an invalid payload",);
+
+        Ok(value)
+    }
+
     fn get(column: &Self::Column, index: usize) -> Self::Elem<'_> {
         column[index]
+    }
+
+    fn get_constant(constant: &Self::Constant) -> Self::Elem<'_> {
+        *constant
     }
 
     fn view(column: &Self::Column) -> Self::View<'_> {
@@ -165,6 +189,7 @@ unsafe impl InputElement for FilterOnlyI64 {
 // SAFETY: the view is a slice, and its reported length is the buffer length.
 unsafe impl InputElement for DenseRetryI64 {
     type Column = Buffer<i64>;
+    type Constant = i64;
     type View<'a> = &'a [i64];
     type Elem<'a> = i64;
 
@@ -179,8 +204,16 @@ unsafe impl InputElement for DenseRetryI64 {
         <i64 as InputElement>::decode(array, ctx)
     }
 
+    fn decode_constant(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Constant> {
+        <i64 as InputElement>::decode_constant(array, ctx)
+    }
+
     fn get(column: &Self::Column, index: usize) -> Self::Elem<'_> {
         column[index]
+    }
+
+    fn get_constant(constant: &Self::Constant) -> Self::Elem<'_> {
+        *constant
     }
 
     fn view(column: &Self::Column) -> Self::View<'_> {
@@ -212,7 +245,8 @@ impl OutputElement for NullProducingI64 {
 struct I64Sink(BufferMut<i64>);
 
 // SAFETY: every row is initialized by `BufferMut::zeroed`, and the sink exposes exactly that
-// initialized slice. The `()` write token therefore proves no additional invariant.
+// initialized slice. The `()` write token therefore proves no additional invariant, and the
+// default skipped-row initializer only rewrites the zeroes.
 unsafe impl OutputSink for I64Sink {
     type Params = ();
     type Rows<'a> = &'a mut [i64];
@@ -332,14 +366,14 @@ impl RowFn for ValidOnlyIdentity {
     }
 }
 
-impl RowFn for FilterAndScatterIdentity {
+impl RowFn for FilteredIdentity {
     type Options = EmptyOptions;
 
     const ARG_NAMES: &'static [&'static str] = &["value"];
     const INFALLIBLE: bool = false;
 
     fn id(&self) -> ScalarFnId {
-        static ID: CachedId = CachedId::new("test.filter_and_scatter_identity");
+        static ID: CachedId = CachedId::new("test.filtered_identity");
         *ID
     }
 
@@ -383,14 +417,14 @@ impl RowFn for DenseRetryIncrement {
     }
 }
 
-impl RowFn for FilterAndScatterRepeat {
+impl RowFn for FilteredRepeat {
     type Options = usize;
 
     const ARG_NAMES: &'static [&'static str] = &["value"];
     const INFALLIBLE: bool = true;
 
     fn id(&self) -> ScalarFnId {
-        static ID: CachedId = CachedId::new("test.filter_and_scatter_repeat");
+        static ID: CachedId = CachedId::new("test.filtered_repeat");
         *ID
     }
 
@@ -403,7 +437,7 @@ impl RowFn for FilterAndScatterRepeat {
         vortex_ensure!(
             u32::try_from(*width).is_ok(),
             InvalidArgument:
-            "test.filter_and_scatter_repeat width must fit in u32, got {width}",
+            "test.filtered_repeat width must fit in u32, got {width}",
         );
 
         visitor
@@ -507,7 +541,7 @@ impl RowFn for PackedPositive {
     }
 }
 
-impl RowFn for PackedGreaterThan {
+impl<const MULTIVERSIONED: bool> RowFn for PackedGreaterThan<MULTIVERSIONED> {
     type Options = EmptyOptions;
 
     const ARG_NAMES: &'static [&'static str] = &["lhs", "rhs"];
@@ -524,7 +558,37 @@ impl RowFn for PackedGreaterThan {
         _args: &[DType],
         visitor: V,
     ) -> VortexResult<V::VisitResult> {
-        visitor.visit::<(i64, i64), bool>(|(lhs, rhs)| lhs > rhs)
+        visitor.visit_bool::<(i64, i64), MULTIVERSIONED>(|(lhs, rhs)| lhs > rhs)
+    }
+}
+
+impl<const MULTIVERSIONED: bool> RowFn for DeferredGreaterThan<MULTIVERSIONED> {
+    type Options = EmptyOptions;
+
+    const ARG_NAMES: &'static [&'static str] = &["lhs", "rhs"];
+    const INFALLIBLE: bool = false;
+
+    fn id(&self) -> ScalarFnId {
+        static ID: CachedId = CachedId::new("test.deferred_greater_than");
+        *ID
+    }
+
+    fn dispatch<V: RowVisitor>(
+        &self,
+        _options: &Self::Options,
+        _args: &[DType],
+        visitor: V,
+    ) -> VortexResult<V::VisitResult> {
+        visitor.visit_deferred_bool::<(i64, i64), bool, MULTIVERSIONED>(
+            |(lhs, rhs)| (lhs > rhs, lhs == i64::MIN),
+            |failed| {
+                if failed {
+                    vortex_bail!(InvalidArgument: "deferred comparison failed");
+                }
+
+                Ok(())
+            },
+        )
     }
 }
 
@@ -657,24 +721,30 @@ fn test_bool_output_word_boundaries(#[case] len: usize) -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn test_bool_output_handles_partial_constants() -> VortexResult<()> {
+fn assert_bool_output_handles_partial_constants<const MULTIVERSIONED: bool>() -> VortexResult<()> {
     let values: Vec<_> = (0_i64..65).collect();
     let varying = PrimitiveArray::from_iter(values.iter().copied()).into_array();
     let constant = ConstantArray::new(32_i64, values.len()).into_array();
     let mut ctx = array_session().create_execution_ctx();
+    let function = PackedGreaterThan::<MULTIVERSIONED>;
 
     let lhs_varying = VecExecutionArgs::new(vec![varying.clone(), constant.clone()], values.len());
-    let actual = execute_rows(&PackedGreaterThan, &EmptyOptions, &lhs_varying, &mut ctx)?;
+    let actual = execute_rows(&function, &EmptyOptions, &lhs_varying, &mut ctx)?;
     let expected = BoolArray::from_iter(values.iter().map(|value| *value > 32)).into_array();
     assert_arrays_eq!(&actual, &expected, &mut ctx);
 
     let rhs_varying = VecExecutionArgs::new(vec![constant, varying], values.len());
-    let actual = execute_rows(&PackedGreaterThan, &EmptyOptions, &rhs_varying, &mut ctx)?;
+    let actual = execute_rows(&function, &EmptyOptions, &rhs_varying, &mut ctx)?;
     let expected = BoolArray::from_iter(values.iter().map(|value| 32 > *value)).into_array();
     assert_arrays_eq!(&actual, &expected, &mut ctx);
 
     Ok(())
+}
+
+#[test]
+fn test_bool_output_handles_partial_constants() -> VortexResult<()> {
+    assert_bool_output_handles_partial_constants::<false>()?;
+    assert_bool_output_handles_partial_constants::<true>()
 }
 
 #[test]
@@ -720,14 +790,14 @@ fn test_valid_only_bool_output_skips_invalid_rows() -> VortexResult<()> {
 }
 
 #[test]
-fn test_filter_and_scatter_skips_invalid_decode_payloads() -> VortexResult<()> {
+fn test_filtered_execution_skips_invalid_decode_payloads() -> VortexResult<()> {
     let validity = Validity::from_iter([false, true, false, true]);
     let input =
         PrimitiveArray::new(vec![i64::MIN, 10, i64::MIN, 30], validity.clone()).into_array();
     let args = VecExecutionArgs::new(vec![input], 4);
     let mut ctx = array_session().create_execution_ctx();
 
-    let actual = execute_rows(&FilterAndScatterIdentity, &EmptyOptions, &args, &mut ctx)?;
+    let actual = execute_rows(&FilteredIdentity, &EmptyOptions, &args, &mut ctx)?;
     let expected = PrimitiveArray::new(vec![0_i64, 10, 0, 30], validity).into_array();
 
     assert_arrays_eq!(&actual, &expected, &mut ctx);
@@ -737,7 +807,7 @@ fn test_filter_and_scatter_skips_invalid_decode_payloads() -> VortexResult<()> {
 #[rstest]
 #[case::width_two(2, vec![0_i64, 0, 7, 7])]
 #[case::zero_width(0, vec![])]
-fn test_filter_and_scatter_preserves_runtime_sink_params(
+fn test_filtered_execution_preserves_runtime_sink_params(
     #[case] width: usize,
     #[case] expected_elements: Vec<i64>,
 ) -> VortexResult<()> {
@@ -746,7 +816,7 @@ fn test_filter_and_scatter_preserves_runtime_sink_params(
     let args = VecExecutionArgs::new(vec![input], 2);
     let mut ctx = array_session().create_execution_ctx();
 
-    let actual = execute_rows(&FilterAndScatterRepeat, &width, &args, &mut ctx)?;
+    let actual = execute_rows(&FilteredRepeat, &width, &args, &mut ctx)?;
     let expected = FixedSizeListArray::new(
         PrimitiveArray::from_iter(expected_elements).into_array(),
         u32::try_from(width)
@@ -757,6 +827,61 @@ fn test_filter_and_scatter_preserves_runtime_sink_params(
     .into_array();
 
     assert_arrays_eq!(&actual, &expected, &mut ctx);
+    Ok(())
+}
+
+#[test]
+fn test_deferred_bool_output_builds_packed_values() -> VortexResult<()> {
+    let values: Vec<_> = (0_i64..65).collect();
+    let lhs = PrimitiveArray::from_iter(values.iter().copied()).into_array();
+    let rhs = PrimitiveArray::from_iter(std::iter::repeat_n(32_i64, values.len())).into_array();
+    let args = VecExecutionArgs::new(vec![lhs, rhs], values.len());
+    let mut ctx = array_session().create_execution_ctx();
+
+    let actual = execute_rows(&DeferredGreaterThan::<true>, &EmptyOptions, &args, &mut ctx)?;
+    let expected = BoolArray::from_iter(values.iter().map(|value| *value > 32)).into_array();
+
+    assert_arrays_eq!(&actual, &expected, &mut ctx);
+    Ok(())
+}
+
+#[test]
+fn test_deferred_bool_output_handles_partial_constants() -> VortexResult<()> {
+    let values: Vec<_> = (0_i64..65).collect();
+    let varying = PrimitiveArray::from_iter(values.iter().copied()).into_array();
+    let constant = ConstantArray::new(32_i64, values.len()).into_array();
+    let mut ctx = array_session().create_execution_ctx();
+    let function = DeferredGreaterThan::<false>;
+
+    let lhs_varying = VecExecutionArgs::new(vec![varying.clone(), constant.clone()], values.len());
+    let actual = execute_rows(&function, &EmptyOptions, &lhs_varying, &mut ctx)?;
+    let expected = BoolArray::from_iter(values.iter().map(|value| *value > 32)).into_array();
+    assert_arrays_eq!(&actual, &expected, &mut ctx);
+
+    let rhs_varying = VecExecutionArgs::new(vec![constant, varying], values.len());
+    let actual = execute_rows(&function, &EmptyOptions, &rhs_varying, &mut ctx)?;
+    let expected = BoolArray::from_iter(values.iter().map(|value| 32 > *value)).into_array();
+    assert_arrays_eq!(&actual, &expected, &mut ctx);
+
+    Ok(())
+}
+
+#[test]
+fn test_deferred_bool_output_reports_valid_row_failure() -> VortexResult<()> {
+    let lhs = PrimitiveArray::from_iter([1_i64, i64::MIN, -1]).into_array();
+    let rhs = ConstantArray::new(0_i64, 3).into_array();
+    let args = VecExecutionArgs::new(vec![lhs, rhs], 3);
+    let mut ctx = array_session().create_execution_ctx();
+
+    let error = match execute_rows(&DeferredGreaterThan::<true>, &EmptyOptions, &args, &mut ctx) {
+        Err(error) => error.to_string(),
+        Ok(_) => vortex_bail!("a valid-row deferred failure was not reported"),
+    };
+
+    assert!(
+        error.contains("deferred comparison failed"),
+        "fallible execution must report its deferred error, got {error}",
+    );
     Ok(())
 }
 

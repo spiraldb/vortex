@@ -169,12 +169,12 @@ impl CudaSession {
     ///
     /// # Arguments
     ///
-    /// * `module_name` - Name of the module (`kernels/{module_name}.ptx`)
+    /// * `module_name` - Kernel source name without the `.cu` extension
     /// * `type_suffixes` - List of type suffix strings to generate kernel name
     ///
     /// # Errors
     ///
-    /// Returns an error if PTX file cannot be read or kernel cannot be loaded.
+    /// Returns an error if the module was not embedded or the kernel cannot be loaded.
     pub fn load_function_with_suffixes(
         &self,
         module_name: &str,

@@ -17,17 +17,20 @@ use futures::pin_mut;
 use futures::select;
 use itertools::Itertools;
 use vortex_array::ArrayContext;
+use vortex_array::ArrayId;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldPath;
 use vortex_array::expr::stats::Stat;
 use vortex_array::iter::ArrayIterator;
 use vortex_array::iter::ArrayIteratorExt;
+use vortex_array::session::ArraySessionExt;
 use vortex_array::stats::PRUNING_STATS;
 use vortex_array::stream::ArrayStream;
 use vortex_array::stream::ArrayStreamAdapter;
 use vortex_array::stream::ArrayStreamExt;
 use vortex_array::stream::SendableArrayStream;
+use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_buffer::ByteBuffer;
 use vortex_edition::ComponentKind;
 use vortex_edition::EditionSessionExt;
@@ -68,15 +71,16 @@ use crate::segments::writer::BufferedSegmentSink;
 /// Configure a new writer, which can eventually be used to write an [`ArrayStream`] into a sink
 /// that implements [`VortexWrite`].
 ///
-/// All write strategies are restricted to the components in the session's enabled editions: an
-/// array, layout, extension dtype, or zone-map aggregate outside them fails the write. An empty
-/// component set therefore forbids writing any component of that kind.
+/// Serialized arrays, layouts, extension dtypes, and zone-map aggregates are restricted to the
+/// component IDs in the session's enabled editions unless edition enforcement is explicitly
+/// disabled. An empty component set therefore forbids writing any component of that kind.
 ///
 /// Construct with [`WriteOptionsSessionExt::write_options`] for normal use so the writer inherits
 /// the session's runtime, array registry, and memory configuration.
 pub struct VortexWriteOptions {
     session: VortexSession,
-    strategy: Arc<dyn LayoutStrategy>,
+    strategy: Option<Arc<dyn LayoutStrategy>>,
+    disable_editions: bool,
     buffered_bytes: BufferedBytesTracker,
     exclude_dtype: bool,
     max_variable_length_statistics_size: usize,
@@ -96,16 +100,9 @@ impl<S: SessionExt> WriteOptionsSessionExt for S {}
 impl VortexWriteOptions {
     /// Create a new [`VortexWriteOptions`] with the given session.
     pub fn new(session: VortexSession) -> Self {
-        let strategy = WriteStrategyBuilder::default()
-            .with_allow_encodings(
-                session
-                    .enabled_component_ids(ComponentKind::Array)
-                    .into_iter()
-                    .collect(),
-            )
-            .build();
         VortexWriteOptions {
-            strategy,
+            strategy: None,
+            disable_editions: false,
             buffered_bytes: BufferedBytesTracker::new(),
             session,
             exclude_dtype: false,
@@ -118,10 +115,24 @@ impl VortexWriteOptions {
     /// Replace the default layout strategy with the provided one.
     ///
     /// The strategy controls repartitioning, statistics layout, compression, and leaf segment
-    /// emission. Use [`WriteStrategyBuilder`] when only a small part of the default strategy needs
-    /// customization. Replacing the strategy does not change the enabled-edition encoding policy.
+    /// emission, and is used without being reconfigured from the enabled editions. Use
+    /// [`WriteStrategyBuilder`] when only a small part of the default strategy needs customization.
+    /// Unless edition enforcement is explicitly disabled, the final serialization context still
+    /// rejects array IDs not permitted by the enabled editions, independently of which in-memory
+    /// encodings a compressor produces.
     pub fn with_strategy(mut self, strategy: Arc<dyn LayoutStrategy>) -> Self {
-        self.strategy = strategy;
+        self.strategy = Some(strategy);
+        self
+    }
+
+    /// Disable all edition enforcement for this write.
+    ///
+    /// The writer permits every serialized array ID registered in the session and does not
+    /// restrict layout IDs, extension dtype IDs, or aggregate function IDs. This does not register
+    /// missing implementations, and the resulting file may not be readable by other Vortex
+    /// versions or configurations.
+    pub fn disable_editions(mut self) -> Self {
+        self.disable_editions = true;
         self
     }
 
@@ -206,8 +217,9 @@ impl VortexWriteOptions {
     /// Note that buffers are flushed as soon as they are available with no buffering, the caller
     /// is responsible for deciding how to configure buffering on the underlying `Write` sink.
     ///
-    /// The set of encodings permitted in the file is snapshotted from the session's enabled
-    /// editions here, so editions enabled after this call do not affect the write.
+    /// When edition enforcement is enabled, the set of encodings permitted in the file is
+    /// snapshotted from the session's enabled editions here, so editions enabled after this call
+    /// do not affect the write.
     pub async fn write<W: VortexWrite + Unpin, S: ArrayStream + Send + 'static>(
         self,
         write: W,
@@ -224,13 +236,31 @@ impl VortexWriteOptions {
     ) -> VortexResult<WriteSummary> {
         validate_metadata_segments(&self.metadata)?;
 
+        let enforce_editions = !self.disable_editions;
         // The array context is built here, rather than when the options were constructed, so that
         // encodings registered on the session in between are still eligible for the file.
-        let ctx = LayoutWriterContext::new(new_array_context(&self.session))
-            .with_buffered_bytes_tracker(self.buffered_bytes.clone())
-            .with_allowed_aggregates(edition_filter(&self.session, ComponentKind::Aggregate));
+        let (array_ctx, allowed_array_encodings) =
+            new_array_context(&self.session, enforce_editions);
+        let ctx = LayoutWriterContext::new(array_ctx)
+            .with_buffered_bytes_tracker(self.buffered_bytes.clone());
+        let ctx = if enforce_editions {
+            ctx.with_allowed_aggregates(edition_filter(&self.session, ComponentKind::Aggregate))
+        } else {
+            ctx
+        };
+        let strategy = match self.strategy {
+            Some(strategy) => strategy,
+            None => WriteStrategyBuilder::default()
+                .with_btrblocks_builder(
+                    BtrBlocksCompressorBuilder::default()
+                        .retain_allowed_encodings(&allowed_array_encodings),
+                )
+                .build(),
+        };
         let dtype = stream.dtype().clone();
-        validate_dtype_editions(&self.session, &dtype)?;
+        if enforce_editions {
+            validate_dtype_editions(&self.session, &dtype)?;
+        }
 
         let (mut ptr, eof) = SequenceId::root().split();
 
@@ -262,8 +292,7 @@ impl VortexWriteOptions {
         let ctx2 = ctx.clone();
         let session = self.session.clone();
         let layout_fut = self.session.handle().spawn_nested(move |_| async move {
-            let layout = self
-                .strategy
+            let layout = strategy
                 .write_stream(
                     ctx2,
                     Arc::<BufferedSegmentSink>::clone(&segments),
@@ -308,7 +337,7 @@ impl VortexWriteOptions {
         let (footer_buffers, metadata, approx_byte_size) = footer
             .clone()
             .into_serializer()
-            .with_layout_context(new_layout_context(&self.session))
+            .with_layout_context(new_layout_context(&self.session, enforce_editions))
             .with_metadata_segments(self.metadata)
             .with_offset(position)
             .with_exclude_dtype(self.exclude_dtype)
@@ -355,16 +384,36 @@ impl VortexWriteOptions {
     }
 }
 
-fn new_array_context(session: &VortexSession) -> ArrayContext {
-    // NOTE(os): Set up an array context with all enabled encodings pre-populated.
+fn new_array_context(
+    session: &VortexSession,
+    enforce_editions: bool,
+) -> (ArrayContext, HashSet<ArrayId>) {
+    // NOTE(os): Set up an array context with all eligible serialized IDs pre-populated.
     // This is preferred for now over having an empty context here, because only the
     // serialised array order is deterministic. The serialisation of arrays are done
     // parallel and with an empty context they can register their encodings to the context
     // in different order, changing the written bytes from run to run.
-    let enabled_encoding_ids = session.enabled_component_ids(ComponentKind::Array);
-    ArrayContext::new(enabled_encoding_ids.iter().cloned().sorted().collect())
-        // Only permit encodings in the enabled editions.
-        .with_allowed_ids(enabled_encoding_ids.into_iter().collect())
+    let arrays = session.arrays();
+    let serialized_ids = if enforce_editions {
+        session.enabled_component_ids(ComponentKind::Array)
+    } else {
+        arrays
+            .registry()
+            .read(|registry| registry.keys().copied().collect())
+    };
+    let allowed_array_encodings = serialized_ids
+        .iter()
+        .filter_map(|serialized_id| arrays.registry().get(serialized_id))
+        .map(|plugin| plugin.id())
+        .collect();
+    let array_ctx = ArrayContext::new(serialized_ids.iter().copied().sorted().collect());
+    let array_ctx = if enforce_editions {
+        // Only permit serialized IDs in the enabled editions.
+        array_ctx.with_allowed_ids(serialized_ids.into_iter().collect())
+    } else {
+        array_ctx
+    };
+    (array_ctx, allowed_array_encodings)
 }
 
 /// The ids of `kind` the enabled editions permit.
@@ -419,10 +468,14 @@ fn validate_dtype_editions(session: &VortexSession, dtype: &DType) -> VortexResu
     validate(dtype, &allowed)
 }
 
-/// The context every layout in the file is interned through, restricted to the layouts the
-/// enabled editions permit.
-fn new_layout_context(session: &VortexSession) -> LayoutContext {
-    LayoutContext::default().with_allowed_ids(edition_filter(session, ComponentKind::Layout))
+/// The context every layout in the file is interned through.
+fn new_layout_context(session: &VortexSession, enforce_editions: bool) -> LayoutContext {
+    let context = LayoutContext::default();
+    if enforce_editions {
+        context.with_allowed_ids(edition_filter(session, ComponentKind::Layout))
+    } else {
+        context
+    }
 }
 
 fn validate_metadata_segments(metadata: &HashMap<String, ByteBuffer>) -> VortexResult<()> {
@@ -703,7 +756,6 @@ impl WriteSummary {
 #[cfg(test)]
 mod tests {
     use rstest::rstest;
-    use vortex_array::ArrayContext;
     use vortex_array::VTable;
     use vortex_array::array_session;
     use vortex_array::arrays::Bool;
@@ -726,7 +778,7 @@ mod tests {
         static DECLARATION: EditionDeclaration = EditionDeclaration {
             edition: Edition {
                 id: EDITION,
-                min_vortex_version: None,
+                min_library_version: None,
             },
             added: &[EditionMember::array(&"vortex.primitive")],
         };
@@ -735,12 +787,30 @@ mod tests {
         session.register_edition(&DECLARATION)?;
         session.enable_edition(EDITION)?;
 
-        let enabled_encoding_ids = session.enabled_component_ids(ComponentKind::Array);
-        let ctx = ArrayContext::new(enabled_encoding_ids.clone())
-            .with_allowed_ids(enabled_encoding_ids.into_iter().collect());
+        let (ctx, allowed_array_encodings) = new_array_context(&session, true);
         assert_eq!(ctx.to_ids(), [Primitive.id()]);
         assert!(ctx.intern(&Bool.id()).is_none());
+        assert_eq!(allowed_array_encodings, HashSet::from([Primitive.id()]));
         Ok(())
+    }
+
+    #[test]
+    fn disabling_editions_allows_all_registered_array_ids() {
+        let session = array_session();
+        let (registered_ids, registered_encodings) = session.arrays().registry().read(|registry| {
+            (
+                registry.keys().copied().sorted().collect::<Vec<_>>(),
+                registry
+                    .values()
+                    .map(|plugin| plugin.id())
+                    .collect::<HashSet<_>>(),
+            )
+        });
+
+        let (ctx, allowed_array_encodings) = new_array_context(&session, false);
+        assert_eq!(ctx.to_ids(), registered_ids);
+        assert_eq!(allowed_array_encodings, registered_encodings);
+        assert!(ctx.intern(&Bool.id()).is_some());
     }
 
     /// This test edition declares only arrays, so every other kind must forbid all components.
@@ -750,7 +820,7 @@ mod tests {
         static ARRAYS_ONLY: EditionDeclaration = EditionDeclaration {
             edition: Edition {
                 id: EDITION,
-                min_vortex_version: None,
+                min_library_version: None,
             },
             added: &[EditionMember::array(&"vortex.primitive")],
         };
@@ -762,9 +832,14 @@ mod tests {
         assert!(edition_filter(&session, ComponentKind::DType).is_empty());
         assert!(edition_filter(&session, ComponentKind::Aggregate).is_empty());
         assert!(
-            new_layout_context(&session)
+            new_layout_context(&session, true)
                 .intern(&"vortex.flat".into())
                 .is_none()
+        );
+        assert!(
+            new_layout_context(&session, false)
+                .intern(&"vortex.flat".into())
+                .is_some()
         );
 
         session.editions().declare_inclusion(EditionInclusion::new(
@@ -789,7 +864,7 @@ mod tests {
         static DECLARATION: EditionDeclaration = EditionDeclaration {
             edition: Edition {
                 id: EDITION,
-                min_vortex_version: None,
+                min_library_version: None,
             },
             added: &[EditionMember::dtype(&"vortex.date")],
         };

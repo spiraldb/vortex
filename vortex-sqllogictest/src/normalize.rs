@@ -25,8 +25,16 @@ pub const WORK_DIR_VAR: &str = "WORK_DIR";
 pub const WORK_DIR_TOKEN: &str = "${WORK_DIR}";
 
 /// Replaces every occurrence of `work_dir` in `cell` with [`WORK_DIR_TOKEN`].
+/// Also handles object-store paths, which omit the leading `/`.
 pub fn normalize_work_dir(cell: &str, work_dir: &str) -> String {
-    cell.replace(work_dir, WORK_DIR_TOKEN)
+    // Replace absolute paths first so their leading slash does not survive.
+    let normalized = cell.replace(work_dir, WORK_DIR_TOKEN);
+    if let Some(object_store_path) = work_dir.strip_prefix('/')
+        && !object_store_path.is_empty()
+    {
+        return normalized.replace(object_store_path, WORK_DIR_TOKEN);
+    }
+    normalized
 }
 
 /// Wraps an [`AsyncDB`] and rewrites this test's scratch path in query output back
@@ -96,12 +104,12 @@ impl<D: AsyncDB + Send> AsyncDB for PathNormalizing<D> {
 mod tests {
     use rstest::rstest;
 
-    use super::WORK_DIR_TOKEN;
     use super::normalize_work_dir;
 
     #[rstest]
     #[case("no paths here", "no paths here")]
     #[case("plain 42", "plain 42")]
+    #[case("${WORK_DIR}/data.vortex", "${WORK_DIR}/data.vortex")]
     fn leaves_unrelated_text_untouched(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
             normalize_work_dir(input, "/repo/scratch/123/df_create.slt"),
@@ -109,13 +117,27 @@ mod tests {
         );
     }
 
-    #[test]
-    fn rewrites_work_dir_to_token() {
-        let work_dir = "/repo/scratch/123/df_create.slt";
-        let cell = format!("output_url={work_dir}/sink/data1.vortex foo");
+    #[rstest]
+    #[case::filesystem(
+        "output_url=/repo/scratch/123/df_create.slt/sink/data1.vortex foo",
+        "output_url=${WORK_DIR}/sink/data1.vortex foo"
+    )]
+    #[case::object_store(
+        "file_groups={1 group: [[repo/scratch/123/df_create.slt/data.vortex]]}",
+        "file_groups={1 group: [[${WORK_DIR}/data.vortex]]}"
+    )]
+    #[case::mixed(
+        "TableScan: /repo/scratch/123/df_create.slt/data.vortex\nfile_groups={1 group: [[repo/scratch/123/df_create.slt/data.vortex]]}",
+        "TableScan: ${WORK_DIR}/data.vortex\nfile_groups={1 group: [[${WORK_DIR}/data.vortex]]}"
+    )]
+    #[case::file_url(
+        "file:///repo/scratch/123/df_create.slt/data.vortex",
+        "file://${WORK_DIR}/data.vortex"
+    )]
+    fn rewrites_work_dir_to_token(#[case] input: &str, #[case] expected: &str) {
         assert_eq!(
-            normalize_work_dir(&cell, work_dir),
-            format!("output_url={WORK_DIR_TOKEN}/sink/data1.vortex foo")
+            normalize_work_dir(input, "/repo/scratch/123/df_create.slt"),
+            expected
         );
     }
 }

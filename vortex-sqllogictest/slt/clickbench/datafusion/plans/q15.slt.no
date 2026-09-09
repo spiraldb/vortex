@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "UserID", COUNT(*) FROM hits GROUP BY "UserID" ORDER BY COUNT(*) DESC LIMIT 10;
+----
+logical_plan
+01)Sort: count(*) DESC NULLS FIRST, fetch=10
+02)--Projection: hits.UserID, count(Int64(1)) AS count(*)
+03)----Aggregate: groupBy=[[hits.UserID]], aggr=[[count(Int64(1))]]
+04)------TableScan: hits projection=[UserID]
+physical_plan
+01)SortPreservingMergeExec: [count(*)@1 DESC], fetch=10
+02)--ProjectionExec: expr=[UserID@0 as UserID, count(Int64(1))@1 as count(*)]
+03)----SortExec: TopK(fetch=10), expr=[count(Int64(1))@1 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[UserID@0 as UserID], aggr=[count(Int64(1))]
+05)--------RepartitionExec: partitioning=Hash([UserID@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[UserID@0 as UserID], aggr=[count(Int64(1))]
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[UserID], file_type=vortex

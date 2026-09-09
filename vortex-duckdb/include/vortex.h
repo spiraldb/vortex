@@ -65,6 +65,20 @@ bool duckdb_reader_get_statistics(const void *file,
                                   size_t column_name_len,
                                   duckdb_column_statistics *stats_out);
 
+extern bool duckdb_table_function_can_get_partition_stats(const void *bind);
+
+extern
+duckdb_vx_data duckdb_footer_get_cached(void *bind,
+                                        const char *path,
+                                        size_t len,
+                                        uint64_t *row_count_out,
+                                        duckdb_vx_error *error);
+
+extern
+bool duckdb_footer_get_statistics(const void *footer,
+                                  size_t column_index,
+                                  duckdb_column_statistics *stats_out);
+
 extern bool duckdb_reader_initialize(const void *global, void *file, duckdb_vx_error *error);
 
 extern duckdb_logical_type duckdb_reader_bind_column_type(const void *bind, size_t index);
@@ -123,6 +137,16 @@ extern
 void duckdb_copy_function_flush_batch(const void *global,
                                       const void *batch,
                                       duckdb_vx_error *error);
+
+extern
+bool duckdb_copy_function_get_written_file_statistics(const void *global_data,
+                                                      duckdb_vx_written_file_statistics *out);
+
+extern
+bool duckdb_copy_function_get_written_column_statistics(const void *global_data,
+                                                        size_t column_index,
+                                                        duckdb_vx_written_column_statistics *out,
+                                                        duckdb_vx_error *error_out);
 
 #ifdef __cplusplus
 }  // extern "C"

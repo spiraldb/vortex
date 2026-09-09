@@ -3,15 +3,24 @@
 
 //! The `spatial` edition family.
 //!
-//! Spatial support is opt-in: a reader without this crate cannot resolve `vortex.st.*`, so
-//! spatial members live in their own family rather than in `core`. [`crate::initialize`]
-//! registers and enables the edition so the writer can serialize spatial dtypes and the AABB
-//! zone stat registered by the crate.
+//! Spatial support is opt-in. [`crate::initialize`] registers and enables the edition so the
+//! writer can serialize spatial dtypes and the AABB zone stat registered by the crate.
 
 use vortex_edition::Edition;
 use vortex_edition::EditionDeclaration;
+use vortex_edition::EditionFamily;
 use vortex_edition::EditionId;
 use vortex_edition::EditionMember;
+
+/// The `spatial` family: the geometry dtypes and the AABB zone aggregate.
+pub static FAMILY: EditionFamily = EditionFamily {
+    name: "spatial",
+    origin: "vortex-spatial",
+    doc: "The geometry extension dtypes and the axis-aligned bounding-box zone aggregate. \
+Spatial support is opt-in: a reader built without `vortex-spatial` cannot resolve \
+`vortex.st.*`, so these members are versioned independently of `core` and a session enables \
+this family only by initializing the crate.",
+};
 
 /// The August 2026 draft edition of the `spatial` family.
 pub const SPATIAL_2026_08: EditionId = EditionId::new("spatial", 2026, 8, 0);
@@ -23,7 +32,7 @@ pub const SPATIAL_2026_08: EditionId = EditionId::new("spatial", 2026, 8, 0);
 pub static DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
         id: SPATIAL_2026_08,
-        min_vortex_version: None,
+        min_library_version: None,
     },
     added: &[
         EditionMember::dtype(&"vortex.st.box"),

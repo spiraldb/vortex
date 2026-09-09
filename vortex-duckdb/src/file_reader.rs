@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::sync::Arc;
-use std::sync::LazyLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 
@@ -11,11 +10,12 @@ use object_store::registry::ObjectStoreRegistry;
 use url::Url;
 use vortex::array::VortexSessionExecute as _;
 use vortex::array::arrays::struct_::StructArrayExt as _;
-use vortex::cloud::Registry;
 use vortex::dtype::DType;
 use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_panic;
+use vortex::file::Footer;
+use vortex::file::multi::MultiFileSession;
 use vortex::file::multi::open_cached;
 use vortex::file::multi::parse_uri_or_path;
 use vortex::file::v2::FileStatsLayoutReader;
@@ -26,7 +26,9 @@ use vortex::io::runtime::BlockingRuntime as _;
 use vortex::layout::LayoutReaderRef;
 use vortex::layout::scan::scan_builder::ScanBuilder;
 use vortex::mask::Mask;
+use vortex::session::SessionExt as _;
 
+use crate::REGISTRY;
 use crate::RUNTIME;
 use crate::SESSION;
 use crate::column_statistics::ColumnStatistics;
@@ -60,6 +62,11 @@ use crate::table_function::convert_result;
 //
 // `reader_open` -> `reader_bind` -> `reader_get_statistics`
 //
+// After this, still in planning phase, one thread calls the following chain on
+// all files to try and replace scanning with metadata answer:
+//
+// `can_get_partition_stats` -> `footer_open` -> `footer_get_statistics`.
+//
 // Then there's query runtime phase, called for all files in scan:
 //
 // `reader_open` -> `reader_initialize` ->
@@ -67,8 +74,6 @@ use crate::table_function::convert_result;
 //
 // `reader_get_progress_in_file` is called during `reader_scan` calls from a
 // separate thread.
-
-static REGISTRY: LazyLock<Registry> = LazyLock::new(Registry::new);
 
 fn resolve_filesystem(url: &Url) -> VortexResult<(FileSystemRef, String)> {
     // Compat makes us use tokio which is very bad for local reads on
@@ -100,11 +105,10 @@ pub struct OpenFileReader {
 }
 
 impl OpenFileReader {
-    async fn open(file_path: String) -> VortexResult<Self> {
-        let url = parse_uri_or_path(&file_path)?;
-        let (fs, path) = resolve_filesystem(&url)?;
-        let file = fs.open_read(&path).await?;
-        let file = open_cached(&SESSION, file, &path, None, &|options| options).await?;
+    async fn open(path: String) -> VortexResult<Self> {
+        let (fs, fs_path) = resolve_filesystem(&parse_uri_or_path(&path)?)?;
+        let source = fs.open_read(&fs_path).await?;
+        let file = open_cached(&SESSION, Some(&path), source, None, &|options| options).await?;
         Ok(OpenFileReader {
             reader: file.layout_reader()?,
             cache: ConversionCache::default(),
@@ -153,6 +157,7 @@ pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexR
         columns,
         has_non_optional_filter: AtomicBool::new(false),
         aggregates: vec![],
+        no_footer_caches: false,
     })
 }
 
@@ -166,18 +171,14 @@ pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> Vor
 
     // Getting splits is non-trivial work so we prefer doing it here under file
     // lock and not in reader_try_initialize_scan under global lock.
-    let ordered = global.file_row_number_column_pos.is_some();
     let reader = Arc::clone(&file.reader);
     let filter = &global.filter;
-    let mut builder = ScanBuilder::new(SESSION.clone(), reader)
+    let builder = ScanBuilder::new(SESSION.clone(), reader)
         .with_projection(global.projection.clone())
-        .with_ordered(ordered)
         .with_some_filter(filter.filter.clone())
         .with_selection(filter.row_selection.clone());
-    if let Some(row_range) = filter.row_range.as_ref() {
-        builder = builder.with_row_range(row_range.clone());
-    }
-    let mut splits = builder.build()?;
+    let scan = builder.prepare()?;
+    let mut splits = scan.execute(filter.row_range.clone())?;
 
     // threads take last element of file.splits so we need to reverse
     splits.reverse();
@@ -271,16 +272,17 @@ pub fn reader_get_statistics(
         .reader
         .as_any()
         .downcast_ref::<FileStatsLayoutReader>()?;
-    let stats_sets = reader.file_stats().stats_sets();
 
     let DType::Struct(fields, _) = &file.reader.dtype() else {
         return None;
     };
     let index = fields.find(column)?;
+    let stats_sets = reader.file_stats().stats_sets();
+
     let dtype = fields.field_by_index(index)?;
 
     let stats = ColumnStatisticsAggregate::new(stats_sets.get(index)?);
-    match ColumnStatistics::try_from(&stats, dtype) {
+    match ColumnStatistics::try_from(stats, dtype) {
         Ok(stats) => Some(stats),
         Err(e) => vortex_panic!(e),
     }
@@ -293,4 +295,44 @@ pub fn reader_get_progress_in_file(file: &OpenFileReader) -> f64 {
     let left = file.splits.len();
     let denom = total + (total == 0) as usize;
     100.0 * (total - left) as f64 / denom as f64
+}
+
+/// Called by one thread in planning phase
+pub fn can_get_partition_stats(bind: &BindState) -> bool {
+    // Re-reading footers on every request is costly so we mimic DuckDB's
+    // TryLoadCaches for Parquet and load them once per file
+    !bind.no_footer_caches
+    // This function is called during planning where we haven't read data yet.
+    // If there's a filter, we need to read the data to evaluate stats.
+    // Even if we could do this fast, we report some filters here as not pushed
+    // (see table_function.rs) and stats would be incorrect.
+        && bind.filters.is_empty()
+}
+
+/// Called by one thread for every file. When we open files, we cache footers
+/// in MultiFileSession so this function retrieves the cached data if present.
+/// If any footer is not present, it sets a flag in BindState so we won't try
+/// again.
+pub fn footer_get_cached(bind: &mut BindState, path: &str) -> VortexResult<Option<Footer>> {
+    let footer = SESSION
+        .get_opt::<MultiFileSession>()
+        .vortex_expect("MultiFileSession not found")
+        .get_footer(path);
+    bind.no_footer_caches |= footer.is_none();
+    Ok(footer)
+}
+
+/// Called by one thread for every footer in planning phase
+pub fn footer_get_statistics(footer: &Footer, index: usize) -> Option<ColumnStatistics> {
+    let DType::Struct(fields, _) = footer.dtype() else {
+        return None;
+    };
+    let stats = footer.statistics()?;
+    let dtype = fields.field_by_index(index)?;
+    let stats = stats.stats_sets().get(index)?;
+    let stats = ColumnStatisticsAggregate::new(stats);
+    match ColumnStatistics::try_from(stats, dtype) {
+        Ok(stats) => Some(stats),
+        Err(e) => vortex_panic!(e),
+    }
 }

@@ -1,0 +1,293 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN (FORMAT json)
+SELECT "RegionID", SUM("AdvEngineID"), COUNT(*) AS c, AVG("ResolutionWidth"), COUNT(DISTINCT "UserID") FROM hits GROUP BY "RegionID" ORDER BY c DESC LIMIT 10;
+----
+logical_plan [
+    {
+        "name": "LIMIT",
+        "children": [
+            {
+                "name": "ORDER_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "AGGREGATE",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Filters": "",
+                                                    "Function": "Vortex Scan"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "WatchID",
+                                                "JavaEnable",
+                                                "Title",
+                                                "GoodEvent",
+                                                "EventTime",
+                                                "EventDate",
+                                                "CounterID",
+                                                "ClientIP",
+                                                "RegionID",
+                                                "UserID",
+                                                "CounterClass",
+                                                "OS",
+                                                "UserAgent",
+                                                "URL",
+                                                "Referer",
+                                                "IsRefresh",
+                                                "RefererCategoryID",
+                                                "RefererRegionID",
+                                                "URLCategoryID",
+                                                "URLRegionID",
+                                                "ResolutionWidth",
+                                                "ResolutionHeight",
+                                                "ResolutionDepth",
+                                                "FlashMajor",
+                                                "FlashMinor",
+                                                "FlashMinor2",
+                                                "NetMajor",
+                                                "NetMinor",
+                                                "UserAgentMajor",
+                                                "UserAgentMinor",
+                                                "CookieEnable",
+                                                "JavascriptEnable",
+                                                "IsMobile",
+                                                "MobilePhone",
+                                                "MobilePhoneModel",
+                                                "Params",
+                                                "IPNetworkID",
+                                                "TraficSourceID",
+                                                "SearchEngineID",
+                                                "SearchPhrase",
+                                                "AdvEngineID",
+                                                "IsArtifical",
+                                                "WindowClientWidth",
+                                                "WindowClientHeight",
+                                                "ClientTimeZone",
+                                                "ClientEventTime",
+                                                "SilverlightVersion1",
+                                                "SilverlightVersion2",
+                                                "SilverlightVersion3",
+                                                "SilverlightVersion4",
+                                                "PageCharset",
+                                                "CodeVersion",
+                                                "IsLink",
+                                                "IsDownload",
+                                                "IsNotBounce",
+                                                "FUniqID",
+                                                "OriginalURL",
+                                                "HID",
+                                                "IsOldCounter",
+                                                "IsEvent",
+                                                "IsParameter",
+                                                "DontCountHits",
+                                                "WithHash",
+                                                "HitColor",
+                                                "LocalEventTime",
+                                                "Age",
+                                                "Sex",
+                                                "Income",
+                                                "Interests",
+                                                "Robotness",
+                                                "RemoteIP",
+                                                "WindowName",
+                                                "OpenerName",
+                                                "HistoryLength",
+                                                "BrowserLanguage",
+                                                "BrowserCountry",
+                                                "SocialNetwork",
+                                                "SocialAction",
+                                                "HTTPError",
+                                                "SendTiming",
+                                                "DNSTiming",
+                                                "ConnectTiming",
+                                                "ResponseStartTiming",
+                                                "ResponseEndTiming",
+                                                "FetchTiming",
+                                                "SocialSourceNetworkID",
+                                                "SocialSourcePage",
+                                                "ParamPrice",
+                                                "ParamOrderID",
+                                                "ParamCurrency",
+                                                "ParamCurrencyID",
+                                                "OpenstatServiceName",
+                                                "OpenstatCampaignID",
+                                                "OpenstatAdID",
+                                                "OpenstatSourceID",
+                                                "UTMSource",
+                                                "UTMMedium",
+                                                "UTMCampaign",
+                                                "UTMContent",
+                                                "UTMTerm",
+                                                "FromTag",
+                                                "HasGCLID",
+                                                "RefererHash",
+                                                "URLHash",
+                                                "CLID"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Groups": "RegionID",
+                                    "Expressions": [
+                                        "sum(AdvEngineID)",
+                                        "count_star()",
+                                        "avg(ResolutionWidth)",
+                                        "count(DISTINCT UserID)"
+                                    ]
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expressions": [
+                                "RegionID",
+                                "sum(AdvEngineID)",
+                                "c",
+                                "avg(ResolutionWidth)",
+                                "count(DISTINCT UserID)"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Order By": "count_star()"
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": ""
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "TOP_N",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "READ_VORTEX",
+                                        "children": [],
+                                        "extra_info": {
+                                            "Filters": "",
+                                            "Function": "Vortex Scan",
+                                            "Estimated Cardinality": "1000000"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "RegionID",
+                                        "UserID",
+                                        "ResolutionWidth",
+                                        "AdvEngineID"
+                                    ],
+                                    "Estimated Cardinality": "1000000"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "RegionID",
+                            "Expressions": [
+                                "sum(AdvEngineID)",
+                                "count_star()",
+                                "avg(ResolutionWidth)",
+                                "count(DISTINCT UserID)"
+                            ],
+                            "Estimated Cardinality": "632120"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "RegionID",
+                        "sum(AdvEngineID)",
+                        "c",
+                        "avg(ResolutionWidth)",
+                        "count(DISTINCT UserID)"
+                    ],
+                    "Estimated Cardinality": "632120"
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": "",
+            "Estimated Cardinality": "10"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "TOP_N",
+        "children": [
+            {
+                "name": "HASH_GROUP_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "READ_VORTEX",
+                                "children": [],
+                                "extra_info": {
+                                    "Function": "Vortex Scan",
+                                    "Projections": [
+                                        "RegionID",
+                                        "UserID",
+                                        "ResolutionWidth",
+                                        "AdvEngineID"
+                                    ],
+                                    "Estimated Cardinality": "1000000"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Projections": [
+                                "RegionID",
+                                "AdvEngineID",
+                                "ResolutionWidth",
+                                "UserID"
+                            ],
+                            "Estimated Cardinality": "1000000"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Groups": "#0",
+                    "Aggregates": [
+                        "sum(#1)",
+                        "count_star()",
+                        "avg(#2)",
+                        "count(DISTINCT #3)"
+                    ],
+                    "Estimated Cardinality": "632120"
+                }
+            }
+        ],
+        "extra_info": {
+            "Top": "10",
+            "Order By": "count_star() DESC"
+        }
+    }
+]

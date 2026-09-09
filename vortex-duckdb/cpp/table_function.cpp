@@ -17,8 +17,10 @@
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/capi/capi_internal.hpp"
 #include "duckdb/main/connection.hpp"
+#include "duckdb/function/partition_stats.hpp"
 #include "duckdb/parser/parsed_data/create_table_function_info.hpp"
 #include "duckdb/planner/operator/logical_get.hpp"
+#include "duckdb/storage/storage_index.hpp"
 
 using namespace std::string_literals;
 constexpr column_t COLUMN_IDENTIFIER_FILE_INDEX = MultiFileReader::COLUMN_IDENTIFIER_FILE_INDEX;
@@ -130,6 +132,51 @@ unique_ptr<MultiFileReader> get_multi_file_reader(const TableFunction &) {
     return make_uniq<VortexMultiFileReader>();
 }
 
+unique_ptr<BaseStatistics> VortexRowGroup::GetColumnStatistics(const StorageIndex &storage_index) {
+    duckdb_column_statistics statistics = {};
+    const idx_t idx = storage_index.GetPrimaryIndex();
+    const void *const ffi_footer_ptr = ffi_footer->DataPtr();
+    if (!duckdb_footer_get_statistics(ffi_footer_ptr, idx, &statistics)) {
+        return {};
+    }
+    return to_duckdb_statistics(statistics);
+}
+
+static vector<PartitionStatistics> get_partition_stats(ClientContext &, GetPartitionStatsInput &input) {
+    const MultiFileBindData &bind_data = input.bind_data->Cast<MultiFileBindData>();
+    VortexBindData &bind = bind_data.bind_data->Cast<VortexBindData>();
+    void *const ffi_bind = bind.ffi_bind_data->DataPtr();
+
+    if (!duckdb_table_function_can_get_partition_stats(ffi_bind)) {
+        return {};
+    }
+
+    vector<OpenFileInfo> files = bind_data.file_list->GetAllFiles();
+    vector<PartitionStatistics> result(files.size());
+    idx_t row_start = 0;
+    uint64_t count = 0;
+    duckdb_vx_error error = nullptr;
+    for (size_t i = 0; i < files.size(); ++i) {
+        const std::string_view path = files[i].path;
+        duckdb_vx_data raw = duckdb_footer_get_cached(ffi_bind, path.data(), path.size(), &count, &error);
+        unique_ptr<CData> cdata(reinterpret_cast<CData *>(raw));
+        if (error) {
+            throw BinderException(IntoErrString(error));
+        }
+        if (!cdata) {
+            return {};
+        }
+
+        PartitionStatistics &stats = result[i];
+        stats.row_start = row_start;
+        stats.count = count;
+        stats.count_type = CountType::COUNT_EXACT;
+        row_start += count;
+        stats.partition_row_group = make_shared_ptr<VortexRowGroup>(std::move(cdata));
+    }
+    return result;
+}
+
 duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter, const std::string &name) {
     MultiFileFunction<VortexReaderInterface> fn(name);
     fn.arguments[0] = parameter;
@@ -156,6 +203,7 @@ duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter
     };
 
     fn.statistics = MultiFileFunction<VortexReaderInterface>::MultiFileScanStats;
+    fn.get_partition_stats = get_partition_stats;
     fn.get_multi_file_reader = get_multi_file_reader;
 
     try {

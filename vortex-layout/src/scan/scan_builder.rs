@@ -98,7 +98,7 @@ impl ScanBuilder<ArrayRef> {
             ordered: true,
             row_range: None,
             selection: Default::default(),
-            split_by: SplitBy::Layout,
+            split_by: SplitBy::default(),
             natural_splits: None,
             // We default to four tasks per worker thread, which allows for some I/O lookahead
             // without too much impact on work-stealing.

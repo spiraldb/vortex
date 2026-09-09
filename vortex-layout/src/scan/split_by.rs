@@ -7,31 +7,45 @@ use std::ops::Range;
 use vortex_array::dtype::FieldMask;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_error::vortex_ensure;
 
 use crate::LayoutReader;
 use crate::RowSplits;
 use crate::SplitRange;
 use crate::scan::IDEAL_SPLIT_SIZE;
 
-/// Chunk-boundary spans wider than this are sub-divided into multiple row-range splits so that a
-/// file with few, large chunks can be decoded across multiple cores rather than one.
-///
-/// Reuses [`IDEAL_SPLIT_SIZE`] as the target span per split.
-const MAX_SPLIT_ROWS: u64 = IDEAL_SPLIT_SIZE;
+/// The default `max_rows` for [`SplitBy::LayoutSubSplitting`]: chunk-boundary spans wider than
+/// this are sub-divided into multiple row-range splits so that a file with few, large chunks can
+/// be decoded across multiple cores rather than one.
+pub const DEFAULT_MAX_SPLIT_ROWS: u64 = IDEAL_SPLIT_SIZE;
 
 /// Defines how the Vortex file is split into batches for reading.
 ///
 /// Note that each split must fit into the platform's maximum usize.
-#[derive(Default, Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum SplitBy {
-    #[default]
-    /// Splits any time there is a chunk boundary in the file. Spans between adjacent boundaries
-    /// wider than `MAX_SPLIT_ROWS` are further sub-divided so that a file with few, large chunks
-    /// can still be decoded across multiple cores.
+    /// Splits any time there is a chunk boundary in the file, and nowhere else. This yields
+    /// splits that follow the file's chunking exactly, trading intra-file decode parallelism
+    /// for fewer, larger batches.
     Layout,
+    /// Splits like [`SplitBy::Layout`], except that spans between adjacent chunk boundaries
+    /// wider than `max_rows` are further sub-divided into evenly sized splits of at most
+    /// `max_rows` rows, so that a file with few, large chunks can still be decoded across
+    /// multiple cores. `max_rows` must be non-zero.
+    ///
+    /// This is the default, with [`DEFAULT_MAX_SPLIT_ROWS`].
+    LayoutSubSplitting { max_rows: u64 },
     /// Splits every n rows.
     RowCount(usize),
     // UncompressedSize(u64),
+}
+
+impl Default for SplitBy {
+    fn default() -> Self {
+        SplitBy::LayoutSubSplitting {
+            max_rows: DEFAULT_MAX_SPLIT_ROWS,
+        }
+    }
 }
 
 impl SplitBy {
@@ -44,17 +58,16 @@ impl SplitBy {
         field_mask: &[FieldMask],
     ) -> VortexResult<Vec<u64>> {
         Ok(match *self {
-            SplitBy::Layout => {
-                // We usually have under 100 splits so reserving upfront saves
-                // us some allocations
-                let mut row_splits = RowSplits::new_capacity(128);
-                row_splits.push(row_range.start);
-                layout_reader.register_splits(
-                    field_mask,
-                    &SplitRange::root(row_range.clone())?,
-                    &mut row_splits,
-                )?;
-                subdivide_large_spans(row_splits.into_sorted_deduped(), MAX_SPLIT_ROWS)
+            SplitBy::Layout => layout_boundaries(layout_reader, row_range, field_mask)?,
+            SplitBy::LayoutSubSplitting { max_rows } => {
+                vortex_ensure!(
+                    max_rows > 0,
+                    "SplitBy::LayoutSubSplitting requires a non-zero max_rows"
+                );
+                subdivide_large_spans(
+                    layout_boundaries(layout_reader, row_range, field_mask)?,
+                    max_rows,
+                )
             }
             SplitBy::RowCount(n) => row_range
                 .clone()
@@ -63,6 +76,24 @@ impl SplitBy {
                 .collect(),
         })
     }
+}
+
+/// The sorted, deduplicated chunk boundaries the layout registers within `row_range`, bracketed
+/// by the range's start (the layout registers its end).
+fn layout_boundaries(
+    layout_reader: &dyn LayoutReader,
+    row_range: &Range<u64>,
+    field_mask: &[FieldMask],
+) -> VortexResult<Vec<u64>> {
+    // We usually have under 100 splits so reserving upfront saves us some allocations
+    let mut row_splits = RowSplits::new_capacity(128);
+    row_splits.push(row_range.start);
+    layout_reader.register_splits(
+        field_mask,
+        &SplitRange::root(row_range.clone())?,
+        &mut row_splits,
+    )?;
+    Ok(row_splits.into_sorted_deduped())
 }
 
 /// Sub-divide any gap between adjacent split boundaries that is wider than `max_span` into evenly
@@ -203,78 +234,120 @@ mod test {
         assert_eq!(splits, vec![0u64, 3, 6, 9, 10]);
     }
 
+    /// A reader that registers a fixed set of interior split points (which may repeat) plus the
+    /// end of its row range.
+    struct StubReader {
+        name: Arc<str>,
+        dtype: DType,
+        row_count: u64,
+        interior_splits: Vec<u64>,
+    }
+
+    impl StubReader {
+        fn new(row_count: u64, interior_splits: Vec<u64>) -> Self {
+            Self {
+                name: Arc::from("stub"),
+                dtype: DType::Primitive(PType::U8, Nullability::NonNullable),
+                row_count,
+                interior_splits,
+            }
+        }
+    }
+
+    impl LayoutReader for StubReader {
+        fn name(&self) -> &Arc<str> {
+            &self.name
+        }
+
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn dtype(&self) -> &DType {
+            &self.dtype
+        }
+
+        fn row_count(&self) -> u64 {
+            self.row_count
+        }
+
+        fn register_splits(
+            &self,
+            _field_mask: &[FieldMask],
+            split_range: &SplitRange,
+            splits: &mut RowSplits,
+        ) -> VortexResult<()> {
+            for split in &self.interior_splits {
+                splits.push(split_range.row_offset() + split);
+            }
+            splits.push(split_range.root_row_range().end);
+            Ok(())
+        }
+
+        fn pruning_evaluation(
+            &self,
+            _: &Range<u64>,
+            _: &BoundExpression,
+            _: Mask,
+        ) -> VortexResult<MaskFuture> {
+            unimplemented!()
+        }
+
+        fn filter_evaluation(
+            &self,
+            _: &Range<u64>,
+            _: &BoundExpression,
+            _: MaskFuture,
+        ) -> VortexResult<MaskFuture> {
+            unimplemented!()
+        }
+
+        fn projection_evaluation(
+            &self,
+            _: &Range<u64>,
+            _: &BoundExpression,
+            _: MaskFuture,
+        ) -> VortexResult<BoxFuture<'static, VortexResult<ArrayRef>>> {
+            unimplemented!()
+        }
+    }
+
     #[test]
-    fn test_layout_splits_dedup() {
-        struct DupReader {
-            name: Arc<str>,
-            dtype: DType,
-        }
-
-        impl LayoutReader for DupReader {
-            fn name(&self) -> &Arc<str> {
-                &self.name
-            }
-
-            fn as_any(&self) -> &dyn Any {
-                self
-            }
-
-            fn dtype(&self) -> &DType {
-                &self.dtype
-            }
-
-            fn row_count(&self) -> u64 {
-                10
-            }
-
-            fn register_splits(
-                &self,
-                _field_mask: &[FieldMask],
-                split_range: &SplitRange,
-                splits: &mut RowSplits,
-            ) -> VortexResult<()> {
-                splits.push(split_range.row_offset() + 5);
-                splits.push(split_range.row_offset() + 5);
-                splits.push(split_range.root_row_range().end);
-                Ok(())
-            }
-
-            fn pruning_evaluation(
-                &self,
-                _: &Range<u64>,
-                _: &BoundExpression,
-                _: Mask,
-            ) -> VortexResult<MaskFuture> {
-                unimplemented!()
-            }
-
-            fn filter_evaluation(
-                &self,
-                _: &Range<u64>,
-                _: &BoundExpression,
-                _: MaskFuture,
-            ) -> VortexResult<MaskFuture> {
-                unimplemented!()
-            }
-
-            fn projection_evaluation(
-                &self,
-                _: &Range<u64>,
-                _: &BoundExpression,
-                _: MaskFuture,
-            ) -> VortexResult<BoxFuture<'static, VortexResult<ArrayRef>>> {
-                unimplemented!()
-            }
-        }
-
-        let reader = DupReader {
-            name: Arc::from("dup"),
-            dtype: DType::Primitive(PType::U8, Nullability::NonNullable),
-        };
-        let splits = SplitBy::Layout
-            .splits(&reader, &(0..10), &[FieldMask::All])
-            .unwrap();
+    fn test_layout_splits_dedup() -> VortexResult<()> {
+        let reader = StubReader::new(10, vec![5, 5]);
+        let splits = SplitBy::Layout.splits(&reader, &(0..10), &[FieldMask::All])?;
         assert_eq!(splits, vec![0u64, 5, 10]);
+        Ok(())
+    }
+
+    #[test]
+    fn test_layout_sub_splitting_max_rows() -> VortexResult<()> {
+        // A single 10-row chunk: left whole by SplitBy::Layout, sub-divided into pieces of at
+        // most `max_rows` by SplitBy::LayoutSubSplitting.
+        let reader = StubReader::new(10, vec![]);
+
+        let splits = SplitBy::Layout.splits(&reader, &(0..10), &[FieldMask::All])?;
+        assert_eq!(splits, vec![0, 10]);
+
+        let splits = SplitBy::LayoutSubSplitting { max_rows: 4 }.splits(
+            &reader,
+            &(0..10),
+            &[FieldMask::All],
+        )?;
+        assert_eq!(splits, vec![0, 4, 8, 10]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_layout_sub_splitting_rejects_zero_max_rows() {
+        let reader = StubReader::new(10, vec![]);
+        let result = SplitBy::LayoutSubSplitting { max_rows: 0 }.splits(
+            &reader,
+            &(0..10),
+            &[FieldMask::All],
+        );
+        assert!(result.is_err());
     }
 
     #[test]
@@ -327,7 +400,7 @@ mod test {
             vec![0, 99_999, 100_000, 300_000],
         ];
         for boundaries in cases {
-            let out = subdivide_large_spans(boundaries.clone(), MAX_SPLIT_ROWS);
+            let out = subdivide_large_spans(boundaries.clone(), DEFAULT_MAX_SPLIT_ROWS);
             // (a) endpoints preserved
             assert_eq!(out.first(), boundaries.first());
             assert_eq!(out.last(), boundaries.last());

@@ -59,7 +59,7 @@ fn build_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
         .build()?)
 }
 
-/// Runs or completes a single `.slt` file against DataFusion reading Vortex files.
+/// Runs or completes a single `.slt` file against DataFusion.
 fn drive_datafusion(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<()> {
     reset_dir(work_dir)?;
     let _guard = WorkDirGuard::new(work_dir.to_path_buf());
@@ -67,7 +67,10 @@ fn drive_datafusion(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<
 
     let rt = build_runtime()?;
     rt.block_on(async {
-        let config = SessionConfig::default().with_option_extension(VortexTableOptions::default());
+        // Keep EXPLAIN plans independent of the host's CPU count.
+        let config = SessionConfig::default()
+            .with_target_partitions(4)
+            .with_option_extension(VortexTableOptions::default());
         let vortex_session = VortexSession::default();
         vortex_session.enable_edition(CORE_2026_08_3)?;
         let factory = Arc::new(VortexFormatFactory::new_with_session(vortex_session));
@@ -77,12 +80,12 @@ fn drive_datafusion(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<
             .with_table_factory(
                 factory.get_ext().to_uppercase(),
                 Arc::new(DefaultTableFactory::new()),
-            )
-            .with_file_formats(vec![factory]);
+            );
+        let mut session_state = session_state_builder.build();
+        session_state.register_file_format(factory, false)?;
         // The workspace builds `datafusion` without the `nested_expressions` feature, so array
         // functions (e.g. `make_array`, `array_length`) are not registered by default. Register
         // them explicitly so SLT files can construct and query list columns.
-        let mut session_state = session_state_builder.build();
         datafusion_functions_nested::register_all(&mut session_state)?;
         let session = SessionContext::new_with_state(session_state).enable_url_table();
 
@@ -102,7 +105,7 @@ fn drive_datafusion(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<
     })
 }
 
-/// Runs or completes a single `.slt` file against DuckDB reading Vortex files.
+/// Runs or completes a single `.slt` file against DuckDB.
 fn drive_duckdb(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<()> {
     reset_dir(work_dir)?;
     let _guard = WorkDirGuard::new(work_dir.to_path_buf());
@@ -162,20 +165,29 @@ fn engines_for(path: &Path) -> (bool, bool) {
     (datafusion, duckdb)
 }
 
-fn is_tpch(path: &Path) -> bool {
-    path.components().any(|c| c.as_os_str() == "tpch")
+/// Suites whose tables come from a `generate_data.sh` script rather than the
+/// test itself: the `slt/` subdirectory holding the suite, and a file whose
+/// Vortex and Parquet versions both have to exist for the suite to run.
+const GENERATED_DATASETS: &[(&str, &str)] = &[
+    ("tpch", "tpch/data/lineitem"),
+    ("clickbench", "clickbench/data/hits"),
+];
+
+/// Whether `path` belongs to a generated-data suite whose data is absent.
+fn missing_generated_data(path: &Path) -> bool {
+    GENERATED_DATASETS.iter().any(|(dir, fixture)| {
+        path.components().any(|c| c.as_os_str() == *dir)
+            && !["vortex", "parquet"]
+                .into_iter()
+                .all(|format| SLT_ROOT.join(format!("{fixture}.{format}")).exists())
+    })
 }
 
 /// Rewrites the expected output of each file in place, completing from a single
 /// reference engine per file (DuckDB for `duckdb/` files, DataFusion otherwise).
-fn complete_files(
-    args: &Arguments,
-    files: &[PathBuf],
-    slt_root: &Path,
-    has_tpch_data: bool,
-) -> anyhow::Result<()> {
+fn complete_files(args: &Arguments, files: &[PathBuf], slt_root: &Path) -> anyhow::Result<()> {
     for path in files {
-        if is_tpch(path) && !has_tpch_data {
+        if missing_generated_data(path) {
             continue;
         }
         let name = path
@@ -219,22 +231,21 @@ fn main() -> anyhow::Result<ExitCode> {
     };
     let args = Arguments::from_iter(raw_args);
 
-    let has_tpch_data = SLT_ROOT.join("tpch/data/lineitem.vortex").exists();
-
     let mut files = list_files(SLT_ROOT.as_path())?;
     files.sort();
 
     if complete {
-        complete_files(&args, &files, SLT_ROOT.as_path(), has_tpch_data)?;
+        complete_files(&args, &files, SLT_ROOT.as_path())?;
         return Ok(ExitCode::SUCCESS);
     }
 
     let mut trials = Vec::new();
     for path in files {
         let (run_datafusion, run_duckdb) = engines_for(&path);
-        // TPC-H trials are ignored (rather than removed) when the generated data
-        // is absent, so `--list` and the run summary still account for them.
-        let ignored = is_tpch(&path) && !has_tpch_data;
+        // TPC-H and ClickBench trials are ignored (rather than removed) when the
+        // generated data is absent, so `--list` and the run summary still
+        // account for them.
+        let ignored = missing_generated_data(&path);
         let name = path
             .strip_prefix(SLT_ROOT.as_path())
             .unwrap_or(&path)

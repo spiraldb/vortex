@@ -97,7 +97,8 @@ rust-version = "1.95"
 version = "0.1.0"
 
 [workspace.dependencies]
-alp = "0.0.2"
+allocator-api2 = "0.2.21"
+alp = "0.0.4"
 anyhow = "1.0.100"
 arbitrary = "1.3.2"
 arc-swap = "1.9"
@@ -171,6 +172,7 @@ geo-types = "0.7.19"
 geoarrow = "0.8.0"
 geoarrow-cast = "0.8.0"
 get_dir = "0.5.0"
+git2 = { version = "0.21", default-features = false }
 glob = "0.3.2"
 goldenfile = "1"
 half = { version = "2.7.1", features = ["std", "num-traits"] }
@@ -276,11 +278,13 @@ thiserror = "2.0.3"
 tokio = { version = "1.52" }
 tokio-stream = "0.1.17"
 tokio-util = "0.7.17"
+toml = "0.9"
 tpchgen = "3.0.0"
 tpchgen-arrow = "3.0.0"
 tracing = { version = "0.1.41", default-features = false }
 tracing-perfetto = "0.1.5"
 tracing-subscriber = "0.3"
+twox-hash = "2.1.2"
 url = "2.5.7"
 uuid = "1.23"
 wasm-bindgen-futures = "0.4.58"
@@ -378,6 +382,7 @@ get_unwrap = "deny"
 host_endian_bytes = "deny"
 if_then_some_else_none = "deny"
 inconsistent_struct_constructor = "deny"
+inline_always = "deny"
 manual_assert = "deny"
 manual_is_variant_and = "deny"
 many_single_char_names = "deny"
@@ -413,6 +418,10 @@ lto = "off"
 [profile.release_debug]
 debug = "full"
 inherits = "release"
+
+[profile.release_size]
+inherits = "release"
+opt-level = "z"
 
 [profile.bench]
 codegen-units = 16

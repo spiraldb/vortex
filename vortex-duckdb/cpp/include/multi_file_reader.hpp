@@ -3,9 +3,13 @@
 #pragma once
 
 #include "data.hpp"
+#include "table_function.h"
 #include "duckdb/common/multi_file/multi_file_function.hpp"
 
 using namespace duckdb;
+
+// Convert Vortex statistics to DuckDB statistics
+unique_ptr<BaseStatistics> to_duckdb_statistics(duckdb_column_statistics &statistics);
 
 struct VortexBindData final : TableFunctionData {
     VortexBindData() = default;

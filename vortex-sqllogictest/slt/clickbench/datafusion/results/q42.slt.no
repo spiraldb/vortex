@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query PI
+SELECT DATE_TRUNC('minute', "EventTime") AS M, COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-14' AND "EventDate" <= '2013-07-15' AND "IsRefresh" = 0 AND "DontCountHits" = 0 GROUP BY DATE_TRUNC('minute', "EventTime") ORDER BY DATE_TRUNC('minute', M) LIMIT 10 OFFSET 1000;
+----
+2013-07-15T12:40:00 314
+2013-07-15T12:41:00 270
+2013-07-15T12:42:00 273
+2013-07-15T12:43:00 285
+2013-07-15T12:44:00 271
+2013-07-15T12:45:00 299
+2013-07-15T12:46:00 266
+2013-07-15T12:47:00 240
+2013-07-15T12:48:00 253
+2013-07-15T12:49:00 273
