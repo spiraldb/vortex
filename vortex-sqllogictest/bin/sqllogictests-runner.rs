@@ -48,11 +48,11 @@ enum Mode {
     Complete,
 }
 
-/// Builds a single-threaded Tokio runtime for one test file.
+/// Builds a single-threaded Tokio runtime for one DataFusion test file.
 ///
 /// `libtest-mimic` runs each trial on its own thread, so a current-thread
-/// runtime keeps blocking DuckDB calls and async DataFusion work isolated per
-/// file instead of contending for shared multi-threaded runtime workers.
+/// runtime keeps async DataFusion work isolated per file instead of contending
+/// for shared multi-threaded runtime workers.
 fn build_runtime() -> anyhow::Result<tokio::runtime::Runtime> {
     Ok(tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -111,8 +111,11 @@ fn drive_duckdb(path: &Path, work_dir: &Path, mode: Mode) -> anyhow::Result<()> 
     let _guard = WorkDirGuard::new(work_dir.to_path_buf());
     let work_dir = work_dir.to_string_lossy().into_owned();
 
-    let rt = build_runtime()?;
-    rt.block_on(async {
+    // Deliberately not a Tokio runtime. DuckDB scans drive Vortex's own runtime, and a Vortex
+    // runtime driven from a thread inside `tokio::runtime::Runtime::block_on` loses the wakeups
+    // that complete its I/O and stalls forever (#9817). `AsyncDB::run` for DuckDB is synchronous
+    // and no DuckDB `.slt` uses the `sleep` or `system` directives, so nothing here needs Tokio.
+    futures::executor::block_on(async {
         let mut runner = Runner::new(|| async {
             DuckDB::try_new().map(|db| PathNormalizing::new(db, work_dir.clone()))
         });
