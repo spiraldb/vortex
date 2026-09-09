@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use num_traits::WrappingAdd;
+use num_traits::CheckedAdd;
 use num_traits::Zero;
 use vortex_array::ArrayRef;
 use vortex_array::Canonical;
@@ -29,7 +29,7 @@ use vortex_error::vortex_bail;
 mod tests;
 
 /// Reference sum of chunked or canonical arrays using native arithmetic.
-/// Decimal precision is checked only after wrapping accumulation of all chunks.
+/// Native overflow is checked during accumulation; decimal precision is checked only at the end.
 /// Empty and all-null arrays return null, matching SQL SUM.
 /// Returns `None` only for floats, whose rounding depends on addition order.
 pub fn sum_canonical_array(
@@ -38,36 +38,15 @@ pub fn sum_canonical_array(
 ) -> VortexResult<Option<Scalar>> {
     let mut any_valid = false;
     Ok(Some(match array.dtype() {
-        DType::Bool(_) => Scalar::from(
-            accumulate(
-                array,
-                Some(0u64),
-                &|sum, value| sum.checked_add(value),
-                &mut any_valid,
-                ctx,
-            )?
-            .filter(|_| any_valid),
-        ),
-        DType::Primitive(ptype, _) if ptype.is_unsigned_int() => Scalar::from(
-            accumulate(
-                array,
-                Some(0u64),
-                &|sum, value| sum.checked_add(value),
-                &mut any_valid,
-                ctx,
-            )?
-            .filter(|_| any_valid),
-        ),
-        DType::Primitive(ptype, _) if ptype.is_signed_int() => Scalar::from(
-            accumulate(
-                array,
-                Some(0i64),
-                &|sum, value| sum.checked_add(value),
-                &mut any_valid,
-                ctx,
-            )?
-            .filter(|_| any_valid),
-        ),
+        DType::Bool(_) => {
+            Scalar::from(accumulate(array, Some(0u64), &mut any_valid, ctx)?.filter(|_| any_valid))
+        }
+        DType::Primitive(ptype, _) if ptype.is_unsigned_int() => {
+            Scalar::from(accumulate(array, Some(0u64), &mut any_valid, ctx)?.filter(|_| any_valid))
+        }
+        DType::Primitive(ptype, _) if ptype.is_signed_int() => {
+            Scalar::from(accumulate(array, Some(0i64), &mut any_valid, ctx)?.filter(|_| any_valid))
+        }
         DType::Primitive(..) => return Ok(None),
         DType::Decimal(input_dtype, _) => {
             let output_dtype = DecimalDType::new(
@@ -81,14 +60,8 @@ pub fn sum_canonical_array(
             match_each_decimal_value_type!(values_type, |I| {
                 let limit = <I as BigCast>::from(limit)
                     .vortex_expect("precision limit fits native accumulator");
-                match accumulate(
-                    array,
-                    Some(I::zero()),
-                    &|sum, value| Some(WrappingAdd::wrapping_add(&sum, &value)),
-                    &mut any_valid,
-                    ctx,
-                )?
-                .filter(|&value| any_valid && -limit < value && value < limit)
+                match accumulate(array, Some(I::zero()), &mut any_valid, ctx)?
+                    .filter(|&value| any_valid && -limit < value && value < limit)
                 {
                     Some(value) => {
                         Scalar::decimal(DecimalValue::from(value), output_dtype, Nullable)
@@ -104,12 +77,11 @@ pub fn sum_canonical_array(
 fn accumulate<T>(
     array: &ArrayRef,
     initial: Option<T>,
-    add: &impl Fn(T, T) -> Option<T>,
     any_valid: &mut bool,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Option<T>>
 where
-    T: BigCast + Copy + Zero,
+    T: BigCast + Copy + Zero + CheckedAdd,
 {
     let Some(initial) = initial else {
         return Ok(None);
@@ -122,13 +94,15 @@ where
         // A nested chunked array has its own partial; canonical chunks share its running total.
         let mut partial = Some(T::zero());
         for chunk in chunked.non_empty_chunks() {
-            partial = accumulate(chunk, partial, add, any_valid, ctx)?;
+            partial = accumulate(chunk, partial, any_valid, ctx)?;
         }
-        Ok(partial.and_then(|partial| add(initial, partial)))
+        Ok(partial.and_then(|partial| initial.checked_add(&partial)))
     } else {
         let values = native_values::<T>(array, ctx)?;
         *any_valid |= !values.is_empty();
-        Ok(values.into_iter().try_fold(initial, add))
+        Ok(values
+            .into_iter()
+            .try_fold(initial, |sum, value| sum.checked_add(&value)))
     }
 }
 

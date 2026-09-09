@@ -70,7 +70,7 @@ pub fn sum_v2(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Scalar> 
 
 /// Sum an array, returning null when it has no valid values or if the sum overflows.
 ///
-/// Decimal sums use wrapping native arithmetic and check the result precision only at finalization.
+/// Decimal sums use checked native arithmetic and check the result precision only at finalization.
 ///
 /// This aggregate intentionally has a distinct ID and partial representation from the legacy
 /// [`Sum`]. Keeping `vortex.sum` unchanged preserves the scalar partials stored by older Vortex
@@ -213,11 +213,11 @@ impl AggregateFnVTable for SumV2 {
             }
             if let SumState::Decimal { value, dtype } = &mut partial.sum {
                 if let Some(constant_value) = constant.scalar().as_decimal().decimal_value() {
-                    add_decimal(
-                        value,
-                        multiply_decimal(constant_value, constant.len(), *dtype),
-                        *dtype,
-                    );
+                    partial.is_overflow =
+                        match multiply_decimal(constant_value, constant.len(), *dtype) {
+                            Some(product) => add_decimal(value, product, *dtype),
+                            None => true,
+                        };
                 }
                 return Ok(());
             }
@@ -384,8 +384,7 @@ fn checked_add_sum_state(state: &mut SumState, other: &Scalar) -> VortexResult<b
             false
         }
         SumState::Decimal { value, dtype } => {
-            add_decimal(value, decimal_partial_value(other, *dtype)?, *dtype);
-            false
+            add_decimal(value, decimal_partial_value(other, *dtype)?, *dtype)
         }
     })
 }

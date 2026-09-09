@@ -208,7 +208,7 @@ fn test_sum_decimal_keeps_definite_overflow() -> VortexResult<()> {
 }
 
 #[test]
-fn test_sum_decimal_native_overflow_cancels() -> VortexResult<()> {
+fn test_sum_decimal_native_overflow_is_absorbing() -> VortexResult<()> {
     let dtype = DecimalDType::new(76, 0);
     let six_e75 = i256::from_i128(10).wrapping_pow(75) * i256::from_i128(6);
     let mut ctx = SESSION.create_execution_ctx();
@@ -217,8 +217,7 @@ fn test_sum_decimal_native_overflow_cancels() -> VortexResult<()> {
             .chain(iter::repeat_n(-value, 10))
             .collect::<Buffer<_>>();
         let array = DecimalArray::new(values, dtype, Validity::NonNullable);
-        let expected =
-            Scalar::decimal(DecimalValue::I256(i256::ZERO), dtype, Nullability::Nullable);
+        let expected = Scalar::null(DType::Decimal(dtype, Nullability::Nullable));
         let array = array.into_array();
         assert_eq!(
             sum_canonical_array(&array, &mut ctx)?,

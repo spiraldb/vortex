@@ -54,16 +54,16 @@ fn partial_preserves_native_extremes(
 
 #[rstest]
 fn cancellation_across_batches(
-    #[values(1, 2, 7, 10, 21)] batch_size: usize,
+    #[values(1, 2, 7, 9, 17)] batch_size: usize,
     #[values(false, true)] negative: bool,
     #[values(false, true)] nullable: bool,
 ) -> VortexResult<()> {
     let dtype = DecimalDType::new(76, -76);
     let unit = i256::from_i128(10).wrapping_pow(75);
     let value = unit * i256::from_i128(if negative { -6 } else { 6 });
-    // Ten values overflow i256 before cancellation; the final total is one input value.
-    let values = iter::repeat_n(value, 10)
-        .chain(iter::repeat_n(-value, 9))
+    // Nine values exceed precision 76 without overflowing i256.
+    let values = iter::repeat_n(value, 9)
+        .chain(iter::repeat_n(-value, 8))
         .collect::<Vec<_>>();
     let chunks = values
         .chunks(batch_size)
@@ -121,7 +121,7 @@ fn cancellation_across_batches(
 #[case::i64(8, DecimalValue::I64(99_999_999), 100_000_000_000)]
 #[case::i128(28, DecimalValue::I128(10i128.pow(28) - 1), 100_000_000_000)]
 #[case::i256(76, DecimalValue::I256(i256::from_i128(10).wrapping_pow(76) - i256::ONE), 10)]
-fn constant_native_overflow_cancels(
+fn constant_native_overflow_is_absorbing(
     #[case] precision: u8,
     #[case] value: DecimalValue,
     #[case] len: usize,
@@ -142,13 +142,101 @@ fn constant_native_overflow_cancels(
     )?;
     let mut ctx = array_session().create_execution_ctx();
     accumulator.accumulate(&ConstantArray::new(scalar, len).into_array(), &mut ctx)?;
+    assert!(accumulator.is_saturated());
     let partial = accumulator.flush()?;
     accumulator.accumulate(&ConstantArray::new(negative, len).into_array(), &mut ctx)?;
     accumulator.combine_partials(partial)?;
     let expected_dtype = DecimalDType::new((precision + 10).min(76), 0);
     assert_eq!(
         accumulator.finish()?,
-        Scalar::decimal(DecimalValue::I8(0), expected_dtype, Nullability::Nullable)
+        Scalar::null(DType::Decimal(expected_dtype, Nullability::Nullable))
+    );
+    Ok(())
+}
+
+#[test]
+fn constant_precision_overflow_cancels() -> VortexResult<()> {
+    let dtype = DecimalDType::new(76, 0);
+    let value = i256::from_i128(10).wrapping_pow(75) * i256::from_i128(6);
+    let scalar = Scalar::decimal(DecimalValue::I256(value), dtype, Nullability::NonNullable);
+    let mut accumulator = Accumulator::try_new(
+        SumV2,
+        NumericalAggregateOpts::default(),
+        scalar.dtype().clone(),
+    )?;
+    let mut ctx = array_session().create_execution_ctx();
+    accumulator.accumulate(&ConstantArray::new(scalar, 2).into_array(), &mut ctx)?;
+    assert!(!accumulator.is_saturated());
+    let partial = accumulator.flush()?;
+    let negative = Scalar::decimal(DecimalValue::I256(-value), dtype, Nullability::NonNullable);
+    accumulator.accumulate(&ConstantArray::new(negative, 1).into_array(), &mut ctx)?;
+    accumulator.combine_partials(partial)?;
+    assert_eq!(
+        accumulator.finish()?,
+        Scalar::decimal(DecimalValue::I256(value), dtype, Nullability::Nullable)
+    );
+    Ok(())
+}
+
+#[rstest]
+fn native_overflow_is_absorbing(
+    #[values(false, true)] negative: bool,
+    #[values(false, true)] nullable: bool,
+) -> VortexResult<()> {
+    let dtype = DecimalDType::new(76, 0);
+    let value =
+        i256::from_i128(10).wrapping_pow(75) * i256::from_i128(if negative { -6 } else { 6 });
+    let values = iter::repeat_n(value, 10)
+        .chain(iter::repeat_n(-value, 10))
+        .chain(iter::once(value))
+        .collect::<Buffer<_>>();
+    let validity = if nullable {
+        Validity::from_iter((0..values.len()).map(|i| i + 1 < values.len()))
+    } else {
+        Validity::NonNullable
+    };
+    let array = DecimalArray::new(values, dtype, validity).into_array();
+    let mut accumulator = Accumulator::try_new(
+        SumV2,
+        NumericalAggregateOpts::default(),
+        array.dtype().clone(),
+    )?;
+    let mut ctx = array_session().create_execution_ctx();
+    accumulator.accumulate(&array, &mut ctx)?;
+    assert!(accumulator.is_saturated());
+    let partial = accumulator.flush()?;
+    accumulator.combine_partials(partial)?;
+    assert!(accumulator.is_saturated());
+    assert_eq!(
+        accumulator.finish()?,
+        Scalar::null(DType::Decimal(dtype, Nullability::Nullable))
+    );
+    Ok(())
+}
+
+#[test]
+fn partial_merge_native_overflow_is_absorbing() -> VortexResult<()> {
+    let dtype = DecimalDType::new(76, 0);
+    let value = i256::from_i128(10).wrapping_pow(75) * i256::from_i128(6);
+    let array = DecimalArray::new(buffer![value; 5], dtype, Validity::NonNullable).into_array();
+    let mut accumulator = Accumulator::try_new(
+        SumV2,
+        NumericalAggregateOpts::default(),
+        array.dtype().clone(),
+    )?;
+    let mut ctx = array_session().create_execution_ctx();
+    accumulator.accumulate(&array, &mut ctx)?;
+    assert!(!accumulator.is_saturated());
+    let partial = accumulator.flush()?;
+    accumulator.combine_partials(partial.clone())?;
+    assert!(!accumulator.is_saturated());
+    accumulator.combine_partials(partial)?;
+    assert!(accumulator.is_saturated());
+    let negative = DecimalArray::new(buffer![-value; 5], dtype, Validity::NonNullable).into_array();
+    accumulator.accumulate(&negative, &mut ctx)?;
+    assert_eq!(
+        accumulator.finish()?,
+        Scalar::null(DType::Decimal(dtype, Nullability::Nullable))
     );
     Ok(())
 }
@@ -157,12 +245,16 @@ fn constant_native_overflow_cancels(
 fn grouped_final_precision_and_empty() -> VortexResult<()> {
     let dtype = DecimalDType::new(76, 0);
     let value = i256::from_i128(10).wrapping_pow(75) * i256::from_i128(6);
-    let elements =
-        DecimalArray::new(buffer![value, value, -value], dtype, Validity::NonNullable).into_array();
+    let values = [value, value, -value]
+        .into_iter()
+        .chain(iter::repeat_n(value, 10))
+        .chain(iter::repeat_n(-value, 10))
+        .collect::<Buffer<_>>();
+    let elements = DecimalArray::new(values, dtype, Validity::NonNullable).into_array();
     let groups = ListViewArray::new(
         elements.clone(),
-        buffer![0u32, 0, 0].into_array(),
-        buffer![3u32, 2, 0].into_array(),
+        buffer![0u32, 0, 0, 3].into_array(),
+        buffer![3u32, 2, 0, 20].into_array(),
         Validity::NonNullable,
     );
     let mut accumulator = GroupedAccumulator::try_new(
@@ -173,9 +265,9 @@ fn grouped_final_precision_and_empty() -> VortexResult<()> {
     let mut ctx = array_session().create_execution_ctx();
     accumulator.accumulate_list(&groups.into_array(), &mut ctx)?;
     let expected = DecimalArray::new(
-        buffer![value, i256::ZERO, i256::ZERO],
+        buffer![value, i256::ZERO, i256::ZERO, i256::ZERO],
         dtype,
-        Validity::from_iter([true, false, false]),
+        Validity::from_iter([true, false, false, false]),
     )
     .into_array();
     assert_arrays_eq!(accumulator.finish()?, expected, &mut ctx);
