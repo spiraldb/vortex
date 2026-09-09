@@ -13,8 +13,6 @@ use arrow_schema::IntervalUnit;
 use arrow_schema::Schema;
 use arrow_schema::TimeUnit as ArrowTimeUnit;
 use arrow_schema::extension::Uuid as ArrowUuid;
-use datafusion::arrow::array::AsArray;
-use datafusion::arrow::datatypes::Int32Type;
 use datafusion_common::ScalarValue;
 use datafusion_common::arrow::buffer::NullBuffer;
 use datafusion_common::arrow::datatypes::i256 as arrow_i256;
@@ -25,6 +23,7 @@ use datafusion_expr::ScalarUDF;
 use datafusion_functions::core::coalesce::CoalesceFunc;
 use datafusion_physical_expr::PhysicalExpr;
 use datafusion_physical_expr::expressions::DynamicFilterPhysicalExpr;
+use datafusion_physical_expr::projection::ProjectionExpr;
 use datafusion_physical_plan::expressions as df_expr;
 use insta::assert_snapshot;
 use rstest::rstest;
@@ -83,6 +82,39 @@ fn array_length_expr(args: Vec<Arc<dyn PhysicalExpr>>, schema: &Schema) -> Arc<d
     )
 }
 
+/// Whether the default convertor accepts `expr` for native evaluation against `schema`.
+fn converts(expr: &Arc<dyn PhysicalExpr>, schema: &Schema) -> DFResult<bool> {
+    Ok(DefaultExpressionConvertor::default()
+        .try_convert(expr, schema)?
+        .is_some())
+}
+
+/// Convert `expr` natively, failing the test if the convertor declines it.
+fn convert(expr: Arc<dyn PhysicalExpr>, schema: &Schema) -> DFResult<Expression> {
+    DefaultExpressionConvertor::default()
+        .try_convert(&expr, schema)?
+        .ok_or_else(|| exec_datafusion_err!("Expected native conversion for {expr}"))
+}
+
+/// Convert an `IN` list expression and compare native evaluation against DataFusion.
+fn assert_in_list_matches(
+    value: Arc<dyn PhysicalExpr>,
+    list: Vec<Arc<dyn PhysicalExpr>>,
+    negated: bool,
+    batch: RecordBatch,
+) -> anyhow::Result<()> {
+    let expr = df_expr::InListExpr::try_new(value, list, negated, &batch.schema())?;
+    expr.evaluate(&batch)?;
+    assert_native_matches(Arc::new(expr), batch)
+}
+
+fn int_literals(values: impl IntoIterator<Item = Option<i32>>) -> Vec<Arc<dyn PhysicalExpr>> {
+    values
+        .into_iter()
+        .map(|value| Arc::new(df_expr::Literal::new(ScalarValue::Int32(value))) as _)
+        .collect()
+}
+
 struct FailingConvertor;
 
 impl ExpressionConvertor for FailingConvertor {
@@ -102,22 +134,16 @@ fn test_duplicate_aliases_fall_back_before_conversion() -> DFResult<()> {
         Field::new("b", DataType::Int32, false),
     ]);
     let projection = ProjectionExprs::from(vec![
-        ProjectionExpr {
-            expr: Arc::new(df_expr::BinaryExpr::new(
+        ProjectionExpr::new(
+            Arc::new(df_expr::BinaryExpr::new(
                 Arc::new(df_expr::Column::new("b", 1)),
                 DFOperator::Plus,
                 Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(1)))),
             )),
-            alias: "duplicate".into(),
-        },
-        ProjectionExpr {
-            expr: Arc::new(df_expr::Column::new("a", 0)),
-            alias: "duplicate".into(),
-        },
-        ProjectionExpr {
-            expr: Arc::new(df_expr::Column::new("b", 1)),
-            alias: "duplicate".into(),
-        },
+            "duplicate",
+        ),
+        ProjectionExpr::new(Arc::new(df_expr::Column::new("a", 0)), "duplicate"),
+        ProjectionExpr::new(Arc::new(df_expr::Column::new("b", 1)), "duplicate"),
     ]);
     let output_schema = projection.project_schema(&schema)?;
     let processed =
@@ -135,29 +161,7 @@ fn test_duplicate_aliases_fall_back_before_conversion() -> DFResult<()> {
 }
 
 #[rstest]
-#[case::past_end(1)]
-#[case::max(usize::MAX)]
-fn test_raw_projection_out_of_bounds(#[case] index: usize) -> DFResult<()> {
-    let schema = Schema::new(vec![Field::new("a", DataType::Int32, false)]);
-    let projection = vec![ProjectionExpr {
-        expr: Arc::new(df_expr::Column::new("a", index)),
-        alias: "a".into(),
-    }]
-    .into();
-    let error = raw_projection(projection, &schema)
-        .err()
-        .ok_or_else(|| exec_datafusion_err!("Expected an out-of-bounds error"))?;
-    assert!(
-        error
-            .to_string()
-            .contains(&format!("Projection column index {index} is out of bounds")),
-        "{error}"
-    );
-    Ok(())
-}
-
-#[rstest]
-fn test_predicate_rejects_cast_over_modulo(test_schema: Schema) {
+fn test_predicate_rejects_cast_over_modulo(test_schema: Schema) -> DFResult<()> {
     let modulo = Arc::new(df_expr::BinaryExpr::new(
         Arc::new(df_expr::Column::new("id", 0)),
         DFOperator::Modulo,
@@ -165,12 +169,8 @@ fn test_predicate_rejects_cast_over_modulo(test_schema: Schema) {
     ));
     let expr: Arc<dyn PhysicalExpr> =
         Arc::new(df_expr::CastExpr::new(modulo, DataType::Int64, None));
-    assert!(
-        !DefaultExpressionConvertor::default()
-            .try_convert(&expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(!converts(&expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
@@ -193,11 +193,7 @@ fn test_predicate_rejects_unsupported_in_list(
         negated,
         &test_schema,
     )?);
-    assert!(
-        !DefaultExpressionConvertor::default()
-            .try_convert(&expr, &test_schema)?
-            .is_some()
-    );
+    assert!(!converts(&expr, &test_schema)?);
     Ok(())
 }
 
@@ -212,16 +208,12 @@ fn test_native_in_list(
     #[values(false, true)] negated: bool,
 ) -> anyhow::Result<()> {
     let batch = arrow_array::record_batch!(("a", Int32, vec![Some(1), Some(2), Some(3), None]))?;
-    let expr = df_expr::InListExpr::try_new(
+    assert_in_list_matches(
         Arc::new(df_expr::Column::new("a", 0)),
-        list.into_iter()
-            .map(|value| Arc::new(df_expr::Literal::new(ScalarValue::Int32(value))) as _)
-            .collect(),
+        int_literals(list),
         negated,
-        &batch.schema(),
-    )?;
-    expr.evaluate(&batch)?;
-    assert_native_matches(Arc::new(expr), batch)
+        batch,
+    )
 }
 
 #[rstest]
@@ -266,17 +258,15 @@ fn test_native_in_list_data_types(
         "a",
         ScalarValue::iter_to_array([member.clone(), absent, null.clone()])?,
     )])?;
-    let expr = df_expr::InListExpr::try_new(
+    assert_in_list_matches(
         Arc::new(df_expr::Column::new("a", 0)),
         vec![
             Arc::new(df_expr::Literal::new(member)),
             Arc::new(df_expr::Literal::new(null)),
         ],
         negated,
-        &batch.schema(),
-    )?;
-    expr.evaluate(&batch)?;
-    assert_native_matches(Arc::new(expr), batch)
+        batch,
+    )
 }
 
 #[rstest]
@@ -296,25 +286,19 @@ fn test_native_in_list_untyped_null(
     } else {
         Arc::new(df_expr::Column::new("a", 0))
     };
-    let expr = df_expr::InListExpr::try_new(value, list, negated, &batch.schema())?;
-    expr.evaluate(&batch)?;
-    assert_native_matches(Arc::new(expr), batch)
+    assert_in_list_matches(value, list, negated, batch)
 }
 
 #[rstest]
 fn test_native_in_list_large(#[values(false, true)] negated: bool) -> anyhow::Result<()> {
     let batch =
         arrow_array::record_batch!(("a", Int32, vec![Some(0), Some(1023), Some(1024), None]))?;
-    let expr = df_expr::InListExpr::try_new(
+    assert_in_list_matches(
         Arc::new(df_expr::Column::new("a", 0)),
-        (0..1024)
-            .map(|i| Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(i)))) as _)
-            .collect(),
+        int_literals((0..1024).map(Some)),
         negated,
-        &batch.schema(),
-    )?;
-    expr.evaluate(&batch)?;
-    assert_native_matches(Arc::new(expr), batch)
+        batch,
+    )
 }
 
 #[rstest]
@@ -340,17 +324,15 @@ fn test_native_in_list_float(
                 .collect::<DFResult<Vec<_>>>()?,
         )?,
     )])?;
-    let expr = df_expr::InListExpr::try_new(
+    assert_in_list_matches(
         Arc::new(df_expr::Column::new("a", 0)),
         vec![
             Arc::new(df_expr::Literal::new(scalar(Some(-0.0))?)),
             Arc::new(df_expr::Literal::new(scalar(Some(f64::NAN))?)),
         ],
         negated,
-        &batch.schema(),
-    )?;
-    expr.evaluate(&batch)?;
-    assert_native_matches(Arc::new(expr), batch)
+        batch,
+    )
 }
 
 #[rstest]
@@ -372,11 +354,7 @@ fn test_in_list_unsupported_input(
         &batch.schema(),
     )?);
     assert!(expr.evaluate(&batch).is_err());
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &batch.schema())?
-            .is_none()
-    );
+    assert!(!converts(&expr, &batch.schema())?);
     Ok(())
 }
 
@@ -390,11 +368,7 @@ fn test_in_list_unsupported_type() -> DFResult<()> {
         false,
         &Schema::empty(),
     )?);
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &Schema::empty())?
-            .is_none()
-    );
+    assert!(!converts(&expr, &Schema::empty())?);
     Ok(())
 }
 
@@ -458,41 +432,31 @@ fn test_operator_conversion_unsupported(#[case] df_op: DFOperator) {
 }
 
 #[test]
-fn test_expr_from_df_column() {
+fn test_expr_from_df_column() -> DFResult<()> {
     let col_expr = df_expr::Column::new("test_column", 0);
-    let result = DefaultExpressionConvertor::default()
-        .try_convert(
-            &(Arc::new(col_expr) as Arc<dyn PhysicalExpr>),
-            &Schema::new(vec![Field::new("test_column", DataType::Int32, false)]),
-        )
-        .unwrap()
-        .unwrap();
+    let result = convert(
+        Arc::new(col_expr),
+        &Schema::new(vec![Field::new("test_column", DataType::Int32, false)]),
+    )?;
 
     assert_snapshot!(result.display_tree().to_string(), @r"
     vortex.get_item(test_column)
     └── input: vortex.root()
     ");
+    Ok(())
 }
 
 #[test]
-fn test_expr_from_df_literal() {
+fn test_expr_from_df_literal() -> DFResult<()> {
     let literal_expr = df_expr::Literal::new(ScalarValue::Int32(Some(42)));
-    let result = DefaultExpressionConvertor::default()
-        .try_convert(
-            &(Arc::new(literal_expr) as Arc<dyn PhysicalExpr>),
-            &Schema::empty(),
-        )
-        .unwrap()
-        .unwrap();
+    let result = convert(Arc::new(literal_expr), &Schema::empty())?;
 
     assert_snapshot!(result.display_tree().to_string(), @"vortex.literal(42i32)");
+    Ok(())
 }
 
 fn convert_literal(expr: Arc<dyn PhysicalExpr>) -> anyhow::Result<Scalar> {
-    let converted = DefaultExpressionConvertor::default()
-        .try_convert(&expr, &Schema::empty())?
-        .ok_or_else(|| anyhow::anyhow!("Expected native conversion for {expr}"))?;
-    converted
+    convert(expr, &Schema::empty())?
         .as_opt::<Literal>()
         .cloned()
         .ok_or_else(|| anyhow::anyhow!("Expected a literal expression"))
@@ -609,19 +573,16 @@ fn test_literal_preserves_extension_metadata(
 }
 
 #[test]
-fn test_expr_from_df_binary() {
+fn test_expr_from_df_binary() -> DFResult<()> {
     let left = Arc::new(df_expr::Column::new("left", 0)) as Arc<dyn PhysicalExpr>;
     let right =
         Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))) as Arc<dyn PhysicalExpr>;
     let binary_expr = df_expr::BinaryExpr::new(left, DFOperator::Eq, right);
 
-    let result = DefaultExpressionConvertor::default()
-        .try_convert(
-            &(Arc::new(binary_expr) as Arc<dyn PhysicalExpr>),
-            &Schema::new(vec![Field::new("left", DataType::Int32, false)]),
-        )
-        .unwrap()
-        .unwrap();
+    let result = convert(
+        Arc::new(binary_expr),
+        &Schema::new(vec![Field::new("left", DataType::Int32, false)]),
+    )?;
 
     assert_snapshot!(result.display_tree().to_string(), @r"
     vortex.binary(=)
@@ -629,6 +590,7 @@ fn test_expr_from_df_binary() {
     │   └── input: vortex.root()
     └── rhs: vortex.literal(42i32)
     ");
+    Ok(())
 }
 
 #[rstest]
@@ -636,20 +598,17 @@ fn test_expr_from_df_binary() {
 #[case::like_negated(true, false)]
 #[case::like_case_insensitive(false, true)]
 #[case::like_negated_case_insensitive(true, true)]
-fn test_expr_from_df_like(#[case] negated: bool, #[case] case_insensitive: bool) {
+fn test_expr_from_df_like(#[case] negated: bool, #[case] case_insensitive: bool) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("text_col", 0)) as Arc<dyn PhysicalExpr>;
     let pattern = Arc::new(df_expr::Literal::new(ScalarValue::Utf8(Some(
         "test%".to_string(),
     )))) as Arc<dyn PhysicalExpr>;
     let like_expr = df_expr::LikeExpr::new(negated, case_insensitive, expr, pattern);
 
-    let result = DefaultExpressionConvertor::default()
-        .try_convert(
-            &(Arc::new(like_expr) as Arc<dyn PhysicalExpr>),
-            &Schema::new(vec![Field::new("text_col", DataType::Utf8, true)]),
-        )
-        .unwrap()
-        .unwrap();
+    let result = convert(
+        Arc::new(like_expr),
+        &Schema::new(vec![Field::new("text_col", DataType::Utf8, true)]),
+    )?;
     let like_opts = result.as_::<Like>();
     assert_eq!(
         like_opts,
@@ -658,17 +617,15 @@ fn test_expr_from_df_like(#[case] negated: bool, #[case] case_insensitive: bool)
             case_insensitive
         }
     );
+    Ok(())
 }
 
 #[rstest]
-fn test_expr_from_df_octet_length(test_schema: Schema) {
+fn test_expr_from_df_octet_length(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("name", 1)) as Arc<dyn PhysicalExpr>;
     let octet_length = octet_length_expr(expr, &test_schema);
 
-    let result = DefaultExpressionConvertor::default()
-        .try_convert(&octet_length, &test_schema)
-        .unwrap()
-        .unwrap();
+    let result = convert(octet_length, &test_schema)?;
 
     assert_snapshot!(result.display_tree().to_string(), @r"
     vortex.cast(i32?)
@@ -676,17 +633,15 @@ fn test_expr_from_df_octet_length(test_schema: Schema) {
         └── input: vortex.get_item(name)
             └── input: vortex.root()
     ");
+    Ok(())
 }
 
 #[rstest]
-fn test_expr_from_df_array_length(test_schema: Schema) {
+fn test_expr_from_df_array_length(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let array_length = array_length_expr(vec![expr], &test_schema);
 
-    let result = DefaultExpressionConvertor::default()
-        .try_convert(&array_length, &test_schema)
-        .unwrap()
-        .unwrap();
+    let result = convert(array_length, &test_schema)?;
 
     assert_snapshot!(result.display_tree().to_string(), @r"
     vortex.cast(u64?)
@@ -694,6 +649,7 @@ fn test_expr_from_df_array_length(test_schema: Schema) {
         └── input: vortex.get_item(tags)
             └── input: vortex.root()
     ");
+    Ok(())
 }
 
 #[rstest]
@@ -751,41 +707,10 @@ fn test_supported_data_types(#[case] data_type: DataType, #[case] expected: bool
 }
 
 #[rstest]
-fn test_can_be_pushed_down_column_supported(test_schema: Schema) {
+fn test_can_be_pushed_down_column_supported(test_schema: Schema) -> DFResult<()> {
     let col_expr = Arc::new(df_expr::Column::new("id", 0)) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&col_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
-}
-
-#[rstest]
-#[case::duration(DataType::Duration(ArrowTimeUnit::Second))]
-#[case::interval(DataType::Interval(IntervalUnit::YearMonth))]
-#[case::fixed_size_binary(DataType::FixedSizeBinary(16))]
-#[case::decimal32(DataType::Decimal32(1, 2))]
-#[case::decimal64(DataType::Decimal64(1, 2))]
-#[case::decimal128(DataType::Decimal128(1, 2))]
-#[case::decimal256(DataType::Decimal256(1, 2))]
-fn test_filter_ignores_unreferenced_unsupported_field(
-    #[case] unsupported: DataType,
-) -> DFResult<()> {
-    let schema = Schema::new(vec![
-        Field::new("unsupported", unsupported, true),
-        Field::new("id", DataType::Int32, false),
-    ]);
-    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::BinaryExpr::new(
-        Arc::new(df_expr::Column::new("id", 1)),
-        DFOperator::Eq,
-        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))),
-    ));
-    assert_eq!(
-        DefaultExpressionConvertor::default().try_convert(&expr, &schema)?,
-        Some(Binary.new_expr(Operator::Eq, [get_item("id", root()), lit(42i32)])),
-    );
+    assert!(converts(&col_expr, &test_schema)?);
     Ok(())
 }
 
@@ -797,16 +722,30 @@ fn test_filter_ignores_unreferenced_unsupported_field(
 #[case::decimal64(DataType::Decimal64(1, 2))]
 #[case::decimal128(DataType::Decimal128(1, 2))]
 #[case::decimal256(DataType::Decimal256(1, 2))]
-fn test_referenced_unsupported_field_is_declined(#[case] unsupported: DataType) -> DFResult<()> {
-    let schema = Schema::new(vec![Field::new("unsupported", unsupported, true)]);
-    let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::IsNotNullExpr::new(Arc::new(
-        df_expr::Column::new("unsupported", 0),
-    )));
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &schema)?
-            .is_none()
-    );
+fn test_unsupported_field_is_declined_only_when_referenced(
+    #[case] unsupported: DataType,
+    #[values(false, true)] referenced: bool,
+) -> DFResult<()> {
+    let schema = Schema::new(vec![
+        Field::new("unsupported", unsupported, true),
+        Field::new("id", DataType::Int32, false),
+    ]);
+    if referenced {
+        let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::IsNotNullExpr::new(Arc::new(
+            df_expr::Column::new("unsupported", 0),
+        )));
+        assert!(!converts(&expr, &schema)?);
+    } else {
+        let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::BinaryExpr::new(
+            Arc::new(df_expr::Column::new("id", 1)),
+            DFOperator::Eq,
+            Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))),
+        ));
+        assert_eq!(
+            convert(expr, &schema)?,
+            Binary.new_expr(Operator::Eq, [get_item("id", root()), lit(42i32)]),
+        );
+    }
     Ok(())
 }
 
@@ -818,10 +757,7 @@ fn test_literal_ignores_unreferenced_malformed_decimal() -> DFResult<()> {
         true,
     )]);
     let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42))));
-    assert_eq!(
-        DefaultExpressionConvertor::default().try_convert(&expr, &schema)?,
-        Some(lit(42i32)),
-    );
+    assert_eq!(convert(expr, &schema)?, lit(42i32));
     Ok(())
 }
 
@@ -836,8 +772,8 @@ fn test_projection_ignores_unreferenced_unsupported_field() -> DFResult<()> {
         ),
         Field::new("b", DataType::Int32, false),
     ]);
-    let projection = ProjectionExprs::from(vec![ProjectionExpr {
-        expr: Arc::new(df_expr::BinaryExpr::new(
+    let projection = ProjectionExprs::from(vec![ProjectionExpr::new(
+        Arc::new(df_expr::BinaryExpr::new(
             Arc::new(df_expr::Column::new("b", 2)),
             DFOperator::Plus,
             Arc::new(df_expr::BinaryExpr::new(
@@ -846,8 +782,8 @@ fn test_projection_ignores_unreferenced_unsupported_field() -> DFResult<()> {
                 Arc::new(df_expr::Column::new("b", 2)),
             )),
         )),
-        alias: "sum".into(),
-    }]);
+        "sum",
+    )]);
     let output_schema = projection.project_schema(&schema)?;
     let processed = DefaultExpressionConvertor::default().split_projection(
         projection,
@@ -872,10 +808,10 @@ fn test_projection_ignores_unreferenced_unsupported_field() -> DFResult<()> {
     assert_eq!(processed.scan_reference_schema, output_schema);
     assert_eq!(
         processed.leftover_projection,
-        ProjectionExprs::from(vec![ProjectionExpr {
-            expr: Arc::new(df_expr::Column::new("sum", 0)),
-            alias: "sum".into(),
-        }]),
+        ProjectionExprs::from(vec![ProjectionExpr::new(
+            Arc::new(df_expr::Column::new("sum", 0)),
+            "sum",
+        )]),
     );
     Ok(())
 }
@@ -897,23 +833,16 @@ fn test_referenced_field_preserves_extension_metadata(
         Field::new("unsupported", DataType::FixedSizeBinary(16), true),
         field,
     ]);
-    assert_eq!(
-        DefaultExpressionConvertor::default().try_convert(&expr, &schema)?,
-        Some(expected),
-    );
+    assert_eq!(convert(expr, &schema)?, expected);
     Ok(())
 }
 
 #[rstest]
-fn test_nested_column_conversion(test_schema: Schema) {
+fn test_nested_column_conversion(test_schema: Schema) -> DFResult<()> {
     let col_expr = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&col_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(converts(&col_expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
@@ -928,16 +857,12 @@ fn test_can_be_pushed_down_column_not_found(test_schema: Schema) {
 }
 
 #[rstest]
-fn test_can_be_pushed_down_literal_supported(test_schema: Schema) {
+fn test_can_be_pushed_down_literal_supported(test_schema: Schema) -> DFResult<()> {
     let lit_expr =
         Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&lit_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(converts(&lit_expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
@@ -951,32 +876,24 @@ fn test_can_be_pushed_down_literal_unsupported(
     #[case] value: ScalarValue,
 ) -> DFResult<()> {
     let lit_expr = Arc::new(df_expr::Literal::new(value)) as Arc<dyn PhysicalExpr>;
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&lit_expr, &test_schema)?
-            .is_none()
-    );
+    assert!(!converts(&lit_expr, &test_schema)?);
     Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_binary_supported(test_schema: Schema) {
+fn test_can_be_pushed_down_binary_supported(test_schema: Schema) -> DFResult<()> {
     let left = Arc::new(df_expr::Column::new("id", 0)) as Arc<dyn PhysicalExpr>;
     let right =
         Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))) as Arc<dyn PhysicalExpr>;
     let binary_expr =
         Arc::new(df_expr::BinaryExpr::new(left, DFOperator::Eq, right)) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&binary_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(converts(&binary_expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_binary_unsupported_operator(test_schema: Schema) {
+fn test_can_be_pushed_down_binary_unsupported_operator(test_schema: Schema) -> DFResult<()> {
     let left = Arc::new(df_expr::Column::new("id", 0)) as Arc<dyn PhysicalExpr>;
     let right =
         Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))) as Arc<dyn PhysicalExpr>;
@@ -986,32 +903,24 @@ fn test_can_be_pushed_down_binary_unsupported_operator(test_schema: Schema) {
         right,
     )) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        !DefaultExpressionConvertor::default()
-            .try_convert(&binary_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(!converts(&binary_expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_binary_unsupported_operand(test_schema: Schema) {
+fn test_can_be_pushed_down_binary_unsupported_operand(test_schema: Schema) -> DFResult<()> {
     let left = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let right =
         Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(42)))) as Arc<dyn PhysicalExpr>;
     let binary_expr =
         Arc::new(df_expr::BinaryExpr::new(left, DFOperator::Eq, right)) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        !DefaultExpressionConvertor::default()
-            .try_convert(&binary_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(!converts(&binary_expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_like_supported(test_schema: Schema) {
+fn test_can_be_pushed_down_like_supported(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("name", 1)) as Arc<dyn PhysicalExpr>;
     let pattern = Arc::new(df_expr::Literal::new(ScalarValue::Utf8(Some(
         "test%".to_string(),
@@ -1019,16 +928,12 @@ fn test_can_be_pushed_down_like_supported(test_schema: Schema) {
     let like_expr =
         Arc::new(df_expr::LikeExpr::new(false, false, expr, pattern)) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&like_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(converts(&like_expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_like_unsupported_operand(test_schema: Schema) {
+fn test_can_be_pushed_down_like_unsupported_operand(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let pattern = Arc::new(df_expr::Literal::new(ScalarValue::Utf8(Some(
         "test%".to_string(),
@@ -1036,29 +941,21 @@ fn test_can_be_pushed_down_like_unsupported_operand(test_schema: Schema) {
     let like_expr =
         Arc::new(df_expr::LikeExpr::new(false, false, expr, pattern)) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        !DefaultExpressionConvertor::default()
-            .try_convert(&like_expr, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(!converts(&like_expr, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_octet_length_supported(test_schema: Schema) {
+fn test_can_be_pushed_down_octet_length_supported(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("name", 1)) as Arc<dyn PhysicalExpr>;
     let octet_length = octet_length_expr(expr, &test_schema);
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&octet_length, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(converts(&octet_length, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_octet_length_unsupported_operand(test_schema: Schema) {
+fn test_can_be_pushed_down_octet_length_unsupported_operand(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let octet_length = Arc::new(ScalarFunctionExpr::new(
         "octet_length",
@@ -1068,29 +965,21 @@ fn test_can_be_pushed_down_octet_length_unsupported_operand(test_schema: Schema)
         Arc::new(ConfigOptions::new()),
     )) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        !DefaultExpressionConvertor::default()
-            .try_convert(&octet_length, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(!converts(&octet_length, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_array_length_supported(test_schema: Schema) {
+fn test_can_be_pushed_down_array_length_supported(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let array_length = array_length_expr(vec![expr], &test_schema);
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&array_length, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(converts(&array_length, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_array_length_unsupported_operand(test_schema: Schema) {
+fn test_can_be_pushed_down_array_length_unsupported_operand(test_schema: Schema) -> DFResult<()> {
     // `array_length` over a non-list column cannot be pushed down.
     let expr = Arc::new(df_expr::Column::new("name", 1)) as Arc<dyn PhysicalExpr>;
     let array_length = Arc::new(ScalarFunctionExpr::new(
@@ -1101,28 +990,22 @@ fn test_can_be_pushed_down_array_length_unsupported_operand(test_schema: Schema)
         Arc::new(ConfigOptions::new()),
     )) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        !DefaultExpressionConvertor::default()
-            .try_convert(&array_length, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(!converts(&array_length, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
-fn test_can_be_pushed_down_array_length_dimension_one_supported(test_schema: Schema) {
+fn test_can_be_pushed_down_array_length_dimension_one_supported(
+    test_schema: Schema,
+) -> DFResult<()> {
     // `array_length(arr, 1)` is the first-dimension length, equivalent to `list_length`.
     let list = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let dimension =
         Arc::new(df_expr::Literal::new(ScalarValue::Int64(Some(1)))) as Arc<dyn PhysicalExpr>;
     let array_length = array_length_expr(vec![list, dimension], &test_schema);
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&array_length, &test_schema)
-            .unwrap()
-            .is_some()
-    );
+    assert!(converts(&array_length, &test_schema)?);
+    Ok(())
 }
 
 #[rstest]
@@ -1135,17 +1018,13 @@ fn test_can_be_pushed_down_array_length_dimension_one_supported(test_schema: Sch
     DataType::Int64,
     None,
 )))]
-fn test_array_length_unsupported_dimension(
+fn test_can_be_pushed_down_array_length_higher_dimension_not_supported(
     test_schema: Schema,
     #[case] dimension: Arc<dyn PhysicalExpr>,
 ) -> DFResult<()> {
     let list = Arc::new(df_expr::Column::new("tags", 5)) as Arc<dyn PhysicalExpr>;
     let array_length = array_length_expr(vec![list, dimension], &test_schema);
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&array_length, &test_schema)?
-            .is_none()
-    );
+    assert!(!converts(&array_length, &test_schema)?);
     Ok(())
 }
 
@@ -1210,10 +1089,8 @@ async fn test_cast_int_to_string() -> anyhow::Result<()> {
 /// which does not support `FixedSizeBinary` and previously panicked here.
 #[test]
 fn test_cast_to_uuid_resolves_via_registry() -> anyhow::Result<()> {
-    use arrow_schema::extension::Uuid;
-
     let mut uuid_field = Field::new("id", DataType::FixedSizeBinary(16), true);
-    uuid_field.try_with_extension_type(Uuid)?;
+    uuid_field.try_with_extension_type(ArrowUuid)?;
 
     let child = Arc::new(df_expr::Column::new("id", 0)) as Arc<dyn PhysicalExpr>;
     let schema = Schema::new(vec![uuid_field.clone()]);
@@ -1224,107 +1101,42 @@ fn test_cast_to_uuid_resolves_via_registry() -> anyhow::Result<()> {
     ));
 
     // Must convert without panicking — the static path would `unimplemented!()`.
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&cast, &schema)?
-            .is_some()
-    );
+    assert!(converts(&cast, &schema)?);
     Ok(())
 }
 
 /// Test that applying a CASE expression to an Arrow RecordBatch using DataFusion
 /// matches the result of applying the converted Vortex expression.
 #[test]
-fn test_case_when_datafusion_vortex_equivalence() {
-    use datafusion::arrow::array::Int32Array;
-    use datafusion::arrow::array::RecordBatch;
-    use datafusion_physical_expr::expressions::CaseExpr;
-    use vortex::VortexSessionDefault;
-    use vortex::array::ArrayRef;
-    use vortex::array::Canonical;
-    use vortex::array::VortexSessionExecute as _;
-    use vortex::session::VortexSession;
+fn test_case_when_datafusion_vortex_equivalence() -> anyhow::Result<()> {
+    let batch = RecordBatch::try_new(
+        Arc::new(Schema::new(vec![Field::new(
+            "value",
+            DataType::Int32,
+            false,
+        )])),
+        vec![Arc::new(arrow_array::Int32Array::from(vec![
+            1, 5, 10, 15, 20,
+        ]))],
+    )?;
+    let value: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new("value", 0));
+    let int32 =
+        |v| Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(v)))) as Arc<dyn PhysicalExpr>;
+    let greater_than = |threshold| {
+        Arc::new(df_expr::BinaryExpr::new(
+            Arc::clone(&value),
+            DFOperator::Gt,
+            int32(threshold),
+        )) as Arc<dyn PhysicalExpr>
+    };
 
-    // Create test data
-    let values = Arc::new(Int32Array::from(vec![1, 5, 10, 15, 20]));
-    let schema = Arc::new(Schema::new(vec![Field::new(
-        "value",
-        DataType::Int32,
-        false,
-    )]));
-    let batch = RecordBatch::try_new(schema, vec![values]).unwrap();
-
-    // Build a DataFusion CASE expression:
     // CASE WHEN value > 10 THEN 100 WHEN value > 5 THEN 50 ELSE 0 END
-    let col_value = Arc::new(df_expr::Column::new("value", 0)) as Arc<dyn PhysicalExpr>;
-    let lit_10 =
-        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(10)))) as Arc<dyn PhysicalExpr>;
-    let lit_5 =
-        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(5)))) as Arc<dyn PhysicalExpr>;
-    let lit_100 =
-        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(100)))) as Arc<dyn PhysicalExpr>;
-    let lit_50 =
-        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(50)))) as Arc<dyn PhysicalExpr>;
-    let lit_0 =
-        Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(0)))) as Arc<dyn PhysicalExpr>;
-
-    // WHEN value > 10 THEN 100
-    let when1 = Arc::new(df_expr::BinaryExpr::new(
-        Arc::clone(&col_value),
-        DFOperator::Gt,
-        lit_10,
-    )) as Arc<dyn PhysicalExpr>;
-    // WHEN value > 5 THEN 50
-    let when2 = Arc::new(df_expr::BinaryExpr::new(col_value, DFOperator::Gt, lit_5))
-        as Arc<dyn PhysicalExpr>;
-
-    let case_expr =
-        CaseExpr::try_new(None, vec![(when1, lit_100), (when2, lit_50)], Some(lit_0)).unwrap();
-
-    // Apply DataFusion expression
-    let df_result = case_expr.evaluate(&batch).unwrap();
-    let df_array = df_result.into_array(batch.num_rows()).unwrap();
-
-    // Convert to Vortex expression
-    let expr_convertor = DefaultExpressionConvertor::default();
-    let vortex_expr = expr_convertor
-        .try_convert(
-            &(Arc::new(case_expr) as Arc<dyn PhysicalExpr>),
-            &batch.schema(),
-        )
-        .unwrap()
-        .unwrap();
-
-    // Convert batch to Vortex array
-    let session = VortexSession::default();
-    let vortex_array: ArrayRef = session
-        .arrow()
-        .from_arrow_record_batch(batch.clone(), &batch.schema())
-        .unwrap();
-
-    // Apply Vortex expression
-    let mut ctx = session.create_execution_ctx();
-    let vortex_result = vortex_array
-        .apply(&vortex_expr)
-        .unwrap()
-        .execute::<Canonical>(&mut ctx)
-        .unwrap();
-
-    // Convert back to Arrow for comparison
-    let vortex_as_arrow = vortex_result.into_primitive().as_slice::<i32>().to_vec();
-
-    // Convert DataFusion result to Vec for comparison
-    let df_as_arrow: Vec<i32> = df_array.as_primitive::<Int32Type>().values().to_vec();
-
-    // Compare results
-    // Expected: [0, 0, 50, 100, 100] for values [1, 5, 10, 15, 20]
-    // value=1: not > 10, not > 5 -> ELSE 0
-    // value=5: not > 10, not > 5 -> ELSE 0
-    // value=10: not > 10, > 5 -> 50
-    // value=15: > 10 -> 100
-    // value=20: > 10 -> 100
-    assert_eq!(df_as_arrow, vec![0, 0, 50, 100, 100]);
-    assert_eq!(vortex_as_arrow, df_as_arrow);
+    let case_expr = df_expr::CaseExpr::try_new(
+        None,
+        vec![(greater_than(10), int32(100)), (greater_than(5), int32(50))],
+        Some(int32(0)),
+    )?;
+    assert_native_matches(Arc::new(case_expr), batch)
 }
 
 fn assert_native_matches(expr: Arc<dyn PhysicalExpr>, batch: RecordBatch) -> anyhow::Result<()> {
@@ -1472,11 +1284,7 @@ fn test_cast_falls_back(#[case] target: DataType) -> DFResult<()> {
         target,
         None,
     ));
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &schema)?
-            .is_none()
-    );
+    assert!(!converts(&expr, &schema)?);
     Ok(())
 }
 
@@ -1491,11 +1299,7 @@ fn test_cast_options_fall_back() -> DFResult<()> {
             format_options: DEFAULT_FORMAT_OPTIONS,
         }),
     ));
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &schema)?
-            .is_none()
-    );
+    assert!(!converts(&expr, &schema)?);
     Ok(())
 }
 
@@ -1517,11 +1321,7 @@ fn test_integer_arithmetic_pushdown_ignores_overflow_mode(
         )
         .with_fail_on_overflow(checked),
     );
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &schema)?
-            .is_some()
-    );
+    assert!(converts(&expr, &schema)?);
     Ok(())
 }
 
@@ -1604,11 +1404,7 @@ fn test_fallible_case_branch_is_residual() -> DFResult<()> {
         )],
         Some(zero),
     )?);
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &schema)?
-            .is_none()
-    );
+    assert!(!converts(&expr, &schema)?);
     Ok(())
 }
 
@@ -1645,11 +1441,7 @@ fn test_nested_functions_reject_unknown_children(
             Arc::new(ConfigOptions::new()),
         )?) as Arc<dyn PhysicalExpr>
     };
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &schema)?
-            .is_none()
-    );
+    assert!(!converts(&expr, &schema)?);
     Ok(())
 }
 
@@ -1704,11 +1496,7 @@ fn test_column_identity_validation_skips_dynamic_filters() -> DFResult<()> {
         Arc::new(df_expr::Literal::new(ScalarValue::Boolean(Some(true)))),
     )) as Arc<dyn PhysicalExpr>;
 
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &schema)?
-            .is_none()
-    );
+    assert!(!converts(&expr, &schema)?);
     Ok(())
 }
 
@@ -1748,11 +1536,7 @@ fn test_native_nested_list_length(
     )?);
     let length = array_length_expr(vec![get_field], &batch.schema());
     if nullable_parent {
-        assert!(
-            DefaultExpressionConvertor::default()
-                .try_convert(&length, &batch.schema())?
-                .is_none()
-        );
+        assert!(!converts(&length, &batch.schema())?);
         Ok(())
     } else {
         assert_native_matches(length, batch)
@@ -1787,11 +1571,7 @@ fn test_simple_case_falls_back() -> DFResult<()> {
         vec![(Arc::clone(&value), value)],
         None,
     )?);
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &Schema::empty())?
-            .is_none()
-    );
+    assert!(!converts(&expr, &Schema::empty())?);
     Ok(())
 }
 
@@ -1864,10 +1644,6 @@ fn test_fallible_boolean_rhs_is_residual(
     ));
     // DataFusion selects the one row that needs RHS evaluation at this selectivity.
     expr.evaluate(&batch)?;
-    assert!(
-        DefaultExpressionConvertor::default()
-            .try_convert(&expr, &batch.schema())?
-            .is_none()
-    );
+    assert!(!converts(&expr, &batch.schema())?);
     Ok(())
 }

@@ -3,22 +3,33 @@
 
 use std::sync::Arc;
 
+use arrow_array::Array;
+use arrow_array::ArrayRef as ArrowArrayRef;
 use arrow_array::StructArray;
 use arrow_schema::Field;
 use arrow_schema::Fields;
 use datafusion_common::ScalarValue;
+use vortex::array::VortexSessionExecute;
+use vortex::buffer::ByteBuffer;
 use vortex::dtype::DType;
+use vortex::dtype::DecimalDType;
 use vortex::dtype::NativeDecimalType;
+use vortex::dtype::Nullability;
 use vortex::dtype::PType;
 use vortex::dtype::half::f16;
 use vortex::dtype::i256;
+use vortex::error::VortexExpect;
 use vortex::error::VortexResult;
 use vortex::error::vortex_bail;
 use vortex::error::vortex_err;
+use vortex::error::vortex_panic;
 use vortex::extension::datetime::AnyTemporal;
 use vortex::extension::datetime::TemporalMetadata;
 use vortex::extension::datetime::TimeUnit;
+use vortex::scalar::DecimalValue;
 use vortex::scalar::Scalar;
+use vortex::session::VortexSession;
+use vortex_arrow::ArrowSessionExt;
 
 use crate::convert::TryToDataFusion;
 
@@ -174,6 +185,139 @@ impl TryToDataFusion<ScalarValue> for Scalar {
     }
 }
 
+/// Converts a DataFusion [`ScalarValue`] to a Vortex [`Scalar`], resolving Arrow types through
+/// `session`'s [`ArrowSession`](vortex_arrow::ArrowSession).
+pub fn scalar_from_df(value: &ScalarValue, session: &VortexSession) -> Scalar {
+    let arrow = session.arrow();
+    match value {
+        ScalarValue::Null => Scalar::null(DType::Null),
+        ScalarValue::Boolean(b) => b
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Bool(Nullability::Nullable))),
+        ScalarValue::Float16(f) => f
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::F16, Nullability::Nullable))),
+        ScalarValue::Float32(f) => f
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::F32, Nullability::Nullable))),
+        ScalarValue::Float64(f) => f
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::F64, Nullability::Nullable))),
+        ScalarValue::Int8(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::I8, Nullability::Nullable))),
+        ScalarValue::Int16(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::I16, Nullability::Nullable))),
+        ScalarValue::Int32(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable))),
+        ScalarValue::Int64(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::I64, Nullability::Nullable))),
+        ScalarValue::UInt8(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::U8, Nullability::Nullable))),
+        ScalarValue::UInt16(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::U16, Nullability::Nullable))),
+        ScalarValue::UInt32(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::U32, Nullability::Nullable))),
+        ScalarValue::UInt64(i) => i
+            .map(Scalar::from)
+            .unwrap_or_else(|| Scalar::null(DType::Primitive(PType::U64, Nullability::Nullable))),
+        ScalarValue::Utf8(s) | ScalarValue::Utf8View(s) | ScalarValue::LargeUtf8(s) => s
+            .as_ref()
+            .map(|s| Scalar::from(s.as_str()))
+            .unwrap_or_else(|| Scalar::null(DType::Utf8(Nullability::Nullable))),
+        ScalarValue::Binary(b)
+        | ScalarValue::BinaryView(b)
+        | ScalarValue::LargeBinary(b)
+        | ScalarValue::FixedSizeBinary(_, b) => b
+            .as_ref()
+            .map(|b| Scalar::binary(ByteBuffer::from(b.clone()), Nullability::Nullable))
+            .unwrap_or_else(|| Scalar::null(DType::Binary(Nullability::Nullable))),
+        ScalarValue::Date32(v)
+        | ScalarValue::Time32Second(v)
+        | ScalarValue::Time32Millisecond(v) => {
+            let dtype = arrow
+                .from_arrow_datatype(&value.data_type(), Nullability::Nullable)
+                .vortex_expect("arrow data type to dtype");
+            Scalar::try_new(dtype, v.map(vortex::scalar::ScalarValue::from))
+                .vortex_expect("unable to create a time `Scalar`")
+        }
+        ScalarValue::Date64(v)
+        | ScalarValue::Time64Microsecond(v)
+        | ScalarValue::Time64Nanosecond(v)
+        | ScalarValue::TimestampSecond(v, _)
+        | ScalarValue::TimestampMillisecond(v, _)
+        | ScalarValue::TimestampMicrosecond(v, _)
+        | ScalarValue::TimestampNanosecond(v, _) => {
+            let dtype = arrow
+                .from_arrow_datatype(&value.data_type(), Nullability::Nullable)
+                .vortex_expect("arrow data type to dtype");
+            Scalar::try_new(dtype, v.map(vortex::scalar::ScalarValue::from))
+                .vortex_expect("unable to create a time `Scalar`")
+        }
+        ScalarValue::Decimal32(decimal, precision, scale) => {
+            let decimal_dtype = DecimalDType::new(*precision, *scale);
+            let nullable = Nullability::Nullable;
+            if let Some(value) = decimal {
+                Scalar::decimal(
+                    DecimalValue::I32(*value),
+                    decimal_dtype,
+                    Nullability::Nullable,
+                )
+            } else {
+                Scalar::null(DType::Decimal(decimal_dtype, nullable))
+            }
+        }
+        ScalarValue::Decimal64(decimal, precision, scale) => {
+            let decimal_dtype = DecimalDType::new(*precision, *scale);
+            let nullable = Nullability::Nullable;
+            if let Some(value) = decimal {
+                Scalar::decimal(
+                    DecimalValue::I64(*value),
+                    decimal_dtype,
+                    Nullability::Nullable,
+                )
+            } else {
+                Scalar::null(DType::Decimal(decimal_dtype, nullable))
+            }
+        }
+        ScalarValue::Decimal128(decimal, precision, scale) => {
+            let decimal_dtype = DecimalDType::new(*precision, *scale);
+            let nullable = Nullability::Nullable;
+            if let Some(value) = decimal {
+                Scalar::decimal(
+                    DecimalValue::I128(*value),
+                    decimal_dtype,
+                    Nullability::Nullable,
+                )
+            } else {
+                Scalar::null(DType::Decimal(decimal_dtype, nullable))
+            }
+        }
+        ScalarValue::Decimal256(decimal, precision, scale) => {
+            let decimal_dtype = DecimalDType::new(*precision, *scale);
+            let nullable = Nullability::Nullable;
+            if let Some(value) = decimal {
+                Scalar::decimal(
+                    DecimalValue::I256(i256::from_le_bytes(value.to_le_bytes())),
+                    decimal_dtype,
+                    Nullability::Nullable,
+                )
+            } else {
+                Scalar::null(DType::Decimal(decimal_dtype, nullable))
+            }
+        }
+        ScalarValue::Dictionary(_, v) => scalar_from_df(v.as_ref(), session),
+        ScalarValue::Struct(array) => struct_from_df(array, session),
+        _ => unimplemented!("Can't convert {value:?} value to a Vortex scalar"),
+    }
+}
+
 /// Converts a Vortex struct scalar to a DataFusion `ScalarValue::Struct`.
 fn struct_to_df(scalar: &Scalar) -> VortexResult<ScalarValue> {
     let scalar = scalar.as_struct();
@@ -215,11 +359,44 @@ fn struct_to_df(scalar: &Scalar) -> VortexResult<ScalarValue> {
     Ok(ScalarValue::Struct(Arc::new(struct_array)))
 }
 
+/// Converts a DataFusion `ScalarValue::Struct` (a one-row struct array) to a Vortex struct scalar.
+///
+/// The struct dtype comes from the Arrow `Fields`, so the children must be converted from those
+/// same fields. Going through `ScalarValue` instead would drop each field's `ARROW:extension:name`
+/// (and its declared nullability), yielding storage-typed children that
+/// [`Scalar::struct_`] rejects against an extension-typed struct dtype.
+fn struct_from_df(array: &StructArray, session: &VortexSession) -> Scalar {
+    let arrow = session.arrow();
+    let dtype = arrow
+        .from_arrow_datatype(array.data_type(), Nullability::Nullable)
+        .vortex_expect("arrow data type to dtype");
+    if array.is_null(0) {
+        Scalar::null(dtype)
+    } else {
+        let mut ctx = session.create_execution_ctx();
+        let children = array
+            .columns()
+            .iter()
+            .zip(array.fields().iter())
+            .map(|(column, field)| {
+                arrow
+                    .from_arrow_array(ArrowArrayRef::clone(column), field)
+                    .and_then(|column| column.execute_scalar(0, &mut ctx))
+                    .unwrap_or_else(|e| {
+                        vortex_panic!("cannot convert struct field to a Vortex scalar: {e}")
+                    })
+            })
+            .collect::<Vec<_>>();
+        Scalar::struct_(dtype, children)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use datafusion_common::ScalarValue;
     use datafusion_common::arrow::datatypes::i256 as arrow_i256;
     use rstest::rstest;
+    use vortex::VortexSessionDefault;
     use vortex::buffer::ByteBuffer;
     use vortex::dtype::DType;
     use vortex::dtype::DecimalDType;
@@ -233,6 +410,11 @@ mod tests {
     use vortex::scalar::Scalar;
 
     use super::*;
+
+    /// Test shim: convert with a default `VortexSession` passed explicitly.
+    fn from_df(value: &ScalarValue) -> Scalar {
+        scalar_from_df(value, &VortexSession::default())
+    }
 
     #[rstest]
     #[case::u8_some(Scalar::from(42u8), ScalarValue::UInt8(Some(42)))]
@@ -389,6 +571,160 @@ mod tests {
     }
 
     #[rstest]
+    #[case::from_df_null(ScalarValue::Null, Scalar::null(DType::Null))]
+    #[case::from_df_bool_some(ScalarValue::Boolean(Some(true)), Scalar::from(true))]
+    #[case::from_df_bool_null(
+        ScalarValue::Boolean(None),
+        Scalar::null(DType::Bool(Nullability::Nullable))
+    )]
+    #[case::from_df_i32_some(ScalarValue::Int32(Some(42)), Scalar::from(42i32))]
+    #[case::from_df_i32_null(
+        ScalarValue::Int32(None),
+        Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable))
+    )]
+    #[case::from_df_f64_some(ScalarValue::Float64(Some(2.5)), Scalar::from(2.5f64))]
+    #[case::from_df_f64_null(
+        ScalarValue::Float64(None),
+        Scalar::null(DType::Primitive(PType::F64, Nullability::Nullable))
+    )]
+    #[case::from_df_utf8_some(ScalarValue::Utf8(Some("test".to_string())), Scalar::from("test"))]
+    #[case::from_df_utf8_null(
+        ScalarValue::Utf8(None),
+        Scalar::null(DType::Utf8(Nullability::Nullable))
+    )]
+    #[case::from_df_binary_some(ScalarValue::Binary(Some(vec![1, 2, 3])), Scalar::binary(ByteBuffer::from(vec![1u8, 2, 3]), Nullability::Nullable))]
+    #[case::from_df_binary_null(
+        ScalarValue::Binary(None),
+        Scalar::null(DType::Binary(Nullability::Nullable))
+    )]
+    fn test_from_datafusion_scalars(
+        #[case] df_scalar: ScalarValue,
+        #[case] expected_vortex: Scalar,
+    ) {
+        let result = from_df(&df_scalar);
+        assert_eq!(result.dtype(), expected_vortex.dtype());
+        assert_eq!(result.is_null(), expected_vortex.is_null());
+
+        // For non-null values, convert both back to DataFusion for comparison
+        if !result.is_null() {
+            let result_df = result.try_to_df().unwrap();
+            let expected_df = expected_vortex.try_to_df().unwrap();
+            assert_eq!(result_df, expected_df);
+        }
+    }
+
+    #[rstest]
+    #[case::decimal128_some(ScalarValue::Decimal128(Some(12345), 10, 2))]
+    #[case::decimal128_null(ScalarValue::Decimal128(None, 10, 2))]
+    #[case::decimal256_some(ScalarValue::Decimal256(Some(arrow_i256::from_i128(12345)), 50, 10))]
+    #[case::decimal256_null(ScalarValue::Decimal256(None, 50, 10))]
+    fn test_from_datafusion_decimals(#[case] df_scalar: ScalarValue) {
+        let result = from_df(&df_scalar);
+        match &df_scalar {
+            ScalarValue::Decimal128(value, precision, scale) => {
+                if let DType::Decimal(decimal_type, _) = result.dtype() {
+                    assert_eq!(decimal_type.precision(), *precision);
+                    assert_eq!(decimal_type.scale(), *scale);
+                    if value.is_some() {
+                        assert!(!result.is_null());
+                    } else {
+                        assert!(result.is_null());
+                    }
+                } else {
+                    panic!("Expected decimal type");
+                }
+            }
+            ScalarValue::Decimal256(value, precision, scale) => {
+                if let DType::Decimal(decimal_type, _) = result.dtype() {
+                    assert_eq!(decimal_type.precision(), *precision);
+                    assert_eq!(decimal_type.scale(), *scale);
+                    if value.is_some() {
+                        assert!(!result.is_null());
+                    } else {
+                        assert!(result.is_null());
+                    }
+                } else {
+                    panic!("Expected decimal type");
+                }
+            }
+            _ => panic!("Unexpected scalar type"),
+        }
+    }
+
+    #[rstest]
+    #[case::date32(ScalarValue::Date32(Some(18628)))] // 2021-01-01
+    #[case::date64(ScalarValue::Date64(Some(1609459200000)))] // 2021-01-01 in milliseconds
+    #[case::time32_second(ScalarValue::Time32Second(Some(3661)))] // 01:01:01
+    #[case::time32_millisecond(ScalarValue::Time32Millisecond(Some(3661000)))] // 01:01:01
+    #[case::time64_microsecond(ScalarValue::Time64Microsecond(Some(3661000000)))] // 01:01:01
+    #[case::time64_nanosecond(ScalarValue::Time64Nanosecond(Some(3661000000000)))] // 01:01:01
+    #[case::timestamp_second(ScalarValue::TimestampSecond(Some(1609459200), None))]
+    #[case::timestamp_millisecond(ScalarValue::TimestampMillisecond(Some(1609459200000), None))]
+    #[case::timestamp_microsecond(ScalarValue::TimestampMicrosecond(Some(1609459200000000), None))]
+    #[case::timestamp_nanosecond(ScalarValue::TimestampNanosecond(
+        Some(1609459200000000000),
+        None
+    ))]
+    fn test_from_datafusion_temporals(#[case] df_scalar: ScalarValue) {
+        let result = from_df(&df_scalar);
+
+        // All temporal types should convert to extension types
+        if let DType::Extension(_) = result.dtype() {
+            assert!(!result.is_null());
+        } else {
+            panic!(
+                "Expected extension type for temporal scalar, got: {:?}",
+                result.dtype()
+            );
+        }
+    }
+
+    #[rstest]
+    #[case::u32(Scalar::from(42u32))]
+    #[case::i64(Scalar::from(-123i64))]
+    #[case::f64(Scalar::from(2.5f64))]
+    #[case::bool(Scalar::from(true))]
+    #[case::utf8(Scalar::from("hello world"))]
+    #[case::null_type(Scalar::null(DType::Null))]
+    #[case::null_i32(Scalar::null(DType::Primitive(PType::I32, Nullability::Nullable)))]
+    #[case::decimal128(Scalar::decimal(
+        DecimalValue::I128(12345),
+        DecimalDType::new(10, 2),
+        Nullability::NonNullable
+    ))]
+    #[case::binary(Scalar::binary(ByteBuffer::from(vec![1u8, 2, 3, 4, 5]), Nullability::NonNullable))]
+    fn test_round_trip_conversions(#[case] original: Scalar) {
+        let df_scalar = original.try_to_df().unwrap();
+        let round_trip = from_df(&df_scalar);
+
+        // Check that core types match (ignoring nullability differences that can occur in round-trip)
+        assert!(
+            original.dtype().eq_ignore_nullability(round_trip.dtype()),
+            "DType mismatch for scalar: {:?} vs {:?}",
+            original.dtype(),
+            round_trip.dtype()
+        );
+
+        assert_eq!(
+            original.is_null(),
+            round_trip.is_null(),
+            "Null status mismatch for scalar: {:?}",
+            original
+        );
+
+        if !original.is_null() {
+            // For non-null values, compare by converting both to DataFusion scalars
+            let original_df = original.try_to_df().unwrap();
+            let round_trip_df = round_trip.try_to_df().unwrap();
+            assert_eq!(
+                original_df, round_trip_df,
+                "Value mismatch for scalar: {:?}",
+                original
+            );
+        }
+    }
+
+    #[rstest]
     #[case::null_type(Scalar::null(DType::Null), ScalarValue::Null)]
     #[case::null_bool(
         Scalar::null(DType::Bool(Nullability::Nullable)),
@@ -422,16 +758,80 @@ mod tests {
         Scalar::null(DType::Decimal(DecimalDType::new(5, 2), Nullability::Nullable)),
         ScalarValue::Decimal32(None, 5, 2)
     )]
-    fn test_null_handling(
-        #[case] vortex_null: Scalar,
-        #[case] expected_df_null: ScalarValue,
-    ) -> VortexResult<()> {
-        assert_eq!(vortex_null.try_to_df()?, expected_df_null);
+    fn test_null_handling(#[case] vortex_null: Scalar, #[case] expected_df_null: ScalarValue) {
+        // Test Vortex -> DataFusion
+        let df_result = vortex_null.try_to_df().unwrap();
+        assert_eq!(df_result, expected_df_null);
+
+        // Test DataFusion -> Vortex
+        let vortex_result = from_df(&expected_df_null);
+        assert!(vortex_result.is_null());
+        assert!(
+            vortex_result
+                .dtype()
+                .eq_ignore_nullability(vortex_null.dtype())
+        );
+    }
+
+    #[rstest]
+    #[case::utf8(ScalarValue::Utf8(Some("test string".to_string())))]
+    #[case::utf8_view(ScalarValue::Utf8View(Some("test string".to_string())))]
+    #[case::large_utf8(ScalarValue::LargeUtf8(Some("test string".to_string())))]
+    fn test_utf8_variants(#[case] variant: ScalarValue) {
+        let result = from_df(&variant);
+        assert_eq!(result.as_utf8().value().unwrap().as_str(), "test string");
+    }
+
+    #[rstest]
+    #[case::binary(ScalarValue::Binary(Some(vec![1u8, 2, 3, 4, 5])))]
+    #[case::binary_view(ScalarValue::BinaryView(Some(vec![1u8, 2, 3, 4, 5])))]
+    #[case::large_binary(ScalarValue::LargeBinary(Some(vec![1u8, 2, 3, 4, 5])))]
+    #[case::fixed_size_binary(ScalarValue::FixedSizeBinary(5, Some(vec![1u8, 2, 3, 4, 5])))]
+    fn test_binary_variants(#[case] variant: ScalarValue) {
+        let result = from_df(&variant);
+        let result_bytes: Vec<u8> = result
+            .as_binary()
+            .value()
+            .cloned()
+            .unwrap()
+            .into_bytes()
+            .into();
+        assert_eq!(result_bytes, vec![1u8, 2, 3, 4, 5]);
+    }
+
+    /// A DataFusion struct whose child field carries Arrow extension metadata: the struct dtype
+    /// derived from the Arrow type keeps the extension, so the child scalars must keep it too or
+    /// `Scalar::struct_` rejects them.
+    #[test]
+    fn struct_from_df_preserves_extension_child() -> VortexResult<()> {
+        use arrow_array::FixedSizeBinaryArray;
+        use arrow_schema::DataType;
+        use arrow_schema::extension::Uuid as ArrowUuid;
+        use vortex::extension::uuid::Uuid;
+
+        let mut id_field = Field::new("id", DataType::FixedSizeBinary(16), false);
+        id_field.try_with_extension_type(ArrowUuid)?;
+        let ids = FixedSizeBinaryArray::try_from_iter([*b"0123456789abcdef"].into_iter())?;
+        let struct_array = StructArray::try_new(
+            Fields::from(vec![Arc::new(id_field)]),
+            vec![Arc::new(ids) as ArrowArrayRef],
+            None,
+        )?;
+
+        let scalar = from_df(&ScalarValue::Struct(Arc::new(struct_array)));
+        let DType::Struct(fields, _) = scalar.dtype() else {
+            panic!("expected a struct dtype, got {}", scalar.dtype());
+        };
+        let id_dtype = fields.field_by_index(0).vortex_expect("one field");
+        assert!(
+            id_dtype.as_extension().is::<Uuid>(),
+            "expected a Uuid extension field, got {id_dtype}"
+        );
         Ok(())
     }
 
     #[test]
-    fn test_struct_scalar_to_datafusion() -> VortexResult<()> {
+    fn struct_scalar_round_trips() -> VortexResult<()> {
         let dtype = DType::Struct(
             StructFields::new(
                 FieldNames::from(["x", "y"]),
@@ -447,27 +847,17 @@ mod tests {
             vec![Scalar::from(-111.7610f64), Scalar::from(34.8697f64)],
         );
 
-        let expected = StructArray::try_new(
-            vec![
-                Field::new("x", arrow_schema::DataType::Float64, false),
-                Field::new("y", arrow_schema::DataType::Float64, false),
-            ]
-            .into(),
-            vec![
-                Arc::new(arrow_array::Float64Array::from(vec![-111.7610])),
-                Arc::new(arrow_array::Float64Array::from(vec![34.8697])),
-            ],
-            None,
-        )?;
-        assert_eq!(
-            original.try_to_df()?,
-            ScalarValue::Struct(Arc::new(expected))
-        );
+        let df = original.try_to_df()?;
+        assert!(matches!(df, ScalarValue::Struct(_)));
+
+        // Back through `from_df` and out again yields the identical DataFusion struct value.
+        let back = from_df(&df);
+        assert_eq!(back.try_to_df()?, df);
         Ok(())
     }
 
     #[test]
-    fn test_null_struct_scalar_to_datafusion() -> VortexResult<()> {
+    fn null_struct_scalar_round_trips() -> VortexResult<()> {
         let dtype = DType::Struct(
             StructFields::new(
                 FieldNames::from(["x", "y"]),
@@ -481,7 +871,7 @@ mod tests {
 
         let df = Scalar::null(dtype).try_to_df()?;
         assert!(matches!(df, ScalarValue::Struct(_)));
-        assert!(df.is_null());
+        assert!(from_df(&df).is_null());
         Ok(())
     }
 

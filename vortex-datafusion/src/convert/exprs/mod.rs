@@ -6,6 +6,7 @@ use std::sync::Arc;
 use arrow_schema::DataType;
 use arrow_schema::Field;
 use arrow_schema::Schema;
+use datafusion_common::DataFusionError;
 use datafusion_common::Result as DFResult;
 use datafusion_common::ScalarValue;
 use datafusion_common::exec_datafusion_err;
@@ -17,7 +18,6 @@ use datafusion_functions_nested::length::ArrayLength;
 use datafusion_physical_expr::DynamicFilterTracking;
 use datafusion_physical_expr::PhysicalExpr;
 use datafusion_physical_expr::ScalarFunctionExpr;
-use datafusion_physical_expr::projection::ProjectionExpr;
 use datafusion_physical_expr::projection::ProjectionExprs;
 use datafusion_physical_expr::utils::collect_columns;
 use datafusion_physical_plan::expressions as df_expr;
@@ -70,26 +70,32 @@ pub struct ProcessedProjection {
 ///
 /// # Implementing a custom convertor
 ///
-///     use std::sync::Arc;
+/// ```
+/// use std::sync::Arc;
 ///
-///     use arrow_schema::Schema;
-///     use datafusion_common::Result as DFResult;
-///     use datafusion_physical_expr::PhysicalExpr;
-///     use vortex::expr::Expression;
-///     use vortex_datafusion::convert::DefaultExpressionConvertor;
-///     use vortex_datafusion::convert::ExpressionConvertor;
+/// use arrow_schema::Schema;
+/// use datafusion_common::Result as DFResult;
+/// use datafusion_physical_expr::PhysicalExpr;
+/// use vortex::expr::Expression;
+/// use vortex_datafusion::convert::DefaultExpressionConvertor;
+/// use vortex_datafusion::convert::ExpressionConvertor;
 ///
-///     struct CustomExpressionConvertor(DefaultExpressionConvertor);
+/// struct CustomExpressionConvertor(DefaultExpressionConvertor);
 ///
-///     impl ExpressionConvertor for CustomExpressionConvertor {
-///         fn try_convert(
-///             &self,
-///             expr: &Arc<dyn PhysicalExpr>,
-///             schema: &Schema,
-///         ) -> DFResult<Option<Expression>> {
-///             self.0.try_convert(expr, schema)
-///         }
+/// impl ExpressionConvertor for CustomExpressionConvertor {
+///     fn try_convert(
+///         &self,
+///         expr: &Arc<dyn PhysicalExpr>,
+///         schema: &Schema,
+///     ) -> DFResult<Option<Expression>> {
+///         self.0.try_convert(expr, schema)
 ///     }
+/// }
+///
+/// let _convertor: Arc<dyn ExpressionConvertor> = Arc::new(CustomExpressionConvertor(
+///     DefaultExpressionConvertor::default(),
+/// ));
+/// ```
 pub trait ExpressionConvertor: Send + Sync {
     /// Convert an expression for native evaluation against this schema.
     ///
@@ -102,7 +108,8 @@ pub trait ExpressionConvertor: Send + Sync {
         schema: &Schema,
     ) -> DFResult<Option<Expression>>;
 
-    /// Split a projection into native and DataFusion evaluation.
+    /// Split a projection into Vortex expressions that can be pushed down and leftover
+    /// DataFusion projections that need to be evaluated after the scan.
     ///
     /// If any expression is unsupported, evaluate the complete projection in DataFusion
     /// over deduplicated raw inputs. This avoids mixing input names with output aliases.
@@ -127,404 +134,107 @@ pub trait ExpressionConvertor: Send + Sync {
             };
             scan_projection.push((projection.alias.clone(), expr));
         }
+        // The output schema names its fields after the projection aliases.
+        let output_indices = (0..scan_projection.len()).collect_vec();
         Ok(ProcessedProjection {
             scan_projection: pack(scan_projection, Nullability::NonNullable),
             scan_reference_schema: output_schema.clone(),
-            leftover_projection: source_projection
-                .iter()
-                .enumerate()
-                .map(|(index, projection)| ProjectionExpr {
-                    expr: Arc::new(df_expr::Column::new(&projection.alias, index)),
-                    alias: projection.alias.clone(),
-                })
-                .collect::<Vec<_>>()
-                .into(),
+            leftover_projection: ProjectionExprs::from_indices(&output_indices, output_schema),
         })
     }
 
-    /// Read the required raw columns and apply the complete projection in DataFusion.
+    /// Create a projection that reads only the required columns without pushing down
+    /// any expressions. All projection logic is applied after the scan.
     fn no_pushdown_projection(
         &self,
         source_projection: ProjectionExprs,
         input_schema: &Schema,
     ) -> DFResult<ProcessedProjection> {
-        raw_projection(source_projection, input_schema)
+        let (scan_projection, scan_reference_schema) =
+            raw_projection(&source_projection.column_indices(), input_schema)?;
+        Ok(ProcessedProjection {
+            scan_projection,
+            scan_reference_schema,
+            leftover_projection: source_projection,
+        })
     }
 }
 
-/// Read raw columns in file-index order without involving custom expression conversion.
+/// Read the raw columns at `indices` in file order, without involving custom expression
+/// conversion. Returns the scan projection and the Arrow schema of its output.
 pub(crate) fn raw_projection(
-    source_projection: ProjectionExprs,
+    indices: &[usize],
     input_schema: &Schema,
-) -> DFResult<ProcessedProjection> {
-    let column_indices = source_projection.column_indices();
-    let mut scan_columns = Vec::with_capacity(column_indices.len());
-    let mut fields = Vec::with_capacity(column_indices.len());
-    for index in column_indices {
-        let field = input_schema.fields().get(index).ok_or_else(|| {
-            exec_datafusion_err!("Projection column index {index} is out of bounds")
-        })?;
-        scan_columns.push((
+) -> DFResult<(Expression, Schema)> {
+    let schema = input_schema.project(indices)?;
+    let scan_columns = schema.fields().iter().map(|field| {
+        (
             field.name().clone(),
             get_item(field.name().as_str(), root()),
-        ));
-        fields.push(Arc::clone(field));
-    }
-    Ok(ProcessedProjection {
-        scan_projection: pack(scan_columns, Nullability::NonNullable),
-        scan_reference_schema: Schema::new_with_metadata(fields, input_schema.metadata().clone()),
-        leftover_projection: source_projection,
-    })
+        )
+    });
+    Ok((pack(scan_columns, Nullability::NonNullable), schema))
 }
 
-/// The default schema-aware DataFusion expression convertor.
+/// Why an expression was not converted.
+enum Unconverted {
+    /// A valid expression that Vortex cannot evaluate; it stays in DataFusion.
+    Unsupported,
+    /// A malformed expression or a failed conversion.
+    Failed(DataFusionError),
+}
+
+impl From<DataFusionError> for Unconverted {
+    fn from(error: DataFusionError) -> Self {
+        Self::Failed(error)
+    }
+}
+
+/// Conversion result where `?` propagates both unsupported expressions and errors.
+type Conversion<T> = Result<T, Unconverted>;
+
+/// The default [`ExpressionConvertor`] implementation.
 ///
 /// Supported arithmetic is pushed down using Vortex semantics, including its checked
 /// integer arithmetic. Matching DataFusion's overflow behavior is deferred to a future patch.
 /// Other expressions require compatible SQL semantics or remain in DataFusion.
 pub struct DefaultExpressionConvertor {
+    /// Session used to resolve Arrow → Vortex dtypes through the extension
+    /// plugin registry, so registered extension types (e.g. UUID ⇄
+    /// `FixedSizeBinary[16]`) convert correctly instead of hitting the static,
+    /// non-plugin-aware `DType::from_arrow`.
     session: VortexSession,
 }
 
 impl Default for DefaultExpressionConvertor {
     fn default() -> Self {
-        Self::new(VortexSession::default())
+        Self {
+            session: VortexSession::default(),
+        }
     }
 }
 
 impl DefaultExpressionConvertor {
-    /// Create a convertor that resolves Arrow extension types using the session registry.
+    /// Create a convertor that resolves Arrow extension types using `session`'s
+    /// dtype registry.
     pub fn new(session: VortexSession) -> Self {
         Self { session }
     }
 
-    fn convert_expr(
+    /// Resolve an Arrow field through the session registry; unknown types are unsupported.
+    fn arrow_dtype(&self, field: &Field) -> Conversion<DType> {
+        self.session
+            .arrow()
+            .from_arrow_field(field)
+            .map_err(|_| Unconverted::Unsupported)
+    }
+
+    /// Convert `expr` and check that it returns the dtype DataFusion expects.
+    fn convert_checked(
         &self,
         expr: &Arc<dyn PhysicalExpr>,
         schema: &Schema,
-        input_dtype: &DType,
-    ) -> DFResult<Option<Expression>> {
-        let converted = if let Some(binary) = expr.downcast_ref::<df_expr::BinaryExpr>() {
-            let Some(operator) = try_operator_from_df(binary.op()) else {
-                return Ok(None);
-            };
-            let boolean_operator = matches!(operator, Operator::And | Operator::Or);
-            let left_type = binary.left().data_type(schema)?;
-            let right_type = binary.right().data_type(schema)?;
-            if boolean_operator {
-                if left_type != DataType::Boolean || right_type != DataType::Boolean {
-                    return Err(exec_datafusion_err!(
-                        "Boolean operator requires Boolean operands: {expr}"
-                    ));
-                }
-            } else if !supported_data_types(&left_type) || !supported_data_types(&right_type) {
-                return Ok(None);
-            }
-            let (Some(left), Some(right)) = (
-                self.convert_expr(binary.left(), schema, input_dtype)?,
-                self.convert_expr(binary.right(), schema, input_dtype)?,
-            ) else {
-                return Ok(None);
-            };
-            if boolean_operator
-                && (label_infallible(&left).get(&left) != Some(&true)
-                    || label_infallible(&right).get(&right) != Some(&true))
-            {
-                // DataFusion may evaluate the RHS only on rows selected by the LHS.
-                return Ok(None);
-            }
-            let (Ok(left_dtype), Ok(right_dtype)) = (
-                left.return_dtype(input_dtype),
-                right.return_dtype(input_dtype),
-            ) else {
-                return Ok(None);
-            };
-            if !left_dtype.eq_ignore_nullability(&right_dtype) {
-                return Ok(None);
-            }
-            Binary.new_expr(operator, [left, right])
-        } else if let Some(column) = expr.downcast_ref::<df_expr::Column>() {
-            get_item(column.name(), root())
-        } else if let Some(literal) = expr.downcast_ref::<df_expr::Literal>() {
-            let field = literal.return_field(schema)?;
-            let array = literal.value().to_array()?;
-            if array.len() != 1 {
-                return Err(exec_datafusion_err!(
-                    "Literal must contain exactly one value, found {}",
-                    array.len()
-                ));
-            }
-            let array = match self.session.arrow().from_arrow_array(array, &field) {
-                Ok(array) => array,
-                Err(error) => {
-                    if self.session.arrow().from_arrow_field(&field).is_err() {
-                        return Ok(None);
-                    }
-                    return Err(exec_datafusion_err!(
-                        "Failed to convert literal {expr}: {error}"
-                    ));
-                }
-            };
-            lit(array
-                .execute_scalar(0, &mut self.session.create_execution_ctx())
-                .map_err(|e| exec_datafusion_err!("Failed to evaluate literal {expr}: {e}"))?)
-        } else if let Some(cast_expr) = expr.downcast_ref::<df_expr::CastExpr>() {
-            if !supported_cast(cast_expr, schema)? {
-                return Ok(None);
-            }
-            let Some(child) = self.convert_expr(cast_expr.expr(), schema, input_dtype)? else {
-                return Ok(None);
-            };
-            let Ok(target) = self
-                .session
-                .arrow()
-                .from_arrow_field(cast_expr.target_field())
-            else {
-                return Ok(None);
-            };
-            let Ok(child_dtype) = child.return_dtype(input_dtype) else {
-                return Ok(None);
-            };
-            // Matching Arrow storage types do not imply matching extension semantics.
-            if (child_dtype.is_extension() || target.is_extension())
-                && !child_dtype.eq_ignore_nullability(&target)
-            {
-                return Ok(None);
-            }
-            cast(child, target)
-        } else if let Some(is_null_expr) = expr.downcast_ref::<df_expr::IsNullExpr>() {
-            let Some(child) = self.convert_expr(is_null_expr.arg(), schema, input_dtype)? else {
-                return Ok(None);
-            };
-            is_null(child)
-        } else if let Some(is_not_null_expr) = expr.downcast_ref::<df_expr::IsNotNullExpr>() {
-            let Some(child) = self.convert_expr(is_not_null_expr.arg(), schema, input_dtype)?
-            else {
-                return Ok(None);
-            };
-            is_not_null(child)
-        } else if let Some(like) = expr.downcast_ref::<df_expr::LikeExpr>() {
-            if !like.expr().data_type(schema)?.is_string()
-                || !like.pattern().data_type(schema)?.is_string()
-            {
-                return Ok(None);
-            }
-            let (Some(child), Some(pattern)) = (
-                self.convert_expr(like.expr(), schema, input_dtype)?,
-                self.convert_expr(like.pattern(), schema, input_dtype)?,
-            ) else {
-                return Ok(None);
-            };
-            Like.new_expr(
-                LikeOptions {
-                    negated: like.negated(),
-                    case_insensitive: like.case_insensitive(),
-                },
-                [child, pattern],
-            )
-        } else if let Some(in_list) = expr.downcast_ref::<df_expr::InListExpr>() {
-            return self.convert_in_list(in_list, schema, input_dtype);
-        } else if let Some(scalar_fn) = expr.downcast_ref::<ScalarFunctionExpr>() {
-            return self.convert_scalar_function(scalar_fn, schema, input_dtype);
-        } else if let Some(case_expr) = expr.downcast_ref::<df_expr::CaseExpr>() {
-            if case_expr.expr().is_some() {
-                return Ok(None);
-            }
-            let mut pairs = Vec::with_capacity(case_expr.when_then_expr().len());
-            for (when, then) in case_expr.when_then_expr() {
-                if when.data_type(schema)? != DataType::Boolean {
-                    return Err(exec_datafusion_err!("CASE WHEN must be Boolean"));
-                }
-                let (Some(when), Some(then)) = (
-                    self.convert_expr(when, schema, input_dtype)?,
-                    self.convert_expr(then, schema, input_dtype)?,
-                ) else {
-                    return Ok(None);
-                };
-                pairs.push((when, then));
-            }
-            let otherwise = match case_expr.else_expr() {
-                Some(expr) => {
-                    let Some(expr) = self.convert_expr(expr, schema, input_dtype)? else {
-                        return Ok(None);
-                    };
-                    Some(expr)
-                }
-                None => None,
-            };
-            let case = nested_case_when(pairs, otherwise);
-            // Vortex may evaluate branch values on rows excluded by the condition.
-            if label_infallible(&case).get(&case) != Some(&true) {
-                return Ok(None);
-            }
-            case
-        } else {
-            return Ok(None);
-        };
-        Ok(Some(converted))
-    }
-
-    fn convert_in_list(
-        &self,
-        in_list: &df_expr::InListExpr,
-        schema: &Schema,
-        input_dtype: &DType,
-    ) -> DFResult<Option<Expression>> {
-        if in_list.is_empty()
-            || !in_list
-                .list()
-                .iter()
-                .all(|expr| expr.is::<df_expr::Literal>())
-            || !supported_data_types(&in_list.expr().data_type(schema)?)
-        {
-            return Ok(None);
-        }
-        let Some(value) = self.convert_expr(in_list.expr(), schema, input_dtype)? else {
-            return Ok(None);
-        };
-        // Boolean rewrites may skip evaluating the input, particularly for all-null lists.
-        if label_infallible(&value).get(&value) != Some(&true) {
-            return Ok(None);
-        }
-        let Ok(value_dtype) = value.return_dtype(input_dtype) else {
-            return Ok(None);
-        };
-        let operator = if in_list.negated() {
-            Operator::NotEq
-        } else {
-            Operator::Eq
-        };
-        let mut comparisons = Vec::with_capacity(in_list.len());
-        for element in in_list.list() {
-            let Some(element) = self.convert_expr(element, schema, input_dtype)? else {
-                return Ok(None);
-            };
-            let Ok(element_dtype) = element.return_dtype(input_dtype) else {
-                return Ok(None);
-            };
-            if element_dtype == DType::Null {
-                comparisons.push(lit(None::<bool>));
-            } else if value_dtype.eq_ignore_nullability(&element_dtype) {
-                comparisons.push(Binary.new_expr(operator, [value.clone(), element]));
-            } else {
-                return Ok(None);
-            }
-        }
-        // Kleene AND/OR preserve SQL IN/NOT IN nulls; list_contains does not.
-        Ok(if in_list.negated() {
-            and_collect(comparisons)
-        } else {
-            or_collect(comparisons)
-        })
-    }
-
-    fn convert_scalar_function(
-        &self,
-        scalar_fn: &ScalarFunctionExpr,
-        schema: &Schema,
-        input_dtype: &DType,
-    ) -> DFResult<Option<Expression>> {
-        if ScalarFunctionExpr::try_downcast_func::<GetFieldFunc>(scalar_fn).is_some() {
-            let [source, paths @ ..] = scalar_fn.args() else {
-                return Err(exec_datafusion_err!(
-                    "get_field requires a source and field path"
-                ));
-            };
-            if paths.is_empty() {
-                return Err(exec_datafusion_err!("get_field requires a field path"));
-            }
-            let mut source_type = source.data_type(schema)?;
-            let mut nullable = source.nullable(schema)?;
-            let mut nullable_struct = false;
-            let mut names = Vec::with_capacity(paths.len());
-            for path in paths {
-                let name = path
-                    .downcast_ref::<df_expr::Literal>()
-                    .and_then(|literal| literal.value().try_as_str().flatten())
-                    .ok_or_else(|| {
-                        exec_datafusion_err!("get_field path must be a non-null string literal")
-                    })?;
-                let DataType::Struct(fields) = &source_type else {
-                    return Ok(None);
-                };
-                nullable_struct |= nullable;
-                let field = fields
-                    .iter()
-                    .find(|field| field.name() == name)
-                    .ok_or_else(|| {
-                        exec_datafusion_err!("get_field references missing field {name}")
-                    })?;
-                nullable = field.is_nullable();
-                source_type = field.data_type().clone();
-                names.push(name);
-            }
-            // DataFusion extracts the child without applying parent struct validity;
-            // Vortex get_item masks the child when its parent is null.
-            if nullable_struct {
-                return Ok(None);
-            }
-            let Some(mut result) = self.convert_expr(source, schema, input_dtype)? else {
-                return Ok(None);
-            };
-            for name in names {
-                result = get_item(name, result);
-            }
-            return Ok(Some(result));
-        }
-
-        let (input, length): (_, fn(Expression) -> Expression) =
-            if ScalarFunctionExpr::try_downcast_func::<OctetLengthFunc>(scalar_fn).is_some() {
-                let [input] = scalar_fn.args() else {
-                    return Err(exec_datafusion_err!(
-                        "octet_length requires exactly one argument"
-                    ));
-                };
-                let data_type = input.data_type(schema)?;
-                let data_type = match &data_type {
-                    DataType::Dictionary(_, value) => value.as_ref(),
-                    data_type => data_type,
-                };
-                if !data_type.is_binary() && !data_type.is_string() {
-                    return Ok(None);
-                }
-                (input, byte_length)
-            } else if ScalarFunctionExpr::try_downcast_func::<ArrayLength>(scalar_fn).is_some() {
-                let Some(input) = array_length_input(scalar_fn)? else {
-                    return Ok(None);
-                };
-                if !matches!(
-                    input.data_type(schema)?,
-                    DataType::List(_) | DataType::LargeList(_) | DataType::FixedSizeList(_, _)
-                ) {
-                    return Ok(None);
-                }
-                (input, list_length)
-            } else {
-                return Ok(None);
-            };
-        let Some(input) = self.convert_expr(input, schema, input_dtype)? else {
-            return Ok(None);
-        };
-        let Ok(return_dtype) = self.session.arrow().from_arrow_field(&Field::new(
-            "",
-            scalar_fn.return_type().clone(),
-            scalar_fn.nullable(),
-        )) else {
-            return Ok(None);
-        };
-        Ok(Some(cast(length(input), return_dtype)))
-    }
-}
-
-impl ExpressionConvertor for DefaultExpressionConvertor {
-    fn try_convert(
-        &self,
-        expr: &Arc<dyn PhysicalExpr>,
-        schema: &Schema,
-    ) -> DFResult<Option<Expression>> {
-        if DynamicFilterTracking::classify(expr).contains_dynamic_filter() {
-            return Ok(None);
-        }
+    ) -> Conversion<Expression> {
         let columns = collect_columns(expr);
         let mut column_indices = Vec::with_capacity(columns.len());
         for column in columns {
@@ -541,34 +251,345 @@ impl ExpressionConvertor for DefaultExpressionConvertor {
                     column.name(),
                     column.index(),
                     field.name()
-                ));
+                )
+                .into());
             }
             column_indices.push(column.index());
         }
         column_indices.sort_unstable();
         column_indices.dedup();
-        let referenced_schema = schema.project(&column_indices)?;
-        let Ok(input_dtype) = self.session.arrow().from_arrow_schema(&referenced_schema) else {
-            return Ok(None);
-        };
-        let Some(converted) = self.convert_expr(expr, schema, &input_dtype)? else {
-            return Ok(None);
-        };
-        let Ok(expected_dtype) = self
+        let input_dtype = self
             .session
             .arrow()
-            .from_arrow_field(expr.return_field(schema)?.as_ref())
-        else {
-            return Ok(None);
+            .from_arrow_schema(
+                &schema
+                    .project(&column_indices)
+                    .map_err(DataFusionError::from)?,
+            )
+            .map_err(|_| Unconverted::Unsupported)?;
+        let converted = self.convert_expr(expr, schema, &input_dtype)?;
+        let expected_dtype = self.arrow_dtype(expr.return_field(schema)?.as_ref())?;
+        if !converted_dtype(&converted, &input_dtype)?.eq_ignore_nullability(&expected_dtype) {
+            return Err(Unconverted::Unsupported);
+        }
+        Ok(converted)
+    }
+
+    fn convert_expr(
+        &self,
+        expr: &Arc<dyn PhysicalExpr>,
+        schema: &Schema,
+        input_dtype: &DType,
+    ) -> Conversion<Expression> {
+        if let Some(binary_expr) = expr.downcast_ref::<df_expr::BinaryExpr>() {
+            let operator =
+                try_operator_from_df(binary_expr.op()).ok_or(Unconverted::Unsupported)?;
+            let boolean_operator = matches!(operator, Operator::And | Operator::Or);
+            let left_type = binary_expr.left().data_type(schema)?;
+            let right_type = binary_expr.right().data_type(schema)?;
+            if boolean_operator {
+                if left_type != DataType::Boolean || right_type != DataType::Boolean {
+                    return Err(exec_datafusion_err!(
+                        "Boolean operator requires Boolean operands: {expr}"
+                    )
+                    .into());
+                }
+            } else if !supported_data_types(&left_type) || !supported_data_types(&right_type) {
+                return Err(Unconverted::Unsupported);
+            }
+            let left = self.convert_expr(binary_expr.left(), schema, input_dtype)?;
+            let right = self.convert_expr(binary_expr.right(), schema, input_dtype)?;
+            // DataFusion may evaluate the RHS only on rows selected by the LHS.
+            if boolean_operator && !(is_infallible(&left) && is_infallible(&right)) {
+                return Err(Unconverted::Unsupported);
+            }
+            if !converted_dtype(&left, input_dtype)?
+                .eq_ignore_nullability(&converted_dtype(&right, input_dtype)?)
+            {
+                return Err(Unconverted::Unsupported);
+            }
+            return Ok(Binary.new_expr(operator, [left, right]));
+        }
+
+        if let Some(col_expr) = expr.downcast_ref::<df_expr::Column>() {
+            return Ok(get_item(col_expr.name(), root()));
+        }
+
+        if let Some(literal) = expr.downcast_ref::<df_expr::Literal>() {
+            let field = literal.return_field(schema)?;
+            let array = literal.value().to_array()?;
+            if array.len() != 1 {
+                return Err(exec_datafusion_err!(
+                    "Literal must contain exactly one value, found {}",
+                    array.len()
+                )
+                .into());
+            }
+            // Literals of unknown Arrow types stay in DataFusion; conversion failures are errors.
+            self.arrow_dtype(&field)?;
+            let scalar = self
+                .session
+                .arrow()
+                .from_arrow_array(array, &field)
+                .and_then(|array| array.execute_scalar(0, &mut self.session.create_execution_ctx()))
+                .map_err(|e| exec_datafusion_err!("Failed to convert literal {expr}: {e}"))?;
+            return Ok(lit(scalar));
+        }
+
+        if let Some(cast_expr) = expr.downcast_ref::<df_expr::CastExpr>() {
+            if !supported_cast(cast_expr, schema)? {
+                return Err(Unconverted::Unsupported);
+            }
+            let child = self.convert_expr(cast_expr.expr(), schema, input_dtype)?;
+            let cast_dtype = self.arrow_dtype(cast_expr.target_field())?;
+            // Matching Arrow storage types do not imply matching extension semantics.
+            let child_dtype = converted_dtype(&child, input_dtype)?;
+            if (child_dtype.is_extension() || cast_dtype.is_extension())
+                && !child_dtype.eq_ignore_nullability(&cast_dtype)
+            {
+                return Err(Unconverted::Unsupported);
+            }
+            return Ok(cast(child, cast_dtype));
+        }
+
+        if let Some(is_null_expr) = expr.downcast_ref::<df_expr::IsNullExpr>() {
+            let arg = self.convert_expr(is_null_expr.arg(), schema, input_dtype)?;
+            return Ok(is_null(arg));
+        }
+
+        if let Some(is_not_null_expr) = expr.downcast_ref::<df_expr::IsNotNullExpr>() {
+            let arg = self.convert_expr(is_not_null_expr.arg(), schema, input_dtype)?;
+            return Ok(is_not_null(arg));
+        }
+
+        if let Some(like) = expr.downcast_ref::<df_expr::LikeExpr>() {
+            if !like.expr().data_type(schema)?.is_string()
+                || !like.pattern().data_type(schema)?.is_string()
+            {
+                return Err(Unconverted::Unsupported);
+            }
+            let child = self.convert_expr(like.expr(), schema, input_dtype)?;
+            let pattern = self.convert_expr(like.pattern(), schema, input_dtype)?;
+            return Ok(Like.new_expr(
+                LikeOptions {
+                    negated: like.negated(),
+                    case_insensitive: like.case_insensitive(),
+                },
+                [child, pattern],
+            ));
+        }
+
+        if let Some(in_list) = expr.downcast_ref::<df_expr::InListExpr>() {
+            return self.convert_in_list(in_list, schema, input_dtype);
+        }
+
+        if let Some(scalar_fn) = expr.downcast_ref::<ScalarFunctionExpr>() {
+            return self.convert_scalar_function(scalar_fn, schema, input_dtype);
+        }
+
+        if let Some(case_expr) = expr.downcast_ref::<df_expr::CaseExpr>() {
+            return self.convert_case_expr(case_expr, schema, input_dtype);
+        }
+
+        Err(Unconverted::Unsupported)
+    }
+
+    fn convert_in_list(
+        &self,
+        in_list: &df_expr::InListExpr,
+        schema: &Schema,
+        input_dtype: &DType,
+    ) -> Conversion<Expression> {
+        if in_list.is_empty()
+            || !in_list
+                .list()
+                .iter()
+                .all(|expr| expr.is::<df_expr::Literal>())
+            || !supported_data_types(&in_list.expr().data_type(schema)?)
+        {
+            return Err(Unconverted::Unsupported);
+        }
+        let value = self.convert_expr(in_list.expr(), schema, input_dtype)?;
+        // Boolean rewrites may skip evaluating the input, particularly for all-null lists.
+        if !is_infallible(&value) {
+            return Err(Unconverted::Unsupported);
+        }
+        let value_dtype = converted_dtype(&value, input_dtype)?;
+        let operator = if in_list.negated() {
+            Operator::NotEq
+        } else {
+            Operator::Eq
         };
-        let Ok(actual_dtype) = converted.return_dtype(&input_dtype) else {
-            return Ok(None);
+        let mut comparisons = Vec::with_capacity(in_list.len());
+        for element in in_list.list() {
+            let element = self.convert_expr(element, schema, input_dtype)?;
+            let element_dtype = converted_dtype(&element, input_dtype)?;
+            if element_dtype == DType::Null {
+                comparisons.push(lit(None::<bool>));
+            } else if value_dtype.eq_ignore_nullability(&element_dtype) {
+                comparisons.push(Binary.new_expr(operator, [value.clone(), element]));
+            } else {
+                return Err(Unconverted::Unsupported);
+            }
+        }
+        // Kleene AND/OR preserve SQL IN/NOT IN nulls; list_contains does not.
+        let membership = if in_list.negated() {
+            and_collect(comparisons)
+        } else {
+            or_collect(comparisons)
         };
-        if !actual_dtype.eq_ignore_nullability(&expected_dtype) {
+        membership.ok_or(Unconverted::Unsupported)
+    }
+
+    fn convert_scalar_function(
+        &self,
+        scalar_fn: &ScalarFunctionExpr,
+        schema: &Schema,
+        input_dtype: &DType,
+    ) -> Conversion<Expression> {
+        if ScalarFunctionExpr::try_downcast_func::<GetFieldFunc>(scalar_fn).is_some() {
+            // DataFusion's GetFieldFunc flattens nested field access into a single call
+            // with multiple field name arguments, e.g. `outer.inner.leaf` becomes
+            // get_field(Column("outer"), "inner", "leaf").
+            let [source, paths @ ..] = scalar_fn.args() else {
+                return Err(
+                    exec_datafusion_err!("get_field requires a source and field path").into(),
+                );
+            };
+            if paths.is_empty() {
+                return Err(exec_datafusion_err!("get_field requires a field path").into());
+            }
+            let mut source_type = source.data_type(schema)?;
+            let mut nullable = source.nullable(schema)?;
+            let mut nullable_struct = false;
+            let mut names = Vec::with_capacity(paths.len());
+            for path in paths {
+                let name = path
+                    .downcast_ref::<df_expr::Literal>()
+                    .and_then(|literal| literal.value().try_as_str().flatten())
+                    .ok_or_else(|| {
+                        exec_datafusion_err!("get_field path must be a non-null string literal")
+                    })?;
+                let DataType::Struct(fields) = &source_type else {
+                    return Err(Unconverted::Unsupported);
+                };
+                nullable_struct |= nullable;
+                let (_, field) = fields.find(name).ok_or_else(|| {
+                    exec_datafusion_err!("get_field references missing field {name}")
+                })?;
+                nullable = field.is_nullable();
+                source_type = field.data_type().clone();
+                names.push(name);
+            }
+            // DataFusion extracts the child without applying parent struct validity;
+            // Vortex get_item masks the child when its parent is null.
+            if nullable_struct {
+                return Err(Unconverted::Unsupported);
+            }
+            let mut result = self.convert_expr(source, schema, input_dtype)?;
+            for name in names {
+                result = get_item(name, result);
+            }
+            return Ok(result);
+        }
+
+        let (input, length): (_, fn(Expression) -> Expression) =
+            if ScalarFunctionExpr::try_downcast_func::<OctetLengthFunc>(scalar_fn).is_some() {
+                let [input] = scalar_fn.args() else {
+                    return Err(
+                        exec_datafusion_err!("octet_length requires exactly one argument").into(),
+                    );
+                };
+                let data_type = input.data_type(schema)?;
+                let data_type = match &data_type {
+                    DataType::Dictionary(_, value) => value.as_ref(),
+                    data_type => data_type,
+                };
+                if !data_type.is_binary() && !data_type.is_string() {
+                    return Err(Unconverted::Unsupported);
+                }
+                (input, byte_length)
+            } else if ScalarFunctionExpr::try_downcast_func::<ArrayLength>(scalar_fn).is_some() {
+                let input = array_length_input(scalar_fn)?.ok_or(Unconverted::Unsupported)?;
+                if !matches!(
+                    input.data_type(schema)?,
+                    DataType::List(_) | DataType::LargeList(_) | DataType::FixedSizeList(_, _)
+                ) {
+                    return Err(Unconverted::Unsupported);
+                }
+                (input, list_length)
+            } else {
+                return Err(Unconverted::Unsupported);
+            };
+        let input = self.convert_expr(input, schema, input_dtype)?;
+        let return_dtype = self.arrow_dtype(&Field::new(
+            "",
+            scalar_fn.return_type().clone(),
+            scalar_fn.nullable(),
+        ))?;
+        Ok(cast(length(input), return_dtype))
+    }
+
+    fn convert_case_expr(
+        &self,
+        case_expr: &df_expr::CaseExpr,
+        schema: &Schema,
+        input_dtype: &DType,
+    ) -> Conversion<Expression> {
+        // Only the searched form (CASE WHEN cond THEN value ...) is supported.
+        if case_expr.expr().is_some() {
+            return Err(Unconverted::Unsupported);
+        }
+        let mut pairs = Vec::with_capacity(case_expr.when_then_expr().len());
+        for (when_expr, then_expr) in case_expr.when_then_expr() {
+            if when_expr.data_type(schema)? != DataType::Boolean {
+                return Err(exec_datafusion_err!("CASE WHEN must be Boolean").into());
+            }
+            let condition = self.convert_expr(when_expr, schema, input_dtype)?;
+            let value = self.convert_expr(then_expr, schema, input_dtype)?;
+            pairs.push((condition, value));
+        }
+        let else_value = case_expr
+            .else_expr()
+            .map(|e| self.convert_expr(e, schema, input_dtype))
+            .transpose()?;
+        let case = nested_case_when(pairs, else_value);
+        // Vortex may evaluate branch values on rows excluded by the condition.
+        if !is_infallible(&case) {
+            return Err(Unconverted::Unsupported);
+        }
+        Ok(case)
+    }
+}
+
+impl ExpressionConvertor for DefaultExpressionConvertor {
+    fn try_convert(
+        &self,
+        expr: &Arc<dyn PhysicalExpr>,
+        schema: &Schema,
+    ) -> DFResult<Option<Expression>> {
+        // We currently do not support pushdown of dynamic expressions in DF.
+        // See issue: https://github.com/vortex-data/vortex/issues/4034
+        if DynamicFilterTracking::classify(expr).contains_dynamic_filter() {
             return Ok(None);
         }
-        Ok(Some(converted))
+        match self.convert_checked(expr, schema) {
+            Ok(converted) => Ok(Some(converted)),
+            Err(Unconverted::Unsupported) => Ok(None),
+            Err(Unconverted::Failed(error)) => Err(error),
+        }
     }
+}
+
+/// Whether evaluating `expr` cannot fail, so Vortex may evaluate it on rows DataFusion skips.
+fn is_infallible(expr: &Expression) -> bool {
+    label_infallible(expr).get(expr) == Some(&true)
+}
+
+/// The Vortex return dtype of a converted expression; unresolvable dtypes are unsupported.
+fn converted_dtype(expr: &Expression, input_dtype: &DType) -> Conversion<DType> {
+    expr.return_dtype(input_dtype)
+        .map_err(|_| Unconverted::Unsupported)
 }
 
 fn supported_cast(cast: &df_expr::CastExpr, schema: &Schema) -> DFResult<bool> {
@@ -667,11 +688,9 @@ fn supported_data_types(dt: &DataType) -> bool {
     is_supported
 }
 
-/// Returns the list argument of an `array_length` call if the call is a form we can rewrite to
-/// `list_length`: either the single-argument form `array_length(arr)`, or the two-argument form
-/// with an explicit first dimension `array_length(arr, 1)`, which is equivalent. Higher
-/// dimensions recurse into nested lists and are not supported.
-/// Calls with other arities return errors.
+/// Returns the list argument of an `array_length` call that can be rewritten to `list_length`:
+/// the single-argument form `array_length(arr)` or the equivalent explicit first dimension
+/// `array_length(arr, 1)`. Other dimensions are unsupported (`None`); other arities are errors.
 fn array_length_input(scalar_fn: &ScalarFunctionExpr) -> DFResult<Option<&Arc<dyn PhysicalExpr>>> {
     match scalar_fn.args() {
         [input] => Ok(Some(input)),

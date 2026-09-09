@@ -5,10 +5,8 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 use std::sync::Weak;
 
-use arrow_schema::DataType;
 use datafusion_common::Result as DFResult;
 use datafusion_common::config::ConfigOptions;
-use datafusion_common::exec_datafusion_err;
 use datafusion_common::tree_node::TreeNodeRecursion;
 use datafusion_datasource::TableSchema;
 use datafusion_datasource::file::FileSource;
@@ -475,9 +473,6 @@ impl FileSource for VortexSource {
         let supported_filters = filters
             .into_iter()
             .map(|expr| {
-                if expr.data_type(self.table_schema.table_schema())? != DataType::Boolean {
-                    return Err(exec_datafusion_err!("Filter must be Boolean: {expr}"));
-                }
                 if self
                     .expression_convertor
                     .try_convert(&expr, self.table_schema.table_schema())?

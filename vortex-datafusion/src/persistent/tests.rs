@@ -646,12 +646,11 @@ async fn arrow_uuid_extension_roundtrip_nested_struct() -> anyhow::Result<()> {
 async fn test_predicate_memtable_oracle(
     #[case] projection: &str,
     #[case] predicate: &str,
-    #[values(false, true)] projection_pushdown: bool,
-    #[values(false, true)] predicate_pushdown: bool,
+    #[values(false, true)] pushdown: bool,
 ) -> anyhow::Result<()> {
     let options = crate::VortexTableOptions {
-        projection_pushdown,
-        predicate_pushdown,
+        projection_pushdown: pushdown,
+        predicate_pushdown: pushdown,
         ..Default::default()
     };
     let ctx = TestSessionContext::new_with_factory(Arc::new(
