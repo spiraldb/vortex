@@ -31,7 +31,8 @@ use vortex_error::VortexResult;
 use vortex_runend::RunEnd;
 use vortex_session::VortexSession;
 
-const LEN: usize = 16_384;
+// Keep the one-element-group fallback below 1 ms in CodSpeed simulation.
+const LEN: usize = 2_048;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(|| {
     let session = vortex_array::array_session();
