@@ -72,7 +72,11 @@ impl Scheme for VarBinScheme {
         // borrowed slices into a single pre-sized allocation. Iterating the array per element
         // instead would clone a buffer handle and allocate for every value.
         let array = data.array();
-        let mut builder = VarBinBuilder::<u64>::with_capacity(array.dtype().clone(), array.len());
+        let mut builder = VarBinBuilder::<u64>::with_capacity_in(
+            array.dtype().clone(),
+            array.len(),
+            exec_ctx.allocator(),
+        );
         array.append_to_builder(&mut builder, exec_ctx)?;
         let varbin = builder.finish_into_varbin();
 
