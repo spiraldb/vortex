@@ -6,6 +6,7 @@
 use std::any::Any;
 
 pub use vortex_buffer::BufferAllocator;
+pub use vortex_buffer::BufferAllocatorExt;
 pub use vortex_buffer::BufferAllocatorRef;
 pub use vortex_buffer::StaticBufferAllocator;
 use vortex_session::SessionExt;
@@ -78,6 +79,7 @@ impl<S: SessionExt> MemorySessionExt for S {}
 mod tests {
     use vortex_buffer::BufferAllocatorRef;
 
+    use super::BufferAllocatorExt;
     use super::MemorySession;
 
     #[test]

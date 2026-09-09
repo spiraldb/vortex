@@ -2,19 +2,20 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 //! The region primitives the handle types are built on: the tagged ownership word, the lazily
-//! allocated refcount, and the global-allocator helpers. See the crate docs for the encoding.
+//! allocated refcount, and the allocation policy. See the crate docs for the encoding.
 
 use std::alloc::Layout;
-use std::alloc::alloc;
-use std::alloc::alloc_zeroed;
-use std::alloc::dealloc;
-use std::alloc::handle_alloc_error;
+use std::any::TypeId;
 use std::ptr::NonNull;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::fence;
 
+use allocator_api2::alloc::Allocator;
+use allocator_api2::alloc::handle_alloc_error;
+
 use crate::Alignment;
+use crate::BufferAllocatorRef;
 use crate::panic::bytes_panic;
 
 /// A dangling but maximally aligned address used by buffers that own no allocation.
@@ -40,7 +41,7 @@ pub(crate) fn dangling() -> NonNull<u8> {
 const KIND_MASK: usize = 0b11;
 /// The state word is a `*mut Shared`. A `Box` is at least 8-aligned, so its low bits are zero.
 const KIND_SHARED: usize = 0b00;
-/// The handle owns a global allocation outright, described inline by this word and `base`.
+/// The handle owns a global-allocator region outright, described inline by this word and `base`.
 const KIND_OWNED: usize = 0b01;
 /// The handle owns nothing: `'static` memory, or an empty window over no region at all.
 const KIND_STATIC: usize = 0b10;
@@ -56,12 +57,15 @@ const MAX_OWNED_SIZE: usize = usize::MAX >> SIZE_SHIFT;
 /// The largest alignment exponent is that of [`Alignment::MAX`], and it has to fit in the field.
 const _: () = assert!((1usize << ALIGN_BITS) > (usize::BITS - 1) as usize);
 
-/// The ownership state of a buffer handle. See the module docs for the encoding.
+/// The ownership state of a buffer handle. See the crate docs for the encoding.
 ///
 /// This wraps a *pointer* rather than a `usize` so that the `SHARED` case keeps its provenance:
 /// rebuilding the `Shared` pointer from an integer address would make it undereferenceable. The
 /// `OWNED` and `STATIC` cases are pure bit patterns that are never dereferenced, so they carry no
 /// provenance and do not need any.
+///
+/// `OWNED` always means the global allocator. A region from any other allocator has to carry the
+/// allocator's handle, which only a [`Shared`] has room for.
 #[derive(Clone, Copy)]
 pub(crate) struct State(pub(crate) *mut ());
 
@@ -147,7 +151,9 @@ impl State {
     pub(crate) fn owned_layout(self) -> Layout {
         // SAFETY: every `State::owned` caller passes the parts of a valid `Layout`, and the size
         // round-trips exactly because `owned` rejects anything wider than `MAX_OWNED_SIZE`.
-        unsafe { Layout::from_size_align_unchecked(self.owned_size(), self.owned_alignment().as_usize()) }
+        unsafe {
+            Layout::from_size_align_unchecked(self.owned_size(), self.owned_alignment().as_usize())
+        }
     }
 
     /// The [`Shared`] this state points at.
@@ -177,20 +183,25 @@ impl Eq for State {}
 
 /// How the memory behind a region is released.
 pub(crate) enum Release {
-    /// Allocated by us through the global allocator, and freed with this exact layout.
-    Global(Layout),
+    /// Allocated through `allocator` with exactly `layout`, and returned to it the same way.
+    Allocated {
+        layout: Layout,
+        allocator: BufferAllocatorRef,
+    },
     /// Kept alive by an owner value; dropping the owner releases the memory.
     ///
     /// The owner is held as a leaked `Box<O>` rather than a `Box<dyn Any>` so that no reborrow of
     /// it ever happens after we have derived the region's pointer from it: moving a `Box` asserts
     /// unique access to its contents, which would invalidate that pointer. This mirrors what
-    /// `bytes::Bytes::from_owner` does.
+    /// `bytes::Bytes::from_owner` does. The `TypeId` is what lets the owner be handed back out to
+    /// a caller that knows what it is.
     ///
-    /// We never hand out a reference to the owner, we only drop it, so `Send` alone is enough for
-    /// the region to be shared across threads.
+    /// We never hand out a reference to the owner of a writable region, we only drop it, so `Send`
+    /// alone is enough for the region to be shared across threads.
     Owner {
         owner: *mut (),
         drop: unsafe fn(*mut ()),
+        type_id: TypeId,
     },
 }
 
@@ -207,7 +218,8 @@ pub(crate) unsafe fn drop_owner<O>(ptr: *mut ()) {
 /// The refcounted description of a region shared by more than one handle.
 ///
 /// This is allocated lazily: a handle that has never been shared describes its region inline in
-/// its [`State`] instead.
+/// its [`State`] instead. The exception is a region from a custom allocator, which needs somewhere
+/// to keep the allocator's handle and so is refcounted from the start.
 pub(crate) struct Shared {
     /// Number of live handles.
     pub(crate) refcount: AtomicUsize,
@@ -225,11 +237,12 @@ pub(crate) struct Shared {
 }
 
 // SAFETY: `Shared` owns its region exclusively and hands out access only through the handles in
-// this module, which enforce that at most one of them may write to any given byte. The bytes
-// themselves have no interior mutability, and `Release::Owner` is `Send`, so moving the
-// deallocation to another thread is sound.
+// this crate, which enforce that at most one of them may write to any given byte. The bytes
+// themselves have no interior mutability, `Release::Owner` is `Send`, and allocators are
+// `Send + Sync`, so moving the deallocation to another thread is sound.
 unsafe impl Send for Shared {}
-// SAFETY: see above. `&Shared` exposes nothing but the region's extent and its refcount.
+// SAFETY: see above. `&Shared` exposes nothing but the region's extent, its refcount, and a
+// `Sync` allocator handle.
 unsafe impl Sync for Shared {}
 
 impl Shared {
@@ -281,10 +294,20 @@ impl Shared {
 
     /// The layout this region was allocated with, if we allocated it ourselves.
     #[inline]
-    pub(crate) fn global_layout(&self) -> Option<Layout> {
+    pub(crate) fn allocated_layout(&self) -> Option<Layout> {
         match &self.release {
-            Release::Global(layout) => Some(*layout),
+            Release::Allocated { layout, .. } => Some(*layout),
             Release::Owner { .. } => None,
+        }
+    }
+
+    /// The allocator this region came from. Adopted regions report the global allocator, which is
+    /// what any buffer derived from them should allocate with.
+    #[inline]
+    pub(crate) fn allocator(&self) -> &BufferAllocatorRef {
+        match &self.release {
+            Release::Allocated { allocator, .. } => allocator,
+            Release::Owner { .. } => BufferAllocatorRef::static_ref(),
         }
     }
 
@@ -298,13 +321,17 @@ impl Shared {
 impl Drop for Shared {
     fn drop(&mut self) {
         match &self.release {
-            Release::Global(layout) => {
+            Release::Allocated { layout, allocator } => {
+                // An empty region was never allocated; see `UniqueBytes::allocate`.
+                if layout.size() == 0 {
+                    return;
+                }
                 // SAFETY: `base` and `layout` are always kept in step with the allocator call that
                 // produced them, so this frees the region with exactly the layout it was
                 // allocated with. The refcount reached zero, so no handle survives.
-                unsafe { dealloc(self.base.as_ptr(), *layout) }
+                unsafe { allocator.deallocate(self.base, *layout) }
             }
-            Release::Owner { owner, drop } => {
+            Release::Owner { owner, drop, .. } => {
                 // SAFETY: the owner is a live leaked box that only we may drop, and the refcount
                 // reached zero.
                 unsafe { drop(*owner) }
@@ -314,43 +341,89 @@ impl Drop for Shared {
 }
 
 // -------------------------------------------------------------------------------------------
-// Allocation helpers
+// Allocation policy
 // -------------------------------------------------------------------------------------------
 
-/// Build the layout for a non-empty allocation, panicking on the (unrepresentable) edge cases.
-fn layout_for(size: usize, alignment: Alignment) -> Layout {
-    if size == 0 {
-        bytes_panic!("Cannot allocate a zero-sized buffer region");
-    }
-    Layout::from_size_align(size, alignment.as_usize()).unwrap_or_else(|_| {
-        bytes_panic!("Buffer of {size} bytes aligned to {alignment} exceeds the maximum layout")
+/// The largest alignment the global allocator provides without taking an aligned-allocation path.
+///
+/// This mirrors the `MIN_ALIGN` table in `std`'s `System` allocator: requests at or below it (and
+/// no larger than the size) go straight to `malloc`; anything else goes through `posix_memalign`
+/// or its equivalent, which is markedly slower.
+pub(crate) const FREE_ALIGN: usize = if usize::BITS >= 64 { 16 } else { 8 };
+
+/// The raw layout to request so that an `alignment`-aligned window of `size` bytes fits inside it.
+///
+/// Rather than ask the allocator for `alignment` directly, we ask for what it provides for free
+/// and pad the size by the largest shift that could then be needed to reach `alignment`. The
+/// window starts at [`shift`] bytes into the region.
+///
+/// `size` must be non-zero.
+pub(crate) fn shifted_layout(size: usize, alignment: Alignment) -> Layout {
+    debug_assert!(size != 0);
+    let alignment = alignment.as_usize();
+    // `std` only takes the `malloc` path when the requested alignment does not exceed the size
+    // either, so a tiny region requests less and pads a little more. Requesting the alignment
+    // itself whenever that is free, rather than always 1, is what lets a `Buffer<T>` that asked
+    // for no more than `align_of::<T>()` be handed out as a `Vec<T>` later.
+    let free = if size >= FREE_ALIGN {
+        FREE_ALIGN
+    } else {
+        1 << (usize::BITS - 1 - size.leading_zeros())
+    };
+    let requested = alignment.min(free);
+    let padding = alignment - requested;
+    let Some(total) = size.checked_add(padding) else {
+        bytes_panic!("buffer of {size} bytes aligned to {alignment} exceeds the maximum layout");
+    };
+    Layout::from_size_align(total, requested).unwrap_or_else(|_| {
+        bytes_panic!("buffer of {size} bytes aligned to {alignment} exceeds the maximum layout")
     })
 }
 
-/// Allocate `size` bytes aligned to `alignment` through the global allocator.
-pub(crate) fn allocate(size: usize, alignment: Alignment, zeroed: bool) -> (NonNull<u8>, Layout) {
-    let layout = layout_for(size, alignment);
-    // SAFETY: `layout_for` rejects zero-sized layouts.
-    let ptr = unsafe {
-        if zeroed {
-            alloc_zeroed(layout)
-        } else {
-            alloc(layout)
-        }
+/// How far into a region the first `alignment`-aligned byte lies.
+///
+/// This is computed from the address rather than with `align_offset`, which is permitted to give
+/// up and return `usize::MAX`.
+#[inline]
+pub(crate) fn shift(base: NonNull<u8>, alignment: Alignment) -> usize {
+    base.as_ptr().addr().wrapping_neg() & (alignment.as_usize() - 1)
+}
+
+/// Allocate a region able to hold an `alignment`-aligned window of `size` non-zero bytes.
+///
+/// Returns the region's base, the layout it was allocated with, and the shift to the window.
+pub(crate) fn allocate_shifted(
+    size: usize,
+    alignment: Alignment,
+    zeroed: bool,
+    allocator: &BufferAllocatorRef,
+) -> (NonNull<u8>, Layout, usize) {
+    let layout = shifted_layout(size, alignment);
+    let block = if zeroed {
+        allocator.allocate_zeroed(layout)
+    } else {
+        allocator.allocate(layout)
     };
-    match NonNull::new(ptr) {
-        Some(base) => (base, layout),
-        None => handle_alloc_error(layout),
-    }
+    let base = block
+        .unwrap_or_else(|_| handle_alloc_error(layout))
+        .cast::<u8>();
+    let shift = shift(base, alignment);
+    debug_assert!(shift + size <= layout.size());
+    (base, layout, shift)
 }
 
 /// Build the `Shared` for a region we allocated ourselves.
-pub(crate) fn shared_global(base: NonNull<u8>, layout: Layout, refcount: usize) -> Shared {
+pub(crate) fn shared_allocated(
+    base: NonNull<u8>,
+    layout: Layout,
+    allocator: BufferAllocatorRef,
+    refcount: usize,
+) -> Shared {
     Shared {
         refcount: AtomicUsize::new(refcount),
         base,
         size: layout.size(),
         writable: true,
-        release: Release::Global(layout),
+        release: Release::Allocated { layout, allocator },
     }
 }

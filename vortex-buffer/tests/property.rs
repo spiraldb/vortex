@@ -236,7 +236,7 @@ fn static_buffers_are_borrowed_and_immutable(tc: TestCase) {
 /// from the same elements are indistinguishable.
 #[hegel::test]
 #[cfg_attr(miri, ignore)] // hegel's engine uses file IO that Miri cannot run
-fn equality_follows_the_bytes(tc: TestCase) {
+fn equality_follows_the_elements(tc: TestCase) {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::Hash;
     use std::hash::Hasher;
@@ -260,12 +260,13 @@ fn equality_follows_the_bytes(tc: TestCase) {
     assert_eq!(hash(&copied), hash(&adopted));
     assert_eq!(hash(&copied), hash(&over_aligned));
 
-    // Ordering matches the underlying bytes.
+    // Ordering is the elements', not the bytes': `[-1i32] < [0i32]` even though its bytes are
+    // larger.
     let other = Buffer::copy_from(&right);
     assert_eq!(
         copied.cmp(&other),
-        copied.as_bytes().cmp(other.as_bytes()),
-        "ordering must follow the bytes"
+        left.as_slice().cmp(right.as_slice()),
+        "ordering must follow the elements"
     );
 }
 

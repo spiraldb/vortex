@@ -50,6 +50,16 @@
 //! * **`Vec<T>` round-trips.** A region allocated with exactly `Layout::array::<T>(cap)` is
 //!   indistinguishable from a `Vec<T>`'s allocation, so it can be handed back out as one.
 //!
+//! # Allocation
+//!
+//! Regions come from a [`BufferAllocatorRef`]: the global allocator by default, or any
+//! `allocator_api2::alloc::Allocator` a caller installs. Alignment is never requested from the
+//! allocator directly. Asking for more than it provides natively sends every allocation down its
+//! aligned-allocation path (`posix_memalign` and friends), which is markedly slower than `malloc`.
+//! Instead a region is allocated with the allocator's free alignment, padded by the largest shift
+//! that could be needed, and the window starts at the first suitably aligned byte inside it. A
+//! region adopted from a `Vec` keeps the `Vec`'s exact layout, so it can be handed back out again.
+//!
 //! # Deferred sharing
 //!
 //! A handle that has never been shared owns its region outright, and describes it inline: no
@@ -73,12 +83,16 @@
 //! `OWNED` keeps the region's start in the handle's own `base` field, so advancing or truncating a
 //! handle never has to allocate. Promotion to `SHARED` only ever rewrites the state word, never
 //! `base`, which is what lets it happen through a shared reference with a single compare-exchange.
+//! `OWNED` always means the global allocator; a region from a custom allocator has to carry the
+//! allocator's handle, so it is `SHARED` from the start.
 
 pub use alignment::*;
+pub use allocator::*;
 pub use shared::*;
 pub use unique::*;
 
 mod alignment;
+mod allocator;
 mod panic;
 mod region;
 mod shared;
@@ -87,10 +101,12 @@ mod unique;
 pub(crate) use region::Release;
 pub(crate) use region::Shared;
 pub(crate) use region::State;
-pub(crate) use region::allocate;
+pub(crate) use region::allocate_shifted;
 pub(crate) use region::dangling;
 pub(crate) use region::drop_owner;
-pub(crate) use region::shared_global;
+pub(crate) use region::shared_allocated;
+pub(crate) use region::shift;
+pub(crate) use region::shifted_layout;
 
 #[cfg(test)]
 mod property_tests;

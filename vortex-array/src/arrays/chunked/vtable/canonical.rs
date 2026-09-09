@@ -29,6 +29,7 @@ use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::dtype::PType;
+use crate::memory::BufferAllocatorExt;
 use crate::validity::Validity;
 
 pub(super) fn _canonicalize(
@@ -287,6 +288,7 @@ mod tests {
     use allocator_api2::alloc::AllocError;
     use allocator_api2::alloc::Allocator;
     use allocator_api2::alloc::Global;
+    use vortex_buffer::BufferAllocatorExt;
     use vortex_buffer::BufferAllocatorRef;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;

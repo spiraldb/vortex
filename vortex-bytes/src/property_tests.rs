@@ -272,9 +272,9 @@ impl WindowModel {
         let steps = tc.draw(
             gs::integers::<usize>()
                 .min_value(0)
-                .max_value(self.model.len() / *self.alignment),
+                .max_value(self.model.len() / self.alignment.as_usize()),
         );
-        let cnt = steps * *self.alignment;
+        let cnt = steps * self.alignment.as_usize();
         self.bytes.advance(cnt);
         self.model.drain(..cnt);
     }

@@ -9,6 +9,15 @@ use crate::Alignment;
 use crate::Buffer;
 use crate::ByteBuffer;
 
+/// `arrow_buffer::Buffer` does not implement `AsRef<[u8]>`, so this stands in for it as an owner.
+struct ArrowOwner(arrow_buffer::Buffer);
+
+impl AsRef<[u8]> for ArrowOwner {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
 impl<T: ArrowNativeType> Buffer<T> {
     /// Converts the buffer zero-copy into a `arrow_buffer::Buffer`.
     pub fn into_arrow_scalar_buffer(self) -> arrow_buffer::ScalarBuffer<T> {
@@ -38,7 +47,7 @@ impl<T: ArrowNativeType> Buffer<T> {
         }
 
         debug_assert_eq!(length, arrow.len() / size_of::<T>());
-        Self::from_arrow_owner(arrow, length, alignment)
+        Self::from_byte_buffer_aligned(ByteBuffer::from_owner(ArrowOwner(arrow)), alignment)
     }
 
     /// Converts the buffer zero-copy into a `arrow_buffer::OffsetBuffer`.
@@ -52,12 +61,20 @@ impl<T: ArrowNativeType> Buffer<T> {
 
 impl ByteBuffer {
     /// Converts the buffer zero-copy into a `arrow_buffer::Buffer`.
+    ///
+    /// A buffer that was adopted from an Arrow buffer hands the original back, sliced to this
+    /// window. Anything else is wrapped without copying.
     pub fn into_arrow_buffer(self) -> arrow_buffer::Buffer {
-        if let Some(crate::BufferBacking::Arrow(arrow)) = self.backing.as_deref() {
-            let offset = self.ptr.addr().get() - arrow.as_ptr().addr();
-            return arrow.slice_with_length(offset, self.length);
+        let offset = self.bytes.offset_in_region();
+        let length = self.length;
+        let bytes = match self.bytes.try_into_owner::<ArrowOwner>() {
+            Ok(arrow) => return arrow.0.slice_with_length(offset, length),
+            Err(bytes) => bytes,
+        };
+        if let Some(arrow) = bytes.owner::<ArrowOwner>() {
+            return arrow.0.slice_with_length(offset, length);
         }
-        arrow_buffer::Buffer::from(self.into_bytes())
+        arrow_buffer::Buffer::from(ByteBuffer::from_shared(bytes).into_bytes())
     }
 
     /// Convert an Arrow scalar buffer into a Vortex scalar buffer.
@@ -66,8 +83,6 @@ impl ByteBuffer {
     ///
     /// Panics if the Arrow buffer is not sufficiently aligned.
     pub fn from_arrow_buffer(arrow: arrow_buffer::Buffer, alignment: Alignment) -> Self {
-        let length = arrow.len();
-
         if arrow.as_ptr().align_offset(alignment.as_usize()) != 0 {
             vortex_panic!(
                 "Arrow buffer is not aligned to the requested alignment: {}",
@@ -75,7 +90,7 @@ impl ByteBuffer {
             );
         }
 
-        Self::from_arrow_owner(arrow, length, alignment)
+        Self::from_byte_buffer_aligned(ByteBuffer::from_owner(ArrowOwner(arrow)), alignment)
     }
 }
 

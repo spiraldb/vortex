@@ -260,8 +260,9 @@ impl From<Alignment> for usize {
 impl From<Alignment> for u32 {
     #[inline]
     fn from(value: Alignment) -> Self {
-        u32::try_from(value.as_usize())
-            .unwrap_or_else(|_| bytes_panic!("alignment {} does not fit into a u32", value.as_usize()))
+        u32::try_from(value.as_usize()).unwrap_or_else(|_| {
+            bytes_panic!("alignment {} does not fit into a u32", value.as_usize())
+        })
     }
 }
 

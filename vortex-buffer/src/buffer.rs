@@ -8,20 +8,19 @@ use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::marker::PhantomData;
 use std::ops::Deref;
 use std::ops::RangeBounds;
-use std::ptr::NonNull;
 use std::sync::Arc;
 
 use bytes::Buf;
 use bytes::Bytes;
+use vortex_bytes::SharedBytes;
 use vortex_error::VortexExpect;
 use vortex_error::vortex_panic;
 
 use crate::Alignment;
-use crate::Allocation;
 use crate::BufferAllocatorRef;
-use crate::BufferBacking;
 use crate::BufferMut;
 use crate::ByteBuffer;
 use crate::debug::TruncatedDebug;
@@ -29,54 +28,58 @@ use crate::trusted_len::TrustedLen;
 
 /// An immutable buffer of items of `T`.
 ///
-/// Zero-sized element types are rejected at compile time when constructing a buffer.
+/// A `Buffer<T>` is a window into a reference-counted region: cloning it shares the region and
+/// slicing it is pointer arithmetic. The buffer promises that its start is aligned to
+/// [`alignment`](Self::alignment), which is at least `align_of::<T>()`.
 ///
-/// ```compile_fail
+/// Zero-sized element types are supported. Such a buffer holds a count and no bytes, so it never
+/// allocates and its capacity is unbounded, exactly as a `Vec` of a zero-sized type behaves.
+///
+/// A `Buffer<T>` is `Send` only when `T` is `Send + Sync`. It is a *shared* handle - every clone
+/// hands out `&[T]` - so sending one to another thread shares the elements exactly as an `Arc<T>`
+/// would. With `T: Send` alone, two threads could write through the same `&[Cell<u8>]`:
+///
+/// ```compile_fail,E0277
+/// use std::cell::Cell;
 /// use vortex_buffer::Buffer;
-/// let _ = Buffer::<()>::empty();
-/// ```
 ///
-/// ```compile_fail
-/// use vortex_buffer::Buffer;
-/// let _ = Buffer::from(vec![(); 3]);
+/// let a: Buffer<Cell<u8>> = Buffer::copy_from(vec![Cell::new(0u8); 8]);
+/// let b = a.clone();
+/// std::thread::spawn(move || b[0].set(1));
+/// a[0].set(2);
 /// ```
-///
-/// ```compile_fail
-/// use vortex_buffer::{Buffer, ByteBuffer};
-/// let _ = Buffer::<()>::from_byte_buffer(ByteBuffer::empty());
-/// ```
-///
-/// ```compile_fail
-/// use bytes::Bytes;
-/// use vortex_buffer::{Alignment, Buffer};
-/// let _ = Buffer::<()>::from_bytes_aligned(Bytes::new(), Alignment::none());
-/// ```
-#[derive(Clone)]
 pub struct Buffer<T> {
-    /// The first element in this view; may dangle for an empty buffer.
-    pub(crate) ptr: NonNull<T>,
-    /// The number of initialized `T` values visible from `ptr`.
+    /// The bytes of the initialised elements, and the region they live in.
+    pub(crate) bytes: SharedBytes,
+    /// The number of elements. Kept separately from the byte length so that zero-sized types,
+    /// which have no bytes at all, still have a count.
     pub(crate) length: usize,
-    /// The minimum alignment promised for `ptr` and preserved by aligned slices.
+    /// The minimum alignment promised for the start of the buffer and preserved by aligned slices.
     pub(crate) alignment: Alignment,
-    /// Shared ownership of the storage containing `ptr`, if any; `Buffer::empty` has no backing.
-    pub(crate) backing: Option<Arc<BufferBacking>>,
+    /// The alignment the region was allocated with, and is grown with: at least `alignment`, and
+    /// usually [`Alignment::DEFAULT_ALIGNMENT`]. Kept so that a buffer built to be SIMD-friendly
+    /// stays that way when it is thawed and grown.
+    pub(crate) preferred: Alignment,
+    /// Carries `T`'s variance and auto traits. See the type docs for why this is `Arc<T>`.
+    pub(crate) _marker: PhantomData<Arc<T>>,
 }
 
-// SAFETY: Buffer is an immutable view over backing memory. Its pointer remains valid while the
-// backing is live, and sharing elements follows the same bounds as sharing a slice.
-unsafe impl<T: Send> Send for Buffer<T> {}
-// SAFETY: see the Send implementation above.
-unsafe impl<T: Sync> Sync for Buffer<T> {}
+impl<T> Clone for Buffer<T> {
+    #[inline]
+    fn clone(&self) -> Self {
+        Self {
+            bytes: self.bytes.clone(),
+            length: self.length,
+            alignment: self.alignment,
+            preferred: self.preferred,
+            _marker: PhantomData,
+        }
+    }
+}
 
 impl<T> Default for Buffer<T> {
     fn default() -> Self {
-        Self {
-            ptr: empty_ptr(),
-            length: 0,
-            alignment: Alignment::of::<T>(),
-            backing: None,
-        }
+        Self::empty()
     }
 }
 
@@ -110,63 +113,108 @@ impl<T: Hash> Hash for Buffer<T> {
     }
 }
 
+/// Copy a buffer's contents into a fresh `Vec`.
+///
+/// Kept out of line and marked cold so that the zero-copy paths in [`Buffer::into_vec`] and
+/// [`BufferMut::into_vec`] do not have to reserve registers for a `memcpy` they will not run.
+#[cold]
+#[inline(never)]
+pub(crate) fn copy_to_vec<T: Copy>(buffer: &[T]) -> Vec<T> {
+    buffer.to_vec()
+}
+
+/// Copy a buffer's contents into a fresh, equally aligned [`BufferMut`] from the same allocator.
+///
+/// Cold for the same reason as [`copy_to_vec`]: it is the fallback [`Buffer::into_mut`] takes
+/// only when the buffer is shared or read-only.
+#[cold]
+#[inline(never)]
+fn copy_to_mut<T>(buffer: &Buffer<T>) -> BufferMut<T> {
+    BufferMut::<T>::copy_from_preferred_aligned_in(
+        buffer,
+        buffer.alignment,
+        Some(buffer.preferred),
+        buffer.allocator().clone(),
+    )
+}
+
+/// The number of `T`s that `bytes` bytes hold.
+///
+/// ## Panics
+///
+/// Panics if `bytes` is not a multiple of `size_of::<T>()`. A zero-sized type has no byte
+/// representation at all, so the only byte length that means anything for it is zero.
+pub(crate) fn elements_in<T>(bytes: usize) -> usize {
+    if size_of::<T>() == 0 {
+        if bytes != 0 {
+            vortex_panic!(
+                "{} bytes cannot be reinterpreted as the zero-sized type {}",
+                bytes,
+                type_name::<T>()
+            );
+        }
+        return 0;
+    }
+    if !bytes.is_multiple_of(size_of::<T>()) {
+        vortex_panic!(
+            "Buffer length {} must be a multiple of the scalar type's size {}",
+            bytes,
+            size_of::<T>()
+        );
+    }
+    bytes / size_of::<T>()
+}
+
+/// A `Vec` of `len` zero-sized values.
+///
+/// There are no bytes to hand over, so this is what a zero-copy `Vec` of a ZST looks like.
+pub(crate) fn zst_vec<T>(len: usize) -> Vec<T> {
+    debug_assert_eq!(size_of::<T>(), 0);
+    // SAFETY: a `Vec` of a zero-sized type owns no allocation; a dangling, aligned pointer with
+    // any length and the unbounded capacity is exactly what `Vec::<T>::with_capacity` holds.
+    unsafe { Vec::from_raw_parts(std::ptr::NonNull::<T>::dangling().as_ptr(), len, usize::MAX) }
+}
+
 impl<T> Buffer<T> {
-    pub(crate) fn from_allocation(
-        allocation: Allocation,
-        offset: usize,
-        length: usize,
-        alignment: Alignment,
-    ) -> Self {
-        // SAFETY: BufferMut keeps offset within allocation, including for empty buffers.
-        let ptr = unsafe { allocation.ptr().add(offset).cast() };
+    /// Build a buffer over `bytes`, whose length must be a whole number of `T`s.
+    #[inline]
+    pub(crate) fn from_shared_aligned(bytes: SharedBytes, alignment: Alignment) -> Self {
+        let length = elements_in::<T>(bytes.len());
         Self {
-            ptr,
+            bytes,
             length,
             alignment,
-            backing: Some(Arc::new(BufferBacking::Owned(allocation))),
+            preferred: alignment,
+            _marker: PhantomData,
         }
     }
 
-    fn from_bytes(bytes: Bytes, alignment: Alignment) -> Self {
-        let length = bytes.len() / size_of::<T>();
-        if length == 0 {
-            return Self::empty_aligned(alignment);
+    /// Adopt `owner`'s memory as `length` elements aligned to `alignment`.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the owner's memory is not aligned to `alignment`.
+    pub(crate) fn from_owner_with_length<O>(owner: O, length: usize, alignment: Alignment) -> Self
+    where
+        O: AsRef<[T]> + Send + 'static,
+    {
+        let bytes = SharedBytes::from_owner::<O, T>(owner);
+        if !alignment.is_ptr_aligned(bytes.as_ptr()) {
+            vortex_panic!("Foreign buffer is not aligned to {alignment}");
         }
-        let ptr =
-            NonNull::new(bytes.as_ptr().cast_mut().cast()).vortex_expect("Bytes pointer is null");
         Self {
-            ptr,
+            bytes,
             length,
             alignment,
-            backing: Some(Arc::new(BufferBacking::Bytes(bytes))),
-        }
-    }
-
-    #[cfg(feature = "arrow")]
-    pub(crate) fn from_arrow_owner(
-        arrow: arrow_buffer::Buffer,
-        length: usize,
-        alignment: Alignment,
-    ) -> Self {
-        if length == 0 {
-            return Self::empty_aligned(alignment);
-        }
-        let ptr = NonNull::new(arrow.as_ptr().cast_mut().cast())
-            .vortex_expect("Arrow buffer pointer is null");
-        Self {
-            ptr,
-            length,
-            alignment,
-            backing: Some(Arc::new(BufferBacking::Arrow(arrow))),
+            preferred: alignment,
+            _marker: PhantomData,
         }
     }
 
     /// Returns a new `Buffer<T>` copied from the provided `Vec<T>`, `&[T]`, etc.
     ///
-    /// Due to our underlying usage of `bytes::Bytes`, we are unable to take zero-copy ownership
-    /// of the provided `Vec<T>` while maintaining the ability to convert it back into a mutable
-    /// buffer. We could fix this by forking `Bytes`, or in many other complex ways, but for now
-    /// callers should prefer to construct `Buffer<T>` from a `BufferMut<T>`.
+    /// To adopt a `Vec<T>` without copying, use [`from_vec`](Self::from_vec) or
+    /// `Buffer::from(vec)`.
     pub fn copy_from(values: impl AsRef<[T]>) -> Self {
         BufferMut::copy_from(values).freeze()
     }
@@ -230,16 +278,15 @@ impl<T> Buffer<T> {
         BufferMut::zeroed_preferred_aligned(len, alignment, preferred_alignment).freeze()
     }
 
-    /// Create a new empty `ByteBuffer` with the provided alignment.
+    /// Create a new empty `Buffer` aligned to `T`.
     pub fn empty() -> Self {
         Self::empty_aligned(Alignment::of::<T>())
     }
 
-    /// Create a new empty `ByteBuffer` with the provided alignment.
+    /// Create a new empty `Buffer` with the provided alignment.
     ///
     /// This does not allocate. Empty buffers use an aligned dangling pointer.
     pub fn empty_aligned(alignment: Alignment) -> Self {
-        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must align to the scalar type's alignment {}",
@@ -248,14 +295,15 @@ impl<T> Buffer<T> {
             );
         }
         Self {
-            ptr: empty_ptr(),
+            bytes: SharedBytes::empty(),
             length: 0,
             alignment,
-            backing: None,
+            preferred: alignment,
+            _marker: PhantomData,
         }
     }
 
-    /// Create a new full `ByteBuffer` with the given value.
+    /// Create a new full `Buffer` with the given value.
     pub fn full(item: T, len: usize) -> Self
     where
         T: Copy,
@@ -269,6 +317,79 @@ impl<T> Buffer<T> {
         T: Copy,
     {
         BufferMut::full_in(item, len, allocator).freeze()
+    }
+
+    /// Take zero-copy ownership of a `Vec<T>`.
+    ///
+    /// For a `T` without a destructor the `Vec`'s allocation becomes the buffer's, and
+    /// [`into_vec`](Self::into_vec) can hand it straight back out. A `T` with a destructor keeps
+    /// the `Vec` alive as the buffer's owner instead, so that its elements are still dropped.
+    pub fn from_vec(vec: Vec<T>) -> Self
+    where
+        T: Send + Sync + 'static,
+    {
+        if std::mem::needs_drop::<T>() {
+            let length = vec.len();
+            return Self::from_owner_with_length(vec, length, Alignment::of::<T>());
+        }
+        BufferMut::from_vec(vec).freeze()
+    }
+
+    /// Take zero-copy ownership of memory kept alive by `owner`.
+    ///
+    /// The buffer's contents are whatever `owner` currently references, and `owner` is dropped
+    /// once the last handle to the buffer goes away. This is how foreign allocations - an Arrow
+    /// buffer, a memory map, a slab handed over an FFI boundary - enter Vortex without a copy.
+    ///
+    /// The memory is treated as read-only: [`try_into_mut`](Self::try_into_mut) will copy rather
+    /// than write through a pointer we only ever had shared access to. Use
+    /// [`BufferMut::from_owner`] when the owner can hand over exclusive, writable access.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the owner's memory is not aligned to `align_of::<T>()`.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use vortex_buffer::Buffer;
+    ///
+    /// let shared: Arc<[i32]> = Arc::from(vec![1, 2, 3]);
+    /// let buffer = Buffer::from_owner(shared.clone());
+    /// assert_eq!(buffer.as_ptr(), shared.as_ptr(), "adoption is zero-copy");
+    /// assert_eq!(buffer.as_slice(), &[1, 2, 3]);
+    /// ```
+    pub fn from_owner<O>(owner: O) -> Self
+    where
+        O: AsRef<[T]> + Send + 'static,
+    {
+        let length = owner.as_ref().len();
+        Self::from_owner_with_length(owner, length, Alignment::of::<T>())
+    }
+
+    /// Borrow a `'static` slice without copying it.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the slice is not aligned to `align_of::<T>()`, which a `&[T]` always is.
+    pub fn from_static(values: &'static [T]) -> Self {
+        // SAFETY: any `[T]` is a valid `[u8]` of `size_of_val` bytes for the purposes of reading.
+        let bytes = unsafe {
+            std::slice::from_raw_parts(values.as_ptr().cast::<u8>(), size_of_val(values))
+        };
+        let bytes = SharedBytes::from_static(bytes);
+        let alignment = Alignment::of::<T>();
+        if !alignment.is_ptr_aligned(bytes.as_ptr()) {
+            vortex_panic!("Static buffer is not aligned to {alignment}");
+        }
+        Self {
+            bytes,
+            length: values.len(),
+            alignment,
+            preferred: alignment,
+            _marker: PhantomData,
+        }
     }
 
     /// Create a `Buffer<T>` zero-copy from a `ByteBuffer`.
@@ -289,7 +410,6 @@ impl<T> Buffer<T> {
     /// Panics if the buffer is not aligned to the given alignment, if the length is not a multiple
     /// of the size of `T`, or if the given alignment is not aligned to that of `T`.
     pub fn from_byte_buffer_aligned(buffer: ByteBuffer, alignment: Alignment) -> Self {
-        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -300,19 +420,10 @@ impl<T> Buffer<T> {
         if !alignment.is_ptr_aligned(buffer.as_ptr()) {
             vortex_panic!("Buffer must align to the requested alignment {}", alignment);
         }
-        if !buffer.len().is_multiple_of(size_of::<T>()) {
-            vortex_panic!(
-                "Buffer length {} must be a multiple of the scalar type's size {}",
-                buffer.len(),
-                size_of::<T>()
-            );
-        }
-        Self {
-            ptr: buffer.ptr.cast(),
-            length: buffer.length / size_of::<T>(),
-            alignment,
-            backing: buffer.backing,
-        }
+        let preferred = buffer.preferred.max(alignment);
+        let mut this = Self::from_shared_aligned(buffer.bytes, alignment);
+        this.preferred = preferred;
+        this
     }
 
     /// Create a `Buffer<T>` zero-copy from a `Bytes`.
@@ -322,7 +433,6 @@ impl<T> Buffer<T> {
     /// Panics if the buffer is not aligned to the size of `T`, or the length is not a multiple of
     /// the size of `T`.
     pub fn from_bytes_aligned(bytes: Bytes, alignment: Alignment) -> Self {
-        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -336,14 +446,10 @@ impl<T> Buffer<T> {
                 alignment,
             );
         }
-        if !bytes.len().is_multiple_of(size_of::<T>()) {
-            vortex_panic!(
-                "Bytes length {} must be a multiple of the scalar type's size {}",
-                bytes.len(),
-                size_of::<T>()
-            );
+        if bytes.is_empty() {
+            return Self::empty_aligned(alignment);
         }
-        Self::from_bytes(bytes, alignment)
+        Self::from_shared_aligned(SharedBytes::from_owner::<Bytes, u8>(bytes), alignment)
     }
 
     /// Create a buffer with values from the TrustedLen iterator.
@@ -352,12 +458,31 @@ impl<T> Buffer<T> {
         BufferMut::from_trusted_len_iter(iter).freeze()
     }
 
-    /// Map each element of the buffer with a closure.
+    /// Map each element of the buffer with a closure, reusing the buffer's allocation when this
+    /// is its only handle.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `R` does not have the same size and alignment as `T`.
     pub fn map_each_in_place<R, F>(self, mut f: F) -> BufferMut<R>
     where
         T: Copy,
+        R: Copy,
         F: FnMut(T) -> R,
     {
+        // Assert here as well as in `BufferMut::map_each_in_place`, so that the contract does not
+        // depend on which arm we take: only the in-place arm reuses `T`'s allocation, so without
+        // this a mismatched `R` would panic or not depending on the buffer's refcount.
+        assert_eq!(
+            size_of::<T>(),
+            size_of::<R>(),
+            "Size of T and R do not match"
+        );
+        assert_eq!(
+            align_of::<T>(),
+            align_of::<R>(),
+            "Alignment of T and R do not match"
+        );
         match self.try_into_mut() {
             Ok(mut_buf) => mut_buf.map_each_in_place(f),
             Err(buf) => {
@@ -371,72 +496,63 @@ impl<T> Buffer<T> {
                     .for_each(|(out, in_)| {
                         out.write(f(in_));
                     });
-                // Safety: just assigned to each value
+                // SAFETY: every one of the `len` slots was just written.
                 unsafe { out_buf.set_len(len) }
                 out_buf
             }
         }
     }
 
-    /// Clear the buffer, preserving existing capacity.
+    /// Clear the buffer.
     pub fn clear(&mut self) {
+        self.bytes.clear();
         self.length = 0;
     }
 
     /// Returns the length of the buffer in elements of type T.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn len(&self) -> usize {
         self.length
     }
 
     /// Returns whether the buffer is empty.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.length == 0
     }
 
     /// Returns the alignment of the buffer.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn alignment(&self) -> Alignment {
         self.alignment
     }
 
     /// Returns the allocator to use for derived buffers.
     ///
-    /// External buffers use the static allocator.
+    /// Adopted and borrowed buffers report the static allocator.
+    #[inline]
     pub fn allocator(&self) -> &BufferAllocatorRef {
-        match self.backing.as_deref() {
-            Some(backing) => backing.allocator(),
-            None => BufferAllocatorRef::static_ref(),
-        }
+        self.bytes.allocator()
     }
 
     /// Returns a raw pointer to the buffer's data.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn as_ptr(&self) -> *const T {
-        self.ptr.as_ptr()
+        self.bytes.as_ptr().cast::<T>()
     }
 
     /// Returns a slice over the buffer of elements of type T.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn as_slice(&self) -> &[T] {
-        // SAFETY: ptr points into the live backing and construction checks its alignment.
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.length) }
+        // SAFETY: the bytes hold `length` initialised `T`s (none, for a zero-sized `T`), and the
+        // pointer is aligned for `T` by construction.
+        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.length) }
     }
 
     /// Return a view over the buffer as an opaque byte slice.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn as_bytes(&self) -> &[u8] {
-        // SAFETY: the element range is initialized and remains live through backing.
-        unsafe {
-            std::slice::from_raw_parts(self.ptr.as_ptr().cast(), size_of_val(self.as_slice()))
-        }
+        self.bytes.as_slice()
     }
 
     /// Returns an iterator over the buffer of elements of type T.
@@ -452,8 +568,7 @@ impl<T> Buffer<T> {
     ///
     /// Requires that `begin <= end` and `end <= self.len()`.
     /// Also requires that both `begin` and `end` are aligned to the buffer's required alignment.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn slice(&self, range: impl RangeBounds<usize>) -> Self {
         self.slice_with_alignment(range, self.alignment)
     }
@@ -464,8 +579,7 @@ impl<T> Buffer<T> {
     /// # Panics
     ///
     /// Requires that `begin <= end` and `end <= self.len()`.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn slice_unaligned(&self, range: impl RangeBounds<usize>) -> Self {
         self.slice_with_alignment(range, Alignment::of::<u8>())
     }
@@ -512,6 +626,7 @@ impl<T> Buffer<T> {
         }
 
         let begin_byte = begin * size_of::<T>();
+        let end_byte = end * size_of::<T>();
         if !alignment.is_offset_aligned(begin_byte) {
             vortex_panic!(
                 "range start must be aligned to {alignment:?}, byte {}",
@@ -523,11 +638,11 @@ impl<T> Buffer<T> {
         }
 
         Self {
-            // SAFETY: begin is in bounds and the alignment check applies to the new pointer.
-            ptr: unsafe { self.ptr.add(begin) },
+            bytes: self.bytes.slice(begin_byte, end_byte),
             length: end - begin,
             alignment,
-            backing: self.backing.clone(),
+            preferred: self.preferred.max(alignment),
+            _marker: PhantomData,
         }
     }
 
@@ -539,8 +654,7 @@ impl<T> Buffer<T> {
     ///
     /// # Panics:
     /// Requires that the given sub slice is in fact contained within the Bytes buffer; otherwise this function will panic.
-    #[allow(clippy::inline_always)]
-    #[inline(always)]
+    #[inline]
     pub fn slice_ref(&self, subset: &[T]) -> Self {
         self.slice_ref_with_alignment(subset, Alignment::of::<T>())
     }
@@ -567,114 +681,140 @@ impl<T> Buffer<T> {
             vortex_panic!("slice_ref subset must be aligned to {:?}", alignment);
         }
 
-        let start = self.as_ptr().addr();
-        let end = start + size_of_val(self.as_slice());
-        let subset_start = subset.as_ptr().addr();
-        let subset_end = subset_start
-            .checked_add(size_of_val(subset))
-            .vortex_expect("slice_ref address overflow");
-        if subset_start < start || subset_end > end {
-            vortex_panic!("slice_ref subset must be contained in the buffer");
+        if size_of::<T>() == 0 {
+            // Every slice of a zero-sized type lives at every address, so containment is only a
+            // matter of the count.
+            if subset.len() > self.length {
+                vortex_panic!("slice_ref subset must be contained in the buffer");
+            }
+            return Self {
+                bytes: SharedBytes::empty(),
+                length: subset.len(),
+                alignment,
+                preferred: self.preferred.max(alignment),
+                _marker: PhantomData,
+            };
         }
 
+        // SAFETY: any `[T]` is a valid `[u8]` of `size_of_val` bytes for the purposes of reading.
+        let subset_bytes = unsafe {
+            std::slice::from_raw_parts(subset.as_ptr().cast::<u8>(), size_of_val(subset))
+        };
         Self {
-            ptr: NonNull::new(subset.as_ptr().cast_mut()).vortex_expect("slice pointer is null"),
+            bytes: self.bytes.slice_ref(subset_bytes),
             length: subset.len(),
             alignment,
-            backing: self.backing.clone(),
+            preferred: self.preferred.max(alignment),
+            _marker: PhantomData,
         }
     }
 
     /// Returns the underlying bytes without copying.
+    ///
+    /// A buffer that was adopted from a `Bytes` hands the original back, sliced to this window if
+    /// need be. Anything else is wrapped in a `Bytes` that keeps the buffer's region alive.
     pub fn into_bytes(self) -> Bytes {
-        if let Some(backing) = self.backing.as_ref()
-            && let BufferBacking::Bytes(bytes) = backing.as_ref()
-        {
-            let offset = self.ptr.cast::<u8>().addr().get() - bytes.as_ptr().addr();
-            let length = self.length * size_of::<T>();
-            if offset == 0 && length == bytes.len() && Arc::strong_count(backing) == 1 {
-                return match self.backing {
-                    Some(backing) => match Arc::try_unwrap(backing) {
-                        Ok(BufferBacking::Bytes(bytes)) => bytes,
-                        _ => unreachable!(),
-                    },
-                    None => unreachable!(),
+        let offset = self.bytes.offset_in_region();
+        let length = self.bytes.len();
+        let bytes = match self.bytes.try_into_owner::<Bytes>() {
+            Ok(owner) => {
+                return if offset == 0 && length == owner.len() {
+                    owner
+                } else {
+                    owner.slice(offset..offset + length)
                 };
             }
-            return bytes.slice(offset..offset + length);
+            Err(bytes) => bytes,
+        };
+        if let Some(owner) = bytes.owner::<Bytes>() {
+            return owner.slice(offset..offset + length);
         }
-        match self.backing {
-            Some(backing) => Bytes::from_owner(BufferBytesOwner {
-                ptr: self.ptr.cast(),
-                length: self.length * size_of::<T>(),
-                backing,
-            }),
-            None => Bytes::new(),
+        if bytes.is_empty() {
+            return Bytes::new();
         }
+        Bytes::from_owner(bytes)
     }
 
     /// Return the ByteBuffer for this `Buffer<T>`.
+    ///
+    /// A buffer of a zero-sized type has no bytes, so its byte buffer is empty.
     pub fn into_byte_buffer(self) -> ByteBuffer {
         ByteBuffer {
-            ptr: self.ptr.cast(),
-            length: self.length * size_of::<T>(),
+            length: self.bytes.len(),
+            bytes: self.bytes,
             alignment: self.alignment,
-            backing: self.backing,
+            preferred: self.preferred,
+            _marker: PhantomData,
         }
     }
 
     /// Try to convert self into `BufferMut<T>` if there is only a single strong reference.
+    ///
+    /// This succeeds for buffers built over foreign memory too - a `Vec<T>` adopted with
+    /// [`from_vec`](Self::from_vec), or any owner handed to [`BufferMut::from_owner`] - as long
+    /// as nothing else holds a reference to it. Memory adopted read-only through
+    /// [`from_owner`](Self::from_owner) is never made mutable.
+    ///
+    /// The recovered capacity runs from the start of this buffer to the end of its allocation, so
+    /// a buffer that is a slice of a larger region regains the rest of it.
     pub fn try_into_mut(self) -> Result<BufferMut<T>, Self> {
-        let Self {
-            ptr,
-            length,
-            alignment,
-            backing,
-        } = self;
-        let Some(backing) = backing else {
-            return Ok(BufferMut::empty_aligned(alignment));
-        };
-        if !matches!(backing.as_ref(), BufferBacking::Owned(_)) {
-            return Err(Self {
-                ptr,
+        let length = self.length;
+        let alignment = self.alignment;
+        let preferred = self.preferred;
+        self.bytes
+            .try_into_unique()
+            .map(|bytes| BufferMut {
+                bytes,
                 length,
                 alignment,
-                backing: Some(backing),
-            });
-        }
-        match Arc::try_unwrap(backing) {
-            Ok(BufferBacking::Owned(allocation)) => {
-                let offset = ptr.addr().get() - allocation.ptr().addr().get();
-                let capacity = if allocation.size() == 0 {
-                    0
-                } else {
-                    (allocation.size() - offset) / size_of::<T>()
-                };
-                Ok(BufferMut {
-                    allocation,
-                    ptr,
-                    length,
-                    capacity,
-                    alignment,
-                    _marker: Default::default(),
-                })
-            }
-            Ok(_) => unreachable!(),
-            Err(backing) => Err(Self {
-                ptr,
+                preferred,
+                _marker: PhantomData,
+            })
+            .map_err(|bytes| Self {
+                bytes,
                 length,
                 alignment,
-                backing: Some(backing),
-            }),
-        }
+                preferred,
+                _marker: PhantomData,
+            })
     }
 
     /// Convert self into `BufferMut<T>`, cloning the data if there are multiple strong references.
     pub fn into_mut(self) -> BufferMut<T> {
-        self.try_into_mut().unwrap_or_else(|buffer| {
-            let allocator = buffer.allocator().clone();
-            BufferMut::<T>::copy_from_aligned_in(&buffer, buffer.alignment, allocator)
-        })
+        self.try_into_mut()
+            .unwrap_or_else(|buffer| copy_to_mut(&buffer))
+    }
+
+    /// Convert the buffer into a `Vec<T>`, without copying where possible.
+    ///
+    /// See [`BufferMut::into_vec`] for when this is zero-copy; in addition, this buffer must be
+    /// the only handle to its allocation.
+    pub fn into_vec(self) -> Vec<T>
+    where
+        T: Copy,
+    {
+        match self.try_into_mut() {
+            Ok(buffer) => buffer.into_vec(),
+            Err(buffer) => copy_to_vec(buffer.as_slice()),
+        }
+    }
+
+    /// Convert the buffer into a `Vec<T>` without copying, or give it back.
+    ///
+    /// See [`into_vec`](Self::into_vec).
+    pub fn try_into_vec(self) -> Result<Vec<T>, Self> {
+        self.try_into_mut()?
+            .try_into_vec()
+            .map_err(BufferMut::freeze)
+    }
+
+    /// Returns whether this is the only handle to the buffer's allocation.
+    ///
+    /// When this is true, [`try_into_mut`](Self::try_into_mut) succeeds for any buffer over
+    /// writable memory, and [`try_into_vec`](Self::try_into_vec) succeeds for any buffer that
+    /// starts at the front of a global allocation made with *exactly* `align_of::<T>()`.
+    pub fn is_unique(&self) -> bool {
+        self.bytes.is_unique()
     }
 
     /// Returns whether a `Buffer<T>` is aligned to the given alignment.
@@ -686,6 +826,7 @@ impl<T> Buffer<T> {
     pub fn aligned(mut self, alignment: Alignment) -> Self {
         if alignment.is_ptr_aligned(self.as_ptr()) {
             self.alignment = alignment;
+            self.preferred = self.preferred.max(alignment);
             self
         } else {
             #[cfg(feature = "warn-copy")]
@@ -704,14 +845,13 @@ impl<T> Buffer<T> {
     pub fn ensure_aligned(mut self, alignment: Alignment) -> Self {
         if alignment.is_ptr_aligned(self.as_ptr()) {
             self.alignment = alignment;
+            self.preferred = self.preferred.max(alignment);
             self
         } else {
             vortex_panic!("Buffer is not aligned to requested alignment {}", alignment)
         }
     }
-}
 
-impl<T> Buffer<T> {
     /// Transmute a `Buffer<T>` into a `Buffer<U>`.
     ///
     /// # Safety
@@ -732,10 +872,11 @@ impl<T> Buffer<T> {
         );
 
         Buffer {
-            ptr: self.ptr.cast(),
+            bytes: self.bytes,
             length: self.length,
             alignment: self.alignment,
-            backing: self.backing,
+            preferred: self.preferred,
+            _marker: PhantomData,
         }
     }
 }
@@ -821,29 +962,27 @@ where
     T: Send + Sync + 'static,
 {
     fn from(value: Vec<T>) -> Self {
-        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
-        let length = value.len();
-        let alignment = Alignment::of::<T>();
-        if std::mem::needs_drop::<T>() {
-            // Keep the typed owner so its elements are dropped.
-            Self {
-                ptr: NonNull::new(value.as_ptr().cast_mut())
-                    .vortex_expect("a Vec always has a non-null pointer"),
-                length,
-                alignment,
-                backing: Some(Arc::new(BufferBacking::External {
-                    _owner: Box::new(value),
-                })),
-            }
-        } else {
-            Self::from_allocation(Allocation::from_vec(value), 0, length, alignment)
-        }
+        Self::from_vec(value)
     }
 }
 
 impl From<Bytes> for ByteBuffer {
     fn from(bytes: Bytes) -> Self {
-        Self::from_bytes(bytes, Alignment::of::<u8>())
+        Self::from_bytes_aligned(bytes, Alignment::of::<u8>())
+    }
+}
+
+impl ByteBuffer {
+    /// Wrap a byte window in a byte buffer aligned to `u8`.
+    #[inline]
+    pub(crate) fn from_shared(bytes: SharedBytes) -> Self {
+        Self {
+            length: bytes.len(),
+            bytes,
+            alignment: Alignment::of::<u8>(),
+            preferred: Alignment::of::<u8>(),
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -867,34 +1006,9 @@ impl Buf for ByteBuffer {
                 self.alignment
             );
         }
-        assert!(cnt <= self.length, "cannot advance past the buffer length");
-        // SAFETY: cnt is within the initialized byte range.
-        self.ptr = unsafe { self.ptr.add(cnt) };
+        self.bytes.advance(cnt);
         self.length -= cnt;
     }
-}
-
-struct BufferBytesOwner {
-    ptr: NonNull<u8>,
-    length: usize,
-    backing: Arc<BufferBacking>,
-}
-
-// SAFETY: the owner exposes immutable initialized bytes and keeps their backing live.
-unsafe impl Send for BufferBytesOwner {}
-unsafe impl Sync for BufferBytesOwner {}
-
-impl AsRef<[u8]> for BufferBytesOwner {
-    fn as_ref(&self) -> &[u8] {
-        let _ = &self.backing;
-        // SAFETY: ptr and length came from a live Buffer.
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.length) }
-    }
-}
-
-fn empty_ptr<T>() -> NonNull<T> {
-    let addr = 1usize << (usize::BITS - 1);
-    NonNull::new(std::ptr::without_provenance_mut(addr)).vortex_expect("empty pointer is non-null")
 }
 
 /// Owned iterator over a [`Buffer`].
@@ -902,33 +1016,36 @@ pub struct BufferIterator<T: Copy> {
     // Keep the buffer alive for the duration of the iteration.
     _buffer: Buffer<T>,
     ptr: *const T,
-    end: *const T,
+    // Counted rather than compared against an end pointer, so that a zero-sized `T` - whose
+    // elements all live at the same address - still yields every one of them.
+    remaining: usize,
 }
 
-// SAFETY: `BufferIterator` is a `Buffer<T>` plus two cursors into it, so it can safely be
-// `Send`/`Sync` exactly when `Buffer<T>` is. Same bounds as `std::vec::IntoIter`.
-unsafe impl<T: Copy + Send> Send for BufferIterator<T> {}
-unsafe impl<T: Copy + Sync> Sync for BufferIterator<T> {}
+// SAFETY: `BufferIterator` is a `Buffer<T>` plus two cursors into it, so it can be sent or shared
+// exactly when `Buffer<T>` can.
+unsafe impl<T: Copy + Send + Sync> Send for BufferIterator<T> {}
+// SAFETY: see above.
+unsafe impl<T: Copy + Send + Sync> Sync for BufferIterator<T> {}
 
 impl<T: Copy> Iterator for BufferIterator<T> {
     type Item = T;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        if self.ptr == self.end {
-            None
-        } else {
-            // SAFETY: ptr is within the buffer and has not reached end.
-            let value = unsafe { self.ptr.read() };
-            self.ptr = unsafe { self.ptr.add(1) };
-            Some(value)
+        if self.remaining == 0 {
+            return None;
         }
+        // SAFETY: `remaining` elements starting at `ptr` are initialised and kept alive by
+        // `_buffer`.
+        let value = unsafe { self.ptr.read() };
+        self.ptr = unsafe { self.ptr.add(1) };
+        self.remaining -= 1;
+        Some(value)
     }
 
     #[inline]
     fn size_hint(&self) -> (usize, Option<usize>) {
-        let remaining = unsafe { self.end.offset_from(self.ptr) } as usize;
-        (remaining, Some(remaining))
+        (self.remaining, Some(self.remaining))
     }
 }
 
@@ -940,12 +1057,12 @@ impl<T: Copy> IntoIterator for Buffer<T> {
 
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
-        let ptr = self.as_slice().as_ptr();
-        let end = unsafe { ptr.add(self.len()) };
+        let ptr = self.as_ptr();
+        let remaining = self.len();
         BufferIterator {
             _buffer: self,
             ptr,
-            end,
+            remaining,
         }
     }
 }
@@ -958,324 +1075,4 @@ impl<T> From<BufferMut<T>> for Buffer<T> {
 }
 
 #[cfg(test)]
-mod test {
-    use std::mem::align_of;
-    use std::sync::Arc;
-    use std::sync::atomic::AtomicUsize;
-    use std::sync::atomic::Ordering;
-
-    use bytes::Buf;
-    use bytes::Bytes;
-
-    use crate::Alignment;
-    use crate::Buffer;
-    use crate::BufferBacking;
-    use crate::ByteBuffer;
-    use crate::buffer;
-
-    #[test]
-    fn align() {
-        let buf = buffer![0u8, 1, 2];
-        let aligned = buf.aligned(Alignment::new(32));
-        assert_eq!(aligned.alignment(), Alignment::new(32));
-        assert_eq!(aligned.as_slice(), &[0, 1, 2]);
-    }
-
-    #[test]
-    fn buffer_iterator_send_sync() {
-        fn assert_send_sync<T: Send + Sync>(_: &T) {}
-
-        let mut iter = buffer![0i32, 1, 2, 3].into_iter();
-        assert_send_sync(&iter);
-        iter.next();
-        let remaining: Vec<i32> = std::thread::spawn(move || iter.collect()).join().unwrap();
-        assert_eq!(remaining, vec![1, 2, 3]);
-    }
-
-    #[test]
-    fn slice() {
-        let buf = buffer![0, 1, 2, 3, 4];
-        assert_eq!(buf.slice(1..3).as_slice(), &[1, 2]);
-        assert_eq!(buf.slice(1..=3).as_slice(), &[1, 2, 3]);
-    }
-
-    #[test]
-    fn slice_unaligned() {
-        let buf = buffer![0i32, 1, 2, 3, 4].into_byte_buffer();
-        // With a regular slice, this would panic. See [`slice_bad_alignment`].
-        let sliced = buf.slice_unaligned(1..2);
-        // Verify the slice has the expected length (1 byte from index 1 to 2).
-        assert_eq!(sliced.len(), 1);
-        // The original buffer has i32 values [0, 1, 2, 3, 4].
-        // In little-endian bytes, 0i32 = [0, 0, 0, 0], so byte at index 1 is 0.
-        assert_eq!(sliced.as_slice(), &[0]);
-    }
-
-    #[test]
-    #[should_panic]
-    fn slice_bad_alignment() {
-        let buf = buffer![0i32, 1, 2, 3, 4].into_byte_buffer();
-        // We should only be able to slice this buffer on 4-byte (i32) boundaries.
-        buf.slice(1..2);
-    }
-
-    #[test]
-    fn bytes_buf() {
-        let mut buf = ByteBuffer::copy_from("helloworld".as_bytes());
-        assert_eq!(buf.remaining(), 10);
-        assert_eq!(buf.chunk(), b"helloworld");
-
-        buf.advance(5);
-        assert_eq!(buf.remaining(), 5);
-        assert_eq!(buf.as_slice(), b"world");
-        assert_eq!(buf.chunk(), b"world");
-    }
-
-    #[test]
-    fn buffer_zeroed() {
-        const LEN: usize = 17;
-
-        let buf = Buffer::<u32>::zeroed(LEN);
-
-        assert!(buf.is_aligned(Alignment::of::<u32>()));
-        assert_eq!(buf.as_slice(), &[0; LEN]);
-    }
-
-    #[test]
-    fn buffer_zeroed_aligned() {
-        const LEN: usize = 17;
-        let alignment = Alignment::new(64);
-
-        let buf = Buffer::<u32>::zeroed_aligned(LEN, alignment);
-
-        assert!(buf.is_aligned(alignment));
-        assert_eq!(buf.as_slice(), &[0; LEN]);
-    }
-
-    #[test]
-    fn copy_from_over_aligns_to_default() {
-        let values = [1u32, 2, 3];
-        let buf = Buffer::<u32>::copy_from(values);
-
-        // The buffer reports the scalar type's alignment, ...
-        assert_eq!(buf.alignment(), Alignment::of::<u32>());
-        // ... but the underlying allocation is over-aligned to DEFAULT_ALIGNMENT.
-        assert!(buf.is_aligned(Alignment::DEFAULT_ALIGNMENT));
-        assert_eq!(buf.as_slice(), &values);
-    }
-
-    #[test]
-    fn zeroed_over_aligns_to_default() {
-        const LEN: usize = 17;
-
-        let buf = Buffer::<u32>::zeroed(LEN);
-
-        assert_eq!(buf.alignment(), Alignment::of::<u32>());
-        assert!(buf.is_aligned(Alignment::DEFAULT_ALIGNMENT));
-        assert_eq!(buf.as_slice(), &[0; LEN]);
-    }
-
-    #[test]
-    fn from_vec() {
-        let vec = vec![1, 2, 3, 4, 5];
-        let buff = Buffer::from(vec.clone());
-        assert!(buff.is_aligned(Alignment::of::<i32>()));
-        assert_eq!(vec, buff.as_ref());
-    }
-
-    #[test]
-    fn from_vec_adopts_allocation() {
-        let mut vec = Vec::with_capacity(16);
-        vec.extend([1u32, 2, 3, 4, 5]);
-        let ptr = vec.as_ptr();
-        let capacity = vec.capacity();
-
-        let buffer = Buffer::from(vec);
-        assert_eq!(buffer.as_ptr(), ptr);
-
-        let Ok(mut buffer) = buffer.try_into_mut() else {
-            panic!("Vec-backed buffer should be uniquely owned")
-        };
-        assert_eq!(buffer.capacity(), capacity);
-        assert_eq!(buffer.allocation.alignment(), align_of::<u32>());
-
-        buffer.extend(6..=32);
-        assert_eq!(buffer.as_slice(), (1..=32).collect::<Vec<_>>());
-        assert_eq!(buffer.allocation.alignment(), align_of::<u32>());
-    }
-
-    #[test]
-    fn byte_owner_preserves_slice_and_lifetime() {
-        struct Owner {
-            values: Vec<u8>,
-            drops: Arc<AtomicUsize>,
-        }
-
-        impl AsRef<[u8]> for Owner {
-            fn as_ref(&self) -> &[u8] {
-                &self.values[1..4]
-            }
-        }
-
-        impl Drop for Owner {
-            fn drop(&mut self) {
-                self.drops.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-
-        let drops = Arc::new(AtomicUsize::new(0));
-        let owner = Owner {
-            values: vec![0, 1, 2, 3, 4],
-            drops: Arc::clone(&drops),
-        };
-        let ptr = owner.as_ref().as_ptr();
-        let buffer = ByteBuffer::from(Bytes::from_owner(owner));
-        assert_eq!(buffer.as_ptr(), ptr);
-        assert_eq!(buffer.as_slice(), [1, 2, 3]);
-        let view = buffer.slice(1..);
-        drop(buffer);
-        assert_eq!(drops.load(Ordering::Relaxed), 0);
-        assert_eq!(view.as_slice(), [2, 3]);
-        drop(view);
-        assert_eq!(drops.load(Ordering::Relaxed), 1);
-    }
-
-    #[test]
-    fn bytes_round_trip_reuses_owner() {
-        let bytes = Bytes::from_static(&[1, 2, 3, 4]);
-        let ptr = bytes.as_ptr();
-
-        let buffer = ByteBuffer::from(bytes);
-        assert!(matches!(
-            buffer.backing.as_deref(),
-            Some(BufferBacking::Bytes(_))
-        ));
-        let bytes = buffer.into_bytes();
-
-        assert_eq!(bytes.as_ptr(), ptr);
-        assert_eq!(bytes.as_ref(), &[1, 2, 3, 4]);
-    }
-
-    #[test]
-    fn external_try_into_mut_preserves_backing() {
-        let buffer = ByteBuffer::from(Bytes::from_static(&[1, 2, 3, 4]));
-        let Some(original_backing) = buffer.backing.as_ref() else {
-            panic!("external buffer has no backing")
-        };
-        let backing = Arc::as_ptr(original_backing);
-
-        let Err(buffer) = buffer.try_into_mut() else {
-            panic!("external buffer became mutable")
-        };
-
-        let Some(new_backing) = buffer.backing.as_ref() else {
-            panic!("external buffer has no backing")
-        };
-        assert_eq!(Arc::as_ptr(new_backing), backing);
-    }
-
-    #[test]
-    fn from_u8_vec_preserves_capacity() {
-        let mut vec = Vec::with_capacity(16);
-        vec.extend([1u8, 2, 3]);
-
-        let buffer = Buffer::from(vec);
-        let Ok(buffer) = buffer.try_into_mut() else {
-            panic!("Vec-backed buffer should be uniquely owned")
-        };
-        assert_eq!(buffer.capacity(), 16);
-    }
-
-    #[test]
-    fn sliced_buffer_into_mut_has_safe_capacity() {
-        let mut original = crate::BufferMut::with_capacity(128);
-        original.extend(0u32..100);
-        let original = original.freeze();
-        let sliced = original.slice(64..96);
-        drop(original);
-
-        let Ok(mut sliced) = sliced.try_into_mut() else {
-            panic!("uniquely owned slice should become mutable")
-        };
-        let ptr = sliced.as_ptr();
-        let capacity = sliced.capacity();
-        sliced.push_n(0, capacity - sliced.len());
-        assert_eq!(sliced.len(), capacity);
-        assert_eq!(sliced.as_ptr(), ptr);
-        sliced.push(42);
-        assert_eq!(&sliced[..32], (64u32..96).collect::<Vec<_>>());
-        assert_eq!(&sliced[32..capacity], vec![0; capacity - 32]);
-        assert_eq!(sliced[capacity], 42);
-    }
-
-    #[test]
-    fn from_vec_preserves_drop_glue() {
-        struct DropValue(Arc<AtomicUsize>);
-
-        impl Drop for DropValue {
-            fn drop(&mut self) {
-                self.0.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-
-        let drops = Arc::new(AtomicUsize::new(0));
-        let values = (0..3)
-            .map(|_| DropValue(Arc::clone(&drops)))
-            .collect::<Vec<_>>();
-        let buffer = Buffer::from(values);
-
-        assert_eq!(drops.load(Ordering::Relaxed), 0);
-        drop(buffer);
-        assert_eq!(drops.load(Ordering::Relaxed), 3);
-    }
-
-    #[test]
-    fn empty_aligned_max_alignment() {
-        // Empty buffers are backed by a static and must satisfy any valid alignment.
-        let buf = Buffer::<u8>::empty_aligned(Alignment::MAX);
-        assert!(buf.is_empty());
-        assert!(buf.is_aligned(Alignment::MAX));
-    }
-
-    #[test]
-    fn empty_has_no_backing() {
-        assert!(Buffer::<u8>::empty().backing.is_none());
-    }
-
-    #[test]
-    fn empty_slice_preserves_alignment() {
-        let buf = Buffer::<u64>::zeroed_aligned(8, Alignment::new(64));
-        let sliced = buf.slice(0..0);
-        assert!(sliced.is_empty());
-        assert_eq!(sliced.alignment(), Alignment::new(64));
-        assert!(sliced.is_aligned(Alignment::new(64)));
-    }
-
-    #[test]
-    fn empty_into_mut_preserves_alignment() {
-        let buf = Buffer::<u8>::empty_aligned(Alignment::new(64));
-        let buf_mut = buf.into_mut();
-        assert_eq!(buf_mut.alignment(), Alignment::new(64));
-        assert!(buf_mut.is_empty());
-    }
-
-    #[test]
-    fn test_slice_unaligned_end_pos() {
-        let data = vec![0u8; 2];
-        // Overalign the u8 vector.
-        let aligned_buffer = Buffer::copy_from_aligned(&data, Alignment::new(8));
-        // Previously, `Buffer::slice` incorrectly asserted that the end position
-        // must be aligned. That assertion has been removed such that the end
-        // position can be arbitrary and only the beginning of the slice needs
-        // to be aligned.
-        aligned_buffer.slice(0..1);
-    }
-
-    #[test]
-    fn test_empty_equality() {
-        let a = Buffer::<u16>::empty();
-        let b = Buffer::<u16>::empty();
-
-        assert_eq!(a, b);
-    }
-}
+mod tests;

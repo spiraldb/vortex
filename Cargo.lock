@@ -10802,6 +10802,7 @@ dependencies = [
 name = "vortex-bytes"
 version = "0.1.0"
 dependencies = [
+ "allocator-api2",
  "hegeltest",
  "rstest",
 ]

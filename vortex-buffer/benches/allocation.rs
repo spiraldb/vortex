@@ -7,6 +7,7 @@ use bytes::BytesMut;
 use divan::Bencher;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
+use vortex_buffer::BufferAllocatorExt;
 use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::BufferMut;
 

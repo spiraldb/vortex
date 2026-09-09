@@ -16,6 +16,9 @@ version = { workspace = true }
 [package.metadata.docs.rs]
 all-features = true
 
+[dependencies]
+allocator-api2 = { workspace = true }
+
 [lints]
 workspace = true
 

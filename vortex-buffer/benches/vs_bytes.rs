@@ -99,7 +99,7 @@ fn build_vortex_unaligned(bencher: Bencher, n: usize) {
 #[divan::bench(args = SIZES)]
 fn build_vortex_as_before(bencher: Bencher, n: usize) {
     let src = payload(n);
-    let alignment = *Alignment::DEFAULT_ALIGNMENT;
+    let alignment = Alignment::DEFAULT_ALIGNMENT.as_usize();
     bencher.bench(|| {
         let mut b = BytesMut::with_capacity(n + alignment);
         let padding = b.as_ptr().align_offset(alignment);

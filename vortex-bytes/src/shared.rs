@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::any::TypeId;
 use std::cmp::Ordering;
 use std::hash::Hash;
 use std::hash::Hasher;
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering as AtomicOrdering;
 
+use crate::BufferAllocatorRef;
 use crate::Release;
 use crate::Shared;
 use crate::State;
@@ -16,6 +19,7 @@ use crate::UniqueBytes;
 use crate::dangling;
 use crate::drop_owner;
 use crate::panic::bytes_panic;
+use crate::shared_allocated;
 
 /// An immutable, reference-counted window into a region.
 ///
@@ -28,8 +32,8 @@ pub struct SharedBytes {
     ptr: NonNull<u8>,
     /// The length of the window in bytes.
     len: usize,
-    /// The first byte of the region, when `state` is `OWNED`. Promotion never rewrites this, which
-    /// is what lets it happen behind a shared reference.
+    /// The first byte of the region. Promotion never rewrites this, which is what lets it happen
+    /// behind a shared reference.
     base: NonNull<u8>,
     /// The ownership state. Written only by promotion, which is why it is atomic. Holding a
     /// pointer rather than a `usize` is what keeps the `SHARED` case's provenance.
@@ -80,8 +84,12 @@ impl SharedBytes {
     /// derived from a shared reference, and writing through such a pointer is undefined behaviour
     /// even when the memory itself is writable.
     ///
-    /// Foreign memory is always refcounted: adoption already allocates a box for
-    /// the owner, so there is nothing to be gained by describing it inline.
+    /// The owner can be had back through [`owner`](Self::owner) and
+    /// [`try_into_owner`](Self::try_into_owner), which is what keeps round trips through foreign
+    /// buffer types zero-copy.
+    ///
+    /// Foreign memory is always refcounted: adoption already allocates a box for the owner, so
+    /// there is nothing to be gained by describing it inline.
     pub fn from_owner<O, T>(owner: O) -> Self
     where
         O: AsRef<[T]> + Send + 'static,
@@ -110,6 +118,7 @@ impl SharedBytes {
             release: Release::Owner {
                 owner: owner.cast::<()>(),
                 drop: drop_owner::<O>,
+                type_id: TypeId::of::<O>(),
             },
         }
         .into_raw();
@@ -128,7 +137,7 @@ impl SharedBytes {
     /// ## Safety
     ///
     /// `ptr..ptr + len` must lie within the region `state` describes, `base` must be its first
-    /// byte when `state` is `OWNED`, and the caller must hand over one reference to it.
+    /// byte, and the caller must hand over one reference to it.
     #[inline]
     pub(crate) unsafe fn from_parts(
         ptr: NonNull<u8>,
@@ -171,6 +180,85 @@ impl SharedBytes {
         unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
     }
 
+    /// How far into its region the window starts.
+    #[inline]
+    pub fn offset_in_region(&self) -> usize {
+        self.ptr.as_ptr().addr() - self.base.as_ptr().addr()
+    }
+
+    /// The allocator the region came from, and so the one to allocate any derived region with.
+    ///
+    /// Regions that were adopted or borrowed rather than allocated report the global allocator.
+    #[inline]
+    pub fn allocator(&self) -> &BufferAllocatorRef {
+        let state = self.state();
+        if state.is_shared() {
+            // SAFETY: we hold a reference to the `Shared`, so it is live.
+            unsafe { &*state.as_shared() }.allocator()
+        } else {
+            BufferAllocatorRef::static_ref()
+        }
+    }
+
+    /// The value this window's region was adopted from, if it was adopted from an `O`.
+    ///
+    /// Only read-only adoptions ([`from_owner`](Self::from_owner)) are visible this way: handing
+    /// out a reference to the owner of a writable region would alias its bytes.
+    pub fn owner<O: 'static>(&self) -> Option<&O> {
+        let state = self.state();
+        if !state.is_shared() {
+            return None;
+        }
+        // SAFETY: we hold a reference to the `Shared`, so it is live.
+        let shared = unsafe { &*state.as_shared() };
+        match &shared.release {
+            Release::Owner { owner, type_id, .. }
+                if !shared.writable && *type_id == TypeId::of::<O>() =>
+            {
+                // SAFETY: the owner is a live leaked `Box<O>` - the `TypeId` says so - that lives
+                // as long as the `Shared`, which `self` keeps alive. The region was derived from
+                // a shared reference to it, so another shared reference is fine.
+                Some(unsafe { &*owner.cast::<O>() })
+            }
+            _ => None,
+        }
+    }
+
+    /// Take the value this window's region was adopted from back out, if this is the only handle
+    /// to it and it is an `O`.
+    ///
+    /// The window itself is not consulted: a caller that needs the whole owner should check that
+    /// the window covers it first, and one that only needs part of it can slice the owner instead.
+    pub fn try_into_owner<O: 'static>(self) -> Result<O, Self> {
+        let state = self.state();
+        if !state.is_shared() {
+            return Err(self);
+        }
+        // SAFETY: we hold a reference to the `Shared`, so it is live.
+        let shared = unsafe { &*state.as_shared() };
+        let Release::Owner { owner, type_id, .. } = &shared.release else {
+            return Err(self);
+        };
+        if *type_id != TypeId::of::<O>() || !shared.is_unique() {
+            return Err(self);
+        }
+        let owner = owner.cast::<O>();
+
+        // This handle must not release the region: the owner is being handed out, not dropped.
+        let _this = ManuallyDrop::new(self);
+        // SAFETY: the refcount is one, so this handle holds the only reference to the box, which
+        // we free without running its `Release`.
+        unsafe {
+            drop(Box::from_raw(
+                state.as_shared().cast::<ManuallyDrop<Shared>>(),
+            ))
+        };
+
+        // SAFETY: `owner` is the leaked `Box<O>` from `from_owner`, and nothing else can reach it
+        // now that the `Shared` is gone.
+        Ok(*unsafe { Box::from_raw(owner) })
+    }
+
     /// Promote an inline-described region to a refcounted one, so a second handle can exist.
     ///
     /// Returns the `Shared` with an extra reference already taken for the caller's new handle.
@@ -178,7 +266,13 @@ impl SharedBytes {
     fn promote(&self, state: State) -> *mut Shared {
         debug_assert!(state.is_owned());
         // Two references: this handle, and the one the caller is about to create.
-        let shared = crate::shared_global(self.base, state.owned_layout(), 2).into_raw();
+        let shared = shared_allocated(
+            self.base,
+            state.owned_layout(),
+            BufferAllocatorRef::statically_allocated(),
+            2,
+        )
+        .into_raw();
 
         // SAFETY: we just created `shared`.
         let new = unsafe { State::shared(shared) };
@@ -193,11 +287,7 @@ impl SharedBytes {
                 // Another thread promoted this handle first. Throw ours away without releasing
                 // the region - the winner owns it now - and take a reference to theirs instead.
                 // SAFETY: nothing ever saw this `Shared`, and its `Release` has not run.
-                unsafe {
-                    drop(Box::from_raw(
-                        shared.cast::<std::mem::ManuallyDrop<Shared>>(),
-                    ))
-                };
+                unsafe { drop(Box::from_raw(shared.cast::<ManuallyDrop<Shared>>())) };
 
                 let actual = State(actual);
                 debug_assert!(!actual.is_owned(), "promotion only ever happens once");
@@ -325,7 +415,7 @@ impl SharedBytes {
             // Never shared: hand the inline description straight over, no atomics involved.
             let capacity =
                 self.base.as_ptr().addr() + state.owned_size() - self.ptr.as_ptr().addr();
-            let this = std::mem::ManuallyDrop::new(self);
+            let this = ManuallyDrop::new(self);
             // SAFETY: we hold the only handle, the window lies in the region, and a region we
             // allocated ourselves is always writable. `this` will not release it.
             return Ok(unsafe {
@@ -340,7 +430,7 @@ impl SharedBytes {
         }
         let capacity = shared.end_addr() - self.ptr.as_ptr().addr();
         let base = shared.base;
-        let this = std::mem::ManuallyDrop::new(self);
+        let this = ManuallyDrop::new(self);
         // SAFETY: the refcount is one, so we hold the only handle and take over its reference.
         Ok(unsafe { UniqueBytes::from_parts(this.ptr, this.len, capacity, base, state) })
     }
@@ -378,7 +468,8 @@ impl Drop for SharedBytes {
             return;
         }
         if state.is_owned() {
-            // SAFETY: we hold the only handle to a region we allocated with exactly this layout.
+            // SAFETY: we hold the only handle to a global-allocator region we allocated with
+            // exactly this layout.
             unsafe { std::alloc::dealloc(self.base.as_ptr(), state.owned_layout()) };
             return;
         }

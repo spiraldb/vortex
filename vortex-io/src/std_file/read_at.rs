@@ -17,6 +17,7 @@ use std::sync::Arc;
 use futures::FutureExt;
 use futures::future::BoxFuture;
 use vortex_array::buffer::BufferHandle;
+use vortex_array::memory::BufferAllocatorExt;
 use vortex_array::memory::BufferAllocatorRef;
 use vortex_buffer::Alignment;
 use vortex_error::VortexResult;
