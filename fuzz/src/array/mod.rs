@@ -48,7 +48,7 @@ use vortex_array::aggregate_fn::NumericalAggregateOpts;
 use vortex_array::aggregate_fn::fns::all_non_distinct::all_non_distinct;
 use vortex_array::aggregate_fn::fns::min_max::MinMaxResult;
 use vortex_array::aggregate_fn::fns::min_max::min_max;
-use vortex_array::aggregate_fn::fns::sum_v2::sum_v2;
+use vortex_array::aggregate_fn::fns::sum::sum;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::arbitrary::ArbitraryArray;
@@ -344,6 +344,7 @@ impl<'a> Arbitrary<'a> for FuzzArrayAction {
                     let Some(sum_result) = sum_canonical_array(&current_array, &mut ctx)
                         .vortex_expect("sum_canonical_array should succeed in fuzz test")
                     else {
+                        // Reject sums whose overflow can depend on grouping or addition order.
                         return Err(EmptyChoose);
                     };
                     (Action::Sum, ExpectedValue::Scalar(sum_result))
@@ -670,7 +671,7 @@ pub fn run_fuzz_action(fuzz_action: FuzzArrayAction) -> VortexFuzzResult<bool> {
                 current_array = cast_result;
             }
             Action::Sum => {
-                let sum_result = sum_v2(&current_array, &mut ctx)
+                let sum_result = sum(&current_array, &mut ctx)
                     .vortex_expect("sum operation should succeed in fuzz test");
                 assert_scalar_eq(&expected.scalar(), &sum_result, i)?;
             }

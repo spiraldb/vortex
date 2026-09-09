@@ -7,9 +7,7 @@ use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
-use vortex_array::arrays::Chunked;
 use vortex_array::arrays::bool::BoolArrayExt;
-use vortex_array::arrays::chunked::ChunkedArrayExt;
 use vortex_array::dtype::BigCast;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
@@ -28,26 +26,23 @@ use vortex_error::vortex_bail;
 #[cfg(test)]
 mod tests;
 
-/// Reference sum of chunked or canonical arrays using native arithmetic.
-/// Native overflow is checked during accumulation; decimal precision is checked only at the end.
-/// Empty and all-null arrays return null, matching SQL SUM.
-/// Returns `None` only for floats, whose rounding depends on addition order.
+/// Reference sum independent of grouping and addition order.
+/// Returns `None` for floats or mixed-sign inputs whose positive or negative subtotal overflows
+/// the native accumulator or decimal precision. Single-sign overflow returns a null scalar;
+/// empty and all-null inputs return zero, matching `sum`.
 pub fn sum_canonical_array(
     array: &ArrayRef,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Option<Scalar>> {
-    let mut any_valid = false;
-    Ok(Some(match array.dtype() {
-        DType::Bool(_) => {
-            Scalar::from(accumulate(array, Some(0u64), &mut any_valid, ctx)?.filter(|_| any_valid))
-        }
+    match array.dtype() {
+        DType::Bool(_) => accumulate::<u64>(array, |_| true, Scalar::from, ctx),
         DType::Primitive(ptype, _) if ptype.is_unsigned_int() => {
-            Scalar::from(accumulate(array, Some(0u64), &mut any_valid, ctx)?.filter(|_| any_valid))
+            accumulate::<u64>(array, |_| true, Scalar::from, ctx)
         }
         DType::Primitive(ptype, _) if ptype.is_signed_int() => {
-            Scalar::from(accumulate(array, Some(0i64), &mut any_valid, ctx)?.filter(|_| any_valid))
+            accumulate::<i64>(array, |_| true, Scalar::from, ctx)
         }
-        DType::Primitive(..) => return Ok(None),
+        DType::Primitive(..) => Ok(None),
         DType::Decimal(input_dtype, _) => {
             let output_dtype = DecimalDType::new(
                 (input_dtype.precision() + 10).min(MAX_PRECISION),
@@ -60,50 +55,54 @@ pub fn sum_canonical_array(
             match_each_decimal_value_type!(values_type, |I| {
                 let limit = <I as BigCast>::from(limit)
                     .vortex_expect("precision limit fits native accumulator");
-                match accumulate(array, Some(I::zero()), &mut any_valid, ctx)?
-                    .filter(|&value| any_valid && -limit < value && value < limit)
-                {
-                    Some(value) => {
-                        Scalar::decimal(DecimalValue::from(value), output_dtype, Nullable)
-                    }
-                    None => Scalar::null(DType::Decimal(output_dtype, Nullable)),
-                }
+                accumulate::<I>(
+                    array,
+                    |&value| -limit < value && value < limit,
+                    |value| match value {
+                        Some(value) => {
+                            Scalar::decimal(DecimalValue::from(value), output_dtype, Nullable)
+                        }
+                        None => Scalar::null(DType::Decimal(output_dtype, Nullable)),
+                    },
+                    ctx,
+                )
             })
         }
         _ => vortex_bail!("Unsupported sum dtype: {}", array.dtype()),
-    }))
+    }
 }
 
 fn accumulate<T>(
     array: &ArrayRef,
-    initial: Option<T>,
-    any_valid: &mut bool,
+    fits: impl Fn(&T) -> bool,
+    scalar: impl Fn(Option<T>) -> Scalar,
     ctx: &mut ExecutionCtx,
-) -> VortexResult<Option<T>>
+) -> VortexResult<Option<Scalar>>
 where
-    T: BigCast + Copy + Zero + CheckedAdd,
+    T: BigCast + Copy + Zero + CheckedAdd + PartialOrd,
 {
-    let Some(initial) = initial else {
-        return Ok(None);
-    };
-    if array.is_empty() {
-        return Ok(Some(initial));
+    let mut positive = Some(T::zero());
+    let mut negative = Some(T::zero());
+    for value in native_values::<T>(array, ctx)? {
+        let subtotal = if value < T::zero() {
+            &mut negative
+        } else {
+            &mut positive
+        };
+        *subtotal = subtotal
+            .and_then(|subtotal| subtotal.checked_add(&value))
+            .filter(&fits);
     }
 
-    if let Some(chunked) = array.as_opt::<Chunked>() {
-        // A nested chunked array has its own partial; canonical chunks share its running total.
-        let mut partial = Some(T::zero());
-        for chunk in chunked.non_empty_chunks() {
-            partial = accumulate(chunk, partial, any_valid, ctx)?;
-        }
-        Ok(partial.and_then(|partial| initial.checked_add(&partial)))
-    } else {
-        let values = native_values::<T>(array, ctx)?;
-        *any_valid |= !values.is_empty();
-        Ok(values
-            .into_iter()
-            .try_fold(initial, |sum, value| sum.checked_add(&value)))
-    }
+    // Every partial sum lies between these sign-separated bounds. If either bound overflows,
+    // an opposite-sign value could cancel it before another grouping detects the overflow.
+    let value = match (positive, negative) {
+        (Some(positive), Some(negative)) => positive.checked_add(&negative),
+        (None, Some(negative)) if negative.is_zero() => None,
+        (Some(positive), None) if positive.is_zero() => None,
+        _ => return Ok(None),
+    };
+    Ok(Some(scalar(value)))
 }
 
 fn native_values<T: BigCast>(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Vec<T>> {

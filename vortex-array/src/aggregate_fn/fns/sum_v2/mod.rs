@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-mod decimal;
 mod grouped;
 
 pub(crate) use grouped::PrimitiveGroupedSumV2EncodingKernel;
@@ -12,13 +11,6 @@ use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
-use self::decimal::accumulate_decimal;
-use self::decimal::add_decimal;
-use self::decimal::decimal_partial_dtype;
-use self::decimal::decimal_partial_scalar;
-use self::decimal::decimal_partial_value;
-use self::decimal::finalize_decimal;
-use self::decimal::multiply_decimal;
 use crate::ArrayRef;
 use crate::ArrayView;
 use crate::Canonical;
@@ -32,6 +24,7 @@ use crate::aggregate_fn::NumericalAggregateOpts;
 use crate::aggregate_fn::fns::sum::Sum;
 use crate::aggregate_fn::fns::sum::SumState;
 use crate::aggregate_fn::fns::sum::accumulate_bool;
+use crate::aggregate_fn::fns::sum::accumulate_decimal;
 use crate::aggregate_fn::fns::sum::accumulate_primitive;
 use crate::aggregate_fn::fns::sum::make_zero_state;
 use crate::aggregate_fn::fns::sum::multiply_constant;
@@ -46,6 +39,7 @@ use crate::dtype::StructFields;
 use crate::expr::stats::Precision;
 use crate::expr::stats::Stat;
 use crate::expr::stats::StatsProviderExt;
+use crate::scalar::DecimalValue;
 use crate::scalar::Scalar;
 use crate::scalar_fn::fns::operators::Operator;
 use crate::validity::Validity;
@@ -70,12 +64,9 @@ pub fn sum_v2(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Scalar> 
 
 /// Sum an array, returning null when it has no valid values or if the sum overflows.
 ///
-/// Decimal sums use checked native arithmetic and check the result precision only at finalization.
-///
 /// This aggregate intentionally has a distinct ID and partial representation from the legacy
 /// [`Sum`]. Keeping `vortex.sum` unchanged preserves the scalar partials stored by older Vortex
-/// files, while `SumV2` uses an explicit `{ sum, is_overflow, is_empty }` state. For decimals,
-/// `sum` carries both a value within the result precision and any excess in a separate field.
+/// files, while `SumV2` can use an explicit `{ sum, is_overflow, is_empty }` state.
 ///
 /// NaN handling for float inputs is controlled by [`NumericalAggregateOpts`]. With `skip_nans`
 /// (the default), NaN values contribute nothing but still make the input non-empty. Otherwise,
@@ -211,16 +202,6 @@ impl AggregateFnVTable for SumV2 {
             if !constant.scalar().is_null() && !constant.is_empty() {
                 partial.is_empty = false;
             }
-            if let SumState::Decimal { value, dtype } = &mut partial.sum {
-                if let Some(constant_value) = constant.scalar().as_decimal().decimal_value() {
-                    partial.is_overflow =
-                        match multiply_decimal(constant_value, constant.len(), *dtype) {
-                            Some(product) => add_decimal(value, product, *dtype),
-                            None => true,
-                        };
-                }
-                return Ok(());
-            }
             if partial.skip_nans
                 && constant
                     .scalar()
@@ -276,19 +257,12 @@ impl AggregateFnVTable for SumV2 {
             .get_item(IS_OVERFLOW_FIELD)?
             .binary(partials.get_item(IS_EMPTY_FIELD)?, Operator::Or)?
             .fill_null(true)?;
-        finalize_decimal(sum)?.mask(is_invalid.not()?)
+        sum.mask(is_invalid.not()?)
     }
 
     fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
         if partial.is_overflow || partial.is_empty {
             return Ok(Scalar::null(partial.return_dtype.as_nullable()));
-        }
-        if let SumState::Decimal { value, dtype } = &partial.sum {
-            return Ok(if value.fits_in_precision(*dtype) {
-                Scalar::decimal(*value, *dtype, Nullability::Nullable)
-            } else {
-                Scalar::null(partial.return_dtype.as_nullable())
-            });
         }
         Ok(sum_state_scalar(partial, Nullability::Nullable))
     }
@@ -310,7 +284,7 @@ fn finalize_struct(partials: ArrayView<'_, Struct>) -> VortexResult<ArrayRef> {
         }
     }
 
-    finalize_decimal(sum)?.mask(is_valid)
+    sum.mask(is_valid)
 }
 
 /// In-memory state for SumV2 accumulation.
@@ -365,12 +339,12 @@ fn decode_partial_scalar(scalar: Scalar) -> VortexResult<(Scalar, bool, bool)> {
 }
 
 fn validate_sum_field_dtype(sum: &Scalar, return_dtype: &DType) -> VortexResult<()> {
-    let partial_dtype = decimal_partial_dtype(return_dtype.as_nonnullable());
     vortex_ensure!(
-        sum.dtype().nullability() == Nullability::NonNullable && sum.dtype() == &partial_dtype,
+        sum.dtype().nullability() == Nullability::NonNullable
+            && sum.dtype().eq_ignore_nullability(return_dtype),
         "SumV2 partial value has dtype {}, expected {}",
         sum.dtype(),
-        partial_dtype,
+        return_dtype.as_nonnullable(),
     );
     Ok(())
 }
@@ -384,7 +358,14 @@ fn checked_add_sum_state(state: &mut SumState, other: &Scalar) -> VortexResult<b
             false
         }
         SumState::Decimal { value, dtype } => {
-            add_decimal(value, decimal_partial_value(other, *dtype)?, *dtype)
+            let other = DecimalValue::try_from(other)?;
+            match value.checked_add(&other) {
+                Some(result) if result.fits_in_precision(*dtype) => {
+                    *value = result;
+                    false
+                }
+                Some(_) | None => true,
+            }
         }
     })
 }
@@ -401,7 +382,7 @@ fn sum_v2_partial_fields(sum_dtype: DType) -> StructFields {
             FieldName::from(IS_EMPTY_FIELD),
         ]),
         vec![
-            decimal_partial_dtype(sum_dtype.as_nonnullable()),
+            sum_dtype.as_nonnullable(),
             DType::Bool(Nullability::NonNullable),
             DType::Bool(Nullability::NonNullable),
         ],
@@ -413,7 +394,7 @@ fn sum_state_scalar(partial: &SumV2Partial, nullability: Nullability) -> Scalar 
         SumState::Unsigned(value) => Scalar::primitive(*value, nullability),
         SumState::Signed(value) => Scalar::primitive(*value, nullability),
         SumState::Float(value) => Scalar::primitive(*value, nullability),
-        SumState::Decimal { value, dtype } => decimal_partial_scalar(*value, *dtype, nullability),
+        SumState::Decimal { value, dtype } => Scalar::decimal(*value, *dtype, nullability),
     }
 }
 

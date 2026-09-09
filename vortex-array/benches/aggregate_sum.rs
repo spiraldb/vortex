@@ -9,16 +9,8 @@ use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::aggregate_fn::fns::sum_v2::sum_v2;
 use vortex_array::array_session;
-use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::PrimitiveArray;
-use vortex_array::dtype::DecimalDType;
-use vortex_array::dtype::DecimalType;
 use vortex_array::expr::stats::Stat;
-use vortex_array::match_each_decimal_value_type;
-use vortex_array::scalar::DecimalValue;
-use vortex_array::validity::Validity;
-use vortex_buffer::Buffer;
-use vortex_error::VortexExpect;
 use vortex_session::VortexSession;
 
 fn main() {
@@ -30,39 +22,6 @@ fn main() {
 const N: usize = 15_000;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
-
-#[divan::bench(args = [8, 28, 66])]
-fn sum_v2_decimal(bencher: Bencher, precision: u8) {
-    bench_decimal_sum(bencher, precision, false);
-}
-
-#[divan::bench(args = [8, 28, 66])]
-fn sum_v2_decimal_nulls(bencher: Bencher, precision: u8) {
-    bench_decimal_sum(bencher, precision, true);
-}
-
-fn bench_decimal_sum(bencher: Bencher, precision: u8, nullable: bool) {
-    let dtype = DecimalDType::new(precision, 2);
-    let values_type = DecimalType::smallest_decimal_value_type(&dtype);
-    let array = match_each_decimal_value_type!(values_type, |I| {
-        let values = (0..N)
-            .map(|i| {
-                DecimalValue::I64(i as i64 % 1000 - 500)
-                    .cast::<I>()
-                    .vortex_expect("benchmark value fits decimal storage")
-            })
-            .collect::<Buffer<_>>();
-        let validity = if nullable {
-            Validity::from_iter((0..N).map(|i| i % 5 != 0))
-        } else {
-            Validity::NonNullable
-        };
-        DecimalArray::new(values, dtype, validity).into_array()
-    });
-    bencher
-        .with_inputs(|| (array.clone(), SESSION.create_execution_ctx()))
-        .bench_refs(|(array, ctx)| sum_v2(array, ctx));
-}
 
 #[divan::bench]
 fn sum_i32(bencher: Bencher) {
