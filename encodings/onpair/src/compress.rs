@@ -43,7 +43,7 @@ pub fn onpair_compress(
     }
 
     let views = array.views();
-    let mut uncompressed_lengths: BufferMut<i32> = BufferMut::with_capacity(len);
+    let mut uncompressed_lengths: BufferMut<u32> = BufferMut::with_capacity(len);
     let mut total_bytes = 0usize;
     let buffers = array
         .data_buffers()
@@ -55,8 +55,7 @@ pub fn onpair_compress(
     match mask.bit_buffer() {
         AllOr::All => {
             for view in views {
-                uncompressed_lengths
-                    .push(i32::try_from(view.len()).vortex_expect("must fit in i32"));
+                uncompressed_lengths.push(view.len());
                 total_bytes += view.len() as usize;
             }
         }
@@ -64,8 +63,7 @@ pub fn onpair_compress(
         AllOr::Some(validity) => {
             for (view, valid) in views.iter().zip(validity.iter()) {
                 if valid {
-                    uncompressed_lengths
-                        .push(i32::try_from(view.len()).vortex_expect("must fit in i32"));
+                    uncompressed_lengths.push(view.len());
                     total_bytes += view.len() as usize;
                 } else {
                     uncompressed_lengths.push(0);
@@ -111,7 +109,7 @@ pub fn onpair_compress(
 struct ViewRows<'a> {
     views: &'a [BinaryView],
     buffers: &'a [&'a ByteBuffer],
-    lengths: &'a [i32],
+    lengths: &'a [u32],
     total_bytes: usize,
 }
 
