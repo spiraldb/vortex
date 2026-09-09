@@ -6,10 +6,9 @@ use std::iter;
 use rstest::rstest;
 use vortex_array::ArrayRef;
 use vortex_array::Canonical;
-use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
-use vortex_array::aggregate_fn::fns::sum::sum;
+use vortex_array::aggregate_fn::fns::sum_v2::sum_v2;
 use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_array::arrays::DecimalArray;
@@ -38,10 +37,6 @@ use crate::FuzzArrayAction;
 use crate::SESSION;
 use crate::run_fuzz_action;
 
-fn reference(array: impl IntoArray, ctx: &mut ExecutionCtx) -> VortexResult<Option<Scalar>> {
-    sum_canonical_array(&array.into_array(), ctx)
-}
-
 #[test]
 fn test_sum_ignores_cached_statistics() -> VortexResult<()> {
     let array = PrimitiveArray::from_iter([1i64, 2, 3]);
@@ -50,10 +45,7 @@ fn test_sum_ignores_cached_statistics() -> VortexResult<()> {
         .statistics()
         .set(Stat::Sum, Precision::Exact(ScalarValue::from(999i64)));
     assert_eq!(
-        reference(
-            Canonical::Primitive(array),
-            &mut SESSION.create_execution_ctx()
-        )?,
+        sum_canonical_array(&array.into_array(), &mut SESSION.create_execution_ctx())?,
         Some(Scalar::from(6i64))
     );
     Ok(())
@@ -73,20 +65,23 @@ fn test_sum_ignores_cached_statistics() -> VortexResult<()> {
     PrimitiveArray::new(buffer![u64::MAX, u64::MAX], Validity::from_iter([true, false])).into_array(),
     u64::MAX.into()
 )]
-#[case::unsigned_all_null(PrimitiveArray::from_option_iter([None::<u64>, None]).into_array(), 0u64.into())]
-#[case::unsigned_empty(Buffer::<u64>::empty().into_array(), 0u64.into())]
-#[case::signed_empty(Buffer::<i32>::empty().into_array(), 0i64.into())]
+#[case::unsigned_all_null(PrimitiveArray::from_option_iter([None::<u64>, None]).into_array(), Scalar::from(None::<u64>))]
+#[case::unsigned_empty(Buffer::<u64>::empty().into_array(), Scalar::from(None::<u64>))]
+#[case::signed_empty(Buffer::<i32>::empty().into_array(), Scalar::from(None::<i64>))]
 #[case::bool(BoolArray::from_iter([true, false, true]).into_array(), 2u64.into())]
 #[case::bool_nulls(BoolArray::from_iter([Some(true), None, Some(false)]).into_array(), 1u64.into())]
-#[case::bool_all_null(BoolArray::from_iter([None::<bool>, None]).into_array(), 0u64.into())]
-#[case::bool_empty(BoolArray::from_iter([] as [bool; 0]).into_array(), 0u64.into())]
+#[case::bool_all_null(BoolArray::from_iter([None::<bool>, None]).into_array(), Scalar::from(None::<u64>))]
+#[case::bool_empty(BoolArray::from_iter([] as [bool; 0]).into_array(), Scalar::from(None::<u64>))]
 fn test_sum_integer_and_bool_values(
     #[case] array: ArrayRef,
     #[case] expected: Scalar,
 ) -> VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
-    let result = reference(array.execute::<Canonical>(&mut ctx)?, &mut ctx)?
-        .ok_or_else(|| vortex_err!("expected an unambiguous sum"))?;
+    let result = sum_canonical_array(
+        &array.execute::<Canonical>(&mut ctx)?.into_array(),
+        &mut ctx,
+    )?
+    .ok_or_else(|| vortex_err!("expected an unambiguous sum"))?;
     assert_eq!(result.dtype(), &expected.dtype().as_nullable());
     assert_eq!(result, expected);
     Ok(())
@@ -110,11 +105,8 @@ fn test_sum_decimal_storage(#[case] values_type: DecimalType) -> VortexResult<()
             Validity::NonNullable,
         )
     });
-    let result = reference(
-        Canonical::Decimal(array),
-        &mut SESSION.create_execution_ctx(),
-    )?
-    .ok_or_else(|| vortex_err!("expected an unambiguous sum"))?;
+    let result = sum_canonical_array(&array.into_array(), &mut SESSION.create_execution_ctx())?
+        .ok_or_else(|| vortex_err!("expected an unambiguous sum"))?;
     assert_eq!(
         result.dtype(),
         &DType::Decimal(DecimalDType::new(12, 0), Nullability::Nullable)
@@ -135,10 +127,7 @@ fn test_sum_decimal_widens_beyond_i128() -> VortexResult<()> {
         Validity::NonNullable,
     );
     assert_eq!(
-        reference(
-            Canonical::Decimal(array),
-            &mut SESSION.create_execution_ctx()
-        )?,
+        sum_canonical_array(&array.into_array(), &mut SESSION.create_execution_ctx())?,
         Some(Scalar::decimal(
             DecimalValue::I256(i256::from_i128(value) * i256::from_i128(2)),
             DecimalDType::new(48, 2),
@@ -149,7 +138,7 @@ fn test_sum_decimal_widens_beyond_i128() -> VortexResult<()> {
 }
 
 #[test]
-fn test_sum_decimal_cancellation_within_one_group() -> VortexResult<()> {
+fn test_sum_decimal_cancellation_across_groups() -> VortexResult<()> {
     let decimal_dtype = DecimalDType::new(76, -76);
     let six_e75 = i256::from_i128(10).wrapping_pow(75) * i256::from_i128(6);
 
@@ -162,35 +151,20 @@ fn test_sum_decimal_cancellation_within_one_group() -> VortexResult<()> {
         let chunked = ChunkedArray::try_new(vec![first, last], dtype)?.into_array();
         let mut ctx = SESSION.create_execution_ctx();
 
-        // The first chunk exceeds precision 76, although cancellation makes the final sum fit.
-        assert!(sum(&chunked, &mut ctx)?.is_null());
-        assert_eq!(
-            reference(chunked.clone(), &mut ctx)?,
-            Some(Scalar::null(chunked.dtype().as_nullable()))
+        // The first chunk exceeds precision 76, but the final sum fits after cancellation.
+        let expected = Scalar::decimal(
+            DecimalValue::I256(value),
+            decimal_dtype,
+            Nullability::Nullable,
         );
-        let canonical = chunked.execute::<Canonical>(&mut ctx)?;
-        assert_eq!(
-            reference(canonical.clone(), &mut ctx)?,
-            Some(Scalar::decimal(
-                DecimalValue::I256(value),
-                decimal_dtype,
-                Nullability::Nullable
-            ))
-        );
-        assert_eq!(
-            sum(&canonical.clone().into_array(), &mut ctx)?
-                .as_decimal()
-                .decimal_value(),
-            Some(DecimalValue::I256(value))
-        );
-        assert_eq!(
-            reference(canonical, &mut ctx)?,
-            Some(Scalar::decimal(
-                DecimalValue::I256(value),
-                decimal_dtype,
-                Nullability::Nullable
-            ))
-        );
+        let canonical = chunked.clone().execute::<Canonical>(&mut ctx)?.into_array();
+        for array in [chunked, canonical] {
+            assert_eq!(sum_v2(&array, &mut ctx)?, expected);
+            assert_eq!(
+                sum_canonical_array(&array, &mut ctx)?,
+                Some(expected.clone())
+            );
+        }
     }
     Ok(())
 }
@@ -205,13 +179,14 @@ fn test_sum_decimal_precision_boundary_and_nulls() -> VortexResult<()> {
         Validity::AllInvalid,
     ] {
         let array = DecimalArray::new(buffer![max, max, -max], dtype, validity);
+        let expected = if matches!(array.as_ref().validity()?, Validity::AllInvalid) {
+            Scalar::null(DType::Decimal(dtype, Nullability::Nullable))
+        } else {
+            Scalar::decimal(DecimalValue::I256(i256::ZERO), dtype, Nullability::Nullable)
+        };
         assert_eq!(
-            reference(Canonical::Decimal(array), &mut ctx)?,
-            Some(Scalar::decimal(
-                DecimalValue::I256(i256::ZERO),
-                dtype,
-                Nullability::Nullable
-            ))
+            sum_canonical_array(&array.into_array(), &mut ctx)?,
+            Some(expected)
         );
     }
     Ok(())
@@ -225,7 +200,7 @@ fn test_sum_decimal_keeps_definite_overflow() -> VortexResult<()> {
     for value in [six_e75, -six_e75] {
         let array = DecimalArray::new(buffer![value, value], dtype, Validity::NonNullable);
         assert_eq!(
-            reference(Canonical::Decimal(array), &mut ctx)?,
+            sum_canonical_array(&array.into_array(), &mut ctx)?,
             Some(Scalar::null(DType::Decimal(dtype, Nullability::Nullable)))
         );
     }
@@ -233,7 +208,7 @@ fn test_sum_decimal_keeps_definite_overflow() -> VortexResult<()> {
 }
 
 #[test]
-fn test_sum_decimal_native_overflow() -> VortexResult<()> {
+fn test_sum_decimal_native_overflow_cancels() -> VortexResult<()> {
     let dtype = DecimalDType::new(76, 0);
     let six_e75 = i256::from_i128(10).wrapping_pow(75) * i256::from_i128(6);
     let mut ctx = SESSION.create_execution_ctx();
@@ -242,10 +217,14 @@ fn test_sum_decimal_native_overflow() -> VortexResult<()> {
             .chain(iter::repeat_n(-value, 10))
             .collect::<Buffer<_>>();
         let array = DecimalArray::new(values, dtype, Validity::NonNullable);
+        let expected =
+            Scalar::decimal(DecimalValue::I256(i256::ZERO), dtype, Nullability::Nullable);
+        let array = array.into_array();
         assert_eq!(
-            reference(Canonical::Decimal(array), &mut ctx)?,
-            Some(Scalar::null(DType::Decimal(dtype, Nullability::Nullable)))
+            sum_canonical_array(&array, &mut ctx)?,
+            Some(expected.clone())
         );
+        assert_eq!(sum_v2(&array, &mut ctx)?, expected);
     }
     Ok(())
 }
@@ -258,10 +237,7 @@ fn test_sum_decimal_uses_widened_precision() -> VortexResult<()> {
         Validity::NonNullable,
     );
     assert_eq!(
-        reference(
-            Canonical::Decimal(array),
-            &mut SESSION.create_execution_ctx()
-        )?,
+        sum_canonical_array(&array.into_array(), &mut SESSION.create_execution_ctx())?,
         Some(Scalar::decimal(
             DecimalValue::I64(99),
             DecimalDType::new(12, 0),
@@ -285,12 +261,12 @@ fn test_sum_signed_overflow_and_cancellation() -> VortexResult<()> {
         (vec![Some(i64::MAX), Some(1)], Some(None)),
         (vec![Some(i64::MIN), Some(-1)], Some(None)),
         (vec![Some(i64::MAX), None, Some(i64::MIN)], Some(Some(-1))),
-        (vec![None, None], Some(Some(0))),
-        (vec![], Some(Some(0))),
+        (vec![None, None], Some(None)),
+        (vec![], Some(None)),
     ] {
         let array = PrimitiveArray::from_option_iter(values);
         assert_eq!(
-            reference(Canonical::Primitive(array), &mut ctx)?,
+            sum_canonical_array(&array.into_array(), &mut ctx)?,
             expected.map(Scalar::from)
         );
     }
@@ -318,13 +294,15 @@ fn decimal_chunks(groups: &[&[i8]]) -> VortexResult<ArrayRef> {
 }
 
 #[rstest]
-#[case::overflow_in_first_group(decimal_chunks(&[&[6, 6], &[-6]]), None)]
-#[case::overflow_after_second_group(decimal_chunks(&[&[6], &[6], &[-6]]), None)]
-#[case::negative_overflow(decimal_chunks(&[&[-6, -6], &[6]]), None)]
+#[case::cancellation_across_groups(decimal_chunks(&[&[6, 6], &[-6]]), Some(6))]
+#[case::cancellation_across_three_groups(decimal_chunks(&[&[6], &[6], &[-6]]), Some(6))]
+#[case::negative_cancellation(decimal_chunks(&[&[-6, -6], &[6]]), Some(-6))]
 #[case::shared_running_total(decimal_chunks(&[&[-6], &[6, 6]]), Some(6))]
 #[case::cancellation_within_group(decimal_chunks(&[&[6, 6, -6]]), Some(6))]
 #[case::empty_groups(decimal_chunks(&[&[], &[6], &[], &[-6], &[]]), Some(0))]
-fn test_sum_checks_decimal_group_boundaries(
+#[case::final_overflow(decimal_chunks(&[&[6], &[6]]), None)]
+#[case::all_empty(decimal_chunks(&[&[], &[]]), None)]
+fn test_sum_decimal_ignores_group_boundaries(
     #[case] array: VortexResult<ArrayRef>,
     #[case] expected: Option<i8>,
 ) -> VortexResult<()> {
@@ -340,13 +318,16 @@ fn test_sum_checks_decimal_group_boundaries(
         ),
         None => Scalar::null(array.dtype().as_nullable()),
     };
-    assert_eq!(reference(array.clone(), &mut ctx)?, Some(expected.clone()));
-    assert_eq!(sum(&array, &mut ctx)?, expected);
+    assert_eq!(
+        sum_canonical_array(&array, &mut ctx)?,
+        Some(expected.clone())
+    );
+    assert_eq!(sum_v2(&array, &mut ctx)?, expected);
     Ok(())
 }
 
 #[test]
-fn test_sum_nested_group_has_independent_partial() -> VortexResult<()> {
+fn test_sum_nested_group_cancellation() -> VortexResult<()> {
     let inner = decimal_chunks(&[&[6, 6], &[-6]])?;
     let array = ChunkedArray::try_new(
         vec![decimal_chunks(&[&[-6]])?, inner.clone()],
@@ -354,11 +335,16 @@ fn test_sum_nested_group_has_independent_partial() -> VortexResult<()> {
     )?
     .into_array();
     let mut ctx = SESSION.create_execution_ctx();
-    assert_eq!(
-        reference(array.clone(), &mut ctx)?,
-        Some(Scalar::null(array.dtype().as_nullable()))
+    let expected = Scalar::decimal(
+        DecimalValue::I256(i256::ZERO),
+        DecimalDType::new(76, -76),
+        Nullability::Nullable,
     );
-    assert!(sum(&array, &mut ctx)?.is_null());
+    assert_eq!(
+        sum_canonical_array(&array, &mut ctx)?,
+        Some(expected.clone())
+    );
+    assert_eq!(sum_v2(&array, &mut ctx)?, expected);
     Ok(())
 }
 
@@ -369,7 +355,10 @@ fn test_sum_cached_statistics_do_not_change_native_overflow() -> VortexResult<()
         .statistics()
         .set(Stat::Sum, Precision::Exact(ScalarValue::from(i64::MAX)));
     let mut ctx = SESSION.create_execution_ctx();
-    assert_eq!(reference(array, &mut ctx)?, Some(Scalar::from(None::<i64>)));
+    assert_eq!(
+        sum_canonical_array(&array, &mut ctx)?,
+        Some(Scalar::from(None::<i64>))
+    );
     Ok(())
 }
 
@@ -384,14 +373,18 @@ fn test_sum_cached_statistics_do_not_change_groups() -> VortexResult<()> {
     );
     let mut ctx = SESSION.create_execution_ctx();
     assert_eq!(
-        reference(array.clone(), &mut ctx)?,
-        Some(Scalar::null(array.dtype().as_nullable()))
+        sum_canonical_array(&array, &mut ctx)?,
+        Some(Scalar::decimal(
+            DecimalValue::I256(i256::from_i128(10).wrapping_pow(75) * i256::from_i128(6)),
+            DecimalDType::new(76, -76),
+            Nullability::Nullable
+        ))
     );
     Ok(())
 }
 
 #[rstest]
-#[case::chunked(false, None)]
+#[case::chunked(false, Some(6))]
 #[case::canonical(true, Some(6))]
 fn test_sum_action_stores_reference_scalar(
     #[case] canonical: bool,
