@@ -144,13 +144,81 @@ fn test_split_i256_part_count_and_types() -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn test_assembled_values_type() -> VortexResult<()> {
-    assert_eq!(assembled_values_type(PType::I32, 0)?, DecimalType::I32);
-    assert_eq!(assembled_values_type(PType::I64, 1)?, DecimalType::I128);
-    assert_eq!(assembled_values_type(PType::I8, 1)?, DecimalType::I128);
-    assert_eq!(assembled_values_type(PType::I8, 2)?, DecimalType::I256);
-    assert_eq!(assembled_values_type(PType::I64, 3)?, DecimalType::I256);
-    assert!(assembled_values_type(PType::I64, 4).is_err());
+#[rstest]
+fn test_split_i256_part_order(
+    #[values(Validity::NonNullable, Validity::from_iter([true, false, true]))] validity: Validity,
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let decimal = DecimalArray::new(
+        buffer![
+            i256::from_parts((2u128 << 64) | 3, (1i128 << 64) | 4),
+            i256::ZERO,
+            i256::from_parts((6u128 << 64) | 7, (-2i128 << 64) | 5),
+        ],
+        DecimalDType::new(76, 0),
+        validity.clone(),
+    );
+    let parts = split_decimal(&decimal, &mut ctx)?;
+    assert_arrays_eq!(
+        PrimitiveArray::new(buffer![1i64, 0, -2], validity),
+        parts.msp,
+        &mut ctx
+    );
+    assert_eq!(parts.lower_parts.len(), 3);
+    for (part, expected) in parts.lower_parts.into_iter().zip([
+        buffer![4u64, 0, 5],
+        buffer![2u64, 0, 6],
+        buffer![3u64, 0, 7],
+    ]) {
+        assert_arrays_eq!(
+            PrimitiveArray::new(expected, Validity::NonNullable),
+            part,
+            &mut ctx
+        );
+    }
+    Ok(())
+}
+
+#[rstest]
+fn test_assemble_rejects_mismatched_lower_lengths(
+    #[values(1, 2, 3)] lower_count: usize,
+    #[values(0, 1, 3)] lower_len: usize,
+) {
+    let msp = PrimitiveArray::new(buffer![0i64; 2], Validity::NonNullable);
+    let mut lower = vec![PrimitiveArray::new(buffer![0u64; 2], Validity::NonNullable); lower_count];
+    lower[lower_count - 1] = PrimitiveArray::new(buffer![0u64; lower_len], Validity::NonNullable);
+    let dtype = DecimalDType::new(if lower_count == 1 { 38 } else { 76 }, 0);
+    assert!(assemble_decimal(&msp, &lower, dtype).is_err());
+}
+
+#[rstest]
+fn test_assemble_i256_part_order_and_sign_extension(
+    #[values(false, true)] narrow_msp: bool,
+    #[values(2, 3)] lower_count: usize,
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let msp = if narrow_msp {
+        PrimitiveArray::new(buffer![3i8, -3], Validity::NonNullable)
+    } else {
+        PrimitiveArray::new(buffer![3i64, -3], Validity::NonNullable)
+    };
+    let lower =
+        [4u64, 1, 2].map(|word| PrimitiveArray::new(buffer![word; 2], Validity::NonNullable));
+    let dtype = DecimalDType::new(76, 0);
+    let actual = assemble_decimal(&msp, &lower[3 - lower_count..], dtype)?;
+    let low = (1u128 << 64) | 2;
+    let expected = if lower_count == 2 {
+        buffer![i256::from_parts(low, 3), i256::from_parts(low, -3)]
+    } else {
+        buffer![
+            i256::from_parts(low, (3i128 << 64) | 4),
+            i256::from_parts(low, (-3i128 << 64) | 4),
+        ]
+    };
+    assert_arrays_eq!(
+        DecimalArray::new(expected, dtype, Validity::NonNullable),
+        actual,
+        &mut ctx
+    );
     Ok(())
 }
