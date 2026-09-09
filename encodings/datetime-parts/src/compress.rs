@@ -48,9 +48,9 @@ pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexRes
     let mut seconds = BufferMut::with_capacity(timestamps.len());
     let mut subseconds = BufferMut::with_capacity(timestamps.len());
 
-    let days_slice = days.spare_capacity_mut();
-    let seconds_slice = seconds.spare_capacity_mut();
-    let subseconds_slice = subseconds.spare_capacity_mut();
+    let days_slice = &mut days.spare_capacity_mut()[..length];
+    let seconds_slice = &mut seconds.spare_capacity_mut()[..length];
+    let subseconds_slice = &mut subseconds.spare_capacity_mut()[..length];
     let timestamps = timestamps.as_slice::<i64>();
 
     match array.temporal_metadata().time_unit() {
