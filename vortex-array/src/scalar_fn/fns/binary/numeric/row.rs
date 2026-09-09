@@ -63,7 +63,7 @@ impl RowFn for NumericBinary {
         ScalarFnVTable::id(&Binary)
     }
 
-    fn dispatch<V: RowVisitor<Self::Options>>(
+    fn dispatch<V: RowVisitor>(
         &self,
         op: &Self::Options,
         args: &[DType],
@@ -89,7 +89,7 @@ fn visit_checked<T, Op, V>(visitor: V) -> VortexResult<V::VisitResult>
 where
     T: NativePType,
     Op: CheckedPrimitiveOp<T>,
-    V: RowVisitor<NumericOperator>,
+    V: RowVisitor,
 {
     visitor.visit_deferred::<(T, T), T, Op::Fail>(
         |(lhs, rhs)| Op::apply(lhs, rhs),
@@ -106,7 +106,7 @@ where
 fn visit_div<T, V>(visitor: V) -> VortexResult<V::VisitResult>
 where
     T: CheckedArithmetic,
-    V: RowVisitor<NumericOperator>,
+    V: RowVisitor,
 {
     if T::PTYPE.is_float() {
         return visit_checked::<T, CheckedDiv, V>(visitor);
@@ -116,7 +116,7 @@ where
     // vectorization. Check each divide immediately and stop at the first failure.
     // Dense execution leaves output uninitialized. Nullable branches fill placeholders only when
     // they need to skip invalid rows.
-    visitor.visit_into::<(T, T), UninitElementSink<T>, _>(|(lhs, rhs), output| {
+    visitor.visit_into::<(T, T), UninitElementSink<T>, _>((), |(lhs, rhs), output| {
         let (value, failed) = CheckedDiv::apply(lhs, rhs);
         if failed {
             return Err(numeric_error(<CheckedDiv as CheckedPrimitiveOp<T>>::ERROR));

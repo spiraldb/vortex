@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT DATE_TRUNC('minute', "EventTime") AS M, COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-14' AND "EventDate" <= '2013-07-15' AND "IsRefresh" = 0 AND "DontCountHits" = 0 GROUP BY DATE_TRUNC('minute', "EventTime") ORDER BY DATE_TRUNC('minute', M) LIMIT 10 OFFSET 1000;
+----
+logical_plan
+01)Limit: skip=1000, fetch=10
+02)--Sort: date_trunc(Utf8("minute"), m) ASC NULLS LAST, fetch=1010
+03)----Projection: date_trunc(Utf8("minute"),hits.EventTime) AS m, count(Int64(1)) AS count(*) AS pageviews
+04)------Aggregate: groupBy=[[date_trunc(Utf8("minute"), hits.EventTime)]], aggr=[[count(Int64(1))]]
+05)--------Projection: hits.EventTime
+06)----------Filter: hits.CounterID = Int32(62) AND hits.EventDate >= TimestampMicrosecond(1373760000000000, None) AND hits.EventDate <= TimestampMicrosecond(1373846400000000, None) AND hits.IsRefresh = Int16(0) AND hits.DontCountHits = Int16(0)
+07)------------TableScan: hits projection=[EventTime, EventDate, CounterID, IsRefresh, DontCountHits], partial_filters=[hits.CounterID = Int32(62), hits.EventDate >= TimestampMicrosecond(1373760000000000, None), hits.EventDate <= TimestampMicrosecond(1373846400000000, None), hits.IsRefresh = Int16(0), hits.DontCountHits = Int16(0)]
+physical_plan
+01)GlobalLimitExec: skip=1000, fetch=10
+02)--SortPreservingMergeExec: [date_trunc(minute, m@0) ASC NULLS LAST], fetch=1010
+03)----SortExec: TopK(fetch=1010), expr=[date_trunc(minute, m@0) ASC NULLS LAST], preserve_partitioning=[true]
+04)------ProjectionExec: expr=[date_trunc(Utf8("minute"),hits.EventTime)@0 as m, count(Int64(1))@1 as pageviews]
+05)--------AggregateExec: mode=FinalPartitioned, gby=[date_trunc(Utf8("minute"),hits.EventTime)@0 as date_trunc(Utf8("minute"),hits.EventTime)], aggr=[count(Int64(1))]
+06)----------RepartitionExec: partitioning=Hash([date_trunc(Utf8("minute"),hits.EventTime)@0], 4), input_partitions=4
+07)------------AggregateExec: mode=Partial, gby=[date_trunc(minute, EventTime@0) as date_trunc(Utf8("minute"),hits.EventTime)], aggr=[count(Int64(1))]
+08)--------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[EventTime], file_type=vortex, predicate: CounterID@6 = 62 AND EventDate@5 >= 1373760000000000 AND EventDate@5 <= 1373846400000000 AND IsRefresh@15 = 0 AND DontCountHits@61 = 0

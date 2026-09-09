@@ -23,6 +23,7 @@ serde = ["dep:serde", "serde/serde_derive"]
 warn-copy = ["dep:tracing"]
 
 [dependencies]
+allocator-api2 = { workspace = true }
 arrow-buffer = { workspace = true }
 bitvec = { workspace = true }
 bytes = { workspace = true }
@@ -56,4 +57,8 @@ harness = false
 
 [[bench]]
 name = "collect_bool"
+harness = false
+
+[[bench]]
+name = "allocation"
 harness = false

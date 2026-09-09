@@ -32,6 +32,7 @@ The Java bindings are supported on the following architectures:
 * x86_64 Linux
 * ARM64 Linux
 * Apple Silicon macOS
+* x86_64 Windows
 
 They support any Linux distribution with a GLIBC version >= 2.31. This includes
 
@@ -46,14 +47,31 @@ Here's a basic example of using the Vortex Java API to read a Vortex file:
 
 .. code-block:: java
 
-    import dev.vortex.api.File;
-    import dev.vortex.api.Array;
+    import dev.vortex.api.DataSource;
+    import dev.vortex.api.Partition;
+    import dev.vortex.api.Scan;
+    import dev.vortex.api.ScanOptions;
+    import dev.vortex.api.Session;
+    import dev.vortex.arrow.ArrowAllocation;
+    import org.apache.arrow.memory.BufferAllocator;
+    import org.apache.arrow.vector.VectorSchemaRoot;
+    import org.apache.arrow.vector.ipc.ArrowReader;
 
-    // Open a Vortex file
-    File vortexFile = File.open("path/to/file.vortex");
+    BufferAllocator allocator = ArrowAllocation.rootAllocator();
+    Session session = Session.create();
+    DataSource source = DataSource.open(session, "path/to/file.vortex");
 
-    // Read arrays from the file
-    Array array = vortexFile.readArray();
+    // A scan yields one partition per chunk of the file.
+    Scan scan = source.scan(ScanOptions.of());
+    while (scan.hasNext()) {
+        Partition partition = scan.next();
+        try (ArrowReader reader = partition.scanArrow(allocator)) {
+            while (reader.loadNextBatch()) {
+                VectorSchemaRoot batch = reader.getVectorSchemaRoot();
+                System.out.println("read " + batch.getRowCount() + " rows");
+            }
+        }
+    }
 
-    // Work with the array data
-    System.out.println("Array length: " + array.getLength());
+Data crosses the JNI boundary as Arrow record batches, so the buffers stay in native memory and
+are read from Java through the Arrow C Data Interface.

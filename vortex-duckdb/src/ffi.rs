@@ -9,6 +9,7 @@ use std::ptr;
 use num_traits::AsPrimitive;
 use vortex::error::VortexExpect;
 use vortex::error::vortex_err;
+use vortex::file::Footer;
 
 use crate::convert::can_push_expression;
 use crate::copy::CopyFunctionBind;
@@ -20,6 +21,8 @@ use crate::copy::copy_to_initialize_global;
 use crate::copy::copy_to_sink;
 use crate::copy::flush_batch;
 use crate::copy::prepare_batch_push;
+use crate::copy::written_column_stats;
+use crate::copy::written_file_stats;
 use crate::cpp;
 use crate::duckdb::AggregatePushdownInput;
 use crate::duckdb::BindResult;
@@ -33,6 +36,9 @@ use crate::duckdb::TableInitInput;
 use crate::duckdb::try_or;
 use crate::duckdb::try_or_null;
 use crate::file_reader::OpenFileReader;
+use crate::file_reader::can_get_partition_stats;
+use crate::file_reader::footer_get_cached;
+use crate::file_reader::footer_get_statistics;
 use crate::file_reader::reader_bind;
 use crate::file_reader::reader_get_progress_in_file;
 use crate::file_reader::reader_get_statistics;
@@ -206,6 +212,55 @@ pub unsafe extern "C-unwind" fn duckdb_reader_get_statistics(
     let name = String::from_utf8_lossy(name_bytes);
 
     let Some(stats) = reader_get_statistics(file, bind, &name) else {
+        return false;
+    };
+    let stats_out = unsafe { &mut *stats_out };
+    stats_out.min = stats.min.map_or(ptr::null_mut(), |v| v.into_ptr());
+    stats_out.max = stats.max.map_or(ptr::null_mut(), |v| v.into_ptr());
+    stats_out.max_string_length = stats.max_string_length;
+    stats_out.has_null = stats.has_null;
+    stats_out.type_ = stats.logical_type.into_ptr();
+    true
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn duckdb_table_function_can_get_partition_stats(
+    bind: *const c_void,
+) -> bool {
+    let bind = unsafe { bind.cast::<BindState>().as_ref() }.vortex_expect("null pointer");
+    can_get_partition_stats(bind)
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn duckdb_footer_get_cached(
+    bind: *mut c_void,
+    path: *const c_char,
+    len: usize,
+    row_count_out: *mut u64,
+    error: *mut cpp::duckdb_vx_error,
+) -> cpp::duckdb_vx_data {
+    let bind = unsafe { bind.cast::<BindState>().as_mut() }.vortex_expect("null pointer");
+    let path = unsafe { std::slice::from_raw_parts(path.cast::<u8>(), len) };
+    try_or_null(error, || {
+        let path = str::from_utf8(path).map_err(|_| vortex_err!("invalid utf-8"))?;
+        Ok(match footer_get_cached(bind, path)? {
+            Some(footer) => {
+                unsafe { *row_count_out = footer.row_count() };
+                Data::from(Box::new(footer)).as_ptr()
+            }
+            None => ptr::null_mut(),
+        })
+    })
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn duckdb_footer_get_statistics(
+    footer: *const c_void,
+    column_index: usize,
+    stats_out: *mut cpp::duckdb_column_statistics,
+) -> bool {
+    let footer = unsafe { footer.cast::<Footer>().as_ref() }.vortex_expect("null pointer");
+    let Some(stats) = footer_get_statistics(footer, column_index) else {
         return false;
     };
     let stats_out = unsafe { &mut *stats_out };
@@ -406,4 +461,49 @@ pub unsafe extern "C-unwind" fn duckdb_copy_function_flush_batch(
         unsafe { global.cast::<CopyFunctionGlobal>().as_ref() }.vortex_expect("null pointer");
     let batch = unsafe { batch.cast::<CopyPreparedBatch>().as_ref() }.vortex_expect("null pointer");
     try_or(error, || flush_batch(global, batch))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn duckdb_copy_function_get_written_file_statistics(
+    global_data: *const c_void,
+    out: *mut cpp::duckdb_vx_written_file_statistics,
+) -> bool {
+    let global_data = unsafe { global_data.cast::<CopyFunctionGlobal>().as_ref() }
+        .vortex_expect("global_data null pointer");
+    let Some(stats) = written_file_stats(global_data) else {
+        return false;
+    };
+    let out = unsafe { &mut *out };
+    out.row_count = stats.row_count;
+    out.file_size_bytes = stats.file_size_bytes;
+    out.footer_size_bytes = stats.footer_size_bytes;
+    out.num_columns = stats.num_columns as u64;
+    true
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C-unwind" fn duckdb_copy_function_get_written_column_statistics(
+    global_data: *const c_void,
+    column_index: usize,
+    out: *mut cpp::duckdb_vx_written_column_statistics,
+    error_out: *mut cpp::duckdb_vx_error,
+) -> bool {
+    let global_data = unsafe { global_data.cast::<CopyFunctionGlobal>().as_ref() }
+        .vortex_expect("global_data null pointer");
+    try_or(error_out, || {
+        let Some(stats) = written_column_stats(global_data, column_index)? else {
+            return Ok(false);
+        };
+        let out = unsafe { &mut *out };
+        out.min = stats.min.map_or(ptr::null_mut(), |v| v.into_ptr());
+        out.max = stats.max.map_or(ptr::null_mut(), |v| v.into_ptr());
+        out.has_null_count = stats.null_count.is_some();
+        out.null_count = stats.null_count.unwrap_or(0);
+        out.num_values = stats.num_values;
+        out.has_column_size = stats.column_size_bytes.is_some();
+        out.column_size_bytes = stats.column_size_bytes.unwrap_or(0);
+        out.has_nan_stat = stats.has_nan.is_some();
+        out.contains_nan = stats.has_nan.unwrap_or(false);
+        Ok(true)
+    })
 }

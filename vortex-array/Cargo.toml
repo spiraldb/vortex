@@ -83,6 +83,7 @@ serde = ["dep:serde", "vortex-buffer/serde", "vortex-mask/serde"]
 unstable_row_fns = []
 
 [dev-dependencies]
+allocator-api2 = { workspace = true }
 divan = { workspace = true }
 futures = { workspace = true, features = ["executor"] }
 insta = { workspace = true }
@@ -97,6 +98,7 @@ vortex-array = { path = ".", features = [
     "table-display",
     "unstable_row_fns",
 ] }
+vortex-bench-support = { workspace = true }
 
 [[bench]]
 name = "aggregate_max"
@@ -132,6 +134,10 @@ harness = false
 
 [[bench]]
 name = "binary_ops"
+harness = false
+
+[[bench]]
+name = "row_fn_output"
 harness = false
 
 [[bench]]
@@ -275,6 +281,10 @@ harness = false
 
 [[bench]]
 name = "filter_fixed_width"
+harness = false
+
+[[bench]]
+name = "filter_list"
 harness = false
 
 [[bench]]

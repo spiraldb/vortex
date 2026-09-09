@@ -13,6 +13,7 @@ import pandas as pd
 REPO_ROOT = Path(__file__).resolve().parents[2]
 COMPARE_SCRIPT = REPO_ROOT / "scripts" / "compare-benchmark-jsons.py"
 CAPTURE_SCRIPT = REPO_ROOT / "scripts" / "capture-file-sizes.py"
+RANDOM_ACCESS_SPLIT_SCRIPT = REPO_ROOT / "scripts" / "random-access-split.py"
 
 
 def load_compare_module():
@@ -22,6 +23,39 @@ def load_compare_module():
     assert spec.loader is not None
     spec.loader.exec_module(module)
     return module
+
+
+def load_random_access_split_module():
+    spec = importlib.util.spec_from_file_location("random_access_split", RANDOM_ACCESS_SPLIT_SCRIPT)
+    assert spec is not None
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_random_access_merge_preserves_each_open_mode(tmp_path: Path) -> None:
+    split = load_random_access_split_module()
+    parts = tmp_path / "parts"
+    parts.mkdir()
+    cached = {
+        "kind": "random_access_time",
+        "dataset": "taxi",
+        "format": "parquet",
+        "open_mode": "cached",
+    }
+    reopen = cached | {"open_mode": "reopen"}
+    (parts / "0.ingest.jsonl").write_text(f"{json.dumps(cached)}\n", encoding="utf-8")
+    (parts / "1.ingest.jsonl").write_text(
+        f"{json.dumps(cached)}\n{json.dumps(reopen)}\n",
+        encoding="utf-8",
+    )
+    output = tmp_path / "results.ingest.jsonl"
+
+    split.merge(str(parts / "*.ingest.jsonl"), split.ingest_identity, str(output))
+
+    records = [json.loads(line) for line in output.read_text(encoding="utf-8").splitlines()]
+    assert records == [cached, reopen]
 
 
 def timing_row(name: str, base: int, pr: int) -> dict[str, object]:
@@ -660,6 +694,29 @@ def test_file_size_report_ignores_baseline_rows_outside_pr_scope() -> None:
     assert "<summary>File Size Changes (1 files changed, +25.0% overall, 1↑ 0↓)</summary>" in report
     assert "hits_0.vortex" not in report
     assert "| part-0.vortex | 1.0 |" not in report
+
+
+def test_file_size_report_omits_formats_the_pr_run_skipped() -> None:
+    compare = load_compare_module()
+
+    report = compare.format_file_size_report(
+        pd.DataFrame(
+            [
+                file_size_record_for("base-sha", 100, "tpch", "10", "vortex-file-compressed", "part-0.vortex"),
+                file_size_record_for("base-sha", 80, "tpch", "10", "vortex-compact", "part-0.vortex"),
+                file_size_record_for("base-sha", 5, "tpch", "10", "vortex-compact", "duckdb.db"),
+            ]
+        ),
+        pd.DataFrame(
+            [
+                file_size_record_for("pr-sha", 125, "tpch", "10", "vortex-file-compressed", "part-0.vortex"),
+            ]
+        ),
+    )
+
+    assert "<summary>File Size Changes (1 files changed, +25.0% overall, 1↑ 0↓)</summary>" in report
+    assert "vortex-compact" not in report
+    assert "-100.0%" not in report
 
 
 def test_capture_file_sizes_emits_shared_benchmark_rows(tmp_path: Path) -> None:

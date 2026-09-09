@@ -1,0 +1,325 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN (FORMAT json)
+select
+    l_shipmode,
+    sum(case
+            when o_orderpriority = '1-URGENT'
+                or o_orderpriority = '2-HIGH'
+                then 1
+            else 0
+        end) as high_line_count,
+    sum(case
+            when o_orderpriority <> '1-URGENT'
+                and o_orderpriority <> '2-HIGH'
+                then 1
+            else 0
+        end) as low_line_count
+from
+    lineitem
+        join
+    orders
+    on
+            l_orderkey = o_orderkey
+where
+        l_shipmode in ('MAIL', 'SHIP')
+  and l_commitdate < l_receiptdate
+  and l_shipdate < l_commitdate
+  and l_receiptdate >= date '1994-01-01'
+  and l_receiptdate < date '1995-01-01'
+group by
+    l_shipmode
+order by
+    l_shipmode;
+----
+logical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "FILTER",
+                                "children": [
+                                    {
+                                        "name": "COMPARISON_JOIN",
+                                        "children": [
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Filters": "",
+                                                            "Function": "Vortex Scan"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "l_orderkey",
+                                                        "l_partkey",
+                                                        "l_suppkey",
+                                                        "l_linenumber",
+                                                        "l_quantity",
+                                                        "l_extendedprice",
+                                                        "l_discount",
+                                                        "l_tax",
+                                                        "l_returnflag",
+                                                        "l_linestatus",
+                                                        "l_shipdate",
+                                                        "l_commitdate",
+                                                        "l_receiptdate",
+                                                        "l_shipinstruct",
+                                                        "l_shipmode",
+                                                        "l_comment"
+                                                    ]
+                                                }
+                                            },
+                                            {
+                                                "name": "PROJECTION",
+                                                "children": [
+                                                    {
+                                                        "name": "READ_VORTEX",
+                                                        "children": [],
+                                                        "extra_info": {
+                                                            "Filters": "",
+                                                            "Function": "Vortex Scan"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": [
+                                                        "o_orderkey",
+                                                        "o_custkey",
+                                                        "o_orderstatus",
+                                                        "o_totalprice",
+                                                        "o_orderdate",
+                                                        "o_orderpriority",
+                                                        "o_clerk",
+                                                        "o_shippriority",
+                                                        "o_comment"
+                                                    ]
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Join Type": "INNER",
+                                            "Conditions": "(l_orderkey = o_orderkey)"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "(l_shipmode IN (CAST('MAIL' AS VARCHAR), CAST('SHIP' AS VARCHAR)))",
+                                        "(l_commitdate < l_receiptdate)",
+                                        "(l_shipdate < l_commitdate)",
+                                        "(l_receiptdate >= CAST('1994-01-01' AS DATE))",
+                                        "(l_receiptdate < CAST('1995-01-01' AS DATE))"
+                                    ]
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "l_shipmode",
+                            "Expressions": [
+                                "sum(CASE  WHEN (((o_orderpriority = CAST('1-URGENT' AS VARCHAR)) OR (o_orderpriority = CAST('2-HIGH' AS VARCHAR)))) THEN (CAST(1 AS INTEGER)) ELSE CAST(0 AS INTEGER) END)",
+                                "sum(CASE  WHEN (((o_orderpriority != CAST('1-URGENT' AS VARCHAR)) AND (o_orderpriority != CAST('2-HIGH' AS VARCHAR)))) THEN (CAST(1 AS INTEGER)) ELSE CAST(0 AS INTEGER) END)"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "l_shipmode",
+                        "high_line_count",
+                        "low_line_count"
+                    ]
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "memory.main.lineitem.l_shipmode"
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "COMPARISON_JOIN",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Filters": "",
+                                                    "Function": "Vortex Scan",
+                                                    "Estimated Cardinality": "150000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "o_orderkey",
+                                                "o_orderpriority"
+                                            ],
+                                            "Estimated Cardinality": "150000"
+                                        }
+                                    },
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Filters": [
+                                                        "vortex.list.contains([\"MAIL\", \"SHIP\"], $.l_shipmode)",
+                                                        "($.l_commitdate < $.l_receiptdate)",
+                                                        "($.l_shipdate < $.l_commitdate)",
+                                                        "(1994-01-01 <= $.l_receiptdate < 1995-01-01)",
+                                                        "($.l_commitdate < 1995-01-01)",
+                                                        "($.l_shipdate < 1995-01-01)"
+                                                    ],
+                                                    "Function": "Vortex Scan",
+                                                    "Estimated Cardinality": "120114"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "l_orderkey",
+                                                "l_shipmode"
+                                            ],
+                                            "Estimated Cardinality": "120114"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Join Type": "INNER",
+                                    "Conditions": "(o_orderkey = l_orderkey)",
+                                    "Estimated Cardinality": "150000"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "l_shipmode",
+                            "Expressions": [
+                                "sum(CASE  WHEN (((o_orderpriority = '1-URGENT') OR (o_orderpriority = '2-HIGH'))) THEN (1) ELSE 0 END)",
+                                "sum(CASE  WHEN (((o_orderpriority != '1-URGENT') AND (o_orderpriority != '2-HIGH'))) THEN (1) ELSE 0 END)"
+                            ],
+                            "Estimated Cardinality": "85659"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "l_shipmode",
+                        "high_line_count",
+                        "low_line_count"
+                    ],
+                    "Estimated Cardinality": "85659"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "memory.main.lineitem.l_shipmode"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "HASH_GROUP_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "HASH_JOIN",
+                                "children": [
+                                    {
+                                        "name": "READ_VORTEX",
+                                        "children": [],
+                                        "extra_info": {
+                                            "Function": "Vortex Scan",
+                                            "Projections": [
+                                                "o_orderkey",
+                                                "o_orderpriority"
+                                            ],
+                                            "Estimated Cardinality": "150000"
+                                        }
+                                    },
+                                    {
+                                        "name": "READ_VORTEX",
+                                        "children": [],
+                                        "extra_info": {
+                                            "Function": "Vortex Scan",
+                                            "Filters": [
+                                                "vortex.list.contains([\"MAIL\", \"SHIP\"], $.l_shipmode)",
+                                                "($.l_commitdate < $.l_receiptdate)",
+                                                "($.l_shipdate < $.l_commitdate)",
+                                                "(1994-01-01 <= $.l_receiptdate < 1995-01-01)",
+                                                "($.l_commitdate < 1995-01-01)",
+                                                "($.l_shipdate < 1995-01-01)"
+                                            ],
+                                            "Projections": [
+                                                "l_orderkey",
+                                                "l_shipmode"
+                                            ],
+                                            "Estimated Cardinality": "120114"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Join Type": "INNER",
+                                    "Conditions": "o_orderkey = l_orderkey",
+                                    "Estimated Cardinality": "150000"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Projections": [
+                                "l_shipmode",
+                                "CASE  WHEN (((o_orderpriority = '1-URGENT') OR (o_orderpriority = '2-HIGH'))) THEN (1) ELSE 0 END",
+                                "CASE  WHEN (((o_orderpriority != '1-URGENT') AND (o_orderpriority != '2-HIGH'))) THEN (1) ELSE 0 END"
+                            ],
+                            "Estimated Cardinality": "150000"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Groups": "#0",
+                    "Aggregates": [
+                        "sum(#1)",
+                        "sum(#2)"
+                    ],
+                    "Estimated Cardinality": "85659"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": "memory.main.lineitem.l_shipmode ASC"
+        }
+    }
+]

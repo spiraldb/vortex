@@ -35,7 +35,7 @@ jobs:
     timeout-minutes: 60
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=bench-dedicated/family=c6id.8xlarge/extras=s3-cache/tag=build-{1}', github.run_id, matrix.benchmark.id)
+          && format('runs-on={0}/runner=bench-dedicated/family=c8gd.8xlarge/image=ubuntu24-full-arm64-pre-v2/extras=s3-cache/tag=build-{1}', github.run_id, matrix.benchmark.id)
           || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -53,7 +53,7 @@ jobs:
         with:
           sccache: s3
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7
-      - uses: ./.github/actions/setup-rust
+      - uses: ./.github/actions/setup-prebuild
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           enable-sccache: ${{ github.repository == 'vortex-data/vortex' && 'true' || 'false' }}
@@ -83,7 +83,7 @@ jobs:
     timeout-minutes: 120
     runs-on: >-
       ${{ github.repository == 'vortex-data/vortex'
-          && format('runs-on={0}/runner=bench-dedicated/family=c6id.metal/extras=s3-cache/tag={1}', github.run_id, matrix.benchmark.id)
+          && format('runs-on={0}/runner=bench-dedicated/family=c8gd.metal-24xl/image=ubuntu24-full-arm64-pre-v2/extras=s3-cache/tag={1}', github.run_id, matrix.benchmark.id)
           || 'ubuntu-latest' }}
     strategy:
       fail-fast: false
@@ -156,7 +156,7 @@ jobs:
           VORTEX_EXPERIMENTAL_PATCHED_ARRAY: "1"
           FLAT_LAYOUT_INLINE_ARRAY_NODE: "1"
         run: |
-          python3 scripts/compress-split.py --formats parquet,lance,vortex --emit-ingest-records
+          python3 scripts/compress-split.py --formats arrow-ipc,parquet,lance,vortex --emit-ingest-records
 
       - name: Run ${{ matrix.benchmark.name }} benchmark (per-column-encoder)
         if: matrix.benchmark.id == 'string-bench'

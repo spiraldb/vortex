@@ -38,6 +38,7 @@ sketches-ddsketch = { workspace = true }
 termtree = { workspace = true }
 tokio = { workspace = true, features = ["rt"], optional = true }
 tracing = { workspace = true }
+twox-hash = { workspace = true }
 vortex-array = { workspace = true }
 vortex-arrow = { workspace = true }
 vortex-btrblocks = { workspace = true }
@@ -56,7 +57,9 @@ vortex-utils = { workspace = true, features = ["dashmap"] }
 [dev-dependencies]
 divan = { workspace = true }
 futures = { workspace = true, features = ["executor"] }
+goldenfile = { workspace = true }
 insta = { workspace = true }
+rand = { workspace = true }
 rstest = { workspace = true }
 temp-env = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros"] }
@@ -78,6 +81,10 @@ harness = false
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 uuid = { workspace = true, features = ["js"], optional = true }
+
+[[bench]]
+name = "bloom_filter"
+harness = false
 
 [lints]
 workspace = true

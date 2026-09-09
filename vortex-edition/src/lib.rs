@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Definitions of Vortex *editions*: named, frozen sets of components that a writer may put
-//! in a file, carrying a forever read-compatibility guarantee.
+//! Definitions of Vortex *editions*: named sets of serialized component IDs. Frozen editions
+//! carry a forever read-compatibility guarantee; draft editions do not.
 //!
 //! Editions live on the session, like encodings do: [`EditionSession`] holds the registered
 //! editions and [`EnabledEditions`] selects which of them a writer may emit. Declarations
@@ -13,20 +13,25 @@
 //!
 //! Every membership is typed by a [`ComponentKind`], and members are resolved one kind at a
 //! time with [`EditionSessionExt::enabled_component_ids`]: the file writer restricts the
-//! arrays, layouts, extension dtypes, and aggregates it writes from separate id sets, never one
-//! untyped set.
+//! arrays, layouts, extension dtypes, and aggregates it writes from separate id sets. Array
+//! memberships name wire IDs rather than in-memory array representations. An array plugin may
+//! serialize one current in-memory representation under several historical IDs. The serialization
+//! context validates the ID chosen by the plugin before writing it. Readers resolve the ID stored
+//! in the file and either deserialize it into the current representation or reject it as unknown.
 //!
-//! An edition is a **draft** until its [`Edition::min_vortex_version`] is recorded —
-//! recording it is the act of freezing. The per-edition member sets are computed from the
-//! registered declarations by [`EditionSession::components_in`], and correctness is enforced
-//! by unit tests: [`EditionSession::validate`] checks a whole registry, and
-//! [`test_harness::validate_edition`] validates one edition's constraints — call it once in
+//! An edition is represented as a **draft** until its [`Edition::min_library_version`] is
+//! recorded. A stable edition may freeze in the release that cuts it; once that release version
+//! is known, the field is backfilled to document the freeze. The per-edition member sets are
+//! computed from the registered declarations by [`EditionSession::components_in`], and
+//! correctness is enforced by unit tests: [`EditionSession::validate`] checks a whole registry,
+//! and [`test_harness::validate_edition`] validates one edition's constraints — call it once in
 //! the `#[cfg(test)]` module of each edition definition.
 //!
-//! The first-party edition declarations live in the public `vortex` crate, which registers
-//! and enables them on the default session. See the published spec at
+//! The first-party edition declarations live in this crate. The public `vortex` crate
+//! re-exports them and registers and enables them on the default session. See the published spec at
 //! <https://docs.vortex.dev/specs/editions.html>.
 
+pub mod declarations;
 mod session;
 pub mod test_harness;
 #[cfg(test)]
@@ -38,6 +43,8 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
 
+pub use declarations::EDITION_DECLARATIONS;
+pub use declarations::EDITION_FAMILIES;
 pub use session::EditionSession;
 pub use session::EditionSessionExt;
 pub use session::EnabledEditions;
@@ -45,18 +52,19 @@ use vortex_session::registry::Id;
 
 /// The identifier of an edition, e.g. `core2026.07.0`.
 ///
-/// The `family` names an independently versioned, additive group of components (`core` is the
-/// set the default writer emits). The date components record when the edition was frozen and
-/// order editions chronologically *within* a family; there is no ordering across families.
+/// The `family` names an independently versioned, additive group of members (`core` is the set
+/// available to the default writer). For `core`, the date components record when the edition
+/// freezes; that date is prospective while the edition is still a draft. Dates order editions
+/// chronologically *within* a family; there is no ordering across families.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EditionId {
     /// The edition family, e.g. `core`.
     pub family: &'static str,
-    /// Year the edition was cut.
+    /// Year in the edition date. For `core`, this is the freeze year.
     pub year: u16,
-    /// Month the edition was cut.
+    /// Month in the edition date. For `core`, this is the freeze month.
     pub month: u8,
-    /// Distinguishes editions cut in the same month; normally `0`.
+    /// Distinguishes editions with the same family, year, and month; normally `0`.
     pub version: u8,
 }
 
@@ -114,7 +122,51 @@ impl Display for EditionId {
     }
 }
 
-/// The kind of component an edition membership covers.
+/// A family of editions: an independently versioned, additive group of members, registered
+/// with [`EditionSession::declare_family`].
+///
+/// Every [`EditionId`] names one. Declaring the family is what makes the name real:
+/// [`EditionSession::validate`] rejects an edition whose family was never declared, so a typo
+/// cannot quietly mint a family of one.
+#[derive(Clone, Copy, Debug)]
+pub struct EditionFamily {
+    /// The family name, matching the [`EditionId::family`] of its editions, e.g. `core`.
+    pub name: &'static str,
+    /// The library or project whose releases provide readers for this family's editions.
+    /// [`Edition::min_library_version`] refers to versions of this origin.
+    pub origin: &'static str,
+    /// What the family is for. Exported into the family's record, so a few sentences at
+    /// most: the long form belongs in the published spec.
+    pub doc: &'static str,
+}
+
+impl EditionFamily {
+    /// Validate the family's form: a non-empty lowercase name, origin, and doc. Checked for every
+    /// declared family by [`EditionSession::validate`].
+    pub fn validate(&self) -> Result<(), EditionError> {
+        if self.name.is_empty() || !self.name.chars().all(|c| c.is_ascii_lowercase()) {
+            return Err(EditionError::new(format!(
+                "edition family {:?} must have a non-empty lowercase name, e.g. `core`",
+                self.name
+            )));
+        }
+        if self.origin.trim().is_empty() {
+            return Err(EditionError::new(format!(
+                "edition family {} must name its origin library or project",
+                self.name
+            )));
+        }
+        if self.doc.trim().is_empty() {
+            return Err(EditionError::new(format!(
+                "edition family {} must document what it is for",
+                self.name
+            )));
+        }
+        Ok(())
+    }
+}
+
+/// The kind of member an edition membership covers.
 ///
 /// Ids are unique per kind, not globally: a layout named `vortex.flat` and an array named
 /// `vortex.flat` are different members. Every membership records its kind, and the writer
@@ -122,7 +174,8 @@ impl Display for EditionId {
 /// written layouts. Further kinds (scalar functions, say) can be added the same way.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ComponentKind {
-    /// An array encoding, e.g. `vortex.alp`, registered in the session's array registry.
+    /// A serialized array representation, e.g. `vortex.alp`, registered in the session's array
+    /// registry.
     Array,
     /// A layout encoding, e.g. `vortex.flat`, registered in the session's layout registry.
     Layout,
@@ -144,32 +197,39 @@ impl Display for ComponentKind {
     }
 }
 
-/// An edition: a named set of components with a read-compatibility guarantee, registered with
-/// [`EditionSession::declare_edition`]. The set itself is computed from the registered
-/// [`EditionInclusion`]s by [`EditionSession::components_in`].
+/// An edition: a named set of serialized components that can acquire a read-compatibility
+/// guarantee, registered with [`EditionSession::declare_edition`].
+/// The set itself is computed from the registered [`EditionInclusion`]s by
+/// [`EditionSession::components_in`].
 #[derive(Clone, Copy, Debug)]
 pub struct Edition {
-    /// The edition identifier. Also carries the freeze date: `core2026.07.0` freezes in
-    /// 2026-07.
+    /// The edition identifier. For a `core` edition, its date records when it freezes.
     pub id: EditionId,
-    /// The minimum Vortex version whose reader supports every member of this edition.
+    /// The minimum version of the edition family's [`EditionFamily::origin`] whose reader
+    /// supports every member of this edition.
     ///
-    /// Recording this is the act of freezing: an edition with `None` is a **draft** — being
-    /// assembled, carrying no guarantee, free to change, never the default write target.
+    /// A stable edition may freeze in the release that cuts it. Until that release is cut, its
+    /// version is not known and this remains `None`. The version is then backfilled to document
+    /// the already completed freeze and identify the first released reader supporting every
+    /// member. A draft has no recorded read-forever guarantee; that does not imply that its
+    /// behavior is expected to change.
     /// Validated against the members' [`EditionInclusion::required_vortex_release`] values:
     /// no member may require a version newer than the edition declares.
-    pub min_vortex_version: Option<&'static str>,
+    pub min_library_version: Option<&'static str>,
 }
 
 impl Edition {
-    /// A draft is an edition whose `min_vortex_version` has not been recorded yet.
+    /// A draft is an edition whose `min_library_version` has not been recorded yet.
+    ///
+    /// This describes the absence of a frozen compatibility guarantee, not necessarily the
+    /// implementation stability of its members.
     pub fn is_draft(&self) -> bool {
-        self.min_vortex_version.is_none()
+        self.min_library_version.is_none()
     }
 }
 
-/// Declares that a component is a member of an edition — and of every later edition of the
-/// same family. Registered with [`EditionSession::declare_inclusion`].
+/// Declares that a serialized component is a member of an edition — and of every later edition of
+/// the same family. Registered with [`EditionSession::declare_inclusion`].
 #[derive(Clone, Copy, Debug)]
 pub struct EditionInclusion {
     /// What the membership covers. Ids are unique per kind, so this is part of the
@@ -179,8 +239,8 @@ pub struct EditionInclusion {
     pub component_id: Id,
     /// The first edition this component is a member of.
     pub since: EditionId,
-    /// The earliest Vortex release able to read and execute this component, recorded from
-    /// evidence (e.g. compat-fixture history). `None` until recorded.
+    /// The earliest Vortex release supporting this member, recorded from evidence (e.g.
+    /// compat-fixture history for serialized components). `None` until recorded.
     pub required_vortex_release: Option<&'static str>,
 }
 
@@ -219,14 +279,14 @@ impl AsComponentId for &'static str {
     }
 }
 
-/// A component that joins an edition, named by id string or vtable and tagged with the kind
-/// of registry it belongs to. Built with the per-kind constructors, so a declaration reads
+/// A member that joins an edition, named by id string or vtable and tagged with its kind.
+/// Built with the per-kind constructors, so a declaration reads
 /// as `EditionMember::array(&"vortex.alp")`.
 #[derive(Clone, Copy, Debug)]
 pub struct EditionMember {
-    /// What kind of component this is.
+    /// What kind of member this is.
     pub kind: ComponentKind,
-    /// The component, named by id string or by vtable.
+    /// The member, named by id string or by vtable.
     pub component: &'static dyn AsComponentId,
 }
 
@@ -264,15 +324,15 @@ impl EditionMember {
     }
 }
 
-/// Declares an edition together with the components that join the family at it, in one
-/// block. Registered with [`EditionSession::declare`], which derives each member's
-/// membership (`since` = the declared edition) from the block structure.
+/// Declares an edition together with its new members in one block. Registered with
+/// [`EditionSession::declare`], which derives each entry's membership (`since` = the declared
+/// edition) from the block structure.
 #[derive(Clone, Copy, Debug)]
 pub struct EditionDeclaration {
     /// The edition being declared.
     pub edition: Edition,
-    /// The components that join the family at this edition, each tagged with its
-    /// [`ComponentKind`]. Members of earlier editions are inherited and never restated.
+    /// The members that join the family at this edition, each tagged with its [`ComponentKind`].
+    /// Earlier entries are inherited and never restated.
     pub added: &'static [EditionMember],
 }
 

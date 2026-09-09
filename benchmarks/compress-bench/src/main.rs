@@ -10,10 +10,12 @@ use anyhow::Context;
 use clap::Parser;
 #[cfg(feature = "lance")]
 use compress_bench::LanceCompressor;
+use compress_bench::arrow::ArrowIpcCompressor;
 use compress_bench::gpu::GpuCodec;
 use compress_bench::gpu::GpuOptions;
 use compress_bench::gpu::compressor as gpu_compressor;
 use compress_bench::parquet::ParquetCompressor;
+use compress_bench::parquet::arrow_uncompressed_size;
 use compress_bench::vortex::VortexCompressor;
 use futures::FutureExt;
 use indicatif::ProgressBar;
@@ -26,6 +28,7 @@ use vortex_bench::LogFormat;
 use vortex_bench::Target;
 use vortex_bench::compress::CompressMeasurements;
 use vortex_bench::compress::CompressOp;
+use vortex_bench::compress::Compressed;
 use vortex_bench::compress::Compressor;
 use vortex_bench::compress::benchmark_compress;
 use vortex_bench::compress::benchmark_decompress;
@@ -58,7 +61,7 @@ struct Args {
         long,
         value_delimiter = ',',
         value_enum,
-        default_values_t = vec![Format::Parquet, Format::OnDiskVortex]
+        default_values_t = vec![Format::ArrowIpc, Format::Parquet, Format::OnDiskVortex]
     )]
     formats: Vec<Format>,
     #[arg(short, long, default_value_t = 5)]
@@ -188,6 +191,7 @@ fn get_compressor(format: Format, mode: BenchMode) -> Box<dyn Compressor> {
     }
 
     match format {
+        Format::ArrowIpc => Box::new(ArrowIpcCompressor),
         Format::OnDiskVortex => Box::new(VortexCompressor),
         Format::Parquet => Box::new(ParquetCompressor::new()),
         #[cfg(feature = "lance")]
@@ -217,7 +221,11 @@ async fn run_compress(
     output_path: Option<PathBuf>,
     ingest_output: Option<PathBuf>,
 ) -> anyhow::Result<()> {
-    let targets = formats
+    let timing_targets = formats
+        .iter()
+        .map(|f| Target::new(Engine::default(), *f))
+        .collect_vec();
+    let size_targets = formats
         .iter()
         .map(|f| Target::new(Engine::default(), *f))
         .collect_vec();
@@ -241,24 +249,23 @@ async fn run_compress(
 
     // Datasets run in GPU mode. Add one only after a `--gpu-verify` run has confirmed its CUDA
     // decode end to end; a dataset here that cannot decode fails the benchmark job. Between them
-    // these cover FSST strings, bit-packed numerics and columns with nulls.
-    //
-    // Not yet listed, each blocked on a `vortex-cuda` gap rather than on the benchmark:
-    //
-    // - `taxi` and `Arade`: `Unsupported ptype u16`. The CUDA `date_time_parts` kernel dispatches
-    //   with `match_each_signed_integer_ptype!` where the CPU canonicaliser uses
-    //   `match_each_integer_ptype!`. Widening the fused kernel takes 4³ = 64 PTX instantiations
-    //   to 8³ = 512, so it is not a free change.
-    // - `Euro2016` and `HashTags`: `No CUDA kernel for encoding vortex.masked`.
-    // - `CMSprovider`: `expected host buffer` — a CPU fallback is reached with device-resident
-    //   buffers, which `CudaArrayExt::execute_cuda` refuses.
-    // - `StructListOfInts`: its list layouts have no verified CUDA decode path.
-    let gpu_datasets: [&dyn Dataset; 4] = [
+    // these cover FSST strings, bit-packed numerics, timestamps, columns with nulls, and lists.
+    let gpu_datasets: Vec<&dyn Dataset> = [
         &TPCHLCommentCanonical as &dyn Dataset,
         &TPCHLCommentChunked,
+        &TaxiData,
+        PBI_DATASETS.get(Arade),
         PBI_DATASETS.get(Bimbo),
+        PBI_DATASETS.get(CMSprovider),
+        PBI_DATASETS.get(Euro2016),
         PBI_DATASETS.get(Food),
-    ];
+        PBI_DATASETS.get(HashTags),
+        &DownloadableDataset::AirQuality,
+        &DownloadableDataset::RPlace,
+    ]
+    .into_iter()
+    .chain(structlistofints.iter().map(|d| d as &dyn Dataset))
+    .collect();
 
     let all_datasets: Vec<&dyn Dataset> = [
         &TaxiData as &dyn Dataset,
@@ -283,7 +290,7 @@ async fn run_compress(
     .collect();
 
     let datasets: Vec<&dyn Dataset> = if mode.is_gpu() {
-        gpu_datasets.to_vec()
+        gpu_datasets
     } else {
         all_datasets
     }
@@ -291,6 +298,9 @@ async fn run_compress(
     .filter(|d| {
         if let Some(filter) = datasets_filter.as_ref() {
             filter.is_match(d.name())
+        } else if mode.is_gpu() {
+            // The GPU suite is an explicit list, so every entry on it runs.
+            true
         } else {
             // These download data from pcodec's public bucket, presumably creating egress charges
             // for pcodec. As such, we do not run in CI.
@@ -358,15 +368,15 @@ async fn run_compress(
     // publishes the numbers for the datasets that did decode.
     match display_format {
         DisplayFormat::Table => {
-            render_table(&mut writer, measurements.timings, &targets)?;
+            render_table(&mut writer, measurements.timings, &timing_targets)?;
             render_table(
                 &mut writer,
-                measurements.ratios,
-                &if formats.contains(&Format::OnDiskVortex) {
-                    vec![Target::new(Engine::default(), Format::OnDiskVortex)]
-                } else {
-                    vec![]
-                },
+                measurements
+                    .ratios
+                    .into_iter()
+                    .filter(|measurement| measurement.unit == "bytes")
+                    .collect(),
+                &size_targets,
             )?;
         }
         DisplayFormat::GhJson => {
@@ -419,6 +429,11 @@ async fn run_benchmark_for_dataset(
 
     // Get the parquet file path for this dataset
     let parquet_path = dataset_handle.to_parquet_path().await?;
+    let uncompressed_size = ops
+        .contains(&CompressOp::Compress)
+        .then(|| arrow_uncompressed_size(&parquet_path))
+        .transpose()
+        .with_context(|| format!("measuring Arrow memory size for {bench_name}"))?;
 
     let mut ratios = Vec::new();
     let mut timings = Vec::new();
@@ -428,18 +443,21 @@ async fn run_benchmark_for_dataset(
 
     for format in formats {
         let compressor = get_compressor(*format, mode);
+        // Read the source once per format; every compression iteration starts from it.
+        let input = compressor
+            .load(&parquet_path)
+            .await
+            .with_context(|| format!("loading {bench_name} for {format}"))?;
+        // Compressed output shared by both ops, so decompression never compresses again.
+        let mut compressed: Option<Compressed> = None;
 
         for op in ops {
             let time = match op {
                 CompressOp::Compress => {
-                    let result = benchmark_compress(
-                        compressor.as_ref(),
-                        &parquet_path,
-                        iterations,
-                        bench_name,
-                    )
-                    .await
-                    .with_context(|| format!("compressing {bench_name} as {format}"))?;
+                    let result =
+                        benchmark_compress(compressor.as_ref(), &input, iterations, bench_name)
+                            .await
+                            .with_context(|| format!("compressing {bench_name} as {format}"))?;
                     compressed_sizes.insert(*format, result.compressed_size);
                     let all_runs_ns: Vec<u64> = result
                         .all_runs
@@ -458,15 +476,26 @@ async fn run_benchmark_for_dataset(
                         v3_variant,
                         *format,
                         result.compressed_size,
+                        uncompressed_size.context("compression size requires Arrow memory size")?,
                     ));
                     ratios.extend(result.ratios);
                     timings.push(result.timing);
+                    compressed = Some(result.compressed);
                     result.time
                 }
                 CompressOp::Decompress => {
+                    let input = match &compressed {
+                        Some(input) => input,
+                        None => compressed.insert(
+                            compressor
+                                .compress(&input)
+                                .await
+                                .with_context(|| format!("compressing {bench_name} as {format}"))?,
+                        ),
+                    };
                     let result = benchmark_decompress(
                         compressor.as_ref(),
-                        &parquet_path,
+                        input,
                         iterations,
                         &decompress_name,
                     )

@@ -8,7 +8,6 @@ use std::fmt::Formatter;
 use std::sync::Arc;
 
 pub use kernel::*;
-use vortex_error::VortexExpect as _;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
@@ -202,12 +201,11 @@ pub(crate) fn zip_impl(
 
     let return_type = zip_return_dtype(if_true.dtype(), if_false.dtype())?;
 
-    if mask.all_true() {
-        return if_true.cast(return_type);
-    }
-    if mask.all_false() {
-        return if_false.cast(return_type);
-    }
+    let mask_values = match mask {
+        Mask::AllTrue(_) | Mask::AllFalse(0) => return if_true.cast(return_type),
+        Mask::AllFalse(_) => return if_false.cast(return_type),
+        Mask::Values(values) => values,
+    };
 
     // `append_to_builder` requires exact dtype equality, so normalize branch
     // nullability to the output dtype before appending slices into the builder.
@@ -217,8 +215,7 @@ pub(crate) fn zip_impl(
     zip_impl_with_builder(
         &if_true,
         &if_false,
-        mask.values()
-            .vortex_expect("zip_impl_with_builder: mask is not all-true or all-false"),
+        mask_values.as_ref(),
         builder_with_capacity(&return_type, if_true.len()),
         ctx,
     )

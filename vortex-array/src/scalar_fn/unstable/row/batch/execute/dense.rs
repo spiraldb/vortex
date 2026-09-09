@@ -3,7 +3,6 @@
 
 use vortex_error::VortexError;
 use vortex_error::VortexResult;
-use vortex_error::vortex_panic;
 use vortex_mask::Mask;
 use vortex_mask::MaskValuesRef;
 
@@ -43,6 +42,11 @@ impl RowFnExecutionArgs {
             MaskValuesRef,
             &mut ExecutionCtx,
         ) -> VortexResult<Option<ArrayRef>>,
+        execute_filtered_rows: impl FnOnce(
+            BorrowedRowFnArgs<'_>,
+            MaskValuesRef,
+            &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
         let attempt =
@@ -51,7 +55,7 @@ impl RowFnExecutionArgs {
         match attempt {
             DenseAttempt::Values(values) => self.finalize_dense_output(values, ctx),
             DenseAttempt::DeferredError(error) => {
-                self.resolve_deferred_error(error, try_valid_rows, ctx)
+                self.resolve_deferred_error(error, try_valid_rows, execute_filtered_rows, ctx)
             }
         }
     }
@@ -64,6 +68,11 @@ impl RowFnExecutionArgs {
             MaskValuesRef,
             &mut ExecutionCtx,
         ) -> VortexResult<Option<ArrayRef>>,
+        execute_filtered_rows: impl FnOnce(
+            BorrowedRowFnArgs<'_>,
+            MaskValuesRef,
+            &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
         let valid_rows = match self.validity.execute_mask(self.row_count, ctx)? {
@@ -80,14 +89,11 @@ impl RowFnExecutionArgs {
         // retrying only observable rows.
         drop(deferred_error);
 
-        if let Some(result) = self.try_execute_valid_rows(try_valid_rows, valid_rows, ctx)? {
+        if let Some(result) = self.try_execute_valid_rows(try_valid_rows, &valid_rows, ctx)? {
             return Ok(result);
         }
 
-        vortex_panic!(
-            "dense retry requires direct valid-row support after a deferred error, but {} declined it",
-            self.id,
-        )
+        self.execute_filtered(execute_filtered_rows, &valid_rows, ctx)
     }
 
     fn finalize_dense_output(

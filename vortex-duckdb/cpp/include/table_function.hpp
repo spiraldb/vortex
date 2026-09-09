@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "data.hpp"
 #include "duckdb.h"
 #include "duckdb/function/function.hpp"
 #include "duckdb/function/table_function.hpp"
@@ -30,3 +31,28 @@ struct TableFunctionUngroupedAggregateInput {
 };
 
 bool aggregate_pushdown(ClientContext &context, const TableFunctionUngroupedAggregateInput &input);
+
+/*
+ * DuckDB uses partition row groups for two purposes:
+ *
+ * 1. If optimizer proves query (e.g. SELECT min(col)) can be answered from
+ *    metadata, it replaces a real scan with a call to GetColumnStatistics.
+ * 2. If optimizer proves a row group can be pruned because of statistics, it
+ *    removes row group's read. We don't use this as we implement own prunung.
+ *
+ * For (1) we care about providing statistics fast, so we report a file as
+ * a "row group".
+ */
+struct VortexRowGroup final : PartitionRowGroup {
+    explicit VortexRowGroup(unique_ptr<CData> ffi_footer) : ffi_footer(std::move(ffi_footer)) {
+    }
+
+    unique_ptr<CData> ffi_footer;
+
+    unique_ptr<BaseStatistics> GetColumnStatistics(const StorageIndex &storage_index) override;
+    bool MinMaxIsExact(const BaseStatistics &, const StorageIndex &) override {
+        // TODO(myrrc): in duckdb 2.0 we should report false for strings and
+        // also add TRUNCATED_STATS type for them
+        return true;
+    }
+};

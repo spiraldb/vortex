@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "URL", COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-01' AND "EventDate" <= '2013-07-31' AND "DontCountHits" = 0 AND "IsRefresh" = 0 AND "URL" <> '' GROUP BY "URL" ORDER BY PageViews DESC LIMIT 10;
+----
+logical_plan
+01)Sort: pageviews DESC NULLS FIRST, fetch=10
+02)--Projection: hits.URL, count(Int64(1)) AS count(*) AS pageviews
+03)----Aggregate: groupBy=[[hits.URL]], aggr=[[count(Int64(1))]]
+04)------Projection: hits.URL
+05)--------Filter: hits.CounterID = Int32(62) AND hits.EventDate >= TimestampMicrosecond(1372636800000000, None) AND hits.EventDate <= TimestampMicrosecond(1375228800000000, None) AND hits.DontCountHits = Int16(0) AND hits.IsRefresh = Int16(0) AND hits.URL != Utf8View("")
+06)----------TableScan: hits projection=[EventDate, CounterID, URL, IsRefresh, DontCountHits], partial_filters=[hits.CounterID = Int32(62), hits.EventDate >= TimestampMicrosecond(1372636800000000, None), hits.EventDate <= TimestampMicrosecond(1375228800000000, None), hits.DontCountHits = Int16(0), hits.IsRefresh = Int16(0), hits.URL != Utf8View("")]
+physical_plan
+01)SortPreservingMergeExec: [pageviews@1 DESC], fetch=10
+02)--ProjectionExec: expr=[URL@0 as URL, count(Int64(1))@1 as pageviews]
+03)----SortExec: TopK(fetch=10), expr=[count(Int64(1))@1 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[URL@0 as URL], aggr=[count(Int64(1))]
+05)--------RepartitionExec: partitioning=Hash([URL@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[URL@0 as URL], aggr=[count(Int64(1))]
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[URL], file_type=vortex, predicate: CounterID@6 = 62 AND EventDate@5 >= 1372636800000000 AND EventDate@5 <= 1375228800000000 AND DontCountHits@61 = 0 AND IsRefresh@15 = 0 AND URL@13 != 

@@ -87,6 +87,7 @@ use vortex_layout::layouts::table::TableStrategy;
 use vortex_layout::layouts::zoned::LegacyStats;
 use vortex_layout::layouts::zoned::Zoned;
 use vortex_layout::scan::scan_builder::ScanBuilder;
+use vortex_layout::scan::split_by::DEFAULT_MAX_SPLIT_ROWS;
 use vortex_layout::scan::split_by::SplitBy;
 use vortex_layout::session::LayoutSession;
 use vortex_scan::strict_sorted_buffer::StrictSortedBuffer;
@@ -2337,19 +2338,15 @@ fn layout_has_dict(layout: &dyn DynLayout) -> bool {
             .any(|child| layout_has_dict(child.as_ref()))
 }
 
-/// Mirrors the (private) `IDEAL_SPLIT_SIZE` that `SplitBy::Layout` uses to sub-divide wide
-/// chunk-boundary spans: layout splits are never wider than this many rows.
-const MAX_SPLIT_ROWS: u64 = 100_000;
+/// Rows in the [`large_flat_file`] fixture; spans the sub-split threshold.
+const FLAT_N_ROWS: u64 = 250_000;
 
-#[tokio::test]
-#[cfg_attr(miri, ignore)]
-async fn test_large_flat_chunk_scan_subdivides_splits() -> VortexResult<()> {
-    // A single flat (unchunked) 250k-row layout spans the 100k sub-split threshold, so the scan
-    // must decode it as multiple row-range splits.
-    let mut ctx = SESSION.create_execution_ctx();
-    const N_ROWS: u64 = 250_000;
+/// A single flat (unchunked) [`FLAT_N_ROWS`]-row layout with alternating-sign values, so filters
+/// select rows on both sides of any split boundary. Returns the opened file and original array.
+async fn large_flat_file() -> VortexResult<(VortexFile, ArrayRef)> {
     let values =
-        Buffer::from_iter((0..N_ROWS as i32).map(|i| if i % 2 == 0 { i } else { -i })).into_array();
+        Buffer::from_iter((0..FLAT_N_ROWS as i32).map(|i| if i % 2 == 0 { i } else { -i }))
+            .into_array();
 
     let mut buf = ByteBufferMut::empty();
     SESSION
@@ -2358,14 +2355,27 @@ async fn test_large_flat_chunk_scan_subdivides_splits() -> VortexResult<()> {
         .write(&mut buf, values.to_array_stream())
         .await?;
 
-    let file = SESSION.open_options().open_buffer(buf)?;
+    Ok((SESSION.open_options().open_buffer(buf)?, values))
+}
 
-    // Sub-division caps each split at MAX_SPLIT_ROWS while tiling the file exactly.
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn test_large_flat_chunk_scan_subdivides_splits() -> VortexResult<()> {
+    // A single flat (unchunked) 250k-row layout spans the 100k sub-split threshold, so the scan
+    // must decode it as multiple row-range splits.
+    let mut ctx = SESSION.create_execution_ctx();
+    let (file, values) = large_flat_file().await?;
+
+    // Sub-division caps each split at DEFAULT_MAX_SPLIT_ROWS while tiling the file exactly.
     let splits = file.splits()?;
     assert!(splits.len() > 1, "expected sub-divided splits: {splits:?}");
-    assert!(splits.iter().all(|r| r.end - r.start <= MAX_SPLIT_ROWS));
+    assert!(
+        splits
+            .iter()
+            .all(|r| r.end - r.start <= DEFAULT_MAX_SPLIT_ROWS)
+    );
     assert_eq!(splits.first().map(|r| r.start), Some(0));
-    assert_eq!(splits.last().map(|r| r.end), Some(N_ROWS));
+    assert_eq!(splits.last().map(|r| r.end), Some(FLAT_N_ROWS));
     assert!(splits.windows(2).all(|w| w[0].end == w[1].start));
 
     // A full scan across the sub-splits returns the original rows.
@@ -2380,8 +2390,47 @@ async fn test_large_flat_chunk_scan_subdivides_splits() -> VortexResult<()> {
         .read_all()
         .await?;
     let expected =
-        Buffer::from_iter((0..N_ROWS as i32).filter(|i| i % 2 == 0 && *i > 0)).into_array();
+        Buffer::from_iter((0..FLAT_N_ROWS as i32).filter(|i| i % 2 == 0 && *i > 0)).into_array();
     assert_arrays_eq!(result, expected, &mut ctx);
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn test_layout_split_keeps_large_chunk_whole() -> VortexResult<()> {
+    // The same over-wide single chunk as above, scanned with `SplitBy::Layout`: the scan follows
+    // the layout's chunk boundaries exactly, so the file decodes as one batch.
+    let mut ctx = SESSION.create_execution_ctx();
+    let (file, values) = large_flat_file().await?;
+
+    let mut chunks: Vec<ArrayRef> = file
+        .scan()?
+        .with_split_by(SplitBy::Layout)
+        .into_array_stream()?
+        .try_collect()
+        .await?;
+    assert_eq!(chunks.len(), 1, "expected a single un-split chunk");
+    assert_arrays_eq!(chunks.remove(0), values, &mut ctx);
+
+    Ok(())
+}
+
+#[tokio::test]
+#[cfg_attr(miri, ignore)]
+async fn test_sub_splitting_max_rows_caps_scan_batches() -> VortexResult<()> {
+    // A custom `max_rows` tiles the 250k-row chunk into five evenly sized batches.
+    const MAX_ROWS: u64 = 50_000;
+    let (file, _) = large_flat_file().await?;
+
+    let chunks: Vec<ArrayRef> = file
+        .scan()?
+        .with_split_by(SplitBy::LayoutSubSplitting { max_rows: MAX_ROWS })
+        .into_array_stream()?
+        .try_collect()
+        .await?;
+    assert_eq!(chunks.len(), (FLAT_N_ROWS / MAX_ROWS) as usize);
+    assert!(chunks.iter().all(|c| c.len() as u64 <= MAX_ROWS));
 
     Ok(())
 }
@@ -2398,18 +2447,7 @@ async fn test_flat_chunk_scan_with_row_count_splits(
     // results whether the split size straddles the chunk arbitrarily or exceeds the file's
     // row count (a single split).
     let mut ctx = SESSION.create_execution_ctx();
-    const N_ROWS: u64 = 250_000;
-    let values =
-        Buffer::from_iter((0..N_ROWS as i32).map(|i| if i % 2 == 0 { i } else { -i })).into_array();
-
-    let mut buf = ByteBufferMut::empty();
-    SESSION
-        .write_options()
-        .with_strategy(Arc::new(FlatLayoutStrategy::default()))
-        .write(&mut buf, values.to_array_stream())
-        .await?;
-
-    let file = SESSION.open_options().open_buffer(buf)?;
+    let (file, values) = large_flat_file().await?;
 
     let result = file
         .scan()?
@@ -2427,7 +2465,7 @@ async fn test_flat_chunk_scan_with_row_count_splits(
         .read_all()
         .await?;
     let expected =
-        Buffer::from_iter((0..N_ROWS as i32).filter(|i| i % 2 == 0 && *i > 0)).into_array();
+        Buffer::from_iter((0..FLAT_N_ROWS as i32).filter(|i| i % 2 == 0 && *i > 0)).into_array();
     assert_arrays_eq!(result, expected, &mut ctx);
 
     Ok(())
@@ -2438,7 +2476,7 @@ async fn test_flat_chunk_scan_with_row_count_splits(
 async fn test_string_chunks_stay_fine_grained_under_split_cap() -> VortexResult<()> {
     // Default writing targets ~1MiB uncompressed blocks, so ~120-byte strings chunk at a few
     // thousand rows (~8k with today's defaults). These natural boundaries sit far below the
-    // sub-split cap, and SplitBy::Layout must pass them through untouched.
+    // sub-split cap, and SplitBy::LayoutSubSplitting must pass them through untouched.
     let mut ctx = SESSION.create_execution_ctx();
     const N_ROWS: usize = 40_000;
     let strings = VarBinArray::from_iter(
@@ -2462,7 +2500,9 @@ async fn test_string_chunks_stay_fine_grained_under_split_cap() -> VortexResult<
         "expected multiple natural chunks: {splits:?}"
     );
     assert!(
-        splits.iter().all(|r| r.end - r.start < MAX_SPLIT_ROWS / 4),
+        splits
+            .iter()
+            .all(|r| r.end - r.start < DEFAULT_MAX_SPLIT_ROWS / 4),
         "string chunks should stay fine-grained, nowhere near the split cap: {splits:?}"
     );
     assert_eq!(splits.first().map(|r| r.start), Some(0));

@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT 1, "URL", COUNT(*) AS c FROM hits GROUP BY 1, "URL" ORDER BY c DESC LIMIT 10;
+----
+logical_plan
+01)Sort: c DESC NULLS FIRST, fetch=10
+02)--Projection: Int64(1), hits.URL, count(Int64(1)) AS c
+03)----Aggregate: groupBy=[[hits.URL]], aggr=[[count(Int64(1))]]
+04)------TableScan: hits projection=[URL]
+physical_plan
+01)SortPreservingMergeExec: [c@2 DESC], fetch=10
+02)--SortExec: TopK(fetch=10), expr=[c@2 DESC], preserve_partitioning=[true]
+03)----ProjectionExec: expr=[1 as Int64(1), URL@0 as URL, count(Int64(1))@1 as c]
+04)------AggregateExec: mode=FinalPartitioned, gby=[URL@0 as URL], aggr=[count(Int64(1))]
+05)--------RepartitionExec: partitioning=Hash([URL@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[URL@0 as URL], aggr=[count(Int64(1))]
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[URL], file_type=vortex

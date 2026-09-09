@@ -18,6 +18,7 @@ use crate::ComponentKind;
 use crate::Edition;
 use crate::EditionDeclaration;
 use crate::EditionError;
+use crate::EditionFamily;
 use crate::EditionId;
 use crate::EditionInclusion;
 use crate::parse_release;
@@ -36,12 +37,14 @@ pub struct EditionSession {
 
 #[derive(Debug, Default)]
 struct Inner {
+    /// Keyed by family name.
+    families: BTreeMap<String, EditionFamily>,
     /// Keyed by the display form of the edition id.
     editions: BTreeMap<String, Edition>,
-    /// One map per component kind, each keyed by interned component id, because ids are
-    /// only unique within a kind. Resolving a kind scans that kind's map alone, never the
-    /// other kinds' entries. Ordered by kind, then by the id's string form.
-    inclusions: BTreeMap<ComponentKind, BTreeMap<Id, EditionInclusion>>,
+    /// One map per member kind, each keyed by interned member id, because ids are only unique
+    /// within a kind. An id may have one inclusion per family. Ordered by kind, then by the id's
+    /// string form.
+    inclusions: BTreeMap<ComponentKind, BTreeMap<Id, Vec<EditionInclusion>>>,
 }
 
 /// Registry of enabled editions, keyed by interned edition family.
@@ -82,9 +85,8 @@ impl EditionSession {
         }
     }
 
-    /// Declare an edition together with the components that join the family at it. Each
-    /// added member's membership (`since`) is the declared edition; members of earlier
-    /// editions are inherited and must not be restated.
+    /// Declare an edition together with the members added at it. Each entry's membership
+    /// (`since`) is the declared edition; earlier entries are inherited and must not be restated.
     pub fn declare(&self, declaration: &EditionDeclaration) -> Result<(), EditionError> {
         self.declare_edition(declaration.edition)?;
         for member in declaration.added {
@@ -95,6 +97,31 @@ impl EditionSession {
             ))?;
         }
         Ok(())
+    }
+
+    /// Declare an edition family. Errors if a family with the same name is already
+    /// declared. Every family must be declared before [`EditionSession::validate`] will
+    /// accept editions belonging to it.
+    pub fn declare_family(&self, family: &EditionFamily) -> Result<(), EditionError> {
+        let mut inner = self.inner.write();
+        if inner.families.contains_key(family.name) {
+            return Err(EditionError::new(format!(
+                "duplicate edition family {}",
+                family.name
+            )));
+        }
+        inner.families.insert(family.name.to_string(), *family);
+        Ok(())
+    }
+
+    /// All declared families, sorted by name.
+    pub fn families(&self) -> Vec<EditionFamily> {
+        self.inner.read().families.values().copied().collect()
+    }
+
+    /// Find a declared family by name.
+    pub fn find_family(&self, name: &str) -> Option<EditionFamily> {
+        self.inner.read().families.get(name).copied()
     }
 
     /// Declare an edition. Errors if an edition with the same id is already declared.
@@ -108,19 +135,39 @@ impl EditionSession {
         Ok(())
     }
 
-    /// Declare an edition inclusion. Errors if the component already has one: a component
-    /// belongs to exactly one family, with one membership interval. Kind is part of the
+    /// Declare an edition inclusion. A component may belong to multiple families but joins each
+    /// family only once. A newer wire representation uses a new component ID. Kind is part of the
     /// key, so an array encoding and a layout may share an id.
     pub fn declare_inclusion(&self, inclusion: EditionInclusion) -> Result<(), EditionError> {
         let mut inner = self.inner.write();
         let by_id = inner.inclusions.entry(inclusion.kind).or_default();
-        if by_id.contains_key(&inclusion.component_id) {
+        let history = by_id.entry(inclusion.component_id).or_default();
+        let previous = history
+            .iter()
+            .filter(|existing| existing.since.family == inclusion.since.family)
+            .max_by_key(|existing| {
+                (
+                    existing.since.year,
+                    existing.since.month,
+                    existing.since.version,
+                )
+            });
+
+        if let Some(previous) = previous {
             return Err(EditionError::new(format!(
-                "duplicate edition inclusion for {} {}",
-                inclusion.kind, inclusion.component_id
+                "{} {} already joined family {} in edition {}",
+                inclusion.kind, inclusion.component_id, inclusion.since.family, previous.since,
             )));
         }
-        by_id.insert(inclusion.component_id, inclusion);
+        history.push(inclusion);
+        history.sort_by_key(|entry| {
+            (
+                entry.since.family,
+                entry.since.year,
+                entry.since.month,
+                entry.since.version,
+            )
+        });
         Ok(())
     }
 
@@ -145,9 +192,9 @@ impl EditionSession {
             .rfind(|e| e.id.family == family && !e.is_draft())
     }
 
-    /// Compute an edition's members of one kind: every declared inclusion of that kind in
-    /// the edition's family whose `since` is at or before it, sorted by component id. Only
-    /// that kind's declarations are scanned.
+    /// Compute an edition's members of one kind, sorted by component id. For each id, this returns
+    /// its inclusion in the edition's family when it joined at or before the requested edition.
+    /// Only that kind's declarations are scanned.
     pub fn components_in(&self, edition: &EditionId, kind: ComponentKind) -> Vec<EditionInclusion> {
         let inner = self.inner.read();
         let Some(by_id) = inner.inclusions.get(&kind) else {
@@ -155,25 +202,47 @@ impl EditionSession {
         };
         by_id
             .values()
-            .filter(|inclusion| inclusion.since.is_at_or_before(edition))
-            .copied()
+            .filter_map(|history| {
+                history
+                    .iter()
+                    .filter(|inclusion| inclusion.since.is_at_or_before(edition))
+                    .max_by_key(|inclusion| {
+                        (
+                            inclusion.since.year,
+                            inclusion.since.month,
+                            inclusion.since.version,
+                        )
+                    })
+                    .copied()
+            })
             .collect()
     }
 
-    /// Validate all registered declarations. Errors on inclusions referencing undeclared
-    /// editions, editions out of chronological order within a family (unversioned drafts
-    /// must be newest), malformed version strings, and members requiring a release newer
-    /// than their edition declares.
+    /// Validate all registered declarations. Errors on editions in undeclared families,
+    /// inclusions referencing undeclared editions, editions out of chronological order within
+    /// a family (unversioned drafts must be newest), malformed version strings, and members
+    /// requiring a release newer than their edition declares.
     pub fn validate(&self) -> Result<(), EditionError> {
         let editions = self.editions();
 
+        for family in self.families() {
+            family.validate()?;
+        }
+
         for edition in &editions {
             edition.id.validate()?;
-            if let Some(version) = edition.min_vortex_version
+            if self.find_family(edition.id.family).is_none() {
+                return Err(EditionError::new(format!(
+                    "edition {} belongs to undeclared family {}; declare the family before \
+                     its editions",
+                    edition.id, edition.id.family,
+                )));
+            }
+            if let Some(version) = edition.min_library_version
                 && parse_release(version).is_none()
             {
                 return Err(EditionError::new(format!(
-                    "edition {} declares malformed min_vortex_version {version:?}",
+                    "edition {} declares malformed min_library_version {version:?}",
                     edition.id
                 )));
             }
@@ -192,7 +261,12 @@ impl EditionSession {
         }
 
         let inner = self.inner.read();
-        for inclusion in inner.inclusions.values().flat_map(|by_id| by_id.values()) {
+        for inclusion in inner
+            .inclusions
+            .values()
+            .flat_map(|by_id| by_id.values())
+            .flatten()
+        {
             inclusion.validate()?;
 
             let Some(edition) = inner.editions.get(&inclusion.since.to_string()) else {
@@ -203,12 +277,12 @@ impl EditionSession {
             };
 
             if let Some(required) = inclusion.required_vortex_release.and_then(parse_release)
-                && let Some(declared) = edition.min_vortex_version.and_then(parse_release)
+                && let Some(declared) = edition.min_library_version.and_then(parse_release)
                 && required > declared
             {
                 return Err(EditionError::new(format!(
                     "{} {} requires release {}, newer than edition {}'s declared \
-                     min_vortex_version",
+                     min_library_version",
                     inclusion.kind,
                     inclusion.component_id,
                     inclusion.required_vortex_release.unwrap_or_default(),
@@ -276,8 +350,8 @@ pub trait EditionSessionExt: SessionExt {
         Ok(())
     }
 
-    /// Resolve the ids of one [`ComponentKind`] across all enabled editions: what a writer
-    /// may emit for that kind.
+    /// Resolve the ids of one [`ComponentKind`] across all enabled editions: what a writer may
+    /// emit for that kind.
     ///
     /// Ids are only unique within a kind, so this never mixes kinds. An empty result means the
     /// enabled editions permit no components of this kind.

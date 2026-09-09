@@ -3,8 +3,8 @@
 
 //! Typed decoding and row access for one input column.
 //!
-//! [`InputElement`] separates invocation-wide decoding from the checked and unchecked access paths
-//! used by row kernels.
+//! [`InputElement`] separates invocation-wide column and batch-constant decoding from the checked
+//! and unchecked access paths used by row kernels.
 
 use vortex_error::VortexResult;
 
@@ -27,6 +27,11 @@ pub unsafe trait InputElement: 'static {
     /// The decoded column representation supporting `O(1)` row access.
     type Column;
 
+    /// The decoded representation of one non-null batch-constant input.
+    ///
+    /// This representation stores one logical value regardless of the input array's batch length.
+    type Constant;
+
     /// The row-loop view of a decoded column.
     ///
     /// This can borrow a cheaper representation than [`Column`](Self::Column). Primitive elements,
@@ -47,6 +52,9 @@ pub unsafe trait InputElement: 'static {
     /// Whether [`decode`](Self::decode) is infallible for _legal_ input data.
     ///
     /// This excludes infrastructural failures such as IO or allocation.
+    /// It is independent of
+    /// [`RowFn::INFALLIBLE`](crate::scalar_fn::unstable::row::RowFn::INFALLIBLE), which describes
+    /// the row operation rather than input decoding.
     const DECODE_INFALLIBLE: bool;
 
     /// Validate that `dtype` is an acceptable input column dtype for this element type.
@@ -58,6 +66,12 @@ pub unsafe trait InputElement: 'static {
     /// deferred error starts a second invocation over valid rows. Hoist dtype checks, downcasts,
     /// and other invocation-invariant work into this method.
     fn decode(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Column>;
+
+    /// Decode one non-null batch-constant input.
+    ///
+    /// `array` retains its logical batch length. Implementations can extract one value directly
+    /// without slicing or materializing a one-row column.
+    fn decode_constant(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Self::Constant>;
 
     /// Whether [`decode_null_tolerant`](Self::decode_null_tolerant) can decode this array.
     ///
@@ -87,10 +101,14 @@ pub unsafe trait InputElement: 'static {
     /// Read one row without repeating batch-constant work from [`decode`](Self::decode).
     fn get(column: &Self::Column, index: usize) -> Self::Elem<'_>;
 
-    /// Borrow the representation used when this argument varies within the batch.
+    /// Read the element stored in a decoded batch constant.
+    fn get_constant(constant: &Self::Constant) -> Self::Elem<'_>;
+
+    /// Borrow the representation used inside the row loop.
     ///
-    /// Called once before the hot loop. Constants do not use this view because the tuple adapter
-    /// keeps their one-row decoded representation separate.
+    /// Executors call this before the hot loop. For every index below the returned view's length,
+    /// [`get_from_view`](Self::get_from_view) must produce the same element as [`get`](Self::get) on
+    /// `column`.
     fn view(column: &Self::Column) -> Self::View<'_>;
 
     /// Read one row from a [`View`](Self::View).

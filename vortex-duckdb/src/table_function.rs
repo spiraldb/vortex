@@ -89,6 +89,8 @@ pub(crate) struct BindState {
     pub has_non_optional_filter: AtomicBool,
     // Non-empty iff this scan is aggregate
     pub aggregates: Vec<ColumnAggregate>,
+    // Any of files present in scan lack a footer
+    pub no_footer_caches: bool,
 }
 assert_impl_all!(BindState: Send, Clone);
 
@@ -103,6 +105,7 @@ impl Clone for BindState {
                 self.has_non_optional_filter.load(Ordering::Relaxed),
             ),
             aggregates: self.aggregates.clone(),
+            no_footer_caches: false,
         }
     }
 }
@@ -463,7 +466,11 @@ pub fn pushdown_projection_expression(
     expr: &ExpressionRef,
     projection_id: usize,
 ) -> VortexResult<bool> {
-    let field = &bind_data.columns[projection_id];
+    // DuckDB may push expression over virtual columns that are absent from
+    // schema
+    let Some(field) = bind_data.columns.get(projection_id) else {
+        return Ok(false);
+    };
     debug!(%expr, %projection_id, col_name=field.name, "pushing down projection expression");
     match try_from_projection_expression(expr, field)? {
         None => {
@@ -490,7 +497,10 @@ fn can_push_projection_aggregate(
     projection_id: u64,
 ) -> bool {
     let projection_id_usize: usize = projection_id.as_();
-    let field = &bind_data.columns[projection_id_usize];
+    // DuckDB may aggregate over columns that are absent from schema
+    let Some(field) = bind_data.columns.get(projection_id_usize) else {
+        return false;
+    };
     let Ok(dtype) = aggregate_input_dtype(field, &bind_data.dtype) else {
         return false;
     };

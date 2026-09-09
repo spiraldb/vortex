@@ -172,14 +172,12 @@ pub fn register_default_encodings(session: &VortexSession) {
     vortex_fsst::initialize(session);
     vortex_onpair::initialize(session);
     vortex_zigzag::initialize(session);
+    #[cfg(feature = "zstd")]
+    vortex_zstd::initialize(session);
 
     {
         let arrays = session.arrays();
         arrays.register(Pco);
-        #[cfg(feature = "zstd")]
-        arrays.register(vortex_zstd::Zstd);
-        #[cfg(all(feature = "zstd", feature = "unstable_encodings"))]
-        arrays.register(vortex_zstd::ZstdBuffers);
         if use_experimental_patches() {
             arrays.register(Patched);
         }
@@ -215,7 +213,7 @@ pub(crate) fn enable_all_registered_array_encodings(session: &VortexSession) {
     editions
         .declare_edition(Edition {
             id: TEST_EDITION,
-            min_vortex_version: None,
+            min_library_version: None,
         })
         .map_err(|error| vortex_err!("{error}"))
         .vortex_expect("test edition is valid");

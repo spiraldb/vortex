@@ -19,6 +19,7 @@ use super::batch::finalize_kernel_output;
 use super::row_fn::RowFn;
 use super::visitor::BatchPlanner;
 use super::visitor::ExecuteDenseWithRetry;
+use super::visitor::ExecuteFilteredRows;
 use super::visitor::ExecuteRows;
 use super::visitor::ExecuteValidRows;
 use crate::ArrayRef;
@@ -96,7 +97,7 @@ pub fn row_fn_return_dtype<F: RowFn>(
 ) -> VortexResult<DType> {
     ensure_arity(function, args.len())?;
 
-    let plan = function.dispatch(options, args, BatchPlanner::<F>::new(args, options))?;
+    let plan = function.dispatch(options, args, BatchPlanner::<F>::new(args))?;
 
     Ok(plan.result_dtype(args))
 }
@@ -126,6 +127,7 @@ pub fn execute_rows<F: RowFn>(
         |args, ctx| execute_row_kernel(function, options, args, ctx),
         |args, ctx| execute_dense_attempt(function, options, args, ctx),
         |args, valid, ctx| try_execute_valid_rows(function, options, args, valid, ctx),
+        |args, valid, ctx| execute_filtered_rows(function, options, args, valid, ctx),
         ctx,
     )
 }
@@ -137,11 +139,13 @@ fn execute_nullary_rows<F: RowFn>(
     row_count: usize,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
-    let plan = function.dispatch(options, &[], BatchPlanner::<F>::new(&[], options))?;
+    let plan = function.dispatch(options, &[], BatchPlanner::<F>::new(&[]))?;
     let result_dtype = plan.result_dtype(&[]);
-    let args = BorrowedRowFnArgs::new(&[], row_count, &[], &plan.output_dtype, plan.policy);
+    let args = BorrowedRowFnArgs::new(&[], row_count, &[], &plan);
 
-    let values = execute_row_kernel(function, options, args, ctx)?;
+    // A nullary function has no input validity to propagate, so its kernel output is the finished
+    // column and this path labels it directly.
+    let values = plan.relabel_output(execute_row_kernel(function, options, args, ctx)?)?;
 
     finalize_kernel_output(RowFn::id(function), &result_dtype, row_count, values, ctx)
 }
@@ -167,14 +171,7 @@ fn execute_row_kernel<F: RowFn>(
     function.dispatch(
         options,
         args.dtypes(),
-        ExecuteRows::<F>::new(
-            &args,
-            args.dtypes(),
-            options,
-            args.output_dtype(),
-            args.policy(),
-            ctx,
-        ),
+        ExecuteRows::<F>::new(&args, args.dtypes(), args.plan(), ctx),
     )
 }
 
@@ -187,7 +184,7 @@ fn execute_dense_attempt<F: RowFn>(
     function.dispatch(
         options,
         args.dtypes(),
-        ExecuteDenseWithRetry::<F>::new(&args, options, ctx),
+        ExecuteDenseWithRetry::<F>::new(&args, ctx),
     )
 }
 
@@ -201,15 +198,22 @@ fn try_execute_valid_rows<F: RowFn>(
     function.dispatch(
         options,
         args.dtypes(),
-        ExecuteValidRows::<F>::new(
-            &args,
-            args.dtypes(),
-            options,
-            args.output_dtype(),
-            args.policy(),
-            valid,
-            ctx,
-        ),
+        ExecuteValidRows::<F>::new(&args, args.dtypes(), args.plan(), valid, ctx),
+    )
+}
+
+/// Execute valid rows over `args` filtered to the valid row domain of `valid`.
+fn execute_filtered_rows<F: RowFn>(
+    function: &F,
+    options: &F::Options,
+    args: BorrowedRowFnArgs<'_>,
+    valid: MaskValuesRef,
+    ctx: &mut ExecutionCtx,
+) -> VortexResult<ArrayRef> {
+    function.dispatch(
+        options,
+        args.dtypes(),
+        ExecuteFilteredRows::<F>::new(&args, args.dtypes(), args.plan(), valid, ctx),
     )
 }
 
@@ -219,11 +223,7 @@ fn prepare_batch<F: RowFn>(
     args: &dyn ExecutionArgs,
 ) -> VortexResult<RowFnExecutionArgs> {
     RowFnExecutionArgs::new(RowFn::id(function), args, |arg_dtypes| {
-        function.dispatch(
-            options,
-            arg_dtypes,
-            BatchPlanner::<F>::new(arg_dtypes, options),
-        )
+        function.dispatch(options, arg_dtypes, BatchPlanner::<F>::new(arg_dtypes))
     })
 }
 
@@ -282,7 +282,7 @@ mod tests {
             *ID
         }
 
-        fn dispatch<V: RowVisitor<Self::Options>>(
+        fn dispatch<V: RowVisitor>(
             &self,
             _options: &Self::Options,
             _args: &[DType],
@@ -304,7 +304,7 @@ mod tests {
             *ID
         }
 
-        fn dispatch<V: RowVisitor<Self::Options>>(
+        fn dispatch<V: RowVisitor>(
             &self,
             _options: &Self::Options,
             args: &[DType],
@@ -327,7 +327,7 @@ mod tests {
             *ID
         }
 
-        fn dispatch<V: RowVisitor<Self::Options>>(
+        fn dispatch<V: RowVisitor>(
             &self,
             _options: &Self::Options,
             _args: &[DType],

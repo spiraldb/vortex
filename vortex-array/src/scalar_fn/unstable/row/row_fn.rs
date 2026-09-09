@@ -47,12 +47,17 @@ pub trait RowFn: 'static + Sized + Clone + Send + Sync {
     /// The arguments in display order. Its length is the function's exact arity.
     const ARG_NAMES: &'static [&'static str];
 
-    /// Whether every dispatch is infallible.
+    /// Whether every row operation selected by [`dispatch`](Self::dispatch) is semantically
+    /// infallible.
     ///
-    /// See [`ScalarFnVTable::is_infallible`](crate::scalar_fn::ScalarFnVTable::is_infallible) for
-    /// a more detailed explanation of semantic errors.
+    /// Input decoding declares its fallibility independently through
+    /// [`InputElement::DECODE_INFALLIBLE`] and does not affect this flag. The framework checks
+    /// row-result fallibility. A conservative `false` is allowed.
     ///
-    /// The framework checks dispatched element and result types. A conservative `false` is allowed.
+    /// See [`ScalarFnVTable::is_infallible`] for the definition of semantic errors.
+    ///
+    /// [`InputElement::DECODE_INFALLIBLE`]: crate::scalar_fn::unstable::row::InputElement::DECODE_INFALLIBLE
+    /// [`ScalarFnVTable::is_infallible`]: crate::scalar_fn::ScalarFnVTable::is_infallible
     const INFALLIBLE: bool;
 
     /// Returns the ID of the scalar function.
@@ -77,7 +82,7 @@ pub trait RowFn: 'static + Sized + Clone + Send + Sync {
     ///
     /// Planning and execution both call this method, so its result **must** depend only on
     /// `options` and `args`. Cross-argument dtype validation belongs here.
-    fn dispatch<V: RowVisitor<Self::Options>>(
+    fn dispatch<V: RowVisitor>(
         &self,
         options: &Self::Options,
         args: &[DType],

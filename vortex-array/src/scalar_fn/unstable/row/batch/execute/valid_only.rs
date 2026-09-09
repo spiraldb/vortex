@@ -2,7 +2,6 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use vortex_error::VortexResult;
-use vortex_error::vortex_panic;
 use vortex_mask::Mask;
 use vortex_mask::MaskValuesRef;
 
@@ -14,12 +13,7 @@ use crate::IntoArray;
 use crate::builtins::ArrayBuiltins;
 
 impl RowFnExecutionArgs {
-    /// Resolve validity, then execute valid rows over the original inputs.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the concrete row signature cannot use direct valid-row execution. Inputs must
-    /// support null-tolerant decoding, and output sinks must initialize skipped rows.
+    /// Resolve validity and try direct valid-row execution before filtered execution.
     pub(super) fn execute_valid_only(
         &self,
         kernel: impl Fn(BorrowedRowFnArgs<'_>, &mut ExecutionCtx) -> VortexResult<ArrayRef>,
@@ -28,6 +22,11 @@ impl RowFnExecutionArgs {
             MaskValuesRef,
             &mut ExecutionCtx,
         ) -> VortexResult<Option<ArrayRef>>,
+        execute_filtered_rows: impl FnOnce(
+            BorrowedRowFnArgs<'_>,
+            MaskValuesRef,
+            &mut ExecutionCtx,
+        ) -> VortexResult<ArrayRef>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
         let validity = self.validity.clone().execute_mask(self.row_count, ctx)?;
@@ -44,14 +43,11 @@ impl RowFnExecutionArgs {
             Mask::Values(valid_rows) => valid_rows,
         };
 
-        if let Some(result) = self.try_execute_valid_rows(try_valid_rows, valid_rows, ctx)? {
+        if let Some(result) = self.try_execute_valid_rows(try_valid_rows, &valid_rows, ctx)? {
             return Ok(result);
         }
 
-        vortex_panic!(
-            "valid-only execution requires direct valid-row support; {} selected an unsupported signature",
-            self.id,
-        )
+        self.execute_filtered(execute_filtered_rows, &valid_rows, ctx)
     }
 
     /// Try execution against the original inputs, then mask a returned full-length result.
@@ -62,12 +58,12 @@ impl RowFnExecutionArgs {
             MaskValuesRef,
             &mut ExecutionCtx,
         ) -> VortexResult<Option<ArrayRef>>,
-        valid: MaskValuesRef,
+        valid: &MaskValuesRef,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Option<ArrayRef>> {
         let Some(values) = try_valid_rows(
             self.execution_args(&self.inputs, self.row_count),
-            MaskValuesRef::clone(&valid),
+            MaskValuesRef::clone(valid),
             ctx,
         )?
         else {
