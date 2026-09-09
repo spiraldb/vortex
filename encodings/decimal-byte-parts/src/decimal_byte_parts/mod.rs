@@ -57,8 +57,7 @@ use vortex_session::registry::CachedId;
 
 use crate::decimal_byte_parts::limbs::LOWER_PART_DTYPE;
 use crate::decimal_byte_parts::limbs::assemble_decimal;
-use crate::decimal_byte_parts::limbs::combine_i128;
-use crate::decimal_byte_parts::limbs::combine_i256;
+use crate::decimal_byte_parts::limbs::assemble_wide_decimal_value;
 use crate::decimal_byte_parts::rules::PARENT_RULES;
 
 /// A [`DecimalByteParts`]-encoded Vortex array.
@@ -440,10 +439,19 @@ impl OperationsVTable<DecimalByteParts> for DecimalByteParts {
             })
             .collect::<VortexResult<Vec<_>>>()?;
 
-        let value = match lower_parts.len() {
-            0 => DecimalValue::I64(msp),
-            1 => DecimalValue::I128(combine_i128(msp, lower_parts)),
-            _ => DecimalValue::I256(combine_i256(msp, lower_parts.into_iter())),
+        let value = match lower_parts.as_slice() {
+            [] => DecimalValue::I64(msp),
+            [first] => DecimalValue::I128(assemble_wide_decimal_value(msp, [*first])),
+            [first, second] => {
+                DecimalValue::I256(assemble_wide_decimal_value(msp, [*first, *second]))
+            }
+            [first, second, third] => {
+                DecimalValue::I256(assemble_wide_decimal_value(msp, [*first, *second, *third]))
+            }
+            _ => vortex_bail!(
+                "at most {MAX_LOWER_PARTS} lower parts are supported, got {}",
+                lower_parts.len()
+            ),
         };
 
         Scalar::try_new(array.dtype().clone(), Some(ScalarValue::Decimal(value)))

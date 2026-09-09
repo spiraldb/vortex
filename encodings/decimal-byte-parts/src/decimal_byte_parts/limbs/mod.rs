@@ -252,7 +252,13 @@ pub fn assemble_decimal(
     let len = msp.len();
     let lower: Vec<&[u64]> = lower_parts
         .iter()
-        .map(|part| {
+        .enumerate()
+        .map(|(idx, part)| {
+            vortex_ensure!(
+                part.dtype() == &LOWER_PART_DTYPE,
+                "lower part {idx} must have dtype {LOWER_PART_DTYPE}, got {}",
+                part.dtype()
+            );
             let part = part.as_slice::<u64>();
             vortex_ensure!(
                 part.len() == len,
@@ -265,17 +271,17 @@ pub fn assemble_decimal(
 
     Ok(match lower.as_slice() {
         [first] => DecimalArray::new(
-            assemble_wide::<i128, 1>(msp, [first]),
+            assemble_wide_decimal::<i128, 1>(msp, [first]),
             decimal_dtype,
             validity,
         ),
         [first, second] => DecimalArray::new(
-            assemble_wide::<i256, 2>(msp, [first, second]),
+            assemble_wide_decimal::<i256, 2>(msp, [first, second]),
             decimal_dtype,
             validity,
         ),
         [first, second, third] => DecimalArray::new(
-            assemble_wide::<i256, 3>(msp, [first, second, third]),
+            assemble_wide_decimal::<i256, 3>(msp, [first, second, third]),
             decimal_dtype,
             validity,
         ),
@@ -286,39 +292,10 @@ pub fn assemble_decimal(
     })
 }
 
-/// Combine a single row's parts into an `i128`.
-#[inline]
-pub(crate) fn combine_i128(msp: i64, lower: impl IntoIterator<Item = u64>) -> i128 {
-    lower.into_iter().fold(i128::from(msp), |acc, part| {
-        (acc << LOWER_PART_BITS) | i128::from(part)
-    })
-}
-
-/// Combine a signed MSP and two or three lower parts into an `i256`.
-#[inline]
-pub(crate) fn combine_i256(msp: i64, lower: impl ExactSizeIterator<Item = u64>) -> i256 {
-    let count = lower.len();
-    let mut high = i128::from(msp);
-    let mut low = 0u128;
-    for (index, part) in lower.enumerate() {
-        if count == 3 && index == 0 {
-            high = (high << LOWER_PART_BITS) | i128::from(part);
-        } else {
-            low = (low << LOWER_PART_BITS) | u128::from(part);
-        }
-    }
-    i256::from_parts(low, high)
-}
-
-/// Reassemble a signed MSP and `K` unsigned lower parts into wide integers.
+/// Assemble a column of wide decimal values from the MSP and `K` lower-part columns.
 ///
-/// Each row starts with the MSP sign-extended to `T`. Appending a lower word shifts the
-/// accumulated value left by 64 bits and fills the low bits with that word. Lower parts
-/// are appended most significant first.
-///
-/// The callers select `i128` for one lower part and `i256` for two or three. Since `K`
-/// is constant, the compiler can unroll the loop that appends the lower words.
-fn assemble_wide<T, const K: usize>(msp: &PrimitiveArray, lower: [&[u64]; K]) -> Buffer<T>
+/// A fixed part count lets the compiler unroll each call to [`assemble_wide_decimal_value`].
+fn assemble_wide_decimal<T, const K: usize>(msp: &PrimitiveArray, lower: [&[u64]; K]) -> Buffer<T>
 where
     T: NativeDecimalType + Shl<usize, Output = T> + BitOr<Output = T>,
 {
@@ -329,15 +306,29 @@ where
                 clippy::useless_conversion,
                 reason = "the widening to i64 is a no-op only for the i64 arm of the ptype match"
             )]
-            let mut value = T::from(i64::from(*value)).vortex_expect("MSP fits in the output type");
-            for part in lower {
-                value = (value << LOWER_PART_BITS)
-                    | T::from(part[row]).vortex_expect("lower word fits in the output type");
-            }
-            value
+            let msp = i64::from(*value);
+            assemble_wide_decimal_value(msp, lower.map(|part| part[row]))
         }));
     });
     out.freeze()
+}
+
+/// Reassemble a decimal's unscaled integer from its signed MSP and `K` lower words.
+///
+/// Sign-extend the MSP to `T`, then append each lower word by shifting left 64 bits and
+/// filling the low bits. Lower words are ordered most significant first. Callers select
+/// `i128` for one lower word and `i256` for two or three.
+#[inline]
+pub(crate) fn assemble_wide_decimal_value<T, const K: usize>(msp: i64, lower: [u64; K]) -> T
+where
+    T: NativeDecimalType + Shl<usize, Output = T> + BitOr<Output = T>,
+{
+    let mut value = T::from(msp).vortex_expect("MSP fits in the output type");
+    for part in lower {
+        value = (value << LOWER_PART_BITS)
+            | T::from(part).vortex_expect("lower word fits in the output type");
+    }
+    value
 }
 
 #[cfg(test)]
