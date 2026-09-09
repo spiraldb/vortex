@@ -309,11 +309,12 @@ fn test_take_nullable_arrays_fsl_specific(
         2
     };
 
-    let mut builder = FixedSizeListBuilder::with_capacity(
+    let mut builder = FixedSizeListBuilder::with_capacity_in(
         DType::Primitive(PType::I32, Nullability::NonNullable).into(),
         list_size,
         Nullability::Nullable,
         array_values.len(),
+        vortex_buffer::BufferAllocatorRef::static_ref(),
     );
 
     for value in array_values {

@@ -49,7 +49,8 @@ impl BufferAllocatorRef {
         Self(None)
     }
 
-    pub(crate) fn static_ref() -> &'static Self {
+    /// Return a borrowed reference to the static allocator.
+    pub fn static_ref() -> &'static Self {
         &STATIC_ALLOCATOR
     }
 
