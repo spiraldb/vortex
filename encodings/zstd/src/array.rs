@@ -1770,7 +1770,7 @@ mod tests {
     #[test]
     fn test_append_to_varbin_copies_the_stored_values() -> VortexResult<()> {
         let slice = decompressed_slice(make_interleaved(&[b"hello", b"world"]), 0, 2, 0, 2);
-        let mut builder = VarBinBuilder::<i32>::new(
+        let mut builder = VarBinBuilder::<i32>::new_in(
             DType::Utf8(NonNullable),
             vortex_buffer::BufferAllocatorRef::static_ref(),
         );
@@ -1793,7 +1793,7 @@ mod tests {
         buffer.extend_from_slice(&1u32.to_le_bytes());
 
         let slice = decompressed_slice(ByteBuffer::copy_from(buffer.as_slice()), 0, 2, 0, 2);
-        let mut builder = VarBinBuilder::<i32>::new(
+        let mut builder = VarBinBuilder::<i32>::new_in(
             DType::Utf8(NonNullable),
             vortex_buffer::BufferAllocatorRef::static_ref(),
         );

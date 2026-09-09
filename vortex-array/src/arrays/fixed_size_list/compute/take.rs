@@ -27,7 +27,7 @@ use crate::arrays::fixed_size_list::FixedSizeListArraySlotsExt;
 use crate::arrays::piecewise_sequence::constant_unsigned_usize;
 use crate::arrays::piecewise_sequence::maybe_contiguous_slices;
 use crate::arrays::primitive::PrimitiveArrayExt;
-use crate::builders::builder_with_capacity;
+use crate::builders::builder_with_capacity_in_ref;
 use crate::dtype::DType;
 use crate::dtype::IntegerPType;
 use crate::executor::ExecutionCtx;
@@ -342,7 +342,7 @@ fn default_elements(
     len: usize,
     allocator: &vortex_buffer::BufferAllocatorRef,
 ) -> ArrayRef {
-    let mut builder = builder_with_capacity(array.elements().dtype(), len, allocator);
+    let mut builder = builder_with_capacity_in_ref(array.elements().dtype(), len, allocator);
     builder.append_defaults(len);
     builder.finish()
 }

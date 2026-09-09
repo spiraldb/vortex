@@ -62,7 +62,7 @@ mod tests {
     #[case(DType::Utf8(Nullability::Nullable))]
     #[case(DType::Binary(Nullability::Nullable))]
     fn test_canonical_varbin_sliced(#[case] dtype: DType) {
-        let mut varbin = VarBinBuilder::<i32>::with_capacity(
+        let mut varbin = VarBinBuilder::<i32>::with_capacity_in(
             dtype.clone(),
             10,
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -132,7 +132,7 @@ mod tests {
         let second = VarBinArray::from_iter([Some(longer), Some("tiny"), None], dtype.clone());
         let view = VarBinViewArray::from_iter([Some(long), None], dtype.clone());
 
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             dtype.clone(),
             8,
             vortex_buffer::BufferAllocatorRef::statically_allocated(),
@@ -175,7 +175,7 @@ mod tests {
         // Every value inlines, so nothing references the value bytes at all.
         let array = VarBinArray::from_iter_nonnull(["short", "tiny", "small"], dtype.clone());
 
-        let mut builder = VarBinViewBuilder::with_compaction(
+        let mut builder = VarBinViewBuilder::with_compaction_in(
             dtype,
             4,
             1.0,

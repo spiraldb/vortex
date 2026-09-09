@@ -26,7 +26,7 @@ use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::Dict;
 use vortex_array::builders::dict::DictConstraints;
 use vortex_array::builders::dict::DictEncoder;
-use vortex_array::builders::dict::dict_encoder;
+use vortex_array::builders::dict::dict_encoder_in;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
@@ -560,7 +560,7 @@ fn start_encoding(
     chunk: &ArrayRef,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<EncodingState> {
-    let encoder = dict_encoder(chunk, constraints, ctx.allocator().clone());
+    let encoder = dict_encoder_in(chunk, constraints, ctx.allocator().clone());
     encode_chunk(encoder, chunk, ctx)
 }
 

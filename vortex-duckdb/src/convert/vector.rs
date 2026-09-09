@@ -109,7 +109,7 @@ fn vector_as_string_blob(vector: &VectorRef, len: usize, dtype: DType) -> ArrayR
     let validity = vector.validity_ref(len);
 
     let mut builder =
-        VarBinViewBuilder::with_capacity(dtype, len, BufferAllocatorRef::statically_allocated());
+        VarBinViewBuilder::with_capacity_in(dtype, len, BufferAllocatorRef::statically_allocated());
 
     for (i, s) in data.iter().enumerate() {
         if validity.is_valid(i) {

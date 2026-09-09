@@ -220,7 +220,7 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let (chunked_arr, data) = make_data_chunked();
 
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             chunked_arr.dtype().clone(),
             chunked_arr.len(),
             ctx.allocator().clone(),
@@ -252,7 +252,7 @@ mod tests {
         };
 
         {
-            let mut builder = VarBinBuilder::<i32>::with_capacity(
+            let mut builder = VarBinBuilder::<i32>::with_capacity_in(
                 chunked_arr.dtype().clone(),
                 data.len(),
                 ctx.allocator(),
@@ -273,7 +273,7 @@ mod tests {
     #[test]
     fn test_append_after_in_progress_buffer() -> VortexResult<()> {
         let dtype = DType::Binary(Nullability::NonNullable);
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             dtype.clone(),
             2,
             vortex_buffer::BufferAllocatorRef::statically_allocated(),

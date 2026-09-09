@@ -10,7 +10,7 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::arrays::ChunkedArray;
 use crate::builders::ArrayBuilder;
-use crate::builders::builder_with_capacity;
+use crate::builders::builder_with_capacity_in_ref;
 use crate::dtype::DType;
 use crate::scalar::Scalar;
 
@@ -42,14 +42,13 @@ pub struct ChildBuilder {
 }
 
 impl ChildBuilder {
-    /// Creates a new `ChildBuilder` whose scalar builder is pre-allocated for `capacity` values.
-    /// Creates a child builder with the provided allocator.
+    /// Creates a child builder with the provided allocator and capacity.
     pub fn with_capacity(dtype: &DType, capacity: usize, allocator: &BufferAllocatorRef) -> Self {
         Self {
             dtype: dtype.clone(),
             chunks: Vec::new(),
             chunks_len: 0,
-            pending: builder_with_capacity(dtype, capacity, allocator),
+            pending: builder_with_capacity_in_ref(dtype, capacity, allocator),
         }
     }
 

@@ -78,7 +78,7 @@ fn test_rle_compression() -> VortexResult<()> {
 
 #[test]
 fn test_sparse_compression() -> VortexResult<()> {
-    let mut array = PrimitiveBuilder::<f32>::with_capacity(
+    let mut array = PrimitiveBuilder::<f32>::with_capacity_in(
         Nullability::Nullable,
         100,
         vortex_buffer::BufferAllocatorRef::static_ref(),

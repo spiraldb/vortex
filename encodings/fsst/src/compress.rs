@@ -299,7 +299,7 @@ impl<'c, O: OffsetBuilderPType + 'static> FsstSink<'c, O> {
     ) -> Self {
         Self {
             buffer: Vec::with_capacity(DEFAULT_BUFFER_LEN),
-            builder: VarBinBuilder::<O>::with_capacity(dtype, len, allocator),
+            builder: VarBinBuilder::<O>::with_capacity_in(dtype, len, allocator),
             uncompressed_lengths: BufferMut::with_capacity_in(len, allocator.clone()),
             compressor,
         }

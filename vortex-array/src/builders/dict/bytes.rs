@@ -61,21 +61,35 @@ pub fn bytes_dict_builder(
     allocator: BufferAllocatorRef,
 ) -> Box<dyn DictEncoder> {
     match constraints.max_len as u64 {
-        max if max <= u8::MAX as u64 => {
-            Box::new(BytesDictBuilder::<u8>::new(dtype, constraints, allocator))
-        }
-        max if max <= u16::MAX as u64 => {
-            Box::new(BytesDictBuilder::<u16>::new(dtype, constraints, allocator))
-        }
-        max if max <= u32::MAX as u64 => {
-            Box::new(BytesDictBuilder::<u32>::new(dtype, constraints, allocator))
-        }
-        _ => Box::new(BytesDictBuilder::<u64>::new(dtype, constraints, allocator)),
+        max if max <= u8::MAX as u64 => Box::new(BytesDictBuilder::<u8>::new_in(
+            dtype,
+            constraints,
+            allocator,
+        )),
+        max if max <= u16::MAX as u64 => Box::new(BytesDictBuilder::<u16>::new_in(
+            dtype,
+            constraints,
+            allocator,
+        )),
+        max if max <= u32::MAX as u64 => Box::new(BytesDictBuilder::<u32>::new_in(
+            dtype,
+            constraints,
+            allocator,
+        )),
+        _ => Box::new(BytesDictBuilder::<u64>::new_in(
+            dtype,
+            constraints,
+            allocator,
+        )),
     }
 }
 
 impl<Code: UnsignedPType> BytesDictBuilder<Code> {
-    pub fn new(dtype: DType, constraints: &DictConstraints, allocator: BufferAllocatorRef) -> Self {
+    pub fn new_in(
+        dtype: DType,
+        constraints: &DictConstraints,
+        allocator: BufferAllocatorRef,
+    ) -> Self {
         Self {
             lookup: Some(HashTable::new()),
             views: BufferMut::<BinaryView>::empty_aligned_in(
@@ -364,7 +378,7 @@ mod test {
     use crate::buffer::BufferHandle;
     use crate::builders::dict::UNCONSTRAINED;
     use crate::builders::dict::dict_encode;
-    use crate::builders::dict::dict_encoder;
+    use crate::builders::dict::dict_encoder_in;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::validity::Validity;
@@ -473,7 +487,7 @@ mod test {
     fn reset_clears_dict() -> VortexResult<()> {
         let mut ctx = SESSION.create_execution_ctx();
         let first = VarBinViewArray::from_iter_str(["one", "two"]).into_array();
-        let mut encoder = dict_encoder(&first, &UNCONSTRAINED, ctx.allocator().clone());
+        let mut encoder = dict_encoder_in(&first, &UNCONSTRAINED, ctx.allocator().clone());
 
         assert_arrays_eq!(
             encoder.encode(&first, &mut ctx)?,
@@ -495,7 +509,7 @@ mod test {
 
     #[test]
     fn max_dict_bytes_cannot_exceed_the_view_offset_range() {
-        let builder = BytesDictBuilder::<u32>::new(
+        let builder = BytesDictBuilder::<u32>::new_in(
             DType::Utf8(Nullability::NonNullable),
             &UNCONSTRAINED,
             BufferAllocatorRef::statically_allocated(),

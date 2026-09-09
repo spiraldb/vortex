@@ -96,7 +96,7 @@ where
     B: OffsetBuilderPType,
     usize: AsPrimitive<B>,
 {
-    let mut builder = VarBinBuilder::<B>::with_capacity(dtype, selection_count, allocator);
+    let mut builder = VarBinBuilder::<B>::with_capacity_in(dtype, selection_count, allocator);
     match logical_validity.bit_buffer() {
         AllOr::All => {
             for &(start, end) in mask_slices {
@@ -208,7 +208,7 @@ fn filter_select_var_bin_by_index_primitive_offset<O: IntegerPType, B: OffsetBui
         Ok(&data[start..end])
     };
 
-    let mut builder = VarBinBuilder::<B>::with_capacity(dtype, selection_count, allocator);
+    let mut builder = VarBinBuilder::<B>::with_capacity_in(dtype, selection_count, allocator);
     match mask.bit_buffer() {
         AllOr::All => {
             for idx in mask_indices.iter().copied() {

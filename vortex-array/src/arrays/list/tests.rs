@@ -386,7 +386,7 @@ fn test_list_filter_variable_sizes() {
 
 #[test]
 fn test_offset_to_0() {
-    let mut builder = ListBuilder::<u32>::with_capacity(
+    let mut builder = ListBuilder::<u32>::with_capacity_in(
         Arc::new(I32.into()),
         Nullability::NonNullable,
         10,

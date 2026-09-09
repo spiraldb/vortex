@@ -47,22 +47,22 @@ where
         width => vortex_panic!("invalid bit_width: {width}"),
     });
     match max_possible_len {
-        max if max <= u8::MAX as u64 => Box::new(PrimitiveDictBuilder::<T, u8>::new(
+        max if max <= u8::MAX as u64 => Box::new(PrimitiveDictBuilder::<T, u8>::new_in(
             nullability,
             constraints,
             allocator,
         )),
-        max if max <= u16::MAX as u64 => Box::new(PrimitiveDictBuilder::<T, u16>::new(
+        max if max <= u16::MAX as u64 => Box::new(PrimitiveDictBuilder::<T, u16>::new_in(
             nullability,
             constraints,
             allocator,
         )),
-        max if max <= u32::MAX as u64 => Box::new(PrimitiveDictBuilder::<T, u32>::new(
+        max if max <= u32::MAX as u64 => Box::new(PrimitiveDictBuilder::<T, u32>::new_in(
             nullability,
             constraints,
             allocator,
         )),
-        _ => Box::new(PrimitiveDictBuilder::<T, u64>::new(
+        _ => Box::new(PrimitiveDictBuilder::<T, u64>::new_in(
             nullability,
             constraints,
             allocator,
@@ -76,7 +76,7 @@ where
     NativeValue<T>: Hash + Eq,
     Code: UnsignedPType,
 {
-    pub fn new(
+    pub fn new_in(
         nullability: Nullability,
         constraints: &DictConstraints,
         allocator: BufferAllocatorRef,
@@ -229,7 +229,7 @@ mod test {
     use crate::assert_arrays_eq;
     use crate::builders::dict::UNCONSTRAINED;
     use crate::builders::dict::dict_encode;
-    use crate::builders::dict::dict_encoder;
+    use crate::builders::dict::dict_encoder_in;
     use crate::builders::dict::primitive::PrimitiveArray;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(crate::array_session);
@@ -275,7 +275,7 @@ mod test {
     fn reset_clears_dict() {
         let mut ctx = SESSION.create_execution_ctx();
         let first = PrimitiveArray::from_option_iter([Some(1i32), None, Some(3)]).into_array();
-        let mut encoder = dict_encoder(&first, &UNCONSTRAINED, ctx.allocator().clone());
+        let mut encoder = dict_encoder_in(&first, &UNCONSTRAINED, ctx.allocator().clone());
 
         assert_arrays_eq!(
             encoder.encode(&first, &mut ctx).unwrap(),

@@ -170,7 +170,7 @@ mod tests {
     use crate::arrays::ListViewArray;
     use crate::arrays::PrimitiveArray;
     use crate::assert_arrays_eq;
-    use crate::builders::builder_with_capacity;
+    use crate::builders::builder_with_capacity_in_ref;
     use crate::dtype::DType;
     use crate::dtype::Nullability::NonNullable;
     use crate::dtype::Nullability::Nullable;
@@ -202,7 +202,7 @@ mod tests {
         let sum_dtype = Sum
             .partial_dtype(&NumericalAggregateOpts::default(), elem_dtype)
             .expect("sum partial dtype");
-        let mut builder = builder_with_capacity(
+        let mut builder = builder_with_capacity_in_ref(
             &sum_dtype,
             ranges.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

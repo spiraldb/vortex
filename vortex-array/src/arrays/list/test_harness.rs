@@ -27,7 +27,7 @@ impl ListArray {
         <I::Item as IntoIterator>::Item: Into<Scalar>,
     {
         let iter = iter.into_iter();
-        let mut builder = ListBuilder::<O>::with_capacity(
+        let mut builder = ListBuilder::<O>::with_capacity_in(
             Arc::clone(&dtype),
             crate::dtype::Nullability::NonNullable,
             2 * iter.size_hint().0,
@@ -55,7 +55,7 @@ impl ListArray {
         T::Item: Into<Scalar>,
     {
         let iter = iter.into_iter();
-        let mut builder = ListBuilder::<O>::with_capacity(
+        let mut builder = ListBuilder::<O>::with_capacity_in(
             Arc::clone(&dtype),
             crate::dtype::Nullability::Nullable,
             2 * iter.size_hint().0,

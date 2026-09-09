@@ -36,12 +36,18 @@ pub struct StructBuilder {
 
 impl StructBuilder {
     /// Creates a new `StructBuilder` with a capacity of [`DEFAULT_BUILDER_CAPACITY`].
-    pub fn new(
+    #[deprecated(note = "use `new_in` with an explicit allocator")]
+    pub fn new(struct_dtype: StructFields, nullability: Nullability) -> Self {
+        Self::new_in(struct_dtype, nullability, BufferAllocatorRef::static_ref())
+    }
+
+    /// Creates a new `StructBuilder` with the default capacity using `allocator`.
+    pub fn new_in(
         struct_dtype: StructFields,
         nullability: Nullability,
         allocator: &BufferAllocatorRef,
     ) -> Self {
-        Self::with_capacity(
+        Self::with_capacity_in(
             struct_dtype,
             nullability,
             DEFAULT_BUILDER_CAPACITY,
@@ -50,7 +56,22 @@ impl StructBuilder {
     }
 
     /// Creates a new `StructBuilder` with the given `capacity`.
+    #[deprecated(note = "use `with_capacity_in` with an explicit allocator")]
     pub fn with_capacity(
+        struct_dtype: StructFields,
+        nullability: Nullability,
+        capacity: usize,
+    ) -> Self {
+        Self::with_capacity_in(
+            struct_dtype,
+            nullability,
+            capacity,
+            BufferAllocatorRef::static_ref(),
+        )
+    }
+
+    /// Creates a new `StructBuilder` with `capacity` using `allocator`.
+    pub fn with_capacity_in(
         struct_dtype: StructFields,
         nullability: Nullability,
         capacity: usize,
@@ -233,7 +254,7 @@ mod tests {
     fn test_struct_builder() {
         let sdt = StructFields::new(["a", "b"].into(), vec![I32.into(), I32.into()]);
         let dtype = DType::Struct(sdt.clone(), Nullability::NonNullable);
-        let mut builder = StructBuilder::with_capacity(
+        let mut builder = StructBuilder::with_capacity_in(
             sdt,
             Nullability::NonNullable,
             0,
@@ -253,7 +274,7 @@ mod tests {
     fn test_append_nullable_struct() {
         let sdt = StructFields::new(["a", "b"].into(), vec![I32.into(), I32.into()]);
         let dtype = DType::Struct(sdt.clone(), Nullability::Nullable);
-        let mut builder = StructBuilder::with_capacity(
+        let mut builder = StructBuilder::with_capacity_in(
             sdt,
             Nullability::Nullable,
             0,
@@ -294,7 +315,7 @@ mod tests {
             DType::Struct(fields, _) => fields.clone(),
             _ => panic!("Expected struct dtype"),
         };
-        let mut builder = StructBuilder::new(
+        let mut builder = StructBuilder::new_in(
             struct_fields,
             Nullability::Nullable,
             BufferAllocatorRef::static_ref(),
@@ -353,7 +374,7 @@ mod tests {
             DType::Struct(fields, _) => fields.clone(),
             _ => panic!("Expected struct dtype"),
         };
-        let mut builder = StructBuilder::new(
+        let mut builder = StructBuilder::new_in(
             struct_fields,
             Nullability::NonNullable,
             BufferAllocatorRef::static_ref(),

@@ -37,8 +37,7 @@ pub(crate) struct ValidityBuilder {
 }
 
 impl ValidityBuilder {
-    /// Creates a new `ValidityBuilder` whose null buffer is pre-allocated for `capacity` bits.
-    /// Creates a validity builder with the provided allocator.
+    /// Creates a validity builder with the provided allocator and capacity.
     pub fn new(capacity: usize, allocator: &BufferAllocatorRef) -> Self {
         Self {
             runs: Vec::new(),

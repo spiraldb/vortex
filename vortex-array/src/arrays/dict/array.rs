@@ -299,7 +299,7 @@ mod test {
     use crate::arrays::VarBinViewArray;
     use crate::assert_arrays_eq;
     use crate::builders::VarBinBuilder;
-    use crate::builders::builder_with_capacity;
+    use crate::builders::builder_with_capacity_in_ref;
     use crate::dtype::DType;
     use crate::dtype::NativePType;
     use crate::dtype::Nullability::NonNullable;
@@ -450,8 +450,11 @@ mod test {
         let dict = DictArray::try_new(buffer![2u8, 0, 2, 1].into_array(), values.into_array())?;
         let expected = VarBinViewArray::from_iter_str(["two", "zero", "two", "one"]);
         let mut ctx = array_session().create_execution_ctx();
-        let mut builder =
-            VarBinBuilder::<i32>::with_capacity(dict.dtype().clone(), dict.len(), ctx.allocator());
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
+            dict.dtype().clone(),
+            dict.len(),
+            ctx.allocator(),
+        );
 
         dict.into_array()
             .append_to_builder(&mut builder, &mut ctx)?;
@@ -467,7 +470,7 @@ mod test {
         let chunk_count = 2;
         let array = make_dict_primitive_chunks::<u64, u64>(len, 2, chunk_count);
 
-        let mut builder = builder_with_capacity(
+        let mut builder = builder_with_capacity_in_ref(
             &DType::Primitive(PType::U64, NonNullable),
             len * chunk_count,
             ctx.allocator(),

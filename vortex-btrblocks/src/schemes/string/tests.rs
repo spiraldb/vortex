@@ -45,7 +45,7 @@ fn test_strings() -> VortexResult<()> {
 
 #[test]
 fn test_sparse_nulls() -> VortexResult<()> {
-    let mut strings = VarBinViewBuilder::with_capacity(
+    let mut strings = VarBinViewBuilder::with_capacity_in(
         DType::Utf8(Nullability::Nullable),
         100,
         vortex_buffer::BufferAllocatorRef::statically_allocated(),

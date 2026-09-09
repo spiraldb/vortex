@@ -512,7 +512,7 @@ mod test {
         let chunked = ChunkedArray::from_iter(chunks).into_array();
 
         let into_ca = chunked.clone().execute::<PrimitiveArray>(&mut ctx)?;
-        let mut primitive_builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut primitive_builder = PrimitiveBuilder::<i32>::with_capacity_in(
             chunked.dtype().nullability(),
             10 * 100,
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -522,7 +522,7 @@ mod test {
 
         assert_arrays_eq!(into_ca, ca_into, &mut ctx);
 
-        let mut primitive_builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut primitive_builder = PrimitiveBuilder::<i32>::with_capacity_in(
             chunked.dtype().nullability(),
             10 * 100,
             vortex_buffer::BufferAllocatorRef::static_ref(),

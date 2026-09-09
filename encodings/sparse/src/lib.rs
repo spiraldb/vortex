@@ -957,7 +957,7 @@ mod test {
             Some("last"),
         ])
         .into_array();
-        let mut builder = VarBinBuilder::<i32>::with_capacity(
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             array.dtype().clone(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -978,7 +978,7 @@ mod test {
         )
         .unwrap();
         let expected = VarBinViewArray::from_iter_str(["fill", "second"]).into_array();
-        let mut builder = VarBinBuilder::<i32>::with_capacity(
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             array.dtype().clone(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

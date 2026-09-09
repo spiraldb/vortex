@@ -80,7 +80,7 @@ fn map_array_from_rows(
 ) -> VortexResult<MapArray> {
     let rows = rows.into_iter().collect::<Vec<_>>();
     let dtype = DType::Map(map_dtype.clone(), nullability);
-    let mut builder = MapBuilder::<u64, u64>::with_capacity(
+    let mut builder = MapBuilder::<u64, u64>::with_capacity_in(
         map_dtype,
         nullability,
         rows.len(),
@@ -227,7 +227,7 @@ fn scalar_access_preserves_variable_entry_counts_and_utf8_pairs() -> VortexResul
         false,
     )?;
     let dtype = DType::Map(map_dtype.clone(), Nullability::Nullable);
-    let mut builder = MapBuilder::<u64, u64>::with_capacity(
+    let mut builder = MapBuilder::<u64, u64>::with_capacity_in(
         map_dtype,
         Nullability::Nullable,
         4,
@@ -654,7 +654,7 @@ fn filter_preserves_duplicate_map_keys() -> VortexResult<()> {
 #[test]
 fn builder_appends_existing_map_arrays() -> VortexResult<()> {
     let source = sample_array()?;
-    let mut builder = MapBuilder::<u64, u64>::with_capacity(
+    let mut builder = MapBuilder::<u64, u64>::with_capacity_in(
         source.map_dtype().clone(),
         source.dtype().nullability(),
         0,

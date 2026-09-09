@@ -33,12 +33,24 @@ pub struct PrimitiveBuilder<T> {
 
 impl<T: NativePType> PrimitiveBuilder<T> {
     /// Creates a new `PrimitiveBuilder` with a capacity of [`DEFAULT_BUILDER_CAPACITY`].
-    pub fn new(nullability: Nullability, allocator: &BufferAllocatorRef) -> Self {
-        Self::with_capacity(nullability, DEFAULT_BUILDER_CAPACITY, allocator)
+    #[deprecated(note = "use `new_in` with an explicit allocator")]
+    pub fn new(nullability: Nullability) -> Self {
+        Self::new_in(nullability, BufferAllocatorRef::static_ref())
+    }
+
+    /// Creates a new `PrimitiveBuilder` with the default capacity using `allocator`.
+    pub fn new_in(nullability: Nullability, allocator: &BufferAllocatorRef) -> Self {
+        Self::with_capacity_in(nullability, DEFAULT_BUILDER_CAPACITY, allocator)
     }
 
     /// Creates a new `PrimitiveBuilder` with the given `capacity`.
-    pub fn with_capacity(
+    #[deprecated(note = "use `with_capacity_in` with an explicit allocator")]
+    pub fn with_capacity(nullability: Nullability, capacity: usize) -> Self {
+        Self::with_capacity_in(nullability, capacity, BufferAllocatorRef::static_ref())
+    }
+
+    /// Creates a new `PrimitiveBuilder` with `capacity` using `allocator`.
+    pub fn with_capacity_in(
         nullability: Nullability,
         capacity: usize,
         allocator: &BufferAllocatorRef,
@@ -92,7 +104,7 @@ impl<T: NativePType> PrimitiveBuilder<T> {
     ///
     /// // Create a new builder.
     /// let mut builder: PrimitiveBuilder<i32> =
-    ///     PrimitiveBuilder::with_capacity(Nullability::NonNullable, 5, BufferAllocatorRef::static_ref());
+    ///     PrimitiveBuilder::with_capacity_in(Nullability::NonNullable, 5, BufferAllocatorRef::static_ref());
     ///
     /// // Populate the values.
     /// let mut uninit_range = builder.uninit_range(5);
@@ -379,7 +391,7 @@ mod tests {
     #[test]
     fn test_multiple_uninit_ranges_correct_offsets() {
         let mut ctx = array_session().create_execution_ctx();
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::NonNullable,
             10,
             BufferAllocatorRef::static_ref(),
@@ -426,7 +438,7 @@ mod tests {
     /// This test ensures the new API works correctly.
     #[test]
     fn test_append_mask_on_uninit_range() {
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::Nullable,
             5,
             BufferAllocatorRef::static_ref(),
@@ -480,7 +492,7 @@ mod tests {
         expected = "Tried to append a mask to an `UninitRange` that was beyond the allowed range"
     )]
     fn test_append_mask_wrong_length_panics() {
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::Nullable,
             10,
             BufferAllocatorRef::static_ref(),
@@ -502,7 +514,7 @@ mod tests {
     #[test]
     fn test_copy_from_slice_with_offsets() {
         let mut ctx = array_session().create_execution_ctx();
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::NonNullable,
             10,
             BufferAllocatorRef::static_ref(),
@@ -534,7 +546,7 @@ mod tests {
     /// modify individual bits with relative indexing.
     #[test]
     fn test_set_bit_relative_indexing() {
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::Nullable,
             10,
             BufferAllocatorRef::static_ref(),
@@ -612,7 +624,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "cannot create an uninit range of length 0")]
     fn test_zero_length_uninit_range_panics() {
-        let mut builder = PrimitiveBuilder::<i32>::new(
+        let mut builder = PrimitiveBuilder::<i32>::new_in(
             Nullability::NonNullable,
             BufferAllocatorRef::static_ref(),
         );
@@ -623,7 +635,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "uninit_range of len 261 exceeds builder with length 0 and capacity")]
     fn test_uninit_range_exceeds_capacity_panics() {
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::NonNullable,
             5,
             BufferAllocatorRef::static_ref(),
@@ -638,7 +650,7 @@ mod tests {
     #[cfg(debug_assertions)]
     #[should_panic(expected = "tried to copy a slice into a `UninitRange` past its boundary")]
     fn test_copy_from_slice_out_of_bounds() {
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::NonNullable,
             10,
             BufferAllocatorRef::static_ref(),
@@ -654,7 +666,7 @@ mod tests {
     /// This test demonstrates proper usage of the unsafe `finish` method.
     #[test]
     fn test_finish_unsafe_contract() {
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::Nullable,
             5,
             BufferAllocatorRef::static_ref(),
@@ -686,7 +698,7 @@ mod tests {
         use crate::dtype::DType;
         use crate::scalar::Scalar;
 
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::Nullable,
             10,
             BufferAllocatorRef::static_ref(),
@@ -741,7 +753,7 @@ mod tests {
         );
 
         // Test wrong dtype error.
-        let mut builder = PrimitiveBuilder::<i32>::with_capacity(
+        let mut builder = PrimitiveBuilder::<i32>::with_capacity_in(
             Nullability::NonNullable,
             10,
             BufferAllocatorRef::static_ref(),

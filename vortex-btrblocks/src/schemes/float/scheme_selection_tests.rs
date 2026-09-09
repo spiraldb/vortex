@@ -59,7 +59,7 @@ fn test_dict_compressed() -> VortexResult<()> {
 
 #[test]
 fn test_null_dominated_compressed() -> VortexResult<()> {
-    let mut builder = PrimitiveBuilder::<f64>::with_capacity(
+    let mut builder = PrimitiveBuilder::<f64>::with_capacity_in(
         Nullability::Nullable,
         100,
         vortex_buffer::BufferAllocatorRef::static_ref(),

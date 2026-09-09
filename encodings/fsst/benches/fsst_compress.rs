@@ -152,7 +152,7 @@ fn chunked_canonicalize_into(
     bencher
         .with_inputs(|| (&array, SESSION.create_execution_ctx()))
         .bench_refs(|(array, ctx)| {
-            let mut builder = VarBinViewBuilder::with_capacity(
+            let mut builder = VarBinViewBuilder::with_capacity_in(
                 DType::Binary(Nullability::NonNullable),
                 array.len(),
                 ctx.allocator().clone(),

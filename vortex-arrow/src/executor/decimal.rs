@@ -274,7 +274,7 @@ mod tests {
         #[case] _decimal_type: T,
     ) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
-        let mut decimal = DecimalBuilder::new::<T>(
+        let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -306,7 +306,7 @@ mod tests {
         use arrow_array::Decimal32Array;
 
         let mut ctx = array_session().create_execution_ctx();
-        let mut decimal = DecimalBuilder::new::<T>(
+        let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -338,7 +338,7 @@ mod tests {
         use arrow_array::Decimal64Array;
 
         let mut ctx = array_session().create_execution_ctx();
-        let mut decimal = DecimalBuilder::new::<T>(
+        let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -370,7 +370,7 @@ mod tests {
         #[case] _decimal_type: T,
     ) -> VortexResult<()> {
         let mut ctx = array_session().create_execution_ctx();
-        let mut decimal = DecimalBuilder::new::<T>(
+        let mut decimal = DecimalBuilder::new_in::<T>(
             DecimalDType::new(2, 1),
             false.into(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

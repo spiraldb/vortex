@@ -61,7 +61,7 @@ mod tests {
     });
 
     fn build_test_fsst_array() -> ArrayRef {
-        let mut builder = VarBinBuilder::<i32>::with_capacity(
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             DType::Utf8(Nullability::NonNullable),
             10,
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -135,7 +135,7 @@ mod tests {
         // Test case with special characters and nulls
         // Values: ["", "", "", "", "", "", "", "", "", "", "", ",", "A<<<<<<<", "", "", "", "", null, null, null, null, null, null]
         // Mask: only the last element is selected (true at index 22)
-        let mut builder = VarBinBuilder::<i32>::with_capacity(
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             DType::Utf8(Nullability::Nullable),
             23,
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn filter_only_null() -> VortexResult<()> {
-        let mut builder = VarBinBuilder::<i32>::with_capacity(
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             DType::Utf8(Nullability::Nullable),
             3,
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -225,7 +225,7 @@ mod tests {
 
     #[test]
     fn test_fsst_byte_length() -> VortexResult<()> {
-        let mut builder = VarBinBuilder::<i32>::with_capacity(
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             DType::Utf8(Nullability::NonNullable),
             3,
             vortex_buffer::BufferAllocatorRef::static_ref(),

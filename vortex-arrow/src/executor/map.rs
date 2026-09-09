@@ -372,7 +372,7 @@ mod tests {
             false,
         )?;
         let dtype = DType::Map(map_dtype.clone(), Nullable);
-        let mut builder = MapBuilder::<u64, u64>::with_capacity(
+        let mut builder = MapBuilder::<u64, u64>::with_capacity_in(
             map_dtype,
             Nullable,
             3,

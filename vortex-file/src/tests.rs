@@ -1933,7 +1933,7 @@ fn map_array_from_rows(rows: &[MapRowFixture<'_>], keys_sorted: bool) -> VortexR
         keys_sorted,
     )?;
     let dtype = DType::Map(map_dtype.clone(), Nullability::Nullable);
-    let mut builder = MapBuilder::<u64, u64>::with_capacity(
+    let mut builder = MapBuilder::<u64, u64>::with_capacity_in(
         map_dtype,
         Nullability::Nullable,
         rows.len(),

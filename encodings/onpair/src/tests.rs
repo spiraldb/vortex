@@ -66,7 +66,7 @@ fn test_direct_offset_builder() -> vortex_error::VortexResult<()> {
     let mut ctx = SESSION.create_execution_ctx();
     let input = sample_input();
     let encoded = compress_onpair(input.as_ref(), &mut ctx)?;
-    let mut builder = VarBinBuilder::<i32>::with_capacity(
+    let mut builder = VarBinBuilder::<i32>::with_capacity_in(
         input.dtype().clone(),
         input.len(),
         vortex_buffer::BufferAllocatorRef::static_ref(),

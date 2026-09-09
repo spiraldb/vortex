@@ -81,7 +81,7 @@ where
 
     // The builder's offset type matches the Arrow target, so `varbin_to_byte_array` hands the
     // offsets buffer straight to Arrow without a cast.
-    let mut builder = VarBinBuilder::<T::Offset>::with_capacity(
+    let mut builder = VarBinBuilder::<T::Offset>::with_capacity_in(
         array.dtype().clone(),
         array.len(),
         ctx.allocator(),

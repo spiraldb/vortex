@@ -260,7 +260,7 @@ mod tests {
             let ctx = ArrayContext::empty();
             let segments = Arc::new(TestSegments::default());
             let (ptr, eof) = SequenceId::root().split();
-            let mut builder = VarBinViewBuilder::with_capacity(
+            let mut builder = VarBinViewBuilder::with_capacity_in(
                 DType::Utf8(Nullability::NonNullable),
                 2,
                 vortex_buffer::BufferAllocatorRef::statically_allocated(),

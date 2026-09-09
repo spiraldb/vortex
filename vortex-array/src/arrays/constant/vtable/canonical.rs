@@ -29,7 +29,7 @@ use crate::arrays::UnionArray;
 use crate::arrays::VarBinViewArray;
 use crate::arrays::VariantArray;
 use crate::arrays::varbinview::BinaryView;
-use crate::builders::builder_with_capacity;
+use crate::builders::builder_with_capacity_in_ref;
 use crate::dtype::DType;
 use crate::dtype::DecimalType;
 use crate::dtype::Nullability;
@@ -265,7 +265,7 @@ fn constant_canonical_list_array(
     // child `elements` and have all list views point to that scalar.
     let elements = if let Some(elements) = list.elements() {
         // Extract the list elements out of the scalar into a new array.
-        let mut builder = builder_with_capacity(
+        let mut builder = builder_with_capacity_in_ref(
             list.dtype()
                 .as_list_element_opt()
                 .vortex_expect("list scalar somehow did not have a list DType"),
@@ -320,7 +320,8 @@ fn constant_canonical_fixed_size_list_array(
             // Even though the scalar is null, we still have to allocate the correct amount of space
             // for the given `DType`.
             let elements_len = list_size as usize * len;
-            let mut element_builder = builder_with_capacity(element_dtype, elements_len, allocator);
+            let mut element_builder =
+                builder_with_capacity_in_ref(element_dtype, elements_len, allocator);
             element_builder.append_defaults(elements_len);
             let elements = element_builder.finish();
 
@@ -332,7 +333,7 @@ fn constant_canonical_fixed_size_list_array(
         }
         Some(values) => {
             let mut elements_builder =
-                builder_with_capacity(element_dtype, len * values.len(), allocator);
+                builder_with_capacity_in_ref(element_dtype, len * values.len(), allocator);
 
             for _ in 0..len {
                 for v in &values {

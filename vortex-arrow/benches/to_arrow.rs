@@ -340,7 +340,7 @@ fn append_to_varbin_builder(bencher: Bencher, encoding: StringEncoding) {
         .with_inputs(|| (array.clone(), SESSION.create_execution_ctx()))
         .input_counter(|(array, _)| ItemsCount::new(array.len()))
         .bench_values(|(array, mut ctx)| {
-            let mut builder = VarBinBuilder::<i32>::with_capacity(
+            let mut builder = VarBinBuilder::<i32>::with_capacity_in(
                 array.dtype().clone(),
                 array.len(),
                 ctx.allocator(),
@@ -359,7 +359,7 @@ fn append_to_view_builder(bencher: Bencher, encoding: StringEncoding) {
         .with_inputs(|| (array.clone(), SESSION.create_execution_ctx()))
         .input_counter(|(array, _)| ItemsCount::new(array.len()))
         .bench_values(|(array, mut ctx)| {
-            let mut builder = VarBinViewBuilder::with_capacity(
+            let mut builder = VarBinViewBuilder::with_capacity_in(
                 array.dtype().clone(),
                 array.len(),
                 ctx.allocator().clone(),

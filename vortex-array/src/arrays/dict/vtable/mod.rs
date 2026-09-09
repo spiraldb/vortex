@@ -370,7 +370,7 @@ mod tests {
                 .into_array(),
         )?;
 
-        let mut builder = VarBinBuilder::<i32>::new(DType::Utf8(Nullable), ctx.allocator());
+        let mut builder = VarBinBuilder::<i32>::new_in(DType::Utf8(Nullable), ctx.allocator());
         dict.append_to_builder(&mut builder, &mut ctx)?;
 
         let expected = VarBinViewArray::from_iter(
@@ -394,7 +394,7 @@ mod tests {
                 .into_array(),
         )?;
 
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullable),
             8,
             vortex_buffer::BufferAllocatorRef::statically_allocated(),
@@ -434,7 +434,7 @@ mod tests {
             values.into_array(),
         )?;
 
-        let mut builder = VarBinViewBuilder::with_buffer_deduplication(
+        let mut builder = VarBinViewBuilder::with_buffer_deduplication_in(
             DType::Utf8(Nullable),
             8,
             vortex_buffer::BufferAllocatorRef::statically_allocated(),

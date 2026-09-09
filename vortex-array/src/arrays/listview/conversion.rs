@@ -85,7 +85,7 @@ fn build_sizes_from_offsets<O: IntegerPType>(
 
     let len = offsets_slice.len() - 1;
     let mut sizes_builder =
-        PrimitiveBuilder::<O>::with_capacity(Nullability::NonNullable, len, allocator);
+        PrimitiveBuilder::<O>::with_capacity_in(Nullability::NonNullable, len, allocator);
 
     // Create `UninitRange` for direct memory access.
     let mut sizes_range = sizes_builder.uninit_range(len);
@@ -154,7 +154,7 @@ unsafe fn build_list_offsets_from_list_view<O: IntegerPType>(
 ) -> ArrayRef {
     let len = list_view.len();
     let mut offsets_builder =
-        PrimitiveBuilder::<O>::with_capacity(Nullability::NonNullable, len + 1, ctx.allocator());
+        PrimitiveBuilder::<O>::with_capacity_in(Nullability::NonNullable, len + 1, ctx.allocator());
 
     // Create uninit range for direct memory access.
     let mut offsets_range = offsets_builder.uninit_range(len + 1);

@@ -45,7 +45,18 @@ pub trait DictEncoder: Send {
     fn codes_ptype(&self) -> PType;
 }
 
-pub fn dict_encoder(
+/// Create a dictionary encoder using the default allocator.
+#[deprecated(note = "use `dict_encoder_in` with an explicit allocator")]
+pub fn dict_encoder(array: &ArrayRef, constraints: &DictConstraints) -> Box<dyn DictEncoder> {
+    dict_encoder_in(
+        array,
+        constraints,
+        BufferAllocatorRef::statically_allocated(),
+    )
+}
+
+/// Create a dictionary encoder using `allocator`.
+pub fn dict_encoder_in(
     array: &ArrayRef,
     constraints: &DictConstraints,
     allocator: BufferAllocatorRef,
@@ -72,7 +83,7 @@ pub fn dict_encode_with_constraints(
     constraints: &DictConstraints,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<DictArray> {
-    let mut encoder = dict_encoder(array, constraints, ctx.allocator().clone());
+    let mut encoder = dict_encoder_in(array, constraints, ctx.allocator().clone());
     let codes = encoder.encode(array, ctx)?.narrow(ctx)?;
     // SAFETY: The encoding process will produce a value set of codes and values
     // All values in the dictionary are guaranteed to be referenced by at least one code

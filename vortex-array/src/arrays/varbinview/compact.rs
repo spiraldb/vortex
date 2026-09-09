@@ -142,7 +142,7 @@ impl VarBinViewArray {
         buffer_utilization_threshold: f64, // [0, 1]
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<VarBinViewArray> {
-        let mut builder = VarBinViewBuilder::with_compaction(
+        let mut builder = VarBinViewBuilder::with_compaction_in(
             self.dtype().clone(),
             self.len(),
             buffer_utilization_threshold,

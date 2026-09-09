@@ -23,7 +23,7 @@ use crate::arrays::BoolArray;
 use crate::arrays::ScalarFnArray;
 use crate::arrays::bool::BoolArrayExt;
 use crate::builders::ArrayBuilder;
-use crate::builders::builder_with_capacity;
+use crate::builders::builder_with_capacity_in_ref;
 use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::dtype::StructFields;
@@ -216,7 +216,7 @@ pub(crate) fn zip_impl(
         &if_true,
         &if_false,
         mask_values.as_ref(),
-        builder_with_capacity(&return_type, if_true.len(), ctx.allocator()),
+        builder_with_capacity_in_ref(&return_type, if_true.len(), ctx.allocator()),
         ctx,
     )
 }
@@ -522,7 +522,7 @@ mod tests {
     #[test]
     fn test_varbinview_zip() {
         let if_true = {
-            let mut builder = VarBinViewBuilder::new(
+            let mut builder = VarBinViewBuilder::new_in(
                 DType::Utf8(Nullability::NonNullable),
                 10,
                 Default::default(),
@@ -538,7 +538,7 @@ mod tests {
         };
 
         let if_false = {
-            let mut builder = VarBinViewBuilder::new(
+            let mut builder = VarBinViewBuilder::new_in(
                 DType::Utf8(Nullability::NonNullable),
                 10,
                 Default::default(),

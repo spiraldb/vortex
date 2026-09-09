@@ -626,7 +626,7 @@ mod tests {
             Some("c"),
         ])
         .into_array();
-        let mut builder = VarBinBuilder::<i32>::with_capacity(
+        let mut builder = VarBinBuilder::<i32>::with_capacity_in(
             arr.dtype().clone(),
             arr.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

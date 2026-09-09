@@ -11,7 +11,7 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::bool::BoolArrayExt;
 use vortex_array::arrays::struct_::StructArrayExt;
-use vortex_array::builders::builder_with_capacity;
+use vortex_array::builders::builder_with_capacity_in_ref;
 use vortex_array::dtype::DType;
 use vortex_array::match_each_decimal_value_type;
 use vortex_array::match_each_native_ptype;
@@ -123,7 +123,7 @@ pub fn filter_canonical_array(
             .map(|a| a.into_array())
         }
         DType::Map(..) => {
-            let mut builder = builder_with_capacity(
+            let mut builder = builder_with_capacity_in_ref(
                 array.dtype(),
                 filter.iter().filter(|b| **b).count(),
                 ctx.allocator(),

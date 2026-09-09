@@ -16,7 +16,7 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::builders::ArrayBuilder;
 use vortex_array::builders::BoolBuilder;
-use vortex_array::builders::builder_with_capacity;
+use vortex_array::builders::builder_with_capacity_in_ref;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldName;
 use vortex_array::dtype::Nullability;
@@ -219,7 +219,7 @@ fn stats_builder_with_capacity(
     capacity: usize,
     max_length: usize,
 ) -> Box<dyn StatsArrayBuilder> {
-    let values_builder = builder_with_capacity(
+    let values_builder = builder_with_capacity_in_ref(
         dtype,
         capacity,
         vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -228,7 +228,7 @@ fn stats_builder_with_capacity(
         Stat::Max => match dtype {
             DType::Utf8(_) => Box::new(TruncatedMaxBinaryStatsBuilder::<BufferString>::new(
                 values_builder,
-                BoolBuilder::with_capacity(
+                BoolBuilder::with_capacity_in(
                     Nullability::NonNullable,
                     capacity,
                     vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -237,7 +237,7 @@ fn stats_builder_with_capacity(
             )),
             DType::Binary(_) => Box::new(TruncatedMaxBinaryStatsBuilder::<ByteBuffer>::new(
                 values_builder,
-                BoolBuilder::with_capacity(
+                BoolBuilder::with_capacity_in(
                     Nullability::NonNullable,
                     capacity,
                     vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -249,7 +249,7 @@ fn stats_builder_with_capacity(
         Stat::Min => match dtype {
             DType::Utf8(_) => Box::new(TruncatedMinBinaryStatsBuilder::<BufferString>::new(
                 values_builder,
-                BoolBuilder::with_capacity(
+                BoolBuilder::with_capacity_in(
                     Nullability::NonNullable,
                     capacity,
                     vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -258,7 +258,7 @@ fn stats_builder_with_capacity(
             )),
             DType::Binary(_) => Box::new(TruncatedMinBinaryStatsBuilder::<ByteBuffer>::new(
                 values_builder,
-                BoolBuilder::with_capacity(
+                BoolBuilder::with_capacity_in(
                     Nullability::NonNullable,
                     capacity,
                     vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -543,14 +543,14 @@ mod tests {
     #[case(DType::Binary(Nullability::NonNullable))]
     fn truncates_accumulated_stats(#[case] dtype: DType) {
         let mut ctx = array_session().create_execution_ctx();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             dtype.clone(),
             2,
             vortex_buffer::BufferAllocatorRef::statically_allocated(),
         );
         builder.append_value("Value to be truncated");
         builder.append_value("untruncated");
-        let mut builder2 = VarBinViewBuilder::with_capacity(
+        let mut builder2 = VarBinViewBuilder::with_capacity_in(
             dtype,
             2,
             vortex_buffer::BufferAllocatorRef::statically_allocated(),
@@ -601,7 +601,7 @@ mod tests {
     #[case(DType::Binary(Nullability::NonNullable))]
     fn truncated_accumulated_stats_are_inexact(#[case] dtype: DType) {
         let mut ctx = array_session().create_execution_ctx();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             dtype,
             2,
             vortex_buffer::BufferAllocatorRef::statically_allocated(),
