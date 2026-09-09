@@ -22,7 +22,7 @@ use vortex_array::match_each_unsigned_integer_ptype;
 use vortex_array::scalar::PValue;
 use vortex_array::scalar::Scalar;
 use vortex_error::VortexResult;
-use vortex_mask::AllOr;
+use vortex_mask::Mask;
 
 use super::RunEndInputs;
 use super::RunEndSumKernel;
@@ -31,7 +31,8 @@ use super::partial_scalar;
 use super::runs::add_float_run;
 use super::runs::add_signed_run;
 use super::runs::add_unsigned_run;
-use super::runs::sum_range;
+use super::runs::sum_all_valid;
+use super::runs::sum_valid_range;
 use crate::RunEnd;
 
 impl DynAggregateKernel for RunEndSumKernel {
@@ -58,19 +59,18 @@ impl DynAggregateKernel for RunEndSumKernel {
             return Ok(Some(empty_partial(aggregate_fn, batch.dtype())?));
         };
         let range = runs.offset..runs.offset + batch.len();
-        let valid_runs = runs.validity.indices();
 
         let (sum, is_empty) = match_each_unsigned_integer_ptype!(runs.ends.ptype(), |E| {
             let ends = runs.ends.as_slice::<E>();
             match_each_native_ptype!(runs.values.ptype(),
                 unsigned: |T| {
-                    sum_scalar(ends, runs.values.as_slice::<T>(), &valid_runs, range, add_unsigned_run)
+                    sum_scalar(ends, runs.values.as_slice::<T>(), &runs.validity, range, add_unsigned_run)
                 },
                 signed: |T| {
-                    sum_scalar(ends, runs.values.as_slice::<T>(), &valid_runs, range, add_signed_run)
+                    sum_scalar(ends, runs.values.as_slice::<T>(), &runs.validity, range, add_signed_run)
                 },
                 floating: |T| {
-                    sum_scalar(ends, runs.values.as_slice::<T>(), &valid_runs, range,
+                    sum_scalar(ends, runs.values.as_slice::<T>(), &runs.validity, range,
                         |sum, value, len| add_float_run(sum, value, len, options.skip_nans))
                 }
             )
@@ -83,11 +83,18 @@ impl DynAggregateKernel for RunEndSumKernel {
 fn sum_scalar<E: IntegerPType, T: NativePType, A: NativePType + Into<PValue>>(
     ends: &[E],
     values: &[T],
-    validity: &AllOr<&[usize]>,
+    validity: &Mask,
     range: Range<usize>,
     add_run: impl Fn(A, T, usize) -> Option<A>,
 ) -> (Scalar, bool) {
-    let (sum, is_empty) = sum_range(ends, values, validity, range, add_run);
+    let (sum, is_empty) = match validity {
+        Mask::AllTrue(_) => {
+            let mut cursor = ends.partition_point(|end| end.as_() <= range.start);
+            sum_all_valid(ends, values, &mut cursor, range, add_run)
+        }
+        Mask::AllFalse(_) => (Some(A::default()), true),
+        Mask::Values(validity) => sum_valid_range(ends, values, validity.indices(), range, add_run),
+    };
     let sum = match sum {
         Some(sum) => Scalar::primitive(sum, Nullable),
         None => Scalar::null(DType::Primitive(A::PTYPE, Nullable)),

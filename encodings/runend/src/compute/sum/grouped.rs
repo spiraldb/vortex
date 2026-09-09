@@ -9,7 +9,6 @@
 
 use std::ops::Range;
 
-use itertools::Either;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
@@ -31,7 +30,6 @@ use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_buffer::BitBufferMut;
 use vortex_error::VortexResult;
-use vortex_mask::AllOr;
 use vortex_mask::Mask;
 
 use super::RunEndInputs;
@@ -40,8 +38,9 @@ use super::empty_partial;
 use super::runs::add_float_run;
 use super::runs::add_signed_run;
 use super::runs::add_unsigned_run;
-use super::runs::sum_next_range;
-use super::runs::sum_range;
+use super::runs::sum_all_valid;
+use super::runs::sum_next_valid_range;
+use super::runs::sum_valid_range;
 use crate::RunEnd;
 
 impl DynGroupedAggregateKernel for RunEndSumKernel {
@@ -78,21 +77,20 @@ impl DynGroupedAggregateKernel for RunEndSumKernel {
         };
 
         let ranges = groups.group_ranges(ctx)?;
-        let valid_runs = runs.validity.indices();
 
         let (results, empty_groups) = match_each_unsigned_integer_ptype!(runs.ends.ptype(), |E| {
             let ends = runs.ends.as_slice::<E>();
             match_each_native_ptype!(runs.values.ptype(),
                 unsigned: |T| {
-                    sum_groups(ends, runs.values.as_slice::<T>(), valid_runs, &ranges,
+                    sum_groups(ends, runs.values.as_slice::<T>(), &runs.validity, &ranges,
                         &validity, runs.offset, add_unsigned_run)
                 },
                 signed: |T| {
-                    sum_groups(ends, runs.values.as_slice::<T>(), valid_runs, &ranges,
+                    sum_groups(ends, runs.values.as_slice::<T>(), &runs.validity, &ranges,
                         &validity, runs.offset, add_signed_run)
                 },
                 floating: |T| {
-                    sum_groups(ends, runs.values.as_slice::<T>(), valid_runs, &ranges,
+                    sum_groups(ends, runs.values.as_slice::<T>(), &runs.validity, &ranges,
                         &validity, runs.offset,
                         |sum, value, len| add_float_run(sum, value, len, options.skip_nans))
                 }
@@ -116,30 +114,38 @@ impl DynGroupedAggregateKernel for RunEndSumKernel {
 fn sum_groups<E: IntegerPType, T: NativePType, A: NativePType>(
     ends: &[E],
     values: &[T],
-    validity: AllOr<&[usize]>,
+    validity: &Mask,
     ranges: &GroupRanges,
     group_validity: &Mask,
     offset: usize,
     add_run: impl Fn(A, T, usize) -> Option<A>,
 ) -> (PrimitiveArray, BitBuffer) {
-    match ranges {
-        // Consecutive groups reuse the cursor, including a run split across group boundaries.
-        GroupRanges::FixedSizeList { .. } => {
-            let indices = match validity {
-                AllOr::All => Either::Left(0..ends.len()),
-                AllOr::None => Either::Left(0..0),
-                AllOr::Some(indices) => Either::Right(indices.iter().copied()),
-            };
-            let mut indices = indices.peekable();
-
+    match (validity, ranges) {
+        (Mask::AllTrue(_), GroupRanges::FixedSizeList { .. }) => {
+            let mut cursor = 0;
             collect_group_sums(ranges, group_validity, offset, |range| {
-                sum_next_range(ends, values, &mut indices, range, &add_run)
+                sum_all_valid(ends, values, &mut cursor, range, &add_run)
             })
         }
-        // These ranges can overlap or go backwards, so each group seeks independently.
-        GroupRanges::ListView { .. } => {
+        (Mask::AllTrue(_), GroupRanges::ListView { .. }) => {
             collect_group_sums(ranges, group_validity, offset, |range| {
-                sum_range(ends, values, &validity, range, &add_run)
+                let mut cursor = ends.partition_point(|end| end.as_() <= range.start);
+                sum_all_valid(ends, values, &mut cursor, range, &add_run)
+            })
+        }
+        (Mask::AllFalse(_), _) => collect_group_sums(ranges, group_validity, offset, |_| {
+            (Some(A::default()), true)
+        }),
+        (Mask::Values(validity), GroupRanges::FixedSizeList { .. }) => {
+            let mut indices = validity.indices().iter().copied().peekable();
+            collect_group_sums(ranges, group_validity, offset, |range| {
+                sum_next_valid_range(ends, values, &mut indices, range, &add_run)
+            })
+        }
+        (Mask::Values(validity), GroupRanges::ListView { .. }) => {
+            let indices = validity.indices();
+            collect_group_sums(ranges, group_validity, offset, |range| {
+                sum_valid_range(ends, values, indices, range, &add_run)
             })
         }
     }

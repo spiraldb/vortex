@@ -5,6 +5,7 @@
 //!
 //! Empty arrays and all-null inputs return before decoding the children. Otherwise, each valid
 //! run contributes its value multiplied by the length included in the input.
+//! All-valid inputs scan the end and value slices directly. Only partially valid inputs use indices.
 //!
 //! Whole-array sums visit one range, clipped at the array's slice boundaries. Fixed-size groups
 //! share a forward cursor. List-view groups can overlap or arrive out of order, so each group

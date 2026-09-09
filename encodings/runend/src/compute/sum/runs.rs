@@ -3,20 +3,19 @@
 
 //! Weighted reduction of the valid runs that intersect a logical range.
 //!
-//! Seeking and forward traversal share one loop that clips each run to the requested range.
+//! All-valid inputs traverse the end and value slices directly. Partially valid inputs visit only
+//! their valid run indices. Both paths clip the boundary runs to the requested range.
 //! Signed arithmetic widens the product, and floating-point arithmetic uses fused multiply-add,
 //! so a run can cancel a preceding sum even when its product alone exceeds the result type.
 
 use std::iter::Peekable;
 use std::ops::Range;
 
-use itertools::Either;
 use num_traits::AsPrimitive;
 use num_traits::ToPrimitive;
 use vortex_array::dtype::IntegerPType;
 use vortex_array::dtype::NativePType;
 use vortex_error::VortexExpect;
-use vortex_mask::AllOr;
 
 pub(super) fn add_unsigned_run<T: AsPrimitive<u64>>(sum: u64, value: T, len: usize) -> Option<u64> {
     value
@@ -44,32 +43,66 @@ pub(super) fn add_float_run<T: NativePType>(
     Some(value.mul_add(len as f64, sum))
 }
 
-/// Locate the first intersecting valid run before summing a range.
-pub(super) fn sum_range<E: IntegerPType, T: NativePType, A: NativePType>(
+/// Sum an all-valid range directly from the end and value slices.
+///
+/// The cursor is a position in the slices, retained for consecutive groups. Ranges must be ordered
+/// and non-overlapping. Arbitrary ranges must first position the cursor with a binary search.
+pub(super) fn sum_all_valid<E: IntegerPType, T: NativePType, A: NativePType>(
     ends: &[E],
     values: &[T],
-    validity: &AllOr<&[usize]>,
+    cursor: &mut usize,
+    range: Range<usize>,
+    add_run: impl Fn(A, T, usize) -> Option<A>,
+) -> (Option<A>, bool) {
+    let mut sum = A::default();
+    if range.is_empty() {
+        return (Some(sum), true);
+    }
+
+    // Skipped null groups or an earlier overflow can leave the cursor behind this range.
+    while ends[*cursor].as_() <= range.start {
+        *cursor += 1;
+    }
+
+    let mut start = range.start;
+    for (&end, &value) in ends[*cursor..].iter().zip(&values[*cursor..]) {
+        let end = end.as_();
+        if end >= range.end {
+            *cursor += usize::from(end == range.end);
+            return (add_run(sum, value, range.end - start), false);
+        }
+
+        *cursor += 1;
+        let Some(next) = add_run(sum, value, end - start) else {
+            return (None, false);
+        };
+        sum = next;
+        start = end;
+    }
+
+    (Some(sum), false)
+}
+
+/// Locate the first intersecting valid run before summing an arbitrary range.
+pub(super) fn sum_valid_range<E: IntegerPType, T: NativePType, A: NativePType>(
+    ends: &[E],
+    values: &[T],
+    indices: &[usize],
     range: Range<usize>,
     add_run: impl Fn(A, T, usize) -> Option<A>,
 ) -> (Option<A>, bool) {
     let first = ends.partition_point(|end| end.as_() <= range.start);
-    let indices = match validity {
-        AllOr::All => Either::Left(first..ends.len()),
-        AllOr::None => return (Some(A::default()), true),
-        AllOr::Some(indices) => {
-            let start = indices.partition_point(|&index| index < first);
-            Either::Right(indices[start..].iter().copied())
-        }
-    };
+    let start = indices.partition_point(|&index| index < first);
+    let mut indices = indices[start..].iter().copied().peekable();
 
-    sum_next_range(ends, values, &mut indices.peekable(), range, add_run)
+    sum_next_valid_range(ends, values, &mut indices, range, add_run)
 }
 
 /// Sum the next range while retaining a run that crosses its end.
 ///
 /// The caller must supply non-overlapping ranges in increasing order. Skipped null groups and
 /// early overflow returns can leave the cursor behind the next range's start.
-pub(super) fn sum_next_range<E: IntegerPType, T: NativePType, A: NativePType>(
+pub(super) fn sum_next_valid_range<E: IntegerPType, T: NativePType, A: NativePType>(
     ends: &[E],
     values: &[T],
     indices: &mut Peekable<impl Iterator<Item = usize>>,

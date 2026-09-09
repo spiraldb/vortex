@@ -306,6 +306,7 @@ fn grouped_sums(
 #[rstest]
 #[case::empty(0, 0, false, buffer![1i64, -2, 3, -4, 5].into_array())]
 #[case::short_groups(0, 2, false, buffer![1i64, -2, 3, -4, 5].into_array())]
+#[case::all_valid_with_null_groups(1, 8, true, buffer![1i64, -2, 3, -4, 5].into_array())]
 #[case::sliced_null_groups(1, 8, true,
     PrimitiveArray::from_option_iter([None, Some(2i64), None, Some(4), Some(5)]).into_array())]
 #[case::all_null(1, 8, true, PrimitiveArray::from_option_iter([None::<i64>; 5]).into_array())]

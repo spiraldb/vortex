@@ -150,20 +150,7 @@ fn sum_runend_fallback(bencher: Bencher, run_length: usize) {
 
 #[divan::bench(args = [Validity::NonNullable, Validity::AllValid, Validity::AllInvalid])]
 fn sum_runend_validity(bencher: Bencher, validity: &Validity) {
-    let ends = PrimitiveArray::from_iter((64..=LEN).step_by(64).map(|end| end as u64));
-    let values = PrimitiveArray::new(
-        (0..ends.len())
-            .map(|index| i32::try_from(index).unwrap())
-            .collect::<Buffer<_>>(),
-        validity.clone(),
-    );
-    let array = RunEnd::try_new(
-        ends.into_array(),
-        values.into_array(),
-        &mut SESSION.create_execution_ctx(),
-    )
-    .unwrap()
-    .into_array();
+    let array = runend_with_validity(validity);
 
     bencher
         .with_inputs(|| SESSION.create_execution_ctx())
@@ -178,4 +165,31 @@ fn grouped_runend<const GROUP_SIZE: u32>(bencher: Bencher, run_length: usize) {
 #[divan::bench(args = [4, 64, 1024], consts = [1, 2, 8, 128])]
 fn grouped_runend_fallback<const GROUP_SIZE: u32>(bencher: Bencher, run_length: usize) {
     bench_grouped(bencher, runend(run_length), GROUP_SIZE, &FALLBACK_SESSION);
+}
+
+fn runend_with_validity(validity: &Validity) -> ArrayRef {
+    let ends = PrimitiveArray::from_iter((64..=LEN).step_by(64).map(|end| end as u64));
+    let values = PrimitiveArray::new(
+        (0..ends.len())
+            .map(|index| i32::try_from(index).unwrap())
+            .collect::<Buffer<_>>(),
+        validity.clone(),
+    );
+    RunEnd::try_new(
+        ends.into_array(),
+        values.into_array(),
+        &mut SESSION.create_execution_ctx(),
+    )
+    .unwrap()
+    .into_array()
+}
+
+#[divan::bench(consts = [2, 128])]
+fn grouped_runend_all_valid<const GROUP_SIZE: u32>(bencher: Bencher) {
+    bench_grouped(
+        bencher,
+        runend_with_validity(&Validity::AllValid),
+        GROUP_SIZE,
+        &SESSION,
+    );
 }
