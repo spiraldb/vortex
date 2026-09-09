@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use std::mem::MaybeUninit;
-
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
@@ -44,13 +42,13 @@ pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexRes
         .execute::<PrimitiveArray>(ctx)?;
 
     let length = timestamps.len();
-    let mut days = BufferMut::with_capacity(timestamps.len());
-    let mut seconds = BufferMut::with_capacity(timestamps.len());
-    let mut subseconds = BufferMut::with_capacity(timestamps.len());
+    let mut days: BufferMut<i64> = BufferMut::with_capacity(timestamps.len());
+    let mut seconds: BufferMut<i64> = BufferMut::with_capacity(timestamps.len());
+    let mut subseconds: BufferMut<i64> = BufferMut::with_capacity(timestamps.len());
 
-    let days_slice = &mut days.spare_capacity_mut()[..length];
-    let seconds_slice = &mut seconds.spare_capacity_mut()[..length];
-    let subseconds_slice = &mut subseconds.spare_capacity_mut()[..length];
+    let days_slice = days.spare_capacity_mut().as_mut_ptr().cast::<i64>();
+    let seconds_slice = seconds.spare_capacity_mut().as_mut_ptr().cast::<i64>();
+    let subseconds_slice = subseconds.spare_capacity_mut().as_mut_ptr().cast::<i64>();
     let timestamps = timestamps.as_slice::<i64>();
 
     match array.temporal_metadata().time_unit() {
@@ -84,16 +82,22 @@ pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexRes
 }
 
 fn split_slice<const DIVISOR: i64>(
-    days: &mut [MaybeUninit<i64>],
-    seconds: &mut [MaybeUninit<i64>],
-    subseconds: &mut [MaybeUninit<i64>],
+    mut days: *mut i64,
+    mut seconds: *mut i64,
+    mut subseconds: *mut i64,
     timestamps: &[i64],
 ) {
-    for (((day, second), subsecond), ts) in days.iter_mut().zip(seconds).zip(subseconds).zip(timestamps) {
+    for ts in timestamps {
         let ts_parts = timestamp::split_with_divisor::<DIVISOR>(*ts);
-        day.write(ts_parts.days);
-        second.write(ts_parts.seconds);
-        subsecond.write(ts_parts.subseconds);
+        unsafe {
+            days.write(ts_parts.days);
+            seconds.write(ts_parts.seconds);
+            subseconds.write(ts_parts.subseconds);
+
+            days = days.add(1);
+            seconds = seconds.add(1);
+            subseconds = subseconds.add(1);
+        }
     }
 }
 
