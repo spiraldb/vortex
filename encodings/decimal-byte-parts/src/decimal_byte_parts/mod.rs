@@ -208,6 +208,18 @@ impl VTable for DecimalByteParts {
         let Some(decimal_dtype) = dtype.as_decimal_opt() else {
             vortex_bail!("expected decimal dtype, got {}", dtype)
         };
+
+        let min_slots = DecimalBytePartsSlots::FIXED_COUNT;
+        let max_slots = min_slots + MAX_LOWER_PARTS;
+        vortex_ensure!(
+            (min_slots..=max_slots).contains(&slots.len()),
+            "expected {min_slots}..={max_slots} slots, got {}",
+            slots.len()
+        );
+        for (idx, slot) in slots.iter().enumerate() {
+            vortex_ensure!(slot.is_some(), "missing required slot {idx}");
+        }
+
         let slots = DecimalBytePartsSlotsView::from_slots(slots);
         DecimalBytePartsData::validate(
             slots.msp,
@@ -727,6 +739,22 @@ mod tests {
         assert!(
             DecimalByteParts::try_new_with_lower_parts(msp(), lower_parts, decimal_dtype).is_err()
         );
+    }
+
+    #[rstest]
+    #[case::no_slots(vec![])]
+    #[case::missing_msp(vec![None])]
+    #[case::missing_lower(vec![Some(msp()), None])]
+    #[case::gap_in_lower(vec![Some(msp()), None, Some(lower_part())])]
+    fn test_rejects_missing_slots(#[case] slots: Vec<Option<ArrayRef>>) {
+        let parts = ArrayParts::new(
+            DecimalByteParts,
+            DType::Decimal(DecimalDType::new(76, 2), Nullability::NonNullable),
+            3,
+            DecimalBytePartsData,
+        )
+        .with_slots(slots.into_iter().collect());
+        assert!(Array::try_from_parts(parts).is_err());
     }
 
     #[test]
