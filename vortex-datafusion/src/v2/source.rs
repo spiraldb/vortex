@@ -118,8 +118,8 @@ use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
 use vortex_utils::parallelism::get_available_parallelism;
 
-use crate::convert::exprs::DefaultExpressionConvertor;
-use crate::convert::exprs::ExpressionConvertor;
+use crate::convert::exprs::DefaultExpressionConverter;
+use crate::convert::exprs::ExpressionConverter;
 use crate::convert::exprs::ProcessedProjection;
 use crate::convert::stats::stats_set_to_df;
 
@@ -544,18 +544,18 @@ impl DataSource for VortexDataSource {
             projection
         );
 
-        let convertor = DefaultExpressionConvertor::default();
+        let converter = DefaultExpressionConverter::default();
         let input_schema = self.initial_schema.as_ref();
         let projected_schema = projection.project_schema(input_schema)?;
 
-        // Use the shared ExpressionConvertor to split the projection into a Vortex
+        // Use the shared ExpressionConverter to split the projection into a Vortex
         // scan_projection and a leftover DataFusion projection for expressions that
         // can't be pushed down (e.g., unsupported scalar functions, decimal binary).
         let ProcessedProjection {
             scan_projection,
             leftover_projection,
             ..
-        } = convertor.split_projection(projection.clone(), input_schema, &projected_schema)?;
+        } = converter.split_projection(projection.clone(), input_schema, &projected_schema)?;
 
         // Compose with the initial projection so the scan operates on the original
         // source columns, not the initial projection's output columns.
@@ -602,7 +602,7 @@ impl DataSource for VortexDataSource {
             ));
         }
 
-        let convertor = DefaultExpressionConvertor::default();
+        let converter = DefaultExpressionConverter::default();
         let filters = filters
             .into_iter()
             .map(|filter| {
@@ -618,7 +618,7 @@ impl DataSource for VortexDataSource {
         // so we can safely claim PushedDown::Yes for them.
         let converted = filters
             .iter()
-            .map(|expr| convertor.try_convert(expr, &self.projected_schema))
+            .map(|expr| converter.try_convert(expr, &self.projected_schema))
             .collect::<DFResult<Vec<_>>>()?;
         let pushdown_results: Vec<PushedDown> = converted
             .iter()

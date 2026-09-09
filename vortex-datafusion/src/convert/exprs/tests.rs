@@ -82,16 +82,16 @@ fn array_length_expr(args: Vec<Arc<dyn PhysicalExpr>>, schema: &Schema) -> Arc<d
     )
 }
 
-/// Whether the default convertor accepts `expr` for native evaluation against `schema`.
+/// Whether the default converter accepts `expr` for native evaluation against `schema`.
 fn converts(expr: &Arc<dyn PhysicalExpr>, schema: &Schema) -> DFResult<bool> {
-    Ok(DefaultExpressionConvertor::default()
+    Ok(DefaultExpressionConverter::default()
         .try_convert(expr, schema)?
         .is_some())
 }
 
-/// Convert `expr` natively, failing the test if the convertor declines it.
+/// Convert `expr` natively, failing the test if the converter declines it.
 fn convert(expr: Arc<dyn PhysicalExpr>, schema: &Schema) -> DFResult<Expression> {
-    DefaultExpressionConvertor::default()
+    DefaultExpressionConverter::default()
         .try_convert(&expr, schema)?
         .ok_or_else(|| exec_datafusion_err!("Expected native conversion for {expr}"))
 }
@@ -115,9 +115,9 @@ fn int_literals(values: impl IntoIterator<Item = Option<i32>>) -> Vec<Arc<dyn Ph
         .collect()
 }
 
-struct FailingConvertor;
+struct FailingConverter;
 
-impl ExpressionConvertor for FailingConvertor {
+impl ExpressionConverter for FailingConverter {
     fn try_convert(
         &self,
         _expr: &Arc<dyn PhysicalExpr>,
@@ -147,7 +147,7 @@ fn test_duplicate_aliases_fall_back_before_conversion() -> DFResult<()> {
     ]);
     let output_schema = projection.project_schema(&schema)?;
     let processed =
-        FailingConvertor.split_projection(projection.clone(), &schema, &output_schema)?;
+        FailingConverter.split_projection(projection.clone(), &schema, &output_schema)?;
     assert_eq!(
         processed.scan_projection,
         pack(
@@ -395,7 +395,7 @@ fn test_in_list_malformed_literal() -> DFResult<()> {
         ))),
     ])?;
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&expr, &schema)
             .is_err()
     );
@@ -806,7 +806,7 @@ fn test_projection_ignores_unreferenced_unsupported_field() -> DFResult<()> {
         "sum",
     )]);
     let output_schema = projection.project_schema(&schema)?;
-    let processed = DefaultExpressionConvertor::default().split_projection(
+    let processed = DefaultExpressionConverter::default().split_projection(
         projection,
         &schema,
         &output_schema,
@@ -871,7 +871,7 @@ fn test_can_be_pushed_down_column_not_found(test_schema: Schema) {
     let col_expr = Arc::new(df_expr::Column::new("nonexistent", 99)) as Arc<dyn PhysicalExpr>;
 
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&col_expr, &test_schema)
             .is_err()
     );
@@ -1065,7 +1065,7 @@ fn test_length_function_invalid_arity(#[case] function: ScalarUDF, #[case] arity
         Arc::new(ConfigOptions::new()),
     ));
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&expr, &Schema::empty())
             .is_err()
     );
@@ -1162,7 +1162,7 @@ fn test_case_when_datafusion_vortex_equivalence() -> anyhow::Result<()> {
 
 fn assert_native_matches(expr: Arc<dyn PhysicalExpr>, batch: RecordBatch) -> anyhow::Result<()> {
     let session = VortexSession::default();
-    let converted = DefaultExpressionConvertor::new(session.clone())
+    let converted = DefaultExpressionConverter::new(session.clone())
         .try_convert(&expr, &batch.schema())?
         .ok_or_else(|| anyhow::anyhow!("Expected native conversion for {expr}"))?;
     for constant in [false, true] {
@@ -1493,7 +1493,7 @@ fn test_malformed_get_field_returns_error(
         Arc::new(ConfigOptions::new()),
     ));
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&expr, &schema)
             .is_err()
     );
@@ -1508,7 +1508,7 @@ fn test_column_identity_validation_skips_dynamic_filters() -> DFResult<()> {
     ]);
     let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Column::new("a", 1));
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&expr, &schema)
             .is_err()
     );
@@ -1606,7 +1606,7 @@ fn test_case_non_boolean_condition_returns_error() -> DFResult<()> {
         None,
     )?);
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&expr, &Schema::empty())
             .is_err()
     );
@@ -1618,7 +1618,7 @@ fn test_malformed_literal_returns_error() {
     let value = ScalarValue::Decimal128(Some(1), 0, 0);
     let expr: Arc<dyn PhysicalExpr> = Arc::new(df_expr::Literal::new(value));
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&expr, &Schema::empty())
             .is_err()
     );
@@ -1630,7 +1630,7 @@ fn test_literal_invalid_row_count(#[values(0, 2)] len: usize) {
     let expr: Arc<dyn PhysicalExpr> =
         Arc::new(df_expr::Literal::new(ScalarValue::Struct(Arc::new(array))));
     assert!(
-        DefaultExpressionConvertor::default()
+        DefaultExpressionConverter::default()
             .try_convert(&expr, &Schema::empty())
             .is_err()
     );

@@ -63,12 +63,12 @@ pub struct ProcessedProjection {
 
 /// Trait for converting DataFusion expressions to Vortex ones.
 ///
-/// Custom convertors implement a single schema-aware decision. Conversion should preserve
-/// DataFusion values, nulls, and evaluation errors; see [`DefaultExpressionConvertor`] for
+/// Custom converters implement a single schema-aware decision. Conversion should preserve
+/// DataFusion values, nulls, and evaluation errors; see [`DefaultExpressionConverter`] for
 /// the temporary arithmetic exception. Unsupported expressions remain in DataFusion,
 /// including when a file's schema adapter introduces them.
 ///
-/// # Implementing a custom convertor
+/// # Implementing a custom converter
 ///
 /// ```
 /// use std::sync::Arc;
@@ -77,12 +77,12 @@ pub struct ProcessedProjection {
 /// use datafusion_common::Result as DFResult;
 /// use datafusion_physical_expr::PhysicalExpr;
 /// use vortex::expr::Expression;
-/// use vortex_datafusion::convert::DefaultExpressionConvertor;
-/// use vortex_datafusion::convert::ExpressionConvertor;
+/// use vortex_datafusion::convert::DefaultExpressionConverter;
+/// use vortex_datafusion::convert::ExpressionConverter;
 ///
-/// struct CustomExpressionConvertor(DefaultExpressionConvertor);
+/// struct CustomExpressionConverter(DefaultExpressionConverter);
 ///
-/// impl ExpressionConvertor for CustomExpressionConvertor {
+/// impl ExpressionConverter for CustomExpressionConverter {
 ///     fn try_convert(
 ///         &self,
 ///         expr: &Arc<dyn PhysicalExpr>,
@@ -92,11 +92,11 @@ pub struct ProcessedProjection {
 ///     }
 /// }
 ///
-/// let _convertor: Arc<dyn ExpressionConvertor> = Arc::new(CustomExpressionConvertor(
-///     DefaultExpressionConvertor::default(),
+/// let _converter: Arc<dyn ExpressionConverter> = Arc::new(CustomExpressionConverter(
+///     DefaultExpressionConverter::default(),
 /// ));
 /// ```
-pub trait ExpressionConvertor: Send + Sync {
+pub trait ExpressionConverter: Send + Sync {
     /// Convert an expression for native evaluation against this schema.
     ///
     /// Returns None for valid but unsupported expressions. Malformed expressions and
@@ -193,12 +193,12 @@ impl From<DataFusionError> for Unconverted {
 /// Conversion result where `?` propagates both unsupported expressions and errors.
 type Conversion<T> = Result<T, Unconverted>;
 
-/// The default [`ExpressionConvertor`] implementation.
+/// The default [`ExpressionConverter`] implementation.
 ///
 /// Supported arithmetic is pushed down using Vortex semantics, including its checked
 /// integer arithmetic. Matching DataFusion's overflow behavior is deferred to a future patch.
 /// Other expressions require compatible SQL semantics or remain in DataFusion.
-pub struct DefaultExpressionConvertor {
+pub struct DefaultExpressionConverter {
     /// Session used to resolve Arrow → Vortex dtypes through the extension
     /// plugin registry, so registered extension types (e.g. UUID ⇄
     /// `FixedSizeBinary[16]`) convert correctly instead of hitting the static,
@@ -206,7 +206,7 @@ pub struct DefaultExpressionConvertor {
     session: VortexSession,
 }
 
-impl Default for DefaultExpressionConvertor {
+impl Default for DefaultExpressionConverter {
     fn default() -> Self {
         Self {
             session: VortexSession::default(),
@@ -214,8 +214,8 @@ impl Default for DefaultExpressionConvertor {
     }
 }
 
-impl DefaultExpressionConvertor {
-    /// Create a convertor that resolves Arrow extension types using `session`'s
+impl DefaultExpressionConverter {
+    /// Create a converter that resolves Arrow extension types using `session`'s
     /// dtype registry.
     pub fn new(session: VortexSession) -> Self {
         Self { session }
@@ -567,7 +567,7 @@ impl DefaultExpressionConvertor {
     }
 }
 
-impl ExpressionConvertor for DefaultExpressionConvertor {
+impl ExpressionConverter for DefaultExpressionConverter {
     fn try_convert(
         &self,
         expr: &Arc<dyn PhysicalExpr>,
