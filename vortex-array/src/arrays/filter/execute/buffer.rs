@@ -51,13 +51,13 @@ pub(crate) fn filter_buffer<T: Copy>(buffer: Buffer<T>, mask: &MaskValues) -> Bu
         buffer
     };
 
-    filter_slice(buffer.as_slice(), mask, allocator)
+    filter_slice(buffer.as_slice(), mask, &allocator)
 }
 
 fn filter_slice<T: Copy>(
     values: &[T],
     mask: &MaskValues,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
     if let Some(slices) = useful_cached_slices(mask) {
         return slice::filter_slice_by_slices(values, slices, mask.true_count(), allocator);
@@ -69,7 +69,7 @@ fn filter_slice<T: Copy>(
         return slice::filter_slice_by_indices(values, indices, allocator);
     }
 
-    if let Some(filtered) = simd_compress::filter_slice_by_bitmap(values, mask, allocator.clone()) {
+    if let Some(filtered) = simd_compress::filter_slice_by_bitmap(values, mask, allocator) {
         return filtered;
     }
 

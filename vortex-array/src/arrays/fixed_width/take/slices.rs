@@ -20,7 +20,7 @@ pub(super) fn take_slices<S: UnsignedPType, L: UnsignedPType>(
     starts: &[S],
     lengths: &[L],
     output_len: usize,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ByteBuffer> {
     let slices = starts
         .iter()
@@ -43,7 +43,7 @@ pub(super) fn take_slices_constant_length<S: UnsignedPType>(
     starts: &[S],
     length: usize,
     output_len: usize,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ByteBuffer> {
     let computed_len = starts
         .len()
@@ -69,7 +69,7 @@ fn copy_slices(
     record_count: usize,
     slices: impl IntoIterator<Item = (usize, usize)>,
     output_len: usize,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ByteBuffer> {
     let input_byte_len = record_count
         .checked_mul(byte_width)
@@ -82,8 +82,11 @@ fn copy_slices(
     let output_byte_len = output_len
         .checked_mul(byte_width)
         .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
-    let mut result =
-        BufferMut::<u8>::with_capacity_aligned_in(output_byte_len, values.alignment(), allocator);
+    let mut result = BufferMut::<u8>::with_capacity_aligned_in(
+        output_byte_len,
+        values.alignment(),
+        allocator.clone(),
+    );
     let spare = &mut result.spare_capacity_mut()[..output_byte_len];
     let mut cursor = 0usize;
 

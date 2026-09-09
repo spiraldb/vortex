@@ -58,7 +58,7 @@ pub(super) fn low_bits_mask(len: usize) -> u64 {
 pub(super) fn filter_slice_by_bitmap<T: Copy>(
     slice: &[T],
     mask: &MaskValues,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
     assert_eq!(
         mask.len(),
@@ -67,7 +67,7 @@ pub(super) fn filter_slice_by_bitmap<T: Copy>(
     );
 
     let output_len = mask.true_count();
-    let mut out = BufferMut::<T>::with_capacity_in(output_len, allocator);
+    let mut out = BufferMut::<T>::with_capacity_in(output_len, allocator.clone());
     let src_ptr = slice.as_ptr();
     let out_ptr = out.spare_capacity_mut().as_mut_ptr().cast::<T>();
     let mut write_pos = 0;
@@ -107,9 +107,9 @@ pub(super) fn filter_slice_by_bitmap<T: Copy>(
 pub(super) fn filter_slice_by_indices<T: Copy>(
     slice: &[T],
     indices: &[usize],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
-    let mut out = BufferMut::<T>::with_capacity_in(indices.len(), allocator);
+    let mut out = BufferMut::<T>::with_capacity_in(indices.len(), allocator.clone());
     let src_ptr = slice.as_ptr();
     let out_ptr = out.spare_capacity_mut().as_mut_ptr().cast::<T>();
 
@@ -129,9 +129,9 @@ pub(super) fn filter_slice_by_slices<T: Copy>(
     slice: &[T],
     slices: &[(usize, usize)],
     output_len: usize,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
-    let mut out = BufferMut::<T>::with_capacity_in(output_len, allocator);
+    let mut out = BufferMut::<T>::with_capacity_in(output_len, allocator.clone());
     for (start, end) in slices {
         out.extend_from_slice(&slice[*start..*end]);
     }

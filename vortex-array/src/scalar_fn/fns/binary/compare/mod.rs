@@ -295,10 +295,10 @@ pub(super) fn collect_zip_bits<T: Copy>(
     lhs: &[T],
     rhs: &[T],
     f: impl Fn(T, T) -> bool,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBuffer {
     let len = lhs.len();
-    let mut words = BufferMut::<u64>::zeroed_in(len.div_ceil(64), allocator);
+    let mut words = BufferMut::<u64>::zeroed_in(len.div_ceil(64), allocator.clone());
     LaneZip::new(lhs, rhs).map_bits_into(words.as_mut_slice(), |(a, b)| f(a, b));
     bit_buffer_from_words(words, len)
 }
@@ -307,10 +307,10 @@ pub(super) fn collect_zip_bits<T: Copy>(
 pub(super) fn collect_bits<T: Copy>(
     values: &[T],
     f: impl Fn(T) -> bool,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBuffer {
     let len = values.len();
-    let mut words = BufferMut::<u64>::zeroed_in(len.div_ceil(64), allocator);
+    let mut words = BufferMut::<u64>::zeroed_in(len.div_ceil(64), allocator.clone());
     values.map_bits_into(words.as_mut_slice(), f);
     bit_buffer_from_words(words, len)
 }

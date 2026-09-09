@@ -39,7 +39,7 @@ pub(super) fn execute(
 
     let validity = array.as_ref().validity()?;
     let output = match_each_native_ptype!(array.dtype().as_ptype(), |T| {
-        let values = gather_values::<T>(&array, ctx.allocator().clone())?;
+        let values = gather_values::<T>(&array, ctx.allocator())?;
         VortexResult::Ok(PrimitiveArray::new(values, validity))
     })?;
 
@@ -56,7 +56,7 @@ struct PrimitiveSource<T> {
 
 fn gather_values<T: NativePType>(
     array: &Array<Interleave>,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<Buffer<T>> {
     let values = (0..array.num_values())
         .map(|i| {
@@ -102,7 +102,7 @@ fn gather<T, A, R>(
     values: &[PrimitiveSource<T>],
     branches: &[A],
     rows: &[R],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<Buffer<T>>
 where
     T: NativePType,
@@ -117,7 +117,7 @@ where
         rows.len()
     );
 
-    let mut output = BufferMut::with_capacity_in(branches.len(), allocator);
+    let mut output = BufferMut::with_capacity_in(branches.len(), allocator.clone());
     output.try_extend_trusted(branches.iter().zip(rows).map(|(branch, row)| {
         let Some(source) = values.get((*branch).as_()) else {
             vortex_bail!("interleave array index out of bounds");
@@ -143,7 +143,7 @@ mod tests {
         }];
 
         let allocator = BufferAllocatorRef::statically_allocated();
-        assert!(gather(&values, &[1u8], &[0u8], allocator.clone()).is_err());
-        assert!(gather(&values, &[0u8], &[1u8], allocator).is_err());
+        assert!(gather(&values, &[1u8], &[0u8], &allocator).is_err());
+        assert!(gather(&values, &[0u8], &[1u8], &allocator).is_err());
     }
 }

@@ -66,15 +66,15 @@ fn compare_primitive_typed<T: NativePType>(
         (
             PrimitiveOperand::Array { values: lhs, .. },
             PrimitiveOperand::Array { values: rhs, .. },
-        ) => compare_slices(lhs, rhs, op, ctx.allocator().clone()),
+        ) => compare_slices(lhs, rhs, op, ctx.allocator()),
         (
             PrimitiveOperand::Array { values: lhs, .. },
             PrimitiveOperand::Constant { value: rhs, .. },
-        ) => compare_slice_constant(lhs, *rhs, op, ctx.allocator().clone()),
+        ) => compare_slice_constant(lhs, *rhs, op, ctx.allocator()),
         (
             PrimitiveOperand::Constant { value: lhs, .. },
             PrimitiveOperand::Array { values: rhs, .. },
-        ) => compare_slice_constant(rhs, *lhs, op.swap(), ctx.allocator().clone()),
+        ) => compare_slice_constant(rhs, *lhs, op.swap(), ctx.allocator()),
         (
             PrimitiveOperand::Constant { value: lhs, .. },
             PrimitiveOperand::Constant { value: rhs, .. },
@@ -111,7 +111,7 @@ fn compare_slices<T: NativePType>(
     lhs: &[T],
     rhs: &[T],
     op: CompareOperator,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBuffer {
     // Dispatch the operator outside the lane loop so each instantiation vectorizes a single
     // branch-free predicate.
@@ -129,7 +129,7 @@ fn compare_slice_constant<T: NativePType>(
     lhs: &[T],
     rhs: T,
     op: CompareOperator,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBuffer {
     match op {
         CompareOperator::Eq => collect_bits(lhs, |a: T| a.is_eq(rhs), allocator),

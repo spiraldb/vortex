@@ -77,22 +77,22 @@ pub(super) fn compare_nested(
     // comparator call itself stays virtual.
     let bits = match op {
         CompareOperator::Eq => {
-            collect_ordering_bits(len, &comparator, Ordering::is_eq, ctx.allocator().clone())
+            collect_ordering_bits(len, &comparator, Ordering::is_eq, ctx.allocator())
         }
         CompareOperator::NotEq => {
-            collect_ordering_bits(len, &comparator, Ordering::is_ne, ctx.allocator().clone())
+            collect_ordering_bits(len, &comparator, Ordering::is_ne, ctx.allocator())
         }
         CompareOperator::Gt => {
-            collect_ordering_bits(len, &comparator, Ordering::is_gt, ctx.allocator().clone())
+            collect_ordering_bits(len, &comparator, Ordering::is_gt, ctx.allocator())
         }
         CompareOperator::Gte => {
-            collect_ordering_bits(len, &comparator, Ordering::is_ge, ctx.allocator().clone())
+            collect_ordering_bits(len, &comparator, Ordering::is_ge, ctx.allocator())
         }
         CompareOperator::Lt => {
-            collect_ordering_bits(len, &comparator, Ordering::is_lt, ctx.allocator().clone())
+            collect_ordering_bits(len, &comparator, Ordering::is_lt, ctx.allocator())
         }
         CompareOperator::Lte => {
-            collect_ordering_bits(len, &comparator, Ordering::is_le, ctx.allocator().clone())
+            collect_ordering_bits(len, &comparator, Ordering::is_le, ctx.allocator())
         }
     };
 
@@ -104,9 +104,9 @@ fn collect_ordering_bits(
     len: usize,
     comparator: &RowComparator,
     predicate: impl Fn(Ordering) -> bool,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBuffer {
-    BitBuffer::collect_bool_in(len, |i| predicate(comparator(i, i)), allocator)
+    BitBuffer::collect_bool_in(len, |i| predicate(comparator(i, i)), allocator.clone())
 }
 
 /// The validity mask of a recursively canonical array.

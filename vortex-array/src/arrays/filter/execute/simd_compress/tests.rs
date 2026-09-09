@@ -12,7 +12,7 @@ use super::super::slice;
 use super::*;
 
 fn filter_slice_by_bitmap<T: Copy>(values: &[T], mask: &MaskValues) -> Option<Buffer<T>> {
-    super::filter_slice_by_bitmap(values, mask, BufferAllocatorRef::statically_allocated())
+    super::filter_slice_by_bitmap(values, mask, &BufferAllocatorRef::statically_allocated())
 }
 
 fn mask_values(mask: &Mask) -> Option<&MaskValues> {
@@ -48,7 +48,7 @@ fn check<T: Copy + PartialEq + std::fmt::Debug>(values: &[T], mask: &Mask) {
         return;
     };
     let expected =
-        slice::filter_slice_by_bitmap(values, mask, BufferAllocatorRef::statically_allocated());
+        slice::filter_slice_by_bitmap(values, mask, &BufferAllocatorRef::statically_allocated());
 
     if let Some(actual) = filter_slice_by_bitmap(values, mask) {
         assert_eq!(actual.as_slice(), expected.as_slice());
@@ -119,8 +119,11 @@ fn avx2_kernels_match_scalar() {
         values: &[T],
         mask: &MaskValues,
     ) {
-        let expected =
-            slice::filter_slice_by_bitmap(values, mask, BufferAllocatorRef::statically_allocated());
+        let expected = slice::filter_slice_by_bitmap(
+            values,
+            mask,
+            &BufferAllocatorRef::statically_allocated(),
+        );
 
         let mut out = vec![T::default(); mask.true_count() + SLACK_BYTES / size_of::<T>()];
         // SAFETY: AVX2 was detected above and the output has a vector of slack.

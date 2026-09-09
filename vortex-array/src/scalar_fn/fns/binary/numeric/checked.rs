@@ -33,7 +33,7 @@ pub(super) fn checked_lanes<S, T, Apply>(
     source: S,
     valid_rows: &Mask,
     apply: Apply,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Result<Buffer<T>, usize>
 where
     S: IndexedSource,
@@ -45,11 +45,11 @@ where
 
     let valid_bits = match valid_rows.bit_buffer() {
         AllOr::All => None,
-        AllOr::None => return Ok(Buffer::zeroed_in(len, allocator)),
+        AllOr::None => return Ok(Buffer::zeroed_in(len, allocator.clone())),
         AllOr::Some(valid_bits) => Some(valid_bits),
     };
 
-    let mut values = BufferMut::<T>::with_capacity_in(len, allocator);
+    let mut values = BufferMut::<T>::with_capacity_in(len, allocator.clone());
     let out = &mut values.spare_capacity_mut()[..len];
     match valid_bits {
         None => source.try_map_into(out, apply)?,

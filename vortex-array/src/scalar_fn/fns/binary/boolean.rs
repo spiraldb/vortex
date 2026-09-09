@@ -250,7 +250,7 @@ pub fn kleene_boolean_buffers(
         &rhs_valid,
         operator,
         nullability,
-        ctx.allocator().clone(),
+        ctx.allocator(),
     )
 }
 
@@ -316,7 +316,7 @@ fn fused_boolean_buffers(
     rhs_validity: &Mask,
     operator: Operator,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ArrayRef> {
     if let Some(result) = fused_boolean_buffers_aligned(
         len,
@@ -326,7 +326,7 @@ fn fused_boolean_buffers(
         rhs_validity,
         operator,
         nullability,
-        allocator.clone(),
+        allocator,
     )? {
         return Ok(result);
     }
@@ -343,7 +343,7 @@ fn fused_boolean_buffers(
                 $rhs_valid_words,
                 operator,
                 nullability,
-                allocator.clone(),
+                allocator,
             )
         };
     }
@@ -410,7 +410,7 @@ fn fused_boolean_buffers_aligned(
     rhs_validity: &Mask,
     operator: Operator,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<Option<ArrayRef>> {
     let Some(lhs_values) = word_source_from_bit_buffer(lhs_values) else {
         return Ok(None);
@@ -461,7 +461,7 @@ fn fused_boolean_word_sources(
     rhs_valid_words: WordSource<'_>,
     operator: Operator,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ArrayRef> {
     match operator {
         Operator::And => fused_boolean_and_word_sources(
@@ -493,13 +493,13 @@ fn fused_boolean_and_word_sources(
     lhs_valid_words: WordSource<'_>,
     rhs_valid_words: WordSource<'_>,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ArrayRef> {
     let n_bytes = len.div_ceil(8);
     let n_words = n_bytes.div_ceil(8);
     let full_bytes = n_bytes - n_bytes % 8;
     let mut values = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
-    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator);
+    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
 
     for byte_offset in (0..full_bytes).step_by(8) {
         let lhs = lhs_words.word_at(byte_offset, 8);
@@ -541,13 +541,13 @@ fn fused_boolean_or_word_sources(
     lhs_valid_words: WordSource<'_>,
     rhs_valid_words: WordSource<'_>,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ArrayRef> {
     let n_bytes = len.div_ceil(8);
     let n_words = n_bytes.div_ceil(8);
     let full_bytes = n_bytes - n_bytes % 8;
     let mut values = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
-    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator);
+    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
 
     for byte_offset in (0..full_bytes).step_by(8) {
         let lhs = lhs_words.word_at(byte_offset, 8);
@@ -615,7 +615,7 @@ fn fused_boolean_words<L, R, LV, RV>(
     rhs_valid_words: RV,
     operator: Operator,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ArrayRef>
 where
     L: Iterator<Item = u64>,
@@ -653,7 +653,7 @@ fn fused_boolean_and_words<L, R, LV, RV>(
     lhs_valid_words: LV,
     rhs_valid_words: RV,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ArrayRef>
 where
     L: Iterator<Item = u64>,
@@ -663,7 +663,7 @@ where
 {
     let n_words = len.div_ceil(64);
     let mut values = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
-    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator);
+    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
 
     for (((lhs, rhs), lhs_valid), rhs_valid) in lhs_words
         .zip(rhs_words)
@@ -690,7 +690,7 @@ fn fused_boolean_or_words<L, R, LV, RV>(
     lhs_valid_words: LV,
     rhs_valid_words: RV,
     nullability: Nullability,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<ArrayRef>
 where
     L: Iterator<Item = u64>,
@@ -700,7 +700,7 @@ where
 {
     let n_words = len.div_ceil(64);
     let mut values = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
-    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator);
+    let mut validity = BufferMut::<u64>::with_capacity_in(n_words, allocator.clone());
 
     for (((lhs, rhs), lhs_valid), rhs_valid) in lhs_words
         .zip(rhs_words)

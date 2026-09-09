@@ -80,7 +80,7 @@ unsafe impl<const N: usize> FixedWidthTakeValue for [u8; N] {}
 pub(crate) fn take_values<T: FixedWidthTakeValue, I: UnsignedPType>(
     values: &[T],
     indices: &[I],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
     #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
     if *HAS_AVX2 {
@@ -144,7 +144,7 @@ pub(crate) fn take<V: FixedWidthArray>(
             V::byte_width(array),
             array.len(),
             indices.as_slice::<I>(),
-            ctx.allocator().clone(),
+            ctx.allocator(),
         )
     })?;
     Ok(Some(
@@ -176,7 +176,7 @@ fn take_contiguous_ranges<V: FixedWidthArray>(
                     starts.as_slice::<S>(),
                     length,
                     output_len,
-                    ctx.allocator().clone(),
+                    ctx.allocator(),
                 )
             })
         }
@@ -191,7 +191,7 @@ fn take_contiguous_ranges<V: FixedWidthArray>(
                         starts.as_slice::<S>(),
                         lengths.as_slice::<L>(),
                         output_len,
-                        ctx.allocator().clone(),
+                        ctx.allocator(),
                     )
                 })
             })

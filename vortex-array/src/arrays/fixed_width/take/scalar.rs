@@ -12,11 +12,11 @@ use crate::dtype::IntegerPType;
 pub(crate) fn take_values_scalar<T: Copy, I: IntegerPType>(
     values: &[T],
     indices: &[I],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
     // The explicit pointer loop keeps the source length in a register and avoids a capacity check
     // for every output value.
-    let mut result = BufferMut::with_capacity_in(indices.len(), allocator);
+    let mut result = BufferMut::with_capacity_in(indices.len(), allocator.clone());
     let result_ptr = result.spare_capacity_mut().as_mut_ptr().cast::<T>();
 
     for (output_index, index) in indices.iter().enumerate() {

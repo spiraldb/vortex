@@ -236,12 +236,7 @@ pub(crate) fn execute_like(
             options.case_insensitive,
             ascii_haystack,
         )?;
-        let bits = eval_pattern(
-            &haystack,
-            &compiled,
-            options.negated,
-            ctx.allocator().clone(),
-        );
+        let bits = eval_pattern(&haystack, &compiled, options.negated, ctx.allocator());
         let validity = values.validity()?.union_nullability(nullability);
         return Ok(BoolArray::new(bits, validity).into_array());
     }
@@ -351,7 +346,7 @@ fn eval_pattern(
     haystack: &ResolvedViews<'_>,
     pattern: &LikePattern,
     negated: bool,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBuffer {
     let len = haystack.views.len();
     match pattern {
@@ -362,7 +357,7 @@ fn eval_pattern(
             BitBuffer::collect_bool_in(
                 len,
                 |i| (haystack.views[i].as_u128() == needle_view) != negated,
-                allocator,
+                allocator.clone(),
             )
         }
         LikePattern::Eq(needle) => {
@@ -377,7 +372,7 @@ fn eval_pattern(
                         view_head(view) == needle_head && haystack.bytes(i)[4..] == needle[4..];
                     matched != negated
                 },
-                allocator,
+                allocator.clone(),
             )
         }
         LikePattern::StartsWith(needle) => {
@@ -405,7 +400,7 @@ fn eval_pattern(
                         && (needle_len <= 4 || haystack.bytes(i)[4..needle_len] == needle[4..]);
                     matched != negated
                 },
-                allocator,
+                allocator.clone(),
             )
         }
         LikePattern::EndsWith(needle) => {
@@ -424,7 +419,7 @@ fn eval_pattern(
                     };
                     matched != negated
                 },
-                allocator,
+                allocator.clone(),
             )
         }
         LikePattern::IEqAscii(needle) => BitBuffer::collect_bool_in(
@@ -435,7 +430,7 @@ fn eval_pattern(
                     && haystack.bytes(i).eq_ignore_ascii_case(needle);
                 matched != negated
             },
-            allocator,
+            allocator.clone(),
         ),
         LikePattern::Contains(finder, needle_len) => BitBuffer::collect_bool_in(
             len,
@@ -445,12 +440,12 @@ fn eval_pattern(
                     view.len() as usize >= *needle_len && finder.find(haystack.bytes(i)).is_some();
                 matched != negated
             },
-            allocator,
+            allocator.clone(),
         ),
         _ => BitBuffer::collect_bool_in(
             len,
             |i| pattern.matches(haystack.bytes(i)) != negated,
-            allocator,
+            allocator.clone(),
         ),
     }
 }

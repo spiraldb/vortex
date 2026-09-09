@@ -55,7 +55,7 @@ pub(super) fn execute(
                 &value_bits,
                 array_indices.as_slice::<A>(),
                 row_indices.as_slice::<R>(),
-                ctx.allocator().clone(),
+                ctx.allocator(),
             )?
         })
     });
@@ -72,7 +72,7 @@ fn gather<A: AsPrimitive<usize>, R: AsPrimitive<usize>>(
     value_bits: &[BitBuffer],
     branches: &[A],
     rows: &[R],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<BitBufferMut> {
     let len = validate_selectors(value_bits, branches, rows)?;
 
@@ -128,7 +128,7 @@ unsafe fn gather_bits<A: AsPrimitive<usize>, R: AsPrimitive<usize>>(
     bits: &[BitBuffer],
     branches: &[A],
     rows: &[R],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBufferMut {
     // SAFETY: `collect_bool` calls this for `i < len`, and the caller guarantees `branches[i]` and
     // `rows[i]` are in bounds for `bits` / the selected buffer.
@@ -138,6 +138,6 @@ unsafe fn gather_bits<A: AsPrimitive<usize>, R: AsPrimitive<usize>>(
             bits.get_unchecked(branches.get_unchecked(i).as_())
                 .value_unchecked(rows.get_unchecked(i).as_())
         },
-        allocator,
+        allocator.clone(),
     )
 }

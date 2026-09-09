@@ -48,17 +48,20 @@ type Kernel = unsafe fn(*const u8, *mut u8, &MaskValues) -> usize;
 /// Filter a slice with a SIMD compress kernel, if one applies.
 ///
 /// Returns `None` when the caller should use a scalar strategy.
+#[inline]
 pub(super) fn filter_slice_by_bitmap<T: Copy>(
     values: &[T],
     mask: &MaskValues,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Option<Buffer<T>> {
     debug_assert_eq!(values.len(), mask.len());
     let kernel = select_kernel::<T, false>(mask)?;
 
     let true_count = mask.true_count();
-    let mut out =
-        BufferMut::<T>::with_capacity_in(true_count + SLACK_BYTES / size_of::<T>(), allocator);
+    let mut out = BufferMut::<T>::with_capacity_in(
+        true_count + SLACK_BYTES / size_of::<T>(),
+        allocator.clone(),
+    );
     // SAFETY: `select_kernel` probed the kernel's target features; `values` holds `mask.len()`
     // elements and the output has capacity for every selected element plus a full vector of
     // slack, so each unmasked store stays in bounds.

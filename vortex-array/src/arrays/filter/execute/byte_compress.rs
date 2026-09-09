@@ -46,7 +46,7 @@ static BYTE_COMPRESS_LUT: &[([u8; 8], u8); 256] = &{
 pub(crate) fn filter_buffer<T: Copy>(
     buffer: impl AsRef<[T]>,
     mask: &MaskValues,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
     let src = buffer.as_ref();
     debug_assert_eq!(src.len(), mask.len());
@@ -54,7 +54,7 @@ pub(crate) fn filter_buffer<T: Copy>(
     let true_count = mask.true_count();
 
     if true_count == 0 {
-        return BufferMut::empty_aligned_in(Alignment::of::<T>(), allocator).freeze();
+        return BufferMut::empty_aligned_in(Alignment::of::<T>(), allocator.clone()).freeze();
     }
 
     let mask_buffer = mask.bit_buffer();
@@ -69,9 +69,9 @@ fn filter_bitpacked<T: Copy>(
     mask_bytes: &[u8],
     mask_offset: usize,
     true_count: usize,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<T> {
-    let mut out = BufferMut::<T>::with_capacity_in(true_count, allocator);
+    let mut out = BufferMut::<T>::with_capacity_in(true_count, allocator.clone());
     let mut write_pos: usize = 0;
 
     if mask_offset == 0 {
@@ -173,7 +173,7 @@ mod tests {
     use super::*;
 
     fn filter_buffer<T: Copy>(buffer: impl AsRef<[T]>, mask: &MaskValues) -> Buffer<T> {
-        super::filter_buffer(buffer, mask, BufferAllocatorRef::statically_allocated())
+        super::filter_buffer(buffer, mask, &BufferAllocatorRef::statically_allocated())
     }
 
     fn mask_values(mask: &Mask) -> &MaskValues {

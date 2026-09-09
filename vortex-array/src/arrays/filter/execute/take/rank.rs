@@ -21,7 +21,7 @@ pub(in crate::arrays::filter) fn translate_indices(
     filter: &Mask,
     indices: &PrimitiveArray,
     indices_validity: Option<&BitBuffer>,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<Buffer<u64>> {
     match_each_integer_ptype!(indices.ptype(), |P| {
         translate_ranks(filter, indices.as_slice::<P>(), indices_validity, allocator)
@@ -70,7 +70,7 @@ pub(in crate::arrays::filter) fn translate_ranks<P: IntegerPType>(
     filter: &Mask,
     ranks: &[P],
     ranks_validity: Option<&BitBuffer>,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<Buffer<u64>> {
     let filtered_len = filter.true_count();
 
@@ -105,14 +105,14 @@ fn translate_ranks_with<P, L>(
     ranks: &[P],
     ranks_validity: Option<&BitBuffer>,
     filtered_len: usize,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
     translate: L,
 ) -> VortexResult<Buffer<u64>>
 where
     P: IntegerPType,
     L: Fn(usize) -> usize,
 {
-    let mut translated = BufferMut::<u64>::with_capacity_in(ranks.len(), allocator);
+    let mut translated = BufferMut::<u64>::with_capacity_in(ranks.len(), allocator.clone());
     let translated_ptr = translated.spare_capacity_mut().as_mut_ptr().cast::<u64>();
 
     for (idx, rank) in ranks.iter().enumerate() {

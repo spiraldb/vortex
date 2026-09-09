@@ -78,10 +78,10 @@ pub(super) fn compare_bool(
             compare_bits(l, r, op)
         }
         (BoolOperand::Array { bits, .. }, BoolOperand::Constant { value, .. }) => {
-            compare_bits_constant(bits, value, op, ctx.allocator().clone())
+            compare_bits_constant(bits, value, op, ctx.allocator())
         }
         (BoolOperand::Constant { value, .. }, BoolOperand::Array { bits, .. }) => {
-            compare_bits_constant(bits, value, op.swap(), ctx.allocator().clone())
+            compare_bits_constant(bits, value, op.swap(), ctx.allocator())
         }
         (BoolOperand::Constant { value: l, .. }, BoolOperand::Constant { value: r, .. }) => {
             // Unreachable through `execute_compare` (constant-constant is folded there), but
@@ -114,7 +114,7 @@ fn compare_bits_constant(
     bits: BitBuffer,
     value: bool,
     op: CompareOperator,
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> BitBuffer {
     let len = bits.len();
     match (op, value) {
@@ -127,10 +127,10 @@ fn compare_bits_constant(
         | (CompareOperator::Lt, true)
         | (CompareOperator::Lte, false) => !bits,
         (CompareOperator::Lt, false) | (CompareOperator::Gt, true) => {
-            BitBuffer::new_unset_in(len, allocator)
+            BitBuffer::new_unset_in(len, allocator.clone())
         }
         (CompareOperator::Lte, true) | (CompareOperator::Gte, false) => {
-            BitBuffer::new_set_in(len, allocator)
+            BitBuffer::new_set_in(len, allocator.clone())
         }
     }
 }

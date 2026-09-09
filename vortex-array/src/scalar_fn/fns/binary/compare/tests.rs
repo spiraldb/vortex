@@ -6,7 +6,6 @@ use std::sync::Arc;
 use allocator_api2::alloc::Global;
 use rstest::rstest;
 use vortex_buffer::BitBuffer;
-use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::buffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -365,7 +364,7 @@ fn execute_compare_test(lhs: ArrayRef, rhs: ArrayRef, op: Operator) -> ArrayRef 
 
 #[test]
 fn comparison_uses_execution_allocator() -> VortexResult<()> {
-    let allocator = BufferAllocatorRef::new(Global);
+    let allocator = vortex_buffer::BufferAllocatorRef::new(Global);
     let mut ctx = array_session()
         .with_allocator(allocator.clone())
         .create_execution_ctx();

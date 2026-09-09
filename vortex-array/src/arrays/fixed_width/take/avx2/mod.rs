@@ -47,14 +47,14 @@ use crate::match_each_unsigned_integer_ptype;
 pub(super) unsafe fn take_avx2<V: FixedWidthTakeValue, I: UnsignedPType>(
     buffer: &[V],
     indices: &[I],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<V> {
     if buffer.is_empty() {
         assert!(
             indices.is_empty(),
             "cannot take a non-empty set of indices from an empty buffer"
         );
-        return BufferMut::empty_aligned_in(Alignment::of::<V>(), allocator).freeze();
+        return BufferMut::empty_aligned_in(Alignment::of::<V>(), allocator.clone()).freeze();
     }
 
     // Dispatch on the gather lane width. The index type must still be concretized to select the
@@ -65,7 +65,7 @@ pub(super) unsafe fn take_avx2<V: FixedWidthTakeValue, I: UnsignedPType>(
                 // SAFETY: `Idx` has the same `PTYPE` as `I`, so this is a no-op reinterpret of the
                 // index slice into the concrete type the gather impl is keyed on.
                 let indices = unsafe { std::mem::transmute::<&[I], &[Idx]>(indices) };
-                exec_take::<V, $lane, Idx, Avx2Gather>(buffer, indices, allocator.clone())
+                exec_take::<V, $lane, Idx, Avx2Gather>(buffer, indices, allocator)
             })
         }};
     }
@@ -101,7 +101,7 @@ const fn i32_gather_can_address(values_len: usize) -> bool {
 fn exec_take<Out, Lane, Idx, Gather>(
     values: &[Out],
     indices: &[Idx],
-    allocator: BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> Buffer<Out>
 where
     Out: FixedWidthTakeValue,
@@ -121,7 +121,7 @@ where
     let mut buffer = BufferMut::<Out>::with_capacity_aligned_in(
         indices_len,
         Alignment::of::<__m256i>(),
-        allocator,
+        allocator.clone(),
     );
     let buf_uninit = buffer.spare_capacity_mut();
 

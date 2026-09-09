@@ -23,7 +23,7 @@ fn take_avx2_if_supported<V: FixedWidthTakeValue, I: UnsignedPType>(
 
     // SAFETY: AVX2 support was detected above, and `FixedWidthTakeValue` guarantees that every
     // byte in the values is initialized.
-    Some(unsafe { take_avx2(values, indices, BufferAllocatorRef::statically_allocated()) })
+    Some(unsafe { take_avx2(values, indices, &BufferAllocatorRef::statically_allocated()) })
 }
 
 fn assert_avx2_take_panics<V, I>(values: &[V], indices: &[I], expected: &str)
@@ -38,7 +38,7 @@ where
     // SAFETY: AVX2 support was detected above, and `FixedWidthTakeValue` guarantees that every
     // byte in the values is initialized.
     let result = catch_unwind(|| unsafe {
-        take_avx2(values, indices, BufferAllocatorRef::statically_allocated())
+        take_avx2(values, indices, &BufferAllocatorRef::statically_allocated())
     });
     let Err(payload) = result else {
         panic!("take should panic for an invalid index");
