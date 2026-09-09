@@ -8,6 +8,7 @@ mod filter;
 mod not;
 pub(crate) mod rules;
 mod slice;
+pub(crate) mod sum;
 mod take;
 pub(crate) mod uncompressed_size;
 

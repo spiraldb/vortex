@@ -4,10 +4,12 @@
 mod grouped;
 
 pub(crate) use grouped::PrimitiveGroupedSumV2EncodingKernel;
+use vortex_buffer::BitBuffer;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
+use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_session::registry::CachedId;
 
@@ -16,6 +18,7 @@ use crate::ArrayView;
 use crate::Canonical;
 use crate::Columnar;
 use crate::ExecutionCtx;
+use crate::IntoArray;
 use crate::aggregate_fn::Accumulator;
 use crate::aggregate_fn::AggregateFnId;
 use crate::aggregate_fn::AggregateFnVTable;
@@ -28,13 +31,17 @@ use crate::aggregate_fn::fns::sum::accumulate_decimal;
 use crate::aggregate_fn::fns::sum::accumulate_primitive;
 use crate::aggregate_fn::fns::sum::make_zero_state;
 use crate::aggregate_fn::fns::sum::multiply_constant;
+use crate::arrays::BoolArray;
+use crate::arrays::PrimitiveArray;
 use crate::arrays::Struct;
+use crate::arrays::StructArray;
 use crate::arrays::struct_::StructArrayExt;
 use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::dtype::FieldName;
 use crate::dtype::FieldNames;
 use crate::dtype::Nullability;
+use crate::dtype::PType;
 use crate::dtype::StructFields;
 use crate::expr::stats::Precision;
 use crate::expr::stats::Stat;
@@ -73,6 +80,84 @@ pub fn sum_v2(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<Scalar> 
 /// any NaN value poisons the sum to NaN.
 #[derive(Clone, Copy, Debug)]
 pub struct SumV2;
+
+impl SumV2 {
+    /// Build an encoding kernel's partial from a widened primitive sum.
+    ///
+    /// `sum` must have dtype `u64`, `i64`, or `f64`. A null sum records overflow. Set `is_empty`
+    /// only when there were no valid inputs. Valid NaNs make the input non-empty even when skipped.
+    pub fn partial_from_sum(sum: Scalar, is_empty: bool) -> VortexResult<Scalar> {
+        validate_primitive_sum_dtype(sum.dtype())?;
+        let sum_dtype = sum.dtype().as_nonnullable();
+        let is_overflow = sum.is_null();
+        let sum = if is_overflow {
+            Scalar::zero_value(&sum_dtype)
+        } else {
+            sum.cast(&sum_dtype)?
+        };
+
+        Ok(Scalar::struct_(
+            sum_v2_partial_dtype(sum_dtype),
+            vec![
+                sum,
+                Scalar::bool(is_overflow, Nullability::NonNullable),
+                Scalar::bool(is_empty && !is_overflow, Nullability::NonNullable),
+            ],
+        ))
+    }
+
+    /// Build grouped encoding-kernel partials from widened primitive sums and empty flags.
+    ///
+    /// Each input has one entry per group. Sums follow the rules in [`Self::partial_from_sum`].
+    /// `is_empty` records groups without valid inputs, including zero-length groups.
+    /// Null groups are represented by `group_validity` and their sum and empty flag are ignored.
+    pub fn partials_from_sums(
+        sums: ArrayRef,
+        is_empty: BitBuffer,
+        group_validity: Mask,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<ArrayRef> {
+        validate_primitive_sum_dtype(sums.dtype())?;
+        vortex_ensure!(
+            sums.len() == group_validity.len() && is_empty.len() == group_validity.len(),
+            "Expected one sum and empty flag per group ({}), got {} sums and {} flags",
+            group_validity.len(),
+            sums.len(),
+            is_empty.len(),
+        );
+        let sum_dtype = sums.dtype().as_nonnullable();
+        let sums = sums.execute::<PrimitiveArray>(ctx)?.into_data_parts();
+        let is_overflow = !sums.validity.execute_mask(group_validity.len(), ctx)?;
+
+        // Overflow and null groups ignore the sum payload, so its physical values can be retained.
+        let sums =
+            PrimitiveArray::from_buffer_handle(sums.buffer, sums.ptype, Validity::NonNullable);
+
+        Ok(StructArray::try_new_with_dtype(
+            vec![
+                sums.into_array(),
+                BoolArray::new(is_overflow.to_bit_buffer(), Validity::NonNullable).into_array(),
+                BoolArray::new(is_empty, Validity::NonNullable).into_array(),
+            ],
+            sum_v2_partial_fields(sum_dtype),
+            group_validity.len(),
+            Validity::from_mask(group_validity, Nullability::Nullable),
+        )?
+        .into_array())
+    }
+}
+
+fn validate_primitive_sum_dtype(dtype: &DType) -> VortexResult<()> {
+    vortex_ensure!(
+        matches!(
+            dtype,
+            DType::Primitive(PType::U64 | PType::I64 | PType::F64, _)
+        ),
+        "Expected a widened primitive sum, got {}",
+        dtype,
+    );
+    Ok(())
+}
 
 impl AggregateFnVTable for SumV2 {
     type Options = NumericalAggregateOpts;

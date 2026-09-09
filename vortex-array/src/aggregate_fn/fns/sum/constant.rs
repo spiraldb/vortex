@@ -50,14 +50,15 @@ pub(crate) fn multiply_constant(
                 }
                 DType::Primitive(PType::I64, _) => {
                     let val = pvalue.cast::<i64>()?;
-                    match i64::try_from(len).ok().and_then(|l| val.checked_mul(l)) {
-                        Some(product) => Scalar::primitive(product, Nullability::Nullable),
-                        None => Scalar::null(return_dtype.as_nullable()),
+                    match i64::try_from(val as i128 * len as i128) {
+                        Ok(product) => Scalar::primitive(product, Nullability::Nullable),
+                        Err(_) => Scalar::null(return_dtype.as_nullable()),
                     }
                 }
                 DType::Primitive(PType::F64, _) => {
                     let val = pvalue.cast::<f64>()?;
-                    Scalar::primitive(val * len as f64, Nullability::Nullable)
+                    // Sums start at positive zero, including groups of negative zeros.
+                    Scalar::primitive(0.0 + val * len as f64, Nullability::Nullable)
                 }
                 _ => vortex_bail!(
                     "Unexpected return dtype for primitive sum: {}",
