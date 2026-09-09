@@ -486,9 +486,11 @@ impl UniqueBytes {
             return false;
         };
         let old_offset = self.ptr.as_ptr().addr() - self.base.as_ptr().addr();
-        if old_offset > layout.size() / 2 {
-            // Most of the region lies behind the window, given up by `advance`. Growing would
-            // carry all of it along; a fresh region copies only the live bytes.
+        // The window sits at the alignment shift unless `advance` moved it further in. When most
+        // of the region has been given up that way, growing would carry it all along; a fresh
+        // region copies only the live bytes.
+        let advanced = old_offset.saturating_sub(shift(self.base, alignment));
+        if advanced > layout.size() / 2 {
             return false;
         }
 

@@ -288,7 +288,6 @@ mod tests {
     use allocator_api2::alloc::AllocError;
     use allocator_api2::alloc::Allocator;
     use allocator_api2::alloc::Global;
-    use vortex_buffer::BufferAllocatorExt;
     use vortex_buffer::BufferAllocatorRef;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
