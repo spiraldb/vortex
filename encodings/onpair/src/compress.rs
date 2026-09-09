@@ -55,16 +55,18 @@ pub fn onpair_compress(
     match mask.bit_buffer() {
         AllOr::All => {
             for view in views {
-                uncompressed_lengths.push(view.len());
-                total_bytes += view.len() as usize;
+                let length = view.len();
+                uncompressed_lengths.push(length);
+                total_bytes += length as usize;
             }
         }
         AllOr::None => unreachable!("all-null input handled above"),
         AllOr::Some(validity) => {
             for (view, valid) in views.iter().zip(validity.iter()) {
                 if valid {
-                    uncompressed_lengths.push(view.len());
-                    total_bytes += view.len() as usize;
+                    let length = view.len();
+                    uncompressed_lengths.push(length);
+                    total_bytes += length as usize;
                 } else {
                     uncompressed_lengths.push(0);
                 }
