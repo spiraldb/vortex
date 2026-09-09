@@ -21,6 +21,7 @@ pub fn enable_all_registered_array_encodings(session: &VortexSession) {
     editions
         .declare_edition(Edition {
             id: TEST_EDITION,
+            unstable: false,
             min_library_version: None,
         })
         .map_err(|error| vortex_err!("{error}"))

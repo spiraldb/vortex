@@ -139,6 +139,6 @@ fn vtable_serde_requires_plugin() -> VortexResult<()> {
     )?;
     let session = vortex_array::array_session();
     session.arrays().register(FoR);
-    assert!(session.array_serialize(&array.into_array()).is_err());
+    assert!(session.array_serialize(&array.into_array())?.is_none());
     Ok(())
 }
