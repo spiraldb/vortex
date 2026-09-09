@@ -3,113 +3,70 @@
 
 //! Primitive sums over run-end encoded arrays.
 //!
-//! The kernels check validity before decoding run ends and values, then sum each valid value
-//! weighted by its run length. Grouped sums intersect runs with each group's range.
-//! Decimal inputs use the fallback.
-//! Float multiplication can round differently from repeated addition, as with constant sums.
+//! Empty arrays and all-null inputs return before decoding the children. Otherwise, each valid
+//! run contributes its value multiplied by the length included in the input.
+//!
+//! Whole-array sums visit one range, clipped at the array's slice boundaries. Fixed-size groups
+//! share a forward cursor. List-view groups can overlap or arrive out of order, so each group
+//! locates its first run independently. The shared reduction in [`runs`] clips intersecting runs.
+//!
+//! Decimal inputs use the fallback. Floating-point multiplication can round differently from
+//! repeated addition, as with constant sums.
 
-mod primitive;
+mod grouped;
+mod runs;
+mod whole;
 
-use vortex_array::ArrayRef;
+use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
-use vortex_array::IntoArray;
 use vortex_array::aggregate_fn::AggregateFnRef;
-use vortex_array::aggregate_fn::GroupedArray;
-use vortex_array::aggregate_fn::fns::sum::Sum;
 use vortex_array::aggregate_fn::fns::sum_v2::SumV2;
-use vortex_array::aggregate_fn::kernels::DynAggregateKernel;
-use vortex_array::aggregate_fn::kernels::DynGroupedAggregateKernel;
-use vortex_array::arrays::ConstantArray;
-use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::DType;
-use vortex_array::dtype::Nullability::Nullable;
 use vortex_array::scalar::Scalar;
-use vortex_array::validity::Validity;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_mask::Mask;
 
-use self::primitive::RunEndSums;
 use crate::RunEnd;
+use crate::RunEndArrayExt;
+use crate::RunEndArraySlotsExt;
 
 /// Whole-array and grouped primitive sum kernels for [`RunEnd`].
 #[derive(Debug)]
 pub(crate) struct RunEndSumKernel;
 
-impl DynAggregateKernel for RunEndSumKernel {
-    fn aggregate(
-        &self,
-        aggregate_fn: &AggregateFnRef,
-        batch: &ArrayRef,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<Option<Scalar>> {
-        let Some(options) = aggregate_fn
-            .as_opt::<Sum>()
-            .or_else(|| aggregate_fn.as_opt::<SumV2>())
-        else {
-            return Ok(None);
-        };
-        let Some(array) = batch.as_opt::<RunEnd>() else {
-            return Ok(None);
-        };
-        if !batch.dtype().is_primitive() {
-            return Ok(None);
-        }
-
-        let Some(sums) = RunEndSums::new(array, ctx, options.skip_nans)? else {
-            return Ok(Some(empty_partial(aggregate_fn, batch.dtype())?));
-        };
-        let (sum, is_empty) = sums.sum(0..batch.len());
-        Ok(Some(partial_scalar(aggregate_fn, sum, is_empty)?))
-    }
+struct RunEndInputs {
+    ends: PrimitiveArray,
+    values: PrimitiveArray,
+    validity: Mask,
+    offset: usize,
 }
 
-impl DynGroupedAggregateKernel for RunEndSumKernel {
-    fn grouped_aggregate(
-        &self,
-        aggregate_fn: &AggregateFnRef,
-        groups: &GroupedArray,
-        ctx: &mut ExecutionCtx,
-    ) -> VortexResult<Option<ArrayRef>> {
-        let Some(options) = aggregate_fn
-            .as_opt::<Sum>()
-            .or_else(|| aggregate_fn.as_opt::<SumV2>())
-        else {
-            return Ok(None);
-        };
-        let Some(elements) = groups.elements().as_opt::<RunEnd>() else {
-            return Ok(None);
-        };
-        if !groups.elements().dtype().is_primitive() {
+impl RunEndInputs {
+    /// Skip materializing the children when the array is empty or every run is null.
+    fn new(array: ArrayView<'_, RunEnd>, ctx: &mut ExecutionCtx) -> VortexResult<Option<Self>> {
+        if array.is_empty() {
             return Ok(None);
         }
 
-        let validity = groups.group_validity(ctx)?;
-        let sums = if validity.all_false() {
-            None
-        } else {
-            RunEndSums::new(elements, ctx, options.skip_nans)?
-        };
-        let Some(sums) = sums else {
-            let partial = empty_partial(aggregate_fn, groups.elements().dtype())?;
-            let partials = ConstantArray::new(partial, groups.len()).into_array();
-            let validity = Validity::from_mask(validity, Nullable).to_array(groups.len());
-            return Ok(Some(partials.mask(validity)?));
-        };
-
-        let ranges = groups.group_ranges(ctx)?;
-        let (results, empty_groups) = sums.grouped_sum(&ranges, &validity);
-
-        let results = results.into_array();
-        if aggregate_fn.is::<SumV2>() {
-            Ok(Some(SumV2::partials_from_sums(
-                results,
-                empty_groups,
-                validity,
-                ctx,
-            )?))
-        } else {
-            Ok(Some(results))
+        let validity = array
+            .values()
+            .validity()?
+            .execute_mask(array.values().len(), ctx)?;
+        if validity.all_false() {
+            return Ok(None);
         }
+
+        let ends = array.ends().clone().execute::<PrimitiveArray>(ctx)?;
+        let values = array.values().clone().execute::<PrimitiveArray>(ctx)?;
+
+        Ok(Some(Self {
+            ends,
+            values,
+            validity,
+            offset: array.offset(),
+        }))
     }
 }
 
