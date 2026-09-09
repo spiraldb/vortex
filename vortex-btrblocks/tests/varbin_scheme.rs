@@ -17,6 +17,8 @@ use vortex_array::dtype::Nullability;
 use vortex_btrblocks::BtrBlocksCompressorBuilder;
 use vortex_btrblocks::SchemeExt;
 use vortex_btrblocks::schemes::binary::VarBinScheme;
+#[cfg(feature = "unstable_encodings")]
+use vortex_btrblocks::schemes::string::OnPairScheme;
 use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
@@ -111,10 +113,14 @@ fn varbin_scheme_shrinks_binary() -> VortexResult<()> {
     Ok(())
 }
 
-/// Same bytes, two dtypes: Binary takes the `VarBinScheme` path, Utf8 takes FSST.
+/// Same bytes, two dtypes: FSST compresses bytes rather than codepoints, so the dtype must not
+/// change the result. `OnPairScheme` only matches utf8 and would otherwise win the utf8 column.
 #[test]
 fn fsst_versus_varbin_on_identical_bytes() -> VortexResult<()> {
-    let compressor = BtrBlocksCompressorBuilder::default().build();
+    let builder = BtrBlocksCompressorBuilder::default();
+    #[cfg(feature = "unstable_encodings")]
+    let builder = builder.exclude_schemes([OnPairScheme.id()]);
+    let compressor = builder.build();
     let mut seed = 99u64;
 
     let shared_prefix: Vec<String> = (0..N).map(|i| format!("PREFIX_{i:09}")).collect();
