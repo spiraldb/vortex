@@ -72,6 +72,9 @@ pub fn sum_canonical_array(
     }
 }
 
+/// Sum positive and negative values separately to bound every possible partial sum.
+/// Reject overflowing bounds with mixed signs, since cancellation can make overflow depend on
+/// grouping or addition order.
 fn accumulate<T>(
     array: &ArrayRef,
     fits: impl Fn(&T) -> bool,
@@ -81,21 +84,20 @@ fn accumulate<T>(
 where
     T: BigCast + Copy + Zero + CheckedAdd + PartialOrd,
 {
-    let mut positive = Some(T::zero());
-    let mut negative = Some(T::zero());
-    for value in native_values::<T>(array, ctx)? {
-        let subtotal = if value < T::zero() {
-            &mut negative
-        } else {
-            &mut positive
-        };
-        *subtotal = subtotal
-            .and_then(|subtotal| subtotal.checked_add(&value))
-            .filter(&fits);
-    }
+    let values = native_values::<T>(array, ctx)?;
+    let positive = values
+        .iter()
+        .copied()
+        .filter(|&value| value > T::zero())
+        .try_fold(T::zero(), |sum, value| sum.checked_add(&value))
+        .filter(&fits);
+    let negative = values
+        .iter()
+        .copied()
+        .filter(|&value| value < T::zero())
+        .try_fold(T::zero(), |sum, value| sum.checked_add(&value))
+        .filter(&fits);
 
-    // Every partial sum lies between these sign-separated bounds. If either bound overflows,
-    // an opposite-sign value could cancel it before another grouping detects the overflow.
     let value = match (positive, negative) {
         (Some(positive), Some(negative)) => positive.checked_add(&negative),
         (None, Some(negative)) if negative.is_zero() => None,
