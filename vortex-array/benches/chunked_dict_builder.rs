@@ -9,7 +9,7 @@ use rand::distr::StandardUniform;
 use vortex_array::Canonical;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::dict_test::gen_dict_primitive_chunks;
-use vortex_array::builders::builder_with_capacity_in_ref;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::NativePType;
 use vortex_error::VortexExpect;
 use vortex_session::VortexSession;
@@ -44,7 +44,7 @@ fn chunked_dict_primitive_canonical_into<T: NativePType>(
         .with_inputs(|| (&chunk, SESSION.create_execution_ctx()))
         .bench_refs(|(chunk, ctx)| {
             let mut builder =
-                builder_with_capacity_in_ref(chunk.dtype(), len * chunk_count, ctx.allocator());
+                builder_with_capacity_in(chunk.dtype(), len * chunk_count, ctx.allocator());
             chunk
                 .append_to_builder(builder.as_mut(), ctx)
                 .vortex_expect("append failed");

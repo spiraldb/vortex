@@ -24,7 +24,7 @@ use crate::arrays::chunked::ChunkedArrayExt;
 use crate::arrays::dict_test::gen_dict_primitive_chunks;
 use crate::arrays::struct_::StructArrayExt;
 use crate::assert_arrays_eq;
-use crate::builders::builder_with_capacity_in_ref;
+use crate::builders::builder_with_capacity_in;
 use crate::dtype::DType;
 use crate::dtype::Nullability;
 use crate::dtype::PType;
@@ -55,7 +55,7 @@ fn builder_kernel_path_canonicalizes_primitive_chunks() {
     let len = array.len();
 
     let builder =
-        builder_with_capacity_in_ref(&dtype, len, vortex_buffer::BufferAllocatorRef::static_ref());
+        builder_with_capacity_in(&dtype, len, vortex_buffer::BufferAllocatorRef::static_ref());
     // Clone the array into the builder path — the test also holds `array` so refcount > 1 on
     // entry, which previously caused `take_slot_unchecked` to silently keep slots populated.
     let mut builder = execute_into_builder(array.clone(), builder, &mut ctx).unwrap();
@@ -95,7 +95,7 @@ fn builder_kernel_nested_chunked_of_chunked() {
     let dtype = outer.dtype().clone();
     let len = outer.len();
     let builder =
-        builder_with_capacity_in_ref(&dtype, len, vortex_buffer::BufferAllocatorRef::static_ref());
+        builder_with_capacity_in(&dtype, len, vortex_buffer::BufferAllocatorRef::static_ref());
     let mut builder = execute_into_builder(outer, builder, &mut ctx).unwrap();
     let output = builder.finish();
 
@@ -122,21 +122,15 @@ fn builder_kernel_path_repeated_shared_chunked_dict_execution() {
         .into_array();
 
     let first = {
-        let builder = builder_with_capacity_in_ref(
-            &dtype,
-            len,
-            vortex_buffer::BufferAllocatorRef::static_ref(),
-        );
+        let builder =
+            builder_with_capacity_in(&dtype, len, vortex_buffer::BufferAllocatorRef::static_ref());
         let mut builder = execute_into_builder(array.clone(), builder, &mut ctx).unwrap();
         builder.finish()
     };
 
     let second = {
-        let builder = builder_with_capacity_in_ref(
-            &dtype,
-            len,
-            vortex_buffer::BufferAllocatorRef::static_ref(),
-        );
+        let builder =
+            builder_with_capacity_in(&dtype, len, vortex_buffer::BufferAllocatorRef::static_ref());
         let mut builder = execute_into_builder(array, builder, &mut ctx).unwrap();
         builder.finish()
     };
@@ -187,7 +181,7 @@ fn execute_path_nested_chunked_dict_of_dict_into_canonical() {
     let keep_alive = outer.clone();
 
     let expected = {
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             outer.dtype(),
             outer.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

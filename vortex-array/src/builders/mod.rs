@@ -15,13 +15,13 @@
 //! ## Example:
 //!
 //! ```
-//! use vortex_array::builders::{ArrayBuilder, builder_with_capacity_in_ref};
+//! use vortex_array::builders::{ArrayBuilder, builder_with_capacity_in};
 //! use vortex_array::dtype::{DType, Nullability};
 //! use vortex_array::memory::BufferAllocatorRef;
 //! use vortex_array::{VortexSessionExecute, array_session};
 //!
 //! // Create a new builder for string data.
-//! let mut builder = builder_with_capacity_in_ref(&DType::Utf8(Nullability::NonNullable), 4, BufferAllocatorRef::static_ref());
+//! let mut builder = builder_with_capacity_in(&DType::Utf8(Nullability::NonNullable), 4, BufferAllocatorRef::static_ref());
 //!
 //! builder.append_scalar(&"a".into()).unwrap();
 //! builder.append_scalar(&"b".into()).unwrap();
@@ -362,21 +362,9 @@ macro_rules! __match_each_map_builder_size {
 }
 
 /// Construct a new canonical builder for the given [`DType`].
-#[deprecated(note = "use `builder_with_capacity_in_ref` with an explicit allocator")]
+#[deprecated(note = "use `builder_with_capacity_in` with an explicit allocator")]
 pub fn builder_with_capacity(dtype: &DType, capacity: usize) -> Box<dyn ArrayBuilder> {
-    builder_with_capacity_in_ref(dtype, capacity, BufferAllocatorRef::static_ref())
-}
-
-/// Construct a new canonical builder with an owned allocator reference.
-///
-/// Prefer [`builder_with_capacity_in_ref`] when borrowing an allocator already in scope.
-#[deprecated(note = "use `builder_with_capacity_in_ref` with a borrowed allocator")]
-pub fn builder_with_capacity_in(
-    allocator: BufferAllocatorRef,
-    dtype: &DType,
-    capacity: usize,
-) -> Box<dyn ArrayBuilder> {
-    builder_with_capacity_in_ref(dtype, capacity, &allocator)
+    builder_with_capacity_in(dtype, capacity, BufferAllocatorRef::static_ref())
 }
 
 /// Construct a new canonical builder using `allocator`.
@@ -384,13 +372,13 @@ pub fn builder_with_capacity_in(
 /// # Example
 ///
 /// ```
-/// use vortex_array::builders::{ArrayBuilder, builder_with_capacity_in_ref};
+/// use vortex_array::builders::{ArrayBuilder, builder_with_capacity_in};
 /// use vortex_array::dtype::{DType, Nullability};
 /// use vortex_array::memory::BufferAllocatorRef;
 /// use vortex_array::{VortexSessionExecute, array_session};
 ///
 /// // Create a new builder for string data.
-/// let mut builder = builder_with_capacity_in_ref(&DType::Utf8(Nullability::NonNullable), 4, BufferAllocatorRef::static_ref());
+/// let mut builder = builder_with_capacity_in(&DType::Utf8(Nullability::NonNullable), 4, BufferAllocatorRef::static_ref());
 ///
 /// builder.append_scalar(&"a".into()).unwrap();
 /// builder.append_scalar(&"b".into()).unwrap();
@@ -405,7 +393,7 @@ pub fn builder_with_capacity_in(
 /// assert_eq!(strings.execute_scalar(2, &mut ctx).unwrap(), "c".into());
 /// assert_eq!(strings.execute_scalar(3, &mut ctx).unwrap(), "d".into());
 /// ```
-pub fn builder_with_capacity_in_ref(
+pub fn builder_with_capacity_in(
     dtype: &DType,
     capacity: usize,
     allocator: &BufferAllocatorRef,

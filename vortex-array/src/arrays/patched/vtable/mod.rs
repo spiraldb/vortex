@@ -365,7 +365,7 @@ mod tests {
     use crate::arrays::patched::PatchedSlots;
     use crate::arrays::patched::PatchedSlotsView;
     use crate::assert_arrays_eq;
-    use crate::builders::builder_with_capacity_in_ref;
+    use crate::builders::builder_with_capacity_in;
     use crate::patches::Patches;
     use crate::serde::SerializeOptions;
     use crate::serde::SerializedArray;
@@ -457,7 +457,7 @@ mod tests {
             .unwrap()
             .into_array();
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -496,7 +496,7 @@ mod tests {
             .slice(3..1024)
             .unwrap();
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -535,7 +535,7 @@ mod tests {
             .unwrap()
             .into_array();
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

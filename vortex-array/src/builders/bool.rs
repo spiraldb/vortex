@@ -174,7 +174,7 @@ mod tests {
     use crate::builders::ArrayBuilder;
     use crate::builders::BoolBuilder;
     use crate::builders::bool::BoolArray;
-    use crate::builders::builder_with_capacity_in_ref;
+    use crate::builders::builder_with_capacity_in;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::scalar::Scalar;
@@ -203,7 +203,7 @@ mod tests {
         let chunk = make_opt_bool_chunks(len, chunk_count);
 
         let mut ctx = array_session().create_execution_ctx();
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             chunk.dtype(),
             len * chunk_count,
             BufferAllocatorRef::static_ref(),

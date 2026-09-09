@@ -19,7 +19,7 @@ use vortex_array::arrays::ConstantArray;
 use vortex_array::builders::ArrayBuilder;
 use vortex_array::builders::VarBinBuilder;
 use vortex_array::builders::VarBinViewBuilder;
-use vortex_array::builders::builder_with_capacity_in_ref;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_session::VortexSession;
@@ -50,7 +50,7 @@ fn chunked_bool_canonical_into(bencher: Bencher, (len, chunk_count): (usize, usi
         .with_inputs(|| (&chunk, SESSION.create_execution_ctx()))
         .bench_refs(|(chunk, ctx)| {
             let mut builder =
-                builder_with_capacity_in_ref(chunk.dtype(), len * chunk_count, ctx.allocator());
+                builder_with_capacity_in(chunk.dtype(), len * chunk_count, ctx.allocator());
             chunk
                 .append_to_builder(builder.as_mut(), ctx)
                 .vortex_expect("append failed");
@@ -66,7 +66,7 @@ fn chunked_opt_bool_canonical_into(bencher: Bencher, (len, chunk_count): (usize,
         .with_inputs(|| (&chunk, SESSION.create_execution_ctx()))
         .bench_refs(|(chunk, ctx)| {
             let mut builder =
-                builder_with_capacity_in_ref(chunk.dtype(), len * chunk_count, ctx.allocator());
+                builder_with_capacity_in(chunk.dtype(), len * chunk_count, ctx.allocator());
             chunk
                 .append_to_builder(builder.as_mut(), ctx)
                 .vortex_expect("append failed");
@@ -201,7 +201,7 @@ fn chunked_constant_i32_append_to_builder(bencher: Bencher, (len, chunk_count): 
         .with_inputs(|| (&chunk, SESSION.create_execution_ctx()))
         .bench_refs(|(chunk, ctx)| {
             let mut builder =
-                builder_with_capacity_in_ref(chunk.dtype(), len * chunk_count, ctx.allocator());
+                builder_with_capacity_in(chunk.dtype(), len * chunk_count, ctx.allocator());
             chunk
                 .append_to_builder(builder.as_mut(), ctx)
                 .vortex_expect("append failed");
@@ -226,7 +226,7 @@ fn chunked_constant_utf8_append_to_builder(
         .with_inputs(|| (&chunk, SESSION.create_execution_ctx()))
         .bench_refs(|(chunk, ctx)| {
             let mut builder =
-                builder_with_capacity_in_ref(chunk.dtype(), len * chunk_count, ctx.allocator());
+                builder_with_capacity_in(chunk.dtype(), len * chunk_count, ctx.allocator());
             chunk
                 .append_to_builder(builder.as_mut(), ctx)
                 .vortex_expect("append failed");

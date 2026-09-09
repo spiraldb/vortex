@@ -16,7 +16,7 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::builders::ArrayBuilder;
 use vortex_array::builders::BoolBuilder;
-use vortex_array::builders::builder_with_capacity_in_ref;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldName;
 use vortex_array::dtype::Nullability;
@@ -219,7 +219,7 @@ fn stats_builder_with_capacity(
     capacity: usize,
     max_length: usize,
 ) -> Box<dyn StatsArrayBuilder> {
-    let values_builder = builder_with_capacity_in_ref(
+    let values_builder = builder_with_capacity_in(
         dtype,
         capacity,
         vortex_buffer::BufferAllocatorRef::static_ref(),

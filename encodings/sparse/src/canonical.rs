@@ -37,7 +37,7 @@ use vortex_array::builders::FixedSizeListBuilder;
 use vortex_array::builders::ListViewBuilder;
 use vortex_array::builders::VarBinBuilder;
 use vortex_array::builders::VarBinViewBuilder;
-use vortex_array::builders::builder_with_capacity_in_ref;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::DecimalType;
@@ -482,8 +482,7 @@ fn list_scalar_elements_array(
     allocator: &vortex_buffer::BufferAllocatorRef,
 ) -> Option<ArrayRef> {
     list.elements().map(|elements| {
-        let mut builder =
-            builder_with_capacity_in_ref(list.element_dtype(), elements.len(), allocator);
+        let mut builder = builder_with_capacity_in(list.element_dtype(), elements.len(), allocator);
         for element in elements {
             builder
                 .append_scalar(&element)
@@ -640,7 +639,7 @@ fn fixed_size_list_fill_tile(
         Ok(uniform) => ConstantArray::new(uniform.clone(), list_size as usize).into_array(),
         Err(_) => {
             let mut builder =
-                builder_with_capacity_in_ref(fill.element_dtype(), elements.len(), allocator);
+                builder_with_capacity_in(fill.element_dtype(), elements.len(), allocator);
             for element in &elements {
                 builder
                     .append_scalar(element)

@@ -39,7 +39,7 @@ use crate::builders::ListViewBuilder;
 use crate::builders::NullBuilder;
 use crate::builders::PrimitiveBuilder;
 use crate::builders::VarBinViewBuilder;
-use crate::builders::builder_with_capacity_in_ref;
+use crate::builders::builder_with_capacity_in;
 use crate::canonical::Canonical;
 use crate::dtype::DType;
 use crate::dtype::OffsetBuilderPType;
@@ -327,7 +327,7 @@ fn append_repeated_list_run<O: OffsetBuilderPType, S: OffsetBuilderPType>(
     };
 
     let mut elements_builder =
-        builder_with_capacity_in_ref(scalar.element_dtype(), elements.len(), ctx.allocator());
+        builder_with_capacity_in(scalar.element_dtype(), elements.len(), ctx.allocator());
     for element in &elements {
         elements_builder.append_scalar(element)?;
     }
@@ -364,11 +364,8 @@ fn append_constant_fixed_size_list_run(
     let tile = match elements.iter().all_equal_value() {
         Ok(uniform) => ConstantArray::new(uniform.clone(), elements.len()).into_array(),
         Err(_) => {
-            let mut tile_builder = builder_with_capacity_in_ref(
-                builder.element_dtype(),
-                elements.len(),
-                ctx.allocator(),
-            );
+            let mut tile_builder =
+                builder_with_capacity_in(builder.element_dtype(), elements.len(), ctx.allocator());
             for element in &elements {
                 tile_builder.append_scalar(element)?;
             }
@@ -440,7 +437,7 @@ mod tests {
     use crate::assert_arrays_eq;
     use crate::builders::ArrayBuilder;
     use crate::builders::ListBuilder;
-    use crate::builders::builder_with_capacity_in_ref;
+    use crate::builders::builder_with_capacity_in;
     use crate::dtype::DType;
     use crate::dtype::Nullability;
     use crate::dtype::PType;
@@ -454,7 +451,7 @@ mod tests {
         let mut ctx = crate::array_session().create_execution_ctx();
 
         let expected = constant_canonicalize(array.as_view(), &mut ctx)?.into_array();
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -594,7 +591,7 @@ mod tests {
         );
         let array = ConstantArray::new(scalar, 1_000);
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -689,7 +686,7 @@ mod tests {
         );
         let array = ConstantArray::new(scalar, 1_000);
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -743,7 +740,7 @@ mod tests {
         );
         let array = ConstantArray::new(scalar, 1_000);
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),
@@ -778,7 +775,7 @@ mod tests {
         let scalar = Scalar::extension::<Date>(TimeUnit::Days, Scalar::from(Some(42i32)));
         let array = ConstantArray::new(scalar, 1_000);
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

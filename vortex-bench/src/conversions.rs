@@ -34,7 +34,7 @@ use vortex::array::arrays::Struct;
 use vortex::array::arrays::StructArray;
 use vortex::array::arrays::VarBinViewArray;
 use vortex::array::arrays::struct_::StructArrayExt;
-use vortex::array::builders::builder_with_capacity_in_ref;
+use vortex::array::builders::builder_with_capacity_in;
 use vortex::array::stream::ArrayStreamAdapter;
 use vortex::array::stream::ArrayStreamExt;
 use vortex::compressor::BtrBlocksCompressorBuilder;
@@ -156,7 +156,7 @@ fn record_batch_to_vortex(batch: RecordBatch) -> VortexResult<ArrayRef> {
     let schema = batch.schema();
     let chunk = SESSION.arrow().from_arrow_record_batch(batch, &schema)?;
     let mut ctx = VortexSession::default().create_execution_ctx();
-    let mut builder = builder_with_capacity_in_ref(chunk.dtype(), chunk.len(), ctx.allocator());
+    let mut builder = builder_with_capacity_in(chunk.dtype(), chunk.len(), ctx.allocator());
 
     // Canonicalize the chunk.
     chunk.append_to_builder(builder.as_mut(), &mut ctx)?;

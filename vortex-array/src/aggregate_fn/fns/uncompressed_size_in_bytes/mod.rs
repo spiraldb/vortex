@@ -361,7 +361,7 @@ mod tests {
     use crate::arrays::VarBinViewArray;
     use crate::arrays::VariantArray;
     use crate::arrays::listview::ListViewRebuildMode;
-    use crate::builders::builder_with_capacity_in_ref;
+    use crate::builders::builder_with_capacity_in;
     use crate::dtype::DType;
     use crate::dtype::DecimalDType;
     use crate::dtype::FieldNames;
@@ -386,7 +386,7 @@ mod tests {
     /// the top level - recursively canonicalize it before measuring.
     fn materialized_uncompressed_size_in_bytes(array: &ArrayRef) -> u64 {
         let mut ctx = array_session().create_execution_ctx();
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             array.dtype(),
             array.len(),
             vortex_buffer::BufferAllocatorRef::static_ref(),

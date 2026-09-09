@@ -11,7 +11,7 @@ use vortex_array::ExecutionCtx;
 use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::arrays::StructArray;
 use vortex_array::builders::ArrayBuilder;
-use vortex_array::builders::builder_with_capacity_in_ref;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldName;
 use vortex_array::scalar::Scalar;
@@ -129,7 +129,7 @@ impl AggregateStatsArrayBuilder {
         Self {
             aggregate_fn,
             dtype: dtype.clone(),
-            builder: builder_with_capacity_in_ref(
+            builder: builder_with_capacity_in(
                 dtype,
                 capacity,
                 vortex_buffer::BufferAllocatorRef::static_ref(),

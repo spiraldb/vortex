@@ -21,7 +21,7 @@ use vortex_array::arrays::fixed_size_list::FixedSizeListArrayExt;
 use vortex_array::arrays::fixed_size_list::FixedSizeListArraySlotsExt;
 use vortex_array::arrays::listview::ListViewArraySlotsExt;
 use vortex_array::arrays::struct_::StructArrayExt;
-use vortex_array::builders::builder_with_capacity_in_ref;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::Nullability;
 use vortex_array::match_each_decimal_value_type;
 use vortex_array::validity::Validity;
@@ -142,8 +142,7 @@ pub fn mask_canonical_array(
         }
         Canonical::Map(array) => {
             let result_dtype = array.dtype().as_nullable();
-            let mut builder =
-                builder_with_capacity_in_ref(&result_dtype, array.len(), ctx.allocator());
+            let mut builder = builder_with_capacity_in(&result_dtype, array.len(), ctx.allocator());
             for idx in 0..array.len() {
                 if mask.value(idx) {
                     builder.append_scalar(&array.execute_scalar(idx, ctx)?.cast(&result_dtype)?)?;

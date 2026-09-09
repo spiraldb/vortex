@@ -299,7 +299,7 @@ mod test {
     use crate::arrays::VarBinViewArray;
     use crate::assert_arrays_eq;
     use crate::builders::VarBinBuilder;
-    use crate::builders::builder_with_capacity_in_ref;
+    use crate::builders::builder_with_capacity_in;
     use crate::dtype::DType;
     use crate::dtype::NativePType;
     use crate::dtype::Nullability::NonNullable;
@@ -470,7 +470,7 @@ mod test {
         let chunk_count = 2;
         let array = make_dict_primitive_chunks::<u64, u64>(len, 2, chunk_count);
 
-        let mut builder = builder_with_capacity_in_ref(
+        let mut builder = builder_with_capacity_in(
             &DType::Primitive(PType::U64, NonNullable),
             len * chunk_count,
             ctx.allocator(),

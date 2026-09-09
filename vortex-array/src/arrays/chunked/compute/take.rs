@@ -30,7 +30,7 @@ use crate::arrays::piecewise_sequence::constant_unsigned_usize;
 use crate::arrays::piecewise_sequence::maybe_contiguous_slices;
 use crate::arrays::primitive::PrimitiveArrayExt;
 use crate::builders::ArrayBuilder;
-use crate::builders::builder_with_capacity_in_ref;
+use crate::builders::builder_with_capacity_in;
 use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::dtype::PType;
@@ -51,7 +51,7 @@ impl ChunkFlattener {
         if dtype.is_nested() {
             Self::Chunks(Vec::new())
         } else {
-            Self::Builder(builder_with_capacity_in_ref(dtype, capacity, allocator))
+            Self::Builder(builder_with_capacity_in(dtype, capacity, allocator))
         }
     }
 

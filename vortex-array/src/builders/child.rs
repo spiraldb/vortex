@@ -10,7 +10,7 @@ use crate::ExecutionCtx;
 use crate::IntoArray;
 use crate::arrays::ChunkedArray;
 use crate::builders::ArrayBuilder;
-use crate::builders::builder_with_capacity_in_ref;
+use crate::builders::builder_with_capacity_in;
 use crate::dtype::DType;
 use crate::scalar::Scalar;
 
@@ -48,7 +48,7 @@ impl ChildBuilder {
             dtype: dtype.clone(),
             chunks: Vec::new(),
             chunks_len: 0,
-            pending: builder_with_capacity_in_ref(dtype, capacity, allocator),
+            pending: builder_with_capacity_in(dtype, capacity, allocator),
         }
     }
 

@@ -443,7 +443,7 @@ mod tests {
     use crate::assert_arrays_eq;
     use crate::builders::ArrayBuilder;
     use crate::builders::ListViewBuilder;
-    use crate::builders::builder_with_capacity_in_ref;
+    use crate::builders::builder_with_capacity_in;
     use crate::builders::list::ListArray;
     use crate::builders::list::ListBuilder;
     use crate::dtype::DType;
@@ -666,11 +666,8 @@ mod tests {
 
         // `builder_with_capacity` produces a `ListViewBuilder` for `DType::List`; appending the
         // `List`-encoded array must dispatch into it instead of bailing.
-        let mut listview_builder = builder_with_capacity_in_ref(
-            list.dtype(),
-            list.len(),
-            BufferAllocatorRef::static_ref(),
-        );
+        let mut listview_builder =
+            builder_with_capacity_in(list.dtype(), list.len(), BufferAllocatorRef::static_ref());
         list.append_to_builder(listview_builder.as_mut(), &mut ctx)?;
         assert_arrays_eq!(listview_builder.finish(), list, &mut ctx);
 

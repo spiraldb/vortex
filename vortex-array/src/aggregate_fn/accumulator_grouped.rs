@@ -28,7 +28,7 @@ use crate::arrays::ListViewArray;
 use crate::arrays::fixed_size_list::FixedSizeListArrayExt;
 use crate::arrays::fixed_size_list::FixedSizeListArraySlotsExt;
 use crate::arrays::listview::ListViewArraySlotsExt;
-use crate::builders::builder_with_capacity_in_ref;
+use crate::builders::builder_with_capacity_in;
 use crate::builtins::ArrayBuiltins;
 use crate::columnar::AnyColumnar;
 use crate::dtype::DType;
@@ -362,7 +362,7 @@ impl<V: AggregateFnVTable> GroupedAccumulator<V> {
             self.dtype.clone(),
         )?;
         let mut states =
-            builder_with_capacity_in_ref(&self.partial_dtype, grouped.len(), ctx.allocator());
+            builder_with_capacity_in(&self.partial_dtype, grouped.len(), ctx.allocator());
         let group_ranges = grouped.group_ranges(ctx)?;
         let group_validity = grouped.group_validity(ctx)?;
 
