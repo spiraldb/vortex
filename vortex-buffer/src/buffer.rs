@@ -793,8 +793,8 @@ impl<T> Buffer<T> {
     where
         T: Copy,
     {
-        match self.try_into_mut() {
-            Ok(buffer) => buffer.into_vec(),
+        match self.try_into_vec() {
+            Ok(vec) => vec,
             Err(buffer) => copy_to_vec(buffer.as_slice()),
         }
     }
@@ -803,9 +803,19 @@ impl<T> Buffer<T> {
     ///
     /// See [`into_vec`](Self::into_vec).
     pub fn try_into_vec(self) -> Result<Vec<T>, Self> {
-        self.try_into_mut()?
-            .try_into_vec()
-            .map_err(BufferMut::freeze)
+        if size_of::<T>() == 0 {
+            return Ok(zst_vec::<T>(self.length));
+        }
+        let length = self.length;
+        let alignment = self.alignment;
+        let preferred = self.preferred;
+        self.bytes.try_into_vec::<T>().map_err(|bytes| Self {
+            bytes,
+            length,
+            alignment,
+            preferred,
+            _marker: PhantomData,
+        })
     }
 
     /// Returns whether this is the only handle to the buffer's allocation.
@@ -972,6 +982,7 @@ impl From<Bytes> for ByteBuffer {
     }
 }
 
+#[cfg(feature = "arrow")]
 impl ByteBuffer {
     /// Wrap a byte window in a byte buffer aligned to `u8`.
     #[inline]

@@ -6,6 +6,7 @@
 
 use std::alloc::Layout;
 use std::any::TypeId;
+use std::mem::ManuallyDrop;
 use std::ptr::NonNull;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -183,8 +184,19 @@ impl Eq for State {}
 
 /// How the memory behind a region is released.
 pub(crate) enum Release {
-    /// Allocated through `allocator` with exactly `layout`, and returned to it the same way.
+    /// Allocated through `allocator` with exactly `layout`, and returned to it the same way. The
+    /// `Shared` describing it is a separate box.
     Allocated {
+        layout: Layout,
+        allocator: BufferAllocatorRef,
+    },
+    /// Allocated through `allocator` with exactly `layout`, with the `Shared` describing it
+    /// embedded at the front of the block and the region starting [`HEADER`] bytes in. Releasing
+    /// the last handle returns the whole block, header included, in one call.
+    ///
+    /// This is how a region from a custom allocator costs a single allocation even though it has
+    /// to carry the allocator's handle from the start.
+    Embedded {
         layout: Layout,
         allocator: BufferAllocatorRef,
     },
@@ -281,9 +293,31 @@ impl Shared {
         }
         // Synchronise with every other handle's release before running the destructor.
         fence(Ordering::Acquire);
-        // SAFETY: the refcount reached zero, so we hold the only reference and may free both the
-        // region and this box.
-        unsafe { drop(Box::from_raw(shared)) }
+        // SAFETY: the refcount reached zero, so we hold the only reference.
+        unsafe { Self::destroy(shared) }
+    }
+
+    /// Free a `Shared` whose last reference has been given up, along with its region.
+    ///
+    /// ## Safety
+    ///
+    /// `shared` must be live with a refcount of zero, and nothing may use it afterwards.
+    #[inline(never)]
+    unsafe fn destroy(shared: *mut Shared) {
+        // SAFETY: the caller guarantees the pointer is live and unreferenced.
+        let (layout, allocator) = match unsafe { &(*shared).release } {
+            // An embedded header lives inside the block it describes, so read out what freeing
+            // the block needs first. Nothing else in `Shared` has a destructor.
+            // SAFETY: the header is never touched again, so the handle is moved out, not copied.
+            Release::Embedded { layout, allocator } => {
+                (*layout, unsafe { std::ptr::read(allocator) })
+            }
+            // SAFETY: a boxed header is freed along with its region by `Drop`.
+            _ => return unsafe { drop(Box::from_raw(shared)) },
+        };
+        // SAFETY: `shared` is the start of a live block from `allocator` with `layout`, and the
+        // refcount reached zero, so no handle survives.
+        unsafe { allocator.deallocate(NonNull::new_unchecked(shared.cast::<u8>()), layout) }
     }
 
     /// Whether this is the only handle to the region.
@@ -292,12 +326,27 @@ impl Shared {
         self.refcount.load(Ordering::Acquire) == 1
     }
 
-    /// The layout this region was allocated with, if we allocated it ourselves.
+    /// The layout this region was allocated with, if we allocated it ourselves. For an embedded
+    /// header this is the layout of the whole block, header included.
     #[inline]
     pub(crate) fn allocated_layout(&self) -> Option<Layout> {
         match &self.release {
-            Release::Allocated { layout, .. } => Some(*layout),
+            Release::Allocated { layout, .. } | Release::Embedded { layout, .. } => Some(*layout),
             Release::Owner { .. } => None,
+        }
+    }
+
+    /// The layout of the region, if the global allocator produced it and this is the only handle
+    /// to it: the two conditions for handing it out as a `Vec`.
+    #[inline(never)]
+    pub(crate) fn sole_global_layout(&self) -> Option<Layout> {
+        match &self.release {
+            Release::Allocated { layout, allocator }
+                if allocator.is_statically_allocated() && self.is_unique() =>
+            {
+                Some(*layout)
+            }
+            _ => None,
         }
     }
 
@@ -306,7 +355,7 @@ impl Shared {
     #[inline]
     pub(crate) fn allocator(&self) -> &BufferAllocatorRef {
         match &self.release {
-            Release::Allocated { allocator, .. } => allocator,
+            Release::Allocated { allocator, .. } | Release::Embedded { allocator, .. } => allocator,
             Release::Owner { .. } => BufferAllocatorRef::static_ref(),
         }
     }
@@ -330,6 +379,14 @@ impl Drop for Shared {
                 // produced them, so this frees the region with exactly the layout it was
                 // allocated with. The refcount reached zero, so no handle survives.
                 unsafe { allocator.deallocate(self.base, *layout) }
+            }
+            Release::Embedded { layout, allocator } => {
+                // A header in its own block is freed by `destroy`, which never runs this. It only
+                // runs for a header that was moved out of its block, whose region still starts
+                // `HEADER` bytes into it.
+                // SAFETY: `base` was derived as `block.add(HEADER)`, so this is the block, which
+                // was allocated from `allocator` with `layout` and is no longer referenced.
+                unsafe { allocator.deallocate(self.base.sub(HEADER), *layout) }
             }
             Release::Owner { owner, drop, .. } => {
                 // SAFETY: the owner is a live leaked box that only we may drop, and the refcount
@@ -358,6 +415,7 @@ pub(crate) const FREE_ALIGN: usize = if usize::BITS >= 64 { 16 } else { 8 };
 /// window starts at [`shift`] bytes into the region.
 ///
 /// `size` must be non-zero.
+#[inline]
 pub(crate) fn shifted_layout(size: usize, alignment: Alignment) -> Layout {
     debug_assert!(size != 0);
     let alignment = alignment.as_usize();
@@ -392,6 +450,7 @@ pub(crate) fn shift(base: NonNull<u8>, alignment: Alignment) -> usize {
 /// Allocate a region able to hold an `alignment`-aligned window of `size` non-zero bytes.
 ///
 /// Returns the region's base, the layout it was allocated with, and the shift to the window.
+#[inline]
 pub(crate) fn allocate_shifted(
     size: usize,
     alignment: Alignment,
@@ -412,18 +471,57 @@ pub(crate) fn allocate_shifted(
     (base, layout, shift)
 }
 
-/// Build the `Shared` for a region we allocated ourselves.
-pub(crate) fn shared_allocated(
+/// The bytes reserved at the front of a block for an embedded [`Shared`].
+///
+/// Rounded up to [`FREE_ALIGN`] so that the region behind the header is as aligned as the block
+/// itself, which is what [`shifted_layout`]'s padding assumes.
+pub(crate) const HEADER: usize = size_of::<Shared>().next_multiple_of(FREE_ALIGN);
+
+/// The layout of a block holding an embedded [`Shared`] followed by a region able to hold an
+/// `alignment`-aligned window of `size` non-zero bytes.
+#[inline]
+pub(crate) fn embedded_layout(size: usize, alignment: Alignment) -> Layout {
+    let region = shifted_layout(size, alignment);
+    let Some(total) = HEADER.checked_add(region.size()) else {
+        bytes_panic!("buffer of {size} bytes aligned to {alignment} exceeds the maximum layout");
+    };
+    Layout::from_size_align(total, region.align().max(align_of::<Shared>())).unwrap_or_else(|_| {
+        bytes_panic!("buffer of {size} bytes aligned to {alignment} exceeds the maximum layout")
+    })
+}
+
+/// Box up the description of a region we allocated from the global allocator, or one too large to
+/// describe inline, and return the state holding its `refcount` references.
+///
+/// Kept out of line so that the constructors it backs stay small enough to inline.
+#[inline(never)]
+pub(crate) fn shared_state(
     base: NonNull<u8>,
     layout: Layout,
     allocator: BufferAllocatorRef,
     refcount: usize,
-) -> Shared {
-    Shared {
+) -> State {
+    let shared = Shared {
         refcount: AtomicUsize::new(refcount),
         base,
         size: layout.size(),
         writable: true,
         release: Release::Allocated { layout, allocator },
     }
+    .into_raw();
+    // SAFETY: we just created `shared`, and the caller takes over its references.
+    unsafe { State::shared(shared) }
+}
+
+/// Free the box behind a `Shared` without running its `Release`, once its region or owner has been
+/// handed elsewhere.
+///
+/// ## Safety
+///
+/// `shared` must be a boxed `Shared` (never an embedded one) that nothing else references, and
+/// nothing may use it afterwards.
+#[inline(never)]
+pub(crate) unsafe fn free_header(shared: *mut Shared) {
+    // SAFETY: the caller guarantees the box is live and unreferenced.
+    unsafe { drop(Box::from_raw(shared.cast::<ManuallyDrop<Shared>>())) }
 }

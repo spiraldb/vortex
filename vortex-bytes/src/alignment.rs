@@ -104,6 +104,16 @@ impl Alignment {
         Self(align.trailing_zeros() as u8)
     }
 
+    /// The alignment of a `Layout`, which is a power of two by construction.
+    #[inline]
+    pub(crate) fn of_layout(layout: std::alloc::Layout) -> Self {
+        #[expect(
+            clippy::cast_possible_truncation,
+            reason = "a power of two's exponent fits in a u8"
+        )]
+        Self(layout.align().trailing_zeros() as u8)
+    }
+
     /// Create a new 1-byte alignment.
     #[inline]
     pub const fn none() -> Self {
@@ -171,6 +181,7 @@ impl Alignment {
     }
 
     /// Returns the log2 of the alignment.
+    #[inline]
     pub fn exponent(&self) -> u8 {
         self.0
     }

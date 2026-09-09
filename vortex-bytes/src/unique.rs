@@ -14,6 +14,7 @@ use allocator_api2::alloc::handle_alloc_error;
 
 use crate::Alignment;
 use crate::BufferAllocatorRef;
+use crate::HEADER;
 use crate::Release;
 use crate::Shared;
 use crate::SharedBytes;
@@ -21,8 +22,10 @@ use crate::State;
 use crate::allocate_shifted;
 use crate::dangling;
 use crate::drop_owner;
+use crate::embedded_layout;
+use crate::free_header;
 use crate::panic::bytes_panic;
-use crate::shared_allocated;
+use crate::shared_state;
 use crate::shift;
 use crate::shifted_layout;
 
@@ -84,6 +87,7 @@ impl UniqueBytes {
     }
 
     /// Allocate an empty window with room for `capacity` bytes, aligned to `alignment`.
+    #[inline]
     pub fn with_capacity_in(
         capacity: usize,
         alignment: Alignment,
@@ -93,67 +97,111 @@ impl UniqueBytes {
     }
 
     /// Allocate a window of `len` zeroed bytes, aligned to `alignment`, from the global allocator.
+    #[inline]
     pub fn zeroed(len: usize, alignment: Alignment) -> Self {
         Self::zeroed_in(len, alignment, BufferAllocatorRef::statically_allocated())
     }
 
     /// Allocate a window of `len` zeroed bytes, aligned to `alignment`.
+    #[inline]
     pub fn zeroed_in(len: usize, alignment: Alignment, allocator: BufferAllocatorRef) -> Self {
         let mut this = Self::allocate(len, alignment, true, allocator);
         this.len = len;
         this
     }
 
+    #[inline]
     fn allocate(
         capacity: usize,
         alignment: Alignment,
         zeroed: bool,
         allocator: BufferAllocatorRef,
     ) -> Self {
+        if !allocator.is_statically_allocated() {
+            return Self::allocate_in(capacity, alignment, zeroed, allocator);
+        }
         if capacity == 0 {
-            // Nothing to allocate: the dangling pointer satisfies every alignment. A custom
-            // allocator is still recorded, so that growth allocates from it.
-            if allocator.is_statically_allocated() {
-                return Self::empty();
-            }
-            let layout = Layout::new::<()>();
-            let shared = shared_allocated(dangling(), layout, allocator, 1).into_raw();
+            // Nothing to allocate: the dangling pointer satisfies every alignment.
+            return Self::empty();
+        }
+
+        let (base, layout, offset) = allocate_shifted(capacity, alignment, zeroed, &allocator);
+        let state = match State::owned(layout.size(), Alignment::of_layout(layout)) {
+            Some(state) => state,
+            // A region too large to describe inline.
+            None => shared_state(base, layout, allocator, 1),
+        };
+        Self {
+            // SAFETY: `allocate_shifted` guarantees the window `offset..offset + capacity` fits.
+            ptr: unsafe { base.add(offset) },
+            len: 0,
+            // The capacity is what was asked for. Whatever alignment padding the shift did not
+            // use stays behind the window until `reclaim` grows back over it.
+            cap: capacity,
+            base,
+            state,
+        }
+    }
+
+    /// Allocate from a custom allocator.
+    ///
+    /// The region has to carry the allocator's handle, which only a [`Shared`] has room for, so
+    /// the `Shared` is written into the front of the block itself rather than boxed separately:
+    /// one allocation, like the global-allocator path. Kept out of line so that path stays small.
+    #[inline(never)]
+    fn allocate_in(
+        capacity: usize,
+        alignment: Alignment,
+        zeroed: bool,
+        allocator: BufferAllocatorRef,
+    ) -> Self {
+        if capacity == 0 {
+            // Nothing to allocate: the dangling pointer satisfies every alignment. The allocator
+            // is still recorded, so that growth allocates from it.
+            let state = shared_state(dangling(), Layout::new::<()>(), allocator, 1);
             return Self {
                 ptr: dangling(),
                 len: 0,
                 cap: 0,
                 base: dangling(),
-                // SAFETY: we just created `shared` and take over its single reference.
-                state: unsafe { State::shared(shared) },
+                state,
             };
         }
 
-        let (base, layout, offset) = allocate_shifted(capacity, alignment, zeroed, &allocator);
-        // SAFETY: `allocate_shifted` guarantees the window `offset..offset + capacity` fits.
-        let ptr = unsafe { base.add(offset) };
-        // The capacity is what was asked for. Whatever alignment padding the shift did not use
-        // stays behind the window until `reclaim` grows back over it.
-        let cap = capacity;
-
-        let inline = allocator
-            .is_statically_allocated()
-            .then(|| State::owned(layout.size(), Alignment::new(layout.align())))
-            .flatten();
-        let state = match inline {
-            Some(state) => state,
-            // A custom allocator, or a region too large to describe inline.
-            None => {
-                let shared = shared_allocated(base, layout, allocator, 1).into_raw();
-                // SAFETY: we just created `shared` and take over its single reference.
-                unsafe { State::shared(shared) }
-            }
+        let layout = embedded_layout(capacity, alignment);
+        let block = if zeroed {
+            allocator.allocate_zeroed(layout)
+        } else {
+            allocator.allocate(layout)
         };
+        let block = block
+            .unwrap_or_else(|_| handle_alloc_error(layout))
+            .cast::<u8>();
+        // SAFETY: `embedded_layout` reserves `HEADER` bytes at the front of the block.
+        let base = unsafe { block.add(HEADER) };
+        let header = block.cast::<Shared>();
+        // SAFETY: the block is aligned for a `Shared` and has room for one, and nothing else has
+        // seen it yet.
+        unsafe {
+            header.write(Shared {
+                refcount: AtomicUsize::new(1),
+                base,
+                size: layout.size() - HEADER,
+                writable: true,
+                release: Release::Embedded { layout, allocator },
+            });
+        }
+        let offset = shift(base, alignment);
+        debug_assert!(HEADER + offset + capacity <= layout.size());
         Self {
-            ptr,
+            // SAFETY: `embedded_layout` pads the region by the largest shift that could be
+            // needed, so the window `offset..offset + capacity` fits behind the header.
+            ptr: unsafe { base.add(offset) },
             len: 0,
-            cap,
+            cap: capacity,
             base,
-            state,
+            // SAFETY: we just wrote `header` and take over its single reference.
+            state: unsafe { State::shared(header.as_ptr()) },
         }
     }
 
@@ -162,6 +210,7 @@ impl UniqueBytes {
     /// The buffer treats the elements as plain bytes and never runs `T`'s destructor. Callers that
     /// need destructors must keep the `Vec` alive themselves, e.g. through
     /// [`SharedBytes::from_owner`].
+    #[inline]
     pub fn from_vec<T>(vec: Vec<T>) -> Self {
         let mut vec = ManuallyDrop::new(vec);
         let capacity = vec.capacity();
@@ -183,15 +232,10 @@ impl UniqueBytes {
         let layout = Layout::array::<T>(capacity)
             .unwrap_or_else(|_| bytes_panic!("a live Vec's layout is always representable"));
 
-        let state = match State::owned(layout.size(), Alignment::new(layout.align())) {
+        let state = match State::owned(layout.size(), Alignment::of_layout(layout)) {
             Some(state) => state,
-            None => {
-                let shared =
-                    shared_allocated(base, layout, BufferAllocatorRef::statically_allocated(), 1)
-                        .into_raw();
-                // SAFETY: we just created `shared` and take over its single reference.
-                unsafe { State::shared(shared) }
-            }
+            // A `Vec` too large to describe inline.
+            None => shared_state(base, layout, BufferAllocatorRef::statically_allocated(), 1),
         };
         Self {
             ptr: base,
@@ -425,7 +469,8 @@ impl UniqueBytes {
     }
 
     /// The slow path of [`reserve`](Self::reserve), kept out of line so the common case inlines.
-    #[cold]
+    /// Not marked cold: a buffer built up from empty lands here on its very first append.
+    #[inline(never)]
     fn reserve_slow(&mut self, additional: usize, alignment: Alignment) {
         let required = self
             .len
@@ -485,6 +530,11 @@ impl UniqueBytes {
         let Some(layout) = self.allocated_layout() else {
             return false;
         };
+        // An empty region from a custom allocator was never allocated, so there is nothing to
+        // grow; see `allocate_in`.
+        if layout.size() == 0 {
+            return false;
+        }
         let old_offset = self.ptr.as_ptr().addr() - self.base.as_ptr().addr();
         // The window sits at the alignment shift unless `advance` moved it further in. When most
         // of the region has been given up that way, growing would carry it all along; a fresh
@@ -494,12 +544,20 @@ impl UniqueBytes {
             return false;
         }
 
+        if self.state.is_shared() {
+            // SAFETY: we hold a reference to the `Shared`, so it is live.
+            let shared = unsafe { &*self.state.as_shared() };
+            if matches!(shared.release, Release::Embedded { .. }) {
+                return self.grow_embedded(layout, target, alignment, old_offset);
+            }
+        }
+
         let new_layout = shifted_layout(target, alignment);
         if new_layout.size() <= layout.size() {
             return false;
         }
         let new_state = if self.state.is_owned() {
-            match State::owned(new_layout.size(), Alignment::new(new_layout.align())) {
+            match State::owned(new_layout.size(), Alignment::of_layout(new_layout)) {
                 Some(state) => state,
                 None => return false,
             }
@@ -507,32 +565,16 @@ impl UniqueBytes {
             self.state
         };
 
-        let allocator = self.allocator();
-        let block = if layout.size() == 0 {
-            // An empty region was never allocated, so there is nothing to grow.
-            allocator.allocate(new_layout)
-        } else {
-            // SAFETY: `base` is a live block from `allocator` with `layout`, and `new_layout` is
-            // no smaller.
-            unsafe { allocator.grow(self.base, layout, new_layout) }
-        };
+        // SAFETY: `base` is a live block from `allocator` with `layout`, and `new_layout` is no
+        // smaller.
+        let block = unsafe { self.allocator().grow(self.base, layout, new_layout) };
         let base = block
             .unwrap_or_else(|_| handle_alloc_error(new_layout))
             .cast::<u8>();
-
         let new_offset = shift(base, alignment);
-        if new_offset != old_offset && self.len != 0 {
-            // SAFETY: `grow` preserved the first `layout.size()` bytes, so the initialised bytes
-            // still sit at `old_offset`; both ranges lie within the new block, and `copy` allows
-            // them to overlap.
-            unsafe {
-                std::ptr::copy(
-                    base.as_ptr().add(old_offset),
-                    base.as_ptr().add(new_offset),
-                    self.len,
-                );
-            }
-        }
+        // SAFETY: `grow` preserved the first `layout.size()` bytes, so the initialised bytes still
+        // sit at `old_offset`, and both windows lie within the new block.
+        unsafe { self.move_window(base, old_offset, new_offset) };
 
         if new_state.is_shared() {
             // SAFETY: we hold the only reference, so nothing else can observe the update.
@@ -551,6 +593,79 @@ impl UniqueBytes {
         self.cap = target;
         self.state = new_state;
         true
+    }
+
+    /// Grow a region whose `Shared` is embedded in its block. The header moves with the block.
+    fn grow_embedded(
+        &mut self,
+        layout: Layout,
+        target: usize,
+        alignment: Alignment,
+        old_offset: usize,
+    ) -> bool {
+        let new_layout = embedded_layout(target, alignment);
+        if new_layout.size() <= layout.size() {
+            return false;
+        }
+        // SAFETY: we hold a reference to the `Shared`, so it is live; a `SHARED` word is never
+        // null.
+        let header = unsafe { NonNull::new_unchecked(self.state.as_shared()) };
+        // `grow` carries the header over byte for byte, allocator handle included, but the
+        // handle we call through has to outlive the old block.
+        // SAFETY: as above.
+        let allocator = unsafe { header.as_ref() }.allocator().clone();
+        // SAFETY: `header` is the start of a live block from `allocator` with `layout`, and
+        // `new_layout` is no smaller.
+        let block = unsafe { allocator.grow(header.cast::<u8>(), layout, new_layout) };
+        let block = block
+            .unwrap_or_else(|_| handle_alloc_error(new_layout))
+            .cast::<u8>();
+        let header = block.cast::<Shared>();
+        // SAFETY: the header sits at the front of the block, followed by the region.
+        let base = unsafe { block.add(HEADER) };
+        let new_offset = shift(base, alignment);
+        // SAFETY: `grow` preserved the old block's bytes, so the initialised bytes still sit at
+        // `old_offset` behind the header, and both windows lie within the new block.
+        unsafe { self.move_window(base, old_offset, new_offset) };
+
+        // SAFETY: `grow` carried the header over, and we hold the only reference to it.
+        let shared = unsafe { &mut *header.as_ptr() };
+        shared.base = base;
+        shared.size = new_layout.size() - HEADER;
+        let Release::Embedded { layout, .. } = &mut shared.release else {
+            unreachable!("the header was embedded before the block moved")
+        };
+        *layout = new_layout;
+
+        self.base = base;
+        // SAFETY: the window `new_offset..new_offset + target` fits behind the header.
+        self.ptr = unsafe { base.add(new_offset) };
+        self.cap = target;
+        // SAFETY: `header` is the moved `Shared`, and we keep the one reference we held.
+        self.state = unsafe { State::shared(header.as_ptr()) };
+        true
+    }
+
+    /// Move the window's initialised bytes from `old_offset` to `new_offset` within the region at
+    /// `base`, after the region has been grown in place.
+    ///
+    /// ## Safety
+    ///
+    /// Both `old_offset..old_offset + len` and `new_offset..new_offset + len` must lie within the
+    /// region at `base`, and the initialised bytes must sit at `old_offset`.
+    #[inline]
+    unsafe fn move_window(&self, base: NonNull<u8>, old_offset: usize, new_offset: usize) {
+        if new_offset != old_offset && self.len != 0 {
+            // SAFETY: the caller guarantees both ranges lie within the region; `copy` allows them
+            // to overlap.
+            unsafe {
+                std::ptr::copy(
+                    base.as_ptr().add(old_offset),
+                    base.as_ptr().add(new_offset),
+                    self.len,
+                );
+            }
+        }
     }
 
     /// Append `slice` to the window, growing it if needed.
@@ -587,16 +702,15 @@ impl UniqueBytes {
     #[cold]
     fn promote(&mut self, refcount: usize) -> *mut Shared {
         debug_assert!(self.state.is_owned());
-        let shared = shared_allocated(
+        // One of the references is this handle's own.
+        self.state = shared_state(
             self.base,
             self.state.owned_layout(),
             BufferAllocatorRef::statically_allocated(),
             refcount,
-        )
-        .into_raw();
-        // SAFETY: we just created `shared` and hand one of its references to this handle.
-        self.state = unsafe { State::shared(shared) };
-        shared
+        );
+        // SAFETY: `shared_state` returns a `SHARED` word.
+        unsafe { self.state.as_shared() }
     }
 
     /// Split the window in two at `at`, keeping `..at` and returning `at..`.
@@ -676,6 +790,7 @@ impl UniqueBytes {
     /// place, or because it was allocated with exactly `align_of::<T>()` - and our window starts
     /// at the front of it. An over-aligned buffer cannot be given away, because `Vec` would free
     /// it with the wrong layout.
+    #[inline]
     pub fn try_into_vec<T>(self) -> Result<Vec<T>, Self> {
         let elem = size_of::<T>();
         if elem == 0 || !self.len.is_multiple_of(elem) {
@@ -687,16 +802,13 @@ impl UniqueBytes {
             return Ok(Vec::new());
         }
 
-        if !self.owns_region()
-            || self.ptr != self.base
-            || !self.allocator().is_statically_allocated()
-        {
-            return Err(self);
-        }
-        let Some(layout) = self.allocated_layout() else {
+        let Some(layout) = self.sole_global_layout() else {
             return Err(self);
         };
-        if layout.align() != align_of::<T>() || !layout.size().is_multiple_of(elem) {
+        if self.ptr != self.base
+            || layout.align() != align_of::<T>()
+            || !layout.size().is_multiple_of(elem)
+        {
             return Err(self);
         }
 
@@ -706,20 +818,30 @@ impl UniqueBytes {
 
         // The `Vec` takes the region over, so neither this handle nor any `Shared` may free it.
         let this = ManuallyDrop::new(self);
-        if !this.state.is_owned() {
-            // SAFETY: `owns_region` reported a refcount of one, so we free the box without ever
-            // running its `Release`.
-            unsafe {
-                drop(Box::from_raw(
-                    this.state.as_shared().cast::<ManuallyDrop<Shared>>(),
-                ))
-            };
+        if this.state.is_shared() {
+            // SAFETY: `sole_global_layout` reported a boxed header with a refcount of one, so we
+            // free the box without ever running its `Release`.
+            unsafe { free_header(this.state.as_shared()) };
         }
 
         // SAFETY: the region was allocated by the global allocator with exactly
         // `Layout::array::<T>(capacity)`, its first `length` elements are initialised, and we have
         // just given up our own claim to it.
         Ok(unsafe { Vec::from_raw_parts(ptr, length, capacity) })
+    }
+
+    /// The layout of the region, if this handle alone owns it and the global allocator produced
+    /// it: the two conditions for handing it out as a `Vec`.
+    #[inline]
+    fn sole_global_layout(&self) -> Option<Layout> {
+        if self.state.is_owned() {
+            return Some(self.state.owned_layout());
+        }
+        if self.state.is_static() {
+            return None;
+        }
+        // SAFETY: we hold a reference to the `Shared`, so it is live.
+        unsafe { &*self.state.as_shared() }.sole_global_layout()
     }
 }
 

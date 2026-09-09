@@ -83,8 +83,9 @@
 //! `OWNED` keeps the region's start in the handle's own `base` field, so advancing or truncating a
 //! handle never has to allocate. Promotion to `SHARED` only ever rewrites the state word, never
 //! `base`, which is what lets it happen through a shared reference with a single compare-exchange.
-//! `OWNED` always means the global allocator; a region from a custom allocator has to carry the
-//! allocator's handle, so it is `SHARED` from the start.
+//! `OWNED` always means the global allocator. A region from a custom allocator has to carry the
+//! allocator's handle, so it is `SHARED` from the start; its `Shared` is embedded at the front of
+//! the block it describes rather than boxed separately, so it still costs a single allocation.
 
 pub use alignment::*;
 pub use allocator::*;
@@ -98,13 +99,16 @@ mod region;
 mod shared;
 mod unique;
 
+pub(crate) use region::HEADER;
 pub(crate) use region::Release;
 pub(crate) use region::Shared;
 pub(crate) use region::State;
 pub(crate) use region::allocate_shifted;
 pub(crate) use region::dangling;
 pub(crate) use region::drop_owner;
-pub(crate) use region::shared_allocated;
+pub(crate) use region::embedded_layout;
+pub(crate) use region::free_header;
+pub(crate) use region::shared_state;
 pub(crate) use region::shift;
 pub(crate) use region::shifted_layout;
 

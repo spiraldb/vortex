@@ -273,3 +273,224 @@ fn static_regions_are_never_writable() {
     assert_eq!(shared.as_ptr(), VALUES.as_ptr());
     assert!(shared.try_into_unique().is_err());
 }
+
+/// Regions from a custom allocator embed their `Shared` in the block they describe.
+mod custom_allocator {
+    use std::alloc::Layout;
+    use std::ptr::NonNull;
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::atomic::Ordering::Relaxed;
+
+    use allocator_api2::alloc::AllocError;
+    use allocator_api2::alloc::Allocator;
+    use allocator_api2::alloc::Global;
+    use rstest::rstest;
+
+    use super::pattern;
+    use crate::Alignment;
+    use crate::BufferAllocatorRef;
+    use crate::UniqueBytes;
+
+    #[derive(Debug, Default)]
+    struct Counts {
+        allocations: AtomicUsize,
+        deallocations: AtomicUsize,
+        grows: AtomicUsize,
+        largest_alignment: AtomicUsize,
+    }
+
+    /// Forwards to the global allocator and counts what it is asked for.
+    #[derive(Debug)]
+    struct Counting(Arc<Counts>);
+
+    // SAFETY: every call is forwarded unchanged to `Global`.
+    unsafe impl Allocator for Counting {
+        fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+            self.0.allocations.fetch_add(1, Relaxed);
+            self.0.largest_alignment.fetch_max(layout.align(), Relaxed);
+            Global.allocate(layout)
+        }
+
+        fn allocate_zeroed(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+            self.0.allocations.fetch_add(1, Relaxed);
+            self.0.largest_alignment.fetch_max(layout.align(), Relaxed);
+            Global.allocate_zeroed(layout)
+        }
+
+        unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+            self.0.deallocations.fetch_add(1, Relaxed);
+            // SAFETY: forwarded unchanged.
+            unsafe { Global.deallocate(ptr, layout) }
+        }
+
+        unsafe fn grow(
+            &self,
+            ptr: NonNull<u8>,
+            old_layout: Layout,
+            new_layout: Layout,
+        ) -> Result<NonNull<[u8]>, AllocError> {
+            self.0.grows.fetch_add(1, Relaxed);
+            self.0
+                .largest_alignment
+                .fetch_max(new_layout.align(), Relaxed);
+            // SAFETY: forwarded unchanged.
+            unsafe { Global.grow(ptr, old_layout, new_layout) }
+        }
+    }
+
+    fn counting() -> (BufferAllocatorRef, Arc<Counts>) {
+        let counts = Arc::new(Counts::default());
+        (
+            BufferAllocatorRef::new(Counting(Arc::clone(&counts))),
+            counts,
+        )
+    }
+
+    #[test]
+    fn regions_cost_one_allocation_freed_with_the_last_handle() {
+        let alignment = Alignment::new(256);
+        let (allocator, counts) = counting();
+        let mut bytes = UniqueBytes::with_capacity_in(100, alignment, allocator.clone());
+        bytes.extend_from_slice(&pattern(100), alignment);
+        assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
+        assert!(bytes.allocator().ptr_eq(&allocator));
+
+        // The refcount lives inside the block, so sharing allocates nothing more.
+        let shared = bytes.freeze();
+        let clone = shared.clone();
+        let slice = shared.slice(10, 50);
+        assert!(slice.allocator().ptr_eq(&allocator));
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+        // Alignment is reached by shifting, never by asking the allocator for it.
+        assert!(counts.largest_alignment.load(Relaxed) <= 16);
+
+        drop((shared, clone));
+        assert_eq!(counts.deallocations.load(Relaxed), 0);
+        assert_eq!(slice.as_slice(), &pattern(100)[10..50]);
+        drop(slice);
+        assert_eq!(counts.deallocations.load(Relaxed), 1);
+    }
+
+    #[rstest]
+    #[case(1)]
+    #[case(16)]
+    #[case(256)]
+    #[case(4096)]
+    fn regions_grow_in_place(#[case] alignment: usize) {
+        let alignment = Alignment::new(alignment);
+        let (allocator, counts) = counting();
+        let mut bytes = UniqueBytes::with_capacity_in(8, alignment, allocator);
+        bytes.extend_from_slice(&pattern(8), alignment);
+        bytes.extend_from_slice(&pattern(10_000)[8..], alignment);
+
+        assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
+        assert_eq!(bytes.as_slice(), &pattern(10_000));
+        // The block was grown through the allocator, header and all, never replaced.
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+        assert!(counts.grows.load(Relaxed) >= 1);
+        assert_eq!(counts.deallocations.load(Relaxed), 0);
+        drop(bytes);
+        assert_eq!(counts.deallocations.load(Relaxed), 1);
+    }
+
+    #[test]
+    fn advanced_windows_grow_in_place() {
+        let alignment = Alignment::new(64);
+        let (allocator, counts) = counting();
+        let mut bytes = UniqueBytes::with_capacity_in(256, alignment, allocator);
+        bytes.extend_from_slice(&pattern(256), alignment);
+        bytes.advance(64);
+        bytes.extend_from_slice(&pattern(4096), alignment);
+
+        assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
+        assert_eq!(&bytes.as_slice()[..192], &pattern(256)[64..]);
+        assert_eq!(&bytes.as_slice()[192..], &pattern(4096));
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+        assert!(counts.grows.load(Relaxed) >= 1);
+    }
+
+    #[test]
+    fn split_windows_share_the_header_and_reclaim_it() {
+        let alignment = Alignment::new(64);
+        let (allocator, counts) = counting();
+        let mut bytes = UniqueBytes::with_capacity_in(256, alignment, allocator);
+        bytes.extend_from_slice(&pattern(256), alignment);
+        let other = bytes.split_off(128);
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+        assert_eq!(bytes.as_slice(), &pattern(256)[..128]);
+        assert_eq!(other.as_slice(), &pattern(256)[128..]);
+
+        drop(other);
+        assert_eq!(counts.deallocations.load(Relaxed), 0);
+        // With the other half gone, the survivor grows back over the region on its own.
+        bytes.extend_from_slice(&pattern(256)[128..], alignment);
+        assert_eq!(bytes.as_slice(), &pattern(256));
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+        assert_eq!(counts.grows.load(Relaxed), 0);
+        drop(bytes);
+        assert_eq!(counts.deallocations.load(Relaxed), 1);
+    }
+
+    #[test]
+    fn unsplit_rejoins_halves_without_copying() {
+        let alignment = Alignment::new(8);
+        let (allocator, counts) = counting();
+        let mut bytes = UniqueBytes::with_capacity_in(64, alignment, allocator);
+        bytes.extend_from_slice(&pattern(64), alignment);
+        let other = bytes.split_off(32);
+        bytes.unsplit(other, alignment);
+        assert_eq!(bytes.capacity(), 64);
+        assert_eq!(bytes.as_slice(), &pattern(64));
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+        assert_eq!(counts.grows.load(Relaxed), 0);
+    }
+
+    #[test]
+    fn zeroed_regions_are_zeroed_behind_the_header() {
+        let alignment = Alignment::new(128);
+        let (allocator, counts) = counting();
+        let bytes = UniqueBytes::zeroed_in(1000, alignment, allocator);
+        assert_eq!(bytes.as_slice(), &[0u8; 1000]);
+        assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+    }
+
+    #[test]
+    fn regions_cannot_be_handed_out_as_vecs() {
+        let alignment = Alignment::new(1);
+        let (allocator, counts) = counting();
+        let mut bytes = UniqueBytes::with_capacity_in(16, alignment, allocator);
+        bytes.extend_from_slice(&pattern(16), alignment);
+        // A `Vec` would free the block through the wrong allocator.
+        let result = bytes.try_into_vec::<u8>();
+        assert!(result.is_err());
+        drop(result);
+        assert_eq!(counts.deallocations.load(Relaxed), 1);
+    }
+
+    #[test]
+    fn empty_regions_record_the_allocator_without_allocating() {
+        let alignment = Alignment::new(64);
+        let (allocator, counts) = counting();
+        let mut bytes = UniqueBytes::with_capacity_in(0, alignment, allocator.clone());
+        assert!(bytes.allocator().ptr_eq(&allocator));
+        assert_eq!(counts.allocations.load(Relaxed), 0);
+
+        bytes.extend_from_slice(&pattern(10), alignment);
+        assert!(bytes.allocator().ptr_eq(&allocator));
+        assert_eq!(counts.allocations.load(Relaxed), 1);
+        assert_eq!(counts.grows.load(Relaxed), 0);
+
+        let shared = bytes.freeze();
+        assert!(shared.allocator().ptr_eq(&allocator));
+        let unique = shared.try_into_unique().ok();
+        assert!(
+            unique
+                .as_ref()
+                .is_some_and(|unique| unique.allocator().ptr_eq(&allocator))
+        );
+        drop(unique);
+        assert_eq!(counts.deallocations.load(Relaxed), 1);
+    }
+}

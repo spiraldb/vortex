@@ -41,11 +41,13 @@ impl BufferAllocatorRef {
     }
 
     /// The handle for the global allocator.
+    #[inline]
     pub const fn statically_allocated() -> Self {
         Self(None)
     }
 
     /// A `'static` handle for the global allocator, for APIs that hand out a reference.
+    #[inline]
     pub fn static_ref() -> &'static Self {
         &GLOBAL
     }

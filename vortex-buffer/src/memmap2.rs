@@ -54,6 +54,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "Miri does not support mprotect")]
     fn read_only_mapping_is_adopted_read_only() {
         let mapping = MmapOptions::new()
             .len(4096)

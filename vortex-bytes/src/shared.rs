@@ -18,8 +18,9 @@ use crate::State;
 use crate::UniqueBytes;
 use crate::dangling;
 use crate::drop_owner;
+use crate::free_header;
 use crate::panic::bytes_panic;
-use crate::shared_allocated;
+use crate::shared_state;
 
 /// An immutable, reference-counted window into a region.
 ///
@@ -64,6 +65,7 @@ impl SharedBytes {
     }
 
     /// Borrow a `'static` slice without copying it.
+    #[inline]
     pub fn from_static(slice: &'static [u8]) -> Self {
         if slice.is_empty() {
             return Self::empty();
@@ -247,12 +249,8 @@ impl SharedBytes {
         // This handle must not release the region: the owner is being handed out, not dropped.
         let _this = ManuallyDrop::new(self);
         // SAFETY: the refcount is one, so this handle holds the only reference to the box, which
-        // we free without running its `Release`.
-        unsafe {
-            drop(Box::from_raw(
-                state.as_shared().cast::<ManuallyDrop<Shared>>(),
-            ))
-        };
+        // is never embedded for an owner, and we free it without running its `Release`.
+        unsafe { free_header(state.as_shared()) };
 
         // SAFETY: `owner` is the leaked `Box<O>` from `from_owner`, and nothing else can reach it
         // now that the `Shared` is gone.
@@ -266,16 +264,14 @@ impl SharedBytes {
     fn promote(&self, state: State) -> *mut Shared {
         debug_assert!(state.is_owned());
         // Two references: this handle, and the one the caller is about to create.
-        let shared = shared_allocated(
+        let new = shared_state(
             self.base,
             state.owned_layout(),
             BufferAllocatorRef::statically_allocated(),
             2,
-        )
-        .into_raw();
-
-        // SAFETY: we just created `shared`.
-        let new = unsafe { State::shared(shared) };
+        );
+        // SAFETY: `shared_state` returns a `SHARED` word.
+        let shared = unsafe { new.as_shared() };
         match self.state.compare_exchange(
             state.0,
             new.0,
@@ -286,8 +282,8 @@ impl SharedBytes {
             Err(actual) => {
                 // Another thread promoted this handle first. Throw ours away without releasing
                 // the region - the winner owns it now - and take a reference to theirs instead.
-                // SAFETY: nothing ever saw this `Shared`, and its `Release` has not run.
-                unsafe { drop(Box::from_raw(shared.cast::<ManuallyDrop<Shared>>())) };
+                // SAFETY: nothing ever saw this boxed `Shared`, and its `Release` has not run.
+                unsafe { free_header(shared) };
 
                 let actual = State(actual);
                 debug_assert!(!actual.is_owned(), "promotion only ever happens once");
@@ -433,6 +429,15 @@ impl SharedBytes {
         let this = ManuallyDrop::new(self);
         // SAFETY: the refcount is one, so we hold the only handle and take over its reference.
         Ok(unsafe { UniqueBytes::from_parts(this.ptr, this.len, capacity, base, state) })
+    }
+
+    /// Hand the region out as a `Vec<T>`, if this is the only handle to it and it is exactly a
+    /// `Vec<T>`'s allocation. See [`UniqueBytes::try_into_vec`] for what that takes.
+    #[inline]
+    pub fn try_into_vec<T>(self) -> Result<Vec<T>, Self> {
+        self.try_into_unique()?
+            .try_into_vec::<T>()
+            .map_err(UniqueBytes::freeze)
     }
 }
 
