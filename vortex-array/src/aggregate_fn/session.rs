@@ -41,9 +41,11 @@ use crate::aggregate_fn::kernels::DynGroupedAggregateKernel;
 use crate::array::ArrayId;
 use crate::array::VTable;
 use crate::arrays::Chunked;
+use crate::arrays::Constant;
 use crate::arrays::Dict;
 use crate::arrays::Primitive;
 use crate::arrays::chunked::compute::aggregate::ChunkedArrayAggregate;
+use crate::arrays::constant::compute::sum::ConstantGroupedSumKernel;
 use crate::arrays::dict::compute::is_constant::DictIsConstantKernel;
 use crate::arrays::dict::compute::is_sorted::DictIsSortedKernel;
 use crate::arrays::dict::compute::min_max::DictMinMaxKernel;
@@ -134,6 +136,9 @@ impl Default for AggregateFnSession {
             SumV2.id(),
             &PrimitiveGroupedSumV2EncodingKernel,
         );
+        for sum in [Sum.id(), SumV2.id()] {
+            this.register_grouped_encoding_kernel(Constant.id(), sum, &ConstantGroupedSumKernel);
+        }
 
         this
     }

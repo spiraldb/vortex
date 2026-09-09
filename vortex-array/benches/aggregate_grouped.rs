@@ -11,22 +11,32 @@ use rand::RngExt;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 use vortex_array::ArrayRef;
+use vortex_array::ArrayVTable;
 use vortex_array::Canonical;
+use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
+use vortex_array::aggregate_fn::AggregateFnRef;
 use vortex_array::aggregate_fn::AggregateFnVTable;
 use vortex_array::aggregate_fn::DynGroupedAccumulator;
 use vortex_array::aggregate_fn::GroupedAccumulator;
+use vortex_array::aggregate_fn::GroupedArray;
 use vortex_array::aggregate_fn::NumericalAggregateOpts;
 use vortex_array::aggregate_fn::fns::count::Count;
 use vortex_array::aggregate_fn::fns::sum::Sum;
 use vortex_array::aggregate_fn::fns::sum_v2::SumV2;
+use vortex_array::aggregate_fn::kernels::DynGroupedAggregateKernel;
+use vortex_array::aggregate_fn::session::AggregateFnSessionExt;
+use vortex_array::arrays::Constant;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::dtype::DType;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
+use vortex_error::VortexResult;
 use vortex_session::VortexSession;
 
 fn main() {
@@ -149,7 +159,9 @@ fn varbinview_input() -> ArrayRef {
 
 fn list_element_dtype(list_view: &ArrayRef) -> DType {
     match list_view.dtype() {
-        DType::List(element_dtype, _) => element_dtype.as_ref().clone(),
+        DType::List(element_dtype, _) | DType::FixedSizeList(element_dtype, ..) => {
+            element_dtype.as_ref().clone()
+        }
         dtype => unreachable!("expected List dtype, got {dtype}"),
     }
 }
@@ -334,4 +346,72 @@ fn count_varbinview(bencher: Bencher) {
     bencher
         .with_inputs(|| &input)
         .bench_refs(|input| grouped_accumulator(input, Count));
+}
+
+/// Disable only the constant kernel so the same inputs exercise the existing grouped fallback.
+#[derive(Debug)]
+struct NoConstantSum;
+
+impl DynGroupedAggregateKernel for NoConstantSum {
+    fn grouped_aggregate(
+        &self,
+        _aggregate_fn: &AggregateFnRef,
+        _groups: &GroupedArray,
+        _ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Option<ArrayRef>> {
+        Ok(None)
+    }
+}
+
+fn bench_constant_sum(bencher: Bencher, groups: ArrayRef, specialized: bool) {
+    let session = vortex_array::array_session();
+    if !specialized {
+        session.aggregate_fns().register_grouped_encoding_kernel(
+            Constant.id(),
+            SumV2.id(),
+            &NoConstantSum,
+        );
+    }
+    let dtype = list_element_dtype(&groups);
+    bencher
+        .with_inputs(|| {
+            (
+                GroupedAccumulator::try_new(
+                    SumV2,
+                    NumericalAggregateOpts::default(),
+                    dtype.clone(),
+                )
+                .unwrap(),
+                session.create_execution_ctx(),
+            )
+        })
+        .bench_refs(|(acc, ctx)| {
+            acc.accumulate_list(&groups, ctx).unwrap();
+            acc.finish()
+                .unwrap()
+                .execute::<PrimitiveArray>(ctx)
+                .unwrap()
+        });
+}
+
+#[divan::bench(args = [2, 128], consts = [true, false])]
+fn sum_v2_constant_fixed<const SPECIALIZED: bool>(bencher: Bencher, size: u32) {
+    let len = 16_384;
+    let groups = FixedSizeListArray::try_new(
+        ConstantArray::new(3i32, len).into_array(),
+        size,
+        Validity::NonNullable,
+        len / size as usize,
+    )
+    .unwrap()
+    .into_array();
+
+    bench_constant_sum(bencher, groups, SPECIALIZED);
+}
+
+#[divan::bench(consts = [true, false])]
+fn sum_v2_constant_list<const SPECIALIZED: bool>(bencher: Bencher) {
+    let sizes = random_group_sizes();
+    let elements = ConstantArray::new(3i32, total_element_count(&sizes)).into_array();
+    bench_constant_sum(bencher, contiguous_list_view(elements, &sizes), SPECIALIZED);
 }
