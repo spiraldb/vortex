@@ -26,6 +26,7 @@ use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::scalar::Scalar;
 use vortex_array::validity::Validity;
+use vortex_buffer::Buffer;
 use vortex_error::VortexResult;
 use vortex_runend::RunEnd;
 use vortex_session::VortexSession;
@@ -144,6 +145,28 @@ fn sum_runend(bencher: Bencher, run_length: usize) {
 #[divan::bench(args = [4, 64, 1024])]
 fn sum_runend_fallback(bencher: Bencher, run_length: usize) {
     bench_sum(bencher, run_length, &FALLBACK_SESSION);
+}
+
+#[divan::bench(args = [Validity::NonNullable, Validity::AllValid, Validity::AllInvalid])]
+fn sum_runend_validity(bencher: Bencher, validity: &Validity) {
+    let ends = PrimitiveArray::from_iter((64..=LEN).step_by(64).map(|end| end as u64));
+    let values = PrimitiveArray::new(
+        (0..ends.len())
+            .map(|index| i32::try_from(index).unwrap())
+            .collect::<Buffer<_>>(),
+        validity.clone(),
+    );
+    let array = RunEnd::try_new(
+        ends.into_array(),
+        values.into_array(),
+        &mut SESSION.create_execution_ctx(),
+    )
+    .unwrap()
+    .into_array();
+
+    bencher
+        .with_inputs(|| SESSION.create_execution_ctx())
+        .bench_refs(|ctx| sum_v2(&array, ctx).unwrap());
 }
 
 #[divan::bench(args = [4, 64, 1024], consts = [1, 2, 8, 128])]

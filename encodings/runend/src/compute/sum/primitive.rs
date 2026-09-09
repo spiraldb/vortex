@@ -45,22 +45,34 @@ pub(super) struct RunEndSums {
 }
 
 impl RunEndSums {
+    /// Skip materializing the children when the array is empty or every run is null.
     pub(super) fn new(
         array: ArrayView<'_, RunEnd>,
         ctx: &mut ExecutionCtx,
         skip_nans: bool,
-    ) -> VortexResult<Self> {
+    ) -> VortexResult<Option<Self>> {
+        if array.is_empty() {
+            return Ok(None);
+        }
+
+        let validity = array
+            .values()
+            .validity()?
+            .execute_mask(array.values().len(), ctx)?;
+        if validity.all_false() {
+            return Ok(None);
+        }
+
         let ends = array.ends().clone().execute::<PrimitiveArray>(ctx)?;
         let values = array.values().clone().execute::<PrimitiveArray>(ctx)?;
-        let validity = values.validity()?.execute_mask(values.len(), ctx)?;
 
-        Ok(Self {
+        Ok(Some(Self {
             ends,
             values,
             validity,
             offset: array.offset(),
             skip_nans,
-        })
+        }))
     }
 
     /// Return the widened sum and whether the range contains no valid values.

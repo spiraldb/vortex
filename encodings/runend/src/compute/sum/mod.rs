@@ -3,8 +3,9 @@
 
 //! Primitive sums over run-end encoded arrays.
 //!
-//! The kernels decode the run ends and values once, then sum each value weighted by its run
-//! length. Grouped sums intersect runs with each group's range. Decimal inputs use the fallback.
+//! The kernels check validity before decoding run ends and values, then sum each valid value
+//! weighted by its run length. Grouped sums intersect runs with each group's range.
+//! Decimal inputs use the fallback.
 //! Float multiplication can round differently from repeated addition, as with constant sums.
 
 mod primitive;
@@ -18,7 +19,13 @@ use vortex_array::aggregate_fn::fns::sum::Sum;
 use vortex_array::aggregate_fn::fns::sum_v2::SumV2;
 use vortex_array::aggregate_fn::kernels::DynAggregateKernel;
 use vortex_array::aggregate_fn::kernels::DynGroupedAggregateKernel;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::builtins::ArrayBuiltins;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability::Nullable;
 use vortex_array::scalar::Scalar;
+use vortex_array::validity::Validity;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
 use self::primitive::RunEndSums;
@@ -48,7 +55,9 @@ impl DynAggregateKernel for RunEndSumKernel {
             return Ok(None);
         }
 
-        let sums = RunEndSums::new(array, ctx, options.skip_nans)?;
+        let Some(sums) = RunEndSums::new(array, ctx, options.skip_nans)? else {
+            return Ok(Some(empty_partial(aggregate_fn, batch.dtype())?));
+        };
         let (sum, is_empty) = sums.sum(0..batch.len());
         Ok(Some(partial_scalar(aggregate_fn, sum, is_empty)?))
     }
@@ -74,9 +83,20 @@ impl DynGroupedAggregateKernel for RunEndSumKernel {
             return Ok(None);
         }
 
-        let ranges = groups.group_ranges(ctx)?;
         let validity = groups.group_validity(ctx)?;
-        let sums = RunEndSums::new(elements, ctx, options.skip_nans)?;
+        let sums = if validity.all_false() {
+            None
+        } else {
+            RunEndSums::new(elements, ctx, options.skip_nans)?
+        };
+        let Some(sums) = sums else {
+            let partial = empty_partial(aggregate_fn, groups.elements().dtype())?;
+            let partials = ConstantArray::new(partial, groups.len()).into_array();
+            let validity = Validity::from_mask(validity, Nullable).to_array(groups.len());
+            return Ok(Some(partials.mask(validity)?));
+        };
+
+        let ranges = groups.group_ranges(ctx)?;
         let (results, empty_groups) = sums.grouped_sum(&ranges, &validity);
 
         let results = results.into_array();
@@ -91,6 +111,13 @@ impl DynGroupedAggregateKernel for RunEndSumKernel {
             Ok(Some(results))
         }
     }
+}
+
+fn empty_partial(aggregate_fn: &AggregateFnRef, dtype: &DType) -> VortexResult<Scalar> {
+    let sum_dtype = aggregate_fn
+        .return_dtype(dtype)
+        .vortex_expect("The primitive sum kernel accepts only supported dtypes");
+    partial_scalar(aggregate_fn, Scalar::zero_value(&sum_dtype), true)
 }
 
 fn partial_scalar(

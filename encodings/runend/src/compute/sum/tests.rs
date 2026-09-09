@@ -12,12 +12,19 @@ use vortex_array::aggregate_fn::fns::sum::Sum;
 use vortex_array::aggregate_fn::fns::sum_v2::SumV2;
 use vortex_array::aggregate_fn::kernels::DynAggregateKernel;
 use vortex_array::aggregate_fn::kernels::DynGroupedAggregateKernel;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::FixedSizeListArray;
 use vortex_array::arrays::ListViewArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::assert_arrays_eq;
+use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
+use vortex_array::dtype::Nullability::Nullable;
+use vortex_array::dtype::PType;
+use vortex_array::scalar::Scalar;
+#[cfg(not(codspeed))]
+use vortex_array::test_harness::trace::trace_op;
 use vortex_array::validity::Validity;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
@@ -102,6 +109,55 @@ fn sliced_sums(#[case] values: ArrayRef) -> VortexResult<()> {
             .into_array();
 
     check_sum(array, NumericalAggregateOpts::default())
+}
+
+#[cfg(not(codspeed))]
+#[rstest]
+#[case::whole_array(false, Validity::NonNullable)]
+#[case::null_runs(true, Validity::NonNullable)]
+#[case::null_groups(true, Validity::AllInvalid)]
+fn all_invalid_skips_decoding(
+    #[case] grouped: bool,
+    #[case] group_validity: Validity,
+) -> VortexResult<()> {
+    let mut ctx = SESSION.create_execution_ctx();
+    let value = if matches!(group_validity, Validity::AllInvalid) {
+        Scalar::from(3i32)
+    } else {
+        Scalar::null(DType::Primitive(PType::I32, Nullable))
+    };
+    let array = RunEnd::try_new(
+        ConstantArray::new(8u32, 1).into_array(),
+        ConstantArray::new(value, 1).into_array(),
+        &mut ctx,
+    )?
+    .into_array();
+
+    let groups = FixedSizeListArray::try_new(array.clone(), 2, group_validity, 4)?.into();
+    for aggregate in [
+        Sum.bind(NumericalAggregateOpts::default()),
+        SumV2.bind(NumericalAggregateOpts::default()),
+    ] {
+        let traced = trace_op(|| -> VortexResult<()> {
+            if grouped {
+                assert!(
+                    RunEndSumKernel
+                        .grouped_aggregate(&aggregate, &groups, &mut ctx)?
+                        .is_some()
+                );
+            } else {
+                assert!(
+                    RunEndSumKernel
+                        .aggregate(&aggregate, &array, &mut ctx)?
+                        .is_some()
+                );
+            }
+            Ok(())
+        })?;
+        assert!(!traced.trace.to_string().contains("execute_until"));
+    }
+
+    Ok(())
 }
 
 #[rstest]
@@ -252,7 +308,7 @@ fn grouped_sums(
 #[case::short_groups(0, 2, false, buffer![1i64, -2, 3, -4, 5].into_array())]
 #[case::sliced_null_groups(1, 8, true,
     PrimitiveArray::from_option_iter([None, Some(2i64), None, Some(4), Some(5)]).into_array())]
-#[case::all_null(1, 8, false, PrimitiveArray::from_option_iter([None::<i64>; 5]).into_array())]
+#[case::all_null(1, 8, true, PrimitiveArray::from_option_iter([None::<i64>; 5]).into_array())]
 #[case::overflow(1, 8, false, buffer![i64::MAX, 1, -2, i64::MIN, 3].into_array())]
 fn consecutive_groups(
     #[case] offset: usize,
