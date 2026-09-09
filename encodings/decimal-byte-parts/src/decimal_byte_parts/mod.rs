@@ -11,7 +11,6 @@ use vortex_array::ArrayView;
 pub(crate) mod compute;
 mod limbs;
 mod rules;
-mod slice;
 #[cfg(test)]
 pub(crate) mod testing;
 
@@ -32,13 +31,12 @@ use vortex_array::ArraySlots;
 use vortex_array::EqMode;
 use vortex_array::ExecutionCtx;
 use vortex_array::ExecutionResult;
-use vortex_array::IntoArray;
+use vortex_array::TypedArrayRef;
 use vortex_array::array_slots;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
-use vortex_array::dtype::DecimalType;
 use vortex_array::dtype::PType;
 use vortex_array::scalar::DecimalValue;
 use vortex_array::scalar::Scalar;
@@ -148,6 +146,48 @@ impl DecimalBytesPartsMetadata {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct DecimalByteParts;
+
+impl DecimalByteParts {
+    /// Construct a new [`DecimalBytePartsArray`] from an MSP array and decimal dtype.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the MSP is not a signed integer array.
+    pub fn try_new(
+        msp: ArrayRef,
+        decimal_dtype: DecimalDType,
+    ) -> VortexResult<DecimalBytePartsArray> {
+        Self::try_new_with_lower_parts(msp, Vec::new(), decimal_dtype)
+    }
+
+    /// Construct a new [`DecimalBytePartsArray`] from an MSP array, its lower parts, and a
+    /// decimal dtype.
+    ///
+    /// Lower parts are ordered most significant first and must each be a non-nullable `u64`
+    /// array of the same length as the MSP. See [`split_decimal`] for producing them from a
+    /// canonical decimal array.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the parts do not describe a valid decimal, see
+    /// [`DecimalBytePartsData::validate`].
+    pub fn try_new_with_lower_parts(
+        msp: ArrayRef,
+        lower_parts: Vec<ArrayRef>,
+        decimal_dtype: DecimalDType,
+    ) -> VortexResult<DecimalBytePartsArray> {
+        // Lower parts are supported in memory; the frozen serializer still rejects them.
+        let len = msp.len();
+        let dtype = DType::Decimal(decimal_dtype, msp.dtype().nullability());
+        let slots = DecimalBytePartsSlots { msp, lower_parts }.into_slots();
+        Array::try_from_parts(
+            ArrayParts::new(DecimalByteParts, dtype, len, DecimalBytePartsData).with_slots(slots),
+        )
+    }
+}
+
 impl VTable for DecimalByteParts {
     type TypedArrayData = DecimalBytePartsData;
 
@@ -242,7 +282,17 @@ impl VTable for DecimalByteParts {
     }
 
     fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {
-        to_canonical_decimal(&array, ctx).map(ExecutionResult::done)
+        // Reassemble DecimalArray from split parts
+        let msp = array.msp().clone().execute::<PrimitiveArray>(ctx)?;
+        let lower_parts = array
+            .lower_parts()
+            .iter()
+            .map(|part| part.clone().execute::<PrimitiveArray>(ctx))
+            .collect::<VortexResult<Vec<_>>>()?;
+
+        let assembled = assemble_decimal(&msp, &lower_parts, array.decimal_dtype())?;
+
+        Ok(ExecutionResult::done(assembled))
     }
 }
 
@@ -256,9 +306,11 @@ pub struct DecimalBytePartsSlots {
     pub lower_parts: Vec<ArrayRef>,
 }
 
-/// This array encodes decimals as between 1-4 columns of primitive typed children.
-/// The most significant part (msp) storing the most significant decimal bits.
-/// This array must be signed and is nullable iff the decimal is nullable.
+/// This array encodes decimals by splitting them between 1-4 columns of primitive typed children.
+///
+/// The most significant part (MSP) stores the most significant decimal bits. It is signed and is
+/// nullable iff the decimal is nullable.
+///
 /// Every lower part is a non-nullable `u64` holding a raw 64-bit window of the value.
 ///
 /// e.g. for a decimal i128 \[ 127..64 | 63..0 \] msp = 127..64 and lower_part\[0\] = 63..0
@@ -300,7 +352,7 @@ impl DecimalBytePartsData {
         vortex_ensure!(msp.len() == len, "expected len {len}, got {}", msp.len());
 
         let lower_part_count = lower_parts.len();
-        // Physical storage may be wider than the declared precision, as for DecimalArray.
+
         vortex_ensure!(
             lower_part_count <= MAX_LOWER_PARTS,
             "at most {MAX_LOWER_PARTS} lower parts are supported, got {lower_part_count}"
@@ -321,114 +373,47 @@ impl DecimalBytePartsData {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct DecimalByteParts;
-
-impl DecimalByteParts {
-    /// Construct a new [`DecimalBytePartsArray`] from an MSP array and decimal dtype.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the MSP is not a signed integer array.
-    pub fn try_new(
-        msp: ArrayRef,
-        decimal_dtype: DecimalDType,
-    ) -> VortexResult<DecimalBytePartsArray> {
-        Self::try_new_with_lower_parts(msp, Vec::new(), decimal_dtype)
+pub(crate) trait DecimalBytePartsArrayExt: DecimalBytePartsArraySlotsExt {
+    /// The decimal precision and scale, validated when the array was constructed.
+    fn decimal_dtype(&self) -> DecimalDType {
+        *self
+            .as_ref()
+            .dtype()
+            .as_decimal_opt()
+            .vortex_expect("must be a decimal dtype")
     }
 
-    /// Construct a new [`DecimalBytePartsArray`] from an MSP array, its lower parts, and a
-    /// decimal dtype.
+    /// Rebuild the array by applying `f` to the MSP and every lower part, in slot order.
     ///
-    /// Lower parts are ordered most significant first and must each be a non-nullable `u64`
-    /// array of the same length as the MSP. See [`split_decimal`] for producing them from a
-    /// canonical decimal array.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the parts do not describe a valid decimal, see
-    /// [`DecimalBytePartsData::validate`].
-    pub fn try_new_with_lower_parts(
-        msp: ArrayRef,
-        lower_parts: Vec<ArrayRef>,
-        decimal_dtype: DecimalDType,
+    /// This applies row operations such as slicing and filtering to all parts together,
+    /// preserving the decimal precision and scale.
+    fn map_parts(
+        &self,
+        mut f: impl FnMut(&ArrayRef) -> VortexResult<ArrayRef>,
     ) -> VortexResult<DecimalBytePartsArray> {
-        // Lower parts are supported in memory; the frozen serializer still rejects them.
-        let len = msp.len();
-        let dtype = DType::Decimal(decimal_dtype, msp.dtype().nullability());
-        let slots = DecimalBytePartsSlots { msp, lower_parts }.into_slots();
-        Array::try_from_parts(
-            ArrayParts::new(DecimalByteParts, dtype, len, DecimalBytePartsData).with_slots(slots),
+        let msp = f(self.msp())?;
+        let lower_parts = self
+            .lower_parts()
+            .iter()
+            .map(&mut f)
+            .collect::<VortexResult<Vec<_>>>()?;
+        DecimalByteParts::try_new_with_lower_parts(msp, lower_parts, self.decimal_dtype())
+    }
+
+    /// Rebuild the array with a replacement MSP, preserving its lower parts, precision and scale.
+    ///
+    /// Use this for operations such as masking and nullability casts that only affect the MSP.
+    /// The replacement MSP determines the result's nullability.
+    fn with_msp(&self, msp: ArrayRef) -> VortexResult<DecimalBytePartsArray> {
+        DecimalByteParts::try_new_with_lower_parts(
+            msp,
+            self.lower_parts().to_vec(),
+            self.decimal_dtype(),
         )
     }
 }
 
-/// The decimal storage type this array canonicalizes to.
-fn values_type(array: ArrayView<'_, DecimalByteParts>) -> VortexResult<DecimalType> {
-    match array.lower_parts().len() {
-        0 => DecimalType::try_from(array.msp().dtype().as_ptype()),
-        1 => Ok(DecimalType::I128),
-        2 | 3 => Ok(DecimalType::I256),
-        count => vortex_bail!("at most {MAX_LOWER_PARTS} lower parts are supported, got {count}"),
-    }
-}
-
-/// The decimal dtype this array carries.
-///
-/// Guaranteed to be a decimal by construction: [`DecimalBytePartsData::validate`] rejects
-/// every other dtype.
-pub(crate) fn decimal_dtype(array: ArrayView<'_, DecimalByteParts>) -> DecimalDType {
-    *array
-        .dtype()
-        .as_decimal_opt()
-        .vortex_expect("must be a decimal dtype")
-}
-
-/// Rebuild the array by applying `f` to the MSP and to every lower part, in slot order.
-///
-/// Part-wise operations must touch every part. Going through this rather than calling
-/// [`DecimalByteParts::try_new_with_lower_parts`] directly makes dropping a lower part —
-/// which silently corrupts wide values — unrepresentable.
-pub(crate) fn map_parts(
-    array: ArrayView<'_, DecimalByteParts>,
-    mut f: impl FnMut(&ArrayRef) -> VortexResult<ArrayRef>,
-) -> VortexResult<DecimalBytePartsArray> {
-    let msp = f(array.msp())?;
-    let lower_parts = array
-        .lower_parts()
-        .iter()
-        .map(&mut f)
-        .collect::<VortexResult<Vec<_>>>()?;
-    DecimalByteParts::try_new_with_lower_parts(msp, lower_parts, decimal_dtype(array))
-}
-
-/// Rebuild the array with a replacement MSP, keeping its lower parts untouched.
-///
-/// Only valid for operations that cannot change a row's magnitude bits — a nullability cast
-/// or a mask — since the lower parts keep whatever bits they held. That is sound because
-/// validity lives in the MSP alone, so lower-part bits in a null row are already undefined.
-pub(crate) fn with_msp(
-    array: ArrayView<'_, DecimalByteParts>,
-    msp: ArrayRef,
-    decimal_dtype: DecimalDType,
-) -> VortexResult<DecimalBytePartsArray> {
-    DecimalByteParts::try_new_with_lower_parts(msp, array.lower_parts().to_vec(), decimal_dtype)
-}
-
-/// Converts a DecimalBytePartsArray to its canonical DecimalArray representation.
-fn to_canonical_decimal(
-    array: &DecimalBytePartsArray,
-    ctx: &mut ExecutionCtx,
-) -> VortexResult<ArrayRef> {
-    let msp = array.msp().clone().execute::<PrimitiveArray>(ctx)?;
-    let lower_parts = array
-        .lower_parts()
-        .iter()
-        .map(|part| part.clone().execute::<PrimitiveArray>(ctx))
-        .collect::<VortexResult<Vec<_>>>()?;
-
-    Ok(assemble_decimal(&msp, &lower_parts, decimal_dtype(array.as_view()))?.into_array())
-}
+impl<T: TypedArrayRef<DecimalByteParts>> DecimalBytePartsArrayExt for T {}
 
 impl OperationsVTable<DecimalByteParts> for DecimalByteParts {
     fn scalar_at(
@@ -438,7 +423,8 @@ impl OperationsVTable<DecimalByteParts> for DecimalByteParts {
     ) -> VortexResult<Scalar> {
         let scalar = array.msp().execute_scalar(index, ctx)?;
 
-        // Note. values in msp, can only be signed integers upto size i64.
+        // Widen the MSP's signed value (i8/i16/i32/i64) to i64 for scalar reconstruction.
+        // The array retains its original MSP storage type.
         let primitive_scalar = scalar.as_primitive();
         let msp = primitive_scalar.as_::<i64>().vortex_expect("non-null");
 
@@ -454,13 +440,10 @@ impl OperationsVTable<DecimalByteParts> for DecimalByteParts {
             })
             .collect::<VortexResult<Vec<_>>>()?;
 
-        let value = if lower_parts.is_empty() {
-            DecimalValue::I64(msp)
-        } else {
-            match values_type(array)? {
-                DecimalType::I256 => DecimalValue::I256(combine_i256(msp, lower_parts.into_iter())),
-                _ => DecimalValue::I128(combine_i128(msp, lower_parts)),
-            }
+        let value = match lower_parts.len() {
+            0 => DecimalValue::I64(msp),
+            1 => DecimalValue::I128(combine_i128(msp, lower_parts)),
+            _ => DecimalValue::I256(combine_i256(msp, lower_parts.into_iter())),
         };
 
         Scalar::try_new(array.dtype().clone(), Some(ScalarValue::Decimal(value)))
@@ -487,6 +470,7 @@ mod tests {
     use vortex_array::assert_arrays_eq;
     use vortex_array::dtype::DType;
     use vortex_array::dtype::DecimalDType;
+    use vortex_array::dtype::DecimalType;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType;
     use vortex_array::dtype::i256;

@@ -10,10 +10,12 @@ use vortex_array::arrays::slice::SliceReduce;
 use vortex_error::VortexResult;
 
 use crate::DecimalByteParts;
-use crate::decimal_byte_parts::map_parts;
+use crate::decimal_byte_parts::DecimalBytePartsArrayExt;
 
 impl SliceReduce for DecimalByteParts {
     fn slice(array: ArrayView<'_, Self>, range: Range<usize>) -> VortexResult<Option<ArrayRef>> {
-        map_parts(array, |part| part.slice(range.clone())).map(|d| Some(d.into_array()))
+        array
+            .map_parts(|part| part.slice(range.clone()))
+            .map(|d| Some(d.into_array()))
     }
 }
