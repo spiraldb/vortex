@@ -8,8 +8,8 @@ use vortex_array::arrays::dict::TakeReduce;
 use vortex_error::VortexResult;
 
 use crate::DecimalByteParts;
+use crate::decimal_byte_parts::DecimalBytePartsArrayExt;
 use crate::decimal_byte_parts::DecimalBytePartsArraySlotsExt;
-use crate::decimal_byte_parts::map_parts;
 
 impl TakeReduce for DecimalByteParts {
     /// Taking wraps each part in a `Dict` without reading any buffer, so it reduces rather
@@ -22,7 +22,9 @@ impl TakeReduce for DecimalByteParts {
             return Ok(None);
         }
 
-        map_parts(array, |part| part.take(indices.clone())).map(|a| Some(a.into_array()))
+        array
+            .map_parts(|part| part.take(indices.clone()))
+            .map(|a| Some(a.into_array()))
     }
 }
 

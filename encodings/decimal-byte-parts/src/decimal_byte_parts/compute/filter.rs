@@ -9,11 +9,13 @@ use vortex_error::VortexResult;
 use vortex_mask::Mask;
 
 use crate::DecimalByteParts;
-use crate::decimal_byte_parts::map_parts;
+use crate::decimal_byte_parts::DecimalBytePartsArrayExt;
 
 impl FilterReduce for DecimalByteParts {
     fn filter(array: ArrayView<'_, Self>, mask: &Mask) -> VortexResult<Option<ArrayRef>> {
-        map_parts(array, |part| part.filter(mask.clone())).map(|d| Some(d.into_array()))
+        array
+            .map_parts(|part| part.filter(mask.clone()))
+            .map(|d| Some(d.into_array()))
     }
 }
 
