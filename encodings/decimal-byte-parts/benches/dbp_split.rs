@@ -25,26 +25,14 @@ fn main() {
 }
 
 #[divan::bench(args = cases())]
-fn all_valid(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
+fn dbp_split_all_valid(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
     bench_split(bencher, values_type, len, Validity::AllValid);
 }
 
 #[divan::bench(args = cases())]
-fn all_null(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
-    bench_split(bencher, values_type, len, Validity::AllInvalid);
-}
-
-#[divan::bench(args = cases())]
-fn mixed_nulls(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
+fn dbp_split_mixed_null(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
     let mut rng = StdRng::seed_from_u64(42);
     let validity = Validity::from_iter((0..len).map(|_| rng.random_bool(0.5)));
-    bench_split(bencher, values_type, len, validity);
-}
-
-#[divan::bench(args = cases())]
-fn clustered_nulls(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
-    const CLUSTER_LEN: usize = 256;
-    let validity = Validity::from_iter((0..len).map(|i| (i / CLUSTER_LEN).is_multiple_of(2)));
     bench_split(bencher, values_type, len, validity);
 }
 

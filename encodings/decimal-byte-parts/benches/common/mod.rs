@@ -17,7 +17,7 @@ use vortex_error::vortex_panic;
 pub(super) fn cases() -> Vec<(DecimalType, usize)> {
     [DecimalType::I64, DecimalType::I128, DecimalType::I256]
         .into_iter()
-        .flat_map(|values_type| [1_024, 8_192, 65_536].map(|len| (values_type, len)))
+        .flat_map(|values_type| [1_024, 8_192].map(|len| (values_type, len)))
         .collect()
 }
 

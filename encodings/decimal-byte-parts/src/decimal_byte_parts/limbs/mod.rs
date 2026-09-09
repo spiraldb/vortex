@@ -14,6 +14,9 @@
 //! This is exactly the two's complement bit pattern of the decimal value cut on 64-bit
 //! boundaries.
 
+use std::ops::BitOr;
+use std::ops::Shl;
+
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
@@ -22,6 +25,7 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::DecimalType;
+use vortex_array::dtype::NativeDecimalType;
 use vortex_array::dtype::NativePType;
 use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
@@ -30,6 +34,7 @@ use vortex_array::match_each_signed_integer_ptype;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferMut;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
@@ -192,24 +197,24 @@ fn split_wide<T: Copy, const N: usize>(
 
 /// Extract the high signed word and low unsigned word of an `i128`.
 #[inline]
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "each cast preserves a 64-bit window of the original two's complement bits"
-)]
 const fn i128_to_parts(value: i128) -> (i64, [u64; 1]) {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "each cast preserves a 64-bit window of the original two's complement bits"
+    )]
     ((value >> LOWER_PART_BITS) as i64, [value as u64])
 }
 
 /// Extract the signed MSP and three unsigned lower words of an `i256`.
 #[inline]
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "each cast preserves a 64-bit window of the original two's complement bits"
-)]
 const fn i256_to_parts(value: i256) -> (i64, [u64; MAX_LOWER_PARTS]) {
     let (low, high) = value.to_parts();
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "each cast preserves a 64-bit window of the original two's complement bits"
+    )]
     (
         (high >> LOWER_PART_BITS) as i64,
         [high as u64, (low >> LOWER_PART_BITS) as u64, low as u64],
@@ -263,12 +268,18 @@ pub fn assemble_decimal(
         .collect::<VortexResult<_>>()?;
 
     Ok(match lower.as_slice() {
-        [first] => DecimalArray::new(assemble_i128(msp, first), decimal_dtype, validity),
-        [first, second] => {
-            DecimalArray::new(assemble_i256(msp, [first, second]), decimal_dtype, validity)
-        }
+        [first] => DecimalArray::new(
+            assemble_wide::<i128, 1>(msp, [first]),
+            decimal_dtype,
+            validity,
+        ),
+        [first, second] => DecimalArray::new(
+            assemble_wide::<i256, 2>(msp, [first, second]),
+            decimal_dtype,
+            validity,
+        ),
         [first, second, third] => DecimalArray::new(
-            assemble_i256(msp, [first, second, third]),
+            assemble_wide::<i256, 3>(msp, [first, second, third]),
             decimal_dtype,
             validity,
         ),
@@ -279,51 +290,32 @@ pub fn assemble_decimal(
     })
 }
 
-/// Reassemble a signed MSP and one `u64` lower part into `i128` values.
+/// Reassemble a signed MSP and `K` unsigned lower parts into wide integers.
 ///
-/// For each row, the result is `msp * 2^64 + lower`.
-#[expect(
-    clippy::useless_conversion,
-    reason = "the widening to i64 is a no-op only for the i64 arm of the ptype match"
-)]
-fn assemble_i128(msp: &PrimitiveArray, lower: &[u64]) -> Buffer<i128> {
-    let mut out = BufferMut::<i128>::with_capacity(msp.len());
+/// Each row starts with the MSP sign-extended to `T`. Appending a lower word shifts the
+/// accumulated value left by 64 bits and fills the low bits with that word. Lower parts
+/// are appended most significant first.
+///
+/// The callers select `i128` for one lower part and `i256` for two or three. Since `K`
+/// is constant, the compiler can unroll the loop that appends the lower words.
+fn assemble_wide<T, const K: usize>(msp: &PrimitiveArray, lower: [&[u64]; K]) -> Buffer<T>
+where
+    T: NativeDecimalType + Shl<usize, Output = T> + BitOr<Output = T>,
+{
+    let mut out = BufferMut::<T>::with_capacity(msp.len());
     match_each_signed_integer_ptype!(msp.ptype(), |P| {
-        out.extend_trusted(msp.as_slice::<P>().iter().zip(lower).map(|(value, part)| {
-            // Sign-extend the MSP, then shift it into the high 64 bits. The unsigned
-            // lower part fills the low 64 bits.
-            (i128::from(i64::from(*value)) << LOWER_PART_BITS) | i128::from(*part)
+        out.extend_trusted(msp.as_slice::<P>().iter().enumerate().map(|(row, value)| {
+            #[allow(
+                clippy::useless_conversion,
+                reason = "the widening to i64 is a no-op only for the i64 arm of the ptype match"
+            )]
+            let mut value = T::from(i64::from(*value)).vortex_expect("MSP fits in the output type");
+            for part in lower {
+                value = (value << LOWER_PART_BITS)
+                    | T::from(part[row]).vortex_expect("lower word fits in the output type");
+            }
+            value
         }));
-    });
-    out.freeze()
-}
-
-/// Reassemble a signed MSP and two or three `u64` lower parts into `i256` values.
-///
-/// The last two lower parts form the unsigned low 128 bits. With two lower parts, the
-/// signed high 128 bits are the MSP widened to `i128`. With three, the high half contains
-/// the MSP followed by the first lower part.
-#[expect(
-    clippy::useless_conversion,
-    reason = "the widening to i64 is a no-op only for the i64 arm of the ptype match"
-)]
-fn assemble_i256<const K: usize>(msp: &PrimitiveArray, lower: [&[u64]; K]) -> Buffer<i256> {
-    let mut out = BufferMut::<i256>::with_capacity(msp.len());
-    match_each_signed_integer_ptype!(msp.ptype(), |P| {
-        for (row, value) in msp.as_slice::<P>().iter().enumerate() {
-            // The last two lower parts always form the unsigned low 128 bits.
-            let low =
-                (u128::from(lower[K - 2][row]) << LOWER_PART_BITS) | u128::from(lower[K - 1][row]);
-            let msp = i128::from(i64::from(*value));
-            let high = if K == 2 {
-                // Widening the MSP supplies the remaining sign bits.
-                msp
-            } else {
-                // With three lower parts, the first one follows the MSP in the high half.
-                (msp << LOWER_PART_BITS) | i128::from(lower[0][row])
-            };
-            out.push(i256::from_parts(low, high));
-        }
     });
     out.freeze()
 }

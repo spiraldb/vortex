@@ -25,7 +25,7 @@ fn main() {
 }
 
 #[divan::bench(args = cases())]
-fn assemble(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
+fn dbp_assemble(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
     let decimal = decimal_array(values_type, len, Validity::NonNullable);
     let mut ctx = array_session().create_execution_ctx();
     let parts = split_decimal(&decimal, &mut ctx).vortex_expect("split benchmark input");
