@@ -228,7 +228,7 @@ const fn i256_to_parts(value: i256) -> (i64, [u64; MAX_LOWER_PARTS]) {
 ///
 /// Returns an error if the parts do not describe a valid decimal, or if the MSP's validity
 /// cannot be derived.
-pub(crate) fn assemble_decimal(
+pub fn assemble_decimal(
     msp: &PrimitiveArray,
     lower_parts: &[PrimitiveArray],
     decimal_dtype: DecimalDType,

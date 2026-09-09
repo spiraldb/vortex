@@ -16,6 +16,11 @@ pub use limbs::split_decimal;
 mod rules;
 mod slice;
 
+#[doc(hidden)]
+pub mod _benchmarking {
+    pub use super::limbs::assemble_decimal;
+}
+
 use prost::Message as _;
 use vortex_array::ArrayEq;
 use vortex_array::ArrayHash;
