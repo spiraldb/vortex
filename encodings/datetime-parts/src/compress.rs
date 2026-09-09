@@ -32,6 +32,11 @@ pub struct TemporalParts {
 /// Splitting the components by granularity creates more small values, which enables better
 /// cascading compression.
 pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexResult<TemporalParts> {
+    let time_unit = array.temporal_metadata().time_unit();
+    if matches!(time_unit, TimeUnit::Days) {
+        vortex_bail!("Cannot handle day-level data");
+    }
+
     let temporal_values = array
         .temporal_values()
         .clone()
@@ -46,11 +51,6 @@ pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexRes
             temporal_values.dtype().nullability(),
         ))?
         .execute::<PrimitiveArray>(ctx)?;
-
-    let time_unit = array.temporal_metadata().time_unit();
-    if matches!(time_unit, TimeUnit::Days) {
-        vortex_bail!("Cannot handle day-level data");
-    }
 
     let length = timestamps.len();
 
@@ -116,13 +116,42 @@ fn split_slice<const DIVISOR: i64>(
     subseconds: &mut [MaybeUninit<i32>],
     timestamps: &[i64],
 ) {
-    for (((day, second), subseconds), ts) in
-        days.iter_mut().zip(seconds).zip(subseconds).zip(timestamps)
-    {
-        let parts = timestamp::split_with_divisor::<DIVISOR>(*ts);
+    // Computing chunks of 4 elements lets LLVM optimize stores into
+    // a 16-byte vector store per chunk.
+    let length = timestamps.len();
+    let (timestamps, timestamps_rem) = timestamps.as_chunks::<4>();
+    let (days, days_rem) = days[..length].as_chunks_mut::<4>();
+    let (seconds, seconds_rem) = seconds[..length].as_chunks_mut::<4>();
+    let (subseconds, subseconds_rem) = subseconds[..length].as_chunks_mut::<4>();
+
+    let chunks = timestamps.iter().zip(days).zip(seconds).zip(subseconds);
+    for (((timestamp, day), second), subsecond) in chunks {
+        let mut day_buf = [0i32; 4];
+        let mut second_buf = [0i32; 4];
+        let mut subsecond_buf = [0i32; 4];
+        for k in 0..4 {
+            let parts = timestamp::split_with_divisor::<DIVISOR>(timestamp[k]);
+            day_buf[k] = parts.days;
+            second_buf[k] = parts.seconds;
+            subsecond_buf[k] = parts.subseconds;
+        }
+        for k in 0..4 {
+            day[k].write(day_buf[k]);
+            second[k].write(second_buf[k]);
+            subsecond[k].write(subsecond_buf[k]);
+        }
+    }
+
+    let remainder = timestamps_rem
+        .iter()
+        .zip(days_rem)
+        .zip(seconds_rem)
+        .zip(subseconds_rem);
+    for (((&ts, day), second), subsecond) in remainder {
+        let parts = timestamp::split_with_divisor::<DIVISOR>(ts);
         day.write(parts.days);
         second.write(parts.seconds);
-        subseconds.write(parts.subseconds);
+        subsecond.write(parts.subseconds);
     }
 }
 

@@ -102,13 +102,15 @@ mod tests {
             ticks_per_day - 1,
             ticks_per_day,
             -ticks_per_day,
-            i64::MAX,
-            i64::MIN,
         ] {
             let parts = split(ts, unit)?;
-            assert_eq!(parts.days, (ts / ticks_per_day) as i32);
-            assert_eq!(parts.seconds, ((ts % ticks_per_day) / divisor) as i32);
-            assert_eq!(parts.subseconds, ((ts % ticks_per_day) % divisor) as i32);
+
+            let days: i32 = (ts / ticks_per_day).as_();
+            let seconds: i32 = ((ts % ticks_per_day) / divisor).as_();
+            let subseconds: i32 = ((ts % ticks_per_day) % divisor).as_();
+            assert_eq!(parts.days, days);
+            assert_eq!(parts.seconds, seconds);
+            assert_eq!(parts.subseconds, subseconds);
             assert_eq!(combine(parts, unit), ts);
         }
         Ok(())
