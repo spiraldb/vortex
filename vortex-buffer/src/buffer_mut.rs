@@ -23,12 +23,30 @@ use crate::debug::TruncatedDebug;
 use crate::trusted_len::TrustedLen;
 
 /// A mutable buffer that maintains a runtime-defined alignment through resizing operations.
+///
+/// Zero-sized element types are rejected at compile time when constructing a buffer.
+///
+/// ```compile_fail
+/// use vortex_buffer::BufferMut;
+/// let _ = BufferMut::<()>::empty();
+/// ```
+///
+/// ```compile_fail
+/// use vortex_buffer::BufferMut;
+/// let _ = BufferMut::<()>::zeroed(3);
+/// ```
 pub struct BufferMut<T> {
+    /// The owned allocation, including any bytes before `ptr` used for alignment.
     pub(crate) allocation: Allocation,
+    /// The first element, aligned to `alignment`; it may dangle for an empty buffer.
     pub(crate) ptr: std::ptr::NonNull<T>,
+    /// The number of initialized `T` values starting at `ptr`.
     pub(crate) length: usize,
+    /// The number of `T` values that fit from `ptr`.
     pub(crate) capacity: usize,
+    /// The minimum alignment maintained for `ptr` across reallocations.
     pub(crate) alignment: Alignment,
+    /// Marks the buffer as logically owning values of `T` despite storing an erased allocation.
     pub(crate) _marker: std::marker::PhantomData<T>,
 }
 
@@ -100,6 +118,7 @@ impl<T> BufferMut<T> {
         preferred_alignment: Option<Alignment>,
         allocator: BufferAllocatorRef,
     ) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         let actual = max(
             alignment,
             preferred_alignment.unwrap_or(Alignment::of::<u8>()),
@@ -131,11 +150,7 @@ impl<T> BufferMut<T> {
         let offset = allocation.ptr().as_ptr().align_offset(actual.as_usize());
         // SAFETY: the allocation includes enough padding to reach this aligned pointer.
         let ptr = unsafe { allocation.ptr().add(offset).cast() };
-        let capacity = if size_of::<T>() == 0 {
-            capacity
-        } else {
-            (allocation.size() - offset) / size_of::<T>()
-        };
+        let capacity = (allocation.size() - offset) / size_of::<T>();
         Self {
             allocation,
             ptr,
@@ -204,6 +219,7 @@ impl<T> BufferMut<T> {
         preferred_alignment: Option<Alignment>,
         allocator: BufferAllocatorRef,
     ) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         let preferred_alignment = preferred_alignment.unwrap_or(Alignment::of::<u8>());
         let actual_alignment = max(preferred_alignment, alignment);
         let size = len
@@ -226,11 +242,7 @@ impl<T> BufferMut<T> {
             .align_offset(actual_alignment.as_usize());
         // SAFETY: the allocation includes enough padding to reach this aligned pointer.
         let ptr = unsafe { allocation.ptr().add(offset).cast() };
-        let capacity = if size_of::<T>() == 0 {
-            len
-        } else {
-            (allocation.size() - offset) / size_of::<T>()
-        };
+        let capacity = (allocation.size() - offset) / size_of::<T>();
         Self {
             allocation,
             ptr,

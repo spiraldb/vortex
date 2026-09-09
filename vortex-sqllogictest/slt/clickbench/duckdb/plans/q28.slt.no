@@ -1,0 +1,328 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# `control substitution on` (see setup.slt.no) treats `\` as an escape and `$` as a
+# variable, so both are escaped here; the engine receives the upstream `\.`, `$` and `\1`.
+query TT
+EXPLAIN (FORMAT json)
+SELECT REGEXP_REPLACE("Referer", '^https?://(?:www\\.)?([^/]+)/.*\$', '\\1') AS k, AVG(OCTET_LENGTH("Referer")) AS l, COUNT(*) AS c, MIN("Referer") FROM hits WHERE "Referer" <> '' GROUP BY k HAVING COUNT(*) > 100000 ORDER BY l DESC LIMIT 25;
+----
+logical_plan [
+    {
+        "name": "LIMIT",
+        "children": [
+            {
+                "name": "ORDER_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "FILTER",
+                                "children": [
+                                    {
+                                        "name": "AGGREGATE",
+                                        "children": [
+                                            {
+                                                "name": "FILTER",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "READ_VORTEX",
+                                                                "children": [],
+                                                                "extra_info": {
+                                                                    "Filters": "",
+                                                                    "Function": "Vortex Scan"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "WatchID",
+                                                                "JavaEnable",
+                                                                "Title",
+                                                                "GoodEvent",
+                                                                "EventTime",
+                                                                "EventDate",
+                                                                "CounterID",
+                                                                "ClientIP",
+                                                                "RegionID",
+                                                                "UserID",
+                                                                "CounterClass",
+                                                                "OS",
+                                                                "UserAgent",
+                                                                "URL",
+                                                                "Referer",
+                                                                "IsRefresh",
+                                                                "RefererCategoryID",
+                                                                "RefererRegionID",
+                                                                "URLCategoryID",
+                                                                "URLRegionID",
+                                                                "ResolutionWidth",
+                                                                "ResolutionHeight",
+                                                                "ResolutionDepth",
+                                                                "FlashMajor",
+                                                                "FlashMinor",
+                                                                "FlashMinor2",
+                                                                "NetMajor",
+                                                                "NetMinor",
+                                                                "UserAgentMajor",
+                                                                "UserAgentMinor",
+                                                                "CookieEnable",
+                                                                "JavascriptEnable",
+                                                                "IsMobile",
+                                                                "MobilePhone",
+                                                                "MobilePhoneModel",
+                                                                "Params",
+                                                                "IPNetworkID",
+                                                                "TraficSourceID",
+                                                                "SearchEngineID",
+                                                                "SearchPhrase",
+                                                                "AdvEngineID",
+                                                                "IsArtifical",
+                                                                "WindowClientWidth",
+                                                                "WindowClientHeight",
+                                                                "ClientTimeZone",
+                                                                "ClientEventTime",
+                                                                "SilverlightVersion1",
+                                                                "SilverlightVersion2",
+                                                                "SilverlightVersion3",
+                                                                "SilverlightVersion4",
+                                                                "PageCharset",
+                                                                "CodeVersion",
+                                                                "IsLink",
+                                                                "IsDownload",
+                                                                "IsNotBounce",
+                                                                "FUniqID",
+                                                                "OriginalURL",
+                                                                "HID",
+                                                                "IsOldCounter",
+                                                                "IsEvent",
+                                                                "IsParameter",
+                                                                "DontCountHits",
+                                                                "WithHash",
+                                                                "HitColor",
+                                                                "LocalEventTime",
+                                                                "Age",
+                                                                "Sex",
+                                                                "Income",
+                                                                "Interests",
+                                                                "Robotness",
+                                                                "RemoteIP",
+                                                                "WindowName",
+                                                                "OpenerName",
+                                                                "HistoryLength",
+                                                                "BrowserLanguage",
+                                                                "BrowserCountry",
+                                                                "SocialNetwork",
+                                                                "SocialAction",
+                                                                "HTTPError",
+                                                                "SendTiming",
+                                                                "DNSTiming",
+                                                                "ConnectTiming",
+                                                                "ResponseStartTiming",
+                                                                "ResponseEndTiming",
+                                                                "FetchTiming",
+                                                                "SocialSourceNetworkID",
+                                                                "SocialSourcePage",
+                                                                "ParamPrice",
+                                                                "ParamOrderID",
+                                                                "ParamCurrency",
+                                                                "ParamCurrencyID",
+                                                                "OpenstatServiceName",
+                                                                "OpenstatCampaignID",
+                                                                "OpenstatAdID",
+                                                                "OpenstatSourceID",
+                                                                "UTMSource",
+                                                                "UTMMedium",
+                                                                "UTMCampaign",
+                                                                "UTMContent",
+                                                                "UTMTerm",
+                                                                "FromTag",
+                                                                "HasGCLID",
+                                                                "RefererHash",
+                                                                "URLHash",
+                                                                "CLID"
+                                                            ]
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Expressions": "(Referer != CAST('' AS VARCHAR))"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Groups": "k",
+                                            "Expressions": [
+                                                "count_star()",
+                                                "avg(strlen(Referer))",
+                                                "min(Referer)"
+                                            ]
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": "(count_star() > CAST(100000 AS BIGINT))"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expressions": [
+                                "0",
+                                "l",
+                                "c",
+                                "min(Referer)"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Order By": "avg(octet_length(memory.main.hits.Referer))"
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": ""
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "TOP_N",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "FILTER",
+                        "children": [
+                            {
+                                "name": "AGGREGATE",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Filters": "($.Referer != \"\")",
+                                                    "Function": "Vortex Scan",
+                                                    "Estimated Cardinality": "200000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": "Referer",
+                                            "Estimated Cardinality": "200000"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Groups": "k",
+                                    "Expressions": [
+                                        "count_star()",
+                                        "avg(strlen(Referer))",
+                                        "min(Referer)"
+                                    ],
+                                    "Estimated Cardinality": "100000"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expressions": "(count_star() > 100000)",
+                            "Estimated Cardinality": "20000"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "0",
+                        "l",
+                        "c",
+                        "min(Referer)"
+                    ],
+                    "Estimated Cardinality": "20000"
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": "",
+            "Estimated Cardinality": "25"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "TOP_N",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "FILTER",
+                        "children": [
+                            {
+                                "name": "HASH_GROUP_BY",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "READ_VORTEX",
+                                                "children": [],
+                                                "extra_info": {
+                                                    "Function": "Vortex Scan",
+                                                    "Filters": "($.Referer != \"\")",
+                                                    "Projections": "Referer",
+                                                    "Estimated Cardinality": "200000"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Projections": [
+                                                "k",
+                                                "strlen(Referer)",
+                                                "Referer"
+                                            ],
+                                            "Estimated Cardinality": "200000"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Groups": "#0",
+                                    "Aggregates": [
+                                        "count_star()",
+                                        "avg(#1)",
+                                        "min(#2)"
+                                    ],
+                                    "Estimated Cardinality": "100000"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expression": "(count_star() > 100000)",
+                            "Estimated Cardinality": "20000"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Projections": [
+                        "0",
+                        "l",
+                        "c",
+                        "min(Referer)"
+                    ],
+                    "Estimated Cardinality": "20000"
+                }
+            }
+        ],
+        "extra_info": {
+            "Top": "25",
+            "Order By": "avg(octet_length(memory.main.hits.Referer)) DESC"
+        }
+    }
+]

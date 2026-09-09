@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+[package]
+name = "vortex-ffi"
+version = "0.0.0"
+edition = "2024"
+[lib]
+path = "lib.rs"
+[dependencies]
+native-helper = { path = "../native-helper" }
+[build-dependencies]
+native-helper = { path = "../native-helper" }

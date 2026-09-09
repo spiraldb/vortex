@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q8.slt.no explains the upstream query unchanged.
+query II
+SELECT "RegionID", COUNT(DISTINCT "UserID") AS u FROM hits GROUP BY "RegionID" ORDER BY u DESC, "RegionID" LIMIT 10;
+----
+229 27961
+2 10413
+208 3073
+1 1720
+34 1428
+158 1110
+184 987
+107 966
+42 956
+47 943

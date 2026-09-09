@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "AdvEngineID", COUNT(*) FROM hits WHERE "AdvEngineID" <> 0 GROUP BY "AdvEngineID" ORDER BY COUNT(*) DESC;
+----
+logical_plan
+01)Sort: count(*) DESC NULLS FIRST
+02)--Projection: hits.AdvEngineID, count(Int64(1)) AS count(*)
+03)----Aggregate: groupBy=[[hits.AdvEngineID]], aggr=[[count(Int64(1))]]
+04)------Filter: hits.AdvEngineID != Int16(0)
+05)--------TableScan: hits projection=[AdvEngineID], partial_filters=[hits.AdvEngineID != Int16(0)]
+physical_plan
+01)SortPreservingMergeExec: [count(*)@1 DESC]
+02)--ProjectionExec: expr=[AdvEngineID@0 as AdvEngineID, count(Int64(1))@1 as count(*)]
+03)----SortExec: expr=[count(Int64(1))@1 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[AdvEngineID@0 as AdvEngineID], aggr=[count(Int64(1))]
+05)--------RepartitionExec: partitioning=Hash([AdvEngineID@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[AdvEngineID@0 as AdvEngineID], aggr=[count(Int64(1))]
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[AdvEngineID], file_type=vortex, predicate: AdvEngineID@40 != 0

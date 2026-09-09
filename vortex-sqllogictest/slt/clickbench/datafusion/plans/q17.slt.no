@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "UserID", "SearchPhrase", COUNT(*) FROM hits GROUP BY "UserID", "SearchPhrase" LIMIT 10;
+----
+logical_plan
+01)Projection: hits.UserID, hits.SearchPhrase, count(Int64(1)) AS count(*)
+02)--Limit: skip=0, fetch=10
+03)----Aggregate: groupBy=[[hits.UserID, hits.SearchPhrase]], aggr=[[count(Int64(1))]]
+04)------TableScan: hits projection=[UserID, SearchPhrase]
+physical_plan
+01)ProjectionExec: expr=[UserID@0 as UserID, SearchPhrase@1 as SearchPhrase, count(Int64(1))@2 as count(*)]
+02)--CoalescePartitionsExec: fetch=10
+03)----AggregateExec: mode=FinalPartitioned, gby=[UserID@0 as UserID, SearchPhrase@1 as SearchPhrase], aggr=[count(Int64(1))]
+04)------RepartitionExec: partitioning=Hash([UserID@0, SearchPhrase@1], 4), input_partitions=4
+05)--------AggregateExec: mode=Partial, gby=[UserID@0 as UserID, SearchPhrase@1 as SearchPhrase], aggr=[count(Int64(1))]
+06)----------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[UserID, SearchPhrase], file_type=vortex

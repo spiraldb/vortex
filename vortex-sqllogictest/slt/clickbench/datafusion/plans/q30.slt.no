@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "SearchEngineID", "ClientIP", COUNT(*) AS c, SUM("IsRefresh"), AVG("ResolutionWidth") FROM hits WHERE "SearchPhrase" <> '' GROUP BY "SearchEngineID", "ClientIP" ORDER BY c DESC LIMIT 10;
+----
+logical_plan
+01)Sort: c DESC NULLS FIRST, fetch=10
+02)--Projection: hits.SearchEngineID, hits.ClientIP, count(Int64(1)) AS count(*) AS c, sum(hits.IsRefresh), avg(hits.ResolutionWidth)
+03)----Aggregate: groupBy=[[hits.SearchEngineID, hits.ClientIP]], aggr=[[count(Int64(1)), sum(CAST(hits.IsRefresh AS Int64)), avg(CAST(hits.ResolutionWidth AS Float64))]]
+04)------Projection: hits.ClientIP, hits.IsRefresh, hits.ResolutionWidth, hits.SearchEngineID
+05)--------Filter: hits.SearchPhrase != Utf8View("")
+06)----------TableScan: hits projection=[ClientIP, IsRefresh, ResolutionWidth, SearchEngineID, SearchPhrase], partial_filters=[hits.SearchPhrase != Utf8View("")]
+physical_plan
+01)SortPreservingMergeExec: [c@2 DESC], fetch=10
+02)--ProjectionExec: expr=[SearchEngineID@0 as SearchEngineID, ClientIP@1 as ClientIP, count(Int64(1))@2 as c, sum(hits.IsRefresh)@3 as sum(hits.IsRefresh), avg(hits.ResolutionWidth)@4 as avg(hits.ResolutionWidth)]
+03)----SortExec: TopK(fetch=10), expr=[count(Int64(1))@2 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[SearchEngineID@0 as SearchEngineID, ClientIP@1 as ClientIP], aggr=[count(Int64(1)), sum(hits.IsRefresh), avg(hits.ResolutionWidth)]
+05)--------RepartitionExec: partitioning=Hash([SearchEngineID@0, ClientIP@1], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[SearchEngineID@3 as SearchEngineID, ClientIP@0 as ClientIP], aggr=[count(Int64(1)), sum(hits.IsRefresh), avg(hits.ResolutionWidth)]
+07)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[ClientIP, IsRefresh, ResolutionWidth, SearchEngineID], file_type=vortex, predicate: SearchPhrase@39 != 

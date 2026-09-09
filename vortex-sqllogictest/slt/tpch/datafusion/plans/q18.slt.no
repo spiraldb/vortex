@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+select
+    c_name,
+    c_custkey,
+    o_orderkey,
+    o_orderdate,
+    o_totalprice,
+    sum(l_quantity)
+from
+    customer,
+    orders,
+    lineitem
+where
+        o_orderkey in (
+        select
+            l_orderkey
+        from
+            lineitem
+        group by
+            l_orderkey having
+                sum(l_quantity) > 300
+    )
+  and c_custkey = o_custkey
+  and o_orderkey = l_orderkey
+group by
+    c_name,
+    c_custkey,
+    o_orderkey,
+    o_orderdate,
+    o_totalprice
+order by
+    o_totalprice desc,
+    o_orderdate
+limit 100;
+----
+logical_plan
+01)Sort: orders.o_totalprice DESC NULLS FIRST, orders.o_orderdate ASC NULLS LAST, fetch=100
+02)--Aggregate: groupBy=[[customer.c_name, customer.c_custkey, orders.o_orderkey, orders.o_orderdate, orders.o_totalprice]], aggr=[[sum(lineitem.l_quantity)]]
+03)----LeftSemi Join: orders.o_orderkey = __correlated_sq_1.l_orderkey
+04)------Projection: customer.c_custkey, customer.c_name, orders.o_orderkey, orders.o_totalprice, orders.o_orderdate, lineitem.l_quantity
+05)--------Inner Join: orders.o_orderkey = lineitem.l_orderkey
+06)----------Projection: customer.c_custkey, customer.c_name, orders.o_orderkey, orders.o_totalprice, orders.o_orderdate
+07)------------Inner Join: customer.c_custkey = orders.o_custkey
+08)--------------TableScan: customer projection=[c_custkey, c_name]
+09)--------------TableScan: orders projection=[o_orderkey, o_custkey, o_totalprice, o_orderdate]
+10)----------TableScan: lineitem projection=[l_orderkey, l_quantity]
+11)------SubqueryAlias: __correlated_sq_1
+12)--------Projection: lineitem.l_orderkey
+13)----------Filter: sum(lineitem.l_quantity) > Decimal128(300.00,25,2)
+14)------------Aggregate: groupBy=[[lineitem.l_orderkey]], aggr=[[sum(lineitem.l_quantity)]]
+15)--------------TableScan: lineitem projection=[l_orderkey, l_quantity]
+physical_plan
+01)SortPreservingMergeExec: [o_totalprice@4 DESC, o_orderdate@3 ASC NULLS LAST], fetch=100
+02)--SortExec: TopK(fetch=100), expr=[o_totalprice@4 DESC, o_orderdate@3 ASC NULLS LAST], preserve_partitioning=[true]
+03)----AggregateExec: mode=SinglePartitioned, gby=[c_name@1 as c_name, c_custkey@0 as c_custkey, o_orderkey@2 as o_orderkey, o_orderdate@4 as o_orderdate, o_totalprice@3 as o_totalprice], aggr=[sum(lineitem.l_quantity)]
+04)------HashJoinExec: mode=CollectLeft, join_type=RightSemi, on=[(l_orderkey@0, o_orderkey@2)]
+05)--------CoalescePartitionsExec
+06)----------FilterExec: sum(lineitem.l_quantity)@1 > 300.00, projection=[l_orderkey@0]
+07)------------AggregateExec: mode=FinalPartitioned, gby=[l_orderkey@0 as l_orderkey], aggr=[sum(lineitem.l_quantity)]
+08)--------------RepartitionExec: partitioning=Hash([l_orderkey@0], 4), input_partitions=4
+09)----------------AggregateExec: mode=Partial, gby=[l_orderkey@0 as l_orderkey], aggr=[sum(lineitem.l_quantity)]
+10)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>]]}, projection=[l_orderkey, l_quantity], file_type=vortex
+11)--------HashJoinExec: mode=Partitioned, join_type=Inner, on=[(o_orderkey@2, l_orderkey@0)], projection=[c_custkey@0, c_name@1, o_orderkey@2, o_totalprice@3, o_orderdate@4, l_quantity@6]
+12)----------RepartitionExec: partitioning=Hash([o_orderkey@2], 4), input_partitions=4
+13)------------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(c_custkey@0, o_custkey@1)], projection=[c_custkey@0, c_name@1, o_orderkey@2, o_totalprice@4, o_orderdate@5]
+14)--------------CoalescePartitionsExec
+15)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>], [${WORK_DIR}/customer.vortex:<slt:ignore>]]}, projection=[c_custkey, c_name], file_type=vortex
+16)--------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>], [${WORK_DIR}/orders.vortex:<slt:ignore>]]}, projection=[o_orderkey, o_custkey, o_totalprice, o_orderdate], file_type=vortex
+17)----------RepartitionExec: partitioning=Hash([l_orderkey@0], 4), input_partitions=4
+18)------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>]]}, projection=[l_orderkey, l_quantity], file_type=vortex

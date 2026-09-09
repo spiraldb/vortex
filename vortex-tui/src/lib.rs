@@ -173,6 +173,41 @@ mod native_cli {
                 Some(clap::error::ErrorKind::DisplayHelp),
             );
         }
+
+        /// `vx tree array` advertised `--json` but bound it to `_json` and printed the
+        /// human-readable tree anyway, so a JSON consumer parsed prose and saw exit 0.
+        /// `docs/getting-started/query.md` documents `--json` as supported by `vx inspect`
+        /// and `vx tree layout` only.
+        #[tokio::test]
+        async fn tree_array_rejects_json_flag() {
+            let err = super::launch_from(
+                &VortexSession::default(),
+                ["vx", "tree", "array", "missing.vortex", "--json"],
+            )
+            .await
+            .expect_err("`tree array` does not support --json");
+            assert_eq!(
+                err.downcast_ref::<clap::Error>().map(clap::Error::kind),
+                Some(clap::error::ErrorKind::UnknownArgument),
+            );
+        }
+
+        /// The sibling subcommand does honour `--json`, so the flag must still parse there.
+        #[tokio::test]
+        async fn tree_layout_still_accepts_json_flag() {
+            let err = super::launch_from(
+                &VortexSession::default(),
+                ["vx", "tree", "layout", "missing.vortex", "--json"],
+            )
+            .await
+            .expect_err("opening a missing file must fail");
+            // Reaching the missing-file check means the flag parsed; `launch_from`
+            // reports that as a `clap::Error` of kind `Io`.
+            assert_eq!(
+                err.downcast_ref::<clap::Error>().map(clap::Error::kind),
+                Some(clap::error::ErrorKind::Io),
+            );
+        }
     }
 }
 

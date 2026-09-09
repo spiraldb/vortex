@@ -7,7 +7,6 @@ maxdepth: 2
 
 community
 roadmap
-bindings
 contributing
 changelog/index
 ../references
