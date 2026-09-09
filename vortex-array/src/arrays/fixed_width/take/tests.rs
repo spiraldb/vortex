@@ -52,6 +52,9 @@ fn take_small_byte_table() {
     );
 }
 
+// The bounds-check message is specific to the NEON table path; other targets reach a different
+// fallback with its own message.
+#[cfg(all(target_arch = "aarch64", target_endian = "little"))]
 #[test]
 #[should_panic(expected = "take index")]
 fn take_small_byte_table_rejects_out_of_bounds_index() {
