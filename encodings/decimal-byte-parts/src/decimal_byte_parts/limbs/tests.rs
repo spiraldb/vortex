@@ -20,10 +20,12 @@ use super::*;
 #[case::all_valid(Validity::AllValid)]
 #[case::all_null(Validity::AllInvalid)]
 #[case::mixed(Validity::from_iter((0..263).map(|i| i % 3 != 1)))]
+#[case::sparse(Validity::from_iter((0..263).map(|i| i % 16 == 0)))]
+#[case::null_prefix_and_suffix(Validity::from_iter((0..263).map(|i| (67..196).contains(&i))))]
 fn test_split_zeroes_null_words(
     #[case] validity: Validity,
     #[values(false, true)] wide_256: bool,
-    #[values(0, 1, 257)] len: usize,
+    #[values(0, 1, 63, 64, 65, 257)] len: usize,
 ) -> VortexResult<()> {
     let mut ctx = array_session().create_execution_ctx();
     let decimal = if wide_256 {

@@ -102,115 +102,118 @@ pub fn split_decimal(decimal: &DecimalArray, ctx: &mut ExecutionCtx) -> VortexRe
         DecimalType::I64 => DecimalParts::from_msp(decimal.buffer::<i64>(), validity),
         DecimalType::I128 => {
             let mask = validity.execute_mask(decimal.len(), ctx)?;
-            let (msp, lower) = split_i128(&decimal.buffer::<i128>(), &mask);
-            DecimalParts::new(msp, [lower], validity)
+            let (msp, lower) = split_wide(&decimal.buffer::<i128>(), &mask, i128_to_parts);
+            DecimalParts::new(msp, lower, validity)
         }
         DecimalType::I256 => {
             let mask = validity.execute_mask(decimal.len(), ctx)?;
-            let (msp, lower) = split_i256(&decimal.buffer::<i256>(), &mask);
+            let (msp, lower) = split_wide(&decimal.buffer::<i256>(), &mask, i256_to_parts);
             DecimalParts::new(msp, lower, validity)
         }
     })
 }
 
-/// Split each `i128` into an `i64` MSP and an `u64` lower part.
+/// Split wide integers into a signed MSP and `N` unsigned lower parts.
 ///
-/// For each valid row, the original value is `msp * 2^64 + lower`. Invalid rows are zeroed.
-#[expect(
-    clippy::cast_possible_truncation,
-    clippy::cast_sign_loss,
-    reason = "splitting a wide integer into 64-bit windows truncates by construction"
-)]
-fn split_i128(values: &Buffer<i128>, validity: &Mask) -> (Buffer<i64>, Buffer<u64>) {
-    if validity.all_true() {
-        let mut msp = BufferMut::<i64>::with_capacity(values.len());
-        let mut lower = BufferMut::<u64>::with_capacity(values.len());
-        for value in values.iter() {
-            msp.push((value >> LOWER_PART_BITS) as i64);
-            lower.push(*value as u64);
-        }
-        return (msp.freeze(), lower.freeze());
-    }
-
-    // Lower parts are stored as non-nullable arrays, so use zeros at null positions instead
-    // of copying their garbage values.
-    let mut msp = BufferMut::<i64>::zeroed(values.len());
-    let mut lower = BufferMut::<u64>::zeroed(values.len());
-
-    if let Mask::Values(valid) = validity {
-        let msp = msp.as_mut_slice();
-        let lower = lower.as_mut_slice();
-        valid.bit_buffer().for_each_set_index(|i| {
-            let value = values[i];
-            msp[i] = (value >> LOWER_PART_BITS) as i64;
-            lower[i] = value as u64;
-        });
-    }
-    (msp.freeze(), lower.freeze())
-}
-
-/// Split each `i256` into an `i64` MSP and three `u64` lower parts, ordered most significant
-/// first.
-///
-/// For each valid row, the original value is
-///
-/// `msp * 2^192 + lower[0] * 2^128 + lower[1] * 2^64 + lower[2]`.
-///
-/// Invalid rows are zeroed.
-fn split_i256(
-    values: &Buffer<i256>,
+/// `to_parts` returns the MSP and lower words in most-significant-first order.
+/// It is specialized for each input type: `i128` has one lower word and `i256`
+/// has three. Null rows get zeros in every output buffer.
+fn split_wide<T: Copy, const N: usize>(
+    values: &Buffer<T>,
     validity: &Mask,
-) -> (Buffer<i64>, [Buffer<u64>; MAX_LOWER_PARTS]) {
-    // With no nulls, append every value without zeroing the output buffers first.
-    if validity.all_true() {
-        let mut msp = BufferMut::<i64>::with_capacity(values.len());
-        let mut lower = std::array::from_fn::<_, MAX_LOWER_PARTS, _>(|_| {
-            BufferMut::<u64>::with_capacity(values.len())
-        });
-        for value in values.iter() {
-            let [msp_word, lower_words @ ..] = i256_to_words(*value);
-            msp.push(msp_word.cast_signed());
-            for (part, word) in lower.iter_mut().zip(lower_words) {
-                part.push(word);
-            }
+    to_parts: impl Fn(T) -> (i64, [u64; N]),
+) -> (Buffer<i64>, [Buffer<u64>; N]) {
+    let len = values.len();
+    let mut msp = BufferMut::<i64>::with_capacity(len);
+    let mut lower = std::array::from_fn::<_, N, _>(|_| BufferMut::<u64>::with_capacity(len));
+
+    // Zero out all parts if all null
+    if validity.all_false() {
+        msp.push_n(0, len);
+        for part in &mut lower {
+            part.push_n(0, len);
         }
         return (msp.freeze(), lower.map(BufferMut::freeze));
     }
 
-    // Lower parts are stored as non-nullable arrays, so use zeros at null positions instead
-    // of copying their garbage values.
-    let mut msp = BufferMut::<i64>::zeroed(values.len());
-    let mut lower =
-        std::array::from_fn::<_, MAX_LOWER_PARTS, _>(|_| BufferMut::<u64>::zeroed(values.len()));
+    // Allocate without zeroing, then initialize every part of each row together.
+    let msp_out = &mut msp.spare_capacity_mut()[..len];
+    let mut lower_out = lower
+        .each_mut()
+        .map(|part| &mut part.spare_capacity_mut()[..len]);
 
-    if let Mask::Values(valid) = validity {
-        let msp = msp.as_mut_slice();
-        let mut lower = lower.each_mut().map(BufferMut::as_mut_slice);
-        valid.bit_buffer().for_each_set_index(|i| {
-            let [msp_word, lower_words @ ..] = i256_to_words(values[i]);
-            msp[i] = msp_word.cast_signed();
-            for (part, word) in lower.iter_mut().zip(lower_words) {
-                part[i] = word;
+    match validity {
+        Mask::AllTrue(_) => {
+            for row in 0..len {
+                let (high, words) = to_parts(values[row]);
+                msp_out[row].write(high);
+                for (part, word) in lower_out.iter_mut().zip(words) {
+                    part[row].write(word);
+                }
             }
-        });
+        }
+        Mask::Values(validity) => {
+            // A shorter bitmap would leave output slots uninitialized before set_len.
+            assert_eq!(
+                validity.bit_buffer().len(),
+                len,
+                "values and validity must have the same length"
+            );
+            for (chunk_index, ((chunk, bits), msp)) in values
+                .chunks(64)
+                .zip(validity.bit_buffer().chunks().iter_padded())
+                .zip(msp_out.chunks_mut(64))
+                .enumerate()
+            {
+                for (i, (&value, msp)) in chunk.iter().zip(msp).enumerate() {
+                    let mask = 0u64.wrapping_sub((bits >> i) & 1);
+                    let (high, words) = to_parts(value);
+                    msp.write(high & mask.cast_signed());
+                    for (part, word) in lower_out.iter_mut().zip(words) {
+                        part[chunk_index * 64 + i].write(word & mask);
+                    }
+                }
+            }
+        }
+        Mask::AllFalse(_) => unreachable!("AllFalse case addressed above"),
+    }
+
+    // SAFETY: the input and all output slices have len elements. Both branches
+    // initialize every slot, including null rows and the final partial chunk.
+    // The bitmap length check prevents the masked iteration from ending early.
+    unsafe {
+        msp.set_len(len);
+        for part in &mut lower {
+            part.set_len(len);
+        }
     }
     (msp.freeze(), lower.map(BufferMut::freeze))
 }
 
-/// Split an `i256` into four `u64` words, most significant first.
+/// Extract the high signed word and low unsigned word of an `i128`.
 #[inline]
-const fn i256_to_words(value: i256) -> [u64; 4] {
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "each cast preserves a 64-bit window of the original two's complement bits"
+)]
+const fn i128_to_parts(value: i128) -> (i64, [u64; 1]) {
+    ((value >> LOWER_PART_BITS) as i64, [value as u64])
+}
+
+/// Extract the signed MSP and three unsigned lower words of an `i256`.
+#[inline]
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "each cast preserves a 64-bit window of the original two's complement bits"
+)]
+const fn i256_to_parts(value: i256) -> (i64, [u64; MAX_LOWER_PARTS]) {
     let (low, high) = value.to_parts();
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "each cast takes the low 64 bits of a word pair by construction"
-    )]
-    [
-        (high >> LOWER_PART_BITS) as u64,
-        high as u64,
-        (low >> LOWER_PART_BITS) as u64,
-        low as u64,
-    ]
+    (
+        (high >> LOWER_PART_BITS) as i64,
+        [high as u64, (low >> LOWER_PART_BITS) as u64, low as u64],
+    )
 }
 
 /// Reassemble primitive arrays that constitute decimal byte parts into a canonical decimal array.
@@ -284,18 +287,13 @@ pub(crate) fn assemble_decimal(
     reason = "the widening to i64 is a no-op only for the i64 arm of the ptype match"
 )]
 fn assemble_i128(msp: &PrimitiveArray, lower: &[u64]) -> Buffer<i128> {
-    let mut out = BufferMut::<i128>::zeroed(msp.len());
+    let mut out = BufferMut::<i128>::with_capacity(msp.len());
     match_each_signed_integer_ptype!(msp.ptype(), |P| {
-        for ((slot, value), part) in out
-            .as_mut_slice()
-            .iter_mut()
-            .zip(msp.as_slice::<P>())
-            .zip(lower)
-        {
+        out.extend_trusted(msp.as_slice::<P>().iter().zip(lower).map(|(value, part)| {
             // Sign-extend the MSP, then shift it into the high 64 bits. The unsigned
             // lower part fills the low 64 bits.
-            *slot = (i128::from(i64::from(*value)) << LOWER_PART_BITS) | i128::from(*part);
-        }
+            (i128::from(i64::from(*value)) << LOWER_PART_BITS) | i128::from(*part)
+        }));
     });
     out.freeze()
 }
