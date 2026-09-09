@@ -5,11 +5,13 @@ use std::fmt::Display;
 use std::fmt::Formatter;
 use std::hash::Hasher;
 
+use prost::Message as _;
 use vortex_array::Array;
 use vortex_array::ArrayParts;
 use vortex_array::ArrayView;
 pub(crate) mod compute;
 mod limbs;
+mod plugin;
 mod rules;
 #[cfg(test)]
 pub(crate) mod testing;
@@ -22,7 +24,8 @@ pub mod _benchmarking {
     pub use super::limbs::assemble_decimal;
 }
 
-use prost::Message as _;
+pub use plugin::DecimalBytePartsPlugin;
+pub use plugin::decimal_byte_parts_v2_id;
 use vortex_array::ArrayEq;
 use vortex_array::ArrayHash;
 use vortex_array::ArrayId;
@@ -178,7 +181,9 @@ impl DecimalByteParts {
         lower_parts: Vec<ArrayRef>,
         decimal_dtype: DecimalDType,
     ) -> VortexResult<DecimalBytePartsArray> {
-        // Lower parts are supported in memory; the frozen serializer still rejects them.
+        // Building lower parts in memory is never gated — reading a file requires it. What is
+        // gated is the serialized form: an array carrying lower parts serializes under the
+        // `vortex.decimal_byte_parts_v2` format ID, which only editions that contain it may write.
         let len = msp.len();
         let dtype = DType::Decimal(decimal_dtype, msp.dtype().nullability());
         let slots = DecimalBytePartsSlots { msp, lower_parts }.into_slots();
@@ -245,7 +250,7 @@ impl VTable for DecimalByteParts {
     ) -> VortexResult<Option<Vec<u8>>> {
         vortex_ensure!(
             array.lower_parts().is_empty(),
-            "serializing DecimalByteParts with lower parts is not supported"
+            "serializing DecimalByteParts with lower parts requires DecimalBytePartsPlugin"
         );
         Ok(Some(
             DecimalBytesPartsMetadata::from_array(array)?.encode_to_vec(),
@@ -486,6 +491,8 @@ mod tests {
     use crate::decimal_byte_parts::testing::i128_parts;
     use crate::decimal_byte_parts::testing::i256_of;
     use crate::decimal_byte_parts::testing::i256_parts;
+    use crate::decimal_byte_parts::testing::wide_i128_values;
+    use crate::decimal_byte_parts::testing::wide_i256_values;
 
     #[test]
     fn test_scalar_at_decimal_parts() {
@@ -524,47 +531,6 @@ mod tests {
                 .execute_scalar(2, &mut array_session().create_execution_ctx())
                 .unwrap()
         );
-    }
-
-    /// The largest unscaled value a `Decimal(38, _)` can hold: `10^38 - 1`.
-    const MAX_PRECISION_38: i128 = 99_999_999_999_999_999_999_999_999_999_999_999_999;
-
-    /// The largest unscaled value a `Decimal(76, _)` can hold: `10^76 - 1`.
-    fn max_precision_76() -> i256 {
-        i256::from_i128(10).wrapping_pow(76) - i256::ONE
-    }
-
-    /// Values that exercise every 64-bit window of an `i128`, both signs, and the boundaries
-    /// where a lower part carries into the MSP.
-    fn wide_i128_values() -> Vec<i128> {
-        vec![
-            0,
-            1,
-            -1,
-            (1 << 64) - 1,
-            1 << 64,
-            -(1 << 64),
-            -((1 << 64) + 1),
-            MAX_PRECISION_38,
-            -MAX_PRECISION_38,
-            1 << 100,
-        ]
-    }
-
-    /// Values that exercise every 64-bit window of an `i256`.
-    fn wide_i256_values() -> Vec<i256> {
-        vec![
-            i256::ZERO,
-            i256::ONE,
-            i256::ZERO - i256::ONE,
-            i256_of(0, u128::MAX),
-            i256_of(1, 0),
-            i256_of(-1, 0),
-            i256_of(-1, u128::MAX - 1),
-            i256_of(1 << 64, 12345),
-            max_precision_76(),
-            i256::ZERO - max_precision_76(),
-        ]
     }
 
     #[rstest]
@@ -779,13 +745,6 @@ mod tests {
         );
         let canonical = array.clone().execute::<DecimalArray>(&mut ctx)?;
         assert_arrays_eq!(array, canonical.into_array(), &mut ctx);
-        Ok(())
-    }
-    #[test]
-    fn test_frozen_serializer_rejects_lower_parts() -> VortexResult<()> {
-        let session = array_session();
-        let array = i128_parts(vec![1i128 << 70], Validity::NonNullable);
-        assert!(VTable::serialize(array.as_view(), &session).is_err());
         Ok(())
     }
 }
