@@ -620,6 +620,27 @@ fn test_expr_from_df_like(#[case] negated: bool, #[case] case_insensitive: bool)
     Ok(())
 }
 
+#[test]
+fn test_like_preserves_nullable_input_through_non_nullable_cast() -> anyhow::Result<()> {
+    let batch = arrow_array::record_batch!((
+        "text_col",
+        Utf8View,
+        vec![Some("google"), None, Some("example")]
+    ))?;
+    let column = Arc::new(df_expr::Column::new("text_col", 0)) as Arc<dyn PhysicalExpr>;
+    let cast = Arc::new(df_expr::CastExpr::new_with_target_field(
+        column,
+        Arc::new(Field::new("text_col", DataType::Utf8View, false)),
+        None,
+    )) as Arc<dyn PhysicalExpr>;
+    let pattern = Arc::new(df_expr::Literal::new(ScalarValue::Utf8View(Some(
+        "%google%".to_string(),
+    )))) as Arc<dyn PhysicalExpr>;
+    let like = Arc::new(df_expr::LikeExpr::new(false, false, cast, pattern));
+
+    assert_native_matches(like, batch)
+}
+
 #[rstest]
 fn test_expr_from_df_octet_length(test_schema: Schema) -> DFResult<()> {
     let expr = Arc::new(df_expr::Column::new("name", 1)) as Arc<dyn PhysicalExpr>;

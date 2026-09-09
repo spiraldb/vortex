@@ -341,7 +341,12 @@ impl DefaultExpressionConvertor {
                 return Err(Unconverted::Unsupported);
             }
             let child = self.convert_expr(cast_expr.expr(), schema, input_dtype)?;
-            let cast_dtype = self.arrow_dtype(cast_expr.target_field())?;
+            // DataFusion casts preserve input nulls even when the target field is declared
+            // non-nullable. Match the expression's runtime nullability rather than narrowing
+            // to the target field's metadata.
+            let cast_dtype = self
+                .arrow_dtype(cast_expr.target_field())?
+                .with_nullability(Nullability::from(cast_expr.nullable(schema)?));
             // Matching Arrow storage types do not imply matching extension semantics.
             let child_dtype = converted_dtype(&child, input_dtype)?;
             if (child_dtype.is_extension() || cast_dtype.is_extension())
@@ -595,10 +600,7 @@ fn converted_dtype(expr: &Expression, input_dtype: &DType) -> Conversion<DType> 
 fn supported_cast(cast: &df_expr::CastExpr, schema: &Schema) -> DFResult<bool> {
     use DataType::*;
     let options = cast.cast_options();
-    if options.safe
-        || options.format_options != DEFAULT_FORMAT_OPTIONS
-        || (cast.expr().nullable(schema)? && !cast.target_field().is_nullable())
-    {
+    if options.safe || options.format_options != DEFAULT_FORMAT_OPTIONS {
         return Ok(false);
     }
     let source = cast.expr().data_type(schema)?;
