@@ -3,11 +3,11 @@
 
 //! Offset-based storage for binary arrays.
 //!
-//! Canonical binary arrays are [`VarBinViewArray`], which spends a fixed 16 bytes per element on
-//! an opaque views buffer that no scheme can compress. Re-encoding as [`VarBinArray`] replaces
-//! that buffer with an offsets child array, which the cascading compressor can then compress with
-//! the ordinary integer schemes. For fixed-width values the offsets are a constant-stride
-//! sequence and collapse to nothing.
+//! Canonical binary arrays are [`VarBinViewArray`](vortex_array::arrays::VarBinViewArray), which
+//! spends a fixed 16 bytes per element on an opaque views buffer that no scheme can compress.
+//! Re-encoding as [`VarBinArray`] replaces that buffer with an offsets child array, which the
+//! cascading compressor can then compress with the ordinary integer schemes. For fixed-width
+//! values the offsets are a constant-stride sequence and collapse to nothing.
 
 use vortex_array::ArrayId;
 use vortex_array::ArrayRef;
