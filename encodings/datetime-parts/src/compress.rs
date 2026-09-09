@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::mem::MaybeUninit;
+
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
@@ -41,13 +43,38 @@ pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexRes
         ))?
         .execute::<PrimitiveArray>(ctx)?;
 
-    let (days, seconds, subseconds) = match array.temporal_metadata().time_unit() {
-        TimeUnit::Nanoseconds => split_slice::<1_000_000_000>(timestamps.as_slice::<i64>()),
-        TimeUnit::Microseconds => split_slice::<1_000_000>(timestamps.as_slice::<i64>()),
-        TimeUnit::Milliseconds => split_slice::<1_000>(timestamps.as_slice::<i64>()),
-        TimeUnit::Seconds => split_slice::<1>(timestamps.as_slice::<i64>()),
+    let length = timestamps.len();
+    let mut days = BufferMut::with_capacity(timestamps.len());
+    let mut seconds = BufferMut::with_capacity(timestamps.len());
+    let mut subseconds = BufferMut::with_capacity(timestamps.len());
+
+    let days_slice = days.spare_capacity_mut();
+    let seconds_slice = seconds.spare_capacity_mut();
+    let subseconds_slice = subseconds.spare_capacity_mut();
+    let timestamps = timestamps.as_slice::<i64>();
+
+    match array.temporal_metadata().time_unit() {
+        TimeUnit::Nanoseconds => {
+            split_slice::<1_000_000_000>(days_slice, seconds_slice, subseconds_slice, timestamps)
+        }
+        TimeUnit::Microseconds => {
+            split_slice::<1_000_000>(days_slice, seconds_slice, subseconds_slice, timestamps)
+        }
+        TimeUnit::Milliseconds => {
+            split_slice::<1_000>(days_slice, seconds_slice, subseconds_slice, timestamps)
+        }
+        TimeUnit::Seconds => {
+            split_slice::<1>(days_slice, seconds_slice, subseconds_slice, timestamps)
+        }
         TimeUnit::Days => vortex_bail!("Cannot handle day-level data"),
     };
+
+    // SAFETY: all bytes from 0 to length have been filled
+    unsafe {
+        days.set_len(length);
+        seconds.set_len(length);
+        subseconds.set_len(length);
+    }
 
     Ok(TemporalParts {
         days: PrimitiveArray::new(days.freeze(), temporal_values.validity()?).into_array(),
@@ -57,23 +84,17 @@ pub fn split_temporal(array: TemporalArray, ctx: &mut ExecutionCtx) -> VortexRes
 }
 
 fn split_slice<const DIVISOR: i64>(
+    days: &mut [MaybeUninit<i64>],
+    seconds: &mut [MaybeUninit<i64>],
+    subseconds: &mut [MaybeUninit<i64>],
     timestamps: &[i64],
-) -> (BufferMut<i64>, BufferMut<i64>, BufferMut<i64>) {
-    let mut days = BufferMut::zeroed(timestamps.len());
-    let mut seconds = BufferMut::zeroed(timestamps.len());
-    let mut subseconds = BufferMut::zeroed(timestamps.len());
-    let (days_out, seconds_out, subseconds_out) = (
-        days.as_mut_slice(),
-        seconds.as_mut_slice(),
-        subseconds.as_mut_slice(),
-    );
-    for (i, &ts) in timestamps.iter().enumerate() {
-        let ts_parts = timestamp::split_with_divisor::<DIVISOR>(ts);
-        days_out[i] = ts_parts.days;
-        seconds_out[i] = ts_parts.seconds;
-        subseconds_out[i] = ts_parts.subseconds;
+) {
+    for (((day, second), subsecond), ts) in days.iter_mut().zip(seconds).zip(subseconds).zip(timestamps) {
+        let ts_parts = timestamp::split_with_divisor::<DIVISOR>(*ts);
+        day.write(ts_parts.days);
+        second.write(ts_parts.seconds);
+        subsecond.write(ts_parts.subseconds);
     }
-    (days, seconds, subseconds)
 }
 
 #[cfg(test)]
