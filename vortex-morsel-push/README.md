@@ -9,7 +9,11 @@ activate source → read/decode → push batch → downstream stages → output
 
 `build_plan` binds expressions, identifies sources, and fuses eligible operator chains. Within
 a pipeline, each batch passes directly to the next stage on the same worker. Operators with
-multiple inputs retain and align batches at pipeline boundaries.
+multiple inputs retain and align batches at pipeline boundaries. Bottom-level `Chunked<Flat…>`
+layouts compile into one flat source over a shared sequence of segment descriptors, removing
+that chunk boundary from the pipeline. Each segment retains its own read ticket and decode lease.
+The source pushes segment overlaps in row order as downstream credits arrive; its full row range
+does not change morsel or batch sizes.
 
 `next_plan` registers the reads a morsel can need. Execution begins with `push_start` on its
 sources. `push_input` and `push_end` deliver batches and input completion. A stage waiting for
@@ -18,7 +22,9 @@ I/O retains its state and resumes through `push_resume` when its exact tickets c
 
 Predicates produce authoritative selections that activate later predicates and projected
 columns. Optional demand hints can defer speculative I/O; correctness depends on the selections,
-not on whether hints arrive. All-false selections avoid unnecessary decode work.
+not on whether hints arrive. Selections can arrive in fragments: each segment becomes eligible
+once its overlapping rows are known, allowing an ordered prefix to run while later selections
+are pending. All-false selections avoid unnecessary decode work.
 
 The executor does not poll storage futures. `SegmentSourceDriver` answers the scan's `IoDemand`
 stream on a separate runtime task or thread. `MorselScan::into_stream` provides ordered output,

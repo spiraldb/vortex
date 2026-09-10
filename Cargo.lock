@@ -11314,6 +11314,7 @@ dependencies = [
  "parking_lot",
  "rstest",
  "rustix",
+ "sysinfo",
  "tokio",
  "tpchgen",
  "tpchgen-arrow",

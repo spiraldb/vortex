@@ -101,6 +101,29 @@ impl FileReadAt {
             allocator,
         })
     }
+
+    /// Enable or disable Darwin's per-descriptor page-cache bypass.
+    #[cfg(target_vendor = "apple")]
+    pub fn set_nocache(&self, value: bool) -> VortexResult<()> {
+        rustix::fs::fcntl_nocache(&*self.file, value).map_err(io::Error::from)?;
+        Ok(())
+    }
+
+    /// Perform a positional read synchronously on the calling thread.
+    ///
+    /// Unlike [`VortexReadAt::read_at_nowait`], this method may block on storage. It is intended
+    /// for callers that have an external reason to expect the range to be resident and accept
+    /// the latency risk of an inline cache miss.
+    pub fn read_at_inline(
+        &self,
+        offset: u64,
+        length: usize,
+        alignment: Alignment,
+    ) -> VortexResult<BufferHandle> {
+        let mut buffer = self.allocator.allocate(length, alignment)?;
+        read_exact_at(&self.file, buffer.as_mut_slice(), offset)?;
+        Ok(BufferHandle::new_host(buffer.freeze()))
+    }
 }
 
 impl VortexReadAt for FileReadAt {

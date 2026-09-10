@@ -7,7 +7,7 @@ into physical pipelines so these transfers run inline on the owning worker.
 ```text
 source activation
       ↓
-flat source → chunk routing → predicate evaluation
+segment sequence source → predicate evaluation
                                     ↓ selection
                               projection sources → field alignment → projection → output
 ```
@@ -22,6 +22,11 @@ chunk boundaries differ. Operators reconcile those boundaries before producing a
 and physical pipelines. Workers instantiate their own arenas and reset node state for each
 morsel. Plans can be shared; mutable operator state stays on its worker.
 
+A bottom-level `Chunked<Flat…>` becomes one flat source containing a shared sequence of segment
+layouts and row ranges. It registers overlapping segments together and pushes one batch per
+segment overlap in row order, subject to consumer credits. Higher-level chunked layouts retain
+their ordering boundary. Source coverage, morsel size, and batch size remain independent.
+
 Before execution, `next_plan` registers segment uses and obtains I/O tickets. Planning is
 resumable and has a per-call budget. It can traverse children to discover reads; value production
 starts separately by activating sources.
@@ -33,7 +38,9 @@ can interpret its array or mask without reconstructing row identity.
 
 Cascade conjunctions activate later predicate sources using earlier results. Parallel
 conjunctions evaluate their inputs independently and intersect the resulting masks. The final
-predicate selection activates projection sources. Optional demand hints help prioritize or
+predicate selection activates projection sources. A source can activate its next segment as
+soon as that segment's overlapping rows have known selections, even while selections for later
+segments are pending. Optional demand hints help prioritize or
 suppress speculative I/O; dropping or delaying them must preserve output.
 
 ## Passing batches through a pipeline

@@ -52,6 +52,9 @@ use vortex_error::vortex_err;
 use vortex_io::runtime::single::block_on;
 use vortex_io::session::RuntimeSession;
 use vortex_layout::LayoutRef;
+use vortex_layout::layout_children;
+use vortex_layout::layouts::chunked::ChunkedLayout;
+use vortex_layout::layouts::struct_::StructLayout;
 use vortex_layout::segments::ReadAtNowait;
 use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
@@ -219,6 +222,146 @@ fn queries() -> Vec<Query> {
 }
 
 const ROWS: usize = 1000;
+
+#[rstest]
+#[case::single(1)]
+#[case::multiple_planning_batches(130)]
+fn flat_chunks_share_one_source_and_pipeline(#[case] chunks: usize) -> VortexResult<()> {
+    let session = session();
+    let values = (0..chunks as i32).collect::<Vec<_>>();
+    let boundaries = (1..=chunks).collect::<Vec<_>>();
+    let fixture = block_on(|_handle| async {
+        write_fixture(
+            vec![Column::new("a", i32_chunks(&values, &boundaries))],
+            &session,
+        )
+        .await
+    })?;
+    let query = Query {
+        name: "segment-run",
+        projection: select(vec!["a"], root()),
+        filter: None,
+    };
+    let plan = crate::build_plan(
+        &fixture.layout,
+        &query.projection,
+        None,
+        ConjunctMode::Cascade,
+    )?;
+    assert_eq!(plan.len(), 3);
+    assert_eq!(plan.sources().len(), 1);
+    assert_eq!(plan.sources()[0].root_range, 0..chunks as u64);
+    assert_eq!(plan.pipelines().len(), 1);
+    assert_eq!(plan.flat_uses().count(), chunks);
+    assert_eq!(
+        plan.natural_splits(),
+        &(1..=chunks as u64).collect::<Vec<_>>()
+    );
+    let oracle = run_v1(&session, &fixture.layout, &fixture.segments, &query)?;
+    let actual = run_morsel(
+        &session,
+        &fixture.layout,
+        &fixture.segments,
+        &query,
+        MorselConfig {
+            morsel_rows: chunks as u64,
+            ..Default::default()
+        },
+    )?;
+    assert_same_rows(
+        &session,
+        &v1_dtype(&fixture.layout, &query)?,
+        &oracle,
+        &actual,
+    )?;
+    let stats = actual
+        .stats
+        .ok_or_else(|| vortex_err!("morsel run omitted stats"))?;
+    assert_eq!(stats.morsels, 1);
+    assert_eq!(stats.push_source_activations, 1);
+    assert_eq!(stats.decodes, chunks as u64);
+    Ok(())
+}
+
+#[rstest]
+#[case::projection(false)]
+#[case::filtered(true)]
+fn nested_chunked_keeps_its_boundary_above_fused_leaves(
+    #[case] filtered: bool,
+) -> VortexResult<()> {
+    let session = session();
+    let values = (0..32).collect::<Vec<i32>>();
+    let fixture = block_on(|_handle| async {
+        write_fixture(
+            vec![Column::new("a", i32_chunks(&values, &[8, 16, 24, 32]))],
+            &session,
+        )
+        .await
+    })?;
+    let column = fixture
+        .layout
+        .slot(1)?
+        .ok_or_else(|| vortex_err!("missing column"))?;
+    let leaves = (0..4)
+        .map(|index| {
+            column
+                .slot(index)?
+                .ok_or_else(|| vortex_err!("missing flat child"))
+        })
+        .collect::<VortexResult<Vec<_>>>()?;
+    let groups = leaves
+        .chunks(2)
+        .map(|children| {
+            ChunkedLayout::new(
+                16,
+                column.dtype().clone(),
+                layout_children(children.to_vec()),
+            )
+            .into_layout()
+        })
+        .collect::<Vec<_>>();
+    let column =
+        ChunkedLayout::new(32, column.dtype().clone(), layout_children(groups)).into_layout();
+    let layout = StructLayout::new(32, fixture.layout.dtype().clone(), vec![column]).into_layout();
+    let query = Query {
+        name: "nested-segment-runs",
+        projection: select(vec!["a"], root()),
+        filter: filtered.then(|| gt(get_item("a", root()), lit(5i32))),
+    };
+    let plan = crate::build_plan(
+        &layout,
+        &query.projection,
+        query.filter.as_ref(),
+        ConjunctMode::Cascade,
+    )?;
+    let expected = if filtered {
+        vec![0..16, 16..32, 0..16, 16..32]
+    } else {
+        vec![0..16, 16..32]
+    };
+    assert_eq!(
+        plan.sources()
+            .iter()
+            .map(|source| source.root_range.clone())
+            .collect::<Vec<_>>(),
+        expected
+    );
+    let oracle = run_v1(&session, &fixture.layout, &fixture.segments, &query)?;
+    for morsel_rows in [0, 12, 32] {
+        let actual = run_morsel(
+            &session,
+            &layout,
+            &fixture.segments,
+            &query,
+            MorselConfig {
+                morsel_rows,
+                ..Default::default()
+            },
+        )?;
+        assert_same_rows(&session, &v1_dtype(&layout, &query)?, &oracle, &actual)?;
+    }
+    Ok(())
+}
 
 #[test]
 fn q6_ranges_build_three_predicate_sources_and_match_v1() -> VortexResult<()> {
@@ -475,6 +618,8 @@ fn bounded_stream_resumes_in_order_after_consumer_stall() -> VortexResult<()> {
         stats: Some(stats.clone()),
         source_io_requests: None,
         source_io_bytes: None,
+        source_nowait: None,
+        source_io_occupancy: None,
     };
     assert_same_rows(
         &session,
@@ -1174,20 +1319,23 @@ impl SegmentSource for PairedPendingSource {
 /// One CPU worker must submit every planned read before waiting for either one. Each of this
 /// source's first two futures remains pending until the other has been polled, so the old inline
 /// `block_on` driver reaches the watchdog while the continuation scheduler completes immediately.
-#[test]
-fn planned_reads_progress_together_without_parking_a_worker() -> VortexResult<()> {
+#[rstest]
+#[case::independent_sources(false)]
+#[case::fused_segments(true)]
+fn planned_reads_progress_together_without_parking_a_worker(
+    #[case] fused: bool,
+) -> VortexResult<()> {
     let session = session();
     let values: Vec<i32> = (0..32).collect();
-    let fixture = block_on(|_handle| async {
-        write_fixture(
-            vec![
-                Column::new("a", i32_chunks(&values, &[32])),
-                Column::new("b", i32_chunks(&values, &[32])),
-            ],
-            &session,
-        )
-        .await
-    })?;
+    let columns = if fused {
+        vec![Column::new("a", i32_chunks(&values, &[16, 32]))]
+    } else {
+        vec![
+            Column::new("a", i32_chunks(&values, &[32])),
+            Column::new("b", i32_chunks(&values, &[32])),
+        ]
+    };
+    let fixture = block_on(|_handle| async { write_fixture(columns, &session).await })?;
 
     let gate = Arc::new(Mutex::new(PairedGate::default()));
     let watchdog_gate = Arc::clone(&gate);
@@ -1210,8 +1358,8 @@ fn planned_reads_progress_together_without_parking_a_worker() -> VortexResult<()
     });
     let query = Query {
         name: "paired-pending",
-        projection: select(vec!["b"], root()),
-        filter: Some(gt(get_item("a", root()), lit(-1i32))),
+        projection: select(vec![if fused { "a" } else { "b" }], root()),
+        filter: (!fused).then(|| gt(get_item("a", root()), lit(-1i32))),
     };
     let v1 = run_v1(&session, &fixture.layout, &fixture.segments, &query)?;
     let morsel = run_morsel(
@@ -1221,6 +1369,7 @@ fn planned_reads_progress_together_without_parking_a_worker() -> VortexResult<()
         &query,
         MorselConfig {
             threads: 1,
+            morsel_rows: 32,
             ..Default::default()
         },
     )?;

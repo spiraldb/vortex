@@ -26,16 +26,26 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
+use std::sync::mpsc::sync_channel;
+use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
+use futures::StreamExt;
 use futures::future::BoxFuture;
+use parking_lot::Mutex;
 #[cfg(not(target_vendor = "apple"))]
 use rustix::fs::Advice;
 #[cfg(not(target_vendor = "apple"))]
 use rustix::fs::fadvise;
+use sysinfo::Pid;
+use sysinfo::ProcessRefreshKind;
+use sysinfo::ProcessesToUpdate;
+use sysinfo::RefreshKind;
+use sysinfo::System;
 use vortex::VortexSessionDefault;
 use vortex::file::SegmentSpec;
 use vortex::file::segments::FileSegmentSource;
@@ -63,6 +73,7 @@ use vortex_morsel_push::fixtures::write_streaming_fixture_no_table;
 use vortex_morsel_push::harness::MorselConfig;
 use vortex_morsel_push::harness::Query;
 use vortex_morsel_push::harness::RunOutcome;
+use vortex_morsel_push::harness::SourceIoOccupancy;
 use vortex_morsel_push::harness::assert_same_rows;
 use vortex_morsel_push::harness::run_morsel;
 use vortex_morsel_push::harness::run_v1;
@@ -149,7 +160,29 @@ struct Timing {
     io_batches_per_morsel_min: Option<u64>,
     io_batches_per_morsel_max: Option<u64>,
     io_blocks_per_morsel_max: Option<u64>,
+    io_occupancy: Option<SourceIoOccupancy>,
+    io_oracle: Option<IoOracleTiming>,
     push_profile: Option<PushProfileTiming>,
+}
+
+struct IoOracleTiming {
+    learned_keys: u64,
+    replay_keys: u64,
+    replay_hits: u64,
+    replay_misses: u64,
+    reordered_reads: u64,
+    reordered_batches: u64,
+    start_inversions: u64,
+    start_pairs: u64,
+    completion_inversions: u64,
+    completion_pairs: u64,
+    unused_started: u64,
+    first_need_ready: u64,
+    first_need_requested: u64,
+    first_need_unissued: u64,
+    late_read_time: Duration,
+    late_read_time_max: Duration,
+    ready_lead_time: Duration,
 }
 
 struct PushProfileTiming {
@@ -170,13 +203,96 @@ struct PushProfileTiming {
 struct PhysicalIoCounters {
     ranges: AtomicU64,
     bytes: AtomicU64,
+    nowait_attempts: AtomicU64,
+    nowait_hits: AtomicU64,
+    nowait_misses: AtomicU64,
+    nowait_unsupported: AtomicU64,
+    occupancy: Mutex<PhysicalIoOccupancy>,
+}
+
+#[derive(Default)]
+struct PhysicalIoOccupancy {
+    capacity: usize,
+    active: usize,
+    max_active: usize,
+    first: Option<Instant>,
+    last: Option<Instant>,
+    full: Duration,
+    underfilled: Duration,
+    idle: Duration,
+    refill_wait: Duration,
+    not_full_since_last_submit: Duration,
+    active_slot_nanos: u128,
+}
+
+impl PhysicalIoCounters {
+    fn submit(&self, count: usize, capacity: usize) {
+        let mut occupancy = self.occupancy.lock();
+        occupancy.advance(Instant::now());
+        let refill_wait = occupancy.not_full_since_last_submit;
+        occupancy.refill_wait += refill_wait;
+        occupancy.not_full_since_last_submit = Duration::ZERO;
+        occupancy.capacity = capacity;
+        occupancy.active = occupancy.active.saturating_add(count);
+        occupancy.max_active = occupancy.max_active.max(occupancy.active);
+    }
+
+    fn complete(&self) {
+        let mut occupancy = self.occupancy.lock();
+        occupancy.advance(Instant::now());
+        occupancy.active = occupancy.active.saturating_sub(1);
+    }
+
+    fn occupancy(&self) -> SourceIoOccupancy {
+        let occupancy = self.occupancy.lock();
+        SourceIoOccupancy {
+            capacity: occupancy.capacity,
+            max_active: occupancy.max_active,
+            span: occupancy
+                .first
+                .zip(occupancy.last)
+                .map(|(first, last)| last.duration_since(first))
+                .unwrap_or_default(),
+            full: occupancy.full,
+            underfilled: occupancy.underfilled,
+            idle: occupancy.idle,
+            refill_wait: occupancy.refill_wait,
+            tail_drain: occupancy.not_full_since_last_submit,
+            active_slot_nanos: occupancy.active_slot_nanos,
+        }
+    }
+}
+
+impl PhysicalIoOccupancy {
+    fn advance(&mut self, now: Instant) {
+        let Some(last) = self.last.replace(now) else {
+            self.first = Some(now);
+            return;
+        };
+        let elapsed = now.duration_since(last);
+        self.active_slot_nanos = self
+            .active_slot_nanos
+            .saturating_add(elapsed.as_nanos().saturating_mul(self.active as u128));
+        if self.active == 0 {
+            self.idle += elapsed;
+            self.not_full_since_last_submit += elapsed;
+        } else if self.active >= self.capacity {
+            self.full += elapsed;
+        } else {
+            self.underfilled += elapsed;
+            self.not_full_since_last_submit += elapsed;
+        }
+    }
 }
 
 #[derive(Clone)]
 struct CountingReadAt {
     inner: Arc<dyn VortexReadAt>,
+    inline_reader: Option<Arc<FileReadAt>>,
+    inline_max_bytes: Option<usize>,
     counters: Arc<PhysicalIoCounters>,
     coalesce_override: Option<CoalesceConfig>,
+    concurrency_override: Option<usize>,
 }
 
 impl VortexReadAt for CountingReadAt {
@@ -190,7 +306,8 @@ impl VortexReadAt for CountingReadAt {
     }
 
     fn concurrency(&self) -> usize {
-        self.inner.concurrency()
+        self.concurrency_override
+            .unwrap_or_else(|| self.inner.concurrency())
     }
 
     fn size(&self) -> BoxFuture<'static, VortexResult<u64>> {
@@ -207,7 +324,15 @@ impl VortexReadAt for CountingReadAt {
         self.counters
             .bytes
             .fetch_add(length as u64, Ordering::Relaxed);
-        self.inner.read_at(offset, length, alignment)
+        let read = self.inner.read_at(offset, length, alignment);
+        let counters = Arc::clone(&self.counters);
+        let capacity = self.concurrency();
+        Box::pin(async move {
+            counters.submit(1, capacity);
+            let result = read.await;
+            counters.complete();
+            result
+        })
     }
 
     fn read_ranges(&self, requests: Arc<[ReadAtRequest]>) -> ReadAtStream {
@@ -218,7 +343,26 @@ impl VortexReadAt for CountingReadAt {
             requests.iter().map(|request| request.length as u64).sum(),
             Ordering::Relaxed,
         );
-        self.inner.read_ranges(requests)
+        let capacity = self.concurrency();
+        let inner = Arc::clone(&self.inner);
+        let counters = Arc::clone(&self.counters);
+        let reads = requests
+            .iter()
+            .copied()
+            .map(move |request| {
+                let read = inner.read_at(request.offset, request.length, request.alignment);
+                let counters = Arc::clone(&counters);
+                async move {
+                    counters.submit(1, capacity);
+                    let result = read.await;
+                    counters.complete();
+                    (request, result)
+                }
+            })
+            .collect::<Vec<_>>();
+        futures::stream::iter(reads)
+            .buffer_unordered(capacity)
+            .boxed()
     }
 
     fn read_at_nowait(
@@ -227,12 +371,32 @@ impl VortexReadAt for CountingReadAt {
         length: usize,
         alignment: Alignment,
     ) -> VortexResult<ReadAtNowait> {
-        let result = self.inner.read_at_nowait(offset, length, alignment)?;
-        if matches!(result, ReadAtNowait::Ready(_)) {
-            self.counters.ranges.fetch_add(1, Ordering::Relaxed);
-            self.counters
-                .bytes
-                .fetch_add(length as u64, Ordering::Relaxed);
+        self.counters
+            .nowait_attempts
+            .fetch_add(1, Ordering::Relaxed);
+        let result = match (self.inline_max_bytes, self.inline_reader.as_ref()) {
+            (Some(max_bytes), Some(reader)) if length <= max_bytes => {
+                ReadAtNowait::Ready(reader.read_at_inline(offset, length, alignment)?)
+            }
+            (Some(_), Some(_)) => ReadAtNowait::WouldBlock,
+            _ => self.inner.read_at_nowait(offset, length, alignment)?,
+        };
+        match &result {
+            ReadAtNowait::Ready(_) => {
+                self.counters.nowait_hits.fetch_add(1, Ordering::Relaxed);
+                self.counters.ranges.fetch_add(1, Ordering::Relaxed);
+                self.counters
+                    .bytes
+                    .fetch_add(length as u64, Ordering::Relaxed);
+            }
+            ReadAtNowait::WouldBlock => {
+                self.counters.nowait_misses.fetch_add(1, Ordering::Relaxed);
+            }
+            ReadAtNowait::Unsupported => {
+                self.counters
+                    .nowait_unsupported
+                    .fetch_add(1, Ordering::Relaxed);
+            }
         }
         Ok(result)
     }
@@ -244,6 +408,8 @@ struct DiskBackend {
     runtime: Handle,
     evict_before_run: bool,
     coalesce_override: Option<CoalesceConfig>,
+    io_depth: Option<usize>,
+    inline_max_bytes: Option<usize>,
 }
 
 enum SegmentBackend {
@@ -259,11 +425,6 @@ impl SegmentBackend {
             Self::Memory(source) => Ok((Arc::clone(source), None)),
             Self::Disk(disk) => {
                 if disk.evict_before_run {
-                    #[cfg(target_vendor = "apple")]
-                    vortex_bail!(
-                        "cold-cache disk scans are not supported on Apple targets; set \
-                         TPCH_CACHE_MODE=hot"
-                    );
                     #[cfg(not(target_vendor = "apple"))]
                     {
                         let file = File::open(&disk.path)?;
@@ -277,13 +438,21 @@ impl SegmentBackend {
                     }
                 }
 
-                let read: Arc<dyn VortexReadAt> =
-                    Arc::new(FileReadAt::open(&disk.path, session.handle())?);
+                let read = Arc::new(FileReadAt::open(&disk.path, session.handle())?);
+                #[cfg(target_vendor = "apple")]
+                if disk.evict_before_run {
+                    read.set_nocache(true)?;
+                }
+                let inline_reader = disk.inline_max_bytes.map(|_| Arc::clone(&read));
+                let read: Arc<dyn VortexReadAt> = read;
                 let counters = Arc::new(PhysicalIoCounters::default());
                 let read = CountingReadAt {
                     inner: read,
+                    inline_reader,
+                    inline_max_bytes: disk.inline_max_bytes,
                     counters: Arc::clone(&counters),
                     coalesce_override: disk.coalesce_override,
+                    concurrency_override: disk.io_depth,
                 };
                 let metrics = DefaultMetricsRegistry::default();
                 let source = FileSegmentSource::open(
@@ -299,8 +468,16 @@ impl SegmentBackend {
     }
 }
 
-fn write_segment_pack(path: &Path, buffers: &[ByteBuffer]) -> VortexResult<Arc<[SegmentSpec]>> {
+fn write_segment_pack(
+    path: &Path,
+    buffers: &[ByteBuffer],
+    _uncached: bool,
+) -> VortexResult<Arc<[SegmentSpec]>> {
     let mut file = File::create(path)?;
+    #[cfg(target_vendor = "apple")]
+    if _uncached {
+        rustix::fs::fcntl_nocache(&file, true).map_err(std::io::Error::from)?;
+    }
     let mut offset = 0u64;
     let mut specs = Vec::with_capacity(buffers.len());
     for buffer in buffers {
@@ -396,6 +573,26 @@ fn main() -> VortexResult<()> {
         "hot" => false,
         mode => vortex_bail!("TPCH_CACHE_MODE must be `cold` or `hot`, got `{mode}`"),
     };
+    let io_depth = std::env::var("TPCH_IO_DEPTH")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .map(|depth| depth.max(1))
+                .map_err(|err| vortex_error::vortex_err!("invalid TPCH_IO_DEPTH: {err}"))
+        })
+        .transpose()?;
+    let inline_max_bytes = std::env::var("TPCH_HOT_INLINE_MAX_BYTES")
+        .ok()
+        .map(|value| {
+            value.parse::<usize>().map_err(|err| {
+                vortex_error::vortex_err!("invalid TPCH_HOT_INLINE_MAX_BYTES: {err}")
+            })
+        })
+        .transpose()?;
+    if inline_max_bytes.is_some() && evict_before_run {
+        vortex_bail!("TPCH_HOT_INLINE_MAX_BYTES is only valid with TPCH_CACHE_MODE=hot");
+    }
     let coalesce_override = match (
         std::env::var("TPCH_COALESCE_DISTANCE").ok(),
         std::env::var("TPCH_COALESCE_MAX_BYTES").ok(),
@@ -419,10 +616,12 @@ fn main() -> VortexResult<()> {
     let backend = match disk_path.as_ref() {
         Some(path) => SegmentBackend::Disk(DiskBackend {
             path: path.clone(),
-            specs: write_segment_pack(path, &fixture.segment_buffers)?,
+            specs: write_segment_pack(path, &fixture.segment_buffers, evict_before_run)?,
             runtime: Handle::new(Arc::downgrade(&io_executor)),
             evict_before_run,
             coalesce_override,
+            io_depth,
+            inline_max_bytes,
         }),
         None => SegmentBackend::Memory(Arc::clone(&segments)),
     };
@@ -465,10 +664,18 @@ fn main() -> VortexResult<()> {
         segment_lengths.len()
     );
     match disk_path {
+        #[cfg(not(target_vendor = "apple"))]
         Some(path) if evict_before_run => println!(
             "host: {threads} available logical CPUs; file-backed segments at {}; cold cache: \
              POSIX_FADV_DONTNEED before every run; {iterations} alternating iterations, median \
              reported",
+            path.display()
+        ),
+        #[cfg(target_vendor = "apple")]
+        Some(path) if evict_before_run => println!(
+            "host: {threads} available logical CPUs; file-backed segments at {}; uncached: \
+             F_NOCACHE while writing and on every read; {iterations} alternating iterations, \
+             median reported",
             path.display()
         ),
         Some(path) => println!(
@@ -481,6 +688,22 @@ fn main() -> VortexResult<()> {
             "host: {threads} available logical CPUs; segments in memory; one untimed warm-up + \
              {iterations} grouped iterations per configuration, median reported"
         ),
+    }
+    if let SegmentBackend::Disk(disk) = &backend {
+        println!(
+            "physical I/O depth: {}; morsel I/O order: {}",
+            disk.io_depth.unwrap_or(16),
+            if std::env::var("VORTEX_MORSEL_IO_ROUND_ROBIN").is_ok_and(|value| value == "1") {
+                "per-morsel round-robin"
+            } else {
+                "batch order"
+            }
+        );
+        if let Some(max_bytes) = disk.inline_max_bytes {
+            println!(
+                "hot inline reads: synchronously probe submitted ranges up to {max_bytes} bytes"
+            );
+        }
     }
     println!("both executors use workers prepared outside the timed interval");
     if let SegmentBackend::Disk(disk) = &backend
@@ -571,6 +794,46 @@ fn main() -> VortexResult<()> {
         ]
     };
 
+    if let Ok(memory_row) = std::env::var("TPCH_MEMORY_ROW") {
+        if queries.len() != 1 {
+            vortex_bail!("TPCH_MEMORY_ROW requires TPCH_QUERY to select exactly one query");
+        }
+        let row = match memory_row.as_str() {
+            "v1-single" => Row::V1Single,
+            "v1-tokio" => Row::V1Tokio(threads),
+            "morsel" => Row::Morsel(MorselConfig {
+                threads,
+                morsel_rows: selected_morsel_rows[0],
+                lookahead_morsels: selected_lookahead,
+                ..Default::default()
+            }),
+            value => vortex_bail!(
+                "TPCH_MEMORY_ROW must be `v1-single`, `v1-tokio`, or `morsel`, got `{value}`"
+            ),
+        };
+        let query = &queries[0];
+        let (outcome, baseline_rss, peak_rss) = measure_peak_rss(|| {
+            run_once(&runtime, &session, &fixture.layout, &backend, query, row)
+        })?;
+        println!("## Peak RSS — {} / {}", query.name, row.label());
+        println!();
+        println!("baseline RSS: {}", mib(baseline_rss));
+        println!("peak RSS: {}", mib(peak_rss));
+        println!(
+            "incremental peak RSS: {}",
+            mib(peak_rss.saturating_sub(baseline_rss))
+        );
+        println!("wall: {}", millis(outcome.wall));
+        if let Some(stats) = outcome.stats {
+            println!(
+                "peak credited output arrays: {}",
+                mib(stats.output_bytes_max)
+            );
+            println!("peak credited output rows: {}", stats.output_rows_max);
+        }
+        return Ok(());
+    }
+
     for query in &queries {
         // Exactness first. Any disagreement aborts: on a real query over real data, a
         // configuration that does not reproduce V1's output exactly is a bug, not a table row.
@@ -660,10 +923,22 @@ fn main() -> VortexResult<()> {
                         .or_else(|| median.stats.as_ref().map(|s| s.io_bytes)),
                     segment_bytes: median.stats.as_ref().map(|s| s.io_bytes),
                     waits: median.stats.as_ref().map(|s| s.io_waits),
-                    nowait_attempts: median.stats.as_ref().map(|s| s.nowait_attempts),
-                    nowait_hits: median.stats.as_ref().map(|s| s.nowait_hits),
-                    nowait_misses: median.stats.as_ref().map(|s| s.nowait_misses),
-                    nowait_unsupported: median.stats.as_ref().map(|s| s.nowait_unsupported),
+                    nowait_attempts: median
+                        .source_nowait
+                        .map(|(attempts, ..)| attempts)
+                        .or_else(|| median.stats.as_ref().map(|s| s.nowait_attempts)),
+                    nowait_hits: median
+                        .source_nowait
+                        .map(|(_, hits, ..)| hits)
+                        .or_else(|| median.stats.as_ref().map(|s| s.nowait_hits)),
+                    nowait_misses: median
+                        .source_nowait
+                        .map(|(_, _, misses, _)| misses)
+                        .or_else(|| median.stats.as_ref().map(|s| s.nowait_misses)),
+                    nowait_unsupported: median
+                        .source_nowait
+                        .map(|(_, _, _, unsupported)| unsupported)
+                        .or_else(|| median.stats.as_ref().map(|s| s.nowait_unsupported)),
                     wait_time: median.stats.as_ref().map(|s| s.io_wait_time),
                     decodes: median.stats.as_ref().map(|s| s.decodes),
                     reuses: median.stats.as_ref().map(|s| s.decode_reuses),
@@ -710,6 +985,29 @@ fn main() -> VortexResult<()> {
                         .stats
                         .as_ref()
                         .map(|s| s.io_blocks_per_morsel_max),
+                    io_occupancy: median.source_io_occupancy,
+                    io_oracle: median.stats.as_ref().and_then(|stats| {
+                        (stats.io_oracle_learned_keys > 0 || stats.io_oracle_replay_keys > 0)
+                            .then_some(IoOracleTiming {
+                                learned_keys: stats.io_oracle_learned_keys,
+                                replay_keys: stats.io_oracle_replay_keys,
+                                replay_hits: stats.io_oracle_replay_hits,
+                                replay_misses: stats.io_oracle_replay_misses,
+                                reordered_reads: stats.io_oracle_reordered_reads,
+                                reordered_batches: stats.io_oracle_reordered_batches,
+                                start_inversions: stats.io_oracle_start_inversions,
+                                start_pairs: stats.io_oracle_start_pairs,
+                                completion_inversions: stats.io_oracle_completion_inversions,
+                                completion_pairs: stats.io_oracle_completion_pairs,
+                                unused_started: stats.io_oracle_unused_started,
+                                first_need_ready: stats.io_oracle_first_need_ready,
+                                first_need_requested: stats.io_oracle_first_need_requested,
+                                first_need_unissued: stats.io_oracle_first_need_unissued,
+                                late_read_time: stats.io_oracle_late_read_time,
+                                late_read_time_max: stats.io_oracle_late_read_time_max,
+                                ready_lead_time: stats.io_oracle_ready_lead_time,
+                            })
+                    }),
                     push_profile: median.stats.as_ref().map(|stats| PushProfileTiming {
                         runtime: stats.push_profile_runtime_time,
                         activation: stats.push_profile_activation_time,
@@ -904,6 +1202,48 @@ fn sweep(
     Ok(())
 }
 
+fn measure_peak_rss(
+    run: impl FnOnce() -> VortexResult<RunOutcome>,
+) -> VortexResult<(RunOutcome, u64, u64)> {
+    let running = Arc::new(AtomicBool::new(true));
+    let sampler_running = Arc::clone(&running);
+    let (baseline_tx, baseline_rx) = sync_channel(1);
+    let sampler = thread::spawn(move || {
+        let pid = Pid::from_u32(std::process::id());
+        let mut system = System::new_with_specifics(
+            RefreshKind::nothing().with_processes(ProcessRefreshKind::nothing().with_memory()),
+        );
+        let refresh = |system: &mut System| {
+            system.refresh_processes(ProcessesToUpdate::Some(&[pid]), true);
+            system
+                .process(pid)
+                .map(|process| process.memory())
+                .unwrap_or(0)
+        };
+        let baseline = refresh(&mut system);
+        let _ = baseline_tx.send(baseline);
+        let mut peak = baseline;
+        while sampler_running.load(Ordering::Acquire) {
+            peak = peak.max(refresh(&mut system));
+            thread::sleep(Duration::from_millis(1));
+        }
+        peak.max(refresh(&mut system))
+    });
+    let baseline = baseline_rx
+        .recv()
+        .map_err(|err| vortex_error::vortex_err!("RSS sampler failed to start: {err}"))?;
+    let outcome = run();
+    running.store(false, Ordering::Release);
+    let peak = sampler
+        .join()
+        .map_err(|_| vortex_error::vortex_err!("RSS sampler panicked"))?;
+    Ok((outcome?, baseline, peak))
+}
+
+fn mib(bytes: u64) -> String {
+    format!("{:.1} MiB", bytes as f64 / (1024.0 * 1024.0))
+}
+
 fn median(
     iterations: usize,
     mut run: impl FnMut() -> VortexResult<RunOutcome>,
@@ -938,6 +1278,16 @@ fn run_once(
     if let Some(counters) = counters {
         outcome.source_io_requests = Some(counters.ranges.load(Ordering::Relaxed));
         outcome.source_io_bytes = Some(counters.bytes.load(Ordering::Relaxed));
+        let nowait_attempts = counters.nowait_attempts.load(Ordering::Relaxed);
+        if nowait_attempts > 0 {
+            outcome.source_nowait = Some((
+                nowait_attempts,
+                counters.nowait_hits.load(Ordering::Relaxed),
+                counters.nowait_misses.load(Ordering::Relaxed),
+                counters.nowait_unsupported.load(Ordering::Relaxed),
+            ));
+        }
+        outcome.source_io_occupancy = Some(counters.occupancy());
     }
     Ok(outcome)
 }
@@ -1022,7 +1372,110 @@ fn report(query: &Query, timings: &[Timing], total_rows: u64) {
         );
     }
     println!();
+    report_io_occupancy(timings);
+    report_io_oracle(timings);
     report_push_profile(timings);
+}
+
+fn report_io_occupancy(timings: &[Timing]) {
+    if !timings.iter().any(|timing| timing.io_occupancy.is_some()) {
+        return;
+    }
+    println!(
+        "| executor | physical depth/max | physical I/O span | full | underfilled busy | idle gap | not full | refill wait | final drain | slot utilization |"
+    );
+    println!("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|");
+    for timing in timings {
+        let Some(occupancy) = timing.io_occupancy else {
+            continue;
+        };
+        let not_full = occupancy.underfilled + occupancy.idle;
+        let slot_capacity_nanos = occupancy
+            .span
+            .as_nanos()
+            .saturating_mul(occupancy.capacity as u128);
+        let slot_utilization = if slot_capacity_nanos == 0 {
+            "—".to_string()
+        } else {
+            format!(
+                "{:.1}%",
+                occupancy.active_slot_nanos as f64 / slot_capacity_nanos as f64 * 100.0
+            )
+        };
+        println!(
+            "| {} | {}/{} | {} | {} | {} | {} | {} | {} | {} | {} |",
+            timing.label,
+            occupancy.capacity,
+            occupancy.max_active,
+            millis(occupancy.span),
+            duration_share(occupancy.full, occupancy.span),
+            duration_share(occupancy.underfilled, occupancy.span),
+            duration_share(occupancy.idle, occupancy.span),
+            duration_share(not_full, occupancy.span),
+            duration_share(occupancy.refill_wait, occupancy.span),
+            duration_share(occupancy.tail_drain, occupancy.span),
+            slot_utilization,
+        );
+    }
+    println!();
+}
+
+fn duration_share(value: Duration, total: Duration) -> String {
+    if total.is_zero() {
+        return "—".to_string();
+    }
+    format!(
+        "{} ({:.1}%)",
+        millis(value),
+        value.as_secs_f64() / total.as_secs_f64() * 100.0
+    )
+}
+
+fn report_io_oracle(timings: &[Timing]) {
+    if !timings.iter().any(|timing| timing.io_oracle.is_some()) {
+        return;
+    }
+    println!(
+        "| executor | learned | replay keys | replay hit/miss | reordered positions/batches | \
+         submit wrong pairs/batch | completion wrong pairs/batch | first need ready/in-flight/unissued | \
+         late total/max | ready lead total | unused starts |"
+    );
+    println!("|---|--:|--:|--:|--:|--:|--:|--:|--:|--:|--:|");
+    for timing in timings {
+        let Some(oracle) = &timing.io_oracle else {
+            continue;
+        };
+        println!(
+            "| {} | {} | {} | {}/{} | {}/{} | {} | {} | {}/{}/{} | {}/{} | {} | {} |",
+            timing.label,
+            oracle.learned_keys,
+            oracle.replay_keys,
+            oracle.replay_hits,
+            oracle.replay_misses,
+            oracle.reordered_reads,
+            oracle.reordered_batches,
+            inversion_rate(oracle.start_inversions, oracle.start_pairs),
+            inversion_rate(oracle.completion_inversions, oracle.completion_pairs),
+            oracle.first_need_ready,
+            oracle.first_need_requested,
+            oracle.first_need_unissued,
+            millis(oracle.late_read_time),
+            millis(oracle.late_read_time_max),
+            millis(oracle.ready_lead_time),
+            oracle.unused_started,
+        );
+    }
+    println!();
+}
+
+fn inversion_rate(inversions: u64, pairs: u64) -> String {
+    if pairs == 0 {
+        return "—".to_string();
+    }
+    format!(
+        "{:.2}% ({inversions}/{pairs})",
+        inversions as f64 / pairs as f64 * 100.0
+    )
 }
 
 fn report_push_profile(timings: &[Timing]) {

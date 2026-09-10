@@ -109,6 +109,7 @@ pub struct MorselScan {
     sparse_morsels: bool,
     /// Issue every source in the lookahead window, not only the first predicate column.
     eager_lookahead: bool,
+    io_round_robin: bool,
     external_driver: Option<ExternalDriver>,
     cancellation: Option<Arc<StreamCancellation>>,
 }
@@ -232,6 +233,7 @@ struct WorkerRun {
     output_bytes: u64,
     demand_hints: DemandHintDelivery,
     eager_lookahead: bool,
+    io_round_robin: bool,
     external_driver: Option<ExternalDriver>,
 }
 
@@ -364,7 +366,10 @@ impl PhysicalRuntime {
                 call: PipelineCall::Start { span, rows },
                 ancestors: None,
             };
-            if first.is_none() && self.work_since_yield < PUSH_INLINE_QUANTUM {
+            if first.is_none()
+                && !self.blocked[source_pipeline as usize]
+                && self.work_since_yield < PUSH_INLINE_QUANTUM
+            {
                 first = Some(activation);
             } else {
                 self.pending.push_back(activation);
@@ -1203,10 +1208,92 @@ impl PhysicalRuntime {
 struct PendingPushSource {
     span: Range<u64>,
     role: SourceRole,
-    demand_io: Option<BoundDemandIo>,
+    demand_io: Option<Arc<[BoundDemandIo]>>,
+    activation_ends: VecDeque<u64>,
     parts: Vec<(Range<u64>, ActivationRows)>,
     direct_rows: Option<ActivationRows>,
     known_rows: usize,
+}
+
+impl PendingPushSource {
+    /// Drain only the next segment overlap once all its selection fragments are known.
+    fn take_ready(&mut self) -> VortexResult<Option<(Range<u64>, ActivationRows)>> {
+        if self.span.is_empty() {
+            return Ok(None);
+        }
+        let end = self
+            .activation_ends
+            .front()
+            .copied()
+            .unwrap_or(self.span.end);
+        let len = usize::try_from(end - self.span.start)
+            .map_err(|_| vortex_err!("source span exceeds usize"))?;
+        if self.known_rows < len {
+            return Ok(None);
+        }
+        let rows = if let Some(rows) = self.direct_rows.take() {
+            if end == self.span.end {
+                rows
+            } else {
+                self.direct_rows = Some(rows.slice(len..rows.logical().len()));
+                rows.slice(0..len)
+            }
+        } else {
+            let mut cursor = self.span.start;
+            for (part, _) in &self.parts {
+                if part.start != cursor {
+                    return Ok(None);
+                }
+                cursor = part.end;
+                if cursor >= end {
+                    break;
+                }
+            }
+            if cursor < end {
+                return Ok(None);
+            }
+            self.take_parts(end)?
+        };
+        let span = self.span.start..end;
+        self.span.start = end;
+        self.known_rows -= len;
+        self.activation_ends.pop_front();
+        Ok(Some((span, rows)))
+    }
+
+    fn take_parts(&mut self, end: u64) -> VortexResult<ActivationRows> {
+        let complete = self.parts.partition_point(|(part, _)| part.end <= end);
+        let mut rows = self
+            .parts
+            .drain(..complete)
+            .map(|(_, rows)| rows)
+            .collect::<Vec<_>>();
+        if let Some((part, selection)) = self.parts.first_mut()
+            && part.start < end
+        {
+            let split = usize::try_from(end - part.start)
+                .map_err(|_| vortex_err!("selection offset exceeds usize"))?;
+            rows.push(selection.slice(0..split));
+            *selection = selection.slice(split..selection.logical().len());
+            part.start = end;
+        }
+        if rows.len() == 1 {
+            return rows
+                .pop()
+                .ok_or_else(|| vortex_err!("source selection disappeared"));
+        }
+        let logical = vortex_mask::Mask::concat(rows.iter().map(ActivationRows::logical))?;
+        if rows
+            .iter()
+            .all(|rows| rows.logical().true_count() == rows.materialized().true_count())
+        {
+            Ok(ActivationRows::selected(logical))
+        } else {
+            let materialized =
+                vortex_mask::Mask::concat(rows.iter().map(ActivationRows::materialized))?;
+            ActivationRows::try_new(logical, materialized)
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -1227,6 +1314,7 @@ enum DemandIoAction {
 struct DemandObservationScratch {
     seen: Vec<IoKey>,
     span_selected: Vec<(Range<usize>, bool)>,
+    required_reads: Vec<IoRead>,
 }
 
 fn apply_unissued_demand(work: &IoWork, selected: bool) -> DemandIoAction {
@@ -1246,57 +1334,72 @@ fn observe_prebound_demand(
     selection: vortex_mask::Mask,
     source_nodes: &[NodeId],
     pending: &[Option<PendingPushSource>],
-    sources: &[Option<BoundDemandIo>],
+    sources: &[Option<Arc<[BoundDemandIo]>>],
     scratch: &mut DemandObservationScratch,
 ) {
     stats.demand_hints_observed += 1;
     scratch.seen.clear();
     scratch.span_selected.clear();
+    scratch.required_reads.clear();
     for &node in source_nodes {
         let source = pending
             .get(node as usize)
             .and_then(Option::as_ref)
             .and_then(|source| source.demand_io.as_ref())
             .or_else(|| sources.get(node as usize).and_then(Option::as_ref));
-        let Some(source) = source else {
+        let Some(segments) = source else {
             continue;
         };
-        if scratch.seen.contains(&source.key) {
-            continue;
-        }
-        scratch.seen.push(source.key);
-        if source.work.required.load(Ordering::Acquire)
-            || !source.work.reads.iter().any(IoRead::is_unissued)
-        {
-            continue;
-        }
-        stats.demand_io_candidates += 1;
-        let start = coverage.start.max(source.source_range.start);
-        let end = coverage.end.min(source.source_range.end);
-        if start >= end {
-            continue;
-        }
-        let (Ok(start), Ok(end)) = (
-            usize::try_from(start - coverage.start),
-            usize::try_from(end - coverage.start),
-        ) else {
-            continue;
-        };
-        let relative = start..end;
-        let selected = scratch
-            .span_selected
-            .iter()
-            .find(|(span, _)| span == &relative)
-            .map(|(_, selected)| *selected)
-            .unwrap_or_else(|| {
-                let selected = selection.count_range(start, end) != 0;
-                scratch.span_selected.push((relative, selected));
-                selected
-            });
-        match apply_unissued_demand(&source.work, selected) {
-            DemandIoAction::Unchanged => {}
-            DemandIoAction::Suppressed => stats.demand_io_suppressed += 1,
-            DemandIoAction::Required => stats.demand_io_promotions += 1,
+        let first = segments.partition_point(|segment| segment.source_range.end <= coverage.start);
+        let end = segments.partition_point(|segment| segment.source_range.start < coverage.end);
+        for source in &segments[first..end.max(first)] {
+            if scratch.seen.contains(&source.key) {
+                continue;
+            }
+            scratch.seen.push(source.key);
+            if source.work.required.load(Ordering::Acquire)
+                || !source.work.reads.iter().any(IoRead::is_unissued)
+            {
+                continue;
+            }
+            stats.demand_io_candidates += 1;
+            let start = coverage.start.max(source.source_range.start);
+            let end = coverage.end.min(source.source_range.end);
+            if start >= end {
+                continue;
+            }
+            let (Ok(start), Ok(end)) = (
+                usize::try_from(start - coverage.start),
+                usize::try_from(end - coverage.start),
+            ) else {
+                continue;
+            };
+            let relative = start..end;
+            let selected = scratch
+                .span_selected
+                .iter()
+                .find(|(span, _)| span == &relative)
+                .map(|(_, selected)| *selected)
+                .unwrap_or_else(|| {
+                    let selected = selection.count_range(start, end) != 0;
+                    scratch.span_selected.push((relative, selected));
+                    selected
+                });
+            match apply_unissued_demand(&source.work, selected) {
+                DemandIoAction::Unchanged => {}
+                DemandIoAction::Suppressed => stats.demand_io_suppressed += 1,
+                DemandIoAction::Required => {
+                    stats.demand_io_promotions += 1;
+                    scratch.required_reads.extend(
+                        source
+                            .work
+                            .reads
+                            .iter()
+                            .filter(|read| read.is_unissued())
+                            .cloned(),
+                    );
+                }
+            }
         }
     }
 }
@@ -1318,7 +1421,7 @@ struct PushControlState {
     has_delayed_hints: bool,
     demand_state: HashMap<DemandTarget, Vec<(Range<u64>, vortex_mask::Mask)>>,
     demand_refine_scratch: Vec<(Range<u64>, vortex_mask::Mask)>,
-    demand_sources: Vec<Option<BoundDemandIo>>,
+    demand_sources: Vec<Option<Arc<[BoundDemandIo]>>>,
     demand_observation: DemandObservationScratch,
     demand_state_live: usize,
     #[cfg(test)]
@@ -1337,6 +1440,7 @@ impl PushControlState {
             demand_observation: DemandObservationScratch {
                 seen: Vec::with_capacity(node_count),
                 span_selected: Vec::with_capacity(node_count),
+                required_reads: Vec::with_capacity(node_count),
             },
             ..Self::default()
         }
@@ -1625,6 +1729,10 @@ impl PushHost<'_> {
             &self.control.demand_sources,
             &mut self.control.demand_observation,
         );
+        let (started, batches) =
+            scheduler.submit_required_reads(&mut self.control.demand_observation.required_reads);
+        stats.io_requests += started;
+        stats.io_batches += batches;
         Ok(())
     }
 
@@ -1841,6 +1949,24 @@ fn assignment_lookahead_target(index: usize, workers: usize, lookahead: usize) -
         .saturating_add(1)
         .saturating_add(workers)
         .saturating_add(lookahead)
+}
+
+fn round_robin<T>(groups: Vec<Vec<T>>) -> Vec<T> {
+    let capacity = groups.iter().map(Vec::len).sum();
+    let mut groups = groups.into_iter().map(Vec::into_iter).collect::<Vec<_>>();
+    let mut interleaved = Vec::with_capacity(capacity);
+    loop {
+        let mut advanced = false;
+        for group in &mut groups {
+            if let Some(item) = group.next() {
+                interleaved.push(item);
+                advanced = true;
+            }
+        }
+        if !advanced {
+            return interleaved;
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -2114,11 +2240,26 @@ impl Scheduler {
         u64::try_from(self.run.io.start(reads)).unwrap_or(u64::MAX)
     }
 
+    fn submit_required_reads(&self, reads: &mut Vec<IoRead>) -> (u64, u64) {
+        self.run.io.sort_reads(reads);
+        reads.dedup_by_key(|read| read.key());
+        for read in reads.iter() {
+            read.require();
+        }
+        if !self.run.io.background_reads() && !self.run.io.probe_unsupported() {
+            return (0, 0);
+        }
+        let started = self.issue_batch(reads);
+        (started, u64::from(started > 0))
+    }
+
     /// Hand a planning wave's reads out, returning how many reads and batches this call started.
     fn submit_reads(self: &Arc<Self>, mut reads: Vec<IoRead>) -> (u64, u64) {
-        reads.sort_unstable_by_key(|read| match read.key() {
-            IoKey::Segment(id) => *id,
-        });
+        self.run.io.sort_reads(&mut reads);
+        self.submit_ordered_reads(reads)
+    }
+
+    fn submit_ordered_reads(self: &Arc<Self>, reads: Vec<IoRead>) -> (u64, u64) {
         let (required, speculative): (Vec<_>, Vec<_>) = reads
             .into_iter()
             .partition(|read| read.priority() == IoPriority::Required);
@@ -2148,62 +2289,65 @@ impl Scheduler {
     }
 
     fn submit_lookahead_slice(self: &Arc<Self>, start: usize, end: usize) {
-        const BATCH_READS: usize = 64;
-
         if start >= end {
             return;
         }
-        let ranges = &self.run.morsels[start..end];
         let filtered = self.run.plan.has_filter();
         let mut admission: HashMap<IoKey, bool> = HashMap::default();
-        let Some(coverage) = ranges
-            .first()
-            .zip(ranges.last())
-            .map(|(first, last)| first.start..last.end)
-        else {
-            return;
-        };
         let mut source_indices = Vec::new();
-        self.run
-            .plan
-            .overlapping_all_source_indices(&coverage, &mut source_indices);
-        for source_index in source_indices {
-            let Some((_, key, _, role)) = self.run.plan.source_io_use_at(source_index) else {
-                continue;
-            };
-            let eager = !filtered
-                || self.run.eager_lookahead
-                || matches!(
-                    role,
-                    SourceRole::Predicate {
-                        slot: 0,
-                        mode: crate::nodes::ConjunctMode::Cascade,
-                    } | SourceRole::Predicate {
-                        mode: crate::nodes::ConjunctMode::Parallel,
-                        ..
-                    }
-                );
-            admission
-                .entry(key)
-                .and_modify(|admitted| *admitted |= eager)
-                .or_insert(eager);
-        }
+        let mut eager_groups = self.run.io_round_robin.then(Vec::new);
         let priority = if filtered {
             IoPriority::Speculative
         } else {
             IoPriority::Required
         };
-        let reads = self
-            .run
-            .io
-            .register_reads(admission.keys().copied(), priority);
-        for batch in reads.chunks(BATCH_READS) {
-            let (eager, deferred): (Vec<_>, Vec<_>) = batch
-                .iter()
-                .cloned()
+        for coverage in &self.run.morsels[start..end] {
+            admission.clear();
+            source_indices.clear();
+            self.run
+                .plan
+                .overlapping_all_source_indices(coverage, &mut source_indices);
+            for &source_index in &source_indices {
+                for (_, key, _, role) in self
+                    .run
+                    .plan
+                    .source_io_uses_at(source_index, coverage.clone())
+                {
+                    let eager = !filtered
+                        || self.run.eager_lookahead
+                        || matches!(
+                            role,
+                            SourceRole::Predicate {
+                                slot: 0,
+                                mode: crate::nodes::ConjunctMode::Cascade,
+                            } | SourceRole::Predicate {
+                                mode: crate::nodes::ConjunctMode::Parallel,
+                                ..
+                            }
+                        );
+                    admission
+                        .entry(key)
+                        .and_modify(|admitted| *admitted |= eager)
+                        .or_insert(eager);
+                }
+            }
+            let mut reads = self
+                .run
+                .io
+                .register_reads(admission.keys().copied(), priority);
+            self.run.io.sort_reads(&mut reads);
+            let (eager, deferred): (Vec<_>, Vec<_>) = reads
+                .into_iter()
                 .partition(|read| admission.get(&read.key()).copied().unwrap_or(false));
-            self.submit_reads(eager);
+            if let Some(groups) = eager_groups.as_mut() {
+                groups.push(eager);
+            } else {
+                self.submit_ordered_reads(eager);
+            }
             self.submit_io_batch(deferred, false, false);
+        }
+        if let Some(groups) = eager_groups {
+            self.submit_ordered_reads(round_robin(groups));
         }
     }
 
@@ -2235,14 +2379,23 @@ impl Scheduler {
         if reads.is_empty() {
             return;
         }
-        for read in reads {
-            let key = read.key();
-            let candidate = new_io_work(read, required);
-            let work = Arc::clone(self.io_work.lock().entry(key).or_insert(candidate));
-            if required {
-                work.required.store(true, Ordering::Release);
-            }
-            if enqueue {
+        let work = {
+            let mut io_work = self.io_work.lock();
+            reads
+                .into_iter()
+                .map(|read| {
+                    let key = read.key();
+                    let candidate = new_io_work(read, required);
+                    let work = Arc::clone(io_work.entry(key).or_insert(candidate));
+                    if required {
+                        work.required.store(true, Ordering::Release);
+                    }
+                    work
+                })
+                .collect::<Vec<_>>()
+        };
+        if enqueue {
+            for work in work {
                 self.enqueue_io(work);
             }
         }
@@ -2256,22 +2409,21 @@ impl Scheduler {
         self.run.io.start(&work.reads);
     }
 
-    /// Establish `key` as blocking execution: start its reads and ask for them ahead of
+    /// Establish `read` as blocking execution: start it and ask for it ahead of
     /// speculative work.
-    fn promote(&self, key: IoKey) {
-        let work = self.io_work.lock().get(&key).cloned();
-        match work {
-            Some(work) => {
-                work.required.store(true, Ordering::Release);
-                for read in &work.reads {
-                    self.run.io.promote(read);
-                }
+    fn promote(&self, read: &IoRead) {
+        if self.run.io.background_reads() {
+            self.run.io.promote(read);
+            return;
+        }
+        let work = self.io_work.lock().get(&read.key()).cloned();
+        if let Some(work) = work {
+            work.required.store(true, Ordering::Release);
+            for read in &work.reads {
+                self.run.io.promote(read);
             }
-            None => {
-                if let Some(read) = self.run.io.read_key(key) {
-                    self.run.io.promote(&read);
-                }
-            }
+        } else {
+            self.run.io.promote(read);
         }
     }
 
@@ -2314,7 +2466,7 @@ impl Scheduler {
                 .io
                 .read(*ticket)
                 .ok_or_else(|| vortex_err!("blocked on an unknown IO ticket"))?;
-            self.promote(read.key());
+            self.promote(&read);
             let waker = Waker::from(Arc::new(TaskWake {
                 tx: tx.clone(),
                 signal: signal.clone(),
@@ -2323,7 +2475,7 @@ impl Scheduler {
                 parked = true;
             }
         }
-        if parked {
+        if parked && !self.run.io.background_reads() {
             // Pull evaluation can expose required dependencies one at a time. Once it blocks,
             // drive every already-admitted required read independently so coupled futures can
             // make progress without promoting any speculative lookahead work.
@@ -2787,6 +2939,7 @@ impl<'a> LocalMorsel<'a> {
         self.push_control.demand_refine_scratch.clear();
         self.push_control.demand_observation.seen.clear();
         self.push_control.demand_observation.span_selected.clear();
+        self.push_control.demand_observation.required_reads.clear();
         self.push_control.demand_state_live = 0;
         self.morsel_io_uses_start = self.stats.io_uses;
         self.morsel_io_requests_start = self.stats.io_requests;
@@ -2905,26 +3058,29 @@ impl<'a> LocalMorsel<'a> {
                 if !is_deferred(source.role) {
                     continue;
                 }
-                let (_, key, source_range, role) = plan
-                    .source_io_use_at(source_index)
-                    .ok_or_else(|| vortex_err!("deferred push source has no planned IO use"))?;
-                debug_assert_eq!(role, source.role);
-                let work = if let Some(work) = io_work.get(&key) {
-                    Arc::clone(work)
-                } else {
-                    let read = scheduler.run.io.read_key(key).ok_or_else(|| {
-                        vortex_err!("planned push source IO work {key:?} is not registered")
-                    })?;
-                    let required = read.priority() == IoPriority::Required;
-                    let work = new_io_work(read, required);
-                    io_work.insert(key, Arc::clone(&work));
-                    work
-                };
-                self.push_control.demand_sources[source.node as usize] = Some(BoundDemandIo {
-                    key,
-                    source_range,
-                    work,
-                });
+                let mut bindings = Vec::new();
+                for (_, key, source_range, role) in
+                    plan.source_io_uses_at(source_index, self.range.clone())
+                {
+                    debug_assert_eq!(role, source.role);
+                    let work = if let Some(work) = io_work.get(&key) {
+                        Arc::clone(work)
+                    } else {
+                        let read = scheduler.run.io.read_key(key).ok_or_else(|| {
+                            vortex_err!("planned push source IO work {key:?} is not registered")
+                        })?;
+                        let required = read.priority() == IoPriority::Required;
+                        let work = new_io_work(read, required);
+                        io_work.insert(key, Arc::clone(&work));
+                        work
+                    };
+                    bindings.push(BoundDemandIo {
+                        key,
+                        source_range,
+                        work,
+                    });
+                }
+                self.push_control.demand_sources[source.node as usize] = Some(Arc::from(bindings));
             }
         }
         for &source_index in &self.push_control.source_matches {
@@ -2949,6 +3105,11 @@ impl<'a> LocalMorsel<'a> {
                         Some(PendingPushSource {
                             span: start..end,
                             role: source.role,
+                            activation_ends: demand_io
+                                .iter()
+                                .map(|segment| segment.source_range.end)
+                                .filter(|&boundary| boundary > start && boundary < end)
+                                .collect(),
                             demand_io: Some(demand_io),
                             parts,
                             direct_rows: None,
@@ -3039,6 +3200,10 @@ impl<'a> LocalMorsel<'a> {
             &self.push_control.demand_sources,
             &mut self.push_control.demand_observation,
         );
+        let (started, batches) = scheduler
+            .submit_required_reads(&mut self.push_control.demand_observation.required_reads);
+        self.stats.io_requests += started;
+        self.stats.io_batches += batches;
     }
 
     #[cfg(test)]
@@ -3280,64 +3445,25 @@ fn activate_pending_sources_into(
         source.known_rows += batch_end - batch_start;
     }
     for &node in source_order {
-        let Some(source) = pending.get(node as usize).and_then(Option::as_ref) else {
+        let Some(source) = pending.get_mut(node as usize).and_then(Option::as_mut) else {
             continue;
         };
-        let total = usize::try_from(source.span.end - source.span.start)
-            .map_err(|_| vortex_err!("source span length exceeds usize"))?;
-        let is_ready = source.known_rows == total;
-        if !is_ready {
-            continue;
-        }
-        let mut source = pending
-            .get_mut(node as usize)
-            .and_then(Option::take)
-            .ok_or_else(|| vortex_err!("ready push source disappeared"))?;
-        let rows = if let Some(rows) = source.direct_rows.take() {
-            rows
-        } else {
-            source
-                .parts
-                .sort_unstable_by_key(|(coverage, _)| coverage.start);
-            let mut cursor = source.span.start;
-            for (part, _) in &source.parts {
-                if part.start != cursor {
-                    return Err(vortex_err!("demand updates left a gap at row {cursor}"));
-                }
-                cursor = part.end;
-            }
-            if cursor != source.span.end {
-                return Err(vortex_err!(
-                    "demand updates stop at row {cursor}, before the source span ends at {}",
-                    source.span.end
-                ));
-            }
-            // Join the parts' masks directly. Consecutive slices of one demand mask are
-            // recovered without copying, and anything else is a bit-buffer append, rather than
-            // re-deriving slice lists and rebuilding every run bit by bit.
-            let selected =
-                vortex_mask::Mask::concat(source.parts.iter().map(|(_, rows)| rows.logical()))?;
-            let exact = source
-                .parts
-                .iter()
-                .all(|(_, rows)| rows.logical().true_count() == rows.materialized().true_count());
-            let rows = if exact {
-                ActivationRows::selected(selected)
-            } else {
-                let materialized = vortex_mask::Mask::concat(
-                    source.parts.iter().map(|(_, rows)| rows.materialized()),
-                )?;
-                ActivationRows::try_new(selected, materialized)?
-            };
-            source.parts.clear();
-            rows
-        };
-        ready.push((node, source.span, rows));
-        let pooled = scratch
+        source
             .parts
-            .get_mut(node as usize)
-            .ok_or_else(|| vortex_err!("push source {node} is outside the node arena"))?;
-        *pooled = source.parts;
+            .sort_unstable_by_key(|(coverage, _)| coverage.start);
+        while let Some((span, rows)) = source.take_ready()? {
+            ready.push((node, span, rows));
+        }
+        if source.span.is_empty() {
+            let source = pending[node as usize]
+                .take()
+                .ok_or_else(|| vortex_err!("ready push source disappeared"))?;
+            *scratch
+                .parts
+                .get_mut(node as usize)
+                .ok_or_else(|| vortex_err!("push source {node} is outside the node arena"))? =
+                source.parts;
+        }
     }
     Ok(())
 }
@@ -3374,6 +3500,7 @@ impl MorselScan {
             completion: None,
             sparse_morsels: false,
             eager_lookahead: false,
+            io_round_robin: false,
             external_driver: None,
             cancellation: None,
         }
@@ -3386,6 +3513,23 @@ impl MorselScan {
     /// only pays off when entire morsels are eliminated by the leading conjunct.
     pub fn with_eager_lookahead(mut self, eager: bool) -> Self {
         self.eager_lookahead = eager;
+        self
+    }
+
+    #[cfg(any(test, feature = "_test-harness"))]
+    pub(crate) fn with_io_oracle(self, replay: impl IntoIterator<Item = IoKey>) -> Self {
+        self.io.enable_oracle(replay);
+        self
+    }
+
+    #[cfg(any(test, feature = "_test-harness"))]
+    pub(crate) fn io_oracle_snapshot(&self) -> Option<crate::io::IoOracleSnapshot> {
+        self.io.oracle_snapshot()
+    }
+
+    #[cfg(any(test, feature = "_test-harness"))]
+    pub(crate) fn with_io_round_robin(mut self, enabled: bool) -> Self {
+        self.io_round_robin = enabled;
         self
     }
 
@@ -3602,6 +3746,7 @@ impl MorselScan {
             output_bytes: self.output_bytes,
             demand_hints: self.demand_hints,
             eager_lookahead: self.eager_lookahead,
+            io_round_robin: self.io_round_robin,
             external_driver: self.external_driver.clone(),
         });
         let (scheduler, signals) = Scheduler::new(Arc::clone(&run), 1);
@@ -3671,10 +3816,13 @@ impl MorselScan {
                 .map(CreditedBatch::receive)
                 .collect::<Vec<_>>()
         });
-        let (stats, wall) = self.run_timed_to(output_tx, self.cancellation.as_ref())?;
+        let (mut stats, wall) = self.run_timed_to(output_tx, self.cancellation.as_ref())?;
         let batches = collector
             .join()
             .map_err(|_| vortex_err!("output collector panicked"))?;
+        if let Some(oracle) = self.io.oracle_snapshot() {
+            oracle.apply_to(&mut stats);
+        }
         Ok((batches, stats, wall))
     }
 
@@ -3707,6 +3855,7 @@ impl MorselScan {
             output_bytes: self.output_bytes,
             demand_hints: self.demand_hints,
             eager_lookahead: self.eager_lookahead,
+            io_round_robin: self.io_round_robin,
             external_driver: self.external_driver.clone(),
         });
 
@@ -3753,6 +3902,7 @@ impl MorselScan {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
     use std::ops::Range;
     use std::sync::Arc;
     use std::sync::atomic::AtomicBool;
@@ -3797,6 +3947,7 @@ mod tests {
     use super::observe_prebound_demand;
     use super::overlapping_morsels;
     use super::refine_demand_spans;
+    use super::round_robin;
     use super::take_ordered_output;
     use crate::build::PhysicalTopology;
     use crate::build::SourceRole;
@@ -3922,6 +4073,14 @@ mod tests {
         assert_eq!(claim_lookahead_extension(&cursor, 6, 16), None);
         assert_eq!(claim_lookahead_extension(&cursor, 20, 16), Some(14..16));
         assert_eq!(cursor.load(Ordering::Acquire), 16);
+    }
+
+    #[test]
+    fn round_robin_preserves_each_morsel_order() {
+        assert_eq!(
+            round_robin(vec![vec![0, 1, 2], vec![10, 11], vec![], vec![20]]),
+            [0, 10, 20, 1, 11, 2]
+        );
     }
 
     #[test]
@@ -4132,6 +4291,7 @@ mod tests {
                 span: 100..116,
                 role: SourceRole::Projection,
                 demand_io: None,
+                activation_ends: VecDeque::new(),
                 parts: Vec::with_capacity(3),
                 direct_rows: None,
                 known_rows: 0,
@@ -4180,6 +4340,7 @@ mod tests {
             span: 102..106,
             role: SourceRole::Projection,
             demand_io: None,
+            activation_ends: VecDeque::new(),
             parts: Vec::with_capacity(2),
             direct_rows: None,
             known_rows: 0,
@@ -4225,6 +4386,7 @@ mod tests {
                 span: 102..106,
                 role: SourceRole::Projection,
                 demand_io: None,
+                activation_ends: VecDeque::new(),
                 parts: Vec::new(),
                 direct_rows: None,
                 known_rows: 0,
@@ -4270,6 +4432,79 @@ mod tests {
     }
 
     #[test]
+    fn fused_source_activates_segments_as_selections_become_known() -> VortexResult<()> {
+        let mut pending = vec![Some(PendingPushSource {
+            span: 100..109,
+            role: SourceRole::Predicate {
+                slot: 1,
+                mode: crate::nodes::ConjunctMode::Cascade,
+            },
+            demand_io: None,
+            activation_ends: VecDeque::from([103, 106]),
+            parts: Vec::new(),
+            direct_rows: None,
+            known_rows: 0,
+        })];
+        let mut scratch = SourceActivationScratch {
+            parts: vec![Vec::new()],
+            rows: Vec::new(),
+        };
+        let mut ready = Vec::new();
+        let rows = ActivationRows::try_new(
+            vortex_mask::Mask::from_iter([
+                true, false, false, false, true, false, false, false, true,
+            ]),
+            vortex_mask::Mask::from_iter([true, true, false, false, true, true, true, false, true]),
+        )?;
+        // Knowing a later segment must neither activate the unknown prefix nor lose its mask.
+        activate_pending_sources_into(
+            &mut pending,
+            &mut scratch,
+            &[0],
+            ActivationTarget::PredicateSlot(1),
+            106..109,
+            &rows.slice(6..9),
+            &mut ready,
+        )?;
+        assert!(ready.is_empty());
+        activate_pending_sources_into(
+            &mut pending,
+            &mut scratch,
+            &[0],
+            ActivationTarget::PredicateSlot(1),
+            100..104,
+            &rows.slice(0..4),
+            &mut ready,
+        )?;
+        assert_eq!(ready.len(), 1);
+        assert_eq!(ready[0].1, 100..103);
+        assert_eq!(ready[0].2.logical(), &rows.logical().slice(0..3));
+        assert_eq!(ready[0].2.materialized(), &rows.materialized().slice(0..3));
+        assert!(pending[0].is_some());
+        activate_pending_sources_into(
+            &mut pending,
+            &mut scratch,
+            &[0],
+            ActivationTarget::PredicateSlot(1),
+            104..106,
+            &rows.slice(4..6),
+            &mut ready,
+        )?;
+        assert_eq!(ready.len(), 2);
+        for (index, (_, span, selection)) in ready.iter().enumerate() {
+            let start = (index + 1) * 3;
+            assert_eq!(span, &(100 + start as u64..103 + start as u64));
+            assert_eq!(selection.logical(), &rows.logical().slice(start..start + 3));
+            assert_eq!(
+                selection.materialized(),
+                &rows.materialized().slice(start..start + 3)
+            );
+        }
+        assert!(pending[0].is_none());
+        Ok(())
+    }
+
+    #[test]
     fn fragmented_activation_assembles_both_row_domains_atomically() -> VortexResult<()> {
         let mut pending = (0..8).map(|_| None).collect::<Vec<_>>();
         pending[7] = Some(PendingPushSource {
@@ -4279,6 +4514,7 @@ mod tests {
                 mode: crate::nodes::ConjunctMode::Cascade,
             },
             demand_io: None,
+            activation_ends: VecDeque::new(),
             parts: Vec::new(),
             direct_rows: None,
             known_rows: 0,
@@ -4542,7 +4778,7 @@ mod tests {
 
     #[test]
     fn prebound_demand_preserves_identity_dedup_and_source_order() -> VortexResult<()> {
-        let service = IoService::new().0;
+        let (service, mut demand) = IoService::new();
         let shared = Arc::new(unissued_test_work(&service, 21)?);
         let other = Arc::new(unissued_test_work(&service, 22)?);
         let same_span = Arc::new(unissued_test_work(&service, 23)?);
@@ -4568,18 +4804,20 @@ mod tests {
         pending[2] = Some(PendingPushSource {
             span: 100..102,
             role: SourceRole::Projection,
-            demand_io: Some(shared_binding.clone()),
+            demand_io: Some(Arc::from([shared_binding.clone()])),
+            activation_ends: VecDeque::new(),
             parts: Vec::new(),
             direct_rows: None,
             known_rows: 0,
         });
         let mut sources = (0..5).map(|_| None).collect::<Vec<_>>();
-        sources[1] = Some(shared_binding);
-        sources[3] = Some(other_binding);
-        sources[4] = Some(same_span_binding);
+        sources[1] = Some(Arc::from([shared_binding, other_binding.clone()]));
+        sources[3] = Some(Arc::from([other_binding]));
+        sources[4] = Some(Arc::from([same_span_binding]));
         let mut scratch = DemandObservationScratch {
             seen: Vec::with_capacity(4),
             span_selected: Vec::with_capacity(4),
+            required_reads: Vec::with_capacity(4),
         };
         let mut stats = ScanStats::default();
 
@@ -4597,7 +4835,7 @@ mod tests {
             &pending[2]
                 .as_ref()
                 .and_then(|source| source.demand_io.as_ref())
-                .ok_or_else(|| vortex_err!("pending source lost its bound IO work"))?
+                .ok_or_else(|| vortex_err!("pending source lost its bound IO work"))?[0]
                 .work,
             &shared
         ));
@@ -4609,6 +4847,30 @@ mod tests {
         assert!(shared.required.load(Ordering::Acquire));
         assert!(!other.required.load(Ordering::Acquire));
         assert!(same_span.required.load(Ordering::Acquire));
+        assert_eq!(
+            scratch
+                .required_reads
+                .iter()
+                .map(|read| read.key())
+                .collect::<Vec<_>>(),
+            [shared_key, same_span_key]
+        );
+        for read in &scratch.required_reads {
+            read.require();
+        }
+        assert_eq!(service.start(&scratch.required_reads), 2);
+        let Ok(IoDemand::Start(requests)) = demand.try_recv() else {
+            return Err(vortex_err!(
+                "selected sibling reads must start as one batch"
+            ));
+        };
+        assert_eq!(requests.len(), 2);
+        assert!(
+            requests
+                .iter()
+                .all(|request| request.priority == IoPriority::Required)
+        );
+        assert!(demand.try_recv().is_err());
         Ok(())
     }
 

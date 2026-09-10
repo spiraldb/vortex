@@ -8,6 +8,8 @@
 //! count and equal ordered content — *before* anything is timed, so a run that is fast because
 //! it dropped rows can never be reported as a win.
 
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
@@ -22,11 +24,13 @@ use vortex_array::dtype::DType;
 use vortex_array::expr::Expression;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_err;
 use vortex_io::runtime::single::block_on;
 use vortex_io::runtime::tokio::TokioRuntime;
 use vortex_io::session::RuntimeSessionExt;
 use vortex_layout::LayoutRef;
 use vortex_layout::scan::scan_builder::ScanBuilder;
+use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
 use vortex_session::VortexSession;
 
@@ -34,6 +38,7 @@ use crate::build::build_plan;
 use crate::driver::DemandHintDelivery;
 use crate::driver::MorselScan;
 use crate::driver::morsels;
+use crate::io::IoKey;
 use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
 use crate::stats::ScanStats;
@@ -65,6 +70,34 @@ pub struct RunOutcome {
     pub source_io_requests: Option<u64>,
     /// I/O bytes observed by benchmark instrumentation at the runner's measurement layer.
     pub source_io_bytes: Option<u64>,
+    /// Submission nowait attempts, hits, misses, and unsupported results at the reader layer.
+    pub source_nowait: Option<(u64, u64, u64, u64)>,
+    /// Physical-reader slot occupancy observed by benchmark instrumentation.
+    pub source_io_occupancy: Option<SourceIoOccupancy>,
+}
+
+/// Time-integrated occupancy of the physical reader between its first submission and final
+/// completion. Idle time after all reads finish is excluded.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SourceIoOccupancy {
+    /// Physical concurrency limit used by the reader.
+    pub capacity: usize,
+    /// Greatest number of physical requests simultaneously in flight.
+    pub max_active: usize,
+    /// Time from the first physical submission to the final physical completion.
+    pub span: Duration,
+    /// Time during `span` with every physical slot occupied.
+    pub full: Duration,
+    /// Time during `span` with some, but not all, physical slots occupied.
+    pub underfilled: Duration,
+    /// Gaps during `span` with no physical request in flight before a later submission.
+    pub idle: Duration,
+    /// Underfilled time followed by a later submission, excluding the final drain.
+    pub refill_wait: Duration,
+    /// Underfilled time after the last submission while its remaining reads drain.
+    pub tail_drain: Duration,
+    /// Integral of active physical slots over time, in nanoseconds.
+    pub active_slot_nanos: u128,
 }
 
 /// Run the V1 `LayoutReader` scan path.
@@ -121,6 +154,8 @@ pub fn run_v1(
         stats: None,
         source_io_requests: None,
         source_io_bytes: None,
+        source_nowait: None,
+        source_io_occupancy: None,
     })
 }
 
@@ -200,6 +235,8 @@ pub fn run_v1_tokio_with(
         stats: None,
         source_io_requests: None,
         source_io_bytes: None,
+        source_nowait: None,
+        source_io_occupancy: None,
     })
 }
 
@@ -246,6 +283,25 @@ pub fn run_morsel(
     query: &Query,
     config: MorselConfig,
 ) -> VortexResult<RunOutcome> {
+    let capture_path = std::env::var_os("VORTEX_MORSEL_IO_ORACLE_CAPTURE").map(PathBuf::from);
+    let replay_path = std::env::var_os("VORTEX_MORSEL_IO_ORACLE_REPLAY").map(PathBuf::from);
+    let replay_order = replay_path
+        .as_deref()
+        .map(load_io_oracle)
+        .transpose()?
+        .unwrap_or_default();
+    let round_robin = std::env::var("VORTEX_MORSEL_IO_ROUND_ROBIN").is_ok_and(|value| value == "1");
+    let io_depth = std::env::var("TPCH_IO_DEPTH")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .map_err(|err| vortex_err!("invalid TPCH_IO_DEPTH: {err}"))
+        })
+        .transpose()?
+        .unwrap_or(16)
+        .max(1);
+    let oracle_enabled = capture_path.is_some() || replay_path.is_some();
     let plan = Arc::new(build_plan(
         layout,
         &query.projection,
@@ -258,10 +314,26 @@ pub fn run_morsel(
         .with_morsels(cut)
         .with_share_decodes(config.share_decodes)
         .with_lookahead_morsels(config.lookahead_morsels)
-        .with_demand_hints(config.demand_hints);
-    let scan = SegmentSourceDriver::new(Arc::clone(segments)).connect_on_thread(scan)?;
+        .with_demand_hints(config.demand_hints)
+        .with_io_round_robin(round_robin);
+    let scan = if oracle_enabled {
+        scan.with_io_oracle(replay_order)
+    } else {
+        scan
+    };
+    let submission_nowait = std::env::var("TPCH_HOT_INLINE_MAX_BYTES").is_ok();
+    let scan = SegmentSourceDriver::new(Arc::clone(segments))
+        .with_background_window(io_depth)
+        .with_submission_nowait(submission_nowait)
+        .connect_on_thread(scan)?;
 
     let (batches, stats, wall) = scan.run_timed()?;
+    if let Some(path) = capture_path {
+        let snapshot = scan
+            .io_oracle_snapshot()
+            .ok_or_else(|| vortex_err!("I/O scheduling oracle was not enabled"))?;
+        write_io_oracle(&path, &snapshot.learned_order)?;
+    }
 
     let rows = batches.iter().map(|b| b.len()).sum();
     Ok(RunOutcome {
@@ -272,7 +344,45 @@ pub fn run_morsel(
         stats: Some(stats),
         source_io_requests: None,
         source_io_bytes: None,
+        source_nowait: None,
+        source_io_occupancy: None,
     })
+}
+
+fn load_io_oracle(path: &Path) -> VortexResult<Vec<IoKey>> {
+    let contents = std::fs::read_to_string(path)?;
+    contents
+        .lines()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let line = line.trim();
+            (!line.is_empty() && !line.starts_with('#')).then_some((index, line))
+        })
+        .map(|(index, line)| {
+            let id = line.parse::<u32>().map_err(|err| {
+                vortex_err!(
+                    "invalid segment ID on line {} of {}: {err}",
+                    index + 1,
+                    path.display()
+                )
+            })?;
+            Ok(IoKey::Segment(SegmentId::from(id)))
+        })
+        .collect()
+}
+
+fn write_io_oracle(path: &Path, order: &[IoKey]) -> VortexResult<()> {
+    let mut contents = String::from("# vortex-morsel-push deadline-miss order v2\n");
+    for key in order {
+        match key {
+            IoKey::Segment(id) => {
+                contents.push_str(&(**id).to_string());
+                contents.push('\n');
+            }
+        }
+    }
+    std::fs::write(path, contents)?;
+    Ok(())
 }
 
 /// Assert that two runs produced the same rows in the same order.

@@ -29,6 +29,7 @@ _test-harness = [
     "dep:tpchgen-arrow",
     "dep:vortex",
     "dep:rustix",
+    "dep:sysinfo",
 ]
 
 [dependencies]
@@ -55,6 +56,7 @@ itertools = { workspace = true }
 parking_lot = { workspace = true }
 tracing = { workspace = true }
 rustix = { workspace = true, features = ["fs"], optional = true }
+sysinfo = { workspace = true, optional = true }
 
 [dev-dependencies]
 vortex-array = { workspace = true, features = ["_test-harness"] }

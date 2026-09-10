@@ -15,6 +15,7 @@ pub use conjunct::ConjunctMode;
 pub use conjunct::ConjunctSlot;
 pub use filter::FilterExec;
 pub use flat::FlatExec;
+pub(crate) use flat::FlatSegment;
 pub use struct_::StructExec;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

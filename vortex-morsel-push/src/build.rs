@@ -41,7 +41,6 @@ use vortex_error::vortex_err;
 use vortex_layout::LayoutRef;
 use vortex_layout::layouts::chunked::Chunked;
 use vortex_layout::layouts::flat::Flat;
-use vortex_layout::layouts::flat::FlatLayout;
 use vortex_layout::layouts::struct_::Struct;
 use vortex_layout::layouts::zoned::LegacyStats;
 use vortex_layout::layouts::zoned::Zoned;
@@ -61,14 +60,14 @@ use crate::nodes::ConjunctMode;
 use crate::nodes::ConjunctSlot;
 use crate::nodes::FilterExec;
 use crate::nodes::FlatExec;
+use crate::nodes::FlatSegment;
 use crate::nodes::PushBatching;
 use crate::nodes::StructExec;
 
 /// The immutable blueprint of one node.
 enum NodeSpec {
     Flat {
-        layout: FlatLayout,
-        root_offset: u64,
+        segments: Arc<[FlatSegment]>,
     },
     Chunked {
         chunk_offsets: Arc<[u64]>,
@@ -547,20 +546,27 @@ impl ExecPlan {
         self.overlapping_source_indices(target, range, out);
     }
 
-    pub(crate) fn source_io_use_at(
+    pub(crate) fn source_io_uses_at(
         &self,
         index: usize,
-    ) -> Option<(NodeId, IoKey, Range<u64>, SourceRole)> {
-        let source = self.sources.get(index)?;
-        let NodeSpec::Flat { layout, .. } = &self.nodes[source.node as usize] else {
-            return None;
-        };
-        Some((
-            source.node,
-            IoKey::Segment(layout.segment_id()),
-            source.root_range.clone(),
-            source.role,
-        ))
+        range: Range<u64>,
+    ) -> impl Iterator<Item = (NodeId, IoKey, Range<u64>, SourceRole)> + '_ {
+        self.sources.get(index).into_iter().flat_map(move |source| {
+            let segments = match &self.nodes[source.node as usize] {
+                NodeSpec::Flat { segments } => segments.as_ref(),
+                _ => &[],
+            };
+            let first = segments.partition_point(|segment| segment.range.end <= range.start);
+            let end = segments.partition_point(|segment| segment.range.start < range.end);
+            segments[first..end.max(first)].iter().map(|segment| {
+                (
+                    source.node,
+                    IoKey::Segment(segment.layout.segment_id()),
+                    segment.range.clone(),
+                    source.role,
+                )
+            })
+        })
     }
 
     pub(crate) fn overlapping_all_source_indices(&self, range: &Range<u64>, out: &mut Vec<usize>) {
@@ -595,21 +601,7 @@ impl ExecPlan {
     pub fn source_io_uses(
         &self,
     ) -> impl Iterator<Item = (NodeId, IoKey, Range<u64>, SourceRole)> + '_ {
-        self.sources.iter().filter_map(|source| {
-            let NodeSpec::Flat {
-                layout,
-                root_offset,
-            } = &self.nodes[source.node as usize]
-            else {
-                return None;
-            };
-            Some((
-                source.node,
-                IoKey::Segment(layout.segment_id()),
-                *root_offset..*root_offset + layout.row_count(),
-                source.role,
-            ))
-        })
+        (0..self.sources.len()).flat_map(|index| self.source_io_uses_at(index, 0..u64::MAX))
     }
 
     /// The dtype the scan emits.
@@ -637,23 +629,12 @@ impl ExecPlan {
         &self.natural_splits
     }
 
-    /// Every flat node's stored unit and its root-coordinate row range, one entry per node.
+    /// Each stored segment use and its root-coordinate row range.
     ///
-    /// A segment referenced from two subtrees (a column in both filter and projection) appears
-    /// once per referencing node, because each node registers its own use per morsel. This is
-    /// the input to the shared-cell lease counts: the count for a unit is the number of
-    /// (node, morsel) pairs whose ranges overlap.
+    /// Segments shared by predicate and projection sources appear once per referencing source.
+    /// Each overlap with a morsel contributes a separate decoded-cell lease.
     pub fn flat_uses(&self) -> impl Iterator<Item = (IoKey, Range<u64>)> + '_ {
-        self.nodes.iter().filter_map(|spec| match spec {
-            NodeSpec::Flat {
-                layout,
-                root_offset,
-            } => Some((
-                IoKey::Segment(layout.segment_id()),
-                *root_offset..*root_offset + layout.row_count(),
-            )),
-            _ => None,
-        })
+        self.source_io_uses().map(|(_, key, range, _)| (key, range))
     }
 
     /// The number of nodes in the plan.
@@ -673,12 +654,8 @@ impl ExecPlan {
             .iter()
             .enumerate()
             .map(|(idx, spec)| match spec {
-                NodeSpec::Flat {
-                    layout,
-                    root_offset,
-                } => Node::Flat(Box::new(FlatExec::new(
-                    layout,
-                    *root_offset,
+                NodeSpec::Flat { segments } => Node::Flat(Box::new(FlatExec::from_segments(
+                    Arc::clone(segments),
                     ProducerId(u32::try_from(idx).unwrap_or(u32::MAX)),
                 ))),
                 NodeSpec::Chunked {
@@ -1059,10 +1036,10 @@ fn source_activations(
         .iter()
         .enumerate()
         .filter_map(|(node, spec)| match spec {
-            NodeSpec::Flat {
-                layout,
-                root_offset,
-            } => Some((node, *root_offset..*root_offset + layout.row_count())),
+            NodeSpec::Flat { segments } => segments
+                .first()
+                .zip(segments.last())
+                .map(|(first, last)| (node, first.range.start..last.range.end)),
             NodeSpec::Struct { children, .. } if children.is_empty() => Some((node, 0..row_count)),
             _ => None,
         })
@@ -1243,22 +1220,41 @@ impl Builder {
             self.splits.push(root_offset + layout.row_count());
             let flat = layout.as_::<Flat>().clone();
             return Ok(self.push(NodeSpec::Flat {
-                layout: flat,
-                root_offset,
+                segments: Arc::from([FlatSegment::new(flat, root_offset)]),
             }));
         }
 
         if layout.is::<Chunked>() {
             let nchunks = layout.nchildren();
+            let layouts = (0..nchunks)
+                .map(|idx| {
+                    layout
+                        .slot(idx)?
+                        .ok_or_else(|| vortex_err!("chunked layout has no child {idx}"))
+                })
+                .collect::<VortexResult<Vec<_>>>()?;
+            if !layouts.is_empty() && layouts.iter().all(|child| child.is::<Flat>()) {
+                let mut offset = root_offset;
+                let mut segments = Vec::with_capacity(nchunks);
+                for child in &layouts {
+                    if child.row_count() > 0 {
+                        segments.push(FlatSegment::new(child.as_::<Flat>().clone(), offset));
+                    }
+                    offset += child.row_count();
+                    self.splits.push(offset);
+                }
+                if !segments.is_empty() {
+                    return Ok(self.push(NodeSpec::Flat {
+                        segments: Arc::from(segments),
+                    }));
+                }
+            }
             let mut offsets = Vec::with_capacity(nchunks + 1);
             offsets.push(0u64);
             let mut children = Vec::with_capacity(nchunks);
-            for idx in 0..nchunks {
-                let child = layout
-                    .slot(idx)?
-                    .ok_or_else(|| vortex_err!("chunked layout has no child {idx}"))?;
-                let offset = offsets[idx];
-                children.push(self.build_layout(&child, root_offset + offset)?);
+            for child in &layouts {
+                let offset = *offsets.last().vortex_expect("chunk offsets start at zero");
+                children.push(self.build_layout(child, root_offset + offset)?);
                 offsets.push(offset + child.row_count());
             }
             return Ok(self.push(NodeSpec::Chunked {

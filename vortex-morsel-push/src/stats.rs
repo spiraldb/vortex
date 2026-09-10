@@ -119,6 +119,40 @@ pub struct ScanStats {
     ///
     /// Reads overlap, so this is not additive CPU or scan time.
     pub io_wait_time: Duration,
+    /// Distinct reads observed at their first execution use while the scheduling oracle ran.
+    pub io_oracle_learned_keys: u64,
+    /// Keys loaded from a scheduling-oracle profile for this run.
+    pub io_oracle_replay_keys: u64,
+    /// Started reads found in the loaded scheduling-oracle profile.
+    pub io_oracle_replay_hits: u64,
+    /// Started reads absent from the loaded scheduling-oracle profile.
+    pub io_oracle_replay_misses: u64,
+    /// Read positions changed by replay sorting.
+    pub io_oracle_reordered_reads: u64,
+    /// Scheduler batches whose order changed during replay.
+    pub io_oracle_reordered_batches: u64,
+    /// Within-batch pairwise inversions between submission order and observed first-use order.
+    pub io_oracle_start_inversions: u64,
+    /// Comparable within-batch submission-order pairs considered by the oracle.
+    pub io_oracle_start_pairs: u64,
+    /// Within-originating-batch inversions between completion and observed first-use order.
+    pub io_oracle_completion_inversions: u64,
+    /// Comparable within-originating-batch completion-order pairs considered by the oracle.
+    pub io_oracle_completion_pairs: u64,
+    /// Started reads that execution never used.
+    pub io_oracle_unused_started: u64,
+    /// First uses that found their read already complete.
+    pub io_oracle_first_need_ready: u64,
+    /// First uses that found their read in flight.
+    pub io_oracle_first_need_requested: u64,
+    /// First uses that found their read not yet issued.
+    pub io_oracle_first_need_unissued: u64,
+    /// Sum of completion lateness for reads that were not ready at their first execution use.
+    pub io_oracle_late_read_time: Duration,
+    /// Greatest completion lateness observed for one read after its first execution use.
+    pub io_oracle_late_read_time_max: Duration,
+    /// Sum of the lead time for reads that completed before their first execution use.
+    pub io_oracle_ready_lead_time: Duration,
     /// Segment decodes performed.
     pub decodes: u64,
     /// Decodes served from a shared cell published by another morsel.
@@ -207,6 +241,25 @@ impl ScanStats {
         self.nowait_misses += other.nowait_misses;
         self.nowait_unsupported += other.nowait_unsupported;
         self.io_wait_time += other.io_wait_time;
+        self.io_oracle_learned_keys += other.io_oracle_learned_keys;
+        self.io_oracle_replay_keys += other.io_oracle_replay_keys;
+        self.io_oracle_replay_hits += other.io_oracle_replay_hits;
+        self.io_oracle_replay_misses += other.io_oracle_replay_misses;
+        self.io_oracle_reordered_reads += other.io_oracle_reordered_reads;
+        self.io_oracle_reordered_batches += other.io_oracle_reordered_batches;
+        self.io_oracle_start_inversions += other.io_oracle_start_inversions;
+        self.io_oracle_start_pairs += other.io_oracle_start_pairs;
+        self.io_oracle_completion_inversions += other.io_oracle_completion_inversions;
+        self.io_oracle_completion_pairs += other.io_oracle_completion_pairs;
+        self.io_oracle_unused_started += other.io_oracle_unused_started;
+        self.io_oracle_first_need_ready += other.io_oracle_first_need_ready;
+        self.io_oracle_first_need_requested += other.io_oracle_first_need_requested;
+        self.io_oracle_first_need_unissued += other.io_oracle_first_need_unissued;
+        self.io_oracle_late_read_time += other.io_oracle_late_read_time;
+        self.io_oracle_late_read_time_max = self
+            .io_oracle_late_read_time_max
+            .max(other.io_oracle_late_read_time_max);
+        self.io_oracle_ready_lead_time += other.io_oracle_ready_lead_time;
         self.decodes += other.decodes;
         self.decode_reuses += other.decode_reuses;
         self.conjuncts_short_circuited += other.conjuncts_short_circuited;

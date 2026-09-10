@@ -19,6 +19,7 @@ use vortex_array::buffer::BufferHandle;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_io::runtime::Handle;
+use vortex_layout::segments::ReadAtNowait;
 use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
@@ -49,6 +50,7 @@ type TaggedRead = BoxFuture<'static, (IoKey, bool, VortexResult<BufferHandle>)>;
 pub struct SegmentSourceDriver {
     source: Arc<dyn SegmentSource>,
     background_window: usize,
+    submission_nowait: bool,
 }
 
 impl SegmentSourceDriver {
@@ -57,12 +59,22 @@ impl SegmentSourceDriver {
         Self {
             source,
             background_window: DEFAULT_BACKGROUND_WINDOW,
+            submission_nowait: false,
         }
     }
 
     /// Set how many speculative reads are polled concurrently.
     pub fn with_background_window(mut self, window: usize) -> Self {
         self.background_window = window.max(1);
+        self
+    }
+
+    /// Probe reads inline as their start batch reaches the driver.
+    ///
+    /// A ready read bypasses construction and polling of its asynchronous source future. Misses
+    /// remain in the original batch and follow the normal background/coalescing path.
+    pub fn with_submission_nowait(mut self, enabled: bool) -> Self {
+        self.submission_nowait = enabled;
         self
     }
 
@@ -115,6 +127,7 @@ impl SegmentSourceDriver {
     ) -> impl Future<Output = ()> + Send + 'static {
         let source = Arc::clone(&self.source);
         let window = self.background_window;
+        let submission_nowait = self.submission_nowait;
         let background_reads = source.prefers_background_reads();
         async move {
             let mut demand = demand.fuse();
@@ -136,7 +149,40 @@ impl SegmentSourceDriver {
                 }
                 futures::select_biased! {
                     next = demand.next() => match next {
-                        Some(IoDemand::Start(requests)) => {
+                        Some(IoDemand::Start(mut requests)) => {
+                            if submission_nowait {
+                                let mut pending = Vec::with_capacity(requests.len());
+                                for request in requests {
+                                    let IoKey::Segment(id) = request.key;
+                                    match source.request_nowait(id) {
+                                        Ok(ReadAtNowait::Ready(handle)) if !handle.is_on_device() => {
+                                            early_promotions.remove(&request.key);
+                                            if !completions.complete(request.key, Ok(handle)) {
+                                                return;
+                                            }
+                                        }
+                                        Ok(ReadAtNowait::Ready(handle)) => {
+                                            early_promotions.remove(&request.key);
+                                            in_flight.insert(request.key);
+                                            polled.push(tag(
+                                                request.key,
+                                                futures::future::ready(Ok(handle)).boxed(),
+                                                false,
+                                            ));
+                                        }
+                                        Ok(ReadAtNowait::WouldBlock | ReadAtNowait::Unsupported) => {
+                                            pending.push(request);
+                                        }
+                                        Err(error) => {
+                                            early_promotions.remove(&request.key);
+                                            if !completions.complete(request.key, Err(error)) {
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
+                                requests = pending;
+                            }
                             let ids = requests
                                 .iter()
                                 .map(|request| match request.key {
