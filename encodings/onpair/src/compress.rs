@@ -44,7 +44,6 @@ pub fn onpair_compress(
 
     let views = array.views();
     let mut uncompressed_lengths: BufferMut<u32> = BufferMut::zeroed(len);
-    let mut total_bytes = 0usize;
     let buffers = array
         .data_buffers()
         .as_ref()
@@ -52,27 +51,29 @@ pub fn onpair_compress(
         .map(|b| b.as_host())
         .collect::<Vec<_>>();
 
-    match mask.bit_buffer() {
+    // Keep sums local to each arm: a shared callback accumulator can prevent
+    // vectorization of the all-valid loop.
+    let total_bytes = match mask.bit_buffer() {
         AllOr::All => {
+            let mut total = 0;
             for (view, length) in views.iter().zip(uncompressed_lengths.iter_mut()) {
                 *length = view.len();
-                total_bytes += *length as usize;
+                total += *length as usize;
             }
+            total
         }
         AllOr::None => unreachable!("all-null input handled above"),
         AllOr::Some(validity) => {
-            for ((view, length), valid) in views
-                .iter()
-                .zip(uncompressed_lengths.iter_mut())
-                .zip(validity.iter())
-            {
-                if valid {
-                    *length = view.len();
-                    total_bytes += *length as usize;
-                }
-            }
+            let lengths = uncompressed_lengths.as_mut_slice();
+            let mut total = 0;
+            validity.for_each_set_index(|i| {
+                let length = views[i].len();
+                lengths[i] = length;
+                total += length as usize;
+            });
+            total
         }
-    }
+    };
 
     let rows = ViewRows {
         views,
