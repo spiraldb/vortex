@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: MIT
 # SPDX-FileCopyrightText: Copyright (c) 2024 Development Seed
 
-from typing import Self, cast
+from typing import Self
 
 from typing_extensions import override
 
@@ -53,12 +53,7 @@ class HTTPStore(_store.HTTPStore):
 
         This is an alias of the :class:`~vortex.store.HTTPStore` constructor.
         """
-        return cast(
-            Self,
-            super(cls).from_url(  # ty: ignore[unresolved-attribute]
-                url, client_options=client_options, retry_config=retry_config
-            ),
-        )
+        return super().from_url(url, client_options=client_options, retry_config=retry_config)
 
     @override
     def __eq__(self, value: object) -> bool:

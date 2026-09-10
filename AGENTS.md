@@ -37,13 +37,17 @@ Before changing files in a subtree, read the closest nested `AGENTS.md`. In part
 
 - `.github/AGENTS.md` covers workflows and other GitHub configuration.
 - `docs/AGENTS.md` covers Sphinx documentation.
-- `vortex-python/AGENTS.md` covers Python and PyO3 binding work.
 
 ## Verification
 
 Run the narrowest check that covers the files you changed. CI already runs the workspace-wide
 version of everything below, so reproducing that breadth locally costs far more than the round
 trip it saves.
+
+Test execution is optional and left to the user. The commands below document how tests are run
+in this repository; they are not mandatory completion checks. Run tests when the user requests
+them, and report which tests ran or were not run. Continue to run applicable lint, formatting,
+and static checks.
 
 Do not run Rust checks at all for changes that only touch Markdown, RST, Sphinx configuration,
 agent configuration, comments outside Rust code, symlinks, or other metadata with no Rust/API
@@ -55,7 +59,6 @@ symlink or path changes with `ls`, `find`, and `git status`.
 For Rust code, public API, feature flag, or generated-file changes, run these before stopping:
 
 ```bash
-cargo nextest run -p <crate-name>
 cargo clippy -p <crate-name> --all-targets --all-features -- -D warnings
 cargo +nightly-<pinned> fmt -p <crate-name>
 ```
@@ -68,16 +71,69 @@ Two details make these match CI rather than merely resemble it:
   `+nightly` can format differently from the toolchain CI checks against, so the reformatted tree
   still fails `fmt --check`.
 
-There is no separate build step. `cargo nextest run` and `cargo clippy --all-targets` each compile
-the crate; a preceding `cargo build` only repeats that work under a third profile.
+There is no separate build step: `cargo clippy --all-targets` compiles the crate.
 
-For Rust doc comments or crate documentation, also run doctests for the affected crate:
+When the user wants Rust tests, scope them to the affected crate. Doctests cover Rust doc comments
+and crate documentation:
 
 ```bash
+cargo nextest run -p <crate-name>
 cargo test --doc -p <crate-name>
 ```
 
-If cargo-nextest is not available, install it with `cargo install --locked cargo-nextest`.
+If needed for a requested test run, install cargo-nextest with `cargo install --locked cargo-nextest`.
+
+### Python
+
+The following applies to Python bindings and their PyO3 implementation under `vortex-python/`,
+and to CUDA bindings under `vortex-python-cuda/`. Run commands from the repository root.
+
+Follow the [Python binding development workflow](CONTRIBUTING.md#python-bindings) for environment
+setup, Maturin rebuilds, targeted testing, Cargo features, and the full Python check. Keep the
+contributor guide as the source of truth for shared commands; its test workflows are available
+when the user chooses to run them.
+
+Run the lint, formatting, and type checks that match the files changed:
+
+```bash
+uvx ruff format --check <changed-python-files>
+uvx ruff check <changed-python-files>
+uvx ty check vortex-python vortex-python-cuda vortex-ffi/cmake/tests scripts/tests
+```
+
+Use `uvx` for both Ruff and ty, matching CI. The command above covers both binding packages and the
+CMake and script tests. For a narrower check, pass the affected directory, such as
+`uvx ty check vortex-python` or `uvx ty check vortex-ffi/cmake/tests`. Type-check the whole binding
+package when changing stubs or annotations so their callers are checked too.
+
+ty reads Python sources and stubs and needs third-party dependencies for type information. Prepare
+them with `uv sync --all-packages --no-install-workspace` to avoid building the Rust extensions for
+type checking. Runtime tests still need the installed extensions.
+
+Use targeted `# ty: ignore[rule-name]` comments for intentional violations, such as invalid-input
+tests or third-party stub limitations, and explain non-obvious suppressions. Pyright suppression
+comments do not suppress ty diagnostics. Keep shared ty configuration in the root `pyproject.toml`.
+
+Functions that only return `None`, including tests, may omit the `-> None` annotation. ty does not
+require return annotations, and Ruff's `suppress-none-returning` setting permits omitting them for
+these functions. Bare `return` and falling through are also allowed when the
+return type permits `None`; Ruff's `RET502` and `RET503` rules are explicitly disabled.
+
+When the user wants Python tests, run the targeted suite with:
+
+```bash
+uv run --all-packages pytest <changed-python-tests>
+```
+
+Do not add a `python -m py_compile` pass: syntax errors are already reported by `ruff check`,
+`ty check`, and pytest collection.
+
+For Python docstrings, `docs/api/python/`, or Sphinx configuration changes, follow
+`docs/AGENTS.md`; the contributor guide documents clean Sphinx builds and doctests. Test execution
+remains the user's choice. If PyO3 Rust files change, run the Rust lint and formatting checks above,
+scoped to the affected binding crate (`-p vortex-python` or `-p vortex-python-cuda`).
+
+Always finish Python binding work with `git diff --check`.
 
 ### C++ and CUDA
 
@@ -91,6 +147,15 @@ clang-format --style=file -i <changed-files>
 Pass only the files you changed; CI excludes vendored or generated CUDA and Arrow headers from its
 repository-wide check. clang-format is idempotent, so a `--dry-run --Werror` pass over the files
 you just formatted cannot fail and is not worth running.
+
+When the user wants CMake integration tests, CI runs the Python unittest suite with:
+
+```bash
+python3 -m unittest discover -s vortex-ffi/cmake/tests -v
+```
+
+These tests need CMake, Ninja, the C/C++ and Rust toolchains, and the lockfile-selected Cargo
+dependencies cached by `cargo fetch --locked`.
 
 ### New and generated files
 
@@ -131,8 +196,8 @@ These CI checks are the ones most often missed when adding files rather than edi
 - Prefer test module names `tests`, not `test`.
 - Use `assert_arrays_eq!` for array comparisons instead of element-by-element assertions.
 - Keep tests concise and focused on behavior, edge cases, and regressions.
-- If a bug fix is requested, add or identify a failing test first when practical. A test that
-  passes before and after the fix does not prove the fix.
+- If a bug fix is requested, add or identify a regression test when practical. Leave execution
+  to the user; when tests are run, a test that passes before and after the fix does not prove it.
 - If clippy lints in tests prohibit patterns that are acceptable only in test code, consider
   allowing the lint at the test module level.
 - If an existing `foo.rs` module needs many tests, promote it to a directory module:

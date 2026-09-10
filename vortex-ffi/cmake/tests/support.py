@@ -12,18 +12,24 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, TypedDict, Unpack
+from typing import TypedDict, Unpack, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 CMAKE_DIR = REPO_ROOT / "vortex-ffi/cmake"
 
 
 class CommandOptions(TypedDict, total=False):
-    env: dict[str, str] | None
+    env: Mapping[str, str] | None
     cwd: str | Path | None
     success: bool
-    timeout: int
+    timeout: float
+
+
+class CargoRecording(TypedDict):
+    args: list[str]
+    env: dict[str, str]
 
 
 def rust_toolchain_environment() -> dict[str, str]:
@@ -65,10 +71,10 @@ class CMakeTest(unittest.TestCase):
     def command(
         self,
         *args: str | Path,
-        env: dict[str, str] | None = None,
+        env: Mapping[str, str] | None = None,
         cwd: str | Path | None = None,
         success: bool = True,
-        timeout: int = 120,
+        timeout: float = 120,
     ) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
             list(map(str, args)),
@@ -87,12 +93,17 @@ class CMakeTest(unittest.TestCase):
         return result
 
     def cmake_configure(
-        self, source: Path, build: Path, *options: str, generator: str = "Ninja", **kwargs: Unpack[CommandOptions]
+        self,
+        source: str | Path,
+        build: str | Path,
+        *options: str,
+        generator: str = "Ninja",
+        **kwargs: Unpack[CommandOptions],
     ) -> subprocess.CompletedProcess[str]:
         return self.command("cmake", "-G", generator, "-S", source, "-B", build, *options, **kwargs)
 
     def cmake_build(
-        self, build: Path, *options: str, **kwargs: Unpack[CommandOptions]
+        self, build: str | Path, *options: str, **kwargs: Unpack[CommandOptions]
     ) -> subprocess.CompletedProcess[str]:
         return self.command("cmake", "--build", build, *options, **kwargs)
 
@@ -128,5 +139,5 @@ class CMakeTest(unittest.TestCase):
             """,
         )
 
-    def cargo_recording(self, target_dir: Path) -> dict[str, Any]:
-        return json.loads((target_dir / "environment.json").read_text(encoding="utf-8"))
+    def cargo_recording(self, target_dir: Path) -> CargoRecording:
+        return cast(CargoRecording, json.loads((target_dir / "environment.json").read_text(encoding="utf-8")))

@@ -91,7 +91,7 @@ from .arrays import (
 from .file import VortexFile, open
 from .scan import RepeatedScan
 
-assert _lib, "Ensure we eagerly import the Vortex native library"
+_ = _lib  # Ensure we eagerly import the Vortex native library.
 
 # Resolve the installed distribution version so it is available as vortex.__version__.
 

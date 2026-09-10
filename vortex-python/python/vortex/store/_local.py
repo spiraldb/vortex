@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2024 Development Seed
 
 from pathlib import Path
-from typing import Self, cast
+from typing import Self
 
 from typing_extensions import override
 
@@ -67,12 +67,7 @@ class LocalStore(_store.LocalStore):
             store = LocalStore.from_url(url)
 
         """
-        return cast(
-            Self,
-            super(cls).from_url(  # ty: ignore[unresolved-attribute]
-                url, automatic_cleanup=automatic_cleanup, mkdir=mkdir
-            ),
-        )
+        return super().from_url(url, automatic_cleanup=automatic_cleanup, mkdir=mkdir)
 
     @override
     def __eq__(self, value: object, /) -> bool:
