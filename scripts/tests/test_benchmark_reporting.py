@@ -26,7 +26,7 @@ def load_compare_module() -> ModuleType:
     return module
 
 
-def load_random_access_split_module():
+def load_random_access_split_module() -> ModuleType:
     spec = importlib.util.spec_from_file_location("random_access_split", RANDOM_ACCESS_SPLIT_SCRIPT)
     assert spec is not None
     module = importlib.util.module_from_spec(spec)
