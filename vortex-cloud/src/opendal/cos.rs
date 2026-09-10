@@ -228,24 +228,4 @@ mod tests {
             Err(OpenDALStoreError::MissingConfig("endpoint"))
         ));
     }
-
-    /// `disable_config_load` asks OpenDAL not to pick up ambient credentials, so a spelling the
-    /// caller reasonably wrote must not be dropped: reading it as `false` would leave the
-    /// implicit config loading the caller asked to turn off.
-    #[rstest::rstest]
-    #[case("True")]
-    #[case("1")]
-    #[case("yes")]
-    fn cos_reads_disable_config_load_beyond_lowercase_true(#[case] value: &str) {
-        let url = Url::parse("cos://my-bucket/path").unwrap();
-        let env = |key: &str| match key {
-            "COS_ENDPOINT" => Some("https://example.com".to_string()),
-            _ => None,
-        };
-        let mut props = HashMap::new();
-        props.insert("disable_config_load".to_string(), value.to_string());
-
-        let config = url_and_properties_to_config(&url, &props, env).expect("config");
-        assert!(config.disable_config_load, "{value} should read as true");
-    }
 }

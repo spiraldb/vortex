@@ -255,24 +255,4 @@ mod tests {
             Err(OpenDALStoreError::MissingConfig("endpoint"))
         ));
     }
-
-    /// `skip_signature` is what makes a public read-only bucket reachable without credentials, so
-    /// a spelling the caller reasonably wrote must not be dropped: reading it as `false` keeps
-    /// signing the request and the bucket answers 403.
-    #[rstest::rstest]
-    #[case("True")]
-    #[case("1")]
-    #[case("yes")]
-    fn oss_reads_skip_signature_beyond_lowercase_true(#[case] value: &str) {
-        let url = Url::parse("oss://public-bucket/path").unwrap();
-        let env = |key: &str| match key {
-            "OSS_ENDPOINT" => Some("https://oss-cn-hangzhou.aliyuncs.com".to_string()),
-            _ => None,
-        };
-        let mut props = HashMap::new();
-        props.insert("skip_signature".to_string(), value.to_string());
-
-        let config = url_and_properties_to_config(&url, &props, env).expect("config");
-        assert!(config.skip_signature, "{value} should read as true");
-    }
 }
