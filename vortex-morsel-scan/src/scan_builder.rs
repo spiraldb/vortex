@@ -20,7 +20,6 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_layout::LayoutRef;
 use vortex_layout::segments::SegmentSource;
 use vortex_metrics::MetricsRegistry;
-use vortex_morsel::MorselScanExecutor;
 use vortex_morsel_push::PushMorselScanExecutor;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
@@ -29,53 +28,14 @@ use vortex_utils::parallelism::get_available_parallelism;
 use crate::ScanBackend;
 use crate::ScanExecutorOptions;
 
-enum MorselExecutor {
-    Pull(MorselScanExecutor),
-    Push(PushMorselScanExecutor),
-}
-
-impl MorselExecutor {
-    fn full_file_splits(
-        &self,
-        projection: &BoundExpression,
-        filter: Option<&BoundExpression>,
-    ) -> VortexResult<Vec<u64>> {
-        match self {
-            Self::Pull(executor) => executor.full_file_splits(projection, filter),
-            Self::Push(executor) => executor.full_file_splits(projection, filter),
-        }
-    }
-
-    #[expect(clippy::too_many_arguments)]
-    fn build(
-        &self,
-        session: VortexSession,
-        projection: BoundExpression,
-        filter: Option<BoundExpression>,
-        row_range: Option<Range<u64>>,
-        selection: Selection,
-        limit: Option<u64>,
-        row_offset: u64,
-    ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
-        match self {
-            Self::Pull(executor) => executor.build(
-                session, projection, filter, row_range, selection, limit, row_offset,
-            ),
-            Self::Push(executor) => executor.build(
-                session, projection, filter, row_range, selection, limit, row_offset,
-            ),
-        }
-    }
-}
-
-/// Builder for Pull or Push scans over a raw layout and segment source.
+/// Builder for push scans over a raw layout and segment source.
 ///
 /// Unlike [`vortex_layout::scan::scan_builder::ScanBuilder`], this builder never constructs or
 /// accepts a layout reader. Layout planning and predicate execution are owned entirely by the
 /// selected morsel implementation.
 pub struct MorselScanBuilder<A> {
     session: VortexSession,
-    executor: MorselExecutor,
+    executor: PushMorselScanExecutor,
     projection: BoundExpression,
     filter: Option<BoundExpression>,
     ordered: bool,
@@ -89,7 +49,7 @@ pub struct MorselScanBuilder<A> {
 }
 
 impl MorselScanBuilder<ArrayRef> {
-    /// Create a dedicated Pull or Push builder over raw file layout state.
+    /// Create a dedicated push builder over raw file layout state.
     pub fn new(
         session: VortexSession,
         backend: ScanBackend,
@@ -100,18 +60,15 @@ impl MorselScanBuilder<ArrayRef> {
         let projection = BoundExpression::new_root(layout.dtype().clone());
         let executor = match backend {
             ScanBackend::V1 => {
-                vortex_bail!("MorselScanBuilder only supports the pull and push backends")
+                vortex_bail!("MorselScanBuilder only supports the push backend")
             }
-            ScanBackend::Pull => MorselExecutor::Pull(
-                MorselScanExecutor::new(layout, segments).with_threads(options.threads),
-            ),
             ScanBackend::Push => {
                 let mut executor =
                     PushMorselScanExecutor::new(layout, segments).with_threads(options.threads);
                 if let Some(driver) = &options.external_driver {
                     executor = executor.with_external_threads(Arc::clone(driver));
                 }
-                MorselExecutor::Push(executor)
+                executor
             }
         };
         Ok(Self {

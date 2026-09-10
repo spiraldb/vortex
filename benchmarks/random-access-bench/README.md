@@ -22,26 +22,6 @@ untimed warm-up, then reuses the open file handle. Reopen mode includes file ope
 work in each timed iteration. CI drives the full matrix via
 [`scripts/random-access-split.py`](../../scripts/random-access-split.py).
 
-The morsel executor intentionally uses all available parallelism, bounded only by the number of
-runnable morsels. Its process-wide worker pool is sized from detected hardware parallelism, not a
-fixed constant, and larger explicit requests remain supported with a dedicated pool. Do not add a
-fixed worker cap: V1 schedules layout splits across the full runtime, so limiting only the morsel
-path can hide substantial sparse-scan parallelism and makes the comparison depend on an unrelated
-constant. Keeping workers persistent is equally important because reopen benchmarks must not
-create a new set of OS threads for every lookup.
-
-Equivalent reopened Vortex accessors also reuse their morsel plan and executor state. The cache is
-keyed by canonical path, format, file length, and modification time, and is bounded by file count.
-It retains the fixed-size per-worker execution arenas and natural split metadata, but not ordinary
-decoded segments, decoded dictionary values, or scan-local IO state. Dictionary values are shared
-between morsels only for the lifetime of one lookup. Rebuilding an arena per worker inside every
-lookup is especially expensive for wide plans and does not make reopen semantics more
-representative.
-
-The consolidated technical history, retained optimizations, observability guide, and final SSD
-comparison against V1 are in the
-[`vortex-morsel` SSD optimization record](../../vortex-morsel/README.md#ssd-random-access-optimization-record).
-
 ## Running locally
 
 ```bash

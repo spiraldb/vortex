@@ -5,20 +5,11 @@ use std::collections::VecDeque;
 use std::ops::Range;
 use std::sync::Arc;
 
-use vortex_array::ArrayRef;
-use vortex_array::Canonical;
-use vortex_array::IntoArray;
-use vortex_array::arrays::ChunkedArray;
-use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
-use vortex_mask::Mask;
 
-use crate::node::ChildPoll;
-use crate::node::ExecCx;
 use crate::node::ExecNode;
-use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
@@ -28,8 +19,6 @@ use crate::node::PushBatch;
 use crate::node::PushCx;
 use crate::node::RetireCx;
 use crate::node::StageOutput;
-use crate::node::Value;
-use crate::node::ValueBatch;
 
 /// One overlap between the morsel's range and a chunk.
 #[derive(Clone, Debug)]
@@ -54,7 +43,6 @@ struct PendingBatch {
 pub struct ChunkedExec {
     chunk_offsets: Arc<[u64]>,
     children: Arc<[NodeId]>,
-    dtype: DType,
 
     // Per-morsel state.
     range: Range<u64>,
@@ -63,8 +51,6 @@ pub struct ChunkedExec {
     plan_cursor: usize,
     /// Whether `plan_cursor`'s child has already been reset for this morsel.
     plan_started: bool,
-    exec_cursor: usize,
-    parts: Vec<ArrayRef>,
     done: bool,
     push_next: usize,
     push_received: Vec<u64>,
@@ -76,18 +62,15 @@ pub struct ChunkedExec {
 
 impl ChunkedExec {
     /// Build a chunked node from cumulative chunk offsets and one child per chunk.
-    pub fn new(chunk_offsets: Arc<[u64]>, children: Arc<[NodeId]>, dtype: DType) -> Self {
+    pub fn new(chunk_offsets: Arc<[u64]>, children: Arc<[NodeId]>) -> Self {
         debug_assert_eq!(chunk_offsets.len(), children.len() + 1);
         Self {
             chunk_offsets,
             children,
-            dtype,
             range: 0..0,
             cuts: Vec::new(),
             plan_cursor: 0,
             plan_started: false,
-            exec_cursor: 0,
-            parts: Vec::new(),
             done: false,
             push_next: 0,
             push_received: Vec::new(),
@@ -182,8 +165,6 @@ impl ExecNode for ChunkedExec {
         self.range = range;
         self.plan_cursor = 0;
         self.plan_started = false;
-        self.exec_cursor = 0;
-        self.parts.clear();
         self.done = false;
         self.cut();
         self.push_next = 0;
@@ -218,59 +199,6 @@ impl ExecNode for ChunkedExec {
             }
         }
         Ok(PlanPoll::Complete)
-    }
-
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-        if self.done {
-            return Ok(ExecPoll::Done);
-        }
-
-        if self.cuts.is_empty() {
-            self.done = true;
-            return Ok(ExecPoll::Value(ValueBatch {
-                coverage: self.range.clone(),
-                value: Value::Array(Canonical::empty(&self.dtype).into_array()),
-            }));
-        }
-
-        let demand = cx.demand().clone();
-        if self.parts.capacity() < self.cuts.len() {
-            self.parts
-                .reserve(self.cuts.len().saturating_sub(self.parts.len()));
-        }
-        while self.exec_cursor < self.cuts.len() {
-            let cut = self.cuts[self.exec_cursor].clone();
-            let child_demand = slice_mask(&demand, cut.mask_range);
-            let child = self.children[cut.chunk];
-            match cx.child_array(child, child_demand)? {
-                ChildPoll::Value(array) => {
-                    if !array.is_empty() {
-                        self.parts.push(array);
-                    }
-                    self.exec_cursor += 1;
-                }
-                ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
-                ChildPoll::Done => {
-                    return Err(vortex_err!("chunked child {child} produced no value"));
-                }
-            }
-        }
-
-        let parts = std::mem::take(&mut self.parts);
-        let array = match parts.len() {
-            0 => Canonical::empty(&self.dtype).into_array(),
-            1 => parts.into_iter().next().vortex_expect("one part"),
-            _ => {
-                let dtype = parts[0].dtype().clone();
-                ChunkedArray::try_new(parts, dtype)?.into_array()
-            }
-        };
-        self.done = true;
-
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.range.clone(),
-            value: Value::Array(array),
-        }))
     }
 
     #[inline]
@@ -461,14 +389,6 @@ fn stage_chunked_output(node: &mut ChunkedExec, out: &mut StageOutput) -> Vortex
     Ok(NodeState::NeedInput)
 }
 
-/// Slice a mask, preserving the all-true / all-false fast paths.
-pub(crate) fn slice_mask(mask: &Mask, range: Range<usize>) -> Mask {
-    if range.start == 0 && range.end == mask.len() {
-        return mask.clone();
-    }
-    mask.slice(range)
-}
-
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
@@ -503,7 +423,7 @@ mod tests {
     #[test]
     fn later_child_waits_for_multiple_earlier_batches() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut node = ChunkedExec::new(Arc::from([0, 4, 6]), Arc::from([0, 1]), dtype.clone());
+        let mut node = ChunkedExec::new(Arc::from([0, 4, 6]), Arc::from([0, 1]));
         node.reset(0..6);
 
         node.push_pending[1].push_back(PendingBatch {
@@ -547,8 +467,7 @@ mod tests {
 
     #[test]
     fn reset_reuses_queue_storage_and_handles_cut_width_changes() {
-        let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut node = ChunkedExec::new(Arc::from([0, 4, 6]), Arc::from([0, 1]), dtype);
+        let mut node = ChunkedExec::new(Arc::from([0, 4, 6]), Arc::from([0, 1]));
         node.reset(0..6);
         node.push_pending[0].reserve(8);
         let queues_capacity = node.push_pending.capacity();
@@ -578,7 +497,7 @@ mod tests {
     #[test]
     fn single_cut_terminal_batch_can_bypass_queue() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut node = ChunkedExec::new(Arc::from([0, 4, 9]), Arc::from([0, 1]), dtype.clone());
+        let mut node = ChunkedExec::new(Arc::from([0, 4, 9]), Arc::from([0, 1]));
         node.reset(4..9);
         let batch = empty_batch(4..9, &dtype)?;
 
@@ -596,7 +515,7 @@ mod tests {
     #[test]
     fn bypass_rejects_partial_and_multi_cut_inputs_without_mutation() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut node = ChunkedExec::new(Arc::from([0, 4, 9]), Arc::from([0, 1]), dtype.clone());
+        let mut node = ChunkedExec::new(Arc::from([0, 4, 9]), Arc::from([0, 1]));
         node.reset(0..4);
         let partial = empty_batch(0..2, &dtype)?;
         assert!(!node.try_accept_single_cut_terminal(InputPort::new(0)?, &partial, false)?);
@@ -615,7 +534,7 @@ mod tests {
     #[test]
     fn reset_after_single_cut_bypass_restores_general_ordering_state() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
-        let mut node = ChunkedExec::new(Arc::from([0, 4, 9]), Arc::from([0, 1]), dtype.clone());
+        let mut node = ChunkedExec::new(Arc::from([0, 4, 9]), Arc::from([0, 1]));
         node.reset(0..4);
         let first = empty_batch(0..4, &dtype)?;
         assert!(node.try_accept_single_cut_terminal(InputPort::new(0)?, &first, true)?);

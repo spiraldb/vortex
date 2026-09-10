@@ -4,9 +4,6 @@
 use std::collections::VecDeque;
 use std::ops::Range;
 
-use vortex_array::Canonical;
-use vortex_array::IntoArray;
-use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -16,10 +13,7 @@ use vortex_mask::Mask;
 use crate::io::IoPriority;
 use crate::node::ActivationRows;
 use crate::node::ActivationTarget;
-use crate::node::ChildPoll;
-use crate::node::ExecCx;
 use crate::node::ExecNode;
-use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
@@ -30,7 +24,6 @@ use crate::node::PushCx;
 use crate::node::RetireCx;
 use crate::node::StageOutput;
 use crate::node::Value;
-use crate::node::ValueBatch;
 use crate::nodes::PushBatching;
 
 /// The root of a morsel: refine the demand with the filter, then project under it.
@@ -38,14 +31,12 @@ pub struct FilterExec {
     predicate: Option<NodeId>,
     projection: NodeId,
     projection_expr: BoundExpression,
-    output_dtype: DType,
     push_batching: PushBatching,
 
     // Per-morsel state.
     range: Range<u64>,
     plan_stage: u8,
     plan_started: bool,
-    mask: Option<Mask>,
     done: bool,
     children: Vec<NodeId>,
     push_cursor: u64,
@@ -79,13 +70,11 @@ impl FilterExec {
         predicate: Option<NodeId>,
         projection: NodeId,
         projection_expr: BoundExpression,
-        output_dtype: DType,
     ) -> Self {
         Self::new_with_push_batching(
             predicate,
             projection,
             projection_expr,
-            output_dtype,
             PushBatching::Streaming,
         )
     }
@@ -94,7 +83,6 @@ impl FilterExec {
         predicate: Option<NodeId>,
         projection: NodeId,
         projection_expr: BoundExpression,
-        output_dtype: DType,
         push_batching: PushBatching,
     ) -> Self {
         let children = predicate.into_iter().chain([projection]).collect();
@@ -102,12 +90,10 @@ impl FilterExec {
             predicate,
             projection,
             projection_expr,
-            output_dtype,
             push_batching,
             range: 0..0,
             plan_stage: 0,
             plan_started: false,
-            mask: None,
             done: false,
             children,
             push_cursor: 0,
@@ -132,7 +118,6 @@ impl ExecNode for FilterExec {
         self.range = range;
         self.plan_stage = 0;
         self.plan_started = false;
-        self.mask = None;
         self.done = false;
         self.push_cursor = self.range.start;
         self.push_predicate.clear();
@@ -173,56 +158,6 @@ impl ExecNode for FilterExec {
                 return Ok(PlanPoll::Item(PlanItem::Plan));
             }
         }
-    }
-
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-        if self.done {
-            return Ok(ExecPoll::Done);
-        }
-        if self.mask.is_none() {
-            let demand = cx.demand().clone();
-            let mask = match self.predicate {
-                Some(predicate) => match cx.child_mask(predicate, demand)? {
-                    ChildPoll::Value(mask) => mask,
-                    ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
-                    ChildPoll::Done => {
-                        return Err(vortex_err!("filter predicate produced no value"));
-                    }
-                },
-                None => demand,
-            };
-
-            if mask.all_false() {
-                self.done = true;
-                cx.stats().morsels_empty += 1;
-                return Ok(ExecPoll::Value(ValueBatch {
-                    coverage: self.range.clone(),
-                    value: Value::Array(Canonical::empty(&self.output_dtype).into_array()),
-                }));
-            }
-            self.mask = Some(mask);
-        }
-
-        // The projection subtree executes only for surviving rows. A sealed-empty chunk avoids
-        // cloning and decoding its projection tickets, although planning may have prefetched them.
-        let mask = self
-            .mask
-            .as_ref()
-            .vortex_expect("non-empty predicate mask is retained")
-            .clone();
-        let array = match cx.child_array(self.projection, mask)? {
-            ChildPoll::Value(array) => array,
-            ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
-            ChildPoll::Done => return Err(vortex_err!("filter projection produced no value")),
-        };
-        let array = array.apply_bound(&self.projection_expr)?;
-        self.mask = None;
-        self.done = true;
-
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.range.clone(),
-            value: Value::Array(array),
-        }))
     }
 
     #[inline]
@@ -272,7 +207,6 @@ impl ExecNode for FilterExec {
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {
-        self.mask = None;
         for &child in &self.children {
             cx.retire_child(child);
         }
@@ -805,7 +739,7 @@ mod tests {
     fn accepts_one_explicit_projection_end() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         let expression = root().bind(&dtype)?;
-        let mut filter = FilterExec::new(None, 0, expression, dtype);
+        let mut filter = FilterExec::new(None, 0, expression);
         filter.reset(0..0);
 
         let io = IoPlane::new(IoService::new().0);
@@ -827,7 +761,7 @@ mod tests {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         let expression = root().bind(&dtype)?;
         let mut filter =
-            FilterExec::new_with_push_batching(Some(0), 1, expression, dtype, PushBatching::Morsel);
+            FilterExec::new_with_push_batching(Some(0), 1, expression, PushBatching::Morsel);
         filter.reset(0..4);
 
         let io = IoPlane::new(IoService::new().0);
@@ -896,13 +830,8 @@ mod tests {
     fn morsel_filter_all_false_is_one_typed_empty_batch() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         let expression = root().bind(&dtype)?;
-        let mut filter = FilterExec::new_with_push_batching(
-            Some(0),
-            1,
-            expression,
-            dtype.clone(),
-            PushBatching::Morsel,
-        );
+        let mut filter =
+            FilterExec::new_with_push_batching(Some(0), 1, expression, PushBatching::Morsel);
         filter.reset(0..3);
 
         let io = IoPlane::new(IoService::new().0);
@@ -948,13 +877,8 @@ mod tests {
     fn streaming_filter_keeps_one_gate_per_predicate_fragment() -> VortexResult<()> {
         let dtype = DType::Primitive(PType::I32, Nullability::NonNullable);
         let expression = root().bind(&dtype)?;
-        let mut filter = FilterExec::new_with_push_batching(
-            Some(0),
-            1,
-            expression,
-            dtype,
-            PushBatching::Streaming,
-        );
+        let mut filter =
+            FilterExec::new_with_push_batching(Some(0), 1, expression, PushBatching::Streaming);
         filter.reset(10..14);
 
         let io = IoPlane::new(IoService::new().0);

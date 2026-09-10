@@ -3,48 +3,33 @@
 
 #![deny(missing_docs)]
 
-//! An experimental morsel-driven scan executor for Vortex layouts.
+//! A morsel-driven push executor for Vortex layouts.
 //!
-//! This crate is the P1 spine of the design recorded in
-//! `docs/developer-guide/internals/scan-execution-models/morsel-based-plan-execution.md`: the scan
-//! is cut into *morsels* (contiguous root row ranges), and each morsel is driven by a tree of
-//! stateful [`ExecNode`] state machines. [`ExecutionMode::Pull`] is the recursive oracle;
-//! [`ExecutionMode::Push`] activates leaves and routes batches upward through credited edges.
+//! Each worker owns an arena and drives one contiguous row range, or morsel. The immutable
+//! [`ExecPlan`] compiles operators into physical pipelines. Execution activates sources with
+//! authoritative row selections; sources produce [`PushBatch`] values and pass them through
+//! downstream stages inline. Multi-input operators align batches at pipeline boundaries.
 //!
-//! The shared planning contract and two value-execution contracts are:
+//! [`ExecNode::next_plan`] names I/O before execution. [`ExecNode::push_start`] activates a
+//! source, [`ExecNode::push_input`] accepts an upstream batch, and [`ExecNode::push_end`] closes
+//! an input. [`ExecNode::push_resume`] continues a stage after an exact dependency is ready;
+//! [`ExecNode::push_credit`] returns downstream capacity to a producer. Operators retain state
+//! across these calls, and [`ExecNode::retire`] releases it when the morsel finishes.
 //!
-//! * [`ExecNode::next_plan`] — planning. A node *names* the IO it will need by registering
-//!   [`IoUse`](io::IoUse)s against the [`IoPlane`](io::IoPlane), which hands back tickets. Nodes
-//!   do not read during planning. Planning is budget-bounded and resumable: a node that exhausts
-//!   its quantum yields [`PlanItem::Plan`] and resumes from its own cursor on the next call.
-//! * [`ExecNode::execute`] — value production. When a named required cell is still unissued,
-//!   [`ExecCx::ready`](node::ExecCx::ready) may attempt one source-provided read guaranteed not to
-//!   wait on storage (Linux files use `preadv2(RWF_NOWAIT)`). A hit is consumed inline. A miss
-//!   hands the read out as required demand and suspends on the exact ticket. Execution never
-//!   polls a storage future or waits for IO on the worker thread.
-//! * Typed [`ExecNode`] push methods — leaf-driven value production through compiled physical
-//!   pipelines on the owning worker. Authoritative [`ActivationTarget`] decisions are distinct
-//!   from optional [`DemandTarget`] I/O hints.
+//! The executor never polls storage futures. [`PushCx::ready`] can try a source-provided
+//! non-blocking read; a miss suspends the pipeline on its exact ticket. Reads leave the scan
+//! through [`MorselScan::take_io`] and are answered by [`IoCompletions`], for example through
+//! [`SegmentSourceDriver`]. Authoritative [`ActivationTarget`] decisions control which sources
+//! execute; optional [`DemandTarget`] hints only affect I/O scheduling.
 //!
-//! Compared to the V1 `LayoutReader` path this executor differs in two measurable ways:
+//! [`MorselScan::into_stream`] exposes ordered output with bounded capacity and cancellation.
+//! [`MorselScan::run`] collects that output. Raw request cells deduplicate segment reads across
+//! the scan. Leased [`cells::SharedCells`] retain decoded chunks until the last overlapping
+//! morsel retires; decoded sharing can be disabled independently.
 //!
-//! 1. There is no async task per evaluation. Planning and execution continuations share one
-//!    bounded worker pool. The executor never touches storage: reads leave a [`MorselScan`] as
-//!    [`IoDemand`](io::IoDemand) on a stream taken with [`MorselScan::take_io`] and are answered
-//!    through [`IoCompletions`](io::IoCompletions), for example by [`SegmentSourceDriver`].
-//! 2. Each worker owns one arena and one active morsel. Arenas never migrate, and emission order
-//!    is restored by morsel index.
-//! 3. [`MorselScan::into_stream`] exposes ordered bounded output with explicit cancellation;
-//!    [`MorselScan::run`] remains the collecting adapter.
-//!
-//! Raw request cells are shared for the lifetime of a scan, deduplicating both pending and
-//! completed segment reads. Decoded chunks use leased shared cells ([`cells::SharedCells`]): a
-//! decoded chunk lives exactly while some not-yet-retired morsel holds a lease computed from the
-//! morsel cut, and is dropped at the last release. Decoded sharing can be disabled independently
-//! as a differential-test and benchmark mode.
-//!
-//! Only the FLAT, CHUNKED and STRUCT layout nodes are supported, plus the FILTER and
-//! CONJUNCT operators. Anything else is rejected at build time by [`build::build_plan`].
+//! Flat, chunked, and non-nullable struct layouts are supported, together with filter and
+//! conjunction operators. Zoned and legacy-statistics wrappers are transparent. Unsupported
+//! layouts fail during [`build_plan`]. This experimental crate is not part of the public API.
 
 pub mod build;
 pub mod cells;
@@ -83,10 +68,7 @@ pub use io::NowaitProbe;
 pub use node::ActivationRows;
 pub use node::ActivationTarget;
 pub use node::DemandTarget;
-pub use node::ExecCx;
 pub use node::ExecNode;
-pub use node::ExecPoll;
-pub use node::ExecutionMode;
 pub use node::InputPort;
 pub use node::NodeState;
 pub use node::PlanCx;
@@ -96,7 +78,6 @@ pub use node::PushBatch;
 pub use node::PushCx;
 pub use node::Route;
 pub use node::Value;
-pub use node::ValueBatch;
 pub use source::SegmentSourceDriver;
 pub use stats::ScanStats;
 

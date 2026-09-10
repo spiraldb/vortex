@@ -1,40 +1,42 @@
 # vortex-morsel-push
 
-An experimental morsel-driven scan executor for Vortex layouts — the P1 spine of the design in
-`docs/developer-guide/internals/scan-execution-models/morsel-based-plan-execution.md`.
+A morsel-driven push executor for Vortex layouts. A worker activates sources for a row range;
+sources produce batches and push them through compiled physical pipelines.
 
-A scan is cut into *morsels* (contiguous root row ranges). Each morsel is driven by a tree of
-stateful `ExecNode` state machines, inline and depth-first, by one affinity-owning worker.
-`next_plan` *names* reads by registering keyed uses against the IO plane. `execute` can try a
-caller-provided non-blocking probe for a required ticket; on a miss the read is handed out as
-required demand and the morsel suspends on that exact ticket until it is completed.
+```text
+activate source → read/decode → push batch → downstream stages → output
+```
 
-The executor never touches storage. Reads the scheduler wants started leave a `MorselScan` as an
-`IoDemand` stream (`MorselScan::take_io`) and are answered through `IoCompletions`;
-`SegmentSourceDriver` serves that demand from any `SegmentSource` as one task on the caller's
-runtime or a dedicated thread.
+`build_plan` binds expressions, identifies sources, and fuses eligible operator chains. Within
+a pipeline, each batch passes directly to the next stage on the same worker. Operators with
+multiple inputs retain and align batches at pipeline boundaries.
 
-The crate is a prototype and is not part of the public API. It supports flat, chunked and
-struct layouts only; anything else is a build error rather than a fallback.
+`next_plan` registers the reads a morsel can need. Execution begins with `push_start` on its
+sources. `push_input` and `push_end` deliver batches and input completion. A stage waiting for
+I/O retains its state and resumes through `push_resume` when its exact tickets complete.
+`push_credit` tells a producer that downstream capacity is available again.
 
-The source commit and the scoped update procedure are recorded in [UPSTREAM.md](UPSTREAM.md).
+Predicates produce authoritative selections that activate later predicates and projected
+columns. Optional demand hints can defer speculative I/O; correctness depends on the selections,
+not on whether hints arrive. All-false selections avoid unnecessary decode work.
 
-Cross-morsel decode reuse comes from **leased shared cells**, not a cache: lease counts are
-computed from the morsel cut before the scan starts, the first morsel to decode a unit publishes
-it, every retiring morsel releases its lease, and the last release drops the array. No budget, no
-eviction policy, nothing outliving the scan; the ledger is asserted to drain to zero. Sharing can
-be disabled (`with_share_decodes(false)`), leaving no state across morsels at all — the
-state-for-state fairness row against V1.
+The executor does not poll storage futures. `SegmentSourceDriver` answers the scan's `IoDemand`
+stream on a separate runtime task or thread. `MorselScan::into_stream` provides ordered output,
+bounded capacity, and cancellation; `run` collects the output. Leased shared cells retain decoded
+chunks until the last overlapping morsel retires.
 
-## Measured
+The prototype supports flat, chunked, and non-nullable struct layouts, plus transparent zoned
+and legacy-statistics wrappers. Unsupported layouts are build errors. Import provenance is in
+[UPSTREAM.md](UPSTREAM.md); the [executor primer](../docs/developer-guide/internals/scan-execution-models/morsel-executor-primer.md)
+explains the current contracts.
 
-Against the V1 `LayoutReader` on shape-matched workloads (see
-`docs/.../morsel-prototype-p1-findings.md` for the full contract and caveats): geomean 0.539 at
-equal thread count (0.644 with sharing disabled), 0.249 at four threads with coalesced morsels,
-with every configuration validated against V1's output before timing.
+## Evaluation
 
-## Running the evaluation
+Both evaluators run push pipelines and validate output against V1 before timing:
 
 ```bash
 cargo run --release -p vortex-morsel-push --features _test-harness --bin morsel-push-eval
+cargo run --release -p vortex-morsel-push --features _test-harness --bin tpch-push-eval -- 1
 ```
+
+SQL integrations select this executor with `VORTEX_SCAN_BACKEND=push`.

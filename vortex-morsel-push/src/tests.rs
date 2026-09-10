@@ -60,7 +60,6 @@ use vortex_layout::session::LayoutSession;
 use vortex_session::VortexSession;
 
 use crate::DemandHintDelivery;
-use crate::ExecutionMode;
 use crate::PushMorselScanExecutor;
 use crate::SegmentSourceDriver;
 use crate::fixtures::Column;
@@ -222,7 +221,7 @@ fn queries() -> Vec<Query> {
 const ROWS: usize = 1000;
 
 #[test]
-fn q6_ranges_build_three_predicate_sources_and_match_pull_push() -> VortexResult<()> {
+fn q6_ranges_build_three_predicate_sources_and_match_v1() -> VortexResult<()> {
     let session = session();
     let fixture = aligned_fixture(&session, ROWS)?;
     let projection = select(vec!["a", "b"], root());
@@ -258,36 +257,31 @@ fn q6_ranges_build_three_predicate_sources_and_match_pull_push() -> VortexResult
     };
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
     let oracle = run_v1(&session, &fixture.layout, &segments, &query)?;
-    for execution_mode in [ExecutionMode::Pull, ExecutionMode::Push] {
-        let actual = run_morsel(
-            &session,
-            &fixture.layout,
-            &segments,
-            &query,
-            MorselConfig {
-                threads: 2,
-                morsel_rows: 128,
-                execution_mode,
-                ..Default::default()
-            },
-        )?;
-        assert_same_rows(
-            &session,
-            &v1_dtype(&fixture.layout, &query)?,
-            &oracle,
-            &actual,
-        )?;
-        if execution_mode == ExecutionMode::Push {
-            let stats = actual.stats.as_ref().expect("morsel runs report stats");
-            assert!(stats.push_inline_gates > 0);
-            assert_eq!(stats.push_cold_frame_spills, 0);
-        }
-    }
+    let actual = run_morsel(
+        &session,
+        &fixture.layout,
+        &segments,
+        &query,
+        MorselConfig {
+            threads: 2,
+            morsel_rows: 128,
+            ..Default::default()
+        },
+    )?;
+    assert_same_rows(
+        &session,
+        &v1_dtype(&fixture.layout, &query)?,
+        &oracle,
+        &actual,
+    )?;
+    let stats = actual.stats.as_ref().expect("morsel runs report stats");
+    assert!(stats.push_inline_gates > 0);
+    assert_eq!(stats.push_cold_frame_spills, 0);
     Ok(())
 }
 
 #[test]
-fn null_range_bound_preserves_pull_push_semantics() -> VortexResult<()> {
+fn null_range_bound_matches_v1() -> VortexResult<()> {
     let session = session();
     let fixture = aligned_fixture(&session, ROWS)?;
     let null = lit(Scalar::null(DType::Primitive(
@@ -304,35 +298,29 @@ fn null_range_bound_preserves_pull_push_semantics() -> VortexResult<()> {
     };
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
     let oracle = run_v1(&session, &fixture.layout, &segments, &query)?;
-    for execution_mode in [ExecutionMode::Pull, ExecutionMode::Push] {
-        let actual = run_morsel(
-            &session,
-            &fixture.layout,
-            &segments,
-            &query,
-            MorselConfig {
-                threads: 2,
-                morsel_rows: 128,
-                execution_mode,
-                ..Default::default()
-            },
-        )?;
-        assert_same_rows(
-            &session,
-            &v1_dtype(&fixture.layout, &query)?,
-            &oracle,
-            &actual,
-        )?;
-    }
+    let actual = run_morsel(
+        &session,
+        &fixture.layout,
+        &segments,
+        &query,
+        MorselConfig {
+            threads: 2,
+            morsel_rows: 128,
+            ..Default::default()
+        },
+    )?;
+    assert_same_rows(
+        &session,
+        &v1_dtype(&fixture.layout, &query)?,
+        &oracle,
+        &actual,
+    )?;
     Ok(())
 }
 
 /// Property: the executor agrees with V1 on every query, over misaligned chunks.
 #[rstest]
-fn matches_v1_oracle(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-    #[values(1, 2, 4)] threads: usize,
-) -> VortexResult<()> {
+fn matches_v1_oracle(#[values(1, 2, 4)] threads: usize) -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
@@ -346,7 +334,6 @@ fn matches_v1_oracle(
             &query,
             MorselConfig {
                 threads,
-                execution_mode,
                 ..Default::default()
             },
         )
@@ -378,7 +365,6 @@ fn demand_hint_delivery_is_not_observable(
             &query,
             MorselConfig {
                 threads: 2,
-                execution_mode: ExecutionMode::Push,
                 demand_hints,
                 ..Default::default()
             },
@@ -421,7 +407,6 @@ fn leaf_batch_crosses_multiple_parent_edges_inline() -> VortexResult<()> {
         &segments,
         &query,
         MorselConfig {
-            execution_mode: ExecutionMode::Push,
             ..Default::default()
         },
     )?;
@@ -449,10 +434,8 @@ fn leaf_batch_crosses_multiple_parent_edges_inline() -> VortexResult<()> {
     Ok(())
 }
 
-#[rstest]
-fn bounded_stream_resumes_in_order_after_consumer_stall(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn bounded_stream_resumes_in_order_after_consumer_stall() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
@@ -472,7 +455,6 @@ fn bounded_stream_resumes_in_order_after_consumer_stall(
     let scan = crate::MorselScan::new(plan, session.clone())
         .with_threads(4)
         .with_morsels(cut)
-        .with_execution_mode(execution_mode)
         .with_share_decodes(false)
         .with_output_capacity(1, 1);
     let mut stream = SegmentSourceDriver::new(segments)
@@ -502,16 +484,12 @@ fn bounded_stream_resumes_in_order_after_consumer_stall(
     )?;
     assert!(stats.output_credit_blocks > 0);
     assert!(stats.output_rows_max > 1, "one oversized batch must escape");
-    if execution_mode == ExecutionMode::Push {
-        assert!(stats.push_inline_transfers > 0);
-    }
+    assert!(stats.push_inline_transfers > 0);
     Ok(())
 }
 
-#[rstest]
-fn dropping_stream_cancels_stalled_scan(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn dropping_stream_cancels_stalled_scan() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
@@ -530,7 +508,6 @@ fn dropping_stream_cancels_stalled_scan(
     let scan = crate::MorselScan::new(plan, session)
         .with_threads(4)
         .with_morsels(cut)
-        .with_execution_mode(execution_mode)
         .with_share_decodes(false)
         .with_output_capacity(1, 1);
     let mut stream = SegmentSourceDriver::new(segments)
@@ -573,8 +550,7 @@ fn dropping_stream_cancels_never_ready_io() -> VortexResult<()> {
     std::thread::spawn(move || {
         let scan = crate::MorselScan::new(plan, session)
             .with_threads(2)
-            .with_morsels(cut)
-            .with_execution_mode(ExecutionMode::Push);
+            .with_morsels(cut);
         let stream = SegmentSourceDriver::new(Arc::new(NeverReadySource))
             .connect_on_thread(scan)
             .and_then(|scan| scan.into_stream());
@@ -632,7 +608,7 @@ fn rejects_invalid_morsel_cuts_before_starting() -> VortexResult<()> {
 /// Property: misaligned chunking is invisible. The same logical table stored with three
 /// different per-column chunkings must produce byte-identical output to the single-chunk
 /// reference.
-#[rstest]
+#[test]
 fn misaligned_chunks_match_aligned_reference() -> VortexResult<()> {
     let session = session();
     let misaligned = misaligned_fixture(&session, ROWS)?;
@@ -668,7 +644,7 @@ fn misaligned_chunks_match_aligned_reference() -> VortexResult<()> {
 }
 
 /// The document's specific misaligned-chunk case: fields chunked `[0,3,10)` against `[0,6,10)`.
-#[rstest]
+#[test]
 fn document_misalignment_case() -> VortexResult<()> {
     let session = session();
     let values: Vec<i32> = (0..10).collect();
@@ -747,10 +723,7 @@ fn document_misalignment_case() -> VortexResult<()> {
 
 /// Property: the result does not depend on how the scan is cut into morsels.
 #[rstest]
-fn independent_of_morsel_size(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-    #[values(0, 1, 7, 128, 4096)] morsel_rows: u64,
-) -> VortexResult<()> {
+fn independent_of_morsel_size(#[values(0, 1, 7, 128, 4096)] morsel_rows: u64) -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
@@ -765,7 +738,6 @@ fn independent_of_morsel_size(
             &query,
             MorselConfig {
                 morsel_rows,
-                execution_mode,
                 ..Default::default()
             },
         )
@@ -777,10 +749,8 @@ fn independent_of_morsel_size(
 }
 
 /// Property: cascade and parallel conjunct policies are observationally identical.
-#[rstest]
-fn conjunct_policy_is_not_observable(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn conjunct_policy_is_not_observable() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
@@ -794,7 +764,6 @@ fn conjunct_policy_is_not_observable(
             &query,
             MorselConfig {
                 mode: ConjunctMode::Cascade,
-                execution_mode,
                 ..Default::default()
             },
         )?;
@@ -805,7 +774,6 @@ fn conjunct_policy_is_not_observable(
             &query,
             MorselConfig {
                 mode: ConjunctMode::Parallel,
-                execution_mode,
                 ..Default::default()
             },
         )?;
@@ -864,7 +832,7 @@ fn shared_cells_are_not_observable(#[values(1, 4)] threads: usize) -> VortexResu
 
 /// Property: on the misaligned fixture, sharing actually fires — a chunk overlapped by several
 /// per-split morsels is decoded once and reused for the rest.
-#[rstest]
+#[test]
 fn shared_cells_reuse_straddled_chunks() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
@@ -946,10 +914,8 @@ impl SegmentSource for NowaitSegmentSource {
     }
 }
 
-#[rstest]
-fn inline_nowait_hit_never_creates_a_background_future(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn inline_nowait_hit_never_creates_a_background_future() -> VortexResult<()> {
     let session = session();
     let fixture = aligned_fixture(&session, 64)?;
     let attempts = Arc::new(AtomicUsize::new(0));
@@ -972,7 +938,6 @@ fn inline_nowait_hit_never_creates_a_background_future(
         &source,
         &query,
         MorselConfig {
-            execution_mode,
             ..Default::default()
         },
     )?;
@@ -989,10 +954,8 @@ fn inline_nowait_hit_never_creates_a_background_future(
     Ok(())
 }
 
-#[rstest]
-fn inline_nowait_miss_falls_back_once(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn inline_nowait_miss_falls_back_once() -> VortexResult<()> {
     let session = session();
     let fixture = aligned_fixture(&session, 64)?;
     let attempts = Arc::new(AtomicUsize::new(0));
@@ -1015,7 +978,6 @@ fn inline_nowait_miss_falls_back_once(
         &source,
         &query,
         MorselConfig {
-            execution_mode,
             ..Default::default()
         },
     )?;
@@ -1040,7 +1002,7 @@ impl SegmentSource for CountingSegmentSource {
 }
 
 /// Raw request cells are shared scan-wide even when decoded-array sharing is disabled.
-#[rstest]
+#[test]
 fn scan_wide_io_cells_deduplicate_straddled_chunks() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
@@ -1074,7 +1036,7 @@ fn scan_wide_io_cells_deduplicate_straddled_chunks() -> VortexResult<()> {
     Ok(())
 }
 
-#[rstest]
+#[test]
 fn filtered_lookahead_refills_from_retired_frontier() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
@@ -1095,7 +1057,7 @@ fn filtered_lookahead_refills_from_retired_frontier() -> VortexResult<()> {
         &query,
         MorselConfig {
             threads: 1,
-            execution_mode: ExecutionMode::Push,
+
             lookahead_morsels: 1,
             ..Default::default()
         },
@@ -1113,7 +1075,7 @@ fn filtered_lookahead_refills_from_retired_frontier() -> VortexResult<()> {
 
 /// Property: every read a node waits on was named by its own planning stream, so the number of
 /// distinct segments read never exceeds the number of uses named.
-#[rstest]
+#[test]
 fn every_read_was_planned() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
@@ -1140,7 +1102,7 @@ fn every_read_was_planned() -> VortexResult<()> {
 }
 
 /// Property: an all-false filter emits nothing and does not decode its projection columns.
-#[rstest]
+#[test]
 fn empty_filter_emits_nothing() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
@@ -1212,10 +1174,8 @@ impl SegmentSource for PairedPendingSource {
 /// One CPU worker must submit every planned read before waiting for either one. Each of this
 /// source's first two futures remains pending until the other has been polled, so the old inline
 /// `block_on` driver reaches the watchdog while the continuation scheduler completes immediately.
-#[rstest]
-fn planned_reads_progress_together_without_parking_a_worker(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn planned_reads_progress_together_without_parking_a_worker() -> VortexResult<()> {
     let session = session();
     let values: Vec<i32> = (0..32).collect();
     let fixture = block_on(|_handle| async {
@@ -1261,7 +1221,6 @@ fn planned_reads_progress_together_without_parking_a_worker(
         &query,
         MorselConfig {
             threads: 1,
-            execution_mode,
             ..Default::default()
         },
     )?;
@@ -1270,15 +1229,13 @@ fn planned_reads_progress_together_without_parking_a_worker(
     let gate = gate.lock();
     assert_eq!(gate.polled, [true; 2]);
     assert!(!gate.watchdog_fired, "the CPU worker parked on one read");
-    if execution_mode == ExecutionMode::Push {
-        let stats = morsel.stats.as_ref().expect("morsel runs report stats");
-        assert!(stats.execute_io_blocks > 0);
-        assert_eq!(stats.push_stale_wakes, 0);
-        assert!(stats.push_inline_transfers > 0);
-        assert!(stats.push_pipeline_runs > 0);
-        assert!(stats.push_pipeline_stage_calls > 0);
-        assert!(stats.push_pipeline_boundary_resumes >= 2);
-    }
+    let stats = morsel.stats.as_ref().expect("morsel runs report stats");
+    assert!(stats.execute_io_blocks > 0);
+    assert_eq!(stats.push_stale_wakes, 0);
+    assert!(stats.push_inline_transfers > 0);
+    assert!(stats.push_pipeline_runs > 0);
+    assert!(stats.push_pipeline_stage_calls > 0);
+    assert!(stats.push_pipeline_boundary_resumes >= 2);
     Ok(())
 }
 
@@ -1340,10 +1297,8 @@ impl SegmentSource for BurstPendingSource {
 
 /// Burst wakeups for several exact cells neither lose a wake nor poll a ready cell again from
 /// execution.
-#[rstest]
-fn burst_wakes_are_coalesced_without_duplicate_polls(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn burst_wakes_are_coalesced_without_duplicate_polls() -> VortexResult<()> {
     let session = session();
     let values: Vec<i32> = (0..32).collect();
     let fixture = block_on(|_handle| async {
@@ -1396,7 +1351,6 @@ fn burst_wakes_are_coalesced_without_duplicate_polls(
         &query,
         MorselConfig {
             threads: 1,
-            execution_mode,
             ..Default::default()
         },
     )?;
@@ -1406,9 +1360,7 @@ fn burst_wakes_are_coalesced_without_duplicate_polls(
     assert_eq!(gate.requests, [1, 1, 1]);
     assert!(gate.polls.iter().all(|polls| (1..=2).contains(polls)));
     assert!(gate.polls.contains(&2));
-    if execution_mode == ExecutionMode::Push {
-        assert_eq!(gate.polls, [2, 2, 2]);
-    }
+    assert_eq!(gate.polls, [2, 2, 2]);
     assert!(!gate.watchdog_fired);
     let stats = morsel.stats.as_ref().expect("morsel runs report stats");
     assert_eq!(stats.io_requests, 3);
@@ -1417,12 +1369,10 @@ fn burst_wakes_are_coalesced_without_duplicate_polls(
     assert_eq!(stats.morsels_blocked_for_io, 1);
     assert!(stats.execute_io_blocks > 0);
     assert!(stats.io_blocks_per_morsel_max <= 3);
-    if execution_mode == ExecutionMode::Push {
-        assert_eq!(stats.push_stale_wakes, 0);
-        assert!(stats.push_pipeline_runs > 0);
-        assert!(stats.push_pipeline_stage_calls > 0);
-        assert!(stats.push_pipeline_boundary_resumes >= 3);
-    }
+    assert_eq!(stats.push_stale_wakes, 0);
+    assert!(stats.push_pipeline_runs > 0);
+    assert!(stats.push_pipeline_stage_calls > 0);
+    assert!(stats.push_pipeline_boundary_resumes >= 3);
     Ok(())
 }
 
@@ -1494,10 +1444,8 @@ impl SegmentSource for SlowSpeculativeSource {
 
 /// Required predicate IO resumes execution while speculative projection IO remains pending. An
 /// empty predicate result retires the morsel without waiting for or consuming that projection.
-#[rstest]
-fn empty_filter_cancels_pending_speculative_io(
-    #[values(ExecutionMode::Pull, ExecutionMode::Push)] execution_mode: ExecutionMode,
-) -> VortexResult<()> {
+#[test]
+fn empty_filter_cancels_pending_speculative_io() -> VortexResult<()> {
     let session = session();
     let values: Vec<i32> = (0..32).collect();
     let fixture = block_on(|_handle| async {
@@ -1546,7 +1494,6 @@ fn empty_filter_cancels_pending_speculative_io(
         &query,
         MorselConfig {
             threads: 1,
-            execution_mode,
             ..Default::default()
         },
     )?;
@@ -1598,7 +1545,6 @@ fn speculative_projection_errors_are_authoritative_only(
         &source,
         &empty,
         MorselConfig {
-            execution_mode: ExecutionMode::Push,
             demand_hints,
             ..Default::default()
         },
@@ -1624,7 +1570,6 @@ fn speculative_projection_errors_are_authoritative_only(
         &source,
         &selected,
         MorselConfig {
-            execution_mode: ExecutionMode::Push,
             demand_hints,
             ..Default::default()
         },
@@ -1637,7 +1582,7 @@ fn speculative_projection_errors_are_authoritative_only(
 }
 
 /// Unsupported shapes are build errors, never silent fallbacks.
-#[rstest]
+#[test]
 fn rejects_unsupported_layouts() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, 32)?;
@@ -1666,7 +1611,7 @@ fn v1_dtype(layout: &LayoutRef, query: &Query) -> VortexResult<DType> {
 }
 
 /// A guard against the fixtures silently degenerating into a single chunk per column.
-#[rstest]
+#[test]
 fn fixture_is_actually_misaligned() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;

@@ -59,7 +59,6 @@ use vortex_io::std_file::FileReadAt;
 use vortex_layout::LayoutRef;
 use vortex_layout::segments::SegmentSource;
 use vortex_layout::segments::SharedSegmentSource;
-use vortex_morsel_push::ExecutionMode;
 use vortex_morsel_push::fixtures::write_streaming_fixture_no_table;
 use vortex_morsel_push::harness::MorselConfig;
 use vortex_morsel_push::harness::Query;
@@ -90,10 +89,6 @@ impl Row {
             Row::V1Single => "A  V1 (1 thread)".to_string(),
             Row::V1Tokio(threads) => format!("A' V1 (tokio x{threads})"),
             Row::Morsel(config) => {
-                let execution = match config.execution_mode {
-                    ExecutionMode::Pull => "pull",
-                    ExecutionMode::Push => "push",
-                };
                 let mode = match config.mode {
                     ConjunctMode::Cascade => "",
                     ConjunctMode::Parallel => ", parallel",
@@ -109,35 +104,12 @@ impl Row {
                     ", no-reuse"
                 };
                 format!(
-                    "D  morsel-{execution} (x{}, {morsel}{mode}{reuse})",
+                    "D  morsel-push (x{}, {morsel}{mode}{reuse})",
                     config.threads
                 )
             }
         }
     }
-}
-
-fn execution_modes() -> VortexResult<Vec<ExecutionMode>> {
-    let Some(value) = std::env::var_os("TPCH_EXECUTION_MODES") else {
-        return Ok(vec![ExecutionMode::Pull]);
-    };
-    let mut modes = Vec::new();
-    for mode in value.to_string_lossy().split(',') {
-        let mode = match mode.trim() {
-            "pull" => ExecutionMode::Pull,
-            "push" => ExecutionMode::Push,
-            value => {
-                vortex_bail!("TPCH_EXECUTION_MODES entries must be `pull` or `push`, got `{value}`")
-            }
-        };
-        if !modes.contains(&mode) {
-            modes.push(mode);
-        }
-    }
-    if modes.is_empty() {
-        vortex_bail!("TPCH_EXECUTION_MODES must contain at least one mode");
-    }
-    Ok(modes)
 }
 
 struct Timing {
@@ -547,7 +519,6 @@ fn main() -> VortexResult<()> {
         .map(|value| parse_row_sizes("TPCH_MORSEL_ROWS", &value))
         .transpose()?
         .unwrap_or_else(|| vec![PRIMARY_MORSEL_ROWS]);
-    let selected_execution_modes = execution_modes()?;
     let selected_lookahead = std::env::var("TPCH_LOOKAHEAD_MORSELS")
         .ok()
         .map(|value| {
@@ -566,25 +537,14 @@ fn main() -> VortexResult<()> {
             if include_v1 {
                 rows.extend([Row::V1Single, Row::V1Tokio(threads)]);
             }
-            rows.extend(
-                selected_morsel_rows
-                    .iter()
-                    .copied()
-                    .flat_map(|morsel_rows| {
-                        selected_execution_modes
-                            .iter()
-                            .copied()
-                            .map(move |execution_mode| {
-                                Row::Morsel(MorselConfig {
-                                    threads,
-                                    morsel_rows,
-                                    execution_mode,
-                                    lookahead_morsels: selected_lookahead,
-                                    ..Default::default()
-                                })
-                            })
-                    }),
-            );
+            rows.extend(selected_morsel_rows.iter().copied().map(|morsel_rows| {
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    lookahead_morsels: selected_lookahead,
+                    ..Default::default()
+                })
+            }));
             return rows;
         }
         vec![

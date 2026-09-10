@@ -25,10 +25,11 @@ use vortex_bench::SESSION;
 use vortex_bench::compress::Compressor;
 use vortex_bench::compress::read_projection;
 use vortex_bench::conversions::parquet_to_vortex_chunks;
-use vortex_morsel::MorselScan;
-use vortex_morsel::SegmentSourceDriver;
-use vortex_morsel::build_plan;
-use vortex_morsel::morsels;
+use vortex_morsel_push::MorselScan;
+use vortex_morsel_push::SegmentSourceDriver;
+use vortex_morsel_push::build_plan;
+use vortex_morsel_push::morsels;
+use vortex_morsel_push::nodes::ConjunctMode;
 
 const MORSEL_ROWS: u64 = 131_072;
 
@@ -82,16 +83,19 @@ impl Compressor for VortexCompressor {
         } else {
             root()
         };
-        let plan = Arc::new(build_plan(file.footer().layout(), &projection, None)?);
+        let plan = Arc::new(build_plan(
+            file.footer().layout(),
+            &projection,
+            None,
+            ConjunctMode::Cascade,
+        )?);
         let cut = morsels(&plan, MORSEL_ROWS);
         let threads = get_available_parallelism().unwrap_or(1);
         let scan = MorselScan::new(plan, SESSION.clone())
             .with_threads(threads)
             .with_morsels(cut);
-        let scan = scan.connect(
-            &SegmentSourceDriver::new(file.segment_source()),
-            &SESSION.handle(),
-        )?;
+        let scan =
+            SegmentSourceDriver::new(file.segment_source()).connect(scan, &SESSION.handle())?;
         let (batches, _) = scan.run()?;
 
         let mut ctx = SESSION.create_execution_ctx();

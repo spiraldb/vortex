@@ -53,22 +53,12 @@ pub struct Route {
     pub port: InputPort,
 }
 
-/// Which value execution model a scan uses.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum ExecutionMode {
-    /// Recursively pull values from the plan root.
-    #[default]
-    Pull,
-    /// Activate sources and push values toward the plan root.
-    Push,
-}
-
 /// A value produced by a node for its parent.
 #[derive(Clone)]
 pub enum Value {
-    /// Dense rows: length equals the true count of the demand mask the node was executed under.
+    /// Dense rows in the batch's materialized domain.
     Array(ArrayRef),
-    /// A refinement of the demand mask the node was executed under; same length as that mask.
+    /// A selection over the batch's coverage, refining its authoritative logical selection.
     Mask(Mask),
 }
 
@@ -88,14 +78,6 @@ impl Value {
             Value::Array(_) => Err(vortex_err!("expected a mask value, got an array")),
         }
     }
-}
-
-/// A value plus the dense range of *input* rows it accounts for.
-pub struct ValueBatch {
-    /// The root-coordinate row range this batch accounts for.
-    pub coverage: Range<u64>,
-    /// The value itself.
-    pub value: Value,
 }
 
 /// Authoritative logical rows and the (possibly wider) physical evaluation domain.
@@ -482,29 +464,7 @@ pub enum PlanPoll {
     Complete,
 }
 
-/// The result of polling a node's execution.
-pub enum ExecPoll {
-    /// A value covering a dense input row range.
-    Value(ValueBatch),
-    /// Execution is suspended on the given waits; no worker thread is parked.
-    Blocked(WaitSet),
-    /// The node made progress but has not produced a value yet.
-    Yield(Progress),
-    /// The node has produced everything it will produce.
-    Done,
-}
-
-/// Result of advancing a child from inside its parent node.
-pub enum ChildPoll<T> {
-    /// The child produced the requested value.
-    Value(T),
-    /// The child is suspended on exact external dependencies.
-    Blocked(WaitSet),
-    /// The child has no more values.
-    Done,
-}
-
-/// A coarse progress marker returned with [`ExecPoll::Yield`].
+/// A coarse progress marker returned with [`NodeState::Yield`].
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Progress {
     /// Rows of input consumed since the last poll.
@@ -568,14 +528,6 @@ pub trait ExecNode: Send {
     /// Planning only names IO; it never reads. A node that has more planning to do than its
     /// budget allows returns [`PlanItem::Plan`] and resumes from its own cursor.
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll>;
-
-    /// Advance this node's execution, producing values under the demand in `cx`.
-    ///
-    /// This method may use [`ExecCx::ready`] to attempt an inline read that the source guarantees
-    /// will not wait on storage. It must not perform blocking IO, poll background futures,
-    /// synchronously transfer device data, or wait for an external resource. A missing dependency
-    /// must return [`ExecPoll::Blocked`] so the scheduler can resume the continuation later.
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll>;
 
     /// Activate a push source for one root-coordinate span.
     fn push_start(
@@ -722,11 +674,6 @@ impl ExecNode for Node {
     }
 
     #[inline]
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-        dispatch_node!(self, node => node.execute(cx))
-    }
-
-    #[inline]
     fn push_start(
         &mut self,
         span: Range<u64>,
@@ -790,9 +737,8 @@ impl ExecNode for Node {
 
 /// Context handed to the typed push-stage methods on [`ExecNode`].
 ///
-/// Unlike [`ExecCx`], this context does not borrow the arena or carry row demand. Push sources
-/// retain their authoritative activation selection, while typed input stages receive selection
-/// with each [`PushBatch`]. This lets a morsel-owned physical runtime invoke stages directly.
+/// Sources retain their authoritative activation selection, while typed input stages receive
+/// selection with each [`PushBatch`]. The physical runtime invokes stages directly.
 pub struct PushCx<'a> {
     io: &'a IoPlane,
     cells: &'a SharedCells,
@@ -890,7 +836,7 @@ impl Arena {
     /// Take a node out of the arena so its children can be driven through the remaining slots.
     ///
     /// The node must be put back with [`Arena::put`]. The take/put pair is what lets a node hold
-    /// `&mut self` while recursively driving its children: the tree shape guarantees a node is
+    /// `&mut self` while planning or retiring its children: the tree shape guarantees a node is
     /// never reachable from its own subtree, so a taken slot is never observed as empty.
     fn take(&mut self, id: NodeId) -> Node {
         self.nodes[id as usize].take().unwrap_or_else(|| {
@@ -1007,94 +953,6 @@ impl<'a> PlanCx<'a> {
     }
 }
 
-/// Context handed to [`ExecNode::execute`].
-pub struct ExecCx<'a> {
-    arena: &'a mut Arena,
-    io: &'a IoPlane,
-    cells: &'a SharedCells,
-    session: &'a VortexSession,
-    stats: &'a mut ScanStats,
-    demand: Mask,
-}
-
-impl<'a> ExecCx<'a> {
-    /// The demand mask this node is executing under.
-    ///
-    /// Its length equals the number of rows in the node's local range; the node must produce
-    /// exactly `demand().true_count()` rows.
-    pub fn demand(&self) -> &Mask {
-        &self.demand
-    }
-
-    /// The session, for creating expression execution contexts.
-    pub fn session(&self) -> &VortexSession {
-        self.session
-    }
-
-    /// Clone ready bytes, first attempting a source-provided non-blocking inline read if unissued.
-    pub fn ready(&mut self, ticket: IoTicket) -> VortexResult<Option<BufferHandle>> {
-        self.io.ready(ticket, self.stats)
-    }
-
-    /// Take a decoded value from the shared cell for a unit, if a morsel already published one.
-    pub fn shared_decoded(&mut self, key: IoKey) -> Option<ArrayRef> {
-        let hit = self.cells.decoded(key);
-        if hit.is_some() {
-            self.stats.decode_reuses += 1;
-        }
-        hit
-    }
-
-    /// Publish a decoded value into the shared cell for a unit.
-    pub fn publish_decoded(&self, key: IoKey, array: &ArrayRef) {
-        self.cells.publish(key, array);
-    }
-
-    /// Mutable access to the run's counters.
-    pub fn stats(&mut self) -> &mut ScanStats {
-        self.stats
-    }
-
-    /// Drive a child to a value under `demand`.
-    ///
-    /// The child is polled until it yields a value, blocks on exact tickets, or reports `Done`.
-    pub fn child_value(&mut self, id: NodeId, demand: Mask) -> VortexResult<ChildPoll<ValueBatch>> {
-        let mut node = self.arena.take(id);
-        let saved = std::mem::replace(&mut self.demand, demand);
-        let result = (|| {
-            loop {
-                match node.execute(self)? {
-                    ExecPoll::Value(batch) => return Ok(ChildPoll::Value(batch)),
-                    ExecPoll::Yield(_) => continue,
-                    ExecPoll::Blocked(waits) => return Ok(ChildPoll::Blocked(waits)),
-                    ExecPoll::Done => return Ok(ChildPoll::Done),
-                }
-            }
-        })();
-        self.demand = saved;
-        self.arena.put(id, node);
-        result
-    }
-
-    /// Drive a child to an array value, failing if it produced nothing.
-    pub fn child_array(&mut self, id: NodeId, demand: Mask) -> VortexResult<ChildPoll<ArrayRef>> {
-        match self.child_value(id, demand)? {
-            ChildPoll::Value(batch) => Ok(ChildPoll::Value(batch.value.into_array()?)),
-            ChildPoll::Blocked(waits) => Ok(ChildPoll::Blocked(waits)),
-            ChildPoll::Done => Ok(ChildPoll::Done),
-        }
-    }
-
-    /// Drive a child to a mask value.
-    pub fn child_mask(&mut self, id: NodeId, demand: Mask) -> VortexResult<ChildPoll<Mask>> {
-        match self.child_value(id, demand)? {
-            ChildPoll::Value(batch) => Ok(ChildPoll::Value(batch.value.into_mask()?)),
-            ChildPoll::Blocked(waits) => Ok(ChildPoll::Blocked(waits)),
-            ChildPoll::Done => Ok(ChildPoll::Done),
-        }
-    }
-}
-
 /// Context handed to [`ExecNode::retire`].
 pub struct RetireCx<'a> {
     arena: &'a mut Arena,
@@ -1147,32 +1005,6 @@ pub(crate) fn poll_plan_morsel(
     };
     let mut node = cx.arena.take(root);
     let poll = node.next_plan(&mut cx);
-    cx.arena.put(root, node);
-    poll
-}
-
-/// Advance one execution quantum for a morsel.
-pub(crate) fn poll_execute_morsel(
-    arena: &mut Arena,
-    root: NodeId,
-    range: &Range<u64>,
-    io: &IoPlane,
-    cells: &SharedCells,
-    session: &VortexSession,
-    stats: &mut ScanStats,
-) -> VortexResult<ExecPoll> {
-    let rows = usize::try_from(range.end - range.start)
-        .map_err(|_| vortex_err!("morsel row count exceeds usize"))?;
-    let mut cx = ExecCx {
-        arena,
-        io,
-        cells,
-        session,
-        stats,
-        demand: Mask::new_true(rows),
-    };
-    let mut node = cx.arena.take(root);
-    let poll = node.execute(&mut cx);
     cx.arena.put(root, node);
     poll
 }

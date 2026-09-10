@@ -474,7 +474,7 @@ impl FileOpener for VortexOpener {
                     };
                     FileScanBuilder::V1(ScanBuilder::new(session.clone(), layout_reader))
                 }
-                ScanBackend::Pull | ScanBackend::Push => FileScanBuilder::Morsel(
+                ScanBackend::Push => FileScanBuilder::Morsel(
                     MorselScanBuilder::new(
                         session.clone(),
                         backend,

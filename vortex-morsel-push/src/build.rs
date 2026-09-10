@@ -73,7 +73,6 @@ enum NodeSpec {
     Chunked {
         chunk_offsets: Arc<[u64]>,
         children: Arc<[NodeId]>,
-        dtype: DType,
     },
     Struct {
         names: FieldNames,
@@ -89,7 +88,6 @@ enum NodeSpec {
         predicate: Option<NodeId>,
         projection: NodeId,
         expr: BoundExpression,
-        dtype: DType,
         push_batching: PushBatching,
     },
 }
@@ -686,11 +684,9 @@ impl ExecPlan {
                 NodeSpec::Chunked {
                     chunk_offsets,
                     children,
-                    dtype,
                 } => Node::Chunked(Box::new(ChunkedExec::new(
                     Arc::clone(chunk_offsets),
                     Arc::clone(children),
-                    dtype.clone(),
                 ))),
                 NodeSpec::Struct {
                     names,
@@ -723,13 +719,11 @@ impl ExecPlan {
                     predicate,
                     projection,
                     expr,
-                    dtype,
                     push_batching,
                 } => Node::Filter(Box::new(FilterExec::new_with_push_batching(
                     *predicate,
                     *projection,
                     expr.clone(),
-                    dtype.clone(),
                     *push_batching,
                 ))),
             })
@@ -798,7 +792,6 @@ pub fn build_plan(
         predicate,
         projection: projection_input,
         expr: projection_bound,
-        dtype: output_dtype.clone(),
         push_batching,
     });
 
@@ -1271,7 +1264,6 @@ impl Builder {
             return Ok(self.push(NodeSpec::Chunked {
                 chunk_offsets: Arc::from(offsets),
                 children: Arc::from(children),
-                dtype: layout.dtype().clone(),
             }));
         }
 

@@ -232,7 +232,7 @@ pub fn reader_initialize(file: &mut OpenFileReader, global: &GlobalState) -> Vor
             }
             builder.build()?
         }
-        ScanBackend::Pull | ScanBackend::Push => {
+        ScanBackend::Push => {
             let mut builder = MorselScanBuilder::new(
                 SESSION.clone(),
                 file.backend,

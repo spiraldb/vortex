@@ -20,7 +20,6 @@ vortex-error = { workspace = true }
 vortex-io = { workspace = true }
 vortex-layout = { workspace = true }
 vortex-metrics = { workspace = true }
-vortex-morsel = { workspace = true }
 vortex-morsel-push = { workspace = true }
 vortex-scan = { workspace = true }
 vortex-session = { workspace = true }

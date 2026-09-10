@@ -17,27 +17,14 @@ That distinction matters. A good plan representation does not by itself provide 
 backpressure, memory control, or a useful batching contract. Conversely, a mature executor can be
 difficult to optimize if planning and mutable runtime state are represented by the same objects.
 
-The **current working direction** is
-[morsel-based plan execution](morsel-based-plan-execution.md): one stateful exec-node graph per
-fixed row morsel, a lazy `IO | Plan` stream whose planning state remains internal to the morsel,
-resumable value execution, and explicit retirement. The comparison and earlier proposals below
-remain as design history and evidence. Its [documents-to-use
-section](morsel-based-plan-execution.md#documents-to-use) is the short reading map.
+The **current implementation** is the [morsel push executor](morsel-executor-primer.md) in
+`vortex-morsel-push`. Workers activate sources, which push batches through compiled physical
+pipelines. The scan facade exposes this backend to SQL integrations with
+`VORTEX_SCAN_BACKEND=push`.
 
-Its P1 spine is now **implemented** in the `vortex-morsel` crate and measured against the V1
-`LayoutReader`: see [P1 findings](morsel-prototype-p1-findings.md) for what was built, what the
-numbers say, and which parts of the plan's evaluation matrix could not be run here — gate E1 as
-written was *not* evaluated, because rows B and C do not exist in this repository. The raw
-evaluation output is in [P1 evaluation output](morsel-prototype-p1-eval.md).
-
-Those P1 numbers came from synthetic fixtures. **Real TPC-H at SF=1** — `tpchgen` data, real
-decimals and dates, written through the btrblocks compressing pipeline, running the real scan
-portions of Q1/Q6/Q12/Q14/Q15/Q19 — is measured in
-[real TPC-H results](morsel-prototype-tpch-findings.md): the prototype is ~1.3x faster than V1 at
-one thread and ~1.5x at four, and the cross-morsel decode reuse that mattered on synthetic
-fixtures turns out to be neutral on a real file except on width-divergent schemas.
-[The handoff](morsel-prototype-handoff.md) says how to re-run all of it on other hardware and
-which conclusions are host-specific.
+The earlier proposals, comparisons, and measurements below are design history. Their commands
+and implementation descriptions refer to the revisions at which they were recorded. The former
+pull implementation and its direct comparisons are preserved in checkpoint `bd1f3cbbe8`.
 
 ```{toctree}
 ---
@@ -45,9 +32,6 @@ maxdepth: 1
 ---
 
 morsel-executor-primer
-morsel-pull-and-push
-morsel-pull-and-push-eval
-morsel-pull-operators
 layout-reader-v1
 plan-v2
 layout27

@@ -61,8 +61,6 @@ use crate::node::ActivationTarget;
 use crate::node::Arena;
 use crate::node::DemandTarget;
 use crate::node::ExecNode;
-use crate::node::ExecPoll;
-use crate::node::ExecutionMode;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanPoll;
@@ -74,7 +72,6 @@ use crate::node::StageSideband;
 use crate::node::Wait;
 use crate::node::WaitSet;
 use crate::node::begin_morsel;
-use crate::node::poll_execute_morsel;
 use crate::node::poll_plan_morsel;
 use crate::node::retire_morsel;
 use crate::stats::ScanStats;
@@ -104,7 +101,6 @@ pub struct MorselScan {
     morsels: Arc<[Range<u64>]>,
     threads: usize,
     share_decodes: bool,
-    execution_mode: ExecutionMode,
     lookahead_morsels: usize,
     output_rows: usize,
     output_bytes: u64,
@@ -230,7 +226,7 @@ struct WorkerRun {
     io: Arc<IoService>,
     cells: SharedCells,
     start: Instant,
-    execution_mode: ExecutionMode,
+
     lookahead_morsels: usize,
     output_rows: usize,
     output_bytes: u64,
@@ -1486,7 +1482,7 @@ struct LocalMorsel<'a> {
     push_control: PushControlState,
     push_root_done: bool,
     credit_waiting: Option<OutputWaitToken>,
-    pull_completion: Option<(usize, ArrayRef)>,
+    pending_output: Option<(usize, ArrayRef)>,
     morsel_io_uses_start: u64,
     morsel_io_requests_start: u64,
     morsel_io_batches_start: u64,
@@ -2375,7 +2371,7 @@ impl Scheduler {
             }
 
             if runnable {
-                let poll = match morsel.pull_completion.take() {
+                let poll = match morsel.pending_output.take() {
                     Some((index, batch)) => Ok(LocalPoll::Complete {
                         index,
                         batch: Some(batch),
@@ -2451,7 +2447,7 @@ impl Scheduler {
                                 runnable = !self.stopped.load(Ordering::Acquire)
                                     && morsel.assign_next(self);
                             } else {
-                                morsel.pull_completion = Some((index, batch));
+                                morsel.pending_output = Some((index, batch));
                                 morsel.credit_waiting = Some(token);
                                 runnable = false;
                             }
@@ -2731,7 +2727,7 @@ impl<'a> LocalMorsel<'a> {
             push_control: PushControlState::with_node_count(run.plan.len()),
             push_root_done: false,
             credit_waiting: None,
-            pull_completion: None,
+            pending_output: None,
             morsel_io_uses_start: 0,
             morsel_io_requests_start: 0,
             morsel_io_batches_start: 0,
@@ -2781,7 +2777,7 @@ impl<'a> LocalMorsel<'a> {
             .for_each(|source| *source = None);
         self.push_root_done = false;
         self.credit_waiting = None;
-        self.pull_completion = None;
+        self.pending_output = None;
         self.push_control.demand_hints.clear();
         self.push_control.has_delayed_hints = false;
         self.push_control
@@ -2875,42 +2871,16 @@ impl<'a> LocalMorsel<'a> {
                     PlanPoll::Complete => {
                         self.stats.morsels += 1;
                         self.phase = TaskPhase::Execute;
-                        if scheduler.run.execution_mode == ExecutionMode::Push {
-                            let activation_started = push_profile_enabled().then(Instant::now);
-                            self.seed_push_sources(scheduler)?;
-                            if let Some(started) = activation_started {
-                                self.stats.push_profile_activation_time += started.elapsed();
-                            }
-                            return self.run_push(scheduler);
+                        let activation_started = push_profile_enabled().then(Instant::now);
+                        self.seed_push_sources(scheduler)?;
+                        if let Some(started) = activation_started {
+                            self.stats.push_profile_activation_time += started.elapsed();
                         }
-                        Ok(LocalPoll::Runnable)
+                        self.run_push(scheduler)
                     }
                 }
             }
-            TaskPhase::Execute if scheduler.run.execution_mode == ExecutionMode::Push => {
-                self.run_push(scheduler)
-            }
-            TaskPhase::Execute => match poll_execute_morsel(
-                self.arena,
-                scheduler.run.plan.root(),
-                &self.range,
-                &self.io,
-                &scheduler.run.cells,
-                &scheduler.run.session,
-                &mut self.stats,
-            )? {
-                ExecPoll::Value(batch) => {
-                    let array = batch.value.into_array()?;
-                    let array = (!array.is_empty()).then_some(array);
-                    self.finish_morsel(scheduler, array)
-                }
-                ExecPoll::Yield(_) => Ok(LocalPoll::Runnable),
-                ExecPoll::Blocked(waits) => {
-                    self.stats.execute_io_blocks += 1;
-                    Ok(LocalPoll::Blocked(waits))
-                }
-                ExecPoll::Done => self.finish_morsel(scheduler, None),
-            },
+            TaskPhase::Execute => self.run_push(scheduler),
         }
     }
 
@@ -3197,6 +3167,9 @@ impl<'a> LocalMorsel<'a> {
         scheduler: &Scheduler,
         batch: Option<ArrayRef>,
     ) -> VortexResult<LocalPoll> {
+        if batch.is_none() {
+            self.stats.morsels_empty += 1;
+        }
         self.stats.demand_hints_dropped +=
             u64::try_from(self.push_control.demand_hints.len()).unwrap_or(u64::MAX);
         self.push_control.demand_hints.clear();
@@ -3394,7 +3367,6 @@ impl MorselScan {
             morsels: Arc::from(morsels),
             threads: 1,
             share_decodes: true,
-            execution_mode: ExecutionMode::Pull,
             lookahead_morsels: 0,
             output_rows: usize::MAX,
             output_bytes: u64::MAX,
@@ -3536,12 +3508,6 @@ impl MorselScan {
         self
     }
 
-    /// Select recursive pull or leaf-driven push value execution.
-    pub fn with_execution_mode(mut self, mode: ExecutionMode) -> Self {
-        self.execution_mode = mode;
-        self
-    }
-
     /// Keep this many future morsels visible to filtered background I/O in addition to the
     /// worker-active window. Unfiltered scans retain whole-plan lookahead.
     pub fn with_lookahead_morsels(mut self, morsels: usize) -> Self {
@@ -3631,7 +3597,6 @@ impl MorselScan {
             io: Arc::clone(&self.io),
             cells,
             start,
-            execution_mode: self.execution_mode,
             lookahead_morsels: self.lookahead_morsels,
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
@@ -3737,7 +3702,6 @@ impl MorselScan {
             io: Arc::clone(&self.io),
             cells,
             start,
-            execution_mode: self.execution_mode,
             lookahead_morsels: self.lookahead_morsels,
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
@@ -3847,9 +3811,7 @@ mod tests {
     use crate::node::ActivationTarget;
     use crate::node::Arena;
     use crate::node::DemandTarget;
-    use crate::node::ExecCx;
     use crate::node::ExecNode;
-    use crate::node::ExecPoll;
     use crate::node::InputPort;
     use crate::node::Node;
     use crate::node::NodeState;
@@ -4723,10 +4685,6 @@ mod tests {
             Ok(PlanPoll::Complete)
         }
 
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
-        }
-
         fn push_resume(
             &mut self,
             _cx: &mut PushCx<'_>,
@@ -4845,10 +4803,6 @@ mod tests {
             Ok(PlanPoll::Complete)
         }
 
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
-        }
-
         fn push_resume(
             &mut self,
             _cx: &mut PushCx<'_>,
@@ -4937,10 +4891,6 @@ mod tests {
             Ok(PlanPoll::Complete)
         }
 
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
-        }
-
         fn push_resume(
             &mut self,
             _cx: &mut PushCx<'_>,
@@ -5025,10 +4975,6 @@ mod tests {
             Ok(PlanPoll::Complete)
         }
 
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
-        }
-
         fn push_resume(
             &mut self,
             _cx: &mut PushCx<'_>,
@@ -5062,10 +5008,6 @@ mod tests {
 
         fn next_plan(&mut self, _cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
             Ok(PlanPoll::Complete)
-        }
-
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
         }
 
         fn push_input(
@@ -5144,10 +5086,6 @@ mod tests {
 
         fn next_plan(&mut self, _cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
             Ok(PlanPoll::Complete)
-        }
-
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
         }
 
         fn push_resume(
@@ -5239,10 +5177,6 @@ mod tests {
             Ok(PlanPoll::Complete)
         }
 
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
-        }
-
         fn push_resume(
             &mut self,
             _cx: &mut PushCx<'_>,
@@ -5271,10 +5205,6 @@ mod tests {
 
         fn next_plan(&mut self, _cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
             Ok(PlanPoll::Complete)
-        }
-
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
         }
 
         fn push_resume(
@@ -5393,10 +5323,6 @@ mod tests {
             Ok(PlanPoll::Complete)
         }
 
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
-        }
-
         fn push_input(
             &mut self,
             _port: InputPort,
@@ -5482,10 +5408,6 @@ mod tests {
 
         fn next_plan(&mut self, _cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
             Ok(PlanPoll::Complete)
-        }
-
-        fn execute(&mut self, _cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-            Ok(ExecPoll::Done)
         }
 
         fn push_input(

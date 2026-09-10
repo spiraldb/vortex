@@ -17,10 +17,7 @@ use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
 use crate::node::ActivationRows;
-use crate::node::ChildPoll;
-use crate::node::ExecCx;
 use crate::node::ExecNode;
-use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
@@ -31,7 +28,6 @@ use crate::node::PushCx;
 use crate::node::RetireCx;
 use crate::node::StageOutput;
 use crate::node::Value;
-use crate::node::ValueBatch;
 use crate::nodes::PushBatching;
 
 /// Struct is almost nothing: identity edges to each field, then a zip.
@@ -48,8 +44,6 @@ pub struct StructExec {
     range: Range<u64>,
     plan_cursor: usize,
     plan_started: bool,
-    exec_cursor: usize,
-    fields: Vec<ArrayRef>,
     done: bool,
     push_cursor: u64,
     push_heads: Vec<VecDeque<PendingField>>,
@@ -88,8 +82,6 @@ impl StructExec {
             range: 0..0,
             plan_cursor: 0,
             plan_started: false,
-            exec_cursor: 0,
-            fields: Vec::new(),
             done: false,
             push_cursor: 0,
             push_heads: Vec::new(),
@@ -112,8 +104,6 @@ impl ExecNode for StructExec {
         self.range = range;
         self.plan_cursor = 0;
         self.plan_started = false;
-        self.exec_cursor = 0;
-        self.fields.clear();
         self.done = false;
         self.push_cursor = self.range.start;
         let width = self.children.len();
@@ -150,42 +140,6 @@ impl ExecNode for StructExec {
             }
         }
         Ok(PlanPoll::Complete)
-    }
-
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-        if self.done {
-            return Ok(ExecPoll::Done);
-        }
-
-        let demand = cx.demand().clone();
-        let len = demand.true_count();
-        if self.fields.capacity() < self.children.len() {
-            self.fields
-                .reserve(self.children.len().saturating_sub(self.fields.len()));
-        }
-        while self.exec_cursor < self.children.len() {
-            let child = self.children[self.exec_cursor];
-            match cx.child_array(child, demand.clone())? {
-                ChildPoll::Value(array) => {
-                    self.fields.push(array);
-                    self.exec_cursor += 1;
-                }
-                ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
-                ChildPoll::Done => {
-                    return Err(vortex_err!("struct child {child} produced no value"));
-                }
-            }
-        }
-
-        let fields = std::mem::take(&mut self.fields);
-        let array = StructArray::try_new(self.names.clone(), fields, len, Validity::NonNullable)?
-            .into_array();
-        self.done = true;
-
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.range.clone(),
-            value: Value::Array(array),
-        }))
     }
 
     #[inline]

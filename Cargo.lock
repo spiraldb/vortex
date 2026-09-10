@@ -1814,7 +1814,7 @@ dependencies = [
  "vortex-arrow",
  "vortex-bench",
  "vortex-cuda",
- "vortex-morsel",
+ "vortex-morsel-push",
 ]
 
 [[package]]
@@ -10610,7 +10610,6 @@ dependencies = [
  "insta",
  "itertools 0.14.0",
  "mimalloc",
- "moka",
  "noodles-bgzf",
  "noodles-vcf",
  "parking_lot",
@@ -10642,8 +10641,6 @@ dependencies = [
  "vortex",
  "vortex-array",
  "vortex-arrow",
- "vortex-mask",
- "vortex-morsel",
  "vortex-spatial",
  "vortex-tensor",
  "wkb",
@@ -11307,39 +11304,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "vortex-morsel"
-version = "0.1.0"
-dependencies = [
- "arrow-array 59.2.0",
- "arrow-cast 59.2.0",
- "arrow-schema 59.2.0",
- "futures",
- "itertools 0.14.0",
- "parking_lot",
- "parquet 59.2.0",
- "rstest",
- "rustix",
- "tokio",
- "tpchgen",
- "tpchgen-arrow",
- "tracing",
- "tracing-subscriber",
- "vortex",
- "vortex-array",
- "vortex-arrow",
- "vortex-btrblocks",
- "vortex-buffer",
- "vortex-error",
- "vortex-io",
- "vortex-layout",
- "vortex-mask",
- "vortex-morsel-push",
- "vortex-scan",
- "vortex-session",
- "vortex-utils",
-]
-
-[[package]]
 name = "vortex-morsel-push"
 version = "0.1.0"
 dependencies = [
@@ -11378,7 +11342,6 @@ dependencies = [
  "vortex-io",
  "vortex-layout",
  "vortex-metrics",
- "vortex-morsel",
  "vortex-morsel-push",
  "vortex-scan",
  "vortex-session",

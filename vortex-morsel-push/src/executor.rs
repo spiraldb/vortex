@@ -34,7 +34,6 @@ use crate::build::build_plan;
 use crate::driver::StreamCancellation;
 use crate::driver::morsels;
 use crate::io::IoService;
-use crate::node::ExecutionMode;
 use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
 
@@ -231,7 +230,6 @@ impl PushMorselScanExecutor {
                             .with_sparse_morsels(true)
                             .with_lookahead_morsels(SHARED_LOOKAHEAD_MORSELS)
                             .with_eager_lookahead(true)
-                            .with_execution_mode(ExecutionMode::Push)
                             .with_cancellation(cancellation)
                             .with_completion_sink(move |index, batch| {
                                 targets[index].complete(batch);
@@ -316,7 +314,6 @@ fn build_external_outputs(
                 .with_share_decodes(false)
                 .with_sparse_morsels(true)
                 .with_eager_lookahead(true)
-                .with_execution_mode(ExecutionMode::Push)
                 .run_on_current_thread()?;
             match (combine_batches(batches)?, row_cap) {
                 (Some(array), Some(cap)) if array.len() > cap => Ok(Some(array.slice(0..cap)?)),

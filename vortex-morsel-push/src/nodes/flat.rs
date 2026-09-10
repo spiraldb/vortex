@@ -23,9 +23,7 @@ use crate::io::IoTicket;
 use crate::io::IoUse;
 use crate::io::ProducerId;
 use crate::node::ActivationRows;
-use crate::node::ExecCx;
 use crate::node::ExecNode;
-use crate::node::ExecPoll;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
@@ -36,7 +34,6 @@ use crate::node::PushCx;
 use crate::node::RetireCx;
 use crate::node::StageOutput;
 use crate::node::Value;
-use crate::node::ValueBatch;
 use crate::node::Wait;
 use crate::node::WaitSet;
 use crate::stats::push_profile_enabled;
@@ -45,7 +42,7 @@ use crate::stats::push_profile_enabled;
 ///
 /// `next_plan` names the segment exactly once per morsel. If the shared cell for the segment
 /// already holds a decoded value, planning skips issuing the read — the morsel's own lease keeps
-/// that value alive until it retires. Otherwise `execute` clones the scheduler-resolved ticket,
+/// that value alive until it retires. When activated, the source resolves its ticket,
 /// decodes, publishes into the cell, then slices to the morsel's local range and applies demand.
 /// Retire releases the lease whether the value was used or not; the last release drops the cell.
 pub struct FlatExec {
@@ -90,31 +87,7 @@ impl FlatExec {
         }
     }
 
-    fn decode(&self, cx: &mut ExecCx<'_>) -> VortexResult<Option<ArrayRef>> {
-        if let Some(shared) = cx.shared_decoded(IoKey::Segment(self.segment)) {
-            return Ok(Some(shared));
-        }
-
-        let ticket = self
-            .ticket
-            .ok_or_else(|| crate::io::unplanned_ticket(self.producer))?;
-        let Some(bytes) = cx.ready(ticket)? else {
-            return Ok(None);
-        };
-        let parts = match self.array_tree.as_ref() {
-            Some(tree) => SerializedArray::from_flatbuffer_and_segment(tree.clone(), bytes)?,
-            None => SerializedArray::try_from(bytes)?,
-        };
-        let rows = usize::try_from(self.segment_rows)
-            .map_err(|_| vortex_err!("segment row count exceeds usize"))?;
-        let session = cx.session().clone();
-        let array = parts.decode(&self.dtype, rows, &self.read_ctx, &session)?;
-        cx.stats().decodes += 1;
-        cx.publish_decoded(IoKey::Segment(self.segment), &array);
-        Ok(Some(array))
-    }
-
-    fn decode_push(&self, cx: &mut PushCx<'_>) -> VortexResult<Option<ArrayRef>> {
+    fn decode(&self, cx: &mut PushCx<'_>) -> VortexResult<Option<ArrayRef>> {
         if let Some(shared) = cx.shared_decoded(IoKey::Segment(self.segment)) {
             return Ok(Some(shared));
         }
@@ -161,7 +134,7 @@ impl FlatExec {
         let array = if rows.materialized().all_false() {
             Canonical::empty(&self.dtype).into_array()
         } else {
-            let Some(mut array) = self.decode_push(cx)? else {
+            let Some(mut array) = self.decode(cx)? else {
                 let ticket = self
                     .ticket
                     .ok_or_else(|| crate::io::unplanned_ticket(self.producer))?;
@@ -286,37 +259,6 @@ impl ExecNode for FlatExec {
         self.ticket = tickets.first().copied();
         self.planned = true;
         Ok(PlanPoll::Item(PlanItem::Io(batch)))
-    }
-
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-        if self.done {
-            return Ok(ExecPoll::Done);
-        }
-        let Some(mut array) = self.decode(cx)? else {
-            let ticket = self
-                .ticket
-                .ok_or_else(|| crate::io::unplanned_ticket(self.producer))?;
-            return Ok(ExecPoll::Blocked(
-                [Wait::Io(ticket)].into_iter().collect::<WaitSet>(),
-            ));
-        };
-
-        let start = usize::try_from(self.range.start).vortex_expect("flat range start fits usize");
-        let end = usize::try_from(self.range.end).vortex_expect("flat range end fits usize");
-        if start > 0 || end < array.len() {
-            array = array.slice(start..end)?;
-        }
-
-        let demand = cx.demand();
-        if !demand.all_true() {
-            array = array.filter(demand.clone())?;
-        }
-        self.done = true;
-
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.root_offset + self.range.start..self.root_offset + self.range.end,
-            value: Value::Array(array),
-        }))
     }
 
     #[inline]
