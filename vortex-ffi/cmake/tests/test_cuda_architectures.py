@@ -17,7 +17,7 @@ ARCH_FLAGS = [
 
 
 class CudaArchitectureTests(CMakeTest):
-    def test_policy_preserves_parent(self):
+    def test_policy_preserves_parent(self) -> None:
         for architectures, expected in (
             (None, "-arch=native"),
             ("native", "-arch=native"),
@@ -53,7 +53,7 @@ class CudaArchitectureTests(CMakeTest):
                 else:
                     self.assertEqual((self.work / "flags.txt").read_text(encoding="utf-8"), expected)
 
-    def test_configure_forwards_flags_and_cpu_ignores_policy(self):
+    def test_configure_forwards_flags_and_cpu_ignores_policy(self) -> None:
         cuda_root = self.work / "fake CUDA toolkit's"
         nvcc = self.executable("fake CUDA toolkit's/bin/nvcc", "raise SystemExit('No native compilation expected')\n")
         # Stub discovery only; production Configure.cmake and its Cargo driver run unchanged.
