@@ -24,6 +24,7 @@ fn main() {
     divan::main();
 }
 
+#[vortex_bench_support::cpu_features]
 #[divan::bench(args = cases())]
 fn dbp_assemble(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
     let decimal = decimal_array(values_type, len, Validity::NonNullable);
