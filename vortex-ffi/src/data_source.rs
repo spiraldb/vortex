@@ -38,7 +38,8 @@ box_wrapper!(
     ///
     /// Copying a vx_data_source via vx_data_source_clone is a cheap operation.
     MultiLayoutDataSource,
-    vx_data_source);
+    vx_data_source
+);
 
 /// Options for creating a data source.
 #[repr(C)]

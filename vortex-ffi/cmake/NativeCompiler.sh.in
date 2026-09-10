@@ -1,0 +1,27 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# Mandatory compiler arguments also apply to compiler-family and flag probes.
+set -- @_compiler_command@ "$@"
+# Cargo clears Rust flags for native build-tool dependencies under --target.
+# Their links lack sanitizer and coverage runtimes.
+if [ -z "${CARGO_ENCODED_RUSTFLAGS:-}" ]; then
+    for arg do
+        shift
+        case "$arg" in
+            -fsanitize=*|-fsanitize-coverage=*|--coverage|-fprofile-arcs|-ftest-coverage) ;;
+            -fprofile-instr-generate|-fprofile-instr-generate=*|-fcoverage-mapping) ;;
+            -fprofile-generate|-fprofile-generate=*) ;;
+            *) set -- "$@" "$arg" ;;
+        esac
+    done
+fi
+# Match cc-rs's native-compatible Rust wrappers, but cache AFTER filtering.
+if @_use_rustc_wrapper@; then
+    wrapper_name=${RUSTC_WRAPPER##*/}
+    case "${wrapper_name%.*}" in
+        sccache|cachepot|buildcache|kache) set -- "$RUSTC_WRAPPER" "$@" ;;
+    esac
+fi
+exec "$@"

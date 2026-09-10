@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q40.slt.no explains the upstream query unchanged.
+query IPI
+SELECT "URLHash", "EventDate", COUNT(*) AS PageViews FROM hits WHERE "CounterID" = 62 AND "EventDate" >= '2013-07-01' AND "EventDate" <= '2013-07-31' AND "IsRefresh" = 0 AND "TraficSourceID" IN (-1, 6) AND "RefererHash" = 3594120000172545465 GROUP BY "URLHash", "EventDate" ORDER BY PageViews DESC, "URLHash", "EventDate" LIMIT 10 OFFSET 100;
+----
+2680587802399303961 2013-07-15T00:00:00 19
+5949607704977564016 2013-07-15T00:00:00 19
+9013370825190178404 2013-07-15T00:00:00 19
+-8213908143099318937 2013-07-15T00:00:00 18
+-1419388746330668048 2013-07-15T00:00:00 18
+1237664075729419728 2013-07-15T00:00:00 18
+2183693295573901880 2013-07-15T00:00:00 18
+4329780285977997346 2013-07-15T00:00:00 18
+7644052073203380311 2013-07-15T00:00:00 18
+-5692075753878677026 2013-07-15T00:00:00 17

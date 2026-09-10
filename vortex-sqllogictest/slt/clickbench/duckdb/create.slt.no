@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+statement ok
+CREATE VIEW hits AS SELECT * FROM read_${FILE_FORMAT}('slt/clickbench/data/hits.${FILE_FORMAT}');
+
+# DuckDB has no octet_length for VARCHAR; the benchmark harness defines the
+# same macro so the upstream ClickBench queries run unchanged.
+statement ok
+CREATE MACRO IF NOT EXISTS octet_length(a) AS strlen(a);

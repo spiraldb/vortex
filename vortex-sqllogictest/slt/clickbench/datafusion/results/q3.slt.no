@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# DataFusion averages BIGINT in floating point, so the last digits of AVG("UserID")
+# depend on summation order and differ between the Parquet and Vortex readers. The
+# decimal cast makes the average exact. plans/q3.slt.no explains the upstream query.
+query R
+SELECT AVG(CAST("UserID" AS DECIMAL(38, 0))) FROM hits;
+----
+1948194877894919561.61

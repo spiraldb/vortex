@@ -37,7 +37,7 @@ use vortex_array::builders::FixedSizeListBuilder;
 use vortex_array::builders::ListViewBuilder;
 use vortex_array::builders::VarBinBuilder;
 use vortex_array::builders::VarBinViewBuilder;
-use vortex_array::builders::builder_with_capacity;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::DecimalType;
@@ -421,15 +421,16 @@ fn execute_sparse_lists_inner<I: IntegerPType, O: OffsetBuilderPType>(
 ) -> ArrayRef {
     // Create the builder with appropriate types. It is easy to just use the same type for both
     // `offsets` and `sizes` since we have no other constraints.
-    let mut builder = ListViewBuilder::<O, O>::with_capacity(
+    let mut builder = ListViewBuilder::<O, O>::with_capacity_in(
         values_dtype,
         nullability,
         total_canonical_values,
         len,
+        ctx.allocator(),
     );
     // The fill's elements become an array once, up front. Every gap then appends that same array,
     // so the fill's elements are stored once for the whole result however many gaps reference them.
-    let fill_elements = list_scalar_elements_array(fill_value.as_list());
+    let fill_elements = list_scalar_elements_array(fill_value.as_list(), ctx.allocator());
 
     // One mask for the whole patch array rather than a validity lookup per patch.
     let patch_validity = patch_values
@@ -476,9 +477,12 @@ fn execute_sparse_lists_inner<I: IntegerPType, O: OffsetBuilderPType>(
 }
 
 /// Materializes a list scalar's elements into an array, or `None` if the scalar is null.
-fn list_scalar_elements_array(list: ListScalar) -> Option<ArrayRef> {
+fn list_scalar_elements_array(
+    list: ListScalar,
+    allocator: &vortex_buffer::BufferAllocatorRef,
+) -> Option<ArrayRef> {
     list.elements().map(|elements| {
-        let mut builder = builder_with_capacity(list.element_dtype(), elements.len());
+        let mut builder = builder_with_capacity_in(list.element_dtype(), elements.len(), allocator);
         for element in elements {
             builder
                 .append_scalar(&element)
@@ -555,17 +559,18 @@ fn execute_sparse_fixed_size_list_inner<I: IntegerPType>(
         .dtype()
         .as_fixed_size_list_element_opt()
         .vortex_expect("sparse fixed-size-list values must have fixed-size-list dtype");
-    let mut builder = FixedSizeListBuilder::with_capacity(
+    let mut builder = FixedSizeListBuilder::with_capacity_in(
         Arc::clone(element_dtype),
         list_size,
         nullability,
         array_len,
+        ctx.allocator(),
     );
     // The fill's elements become an array once, up front, so that a gap does not rebuild them.
     // They are tiled per row rather than shared - a fixed-size list holds its elements back to
     // back - unless they are all the same scalar, in which case the tile stays constant-encoded
     // and the tiling costs nothing.
-    let fill_elements = fixed_size_list_fill_tile(fill_value.as_list(), list_size);
+    let fill_elements = fixed_size_list_fill_tile(fill_value.as_list(), list_size, ctx.allocator());
 
     // One mask for the whole patch array rather than a validity lookup per patch.
     let patch_validity = values
@@ -623,13 +628,18 @@ fn execute_sparse_fixed_size_list_inner<I: IntegerPType>(
 ///
 /// Elements that are all the same scalar stay a constant array, so tiling them over a gap costs
 /// nothing however many rows it covers.
-fn fixed_size_list_fill_tile(fill: ListScalar, list_size: u32) -> Option<ArrayRef> {
+fn fixed_size_list_fill_tile(
+    fill: ListScalar,
+    list_size: u32,
+    allocator: &vortex_buffer::BufferAllocatorRef,
+) -> Option<ArrayRef> {
     let elements = fill.elements()?;
 
     Some(match elements.iter().all_equal_value() {
         Ok(uniform) => ConstantArray::new(uniform.clone(), list_size as usize).into_array(),
         Err(_) => {
-            let mut builder = builder_with_capacity(fill.element_dtype(), elements.len());
+            let mut builder =
+                builder_with_capacity_in(fill.element_dtype(), elements.len(), allocator);
             for element in &elements {
                 builder
                     .append_scalar(element)
@@ -775,7 +785,8 @@ fn execute_sparse_decimal<D: NativeDecimalType>(
     len: usize,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
-    let mut builder = DecimalBuilder::with_capacity::<D>(len, decimal_dtype, nullability);
+    let mut builder =
+        DecimalBuilder::with_capacity_in::<D>(len, decimal_dtype, nullability, ctx.allocator());
     match fill_value.decimal_value() {
         Some(fill_value) => {
             let fill_value = fill_value
@@ -2189,11 +2200,18 @@ mod test {
         for candidate in [array.clone(), array.slice(1..9)?] {
             let expected = candidate.clone().execute::<VarBinViewArray>(&mut ctx)?;
 
-            let mut view_builder = VarBinViewBuilder::with_capacity(candidate.dtype().clone(), 4);
+            let mut view_builder = VarBinViewBuilder::with_capacity_in(
+                candidate.dtype().clone(),
+                4,
+                vortex_buffer::BufferAllocatorRef::statically_allocated(),
+            );
             candidate.append_to_builder(&mut view_builder, &mut ctx)?;
             assert_arrays_eq!(view_builder.finish_into_varbinview(), expected, &mut ctx);
 
-            let mut varbin_builder = VarBinBuilder::<i32>::new(candidate.dtype().clone());
+            let mut varbin_builder = VarBinBuilder::<i32>::new_in(
+                candidate.dtype().clone(),
+                vortex_buffer::BufferAllocatorRef::static_ref(),
+            );
             candidate.append_to_builder(&mut varbin_builder, &mut ctx)?;
             assert_arrays_eq!(varbin_builder.finish_into_varbin(), expected, &mut ctx);
         }

@@ -165,20 +165,29 @@ fn engines_for(path: &Path) -> (bool, bool) {
     (datafusion, duckdb)
 }
 
-fn is_tpch(path: &Path) -> bool {
-    path.components().any(|c| c.as_os_str() == "tpch")
+/// Suites whose tables come from a `generate_data.sh` script rather than the
+/// test itself: the `slt/` subdirectory holding the suite, and a file whose
+/// Vortex and Parquet versions both have to exist for the suite to run.
+const GENERATED_DATASETS: &[(&str, &str)] = &[
+    ("tpch", "tpch/data/lineitem"),
+    ("clickbench", "clickbench/data/hits"),
+];
+
+/// Whether `path` belongs to a generated-data suite whose data is absent.
+fn missing_generated_data(path: &Path) -> bool {
+    GENERATED_DATASETS.iter().any(|(dir, fixture)| {
+        path.components().any(|c| c.as_os_str() == *dir)
+            && !["vortex", "parquet"]
+                .into_iter()
+                .all(|format| SLT_ROOT.join(format!("{fixture}.{format}")).exists())
+    })
 }
 
 /// Rewrites the expected output of each file in place, completing from a single
 /// reference engine per file (DuckDB for `duckdb/` files, DataFusion otherwise).
-fn complete_files(
-    args: &Arguments,
-    files: &[PathBuf],
-    slt_root: &Path,
-    has_tpch_data: bool,
-) -> anyhow::Result<()> {
+fn complete_files(args: &Arguments, files: &[PathBuf], slt_root: &Path) -> anyhow::Result<()> {
     for path in files {
-        if is_tpch(path) && !has_tpch_data {
+        if missing_generated_data(path) {
             continue;
         }
         let name = path
@@ -222,26 +231,21 @@ fn main() -> anyhow::Result<ExitCode> {
     };
     let args = Arguments::from_iter(raw_args);
 
-    let has_tpch_data = ["vortex", "parquet"].into_iter().all(|format| {
-        SLT_ROOT
-            .join(format!("tpch/data/lineitem.{format}"))
-            .exists()
-    });
-
     let mut files = list_files(SLT_ROOT.as_path())?;
     files.sort();
 
     if complete {
-        complete_files(&args, &files, SLT_ROOT.as_path(), has_tpch_data)?;
+        complete_files(&args, &files, SLT_ROOT.as_path())?;
         return Ok(ExitCode::SUCCESS);
     }
 
     let mut trials = Vec::new();
     for path in files {
         let (run_datafusion, run_duckdb) = engines_for(&path);
-        // TPC-H trials are ignored (rather than removed) when the generated data
-        // is absent, so `--list` and the run summary still account for them.
-        let ignored = is_tpch(&path) && !has_tpch_data;
+        // TPC-H and ClickBench trials are ignored (rather than removed) when the
+        // generated data is absent, so `--list` and the run summary still
+        // account for them.
+        let ignored = missing_generated_data(&path);
         let name = path
             .strip_prefix(SLT_ROOT.as_path())
             .unwrap_or(&path)

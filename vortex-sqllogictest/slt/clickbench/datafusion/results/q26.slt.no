@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query T
+SELECT "SearchPhrase" FROM hits WHERE "SearchPhrase" <> '' ORDER BY "EventTime", "SearchPhrase" LIMIT 10;
+----
+ведомосквы не удалог на ногтей денье
+ведомосквы не удалог на ногтей денье
+армянск
+армянск
+коптимиквидвич фаршироксин
+враганрог из мультики из баклажанов
+враганрог из мультики из баклажанов
+коптимиквидвич фаршироксин
+hp 105.460 2007 годов
+hp 105.460 2007 годов

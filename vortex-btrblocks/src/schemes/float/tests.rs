@@ -50,7 +50,8 @@ fn test_compress() -> VortexResult<()> {
         .display_as(DisplayOptions::MetadataOnly)
         .to_string()
         .to_lowercase();
-    assert_eq!(display, "vortex.dict(f32, len=1024)");
+    assert_arrays_eq!(compressed, array, &mut SESSION.create_execution_ctx());
+    assert_eq!(display, "vortex.alp(f32, len=1024)");
 
     Ok(())
 }
@@ -77,7 +78,11 @@ fn test_rle_compression() -> VortexResult<()> {
 
 #[test]
 fn test_sparse_compression() -> VortexResult<()> {
-    let mut array = PrimitiveBuilder::<f32>::with_capacity(Nullability::Nullable, 100);
+    let mut array = PrimitiveBuilder::<f32>::with_capacity_in(
+        Nullability::Nullable,
+        100,
+        vortex_buffer::BufferAllocatorRef::static_ref(),
+    );
     array.append_value(f32::NAN);
     array.append_value(-f32::NAN);
     array.append_value(f32::INFINITY);

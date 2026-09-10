@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q18.slt.no explains the upstream query unchanged.
+query IITI
+SELECT "UserID", extract(minute FROM "EventTime") AS m, "SearchPhrase", COUNT(*) FROM hits GROUP BY "UserID", m, "SearchPhrase" ORDER BY COUNT(*) DESC, "UserID", m, "SearchPhrase" LIMIT 10;
+----
+5216851095034646002 51 (empty) 80
+5216851095034646002 52 (empty) 67
+1074353211169645510 8 (empty) 37
+1220910554975721402 13 (empty) 35
+614605011960296602 18 (empty) 34
+1074353211169645510 19 (empty) 34
+4673379180966332110 0 (empty) 34
+502693359570399458 53 (empty) 33
+502693359570399458 59 (empty) 33
+1074353211169645510 9 (empty) 33

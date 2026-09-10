@@ -1,0 +1,192 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN (FORMAT json)
+SELECT MIN("EventDate"), MAX("EventDate") FROM hits;
+----
+logical_plan [
+    {
+        "name": "PROJECTION",
+        "children": [
+            {
+                "name": "AGGREGATE",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "READ_VORTEX",
+                                "children": [],
+                                "extra_info": {
+                                    "Filters": "",
+                                    "Function": "Vortex Scan"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Expressions": [
+                                "WatchID",
+                                "JavaEnable",
+                                "Title",
+                                "GoodEvent",
+                                "EventTime",
+                                "EventDate",
+                                "CounterID",
+                                "ClientIP",
+                                "RegionID",
+                                "UserID",
+                                "CounterClass",
+                                "OS",
+                                "UserAgent",
+                                "URL",
+                                "Referer",
+                                "IsRefresh",
+                                "RefererCategoryID",
+                                "RefererRegionID",
+                                "URLCategoryID",
+                                "URLRegionID",
+                                "ResolutionWidth",
+                                "ResolutionHeight",
+                                "ResolutionDepth",
+                                "FlashMajor",
+                                "FlashMinor",
+                                "FlashMinor2",
+                                "NetMajor",
+                                "NetMinor",
+                                "UserAgentMajor",
+                                "UserAgentMinor",
+                                "CookieEnable",
+                                "JavascriptEnable",
+                                "IsMobile",
+                                "MobilePhone",
+                                "MobilePhoneModel",
+                                "Params",
+                                "IPNetworkID",
+                                "TraficSourceID",
+                                "SearchEngineID",
+                                "SearchPhrase",
+                                "AdvEngineID",
+                                "IsArtifical",
+                                "WindowClientWidth",
+                                "WindowClientHeight",
+                                "ClientTimeZone",
+                                "ClientEventTime",
+                                "SilverlightVersion1",
+                                "SilverlightVersion2",
+                                "SilverlightVersion3",
+                                "SilverlightVersion4",
+                                "PageCharset",
+                                "CodeVersion",
+                                "IsLink",
+                                "IsDownload",
+                                "IsNotBounce",
+                                "FUniqID",
+                                "OriginalURL",
+                                "HID",
+                                "IsOldCounter",
+                                "IsEvent",
+                                "IsParameter",
+                                "DontCountHits",
+                                "WithHash",
+                                "HitColor",
+                                "LocalEventTime",
+                                "Age",
+                                "Sex",
+                                "Income",
+                                "Interests",
+                                "Robotness",
+                                "RemoteIP",
+                                "WindowName",
+                                "OpenerName",
+                                "HistoryLength",
+                                "BrowserLanguage",
+                                "BrowserCountry",
+                                "SocialNetwork",
+                                "SocialAction",
+                                "HTTPError",
+                                "SendTiming",
+                                "DNSTiming",
+                                "ConnectTiming",
+                                "ResponseStartTiming",
+                                "ResponseEndTiming",
+                                "FetchTiming",
+                                "SocialSourceNetworkID",
+                                "SocialSourcePage",
+                                "ParamPrice",
+                                "ParamOrderID",
+                                "ParamCurrency",
+                                "ParamCurrencyID",
+                                "OpenstatServiceName",
+                                "OpenstatCampaignID",
+                                "OpenstatAdID",
+                                "OpenstatSourceID",
+                                "UTMSource",
+                                "UTMMedium",
+                                "UTMCampaign",
+                                "UTMContent",
+                                "UTMTerm",
+                                "FromTag",
+                                "HasGCLID",
+                                "RefererHash",
+                                "URLHash",
+                                "CLID"
+                            ]
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Groups": "",
+                    "Expressions": [
+                        "min(EventDate)",
+                        "max(EventDate)"
+                    ]
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": [
+                "min(EventDate)",
+                "max(EventDate)"
+            ]
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "PROJECTION",
+        "children": [
+            {
+                "name": "EXPRESSION_GET",
+                "children": [
+                    {
+                        "name": "DUMMY_SCAN",
+                        "children": [],
+                        "extra_info": {
+                            "Expressions": ""
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": ""
+                }
+            }
+        ],
+        "extra_info": {
+            "Expressions": [
+                "min(EventDate)",
+                "max(EventDate)"
+            ],
+            "Estimated Cardinality": "1"
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "COLUMN_DATA_SCAN",
+        "children": [],
+        "extra_info": {
+            "Estimated Cardinality": "1"
+        }
+    }
+]

@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q21.slt.no explains the upstream query unchanged.
+query TTI
+SELECT "SearchPhrase", MIN("URL"), COUNT(*) AS c FROM hits WHERE "URL" LIKE '%google%' AND "SearchPhrase" <> '' GROUP BY "SearchPhrase" ORDER BY c DESC, "SearchPhrase" LIMIT 10;
+----
+один инструктура птахани нюши смотреть краси http://bdsm_position/2624217,2013-07-01:2013/frl-4/transport.ru/google%2F 2

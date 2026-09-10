@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+statement ok
+DROP VIEW hits;
+
+statement ok
+DROP MACRO octet_length;
