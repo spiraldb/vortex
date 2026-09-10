@@ -1,18 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Property tests for splitting decimals into byte parts and putting them back together.
-//!
-//! Every property here is the same shape: whatever the encoding does must be indistinguishable
-//! from doing it to the canonical `DecimalArray`. Round tripping covers the split/assemble
-//! pair directly; the compute properties cover it indirectly, since each one canonicalizes an
-//! encoded array at the end.
-//!
-//! The generators deliberately reach the cases hand-written tests tend to miss: values that
-//! straddle a 64-bit word boundary, negative values whose sign extension fills the words above
-//! the most significant part, and null rows whose lower parts hold arbitrary bits.
-
-#![expect(clippy::tests_outside_test_module)]
+//! Property tests for decimal byte-parts round trips.
 
 use hegel::TestCase;
 use hegel::generators as gs;
@@ -28,10 +17,11 @@ use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::i256;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
-use vortex_decimal_byte_parts::DecimalByteParts;
-use vortex_decimal_byte_parts::DecimalBytePartsArray;
-use vortex_decimal_byte_parts::split_decimal;
 use vortex_error::VortexExpect;
+
+use super::DecimalByteParts;
+use super::DecimalBytePartsArray;
+use super::testing::encode;
 
 /// Largest magnitude a `Decimal(38, _)` can hold: 38 nines.
 const MAX_I128: i128 = 10i128.pow(38) - 1;
@@ -46,19 +36,8 @@ const MAX_LEN: usize = 48;
 
 fn ctx() -> ExecutionCtx {
     let session = array_session();
-    vortex_decimal_byte_parts::initialize(&session);
+    crate::initialize(&session);
     session.create_execution_ctx()
-}
-
-/// Encode a canonical decimal as byte parts, splitting wide values into lower parts.
-fn encode(decimal: &DecimalArray, ctx: &mut ExecutionCtx) -> DecimalBytePartsArray {
-    let parts = split_decimal(decimal, ctx).vortex_expect("split");
-    DecimalByteParts::try_new_with_lower_parts(
-        parts.msp,
-        parts.lower_parts,
-        decimal.decimal_dtype(),
-    )
-    .vortex_expect("valid byte parts")
 }
 
 /// A validity mask of exactly `len` entries, so null rows exercise lower parts holding bits
@@ -160,7 +139,10 @@ fn decoded_survives_encode_then_decode(tc: TestCase) {
     let decimal = draw_decimal(&tc);
     let mut ctx = ctx();
 
-    let round_tripped = canonicalize(encode(&decimal, &mut ctx).into_array(), &mut ctx);
+    let round_tripped = canonicalize(
+        encode(&decimal).vortex_expect("encode").into_array(),
+        &mut ctx,
+    );
 
     assert_eq!(round_tripped.values_type(), decimal.values_type());
     assert_arrays_eq!(decimal, round_tripped, &mut ctx);
@@ -178,7 +160,10 @@ fn encoded_survives_decode_then_encode(tc: TestCase) {
     let mut ctx = ctx();
 
     let decoded = canonicalize(array.into_array(), &mut ctx);
-    let re_decoded = canonicalize(encode(&decoded, &mut ctx).into_array(), &mut ctx);
+    let re_decoded = canonicalize(
+        encode(&decoded).vortex_expect("encode").into_array(),
+        &mut ctx,
+    );
 
     assert_arrays_eq!(decoded, re_decoded, &mut ctx);
 }
