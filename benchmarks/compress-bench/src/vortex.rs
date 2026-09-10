@@ -29,7 +29,6 @@ use vortex_morsel::MorselScan;
 use vortex_morsel::SegmentSourceDriver;
 use vortex_morsel::build_plan;
 use vortex_morsel::morsels;
-use vortex_morsel::nodes::ConjunctMode;
 
 const MORSEL_ROWS: u64 = 131_072;
 
@@ -83,12 +82,7 @@ impl Compressor for VortexCompressor {
         } else {
             root()
         };
-        let plan = Arc::new(build_plan(
-            file.footer().layout(),
-            &projection,
-            None,
-            ConjunctMode::Cascade,
-        )?);
+        let plan = Arc::new(build_plan(file.footer().layout(), &projection, None)?);
         let cut = morsels(&plan, MORSEL_ROWS);
         let threads = get_available_parallelism().unwrap_or(1);
         let scan = MorselScan::new(plan, SESSION.clone())

@@ -3,8 +3,8 @@
 
 //! The scheduler-visible IO plane.
 //!
-//! Nodes *name* reads during planning: [`PlanCx::register`](crate::PlanCx::register) takes an
-//! [`IoBatch`] of [`IoUse`]s, each keyed to a whole stored unit, and hands back an [`IoTicket`].
+//! Operators register reads during look-ahead: [`Cx::register`](crate::Cx::register) takes an
+//! [`IoUse`] with a live demand view, keyed to a whole stored unit, and returns an [`IoTicket`].
 //! Execution may resolve an unissued required ticket through a caller-provided non-blocking
 //! probe; otherwise it can only clone an already-ready cell or suspend on that exact ticket.
 //!
@@ -35,7 +35,11 @@ use vortex_layout::segments::ReadAtNowait;
 use vortex_layout::segments::SegmentId;
 use vortex_utils::aliases::hash_map::HashMap;
 
+use crate::demand::DemandRef;
+use crate::stats::IoReadyOutcome;
+use crate::stats::IoUseOutcome;
 use crate::stats::ScanStats;
+use crate::stats::TraceEventKind;
 
 /// The scan-wide key of one whole stored unit.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -75,58 +79,31 @@ pub struct IoUse {
     pub key: IoKey,
     /// The rows of the stored unit, frozen at emission.
     pub extent: Range<u64>,
-    /// The inverse image of `extent` in root coordinates, stamped at emission. The scheduler
-    /// reads demand verdicts over this range without ever seeing an offset map.
-    pub source_range: Range<u64>,
-    /// The node that emitted this use.
+    /// The operator that emitted this use.
     pub producer: ProducerId,
-    /// The estimated size of the read, for admission accounting.
-    pub estimated_bytes: usize,
-}
-
-/// A batch of uses emitted by one planning step.
-#[derive(Clone, Debug, Default)]
-pub struct IoBatch {
-    uses: Vec<IoUse>,
-}
-
-impl IoBatch {
-    /// An empty batch.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add a use to the batch.
-    pub fn push(&mut self, r#use: IoUse) {
-        self.uses.push(r#use);
-    }
-
-    /// The uses in this batch.
-    pub fn uses(&self) -> &[IoUse] {
-        &self.uses
-    }
-
-    /// Whether the batch is empty.
-    pub fn is_empty(&self) -> bool {
-        self.uses.is_empty()
-    }
-}
-
-impl FromIterator<IoUse> for IoBatch {
-    fn from_iter<T: IntoIterator<Item = IoUse>>(iter: T) -> Self {
-        Self {
-            uses: iter.into_iter().collect(),
-        }
-    }
+    /// A live view of the rows that use this segment, updated as execution narrows demand.
+    pub demand: DemandRef,
 }
 
 /// One read the scan wants performed, handed out of plan execution.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct IoRequest {
     /// The stored unit to read.
     pub key: IoKey,
     /// Whether execution is known to need this read before it can continue.
     pub priority: IoPriority,
+    demands: Arc<Mutex<Vec<DemandRef>>>,
+}
+
+impl IoRequest {
+    /// Every operator use currently registered for this read.
+    ///
+    /// Each handle observes later mask refinements. New uses can join a deduplicated read after
+    /// submission, so call this again to see them. An empty list means only scan-level lookahead
+    /// has registered the segment so far; it does not establish that the read is unwanted.
+    pub fn demands(&self) -> Vec<DemandRef> {
+        self.demands.lock().clone()
+    }
 }
 
 /// What a scan asks of the caller that owns storage.
@@ -186,6 +163,7 @@ struct IoCell {
     waiters: Mutex<Vec<Waker>>,
     required: AtomicBool,
     submitted: AtomicBool,
+    demands: Arc<Mutex<Vec<DemandRef>>>,
 }
 
 impl IoCell {
@@ -287,6 +265,7 @@ impl IoService {
             waiters: Mutex::new(Vec::new()),
             required: AtomicBool::new(priority == IoPriority::Required),
             submitted: AtomicBool::new(false),
+            demands: Arc::default(),
         });
         cells.insert(key, Arc::clone(&cell));
         (cell, true)
@@ -325,6 +304,7 @@ impl IoService {
             requests.push(IoRequest {
                 key: read.cell.key,
                 priority: read.cell.priority(),
+                demands: Arc::clone(&read.cell.demands),
             });
             cells.push(Arc::clone(&read.cell));
         }
@@ -503,35 +483,45 @@ impl IoPlane {
         }
     }
 
-    /// Register a batch of uses, creating any cell that does not already exist.
+    /// Register one use, retaining its demand even if the raw read already exists.
     pub(crate) fn register(
         &self,
-        batch: IoBatch,
+        r#use: IoUse,
         priority: IoPriority,
         stats: &mut ScanStats,
-    ) -> VortexResult<Vec<IoTicket>> {
+    ) -> VortexResult<IoTicket> {
         let mut cells = self.cells.borrow_mut();
-        let mut tickets = Vec::with_capacity(batch.uses().len());
-        for r#use in batch.uses() {
-            if !cells.contains_key(&r#use.key) {
-                stats.io_registered += 1;
-                let (cell, created) = self.service.register(r#use.key, priority);
-                if created {
-                    stats.io_requests += 1;
-                } else {
-                    stats.io_cell_hits += 1;
-                }
-                self.unsubmitted.borrow_mut().push(Arc::clone(&cell));
-                cells.insert(r#use.key, cell);
+        let outcome = if !cells.contains_key(&r#use.key) {
+            stats.io_registered += 1;
+            let (cell, created) = self.service.register(r#use.key, priority);
+            let outcome = if created {
+                stats.io_requests += 1;
+                IoUseOutcome::Requested
             } else {
                 stats.io_cell_hits += 1;
-                if priority == IoPriority::Required {
-                    cells[&r#use.key].required.store(true, Ordering::Release);
-                }
+                IoUseOutcome::SharedCell
+            };
+            self.unsubmitted.borrow_mut().push(Arc::clone(&cell));
+            cells.insert(r#use.key, cell);
+            outcome
+        } else {
+            stats.io_cell_hits += 1;
+            if priority == IoPriority::Required {
+                cells[&r#use.key].required.store(true, Ordering::Release);
             }
-            tickets.push(IoTicket(r#use.key));
+            IoUseOutcome::MorselCell
+        };
+        cells[&r#use.key].demands.lock().push(r#use.demand.clone());
+        if stats.tracing() {
+            let IoKey::Segment(segment) = r#use.key;
+            stats.record_event(TraceEventKind::IoUse {
+                segment: *segment,
+                extent: r#use.extent.clone(),
+                priority,
+                outcome,
+            });
         }
-        Ok(tickets)
+        Ok(IoTicket(r#use.key))
     }
 
     /// Take newly registered reads for submission to the scheduler.
@@ -585,6 +575,22 @@ impl IoPlane {
         ticket: IoTicket,
         stats: &mut ScanStats,
     ) -> VortexResult<Option<BufferHandle>> {
+        let (handle, outcome) = self.ready_inner(ticket, stats)?;
+        if stats.tracing() {
+            let IoKey::Segment(segment) = ticket.key();
+            stats.record_event(TraceEventKind::IoReady {
+                segment: *segment,
+                outcome,
+            });
+        }
+        Ok(handle)
+    }
+
+    fn ready_inner(
+        &self,
+        ticket: IoTicket,
+        stats: &mut ScanStats,
+    ) -> VortexResult<(Option<BufferHandle>, IoReadyOutcome)> {
         let cell = self
             .cells
             .borrow()
@@ -593,8 +599,11 @@ impl IoPlane {
             .ok_or_else(|| vortex_err!("IO ticket was accessed without registration"))?;
         let mut state = cell.state.lock();
         match &*state {
-            CellState::Ready(handle) => return Ok(Some(handle.clone())),
-            CellState::Requested { .. } => return Ok(None),
+            CellState::Ready(handle) => {
+                let bytes = handle.len();
+                return Ok((Some(handle.clone()), IoReadyOutcome::Ready { bytes }));
+            }
+            CellState::Requested { .. } => return Ok((None, IoReadyOutcome::InFlight)),
             CellState::Failed(error) => {
                 return Err(vortex_err!("segment read failed: {error}"));
             }
@@ -612,27 +621,30 @@ impl IoPlane {
                         .store(PROBE_SUPPORTED, Ordering::Release);
                     stats.nowait_hits += 1;
                     stats.io_bytes += handle.len() as u64;
+                    let bytes = handle.len();
                     *state = CellState::Ready(handle.clone());
                     drop(state);
                     cell.wake_waiters();
-                    return Ok(Some(handle));
+                    return Ok((Some(handle), IoReadyOutcome::NowaitHit { bytes }));
                 }
                 ReadAtNowait::WouldBlock => {
                     self.service
                         .probe_support
                         .store(PROBE_SUPPORTED, Ordering::Release);
                     stats.nowait_misses += 1;
+                    return Ok((None, IoReadyOutcome::NowaitMiss));
                 }
                 ReadAtNowait::Unsupported => {
                     self.service
                         .probe_support
                         .store(PROBE_UNSUPPORTED, Ordering::Release);
                     stats.nowait_unsupported += 1;
+                    return Ok((None, IoReadyOutcome::NowaitUnsupported));
                 }
             }
         }
 
-        Ok(None)
+        Ok((None, IoReadyOutcome::Unissued))
     }
 
     /// Drop every cell. Called between morsel batches to bound retained bytes.

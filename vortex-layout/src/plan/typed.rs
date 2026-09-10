@@ -7,6 +7,8 @@ use std::fmt;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::fmt::Formatter;
+use std::hash::Hash;
+use std::hash::Hasher;
 use std::marker::PhantomData;
 use std::ops::Deref;
 use std::sync::Arc;
@@ -38,6 +40,27 @@ struct PlanInner<D: ?Sized> {
 /// Shared, erased handle to a plan operator.
 #[derive(Clone)]
 pub struct PlanRef(Arc<PlanInner<dyn DynPlan>>);
+
+/// A plan cache key compared and hashed by its shared allocation, without traversing children.
+///
+/// Clones identify the same plan; independently allocated plans have different identities even
+/// when their structure is equal. Holding the key keeps the allocation alive.
+#[derive(Clone, Debug)]
+pub struct ExactPlan(pub PlanRef);
+
+impl PartialEq for ExactPlan {
+    fn eq(&self, other: &Self) -> bool {
+        PlanRef::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for ExactPlan {}
+
+impl Hash for ExactPlan {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        Arc::as_ptr(&self.0.0).cast::<()>().hash(state);
+    }
+}
 
 impl PlanRef {
     fn from_inner<V: PlanVTable>(inner: Arc<PlanInner<PlanData<V>>>) -> Self {

@@ -33,9 +33,9 @@ use vortex_layout::segments::SegmentSource;
 use vortex_session::VortexSession;
 
 use crate::build::build_plan;
+use crate::driver::MorselExecutor;
 use crate::driver::MorselScan;
 use crate::driver::morsels;
-use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
 use crate::stats::ScanStats;
 
@@ -211,8 +211,6 @@ pub struct MorselConfig {
     pub threads: usize,
     /// Morsel coalescing target; zero means "one morsel per natural split", matching V1.
     pub morsel_rows: u64,
-    /// Conjunct evaluation policy.
-    pub mode: ConjunctMode,
     /// Whether the leased shared decoded cells are enabled.
     pub share_decodes: bool,
     /// Morsels kept visible to background I/O beyond the active window on filtered scans.
@@ -232,7 +230,6 @@ impl Default for MorselConfig {
         Self {
             threads: 1,
             morsel_rows: 0,
-            mode: ConjunctMode::Cascade,
             share_decodes: true,
             lookahead_morsels: DEFAULT_LOOKAHEAD_MORSELS.load(Ordering::Relaxed),
         }
@@ -256,7 +253,6 @@ pub fn run_morsel(
         layout,
         &query.projection,
         query.filter.as_ref(),
-        config.mode,
     )?);
     let cut = morsels(&plan, config.morsel_rows);
     let scan = MorselScan::new(plan, session.clone())
@@ -274,6 +270,52 @@ pub fn run_morsel(
         time_to_first_batch: stats.time_to_first_batch,
         batches,
         wall,
+        stats: Some(stats),
+        source_io_requests: None,
+        source_io_bytes: None,
+    })
+}
+
+/// Time a complete pull scan, including plan construction, morsel cutting, and scan teardown.
+///
+/// The caller's Tokio runtime serves I/O and the shared CPU pool survives runs. Warm up before
+/// measuring so both V1 and pull use initialized workers. Fixture creation is outside timing.
+pub fn run_morsel_e2e(
+    runtime: &tokio::runtime::Runtime,
+    session: &VortexSession,
+    layout: &LayoutRef,
+    segments: &Arc<dyn SegmentSource>,
+    query: &Query,
+    config: MorselConfig,
+) -> VortexResult<RunOutcome> {
+    let start = Instant::now();
+    let _entered = runtime.enter();
+    let session = session.clone().with_handle(TokioRuntime::current());
+    let plan = Arc::new(build_plan(
+        layout,
+        &query.projection,
+        query.filter.as_ref(),
+    )?);
+    let cut = morsels(&plan, config.morsel_rows);
+    let executor = MorselExecutor::shared(Arc::clone(&plan), config.threads)?;
+    let scan = MorselScan::new(plan, session.clone())
+        .with_morsels(cut)
+        .with_share_decodes(config.share_decodes)
+        .with_lookahead_morsels(config.lookahead_morsels)
+        .connect(
+            &SegmentSourceDriver::new(Arc::clone(segments)),
+            &session.handle(),
+        )?;
+    let preparation = start.elapsed();
+    let (batches, stats) = executor.run(&scan)?;
+    drop(scan);
+    drop(executor);
+    let wall = start.elapsed();
+    Ok(RunOutcome {
+        rows: batches.iter().map(|batch| batch.len()).sum(),
+        batches,
+        wall,
+        time_to_first_batch: stats.time_to_first_batch.map(|first| preparation + first),
         stats: Some(stats),
         source_io_requests: None,
         source_io_bytes: None,

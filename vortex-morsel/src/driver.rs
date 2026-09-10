@@ -3,8 +3,8 @@
 
 //! Affinity-owned morsel execution over one shared asynchronous IO service.
 //!
-//! Each worker owns one arena and at most one active morsel. The arena never crosses a thread
-//! boundary. Planning registers named segment futures scan-wide. When execution reaches an exact
+//! Each worker owns one operator tree and at most one active morsel. The tree never crosses a
+//! thread boundary. Planning registers named segment futures scan-wide. When execution reaches an exact
 //! dependency, the owning worker drives the planned futures until that dependency is ready, then
 //! resumes the same morsel. Output order is restored by morsel index after all workers finish.
 
@@ -34,6 +34,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_error::vortex_panic;
 use vortex_io::runtime::Handle;
+use vortex_layout::plan::ExactPlan;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 use vortex_utils::aliases::hash_map::HashMap;
@@ -50,19 +51,13 @@ use crate::io::IoPriority;
 use crate::io::IoRead;
 use crate::io::IoService;
 use crate::io::NowaitProbe;
-use crate::node::Arena;
-use crate::node::ExecPoll;
-use crate::node::PlanPoll;
-use crate::node::ScanCaches;
-use crate::node::Value;
+use crate::node::Env;
+use crate::node::LookAhead;
+use crate::node::Step;
+use crate::node::Tree;
 use crate::node::Wait;
 use crate::node::WaitSet;
-use crate::node::begin_morsel;
-use crate::node::poll_execute_morsel;
-use crate::node::poll_plan_morsel;
-use crate::node::retire_morsel;
 use crate::source::IoAnswerer;
-use crate::stats::PollOutcome;
 use crate::stats::ScanStats;
 
 /// The morsel row ranges for a plan.
@@ -171,7 +166,8 @@ pub struct MorselExecutor {
 }
 
 enum ExecutorWorkers {
-    Inline(Mutex<Arena>),
+    /// Build and drive each morsel on the calling thread.
+    Inline,
     Pool(Arc<MorselWorkerPool>),
 }
 
@@ -185,7 +181,7 @@ struct WorkerRun {
     demands: Option<Arc<[Mask]>>,
     io: Arc<IoService>,
     cells: SharedCells,
-    dictionary_values: Box<[OnceLock<ArrayRef>]>,
+    dictionary_values: Mutex<HashMap<ExactPlan, ArrayRef>>,
     start: Instant,
     observe_timing: bool,
     observe_morsels: bool,
@@ -200,8 +196,8 @@ enum TaskPhase {
     Execute,
 }
 
-struct LocalMorsel<'a> {
-    arena: &'a mut Arena,
+struct LocalMorsel {
+    tree: Option<Tree>,
     worker: usize,
     io: IoPlane,
     phase: TaskPhase,
@@ -282,39 +278,23 @@ struct MorselWorkerPool {
 }
 
 impl MorselWorkerPool {
-    fn new(threads: usize, initial_plan: Option<Arc<ExecPlan>>) -> VortexResult<Self> {
+    fn new(threads: usize) -> VortexResult<Self> {
         let (ready_tx, ready_rx) = mpsc::channel();
         let mut workers = Vec::with_capacity(threads);
 
         for idx in 0..threads {
             let (message_tx, message_rx) = mpsc::channel();
             let ready_tx = ready_tx.clone();
-            let initial_plan = initial_plan.clone();
             let handle = std::thread::Builder::new()
                 .name(format!("vortex-morsel-{idx}"))
                 .spawn(move || {
-                    let mut arena = initial_plan.map(|plan| {
-                        let arena = plan.instantiate();
-                        (plan, arena)
-                    });
                     if ready_tx.send(()).is_err() {
                         return;
                     }
                     while let Ok(message) = message_rx.recv() {
                         match message {
                             WorkerMessage::Run { scheduler, done } => {
-                                if arena
-                                    .as_ref()
-                                    .is_none_or(|(plan, _)| !Arc::ptr_eq(plan, &scheduler.run.plan))
-                                {
-                                    let plan = Arc::clone(&scheduler.run.plan);
-                                    arena = Some((Arc::clone(&plan), plan.instantiate()));
-                                }
-                                let stats = arena
-                                    .as_mut()
-                                    .map_or_else(ScanStats::default, |(_, arena)| {
-                                        scheduler.worker_loop(idx, arena)
-                                    });
+                                let stats = scheduler.worker_loop(idx);
                                 drop(done.send(stats));
                             }
                             WorkerMessage::Shutdown => break,
@@ -433,7 +413,6 @@ impl Scheduler {
         self: &Arc<Self>,
         morsel: usize,
         reads: Vec<IoRead>,
-        complete: bool,
         blocked: bool,
     ) -> u64 {
         let local_batches = read_batch_count(&reads);
@@ -453,13 +432,11 @@ impl Scheduler {
             self.submit_reads_now(reads);
             return local_batches;
         }
-
         wave.reads.extend(reads);
-        if complete {
-            wave.completed += 1;
-        }
-        let should_flush = blocked || wave.completed == expected;
-        if !should_flush || wave.status != PlanningWaveStatus::Open {
+        wave.completed += usize::from(!blocked);
+        // A planning dependency must leave before the wave is complete, or the worker that
+        // would complete the wave would wait forever on its own unsubmitted read.
+        if (!blocked && wave.completed != expected) || wave.status != PlanningWaveStatus::Open {
             return local_batches;
         }
 
@@ -550,10 +527,16 @@ impl Scheduler {
         true
     }
 
-    fn wait(self: &Arc<Self>, morsel: usize, waits: &WaitSet, io: &IoPlane) -> VortexResult<()> {
+    fn wait(
+        self: &Arc<Self>,
+        morsel: usize,
+        waits: &WaitSet,
+        io: &IoPlane,
+        planning: bool,
+    ) -> VortexResult<()> {
         if waits.is_empty() {
             return Err(vortex_err!(
-                "execution blocked without naming an exact dependency"
+                "operator blocked without naming an exact dependency"
             ));
         }
 
@@ -570,7 +553,7 @@ impl Scheduler {
             self.run.io.promote(&read);
             targets.push(read);
         }
-        if self.run.demands.is_none() || self.workers == 1 {
+        if !planning && (self.run.demands.is_none() || self.workers == 1) {
             for read in io.required_reads() {
                 if !targets.iter().any(|target| target.key() == read.key()) {
                     targets.push(read);
@@ -602,13 +585,17 @@ impl Scheduler {
             }
 
             let mut target_pending = false;
+            let mut target_ready = false;
             for target in &targets {
                 if let Some(error) = target.failure() {
                     return Poll::Ready(Err(vortex_err!("segment read failed: {error}")));
                 }
-                target_pending |= target.park(cx.waker().clone());
+                let pending = target.park(cx.waker().clone());
+                target_pending |= pending;
+                target_ready |= !pending;
             }
-            if target_pending {
+            // Resume planning when any child can progress, even if a sibling is still blocked.
+            if target_pending && !(planning && target_ready) {
                 Poll::Pending
             } else {
                 Poll::Ready(Ok(()))
@@ -616,8 +603,8 @@ impl Scheduler {
         }))
     }
 
-    fn worker_loop(self: &Arc<Self>, worker: usize, arena: &mut Arena) -> ScanStats {
-        let mut morsel = LocalMorsel::new(&self.run, worker, arena);
+    fn worker_loop(self: &Arc<Self>, worker: usize) -> ScanStats {
+        let mut morsel = LocalMorsel::new(&self.run, worker);
         let mut runnable = morsel.assign_next(self);
 
         loop {
@@ -632,7 +619,12 @@ impl Scheduler {
                 Ok(LocalPoll::Runnable) => {}
                 Ok(LocalPoll::Blocked(waits)) => {
                     let wait_start = self.run.observe_timing.then(Instant::now);
-                    let result = self.wait(morsel.index, &waits, &morsel.io);
+                    let result = self.wait(
+                        morsel.index,
+                        &waits,
+                        &morsel.io,
+                        matches!(morsel.phase, TaskPhase::Plan),
+                    );
                     if let Some(wait_start) = wait_start {
                         morsel.stats.worker_io_wait_time += wait_start.elapsed();
                     }
@@ -793,10 +785,10 @@ enum LocalPoll {
     },
 }
 
-impl<'a> LocalMorsel<'a> {
-    fn new(run: &WorkerRun, worker: usize, arena: &'a mut Arena) -> Self {
+impl LocalMorsel {
+    fn new(run: &WorkerRun, worker: usize) -> Self {
         Self {
-            arena,
+            tree: None,
             worker,
             io: IoPlane::new(Arc::clone(&run.io)),
             phase: TaskPhase::Plan,
@@ -857,7 +849,12 @@ impl<'a> LocalMorsel<'a> {
             );
         }
         self.io.clear();
-        begin_morsel(self.arena, scheduler.run.plan.root(), range);
+        self.tree = Some(
+            scheduler
+                .run
+                .plan
+                .instantiate_with_demand(range, self.demand.clone()),
+        );
         true
     }
 
@@ -867,78 +864,70 @@ impl<'a> LocalMorsel<'a> {
             TaskPhase::Plan => {
                 self.stats.plan_polls += 1;
                 let phase_start = scheduler.run.observe_timing.then(Instant::now);
-                let poll = poll_plan_morsel(
-                    self.arena,
-                    scheduler.run.plan.root(),
-                    &self.demand,
-                    &self.io,
-                    ScanCaches::new(&scheduler.run.cells, &scheduler.run.dictionary_values),
-                    &mut self.stats,
-                )?;
+                let (result, waits) = self
+                    .tree
+                    .as_mut()
+                    .vortex_expect("active morsel has a tree")
+                    .look_ahead(
+                        self.range.clone(),
+                        &self.demand,
+                        Env {
+                            io: &self.io,
+                            cells: &scheduler.run.cells,
+                            dictionaries: &scheduler.run.dictionary_values,
+                            session: &scheduler.run.session,
+                            stats: &mut self.stats,
+                        },
+                    )?;
                 if let Some(phase_start) = phase_start {
                     self.stats.planning_time += phase_start.elapsed();
-                }
-                if scheduler.run.observe_morsels {
-                    self.stats.record_poll(match &poll {
-                        PlanPoll::Blocked(waits) => PollOutcome::PlanBlocked(wait_keys(waits)),
-                        PlanPoll::Complete => PollOutcome::PlanComplete,
-                    });
                 }
                 self.stats.io_batches += scheduler.submit_planning_reads(
                     self.index,
                     self.io.take_reads(),
-                    matches!(poll, PlanPoll::Complete),
-                    matches!(poll, PlanPoll::Blocked(_)),
+                    result == LookAhead::Blocked,
                 );
-                match poll {
-                    PlanPoll::Blocked(waits) => Ok(LocalPoll::Blocked(waits)),
-                    PlanPoll::Complete => {
-                        self.stats.morsels += 1;
-                        self.stats.morsel_rows += self.demand.len() as u64;
-                        self.stats.selected_rows += self.demand.true_count() as u64;
-                        self.phase = TaskPhase::Execute;
-                        Ok(LocalPoll::Runnable)
-                    }
+                if result == LookAhead::Blocked {
+                    return Ok(LocalPoll::Blocked(waits));
                 }
+                self.stats.morsels += 1;
+                self.stats.morsel_rows += self.demand.len() as u64;
+                self.stats.selected_rows += self.demand.true_count() as u64;
+                self.phase = TaskPhase::Execute;
+                Ok(LocalPoll::Runnable)
             }
             TaskPhase::Execute => {
                 self.stats.execute_polls += 1;
                 let phase_start = scheduler.run.observe_timing.then(Instant::now);
-                let poll = poll_execute_morsel(
-                    self.arena,
-                    scheduler.run.plan.root(),
-                    &self.demand,
-                    &self.io,
-                    ScanCaches::new(&scheduler.run.cells, &scheduler.run.dictionary_values),
-                    &scheduler.run.session,
-                    &mut self.stats,
-                )?;
+                let (poll, waits) = self
+                    .tree
+                    .as_mut()
+                    .vortex_expect("active morsel has a tree")
+                    .next(
+                        self.range.clone(),
+                        &self.demand,
+                        Env {
+                            io: &self.io,
+                            cells: &scheduler.run.cells,
+                            dictionaries: &scheduler.run.dictionary_values,
+                            session: &scheduler.run.session,
+                            stats: &mut self.stats,
+                        },
+                    )?;
                 if let Some(phase_start) = phase_start {
                     self.stats.execution_time += phase_start.elapsed();
                 }
-                if scheduler.run.observe_morsels {
-                    self.stats.record_poll(match &poll {
-                        ExecPoll::Value(batch) => PollOutcome::ExecuteValue(match &batch.value {
-                            Value::Array(array) => array.len() as u64,
-                            Value::Mask(mask) => mask.true_count() as u64,
-                        }),
-                        ExecPoll::Blocked(waits) => PollOutcome::ExecuteBlocked(wait_keys(waits)),
-                        ExecPoll::Yield(_) => PollOutcome::ExecuteYield,
-                        ExecPoll::Done => PollOutcome::ExecuteDone,
-                    });
-                }
                 match poll {
-                    ExecPoll::Value(batch) => {
+                    Step::Batch(batch) => {
                         let array = batch.value.into_array()?;
                         let array = (!array.is_empty()).then_some(array);
                         self.finish_morsel(scheduler, array)
                     }
-                    ExecPoll::Yield(_) => Ok(LocalPoll::Runnable),
-                    ExecPoll::Blocked(waits) => {
+                    Step::Blocked => {
                         self.stats.execute_io_blocks += 1;
                         Ok(LocalPoll::Blocked(waits))
                     }
-                    ExecPoll::Done => self.finish_morsel(scheduler, None),
+                    Step::Finished => self.finish_morsel(scheduler, None),
                 }
             }
         }
@@ -950,12 +939,21 @@ impl<'a> LocalMorsel<'a> {
         batch: Option<ArrayRef>,
     ) -> VortexResult<LocalPoll> {
         let retire_start = scheduler.run.observe_timing.then(Instant::now);
-        retire_morsel(
-            self.arena,
-            scheduler.run.plan.root(),
-            &scheduler.run.cells,
-            &mut self.stats,
-        );
+        self.tree
+            .as_mut()
+            .vortex_expect("active morsel has a tree")
+            .close(
+                self.range.clone(),
+                &self.demand,
+                Env {
+                    io: &self.io,
+                    cells: &scheduler.run.cells,
+                    dictionaries: &scheduler.run.dictionary_values,
+                    session: &scheduler.run.session,
+                    stats: &mut self.stats,
+                },
+            );
+        drop(self.tree.take());
         if let Some(retire_start) = retire_start {
             self.stats.retire_time += retire_start.elapsed();
         }
@@ -1202,16 +1200,13 @@ impl MorselScan {
 }
 
 impl MorselExecutor {
-    /// Create a reusable executor with initialized per-worker arenas.
+    /// Create an executor with workers ready to build and drive morsels.
     pub fn new(plan: Arc<ExecPlan>, threads: usize) -> VortexResult<Self> {
         let threads = threads.max(1);
         let workers = if threads == 1 {
-            ExecutorWorkers::Inline(Mutex::new(plan.instantiate()))
+            ExecutorWorkers::Inline
         } else {
-            ExecutorWorkers::Pool(Arc::new(MorselWorkerPool::new(
-                threads,
-                Some(Arc::clone(&plan)),
-            )?))
+            ExecutorWorkers::Pool(Arc::new(MorselWorkerPool::new(threads)?))
         };
         Ok(Self {
             plan,
@@ -1231,12 +1226,12 @@ impl MorselExecutor {
 
         let threads = threads.max(1);
         let workers = if threads == 1 {
-            ExecutorWorkers::Inline(Mutex::new(plan.instantiate()))
+            ExecutorWorkers::Inline
         } else {
             let (pool, shared_threads) = POOL
                 .get_or_init(|| {
                     let shared_threads = get_available_parallelism().unwrap_or(1).max(1);
-                    MorselWorkerPool::new(shared_threads, None)
+                    MorselWorkerPool::new(shared_threads)
                         .map(|pool| (Arc::new(pool), shared_threads))
                         .map_err(|err| err.to_string())
                 })
@@ -1310,7 +1305,7 @@ impl MorselExecutor {
             demands: scan.demands.clone(),
             io: Arc::clone(&scan.io),
             cells,
-            dictionary_values: (0..scan.plan.len()).map(|_| OnceLock::new()).collect(),
+            dictionary_values: Mutex::new(HashMap::default()),
             start,
             observe_timing,
             observe_morsels,
@@ -1330,9 +1325,7 @@ impl MorselExecutor {
             Duration::default()
         };
         let worker_stats = match &self.workers {
-            ExecutorWorkers::Inline(arena) => {
-                vec![scheduler.worker_loop(0, &mut arena.lock())]
-            }
+            ExecutorWorkers::Inline => vec![scheduler.worker_loop(0)],
             ExecutorWorkers::Pool(workers) => workers.run(Arc::clone(&scheduler), threads)?,
         };
         let (batches, mut stats) = scheduler.finish(worker_stats)?;
@@ -1438,21 +1431,115 @@ impl MorselExecutor {
 }
 
 /// The cells a wait set names, for the morsel trace.
-fn wait_keys(waits: &WaitSet) -> Vec<IoKey> {
-    waits
-        .waits()
-        .iter()
-        .map(|Wait::Io(ticket)| ticket.key())
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    use std::time::Instant;
+
+    use parking_lot::Mutex;
+    use vortex_array::array_session;
+    use vortex_array::buffer::BufferHandle;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::StructFields;
+    use vortex_buffer::ByteBuffer;
+    use vortex_error::VortexResult;
+    use vortex_error::vortex_err;
+    use vortex_layout::plan::PackPlan;
+    use vortex_layout::segments::SegmentId;
     use vortex_mask::Mask;
 
+    use super::Scheduler;
+    use super::WorkerRun;
     use super::demanding_morsels;
     use super::overlapping_morsels;
     use super::should_sort_reads_by_segment;
+    use crate::ExecPlan;
+    use crate::RowDomain;
+    use crate::cells::SharedCells;
+    use crate::io::IoDemand;
+    use crate::io::IoKey;
+    use crate::io::IoPlane;
+    use crate::io::IoPriority;
+    use crate::io::IoService;
+    use crate::io::IoUse;
+    use crate::io::ProducerId;
+    use crate::node::Wait;
+    use crate::stats::ScanStats;
+
+    #[test]
+    fn blocked_look_ahead_flushes_reads_and_waits_for_any_dependency() -> VortexResult<()> {
+        let (service, mut requests) = IoService::new();
+        let plan = PackPlan::try_new(
+            StructFields::empty(),
+            Nullability::NonNullable,
+            2,
+            vec![],
+            None,
+        )?;
+        let scheduler = Scheduler::new(
+            Arc::new(WorkerRun {
+                plan: Arc::new(ExecPlan::from_plan(plan.into_plan())?),
+                session: array_session(),
+                morsels: Arc::from([0..1, 1..2]),
+                demands: None,
+                io: Arc::clone(&service),
+                cells: SharedCells::disabled(),
+                dictionary_values: Mutex::default(),
+                start: Instant::now(),
+                observe_timing: false,
+                observe_morsels: false,
+                lookahead_morsels: 0,
+                completion: None,
+                cancellation: None,
+            }),
+            2,
+        );
+        let io = IoPlane::new(Arc::clone(&service));
+        let domain = RowDomain::new(0..1, Mask::new_true(1))?;
+        let mut tickets = Vec::new();
+        for id in 0..2 {
+            tickets.push(io.register(
+                IoUse {
+                    key: IoKey::Segment(SegmentId::from(id)),
+                    extent: 0..1,
+                    producer: ProducerId(id),
+                    demand: domain.demand(0..1)?,
+                },
+                IoPriority::Required,
+                &mut ScanStats::default(),
+            )?);
+        }
+        // Only one of the wave's two morsels has planned; its dependency must still be submitted.
+        scheduler.submit_planning_reads(0, io.take_reads(), true);
+        let IoDemand::Start(batch) = requests.try_recv().map_err(|err| vortex_err!("{err}"))?
+        else {
+            return Err(vortex_err!("blocked look-ahead did not submit its reads"));
+        };
+        assert_eq!(batch.len(), 2);
+        service.completions().complete(
+            tickets[0].key(),
+            Ok(BufferHandle::new_host(ByteBuffer::empty())),
+        );
+
+        let worker_scheduler = Arc::clone(&scheduler);
+        let (done_tx, done_rx) = mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let io = IoPlane::new(Arc::clone(&worker_scheduler.run.io));
+            let waits = tickets.into_iter().map(Wait::Io).collect();
+            drop(done_tx.send(worker_scheduler.wait(0, &waits, &io, true)));
+        });
+        let result = done_rx.recv_timeout(Duration::from_secs(2));
+        // Also release the worker if a regression made it wait for both dependencies.
+        scheduler.stop();
+        worker
+            .join()
+            .map_err(|_| vortex_err!("waiting worker panicked"))?;
+        result
+            .map_err(|_| vortex_err!("look-ahead did not resume after its first dependency"))??;
+        Ok(())
+    }
 
     #[test]
     fn counts_overlapping_sorted_morsels() {

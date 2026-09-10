@@ -21,6 +21,7 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_session::registry::CachedId;
 use vortex_session::registry::ReadContext;
+use vortex_utils::aliases::hash_map::HashMap;
 
 use super::*;
 use crate::LayoutRef;
@@ -1083,5 +1084,20 @@ fn nullable_struct_keeps_expression_above_parent_validity() -> VortexResult<()> 
         .as_opt::<Eval>()
         .ok_or_else(|| vortex_err!("Nullable struct expression unexpectedly pushed down"))?;
     assert!(eval.child_plan()?.is::<Pack>());
+    Ok(())
+}
+
+#[test]
+fn exact_plan_keys_use_allocation_identity() -> VortexResult<()> {
+    let dtype = primitive(PType::I32, Nullability::NonNullable);
+    let first = ExactPlan(lower(&flat(4, dtype.clone(), 0))?);
+    let same = first.clone();
+    let distinct = ExactPlan(lower(&flat(4, dtype, 0))?);
+    let mut values = HashMap::default();
+    values.insert(first, 10);
+    values.insert(distinct.clone(), 20);
+    assert_eq!(values.len(), 2);
+    assert_eq!(values.get(&same), Some(&10));
+    assert_eq!(values.get(&distinct), Some(&20));
     Ok(())
 }

@@ -68,7 +68,6 @@ use vortex_morsel::harness::run_morsel;
 use vortex_morsel::harness::run_v1;
 use vortex_morsel::harness::run_v1_tokio;
 use vortex_morsel::harness::run_v1_tokio_with;
-use vortex_morsel::nodes::ConjunctMode;
 use vortex_morsel::tpch;
 use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
@@ -91,10 +90,6 @@ impl Row {
             Row::V1Single => "A  V1 (1 thread)".to_string(),
             Row::V1Tokio(threads) => format!("A' V1 (tokio x{threads})"),
             Row::Morsel(config) => {
-                let mode = match config.mode {
-                    ConjunctMode::Cascade => "",
-                    ConjunctMode::Parallel => ", parallel",
-                };
                 let morsel = if config.morsel_rows == 0 {
                     "splits".to_string()
                 } else {
@@ -105,7 +100,7 @@ impl Row {
                 } else {
                     ", no-reuse"
                 };
-                format!("D  morsel (x{}, {morsel}{mode}{reuse})", config.threads)
+                format!("D  morsel (x{}, {morsel}{reuse})", config.threads)
             }
         }
     }
@@ -422,14 +417,9 @@ fn main() -> VortexResult<()> {
         None => SegmentBackend::Memory(Arc::clone(&segments)),
     };
 
-    let splits = vortex_morsel::build_plan(
-        &fixture.layout,
-        &queries_probe(),
-        None,
-        ConjunctMode::Cascade,
-    )
-    .map(|plan| plan.natural_splits().len())
-    .unwrap_or(0);
+    let splits = vortex_morsel::build_plan(&fixture.layout, &queries_probe(), None)
+        .map(|plan| plan.natural_splits().len())
+        .unwrap_or(0);
     println!(
         "lineitem SF={scale}: {} rows ({generated_rows} generated), {ncolumns} columns,          {splits} natural splits; generated in {}, written in {}",
         fixture.row_count,

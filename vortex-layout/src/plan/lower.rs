@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! Test support for constructing physical plans from stored layout trees.
+//! Constructing physical plans from stored layout trees.
 //!
-//! This module is only used to build physical-plan fixtures for tests. It is not a production
-//! planning API.
+//! This is the interim lowering used by tests and by the morsel executor until every layout
+//! lowers itself through its vtable.
 
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
@@ -24,6 +24,8 @@ use crate::layouts::list::OFFSETS_CHILD_INDEX;
 use crate::layouts::list::VALIDITY_CHILD_INDEX;
 use crate::layouts::struct_::Struct;
 use crate::layouts::struct_::StructLayout;
+use crate::layouts::zoned::LegacyStats;
+use crate::layouts::zoned::Zoned;
 use crate::plan::ConcatPlan;
 use crate::plan::ListPackPlan;
 use crate::plan::PackPlan;
@@ -32,11 +34,19 @@ use crate::plan::PlanRef;
 use crate::plan::SegmentScanPlan;
 use crate::plan::TakePlan;
 
-/// Constructs a physical-plan fixture from `layout` for tests.
+/// Constructs a physical plan from `layout`.
 ///
 /// The root operator is built immediately. Its child container owns a hidden clone of the source
-/// layout and lowers each child independently on first access.
+/// layout and lowers each child independently on first access. Zoned and legacy-statistics
+/// layouts are transparent: no operator prunes on statistics yet, so both lower to their data
+/// child.
 pub fn lower(layout: &LayoutRef) -> VortexResult<PlanRef> {
+    if layout.is::<Zoned>() || layout.is::<LegacyStats>() {
+        let data = layout
+            .slot(0)?
+            .ok_or_else(|| vortex_err!("Zoned layout has no data child"))?;
+        return lower(&data);
+    }
     if let Some(layout) = layout.as_opt::<Flat>() {
         return Ok(lower_flat(layout).into_plan());
     }

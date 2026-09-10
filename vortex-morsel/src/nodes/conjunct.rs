@@ -2,238 +2,145 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::ops::BitAnd;
-use std::ops::Range;
 
 use vortex_array::VortexSessionExecute;
 use vortex_array::expr::BoundExpression;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
-use crate::build::NodeBlueprint;
-use crate::node::ChildPoll;
-use crate::node::ExecCx;
-use crate::node::ExecNode;
-use crate::node::ExecPoll;
-use crate::node::NodeId;
-use crate::node::PlanCx;
-use crate::node::PlanPoll;
-use crate::node::RetireCx;
-use crate::node::Value;
-use crate::node::ValueBatch;
+use crate::demand::RowDomain;
+use crate::node::Batch;
+use crate::node::Child;
+use crate::node::Cx;
+use crate::node::LookAhead;
+use crate::node::Operator;
+use crate::node::Step;
 use crate::node::filter_rows;
 use crate::nodes::EXPR_EVAL_THRESHOLD;
 
 /// One conjunct: the subtree producing its input, and the predicate applied to that input.
 pub struct ConjunctSlot {
-    /// The node producing the fields this predicate reads.
-    pub input: NodeId,
+    /// The subtree producing the fields this predicate reads.
+    pub input: Child,
     /// The predicate, bound to the input subtree's output dtype.
     pub predicate: BoundExpression,
 }
 
-/// How the conjuncts of one filter relate to each other.
+/// The mask producer of a filtered scan: a cascade of predicate evaluations.
 ///
-/// This is the whole of the cascade-versus-parallel policy: the operators are identical, only
-/// the demand each conjunct sees differs.
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-pub enum ConjunctMode {
-    /// Each conjunct sees the mask the previous one produced, and an all-false mask ends the
-    /// morsel early. Fewer rows read; a serial dependency between conjuncts.
-    Cascade,
-    /// Every conjunct sees the incoming mask, and the results are intersected. More rows read;
-    /// no dependency between conjuncts.
-    Parallel,
-}
-
-/// The blueprint of a conjunct node: each conjunct's input subtree and bound predicate.
-pub struct ConjunctSpec {
-    /// One entry per conjunct.
-    pub slots: Vec<(NodeId, BoundExpression)>,
-    /// How the conjuncts relate.
-    pub mode: ConjunctMode,
-}
-
-impl NodeBlueprint for ConjunctSpec {
-    fn instantiate(&self, _id: NodeId) -> Box<dyn ExecNode> {
-        Box::new(ConjunctExec::new(
-            self.slots
-                .iter()
-                .map(|(input, predicate)| ConjunctSlot {
-                    input: *input,
-                    predicate: predicate.clone(),
-                })
-                .collect(),
-            self.mode,
-        ))
-    }
-}
-
-/// The demand spine: predicate evaluations feeding one intersection.
+/// Each conjunct is evaluated under the mask the previous one produced, and an all-false mask
+/// ends the morsel early, as the V1 reader does. Its range is the morsel and its hint is the
+/// morsel demand; the root passes both. It answers once per morsel; the root buffers the mask
+/// for every filter that reads it.
 pub struct ConjunctExec {
     slots: Vec<ConjunctSlot>,
-    mode: ConjunctMode,
 
-    // Per-morsel state.
-    range: Range<u64>,
-    exec_cursor: usize,
-    incoming: Option<Mask>,
-    mask: Option<Mask>,
-    done: bool,
-    children: Vec<NodeId>,
+    domain: RowDomain,
+    state: State,
+}
+
+enum State {
+    Evaluating { slot: usize, mask: Mask },
+    Emitted,
 }
 
 impl ConjunctExec {
-    /// Build a conjunct node.
-    pub fn new(slots: Vec<ConjunctSlot>, mode: ConjunctMode) -> Self {
-        let children = slots.iter().map(|slot| slot.input).collect();
+    /// Build a conjunct operator over its slots, evaluated in order.
+    pub fn new(slots: Vec<ConjunctSlot>, domain: RowDomain) -> Self {
+        let mask = domain.snapshot();
         Self {
             slots,
-            mode,
-            range: 0..0,
-            exec_cursor: 0,
-            incoming: None,
-            mask: None,
-            done: false,
-            children,
+            domain,
+            state: State::Evaluating { slot: 0, mask },
         }
-    }
-
-    /// Evaluate one conjunct under `incoming`, returning the refined mask.
-    fn eval(
-        &self,
-        idx: usize,
-        incoming: &Mask,
-        cx: &mut ExecCx<'_>,
-    ) -> VortexResult<ChildPoll<Mask>> {
-        let slot = &self.slots[idx];
-
-        // The regime switch: over a sparse selection, reduce the input to the selected rows and
-        // evaluate only those; over a dense one, evaluate the whole range and intersect. Same
-        // choice the V1 flat reader makes. The input comes back dense either way; the hint only
-        // lets its leaves skip reads, and this node applies the selection it holds.
-        let sparse = incoming.density() < EXPR_EVAL_THRESHOLD;
-        let child_hint = if sparse {
-            incoming.clone()
-        } else {
-            Mask::new_true(incoming.len())
-        };
-
-        let input = match cx.child_array(slot.input, child_hint)? {
-            ChildPoll::Value(input) => input,
-            ChildPoll::Blocked(waits) => return Ok(ChildPoll::Blocked(waits)),
-            ChildPoll::Done => {
-                return Err(vortex_err!(
-                    "conjunct input {} produced no value",
-                    slot.input
-                ));
-            }
-        };
-        let array = if sparse {
-            filter_rows(input, incoming.clone())?
-        } else {
-            input
-        };
-        let array = array.apply_bound(&slot.predicate)?;
-        let mut ctx = cx.session().create_execution_ctx();
-        let predicate_mask = array.null_as_false().execute(&mut ctx)?;
-
-        Ok(ChildPoll::Value(if sparse {
-            incoming.intersect_by_rank(&predicate_mask)
-        } else {
-            incoming.bitand(&predicate_mask)
-        }))
     }
 }
 
-impl ExecNode for ConjunctExec {
-    fn reset(&mut self, range: Range<u64>) {
-        self.range = range;
-        self.exec_cursor = 0;
-        self.incoming = None;
-        self.mask = None;
-        self.done = false;
+impl Operator for ConjunctExec {
+    fn row_domain(&self) -> &RowDomain {
+        &self.domain
     }
 
-    fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
-        // Emit-once planning: every conjunct's IO is named up front, whatever the mode. Under
-        // cascade a later conjunct may turn out not to be needed, but a use is named before its
-        // demand is known — refining it after emission is P2's cancellation path, not a reason
-        // to defer naming it here.
-        for slot in &self.slots {
-            if let PlanPoll::Blocked(waits) = cx.plan_child(slot.input, self.range.clone())? {
-                return Ok(PlanPoll::Blocked(waits));
-            }
+    fn look_ahead(&mut self, cx: &mut Cx<'_>) -> VortexResult<LookAhead> {
+        let mut result = LookAhead::Complete;
+        for slot in &mut self.slots {
+            result = result.merge(slot.input.look_ahead(cx)?);
         }
-        Ok(PlanPoll::Complete)
+        Ok(result)
     }
 
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-        if self.done {
-            return Ok(ExecPoll::Done);
-        }
-        if self.incoming.is_none() {
-            let incoming = cx.hint().clone();
-            self.mask = Some(incoming.clone());
-            self.incoming = Some(incoming);
-        }
-
-        while self.exec_cursor < self.slots.len() {
-            let eval_demand = match self.mode {
-                ConjunctMode::Cascade => self.mask.as_ref(),
-                ConjunctMode::Parallel => self.incoming.as_ref(),
-            }
-            .vortex_expect("execution masks initialized")
-            .clone();
-            if self.mode == ConjunctMode::Cascade && eval_demand.all_false() {
-                cx.stats().conjuncts_short_circuited +=
-                    (self.slots.len() - self.exec_cursor) as u64;
-                self.exec_cursor = self.slots.len();
-                break;
-            }
-
-            match self.eval(self.exec_cursor, &eval_demand, cx)? {
-                ChildPoll::Value(refined) => {
-                    if self.mode == ConjunctMode::Parallel {
-                        self.mask = Some(
-                            self.mask
-                                .take()
-                                .vortex_expect("execution mask initialized")
-                                .bitand(&refined),
-                        );
-                    } else {
-                        self.mask = Some(refined);
+    fn next(&mut self, _hint: &Mask, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        match &mut self.state {
+            State::Emitted => Ok(Step::Finished),
+            State::Evaluating { slot, mask } => {
+                while *slot < self.slots.len() {
+                    if mask.all_false() {
+                        cx.stats().conjuncts_short_circuited += (self.slots.len() - *slot) as u64;
+                        break;
                     }
-                    self.exec_cursor += 1;
+
+                    // The regime switch: over a sparse selection, reduce the input to the
+                    // selected rows and evaluate only those; over a dense one, evaluate the
+                    // whole range and intersect. Same choice the V1 flat reader makes. The input
+                    // comes back dense either way; the hint only lets its leaves skip reads.
+                    let eval_demand = mask.clone();
+                    let sparse = eval_demand.density() < EXPR_EVAL_THRESHOLD;
+                    let child_hint = if sparse {
+                        eval_demand.clone()
+                    } else {
+                        Mask::new_true(eval_demand.len())
+                    };
+                    let current = &mut self.slots[*slot];
+                    let input = match current.input.next(&child_hint, cx)? {
+                        Step::Batch(batch) => batch.value.into_array()?,
+                        Step::Blocked => return Ok(Step::Blocked),
+                        Step::Finished => {
+                            return Err(vortex_err!(
+                                "conjunct input {} produced no value",
+                                current.input.id()
+                            ));
+                        }
+                    };
+                    let input = if sparse {
+                        filter_rows(input, eval_demand.clone())?
+                    } else {
+                        input
+                    };
+                    let predicate = input.apply_bound(&current.predicate)?;
+                    let mut ctx = cx.session().create_execution_ctx();
+                    let predicate_mask = predicate.null_as_false().execute(&mut ctx)?;
+                    *mask = if sparse {
+                        eval_demand.intersect_by_rank(&predicate_mask)
+                    } else {
+                        eval_demand.bitand(&predicate_mask)
+                    };
+                    *slot += 1;
+                    for remaining in &self.slots[*slot..] {
+                        remaining.input.row_domain().refine(mask)?;
+                    }
                 }
-                ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
-                ChildPoll::Done => {
-                    return Err(vortex_err!(
-                        "conjunct {} produced no value",
-                        self.exec_cursor
-                    ));
-                }
+
+                let mask = mask.clone();
+                self.state = State::Emitted;
+                Ok(Step::Batch(Batch::mask(self.domain.range().clone(), mask)))
             }
         }
-
-        let mask = self.mask.take().vortex_expect("execution mask initialized");
-        self.incoming = None;
-        self.done = true;
-
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.range.clone(),
-            value: Value::Mask(mask),
-        }))
     }
 
-    fn retire(&mut self, cx: &mut RetireCx<'_>) {
-        for &child in &self.children {
-            cx.retire_child(child);
+    fn close(&mut self, cx: &mut Cx<'_>) {
+        for slot in &mut self.slots {
+            slot.input.close(cx);
         }
+        self.state = State::Emitted;
     }
 
-    fn children(&self) -> &[NodeId] {
-        &self.children
+    fn describe(&self) -> String {
+        let slots: Vec<String> = self
+            .slots
+            .iter()
+            .map(|slot| format!("{} over node {}", slot.predicate, slot.input.id()))
+            .collect();
+        format!("Conjunct({})", slots.join("; "))
     }
 }

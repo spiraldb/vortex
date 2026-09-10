@@ -4,8 +4,9 @@ An experimental morsel-driven scan executor for Vortex layouts — the P1 spine 
 `docs/developer-guide/internals/scan-execution-models/morsel-based-plan-execution.md`.
 
 A scan is cut into *morsels* (contiguous root row ranges). Each morsel is driven by a tree of
-stateful `ExecNode` state machines, inline and depth-first, by one affinity-owning worker.
-`next_plan` *names* reads by registering keyed uses against the IO plane. `execute` can try a
+stateful `Operator` state machines, inline and depth-first, by one affinity-owning worker.
+`look_ahead` names reads by registering keyed uses with live row demand through `Cx`. It can
+block on dependencies needed to discover further reads. `next` can try a
 caller-provided non-blocking probe for a required ticket; on a miss the read is handed out as
 required demand and the morsel suspends on that exact ticket until it is completed.
 
@@ -39,6 +40,17 @@ with every configuration validated against V1's output before timing.
 
 ```bash
 cargo run --release -p vortex-morsel --features _test-harness --bin morsel-eval
+```
+
+Set `MORSEL_EVAL_E2E=1` to compare V1 and pull from reader/plan construction through the complete
+scan and scan teardown. This includes expression binding, morsel cutting, and look-ahead.
+Fixture generation and output validation are outside the timer; worker pools are warmed up.
+The fixtures use in-memory segment sources, so these timings do not measure disk or network
+latency. The default evaluation without this switch times execution after plan construction.
+
+```bash
+MORSEL_EVAL_E2E=1 MORSEL_EVAL_THREADS=4 MORSEL_EVAL_ROWS=1000000 \
+  MORSEL_EVAL_ITERATIONS=11 target/release/morsel-eval
 ```
 
 ## Scan observability

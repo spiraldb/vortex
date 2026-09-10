@@ -11323,6 +11323,7 @@ dependencies = [
  "tpchgen",
  "tpchgen-arrow",
  "tracing",
+ "tracing-subscriber",
  "vortex",
  "vortex-array",
  "vortex-arrow",

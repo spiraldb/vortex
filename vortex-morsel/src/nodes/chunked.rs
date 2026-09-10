@@ -5,242 +5,183 @@ use std::ops::Range;
 use std::sync::Arc;
 
 use vortex_array::ArrayRef;
-use vortex_array::Canonical;
-use vortex_array::IntoArray;
-use vortex_array::arrays::ChunkedArray;
 use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 
-use crate::build::NodeBlueprint;
-use crate::node::ChildPoll;
-use crate::node::ExecCx;
-use crate::node::ExecNode;
-use crate::node::ExecPoll;
-use crate::node::NodeId;
-use crate::node::PlanCx;
-use crate::node::PlanPoll;
-use crate::node::RetireCx;
-use crate::node::Value;
-use crate::node::ValueBatch;
+use crate::demand::RowDomain;
+use crate::node::Batch;
+use crate::node::Child;
+use crate::node::Cx;
+use crate::node::LookAhead;
+use crate::node::Operator;
+use crate::node::Step;
+use crate::node::concat_parts;
 
 /// One overlap between the morsel's range and a chunk.
 #[derive(Clone, Debug)]
 struct Cut {
-    child: usize,
-    /// Rows within the chunk.
-    chunk_range: Range<u64>,
-    /// The slice of the demand mask that covers this overlap.
+    chunk: usize,
+    /// The slice of the hint that covers this overlap.
     mask_range: Range<usize>,
-}
-
-/// The blueprint of a chunked node.
-pub struct ChunkedSpec {
-    /// Cumulative row offsets, one more than the number of chunks.
-    pub chunk_offsets: Arc<[u64]>,
-    /// Original chunk index of each materialized child.
-    pub child_chunks: Arc<[usize]>,
-    /// The materialized children, in chunk order.
-    pub children: Arc<[NodeId]>,
-    /// The column's dtype, for empty output.
-    pub dtype: DType,
-}
-
-impl NodeBlueprint for ChunkedSpec {
-    fn instantiate(&self, _id: NodeId) -> Box<dyn ExecNode> {
-        Box::new(ChunkedExec::new(
-            Arc::clone(&self.chunk_offsets),
-            Arc::clone(&self.child_chunks),
-            Arc::clone(&self.children),
-            self.dtype.clone(),
-        ))
-    }
 }
 
 /// Chunked has no runtime existence beyond cutting: it turns one range into per-chunk ranges and
 /// wraps the children's outputs back up in chunk order.
 ///
 /// The cut is `partition_point` plus a walk of the overlapping chunks — chunks outside the
-/// morsel are arithmetic that never ran, not objects that were created and discarded.
+/// morsel are arithmetic that never ran, not objects that were created and discarded. Look-ahead visits all cut children even if some block; completed children are skipped on
+/// subsequent calls. Execution keeps its own cut cursor.
 pub struct ChunkedExec {
+    /// Cumulative chunk offsets, ending at the row count.
     chunk_offsets: Arc<[u64]>,
-    /// Original chunk index for each materialized child.
-    child_chunks: Arc<[usize]>,
-    children: Arc<[NodeId]>,
+    /// One slot per chunk; `None` where a range-scoped plan left the chunk unmaterialized.
+    children: Vec<Option<Child>>,
     dtype: DType,
 
-    // Per-morsel state.
-    range: Range<u64>,
+    domain: RowDomain,
     cuts: Vec<Cut>,
-    /// Index into `cuts` of the child currently being planned.
-    /// The cut whose child is being planned; a blocked child leaves it in place.
-    plan_cursor: usize,
-    exec_cursor: usize,
-    parts: Vec<ArrayRef>,
-    missing_chunk: Option<usize>,
-    done: bool,
+    state: State,
+}
+
+enum State {
+    Pulling { cut: usize, parts: Vec<ArrayRef> },
+    Emitted,
 }
 
 impl ChunkedExec {
-    /// Build a chunked node from cumulative chunk offsets and its materialized children.
+    /// Build a chunked operator from cumulative chunk offsets and one child per chunk.
     pub fn new(
         chunk_offsets: Arc<[u64]>,
-        child_chunks: Arc<[usize]>,
-        children: Arc<[NodeId]>,
+        children: Vec<Option<Child>>,
         dtype: DType,
-    ) -> Self {
-        debug_assert_eq!(child_chunks.len(), children.len());
-        debug_assert!(child_chunks.is_sorted());
-        Self {
+        domain: RowDomain,
+    ) -> VortexResult<Self> {
+        debug_assert_eq!(chunk_offsets.len(), children.len() + 1);
+        let mut op = Self {
             chunk_offsets,
-            child_chunks,
             children,
             dtype,
-            range: 0..0,
+            domain,
             cuts: Vec::new(),
-            plan_cursor: 0,
-            exec_cursor: 0,
-            parts: Vec::new(),
-            missing_chunk: None,
-            done: false,
-        }
+            state: State::Pulling {
+                cut: 0,
+                parts: Vec::new(),
+            },
+        };
+        op.cut()?;
+        Ok(op)
     }
 
-    fn cut(&mut self) {
-        self.cuts.clear();
-        if self.range.is_empty() {
-            return;
+    fn cut(&mut self) -> VortexResult<()> {
+        if self.domain.range().is_empty() {
+            return Ok(());
         }
 
         let offsets = &self.chunk_offsets;
         let first = offsets
-            .partition_point(|&offset| offset <= self.range.start)
+            .partition_point(|&offset| offset <= self.domain.range().start)
             .saturating_sub(1);
         let mut mask_start = 0usize;
         for chunk in first..offsets.len().saturating_sub(1) {
             let chunk_start = offsets[chunk];
             let chunk_end = offsets[chunk + 1];
-            if chunk_start >= self.range.end {
+            if chunk_start >= self.domain.range().end {
                 break;
             }
-            let overlap_start = self.range.start.max(chunk_start);
-            let overlap_end = self.range.end.min(chunk_end);
+            let overlap_start = self.domain.range().start.max(chunk_start);
+            let overlap_end = self.domain.range().end.min(chunk_end);
             if overlap_start >= overlap_end {
                 continue;
             }
             let len = usize::try_from(overlap_end - overlap_start)
                 .vortex_expect("chunk overlap fits usize");
-            let Ok(child) = self.child_chunks.binary_search(&chunk) else {
-                self.missing_chunk = Some(chunk);
-                return;
-            };
+            if self.children[chunk].is_none() {
+                return Err(vortex_err!(
+                    "morsel range {:?} reaches chunk {chunk}, which was not materialized in the plan",
+                    self.domain.range()
+                ));
+            }
             self.cuts.push(Cut {
-                child,
-                chunk_range: overlap_start - chunk_start..overlap_end - chunk_start,
+                chunk,
                 mask_range: mask_start..mask_start + len,
             });
             mask_start += len;
         }
+        Ok(())
     }
 }
 
-impl ExecNode for ChunkedExec {
-    fn reset(&mut self, range: Range<u64>) {
-        self.range = range;
-        self.plan_cursor = 0;
-        self.exec_cursor = 0;
-        self.parts.clear();
-        self.missing_chunk = None;
-        self.done = false;
-        self.cut();
+impl Operator for ChunkedExec {
+    fn row_domain(&self) -> &RowDomain {
+        &self.domain
     }
 
-    fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
-        if let Some(chunk) = self.missing_chunk {
-            return Err(vortex_err!(
-                "morsel range {:?} reaches chunk {chunk}, which was not materialized in the plan",
-                self.range
-            ));
+    fn look_ahead(&mut self, cx: &mut Cx<'_>) -> VortexResult<LookAhead> {
+        let mut result = LookAhead::Complete;
+        for cut in &self.cuts {
+            let child = self.children[cut.chunk]
+                .as_mut()
+                .vortex_expect("cut chunk is built");
+            result = result.merge(child.look_ahead(cx)?);
         }
-        // The cursor is what makes a block resumable: a cut whose child cannot name its reads
-        // yet leaves the cursor on it, and the next poll continues there.
-        while self.plan_cursor < self.cuts.len() {
-            let cut = self.cuts[self.plan_cursor].clone();
-            let child_hint = slice_mask(cx.hint(), cut.mask_range.clone());
-            match cx.plan_child_with_hint(self.children[cut.child], cut.chunk_range, child_hint)? {
-                PlanPoll::Complete => self.plan_cursor += 1,
-                PlanPoll::Blocked(waits) => return Ok(PlanPoll::Blocked(waits)),
-            }
-        }
-        Ok(PlanPoll::Complete)
+        Ok(result)
     }
 
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll> {
-        if self.done {
-            return Ok(ExecPoll::Done);
-        }
-
-        if self.cuts.is_empty() {
-            self.done = true;
-            return Ok(ExecPoll::Value(ValueBatch {
-                coverage: self.range.clone(),
-                value: Value::Array(Canonical::empty(&self.dtype).into_array()),
-            }));
-        }
-
-        // Every cut is executed, hinted with its slice of the rows the parent expects to need.
-        // A cut whose slice is all-false comes back as placeholder rows from its leaf, so the
-        // concatenation stays dense without this node knowing which chunks were read.
-        let hint = cx.hint().clone();
-        if self.parts.capacity() < self.cuts.len() {
-            self.parts
-                .reserve(self.cuts.len().saturating_sub(self.parts.len()));
-        }
-        while self.exec_cursor < self.cuts.len() {
-            let cut = self.cuts[self.exec_cursor].clone();
-            let child_hint = slice_mask(&hint, cut.mask_range);
-            let child = self.children[cut.child];
-            match cx.child_array(child, child_hint)? {
-                ChildPoll::Value(array) => {
-                    if !array.is_empty() {
-                        self.parts.push(array);
+    fn next(&mut self, hint: &Mask, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        match &mut self.state {
+            State::Emitted => Ok(Step::Finished),
+            State::Pulling { cut, parts } => {
+                // Every cut is pulled with its slice of the parent's hint. A cut nobody wants
+                // comes back as placeholder rows from its leaf, or empty from the filter above
+                // it, so the concatenation is consistent without this operator knowing which
+                // chunks were read.
+                while *cut < self.cuts.len() {
+                    let c = &self.cuts[*cut];
+                    let child_hint = slice_mask(hint, c.mask_range.clone());
+                    let child = self.children[c.chunk]
+                        .as_mut()
+                        .vortex_expect("cut chunk is built");
+                    match child.next(&child_hint, cx)? {
+                        Step::Batch(batch) => {
+                            let array = batch.value.into_array()?;
+                            if !array.is_empty() {
+                                parts.push(array);
+                            }
+                            *cut += 1;
+                        }
+                        Step::Blocked => return Ok(Step::Blocked),
+                        Step::Finished => {
+                            return Err(vortex_err!("chunk {} produced no value", c.chunk));
+                        }
                     }
-                    self.exec_cursor += 1;
                 }
-                ChildPoll::Blocked(waits) => return Ok(ExecPoll::Blocked(waits)),
-                ChildPoll::Done => {
-                    return Err(vortex_err!("chunked child {child} produced no value"));
-                }
+                let array = concat_parts(std::mem::take(parts), &self.dtype)?;
+                self.state = State::Emitted;
+                Ok(Step::Batch(Batch::array(
+                    self.domain.range().clone(),
+                    array,
+                )))
             }
-        }
-
-        let array = match self.parts.len() {
-            0 => Canonical::empty(&self.dtype).into_array(),
-            1 => self.parts.pop().vortex_expect("one part"),
-            _ => {
-                let parts = std::mem::take(&mut self.parts);
-                let dtype = parts[0].dtype().clone();
-                ChunkedArray::try_new(parts, dtype)?.into_array()
-            }
-        };
-        self.done = true;
-
-        Ok(ExecPoll::Value(ValueBatch {
-            coverage: self.range.clone(),
-            value: Value::Array(array),
-        }))
-    }
-
-    fn retire(&mut self, cx: &mut RetireCx<'_>) {
-        for cut in std::mem::take(&mut self.cuts) {
-            cx.retire_child(self.children[cut.child]);
         }
     }
 
-    fn children(&self) -> &[NodeId] {
-        &self.children
+    fn close(&mut self, cx: &mut Cx<'_>) {
+        for child in self.children.iter_mut().flatten() {
+            child.close(cx);
+        }
+        self.state = State::Emitted;
+    }
+
+    fn describe(&self) -> String {
+        let offsets: Vec<String> = self.chunk_offsets.iter().map(u64::to_string).collect();
+        format!(
+            "Chunked({} chunks at {})",
+            self.chunk_offsets.len().saturating_sub(1),
+            offsets.join(" ")
+        )
     }
 }
 

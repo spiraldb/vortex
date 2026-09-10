@@ -12,6 +12,8 @@
 // only makes the generators harder to read.
 #![allow(clippy::cast_possible_truncation)]
 
+mod look_ahead;
+
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -33,9 +35,11 @@ use vortex_array::aggregate_fn::fns::all_non_distinct::all_non_distinct;
 use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::assert_arrays_eq;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
+use vortex_array::expr::BoundExpression;
 use vortex_array::expr::and;
 use vortex_array::expr::eq;
 use vortex_array::expr::get_item;
@@ -62,6 +66,15 @@ use vortex_layout::layouts::dict::writer::DictStrategy;
 use vortex_layout::layouts::flat::Flat;
 use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
 use vortex_layout::layouts::struct_::Struct;
+use vortex_layout::plan::Concat;
+use vortex_layout::plan::ConcatPlan;
+use vortex_layout::plan::Eval;
+use vortex_layout::plan::EvalPlan;
+use vortex_layout::plan::FilterPlan;
+use vortex_layout::plan::Pack;
+use vortex_layout::plan::PlanRef;
+use vortex_layout::plan::lower;
+use vortex_layout::plan::optimize;
 use vortex_layout::scan::scan_builder::ScanBuilder;
 use vortex_layout::segments::ReadAtNowait;
 use vortex_layout::segments::SegmentFuture;
@@ -72,16 +85,16 @@ use vortex_mask::Mask;
 use vortex_scan::selection::Selection;
 use vortex_session::VortexSession;
 
+use crate::ExecPlan;
 use crate::IoAnswerer;
 use crate::IoDemand;
-use crate::LayoutCx;
-use crate::LayoutPlanner;
-use crate::LayoutPlanners;
+use crate::MorselExecutor;
 use crate::MorselScan;
 use crate::MorselScanExecutor;
 use crate::ScanCancellation;
 use crate::SegmentSourceDriver;
 use crate::build_plan;
+use crate::build_plan_for_ranges;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
@@ -93,10 +106,10 @@ use crate::harness::concat;
 use crate::harness::run_morsel;
 use crate::harness::run_v1;
 use crate::io_trace::RecordingSegmentSource;
-use crate::layouts::FlatPlanner;
 use crate::morsels;
-use crate::node::NodeId;
-use crate::nodes::ConjunctMode;
+use crate::stats::IoUseOutcome;
+use crate::stats::TraceEventKind;
+use crate::stats::TracePhase;
 
 fn session() -> VortexSession {
     array_session()
@@ -422,12 +435,7 @@ fn document_misalignment_case() -> VortexResult<()> {
     assert_same_rows(&session, &dtype, &left, &v1)?;
 
     // The morsel cut must be the union of both columns' boundaries.
-    let plan = build_plan(
-        &fixture.layout,
-        &query.projection,
-        query.filter.as_ref(),
-        ConjunctMode::Cascade,
-    )?;
+    let plan = build_plan(&fixture.layout, &query.projection, query.filter.as_ref())?;
     assert_eq!(plan.natural_splits(), &[3, 6, 10]);
 
     let projection = query.projection.bind(fixture.layout.dtype())?;
@@ -444,9 +452,7 @@ fn document_misalignment_case() -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn scan_builder_pull_matches_v1_for_dictionary_layout_runs() -> VortexResult<()> {
-    let session = session();
+fn dictionary_fixture(session: &VortexSession) -> VortexResult<Fixture> {
     let first = VarBinViewArray::from_iter_str([
         "alpha", "beta", "alpha", "gamma", "alpha", "beta", "gamma", "alpha",
     ])
@@ -455,7 +461,7 @@ fn scan_builder_pull_matches_v1_for_dictionary_layout_runs() -> VortexResult<()>
         "delta", "alpha", "delta", "beta", "alpha", "delta", "alpha", "beta",
     ])
     .into_array();
-    let fixture = block_on(|handle| async {
+    block_on(|handle| async {
         let write_session = session.clone().with_handle(handle);
         write_fixture_with(
             vec![Column::new("label", vec![first, second])],
@@ -463,7 +469,13 @@ fn scan_builder_pull_matches_v1_for_dictionary_layout_runs() -> VortexResult<()>
             &write_session,
         )
         .await
-    })?;
+    })
+}
+
+#[test]
+fn scan_builder_pull_matches_v1_for_dictionary_layout_runs() -> VortexResult<()> {
+    let session = session();
+    let fixture = dictionary_fixture(&session)?;
     let column = fixture
         .layout
         .slot(1)?
@@ -504,6 +516,41 @@ fn scan_builder_pull_matches_v1_for_dictionary_layout_runs() -> VortexResult<()>
     )
 }
 
+#[rstest]
+fn dictionary_morsels_keep_distinct_values(
+    #[values(1, 4)] threads: usize,
+    #[values(false, true)] filtered: bool,
+) -> VortexResult<()> {
+    let session = session();
+    let fixture = dictionary_fixture(&session)?;
+    let query = Query {
+        name: "dictionary-morsels",
+        projection: select(vec!["label"], root()),
+        filter: filtered.then(|| eq(get_item("label", root()), lit("alpha"))),
+    };
+    let expected = run_v1(&session, &fixture.layout, &fixture.segments, &query)?;
+    let plan = Arc::new(build_plan(
+        &fixture.layout,
+        &query.projection,
+        query.filter.as_ref(),
+    )?);
+    let executor = MorselExecutor::new(Arc::clone(&plan), threads)?;
+    let expected = concat(&expected.batches, plan.output_dtype())?;
+    for ranges in [vec![0..3, 3..8, 8..11, 11..16], vec![0..8, 8..16]] {
+        let scan = MorselScan::new(Arc::clone(&plan), session.clone())
+            .with_threads(threads)
+            .with_morsels(ranges)
+            .connect_on_thread(&SegmentSourceDriver::new(Arc::clone(&fixture.segments)))?;
+        let (batches, _) = executor.run(&scan)?;
+        assert_arrays_eq!(
+            concat(&batches, plan.output_dtype())?,
+            expected,
+            &mut session.create_execution_ctx()
+        );
+    }
+    Ok(())
+}
+
 /// Property: the result does not depend on how the scan is cut into morsels.
 #[rstest]
 fn independent_of_morsel_size(#[values(0, 1, 7, 128, 4096)] morsel_rows: u64) -> VortexResult<()> {
@@ -525,41 +572,6 @@ fn independent_of_morsel_size(#[values(0, 1, 7, 128, 4096)] morsel_rows: u64) ->
             },
         )?;
         assert_same_rows(&session, &dtype, &v1, &morsel)
-            .map_err(|err| err.with_context(format!("query {}", query.name)))?;
-    }
-    Ok(())
-}
-
-/// Property: cascade and parallel conjunct policies are observationally identical.
-#[rstest]
-fn conjunct_policy_is_not_observable() -> VortexResult<()> {
-    let session = session();
-    let fixture = misaligned_fixture(&session, ROWS)?;
-    let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
-
-    for query in queries() {
-        let dtype = v1_dtype(&fixture.layout, &query)?;
-        let cascade = run_morsel(
-            &session,
-            &fixture.layout,
-            &segments,
-            &query,
-            MorselConfig {
-                mode: ConjunctMode::Cascade,
-                ..Default::default()
-            },
-        )?;
-        let parallel = run_morsel(
-            &session,
-            &fixture.layout,
-            &segments,
-            &query,
-            MorselConfig {
-                mode: ConjunctMode::Parallel,
-                ..Default::default()
-            },
-        )?;
-        assert_same_rows(&session, &dtype, &cascade, &parallel)
             .map_err(|err| err.with_context(format!("query {}", query.name)))?;
     }
     Ok(())
@@ -1203,14 +1215,9 @@ fn rejects_unsupported_layouts() -> VortexResult<()> {
         .layout
         .slot(1)?
         .expect("the fixture root has a first field");
-    let err = build_plan(
-        &column,
-        &select(vec!["a"], root()),
-        None,
-        ConjunctMode::Cascade,
-    )
-    .err()
-    .expect("a chunked root must be rejected");
+    let err = build_plan(&column, &select(vec!["a"], root()), None)
+        .err()
+        .expect("a chunked root must be rejected");
     assert!(
         format!("{err}").contains("struct"),
         "unexpected error: {err}"
@@ -1227,12 +1234,7 @@ fn v1_dtype(layout: &LayoutRef, query: &Query) -> VortexResult<DType> {
 fn fixture_is_actually_misaligned() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
-    let plan = build_plan(
-        &fixture.layout,
-        &select(vec!["a", "b", "c"], root()),
-        None,
-        ConjunctMode::Cascade,
-    )?;
+    let plan = build_plan(&fixture.layout, &select(vec!["a", "b", "c"], root()), None)?;
     // Three columns cut into 3, 5 and 7 chunks share only the final boundary.
     assert!(
         plan.natural_splits().len() > 7,
@@ -1312,7 +1314,6 @@ fn cancelling_a_stalled_scan_releases_its_workers() -> VortexResult<()> {
         &fixture.layout,
         &select(vec!["a", "b", "c"], root()),
         None,
-        ConjunctMode::Cascade,
     )?);
     let cut = morsels(&plan, 0);
     let cancellation = ScanCancellation::new();
@@ -1336,90 +1337,22 @@ fn cancelling_a_stalled_scan_releases_its_workers() -> VortexResult<()> {
     Ok(())
 }
 
-/// A planner registered ahead of the built-ins owns the layouts it handles.
-struct CountingFlatPlanner {
-    planned: Arc<AtomicUsize>,
-}
-
-impl LayoutPlanner for CountingFlatPlanner {
-    fn handles(&self, layout: &LayoutRef) -> bool {
-        FlatPlanner.handles(layout)
-    }
-
-    fn natural_splits(
-        &self,
-        layout: &LayoutRef,
-        root_offset: u64,
-        cx: &mut crate::SplitCx<'_>,
-    ) -> VortexResult<()> {
-        FlatPlanner.natural_splits(layout, root_offset, cx)
-    }
-
-    fn plan(
-        &self,
-        layout: &LayoutRef,
-        root_offset: u64,
-        cx: &mut LayoutCx<'_>,
-    ) -> VortexResult<NodeId> {
-        self.planned.fetch_add(1, Ordering::Relaxed);
-        FlatPlanner.plan(layout, root_offset, cx)
-    }
-}
-
-#[rstest]
-fn registered_planners_take_precedence_and_missing_planners_are_errors() -> VortexResult<()> {
+/// A range-scoped plan materializes only the chunks its ranges reach, still knows every natural
+/// split, and knows which ranges it can serve.
+#[test]
+fn range_scoped_plans_prune_untouched_chunks() -> VortexResult<()> {
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
-    let query = Query {
-        name: "planner-registry",
-        projection: select(vec!["a", "b", "c"], root()),
-        filter: Some(gt(get_item("a", root()), lit(400i32))),
-    };
-
-    let planned = Arc::new(AtomicUsize::new(0));
-    let planners = LayoutPlanners::default().with(Arc::new(CountingFlatPlanner {
-        planned: Arc::clone(&planned),
-    }));
-    let plan = planners.build_plan(
-        &fixture.layout,
-        &query.projection,
-        query.filter.as_ref(),
-        ConjunctMode::Cascade,
-    )?;
-    let reference = build_plan(
-        &fixture.layout,
-        &query.projection,
-        query.filter.as_ref(),
-        ConjunctMode::Cascade,
-    )?;
-    assert_eq!(planned.load(Ordering::Relaxed), plan.flat_uses().count());
-    assert_eq!(plan.flat_uses().count(), reference.flat_uses().count());
-    assert_eq!(plan.natural_splits(), reference.natural_splits());
-    // The same registry cuts morsels and scopes plans, so a custom layout works everywhere.
-    assert_eq!(
-        planners.natural_morsels_for(&fixture.layout, &query.projection, None, 0)?,
-        crate::natural_morsels_for(&fixture.layout, &query.projection, None, 0)?
-    );
-    let scoped = planners.build_plan_for_ranges(
-        &fixture.layout,
-        &query.projection,
-        None,
-        ConjunctMode::Cascade,
-        &[0..10, 20..30],
-    )?;
+    let projection = select(vec!["a", "b", "c"], root());
+    let full = build_plan(&fixture.layout, &projection, None)?;
+    let scoped = build_plan_for_ranges(&fixture.layout, &projection, None, &[0..10, 20..30])?;
+    // Rows 0..30 touch only the first chunk of each column; the full plan reads every chunk.
+    assert_eq!(scoped.flat_uses().count(), 3);
+    assert_eq!(full.flat_uses().count(), 3 + 5 + 7);
+    assert_eq!(scoped.natural_splits(), full.natural_splits());
     assert!(scoped.supports_ranges(&[0..10, 20..30]));
     assert!(!scoped.supports_ranges(&[10..20, 20..30]));
-
-    let err = LayoutPlanners::empty()
-        .build_plan(
-            &fixture.layout,
-            &query.projection,
-            None,
-            ConjunctMode::Cascade,
-        )
-        .err()
-        .ok_or_else(|| vortex_err!("a plan without planners must fail"))?;
-    assert!(err.to_string().contains("no planner for layout"));
+    assert!(full.supports_ranges(&[10..20, 20..30]));
     Ok(())
 }
 
@@ -1475,7 +1408,6 @@ fn any_answerer_can_serve_a_scan() -> VortexResult<()> {
         &fixture.layout,
         &query.projection,
         query.filter.as_ref(),
-        ConjunctMode::Cascade,
     )?);
     let served = Arc::new(AtomicUsize::new(0));
     let answerer = MemoryAnswerer {
@@ -1504,7 +1436,7 @@ fn any_answerer_can_serve_a_scan() -> VortexResult<()> {
     Ok(())
 }
 
-/// The morsel cut a planner produces before any node exists matches the plan's natural splits.
+/// The morsel cut for a query matches the natural splits of the plan built for it.
 #[rstest]
 #[case::misaligned(true)]
 #[case::aligned(false)]
@@ -1516,12 +1448,7 @@ fn natural_morsels_match_the_plan(#[case] misaligned: bool) -> VortexResult<()> 
         aligned_fixture(&session, ROWS)?
     };
     for query in queries() {
-        let plan = build_plan(
-            &fixture.layout,
-            &query.projection,
-            query.filter.as_ref(),
-            ConjunctMode::Cascade,
-        )?;
+        let plan = build_plan(&fixture.layout, &query.projection, query.filter.as_ref())?;
         let cut = crate::natural_morsels_for(
             &fixture.layout,
             &query.projection,
@@ -1555,7 +1482,7 @@ fn natural_morsels_match_the_plan_for_dictionary_layouts() -> VortexResult<()> {
         .await
     })?;
     let projection = select(vec!["label"], root());
-    let plan = build_plan(&fixture.layout, &projection, None, ConjunctMode::Cascade)?;
+    let plan = build_plan(&fixture.layout, &projection, None)?;
     let cut = crate::natural_morsels_for(&fixture.layout, &projection, None, 0)?;
     assert_eq!(cut, morsels(&plan, 0));
     assert!(cut.len() > 1, "each dictionary chunk is its own morsel");
@@ -1572,12 +1499,7 @@ fn leaves_never_apply_the_selection(#[values(false, true)] filtered: bool) -> Vo
     let projection = select(vec!["a", "b", "c"], root());
     let predicate = gt(get_item("a", root()), lit(400i32));
     let filter = filtered.then(|| predicate.clone());
-    let plan = Arc::new(build_plan(
-        &fixture.layout,
-        &projection,
-        filter.as_ref(),
-        ConjunctMode::Cascade,
-    )?);
+    let plan = Arc::new(build_plan(&fixture.layout, &projection, filter.as_ref())?);
 
     // Every 37th row of each morsel: a sparse selection supplied by the caller.
     let cut = morsels(&plan, 0);
@@ -1642,12 +1564,7 @@ fn unwanted_chunks_are_not_decoded() -> VortexResult<()> {
     let fixture = misaligned_fixture(&session, ROWS)?;
     let projection = select(vec!["a", "b", "c"], root());
     let filter = lt(get_item("a", root()), lit(10i32));
-    let plan = Arc::new(build_plan(
-        &fixture.layout,
-        &projection,
-        Some(&filter),
-        ConjunctMode::Cascade,
-    )?);
+    let plan = Arc::new(build_plan(&fixture.layout, &projection, Some(&filter))?);
 
     // One morsel over the whole file, so every chunk of every column is in range.
     let scan = MorselScan::new(Arc::clone(&plan), session.clone())
@@ -1671,17 +1588,14 @@ fn unwanted_chunks_are_not_decoded() -> VortexResult<()> {
 
     // `a` is read whole for the predicate (three chunks); `b` and `c` only need their first.
     assert_eq!(stats.decodes, 3 + 1 + 1);
-    assert!(stats.rows_placeholder > 0);
+    assert!(stats.rows_skipped > 0);
     Ok(())
 }
 
-/// A readable trace of one morsel: the segments, the reads it named in the order the source
-/// saw them, what was decoded or stood in for, and what came out.
-///
-/// Run it with `cargo nextest run -p vortex-morsel trace_one_morsel --no-capture`.
-#[test]
-fn trace_one_morsel() -> VortexResult<()> {
-    // A second call in the same process is fine: the first subscriber stays installed.
+/// Morsel traces are only collected while something listens at DEBUG on the morsel target, so
+/// the trace tests install a subscriber first. A second call in the same process is fine: the
+/// first subscriber stays installed.
+fn install_trace_subscriber() {
     drop(
         tracing_subscriber::fmt()
             .with_max_level(tracing::Level::TRACE)
@@ -1690,6 +1604,16 @@ fn trace_one_morsel() -> VortexResult<()> {
             .with_test_writer()
             .try_init(),
     );
+}
+
+/// A readable trace of one morsel: the segments, the reads it named in the order the source
+/// saw them, every node call with its IO and return value, what was decoded or stood in for,
+/// and what came out.
+///
+/// Run it with `cargo nextest run -p vortex-morsel trace_one_morsel --no-capture`.
+#[test]
+fn trace_one_morsel() -> VortexResult<()> {
+    install_trace_subscriber();
     let session = session();
     let fixture = misaligned_fixture(&session, ROWS)?;
 
@@ -1741,16 +1665,10 @@ fn trace_one_morsel() -> VortexResult<()> {
     // SELECT a, b, c WHERE a < 10: one morsel over the whole file.
     let projection = select(vec!["a", "b", "c"], root());
     let filter = lt(get_item("a", root()), lit(10i32));
-    let plan = Arc::new(build_plan(
-        &fixture.layout,
-        &projection,
-        Some(&filter),
-        ConjunctMode::Cascade,
-    )?);
+    let plan = Arc::new(build_plan(&fixture.layout, &projection, Some(&filter))?);
     let splits: Vec<String> = plan.natural_splits().iter().map(u64::to_string).collect();
     println!(
-        "== plan == root node {}, {} rows, natural splits at {}",
-        plan.root(),
+        "== plan == {} rows, natural splits at {}",
         plan.row_count(),
         splits.join(" ")
     );
@@ -1778,10 +1696,10 @@ fn trace_one_morsel() -> VortexResult<()> {
         );
     }
 
-    println!("== morsel ==");
+    println!("== steps: every node call, its IO, and what it returned ==");
     for trace in &stats.morsel_traces {
-        for (n, outcome) in trace.polls.iter().enumerate() {
-            println!("  poll {}: {outcome}", n + 1);
+        for event in &trace.events {
+            println!("  {:indent$}{event}", "", indent = event.depth * 2);
         }
         println!(
             "  morsel {} rows {}..{}: plan polls {}, execute polls {}, named uses {}, requests {}, \
@@ -1801,11 +1719,12 @@ fn trace_one_morsel() -> VortexResult<()> {
         );
     }
     println!(
-        "  decodes {} (reused {}), rows from storage {}, placeholder rows {}, rows selected {}, \
-         empty morsels {}",
+        "  decodes {} (reused {}), rows from storage {}, rows skipped {}, placeholder rows {}, \
+         rows selected {}, empty morsels {}",
         stats.decodes,
         stats.decode_reuses,
         stats.rows_materialized,
+        stats.rows_skipped,
         stats.rows_placeholder,
         stats.rows_selected,
         stats.morsels_empty
@@ -1815,5 +1734,193 @@ fn trace_one_morsel() -> VortexResult<()> {
 
     assert_eq!(rows, 10);
     assert_eq!(stats.decodes, 3 + 1 + 1);
+    Ok(())
+}
+
+/// The same query over its natural morsels, one per chunk boundary, printed morsel by morsel:
+/// a morsel that straddles a segment another morsel already named joins that read instead of
+/// issuing its own, and one that runs after the segment was decoded reuses the values.
+///
+/// Run it with `cargo nextest run -p vortex-morsel trace_natural_morsels --no-capture`.
+#[test]
+fn trace_natural_morsels() -> VortexResult<()> {
+    install_trace_subscriber();
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let projection = select(vec!["a", "b", "c"], root());
+    let filter = lt(get_item("a", root()), lit(10i32));
+    let plan = Arc::new(build_plan(&fixture.layout, &projection, Some(&filter))?);
+    let recording = RecordingSegmentSource::new(Arc::clone(&fixture.segments));
+    let source = Arc::clone(&recording) as Arc<dyn SegmentSource>;
+    let scan = MorselScan::new(Arc::clone(&plan), session)
+        .with_threads(1)
+        .with_observability(true)
+        .connect_on_thread(&SegmentSourceDriver::new(source))?;
+    let (batches, stats) = scan.run()?;
+
+    println!("== reads, in the order the source saw them ==");
+    for demand in recording.demands() {
+        println!(
+            "  #{:<2} at +{:>5}us  segment {:>2}",
+            demand.ordinal,
+            demand.needed_at.as_micros(),
+            *demand.segment
+        );
+    }
+    let mut joined = 0;
+    let mut reused = 0;
+    for trace in &stats.morsel_traces {
+        println!(
+            "== morsel {} rows {}..{} on worker {} -> {} rows out ==",
+            trace.index, trace.row_start, trace.row_end, trace.worker, trace.output_rows
+        );
+        for event in &trace.events {
+            match &event.kind {
+                TraceEventKind::IoUse {
+                    outcome: IoUseOutcome::SharedCell,
+                    ..
+                } => joined += 1,
+                TraceEventKind::DecodeReuse { .. } => reused += 1,
+                _ => {}
+            }
+            println!("  {:indent$}{event}", "", indent = event.depth * 2);
+        }
+    }
+    let rows: usize = batches.iter().map(|batch| batch.len()).sum();
+    println!(
+        "== output == {} morsel(s), {} batch(es), {rows} rows; {joined} uses joined another \
+         morsel's read, {reused} decodes reused",
+        stats.morsel_traces.len(),
+        batches.len()
+    );
+
+    assert_eq!(rows, 10);
+    assert_eq!(stats.morsel_traces.len(), plan.natural_splits().len());
+    // Every segment is read exactly once however many morsels touch it.
+    assert_eq!(stats.io_requests, 15);
+    assert!(joined > 0);
+    assert!(reused > 0);
+    Ok(())
+}
+
+/// The number of `Eval` node executions below the root during a traced scan.
+fn eval_nodes_run(stats: &crate::ScanStats) -> usize {
+    stats
+        .morsel_traces
+        .iter()
+        .flat_map(|trace| trace.events.iter())
+        .filter(|event| {
+            matches!(
+                &event.kind,
+                TraceEventKind::Enter { phase: TracePhase::Execute, label, .. }
+                    if label.starts_with("Eval(")
+            )
+        })
+        .count()
+}
+
+/// Run `Eval(projection, Filter(input, mask))` as one morsel and check it against the V1 reader.
+fn check_plan_against_v1(
+    session: &VortexSession,
+    fixture: &Fixture,
+    query: &Query,
+    mask: PlanRef,
+    input: PlanRef,
+    projection: BoundExpression,
+) -> VortexResult<crate::ScanStats> {
+    install_trace_subscriber();
+    let filtered = FilterPlan::try_new(input, mask)?.into_plan();
+    let root = EvalPlan::try_new(projection, filtered)?.into_plan();
+    println!("scan plan:\n{}", root.display_tree());
+    let plan = Arc::new(ExecPlan::from_plan(root)?);
+    let segments = Arc::clone(&fixture.segments);
+    let whole = 0..ROWS as u64;
+    let scan = MorselScan::new(Arc::clone(&plan), session.clone())
+        .with_threads(1)
+        .with_morsels(vec![whole])
+        .with_observability(true)
+        .connect_on_thread(&SegmentSourceDriver::new(Arc::clone(&segments)))?;
+    let (batches, stats) = scan.run()?;
+    let actual = concat(&batches, plan.output_dtype())?;
+    let v1 = run_v1(session, &fixture.layout, &segments, query)?;
+    let expected = concat(&v1.batches, plan.output_dtype())?;
+    let mut ctx = session.create_execution_ctx();
+    assert_eq!(actual.len(), expected.len());
+    assert!(all_non_distinct(&actual, &expected, &mut ctx)?);
+    Ok(stats)
+}
+
+/// A mask plan rewritten by the layout crate's optimizer executes like the scoped one
+/// `build_plan` makes: whatever shape the rules leave, the executor lowers it.
+#[test]
+fn optimized_plans_execute_like_scoped_plans() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let dtype = fixture.layout.dtype().clone();
+    let query = Query {
+        name: "optimized",
+        projection: select(vec!["a", "b", "c"], root()),
+        filter: Some(lt(get_item("a", root()), lit(10i32))),
+    };
+    let filter = query
+        .filter
+        .clone()
+        .ok_or_else(|| vortex_err!("the query has a filter"))?;
+
+    let lowered = lower(&fixture.layout)?;
+    let mask = optimize(EvalPlan::try_new(filter.bind(&dtype)?, lowered.clone())?.into_plan())?;
+    println!("optimized mask:\n{}", mask.display_tree());
+    assert!(
+        mask.is::<Concat>(),
+        "the comparison is pushed into the chunks"
+    );
+
+    check_plan_against_v1(
+        &session,
+        &fixture,
+        &query,
+        mask,
+        lowered,
+        query.projection.bind(&dtype)?,
+    )?;
+    Ok(())
+}
+
+/// An `Eval` pushed below the root runs per chunk as its own node, so a predicate evaluated
+/// inside every chunk of a column gives the same rows as one evaluated over the whole morsel.
+#[test]
+fn eval_below_the_root_runs_per_chunk() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let dtype = fixture.layout.dtype().clone();
+    let query = Query {
+        name: "pushed-eval",
+        projection: select(vec!["a", "b", "c"], root()),
+        filter: Some(lt(get_item("a", root()), lit(10i32))),
+    };
+
+    // Concat(Eval($ < 10, chunk) for each chunk of column `a`), built by hand.
+    let lowered = lower(&fixture.layout)?;
+    let column = lowered.as_::<Pack>().child_required(0)?;
+    let comparison = lt(root(), lit(10i32)).bind(column.dtype())?;
+    let chunks = column
+        .as_::<Concat>()
+        .children()
+        .iter()
+        .map(|chunk| Ok(EvalPlan::try_new(comparison.clone(), chunk?)?.into_plan()))
+        .collect::<VortexResult<Vec<_>>>()?;
+    assert_eq!(chunks.len(), 3);
+    let mask = ConcatPlan::try_new(comparison.dtype().clone(), chunks)?.into_plan();
+    assert!(mask.child_required(0)?.is::<Eval>());
+
+    let stats = check_plan_against_v1(
+        &session,
+        &fixture,
+        &query,
+        mask,
+        lowered,
+        query.projection.bind(&dtype)?,
+    )?;
+    assert_eq!(eval_nodes_run(&stats), 3);
     Ok(())
 }

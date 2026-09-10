@@ -3,42 +3,321 @@
 
 //! Per-run counters. The eval matrix in the prototype plan records these per row.
 
+use std::fmt;
+use std::ops::Range;
 use std::time::Duration;
 
 use crate::io::IoKey;
+use crate::io::IoPriority;
+use crate::node::NodeId;
 
-/// What one top-level poll of a morsel's root returned.
+/// What one `look_ahead` or `next` call on an operator returned.
 #[derive(Clone, Debug)]
 pub enum PollOutcome {
-    /// `next_plan` could not name more reads until these cells are ready.
+    /// Look-ahead could not name more reads until one of these cells is ready.
     PlanBlocked(Vec<IoKey>),
-    /// `next_plan` named every read the morsel needs.
+    /// Look-ahead named every read the operator needs.
     PlanComplete,
-    /// `execute` produced the morsel's value with this many rows.
-    ExecuteValue(u64),
-    /// `execute` is waiting on these cells.
+    /// `next` produced a value covering these root rows.
+    ExecuteValue {
+        /// The root rows the value covers.
+        coverage: Range<u64>,
+        /// The value's shape.
+        value: ValueSummary,
+    },
+    /// `next` is waiting on these cells.
     ExecuteBlocked(Vec<IoKey>),
-    /// `execute` yielded without a value.
-    ExecuteYield,
-    /// `execute` had nothing left to produce.
-    ExecuteDone,
+    /// `next` had nothing left to produce.
+    ExecuteFinished,
 }
 
-impl std::fmt::Display for PollOutcome {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        fn cells(keys: &[IoKey]) -> String {
-            keys.iter()
-                .map(|IoKey::Segment(id)| format!("segment {}", **id))
-                .collect::<Vec<_>>()
-                .join(", ")
+/// The shape of a value a node produced.
+#[derive(Clone, Debug)]
+pub enum ValueSummary {
+    /// An array of this many rows and this dtype.
+    Array {
+        /// Row count.
+        rows: usize,
+        /// The array's dtype.
+        dtype: String,
+    },
+    /// A selection mask with this many rows set.
+    Mask {
+        /// Rows selected.
+        selected: usize,
+        /// Rows covered.
+        rows: usize,
+    },
+}
+
+impl fmt::Display for ValueSummary {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Array { rows, dtype } => write!(f, "array of {rows} rows, {dtype}"),
+            Self::Mask { selected, rows } => write!(f, "mask {selected}/{rows} selected"),
         }
+    }
+}
+
+/// Format a row range without going through `Debug`.
+pub fn rows(range: &Range<u64>) -> String {
+    format!("{}..{}", range.start, range.end)
+}
+
+fn cells(keys: &[IoKey]) -> String {
+    keys.iter()
+        .map(|IoKey::Segment(id)| format!("segment {}", **id))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+impl fmt::Display for PollOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::PlanBlocked(keys) => write!(f, "plan -> Blocked on {}", cells(keys)),
             Self::PlanComplete => write!(f, "plan -> Complete"),
-            Self::ExecuteValue(rows) => write!(f, "execute -> Value({rows} rows)"),
+            Self::ExecuteValue { coverage, value } => {
+                write!(f, "execute -> Value({value}, root rows {})", rows(coverage))
+            }
             Self::ExecuteBlocked(keys) => write!(f, "execute -> Blocked on {}", cells(keys)),
-            Self::ExecuteYield => write!(f, "execute -> Yield"),
-            Self::ExecuteDone => write!(f, "execute -> Done"),
+            Self::ExecuteFinished => write!(f, "execute -> Finished"),
+        }
+    }
+}
+
+/// Which operator method a trace event happened inside.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TracePhase {
+    /// [`Operator::look_ahead`](crate::node::Operator::look_ahead).
+    Plan,
+    /// [`Operator::next`](crate::node::Operator::next).
+    Execute,
+}
+
+impl fmt::Display for TracePhase {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Plan => f.write_str("plan"),
+            Self::Execute => f.write_str("execute"),
+        }
+    }
+}
+
+/// What registering one use of a stored unit found.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IoUseOutcome {
+    /// No morsel had named the unit: a new scan-wide read was created.
+    Requested,
+    /// The unit already had a scan-wide cell, from lookahead or another morsel; this morsel
+    /// joined it.
+    SharedCell,
+    /// This morsel had already named the unit through another node.
+    MorselCell,
+}
+
+impl fmt::Display for IoUseOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Requested => f.write_str("new read"),
+            Self::SharedCell => f.write_str("joined a read already registered scan-wide"),
+            Self::MorselCell => f.write_str("already named by this morsel"),
+        }
+    }
+}
+
+/// What an inline readiness check on a ticket found.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IoReadyOutcome {
+    /// The bytes had landed.
+    Ready {
+        /// Bytes in the segment.
+        bytes: usize,
+    },
+    /// The read is in flight and the bytes have not landed.
+    InFlight,
+    /// The read had not been handed out and the source offered no inline probe.
+    Unissued,
+    /// The source's non-blocking probe returned the bytes.
+    NowaitHit {
+        /// Bytes in the segment.
+        bytes: usize,
+    },
+    /// The source's non-blocking probe said the read would wait on storage.
+    NowaitMiss,
+    /// The source does not support non-blocking probes.
+    NowaitUnsupported,
+}
+
+impl fmt::Display for IoReadyOutcome {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Ready { bytes } => write!(f, "ready, {bytes} bytes"),
+            Self::InFlight => f.write_str("in flight, not ready"),
+            Self::Unissued => f.write_str("not issued yet"),
+            Self::NowaitHit { bytes } => write!(f, "nowait probe hit, {bytes} bytes"),
+            Self::NowaitMiss => f.write_str("nowait probe miss"),
+            Self::NowaitUnsupported => f.write_str("nowait probe unsupported"),
+        }
+    }
+}
+
+/// Why planning named no read for a stored unit.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum NoReadReason {
+    /// The hint said no row in the node's range will be looked at.
+    NothingWanted,
+    /// The scan already holds the decoded values in the shared cell.
+    AlreadyDecoded,
+}
+
+impl fmt::Display for NoReadReason {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NothingWanted => f.write_str("nothing in range is wanted"),
+            Self::AlreadyDecoded => f.write_str("values already decoded in the shared cell"),
+        }
+    }
+}
+
+/// The parent's row hint at the moment a node was called.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HintSummary {
+    /// Rows the hint covers.
+    pub rows: usize,
+    /// Rows the hint says will be looked at.
+    pub selected: usize,
+}
+
+/// One step of a morsel at node granularity, recorded when detailed observability is enabled.
+#[derive(Clone, Debug)]
+pub struct TraceEvent {
+    /// Nesting below the root: the root's own calls are at depth 0.
+    pub depth: usize,
+    /// The node the event belongs to.
+    pub node: NodeId,
+    /// What happened.
+    pub kind: TraceEventKind,
+}
+
+/// What one [`TraceEvent`] records.
+#[derive(Clone, Debug)]
+pub enum TraceEventKind {
+    /// The scheduler or a parent called this operator's `look_ahead` or `next`.
+    Enter {
+        /// Which method was called.
+        phase: TracePhase,
+        /// The node's own description of itself, including its morsel-local range.
+        label: String,
+        /// The hint the caller passed.
+        hint: HintSummary,
+    },
+    /// The call returned.
+    Return(PollOutcome),
+    /// Planning decided a stored unit need not be read for this morsel.
+    NoRead {
+        /// The segment not read.
+        segment: u32,
+        /// Why.
+        reason: NoReadReason,
+    },
+    /// Planning registered one use of a stored unit.
+    IoUse {
+        /// The segment named.
+        segment: u32,
+        /// The rows of the segment the use covers.
+        extent: Range<u64>,
+        /// The scheduler priority the use was registered under.
+        priority: IoPriority,
+        /// What registration found.
+        outcome: IoUseOutcome,
+    },
+    /// Execution asked whether a ticket's bytes were available.
+    IoReady {
+        /// The segment asked for.
+        segment: u32,
+        /// What the check found.
+        outcome: IoReadyOutcome,
+    },
+    /// The node decoded a segment's bytes into values.
+    Decode {
+        /// The segment decoded.
+        segment: u32,
+        /// Values decoded.
+        rows: usize,
+    },
+    /// The node took values from the shared decoded cell, published by an earlier decode of the
+    /// same segment in this or another morsel.
+    DecodeReuse {
+        /// The segment reused.
+        segment: u32,
+    },
+    /// The node stood in placeholder rows without reading, because nothing in them was wanted.
+    Placeholder {
+        /// Rows stood in.
+        rows: usize,
+    },
+    /// The node returned no rows without decoding, because its filter keeps none of them.
+    Skipped {
+        /// Rows left out.
+        rows: usize,
+    },
+    /// The scheduler or a parent retired this node.
+    Retire {
+        /// The node's own description of itself.
+        label: String,
+    },
+    /// Retiring released the morsel's lease on a stored unit.
+    Release {
+        /// The segment released.
+        segment: u32,
+    },
+}
+
+impl fmt::Display for TraceEvent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.kind {
+            TraceEventKind::Enter { phase, label, hint } => write!(
+                f,
+                "{phase} node {} {label}, hint {}/{}",
+                self.node, hint.selected, hint.rows
+            ),
+            TraceEventKind::Return(outcome) => write!(f, "{outcome}"),
+            TraceEventKind::NoRead { segment, reason } => {
+                write!(f, "no read for segment {segment}: {reason}")
+            }
+            TraceEventKind::IoUse {
+                segment,
+                extent,
+                priority,
+                outcome,
+            } => {
+                let priority = match priority {
+                    IoPriority::Required => "required",
+                    IoPriority::Speculative => "speculative",
+                };
+                write!(
+                    f,
+                    "io use segment {segment} rows {} ({priority}) -> {outcome}",
+                    rows(extent)
+                )
+            }
+            TraceEventKind::IoReady { segment, outcome } => {
+                write!(f, "io ready? segment {segment} -> {outcome}")
+            }
+            TraceEventKind::Decode { segment, rows } => {
+                write!(f, "decode segment {segment} -> {rows} values")
+            }
+            TraceEventKind::DecodeReuse { segment } => {
+                write!(f, "reuse segment {segment} from the shared decoded cell")
+            }
+            TraceEventKind::Placeholder { rows } => {
+                write!(f, "placeholder {rows} rows, no read")
+            }
+            TraceEventKind::Skipped { rows } => {
+                write!(f, "skipped {rows} rows, filter keeps none")
+            }
+            TraceEventKind::Retire { label } => write!(f, "retire node {} {label}", self.node),
+            TraceEventKind::Release { segment } => write!(f, "release lease on segment {segment}"),
         }
     }
 }
@@ -49,8 +328,8 @@ impl std::fmt::Display for PollOutcome {
 /// named by this morsel while physical request and byte totals remain scan-level counters.
 #[derive(Clone, Debug, Default)]
 pub struct MorselTrace {
-    /// What every top-level `next_plan` and `execute` poll returned, in order.
-    pub polls: Vec<PollOutcome>,
+    /// Every node call, return value, IO use, readiness check, decode, and release, in order.
+    pub events: Vec<TraceEvent>,
     /// Stable index in scan output order.
     pub index: usize,
     /// Executor worker that drove the morsel.
@@ -110,6 +389,9 @@ pub struct MorselTrace {
 pub struct ScanStats {
     /// Per-morsel work records, populated only when detailed observability is enabled.
     pub morsel_traces: Vec<MorselTrace>,
+    /// The nodes currently being driven for the morsel trace being written, root first. Empty
+    /// unless detailed observability is enabled.
+    trace_stack: Vec<NodeId>,
     /// Morsels driven.
     pub morsels: u64,
     /// Logical rows covered by all morsel ranges.
@@ -155,6 +437,8 @@ pub struct ScanStats {
     pub rows_materialized: u64,
     /// Rows leaves stood in for without reading, because their hint said nothing was wanted.
     pub rows_placeholder: u64,
+    /// Rows leaves left out without decoding, because their filter kept none of them.
+    pub rows_skipped: u64,
     /// Rows that survived the actual selection at the root.
     pub rows_selected: u64,
     /// Conjuncts skipped because the mask was already all-false.
@@ -221,6 +505,7 @@ impl ScanStats {
         self.decode_reuses += other.decode_reuses;
         self.rows_materialized += other.rows_materialized;
         self.rows_placeholder += other.rows_placeholder;
+        self.rows_skipped += other.rows_skipped;
         self.rows_selected += other.rows_selected;
         self.conjuncts_short_circuited += other.conjuncts_short_circuited;
         self.morsels_empty += other.morsels_empty;
@@ -268,8 +553,9 @@ impl ScanStats {
         row_end: u64,
         selected_rows: u64,
     ) {
+        self.trace_stack.clear();
         self.morsel_traces.push(MorselTrace {
-            polls: Vec::new(),
+            events: Vec::new(),
             index,
             worker,
             row_start,
@@ -295,11 +581,12 @@ impl ScanStats {
         });
     }
 
-    pub(crate) fn record_decode(&mut self, segment: u32) {
+    pub(crate) fn record_decode(&mut self, segment: u32, rows: usize) {
         self.decodes += 1;
         if let Some(trace) = self.morsel_traces.last_mut() {
             trace.decoded_segment_ids.push(segment);
         }
+        self.record_event(TraceEventKind::Decode { segment, rows });
     }
 
     pub(crate) fn record_decode_reuse(&mut self, segment: u32) {
@@ -307,13 +594,87 @@ impl ScanStats {
         if let Some(trace) = self.morsel_traces.last_mut() {
             trace.reused_segment_ids.push(segment);
         }
+        self.record_event(TraceEventKind::DecodeReuse { segment });
     }
 
-    /// Record what a top-level poll returned, on the morsel trace being written.
-    pub(crate) fn record_poll(&mut self, outcome: PollOutcome) {
+    pub(crate) fn record_placeholder(&mut self, rows: usize) {
+        self.rows_placeholder += rows as u64;
+        self.record_event(TraceEventKind::Placeholder { rows });
+    }
+
+    pub(crate) fn record_skipped(&mut self, rows: usize) {
+        self.rows_skipped += rows as u64;
+        self.record_event(TraceEventKind::Skipped { rows });
+    }
+
+    /// Whether a morsel trace is being written, so callers can skip building trace-only strings.
+    pub(crate) fn tracing(&self) -> bool {
+        !self.morsel_traces.is_empty()
+    }
+
+    /// Record a call into `node`, making it the node later events are attributed to.
+    pub(crate) fn record_enter(
+        &mut self,
+        node: NodeId,
+        phase: TracePhase,
+        label: String,
+        hint: HintSummary,
+    ) {
+        let Some(trace) = self.morsel_traces.last_mut() else {
+            return;
+        };
+        trace.events.push(TraceEvent {
+            depth: self.trace_stack.len(),
+            node,
+            kind: TraceEventKind::Enter { phase, label, hint },
+        });
+        self.trace_stack.push(node);
+    }
+
+    /// Record what the innermost call returned and hand attribution back to its caller.
+    pub(crate) fn record_return(&mut self, outcome: PollOutcome) {
+        let Some(node) = self.trace_stack.pop() else {
+            return;
+        };
         if let Some(trace) = self.morsel_traces.last_mut() {
-            trace.polls.push(outcome);
+            trace.events.push(TraceEvent {
+                depth: self.trace_stack.len(),
+                node,
+                kind: TraceEventKind::Return(outcome),
+            });
         }
+    }
+
+    /// Record that `node` is being retired; events until [`Self::record_retire_exit`] are its.
+    pub(crate) fn record_retire_enter(&mut self, node: NodeId, label: String) {
+        let Some(trace) = self.morsel_traces.last_mut() else {
+            return;
+        };
+        trace.events.push(TraceEvent {
+            depth: self.trace_stack.len(),
+            node,
+            kind: TraceEventKind::Retire { label },
+        });
+        self.trace_stack.push(node);
+    }
+
+    pub(crate) fn record_retire_exit(&mut self) {
+        self.trace_stack.pop();
+    }
+
+    /// Record an event against the node currently being driven.
+    pub(crate) fn record_event(&mut self, kind: TraceEventKind) {
+        let Some(trace) = self.morsel_traces.last_mut() else {
+            return;
+        };
+        let Some(node) = self.trace_stack.last().copied() else {
+            return;
+        };
+        trace.events.push(TraceEvent {
+            depth: self.trace_stack.len(),
+            node,
+            kind,
+        });
     }
 
     pub(crate) fn finish_morsel_trace(
@@ -393,7 +754,7 @@ mod tests {
         stats.io_requests += 1;
         stats.planning_time += Duration::from_micros(5);
         stats.execution_time += Duration::from_micros(11);
-        stats.record_decode(17);
+        stats.record_decode(17, 5);
         stats.record_decode_reuse(59);
         stats.finish_morsel_trace(3, 2, vec![17], Duration::from_micros(30));
 

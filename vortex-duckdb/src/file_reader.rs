@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use std::task::Poll;
 
 use futures::FutureExt;
 use object_store::registry::ObjectStoreRegistry;
@@ -98,17 +97,17 @@ fn resolve_filesystem(url: &Url) -> VortexResult<(FileSystemRef, String)> {
     ))
 }
 
-fn drive_runtime_once() {
-    let mut yielded = false;
-    RUNTIME.block_on(std::future::poll_fn(move |cx| {
-        if yielded {
-            Poll::Ready(())
-        } else {
-            yielded = true;
-            cx.waker().wake_by_ref();
-            Poll::Pending
-        }
-    }));
+/// Advance the current-thread runtime by running every task that is ready right now.
+///
+/// Morsel workers on DuckDB threads call this while they wait for segment I/O; the runtime has
+/// no threads of its own, so the I/O driver task only progresses when a waiting thread ticks it.
+/// Returns whether any task ran so the caller can park briefly instead of spinning.
+fn drive_runtime_once() -> bool {
+    let mut ran = false;
+    while RUNTIME.try_tick() {
+        ran = true;
+    }
+    ran
 }
 
 pub struct OpenFileReader {

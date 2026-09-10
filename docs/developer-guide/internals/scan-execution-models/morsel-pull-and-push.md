@@ -42,21 +42,23 @@ it asks its children for their values through `ExecCx::child_array` or `child_ma
 asks its own children, and values return up the call stack.
 
 ```text
-FilterExec::execute
-  └─ child_mask(conjunct)  ──►  ConjunctExec::execute
-  │                               └─ child_array(input) ──► StructExec ──► FlatExec (decode)
-  └─ child_array(projection) ──► StructExec::execute
+ProjectExec::execute
+  └─ child_array(body) ──► StructExec ──► ChunkedExec ──► FilterExec::execute
+                                            ├─ child_mask(mask node) ──► ConjunctExec::execute
+                                            │     └─ child_array(input) ──► StructExec ──► FlatExec (decode)
+                                            └─ child_array(leaf, hint = mask slice) ──► FlatExec (decode)
                                   └─ child_array(field)  ──► ChunkedExec ──► FlatExec (decode)
 ```
 
-- **A hint flows down, a mask flows up.** A node executes under a row hint its parent chose:
-  the rows the parent expects to need. The filter evaluates its predicate under the morsel's
-  own selection, then hints the projection with the resulting mask. Only the flat leaf reads
-  the hint: a chunk nobody wants is not read, and at execution the leaf answers with
-  placeholder rows of the right length instead of waiting for it. Every batch is therefore
-  dense over its range, chunked concatenates and struct zips without bookkeeping, and the
-  filter root applies the conjunct's boolean array once. A conjunct in cascade mode passes
-  each conjunct the mask the previous one produced.
+- **A hint flows down, the filter is a node.** A node executes under a row hint its parent
+  chose: the rows the parent expects to need. Only the flat leaf reads it, to skip a read nobody
+  wants. The selection itself is not a parameter of anything: the plan's `Filter` is pushed to
+  the leaves at planning, so every segment scan under it sits below its own filter node, and all
+  of them read one mask node, the conjunct, which evaluates the predicate once per morsel from
+  the morsel's own demand and answers every filter with the same mask. A filter slices the mask
+  to its rows, hands the slice down as the hint, keeps the selected rows of what comes back, and
+  returns empty without touching the leaf when the slice keeps nothing. A conjunct in cascade
+  mode passes each conjunct the mask the previous one produced.
 - **Blocking unwinds the stack.** When a leaf finds its cell not ready it returns
   `ExecPoll::Blocked(waits)` naming the exact ticket; every ancestor returns the same, the
   worker parks, and on wake the root is polled again. Each node keeps a cursor so it resumes
@@ -135,11 +137,11 @@ contract on `ExecNode` grows from five methods to ten, plus a defaulted benchmar
 
 | Step | Pull | Push |
 | --- | --- | --- |
-| Plan | Filter names `a` (required) then `b` (speculative). | Same planning stream. `a` becomes a predicate source, `b` a deferred projection source. |
-| Start | Root `execute` runs; filter asks the conjunct for a mask. | The runtime activates `a`'s source with all rows; `b` waits for a gate. |
-| Predicate | Conjunct asks `a`'s subtree for an array hinted with the morsel's rows, applies `a > 400`, returns the mask. | `a`'s source decodes and pushes one batch to the conjunct's port; the conjunct evaluates `a > 400` on arrival and pushes the mask to the filter's port 0. |
-| Projection | Filter executes `b`'s subtree hinted with the mask; `b`'s leaf decodes its range whole (or stands in placeholder rows where the mask is all-false); the filter applies the mask. | The filter emits a projection gate with the mask; `b`'s source is activated with exactly those rows, decodes, filters, and pushes to port 1. |
-| Output | Filter applies the projection expression and returns one batch. | The filter waits for both ports to end, applies the projection expression, and emits one root batch. |
+| Plan | The project root plans the mask node, `a` (required), then the body, `b` (speculative). | Same planning stream. `a` becomes a predicate source, `b` a deferred projection source. |
+| Start | Root `execute` runs the body; the first filter node it reaches asks the mask node for the morsel's mask. | The runtime activates `a`'s source with all rows; `b` waits for a gate. |
+| Predicate | The conjunct asks `a`'s subtree for an array hinted with the morsel's rows, applies `a > 400`, keeps the mask and returns it to every filter that asks. | `a`'s source decodes and pushes one batch to the conjunct's port; the conjunct evaluates `a > 400` on arrival and pushes the mask to the filter's port 0. |
+| Projection | Each filter over a `b` leaf slices the mask to its chunk, hands the slice down as the hint, and keeps the selected rows of what its leaf decodes (or returns nothing without decoding where the slice is all-false). | The filter emits a projection gate with the mask; `b`'s source is activated with exactly those rows, decodes, filters, and pushes to port 1. |
+| Output | The project root applies the projection expression to the selected rows and returns one batch. | The filter waits for both ports to end, applies the projection expression, and emits one root batch. |
 | A read not ready | The leaf returns `Blocked(ticket)`; the whole stack unwinds; the worker parks; the root is re-polled. | The stage returns `Waiting(ticket)`; that pipeline's frames are suspended; the worker parks; that stage is resumed. |
 
 On this query the two models read the same bytes and decode the same chunks. Where they differ
@@ -153,7 +155,7 @@ activation, and a routed batch in push.
 | Value execution | Recursive `execute` | Leaf activation, routed batches, credits |
 | `ExecNode` methods | 5 | 10, plus one defaulted benchmark hook |
 | Layouts | Flat, chunked, struct (incl. nullable), dictionary, zoned wrappers | Flat, chunked, non-nested struct, zoned wrappers |
-| Layout extension | `LayoutPlanner` registry | Closed match in `build.rs` |
+| Layout extension | Lowers `vortex_layout::plan` operators; no layout dispatch | Closed match in `build.rs` |
 | Sparse demand | `with_morsel_demands` (per-morsel masks) | Selection converted to row ranges |
 | Output | Batches collected, or a completion sink | Ordered credit-bounded stream, sink, or collected |
 | Engine threads | Worker pool, shared or dedicated | Same, plus run on the caller's thread |
@@ -232,8 +234,9 @@ scans and smallest where decode and predicate kernels dominate.
 Ask three questions of any change to either crate:
 
 1. Does it change what rows a leaf materializes? In pull a leaf hands up its whole range and
-   the filter root applies the conjunct's mask; the hint only decides which chunks are read at
-   all. In push it is the activation, which is exact for the projection under a filter.
+   the filter node the plan placed above it keeps the selected rows; the hint only decides
+   which chunks are read at all. In push it is the activation, which is exact for the projection
+   under a filter.
 2. Does it change when a read starts? Neither model starts a read during execution; planning
    names it and the scheduler hands it out. Push additionally holds deferred sources' reads as
    speculative until a gate or a park proves them needed.

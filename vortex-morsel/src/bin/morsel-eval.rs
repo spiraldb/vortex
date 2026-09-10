@@ -17,6 +17,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 
 use vortex_array::array_session;
 use vortex_error::VortexResult;
@@ -32,11 +33,11 @@ use vortex_morsel::harness::Query;
 use vortex_morsel::harness::RunOutcome;
 use vortex_morsel::harness::assert_same_rows;
 use vortex_morsel::harness::run_morsel;
+use vortex_morsel::harness::run_morsel_e2e;
 use vortex_morsel::harness::run_v1;
 use vortex_morsel::harness::run_v1_tokio;
 use vortex_morsel::io_trace::RecordingSegmentSource;
 use vortex_morsel::io_trace::ReplaySegmentSource;
-use vortex_morsel::nodes::ConjunctMode;
 use vortex_morsel::workloads;
 use vortex_session::VortexSession;
 use vortex_utils::parallelism::get_available_parallelism;
@@ -62,10 +63,6 @@ impl Row {
             Row::V1Single => "A  V1 (1 thread)".to_string(),
             Row::V1Tokio(threads) => format!("A' V1 (tokio x{threads})"),
             Row::Morsel(config) => {
-                let mode = match config.mode {
-                    ConjunctMode::Cascade => "",
-                    ConjunctMode::Parallel => ", parallel",
-                };
                 let morsel = if config.morsel_rows == 0 {
                     "splits".to_string()
                 } else {
@@ -76,7 +73,7 @@ impl Row {
                 } else {
                     ", no-reuse"
                 };
-                format!("D  morsel (x{}, {morsel}{mode}{reuse})", config.threads)
+                format!("D  morsel (x{}, {morsel}{reuse})", config.threads)
             }
             Row::Push {
                 threads,
@@ -111,7 +108,10 @@ fn main() -> VortexResult<()> {
     let session = array_session()
         .with::<LayoutSession>()
         .with::<RuntimeSession>();
-    let threads = get_available_parallelism().unwrap_or(4);
+    let threads = env_rows("MORSEL_EVAL_THREADS")?
+        .unwrap_or_else(|| get_available_parallelism().unwrap_or(4))
+        .max(1);
+    let e2e = std::env::var_os("MORSEL_EVAL_E2E").is_some();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(threads)
         .enable_all()
@@ -141,7 +141,15 @@ fn main() -> VortexResult<()> {
         "host: {threads} logical cores; segments in memory; fineweb-shaped={fineweb_rows} rows, \
          clickbench-shaped={clickbench_rows} rows; {iterations} grouped iterations, median reported"
     );
-    println!("both executors use workers prepared outside the timed interval");
+    if e2e {
+        println!(
+            "E2E: reader/plan construction, expression binding, morsel cutting, complete scan, and scan teardown; initialized worker pools; fixture creation excluded"
+        );
+    } else {
+        println!(
+            "execution timing: reader/plan construction, expression binding, and worker lifecycle excluded"
+        );
+    }
     println!();
 
     let mut workload_set = Vec::new();
@@ -202,57 +210,69 @@ fn main() -> VortexResult<()> {
             {
                 continue;
             }
-            let rows_config: Vec<Row> = match &selected_morsel_rows {
-                Some(sizes) => sizes
-                    .iter()
-                    .copied()
-                    .map(|morsel_rows| {
-                        Row::Morsel(MorselConfig {
-                            threads,
+            let rows_config: Vec<Row> = if e2e {
+                let mut rows = vec![Row::V1Single, Row::V1Tokio(threads)];
+                for count in [1, threads] {
+                    for &morsel_rows in selected_morsel_rows.as_deref().unwrap_or(&[0, 65_536]) {
+                        rows.push(Row::Morsel(MorselConfig {
+                            threads: count,
                             morsel_rows,
                             ..Default::default()
+                        }));
+                    }
+                    if threads == 1 {
+                        break;
+                    }
+                }
+                rows
+            } else {
+                match &selected_morsel_rows {
+                    Some(sizes) => sizes
+                        .iter()
+                        .copied()
+                        .map(|morsel_rows| {
+                            Row::Morsel(MorselConfig {
+                                threads,
+                                morsel_rows,
+                                ..Default::default()
+                            })
                         })
-                    })
-                    .collect(),
-                None => vec![
-                    Row::V1Single,
-                    Row::V1Tokio(threads),
-                    Row::Morsel(MorselConfig {
-                        threads: 1,
-                        ..Default::default()
-                    }),
-                    Row::Morsel(MorselConfig {
-                        threads: 1,
-                        share_decodes: false,
-                        ..Default::default()
-                    }),
-                    Row::Morsel(MorselConfig {
-                        threads,
-                        ..Default::default()
-                    }),
-                    Row::Morsel(MorselConfig {
-                        threads,
-                        morsel_rows: 65_536,
-                        ..Default::default()
-                    }),
-                    Row::Morsel(MorselConfig {
-                        threads,
-                        mode: ConjunctMode::Parallel,
-                        ..Default::default()
-                    }),
-                    Row::Push {
-                        threads: 1,
-                        morsel_rows: 0,
-                    },
-                    Row::Push {
-                        threads,
-                        morsel_rows: 0,
-                    },
-                    Row::Push {
-                        threads,
-                        morsel_rows: 65_536,
-                    },
-                ],
+                        .collect(),
+                    None => vec![
+                        Row::V1Single,
+                        Row::V1Tokio(threads),
+                        Row::Morsel(MorselConfig {
+                            threads: 1,
+                            ..Default::default()
+                        }),
+                        Row::Morsel(MorselConfig {
+                            threads: 1,
+                            share_decodes: false,
+                            ..Default::default()
+                        }),
+                        Row::Morsel(MorselConfig {
+                            threads,
+                            ..Default::default()
+                        }),
+                        Row::Morsel(MorselConfig {
+                            threads,
+                            morsel_rows: 65_536,
+                            ..Default::default()
+                        }),
+                        Row::Push {
+                            threads: 1,
+                            morsel_rows: 0,
+                        },
+                        Row::Push {
+                            threads,
+                            morsel_rows: 0,
+                        },
+                        Row::Push {
+                            threads,
+                            morsel_rows: 65_536,
+                        },
+                    ],
+                }
             };
 
             // Step 1: the oracle. Every row must agree with V1 before any timing happens.
@@ -413,9 +433,14 @@ fn run_once(
     query: &Query,
     row: Row,
 ) -> VortexResult<RunOutcome> {
-    match row {
+    let e2e = std::env::var_os("MORSEL_EVAL_E2E").is_some();
+    let start = Instant::now();
+    let mut outcome = match row {
         Row::V1Single => run_v1(session, layout, segments, query),
         Row::V1Tokio(_) => run_v1_tokio(runtime, session, layout, segments, query),
+        Row::Morsel(config) if e2e => {
+            run_morsel_e2e(runtime, session, layout, segments, query, config)
+        }
         Row::Morsel(config) => run_morsel(session, layout, segments, query, config),
         Row::Push {
             threads,
@@ -447,16 +472,20 @@ fn run_once(
                 source_io_bytes: pushed.source_io_bytes,
             })
         }
+    }?;
+    if e2e {
+        outcome.wall = start.elapsed();
+        // The V1 helper's first-batch clock starts after reader construction and binding.
+        if matches!(row, Row::V1Single | Row::V1Tokio(_)) {
+            outcome.time_to_first_batch = None;
+        }
     }
+    Ok(outcome)
 }
 
 fn natural_splits(fixture: &Fixture, query: &Query) -> VortexResult<usize> {
-    let plan = vortex_morsel::build_plan(
-        &fixture.layout,
-        &query.projection,
-        query.filter.as_ref(),
-        ConjunctMode::Cascade,
-    )?;
+    let plan =
+        vortex_morsel::build_plan(&fixture.layout, &query.projection, query.filter.as_ref())?;
     Ok(plan.natural_splits().len())
 }
 

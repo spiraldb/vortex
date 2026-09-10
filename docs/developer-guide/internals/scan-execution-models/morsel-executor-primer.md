@@ -79,58 +79,44 @@ configured concurrency (16 for local files).
 **Rule:** polling a `ReadFuture` promotes it. That is why the executor's driver polls speculative
 reads through a bounded window rather than all at once.
 
-### `ExecPlan`, `build_plan`, and `NodeBlueprint` (`vortex-morsel/src/build.rs`)
+### `ExecPlan`, `build_plan`, and `ExecPlan::from_plan` (`vortex-morsel/src/build.rs`)
 
-The immutable blueprint of one scan. `build_plan(layout, projection, filter, conjunct_mode)`
-walks the stored layout through the registered `LayoutPlanner`s and collects one
-`NodeBlueprint` per node: `FlatSpec`, `ChunkedSpec`, `StructSpec`, `DictSpec` (pull only),
-`ConjunctSpec`, and the root `FilterSpec`. Unsupported layouts are errors, never fallbacks. The
-plan knows the row count, the natural split boundaries, and, through `NodeBlueprint::stored_uses`,
-every `(IoKey, row range)` a leaf reads, which is what lease counting and lookahead are computed
-from. The node's side of that bargain is to register each reported unit while planning a morsel
-that overlaps it and release it exactly once at retire.
+The immutable description of one scan, lowered from one physical plan in `vortex_layout::plan`.
+The plan is `Eval(projection, Filter(fields, mask))`, or `Eval(projection, fields)` without a
+predicate, where `mask` is a boolean plan over the same rows. `build_plan(layout, projection,
+filter, conjunct_mode)` derives it from a layout: it lowers the layout with
+`vortex_layout::plan::lower` and scopes each expression to an `Eval` over a `Pack` of just the
+top-level fields it reads. `ExecPlan::from_plan(plan, conjunct_mode)` accepts a tree built or
+optimized elsewhere, so a plan rewritten by the layout crate's optimizer executes without the
+executor knowing.
 
-```rust
-pub trait NodeBlueprint: Send + Sync {
-    fn instantiate(&self, id: NodeId) -> Box<dyn ExecNode>;
-    fn stored_uses(&self) -> Vec<(IoKey, Range<u64>)> { Vec::new() }
-}
-```
+Lowering walks the tree once and appends one arena node per operator: `SegmentScan` becomes
+the flat node, `Concat` the chunked node, `Pack` the struct node, `Take` the dictionary node,
+and an `Eval` below the root an eval node. The `Filter` is pushed to the leaves here, at
+planning: its mask plan becomes the morsel's single *mask node* (a conjunct node when the mask
+is an `Eval` over a `Pack`, split into conjuncts each scoped to its fields; the morsel's own
+demand when there is no predicate), and every segment scan under the filtered subtree gets a
+filter node that reads it. The root `Eval` becomes the project node, which owns the mask node.
+Unsupported operators are errors, never fallbacks. The walk also derives what the executor
+needs and the plan does not carry: each operator's root row offset, chunk cuts and natural
+splits from `Concat` row offsets, and the *lease scope* of a `Take`'s values subtree, which says
+the dictionary values are used by every morsel of the codes' range and are never filtered.
+Through `flat_uses` the plan reports every `(IoKey, row range)` a segment scan reads, which is
+what lease counting and lookahead are computed from. The node's side of that bargain is to
+register each reported unit while planning a morsel that overlaps it and release it exactly once
+at retire.
 
-- `plan.instantiate()` asks every blueprint for one worker's mutable node state. Each worker
+- `plan.instantiate()` builds one worker's mutable node state from every arena slot. Each worker
   owns one arena and reuses it across morsels.
 - `morsels(&plan, target_rows)` (in `driver.rs`) cuts the row space; `0` means one morsel per
-  natural split.
+  natural split. `natural_morsels_for` is the same cut for a query before a scan exists.
+- `build_plan_for_ranges` and `ExecPlan::from_plan_for_ranges` materialize only the `Concat`
+  chunks the given ranges reach; the plan still knows every natural split.
 
-**Rule:** the plan is shared and read-only; all mutable state lives in per-worker arenas. A node
-that reads storage must say so through `stored_uses`, because nothing else inspects a blueprint.
-
-### `LayoutPlanner`, `LayoutPlanners`, `LayoutCx`, `SplitCx` (`vortex-morsel/src/build.rs`, `layouts.rs`)
-
-How one kind of stored layout becomes nodes.
-
-```rust
-pub trait LayoutPlanner: Send + Sync {
-    fn handles(&self, layout: &LayoutRef) -> bool;
-    fn natural_splits(&self, layout: &LayoutRef, root_offset: u64, cx: &mut SplitCx<'_>) -> VortexResult<()>;
-    fn plan(&self, layout: &LayoutRef, root_offset: u64, cx: &mut LayoutCx<'_>) -> VortexResult<NodeId>;
-}
-```
-
-`LayoutPlanners` is an ordered registry and the entry point for planning: `build_plan`,
-`build_plan_for_ranges`, and `natural_morsels_for` are methods on it, and the free functions of
-the same names use the default registry. The first planner whose `handles` accepts a layout owns
-it, and `with` puts a new planner ahead of the built-ins. The built-ins in `layouts.rs` are
-`ZonedPlanner` (transparent wrapper), `FlatPlanner`, `DictPlanner`, `StructPlanner`, and
-`ChunkedPlanner`. `SplitCx` lets a planner record chunk boundaries and recurse without
-materializing indivisible children; `LayoutCx` lets it push blueprints, plan children, and open a
-*lease scope*, which is how the dictionary planner says its values are used by every morsel of the
-codes' range.
-
-**Rule:** a planner answers both questions about its layout, where chunks start and which nodes
-execute it. The answers sit side by side, and a test checks that the cut and the plan's natural
-splits agree on every fixture. `MorselScanExecutor::with_planners` is how an engine supplies a
-registry.
+**Rule:** the plan is shared and read-only; all mutable state lives in per-worker arenas. The
+executor owns no layout dispatch: a new layout kind is supported by lowering it to the existing
+plan operators, and a new operator by adding one arm to the lowering and one node. Nothing about
+the selection travels through the execution contexts; it is nodes all the way down.
 
 ### `ExecNode` (`vortex-morsel/src/node.rs`)
 
@@ -178,21 +164,26 @@ The three contexts are the only way a node touches the world.
 ### `ValueBatch` and the row hint (`vortex-morsel/src/node.rs`)
 
 What flows back up. A `ValueBatch` is a value plus the root-coordinate `coverage` it accounts
-for, and an array value always holds one row per row of that coverage. Two things carry a
-selection through the tree, and they are deliberately different:
+for. Three things carry a selection, and they are deliberately different:
 
-- The **hint** flows down as advice. The filter node hints the projection with the mask it
-  computed, and a sparse conjunct hints its input with the incoming rows. Only the flat leaf
-  reads it, for two decisions: an all-false hint at planning names no read, and an all-false
-  hint at execution answers with a constant placeholder of the range's length instead of
-  waiting for one. Chunked concatenates, struct zips, dict indexes; none of them look at it.
-- The **conjunct's mask** flows up as a value. It is the boolean array the predicate produced,
-  expressed over the morsel's whole coverage, and it is the only thing anyone applies. The
-  filter root applies it once, filtering each struct field and each chunk by its own slice of
-  the mask (`filter_rows`), which drops the placeholder rows along with everything else.
+- The **hint** flows down as advice about which rows will be looked at. It only ever spares
+  IO: an all-false hint at planning names no read, and an all-false hint at execution answers
+  with a constant placeholder of the range's length instead of waiting for one. Chunked slices
+  it per cut, struct and dict pass it on; none of them change what they return because of it.
+- The **mask node** produces the morsel's selection once, as a `Value::Mask` over the morsel's
+  whole coverage, and answers with the same value as often as it is asked. It is the conjunct
+  node, which starts from the morsel's demand and narrows it conjunct by conjunct, or the demand
+  node when there is no predicate. The project root plans and retires it.
+- The **filter nodes** the plan placed over the leaves apply the selection. Each one asks the
+  mask node for the morsel's mask, slices it to its own rows, hands the slice down as the hint,
+  and keeps exactly the selected rows of what comes back; a slice that keeps nothing returns
+  empty without touching the leaf. Every sibling under a parent is filtered by the same mask, so
+  chunked concatenates and struct zips without bookkeeping, and the root only applies the
+  projection expression.
 
-**Rule:** a hint may spare a leaf a read, never change what a batch looks like. Every batch is
-dense over its coverage, so no node has to describe what it holds.
+**Rule:** a hint may spare a leaf a read, never change what a batch looks like. A filter node
+changes exactly which rows a batch holds, and it is a node in the plan, not a parameter of the
+execution context. A batch below no filter is dense over its coverage.
 
 ### `IoUse`, `IoBatch`, `IoTicket`, `IoKey` (`vortex-morsel/src/io.rs`)
 
@@ -356,8 +347,8 @@ Three things vary by design and are traits. Everything else is deliberately conc
 
 | Extension point | Shape | Why this shape |
 | --- | --- | --- |
-| A new stored layout | `LayoutPlanner`, registered in `LayoutPlanners` | Layouts are the open set in Vortex; V1 extends the same way through `LayoutVTable::new_reader`. Before this, two duplicated `match`es in `build.rs` had to be edited per layout, and the split walk and the plan walk could disagree. A planner owns both answers for its layout. |
-| A new kind of node | `NodeBlueprint` plus `ExecNode` | A planner must be able to introduce node types the crate has never seen. The blueprint is the immutable half a worker instantiates; the exec node is the mutable half. Only `stored_uses` is inspected from outside, so the scheduler stays ignorant of node types. |
+| A new stored layout | Lowering it to the plan operators in `vortex_layout::plan` | Layouts are the open set in Vortex; the executor owns no layout dispatch, so a layout that lowers to `SegmentScan`, `Concat`, `Pack`, `Take` and `Eval` executes with no executor change. Before this, the executor kept its own planner registry that duplicated the layout crate's lowering. |
+| A new kind of node | A plan operator plus an `ExecNode` | A new operator is one arm in the lowering that derives its placement, and one state machine that executes it. Only `flat_uses` is inspected from outside, so the scheduler stays ignorant of node types. |
 | A new way to perform reads | `IoAnswerer` | The scan only ever sees a demand stream and a completions handle. An engine's buffer manager, an object-store prefetcher, or a test double that scripts latency can serve it without implementing `SegmentSource`; `SegmentSourceDriver` is one answerer among possible others. |
 | A new operator between layouts and output | `ExecNode` | Already the per-node contract; six operators implement it. |
 

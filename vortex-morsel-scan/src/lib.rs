@@ -57,7 +57,7 @@ pub fn scan_backend_from_env() -> VortexResult<ScanBackend> {
 #[derive(Clone)]
 pub struct ScanExecutorOptions {
     threads: usize,
-    external_driver: Option<Arc<dyn Fn() + Send + Sync>>,
+    external_driver: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
 }
 
 impl Default for ScanExecutorOptions {
@@ -77,9 +77,12 @@ impl ScanExecutorOptions {
     }
 
     /// Let the execution engine's calling threads drive returned morsel futures directly.
-    /// `driver` must advance the engine's async runtime by one cooperative turn while a morsel is
-    /// waiting for segment I/O.
-    pub fn with_external_threads(mut self, driver: impl Fn() + Send + Sync + 'static) -> Self {
+    /// `driver` runs whatever is ready on the engine's async runtime while a morsel waits for
+    /// segment I/O and returns whether anything ran, so the worker can park when it did not.
+    pub fn with_external_threads(
+        mut self,
+        driver: impl Fn() -> bool + Send + Sync + 'static,
+    ) -> Self {
         self.external_driver = Some(Arc::new(driver));
         self
     }

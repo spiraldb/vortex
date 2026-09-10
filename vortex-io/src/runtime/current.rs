@@ -48,6 +48,14 @@ impl CurrentThreadRuntime {
     ///
     /// By default, the pool has no worker threads; the caller must set the desired number of
     /// worker threads using the `set_workers` method on the returned pool.
+    /// Run one task that is ready on this runtime's executor without blocking.
+    ///
+    /// Returns whether a task ran. Threads that must keep the runtime moving while they wait on
+    /// something else can drain ready work with this instead of re-entering `block_on`.
+    pub fn try_tick(&self) -> bool {
+        self.executor.async_executor().try_tick()
+    }
+
     pub fn new_pool(&self) -> CurrentThreadWorkerPool {
         CurrentThreadWorkerPool::new(Arc::clone(&self.executor))
     }

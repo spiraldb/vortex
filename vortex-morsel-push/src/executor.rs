@@ -51,7 +51,7 @@ pub struct PushMorselScanExecutor {
     target_rows: u64,
     conjunct_mode: ConjunctMode,
     threads: usize,
-    external_driver: Option<Arc<dyn Fn() + Send + Sync>>,
+    external_driver: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     plan_cache: Mutex<HashMap<PlanCacheKey, Arc<ExecPlan>>>,
 }
 
@@ -88,7 +88,7 @@ impl PushMorselScanExecutor {
     }
 
     /// Run each returned morsel future on the thread that polls it.
-    pub fn with_external_threads(mut self, driver: Arc<dyn Fn() + Send + Sync>) -> Self {
+    pub fn with_external_threads(mut self, driver: Arc<dyn Fn() -> bool + Send + Sync>) -> Self {
         self.external_driver = Some(driver);
         self
     }
@@ -286,7 +286,7 @@ fn build_external_outputs(
     segments: Arc<dyn SegmentSource>,
     morsels: Vec<SelectedMorsel>,
     row_caps: Option<Vec<usize>>,
-    driver: Arc<dyn Fn() + Send + Sync>,
+    driver: Arc<dyn Fn() -> bool + Send + Sync>,
 ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
     // One I/O service, and therefore one demand stream, spans every morsel of this file so
     // reads dedupe across them. The engine's threads advance the runtime the driver runs on.

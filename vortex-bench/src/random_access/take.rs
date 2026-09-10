@@ -48,7 +48,6 @@ use vortex_morsel::MorselScan;
 use vortex_morsel::SegmentSourceDriver;
 use vortex_morsel::build_plan_for_ranges;
 use vortex_morsel::natural_morsels_for;
-use vortex_morsel::nodes::ConjunctMode;
 
 use crate::Format;
 use crate::SESSION;
@@ -576,7 +575,6 @@ impl VortexRandomAccessor {
                 self.file.footer().layout(),
                 &vortex::expr::root(),
                 None,
-                ConjunctMode::Cascade,
                 &planned_ranges,
             )?)
         };

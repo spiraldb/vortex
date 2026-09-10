@@ -1,30 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! The operator state machines and their blueprints: FLAT, CHUNKED, STRUCT, DICT, CONJUNCT and
-//! FILTER.
+//! The operator state machines: one per plan operator the executor drives (segment scan,
+//! concat, pack, take, eval, filter), plus the executor's own mask producers (conjunct, demand)
+//! and its project root.
 
 mod chunked;
 mod conjunct;
+mod demand;
 mod dict;
+mod eval;
 mod filter;
 mod flat;
+mod project;
 mod struct_;
 
 pub use chunked::ChunkedExec;
-pub use chunked::ChunkedSpec;
 pub use conjunct::ConjunctExec;
-pub use conjunct::ConjunctMode;
 pub use conjunct::ConjunctSlot;
-pub use conjunct::ConjunctSpec;
+pub use demand::DemandExec;
 pub use dict::DictExec;
-pub use dict::DictSpec;
+pub use eval::EvalExec;
 pub use filter::FilterExec;
-pub use filter::FilterSpec;
 pub use flat::FlatExec;
-pub use flat::FlatSpec;
+pub use project::ProjectExec;
 pub use struct_::StructExec;
-pub use struct_::StructSpec;
 
 /// The mask density at or above which a predicate is evaluated over the whole range and
 /// intersected afterwards, rather than over the selected rows only.

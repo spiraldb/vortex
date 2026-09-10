@@ -118,7 +118,11 @@ pub struct MorselScan {
 }
 
 type CompletionSink = Arc<dyn Fn(usize, VortexResult<Option<ArrayRef>>) + Send + Sync>;
-type ExternalDriver = Arc<dyn Fn() + Send + Sync>;
+/// How long an externally driven worker parks when neither the runtime nor its signals had work.
+const EXTERNAL_IDLE_PARK: Duration = Duration::from_micros(20);
+
+/// Advances the engine's runtime while a morsel waits; returns whether any work ran.
+type ExternalDriver = Arc<dyn Fn() -> bool + Send + Sync>;
 
 thread_local! {
     static EXTERNAL_ARENA: RefCell<Option<(Arc<ExecPlan>, Arena)>> = const { RefCell::new(None) };
@@ -2337,8 +2341,23 @@ impl Scheduler {
         signals: &Receiver<WorkerSignal>,
         morsel: &mut LocalMorsel<'_>,
     ) -> Option<bool> {
-        driver();
-        morsel.handle_external_signal(signals.try_recv())
+        // Park briefly when the runtime had nothing to run: a waiting thread that spins through
+        // the executor competes with the threads doing I/O completion and decode.
+        let signal = if driver() {
+            signals.try_recv()
+        } else {
+            signals
+                .recv_timeout(EXTERNAL_IDLE_PARK)
+                .map_err(|err| match err {
+                    crossbeam_channel::RecvTimeoutError::Timeout => {
+                        crossbeam_channel::TryRecvError::Empty
+                    }
+                    crossbeam_channel::RecvTimeoutError::Disconnected => {
+                        crossbeam_channel::TryRecvError::Disconnected
+                    }
+                })
+        };
+        morsel.handle_external_signal(signal)
     }
 
     fn worker_loop(
@@ -3699,7 +3718,12 @@ impl MorselScan {
         output_tx: Sender<CreditedBatch>,
         cancellation: Option<&Arc<StreamCancellation>>,
     ) -> VortexResult<(ScanStats, Duration)> {
-        let workers = MorselWorkerPool::new(self.threads, Arc::clone(&self.plan))?;
+        // A single worker runs on the calling thread: engines already give each scan a thread
+        // of its own, and spawning another per partition only adds scheduler contention.
+        let workers = (self.threads > 1)
+            .then(|| MorselWorkerPool::new(self.threads, Arc::clone(&self.plan)))
+            .transpose()?;
+        let mut inline_arena = workers.is_none().then(|| self.plan.instantiate());
         let start = Instant::now();
         let cells = if self.share_decodes {
             SharedCells::with_leases(self.lease_counts())
@@ -3732,7 +3756,17 @@ impl MorselScan {
             output_scheduler.stream_ordered(&output_tx, completion.as_ref());
         });
         scheduler.submit_exact_lookahead();
-        let worker_stats = workers.run(Arc::clone(&scheduler), signals)?;
+        let worker_stats = match (&workers, inline_arena.as_mut()) {
+            (Some(workers), _) => workers.run(Arc::clone(&scheduler), signals)?,
+            (None, Some(arena)) => {
+                let signals = signals
+                    .into_iter()
+                    .next()
+                    .ok_or_else(|| vortex_err!("inline morsel worker signal channel is missing"))?;
+                vec![scheduler.worker_loop(0, &signals, arena)]
+            }
+            (None, None) => unreachable!("inline arena exists whenever the pool does not"),
+        };
         let stats = scheduler.finish(worker_stats)?;
         coordinator
             .join()

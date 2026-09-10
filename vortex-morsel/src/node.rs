@@ -1,11 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! The [`ExecNode`] contract and the arena that drives it.
+//! The [`Operator`] contract, the context it runs under, and the per-worker tree.
+//!
+//! An operator owns its children and calls them directly. It is a state machine driven by three
+//! calls per morsel: `look_ahead` names the reads its subtree needs, `next` produces its value, and
+//! `close` releases what it held. A call that cannot make progress pushes the tickets it needs
+//! into the context and returns `Blocked`; the worker parks on exactly those cells and calls
+//! again, and the operator resumes from its own state. Nothing here is a future or a waker.
+//!
+//! Each tree belongs to one morsel. Constructors initialize operator state; repeated calls
+//! resume that state until the morsel is closed and the tree is dropped.
 
 use std::ops::Range;
-use std::sync::OnceLock;
 
+use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
@@ -16,43 +25,41 @@ use vortex_array::arrays::StructArray;
 use vortex_array::arrays::chunked::ChunkedArrayExt;
 use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::buffer::BufferHandle;
+use vortex_array::dtype::DType;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
-use vortex_error::vortex_panic;
+use vortex_layout::plan::ExactPlan;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
+use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::cells::SharedCells;
-use crate::io::IoBatch;
+use crate::demand::RowDomain;
 use crate::io::IoKey;
 use crate::io::IoPlane;
 use crate::io::IoPriority;
 use crate::io::IoTicket;
+use crate::io::IoUse;
+use crate::stats::HintSummary;
+use crate::stats::NoReadReason;
+use crate::stats::PollOutcome;
 use crate::stats::ScanStats;
+use crate::stats::TraceEventKind;
+use crate::stats::TracePhase;
+use crate::stats::ValueSummary;
+use crate::stats::rows;
+use crate::tee::MaskBuffer;
 
-/// Index of a node within an [`Arena`].
+/// An operator's pre-order position in its tree. Names the operator in traces and I/O
+/// attribution; never used for dispatch.
 pub type NodeId = u32;
 
-#[derive(Clone, Copy)]
-pub(crate) struct ScanCaches<'a> {
-    decoded: &'a SharedCells,
-    dictionaries: &'a [OnceLock<ArrayRef>],
-}
-
-impl<'a> ScanCaches<'a> {
-    pub(crate) fn new(decoded: &'a SharedCells, dictionaries: &'a [OnceLock<ArrayRef>]) -> Self {
-        Self {
-            decoded,
-            dictionaries,
-        }
-    }
-}
-
-/// A value produced by a node for its parent.
+/// A value produced by an operator for its parent.
 #[derive(Clone)]
 pub enum Value {
-    /// Dense rows, one per row of the batch's coverage.
+    /// Dense rows, one per row of the batch's coverage, or exactly the selected rows below a
+    /// filter.
     Array(ArrayRef),
     /// A selection over the batch's whole coverage; same length as the coverage.
     Mask(Mask),
@@ -76,109 +83,76 @@ impl Value {
     }
 }
 
-/// A value plus the dense range of *input* rows it accounts for.
+/// A value plus the root rows it accounts for.
 ///
-/// Every batch is dense over its coverage. The row hint a node executes under never changes
-/// that: a leaf that was told nothing in its range is wanted stands in placeholder rows rather
-/// than leaving a hole, so parents concatenate and zip without any bookkeeping, and the filter
-/// node that holds the actual selection applies it once.
-pub struct ValueBatch {
+/// Below a filter a batch holds exactly the rows the filter keeps, in order; elsewhere it is
+/// dense over its coverage. The row hint an operator runs under never changes that: a leaf that
+/// was told nothing in its range is wanted stands in placeholder rows rather than leaving a hole.
+/// Every sibling under one parent sees the same selection, so parents concatenate and zip
+/// without any bookkeeping either way.
+pub struct Batch {
     /// The root-coordinate row range this batch accounts for.
     pub coverage: Range<u64>,
     /// The value itself.
     pub value: Value,
 }
 
-/// Keep exactly the rows `keep` selects, one chunk at a time.
-///
-/// The generic filter kernel turns a sparse mask over a chunked array into per-index takes,
-/// which cost Q15 about 15 percent. Filtering each chunk by its own slice of the mask keeps the
-/// cost profile the leaves had when they filtered themselves.
-pub(crate) fn filter_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef> {
-    if keep.all_true() {
-        return Ok(array);
-    }
-    if keep.all_false() {
-        return Ok(Canonical::empty(array.dtype()).into_array());
-    }
-    if let Some(chunked) = array.as_opt::<Chunked>() {
-        let dtype = array.dtype().clone();
-        let mut parts = Vec::with_capacity(chunked.nchunks());
-        let mut offset = 0usize;
-        for chunk in chunked.iter_chunks() {
-            let end = offset + chunk.len();
-            let part = keep.slice(offset..end);
-            if !part.all_false() {
-                parts.push(filter_rows(chunk.clone(), part)?);
-            }
-            offset = end;
+impl Batch {
+    /// An array batch.
+    pub fn array(coverage: Range<u64>, array: ArrayRef) -> Self {
+        Self {
+            coverage,
+            value: Value::Array(array),
         }
-        return Ok(match parts.len() {
-            0 => Canonical::empty(&dtype).into_array(),
-            1 => parts.pop().vortex_expect("one part"),
-            _ => ChunkedArray::try_new(parts, dtype)?.into_array(),
-        });
     }
-    if let Some(struct_) = array.as_opt::<Struct>() {
-        let len = keep.true_count();
-        let validity = struct_.struct_validity().filter(&keep)?;
-        let fields = struct_
-            .iter_unmasked_fields()
-            .map(|field| filter_rows(field.clone(), keep.clone()))
-            .collect::<VortexResult<Vec<_>>>()?;
-        return Ok(
-            StructArray::try_new(struct_.names().clone(), fields, len, validity)?.into_array(),
-        );
+
+    /// A mask batch.
+    pub fn mask(coverage: Range<u64>, mask: Mask) -> Self {
+        Self {
+            coverage,
+            value: Value::Mask(mask),
+        }
     }
-    array.filter(keep)
 }
 
-/// The result of polling a node's planning.
-pub enum PlanPoll {
-    /// The node cannot name more reads until these waits are satisfied. It keeps its own
-    /// cursor and is polled again afterwards; no worker thread is parked.
-    Blocked(WaitSet),
-    /// Every read this subtree needs for the morsel has been named.
-    Complete,
-}
-
-/// The result of polling a node's execution.
-pub enum ExecPoll {
+/// The result of pulling an operator.
+pub enum Step {
     /// A value covering a dense input row range.
-    Value(ValueBatch),
-    /// Execution is suspended on the given waits; no worker thread is parked.
-    Blocked(WaitSet),
-    /// The node made progress but has not produced a value yet.
-    Yield(Progress),
-    /// The node has produced everything it will produce.
-    Done,
+    Batch(Batch),
+    /// Nothing more this morsel.
+    Finished,
+    /// The operator pushed the tickets it needs into the context; call again once they complete.
+    Blocked,
 }
 
-/// Result of advancing a child from inside its parent node.
-pub enum ChildPoll<T> {
-    /// The child produced the requested value.
-    Value(T),
-    /// The child is suspended on exact external dependencies.
-    Blocked(WaitSet),
-    /// The child has no more values.
-    Done,
+/// Whether look-ahead has named every currently discoverable read.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LookAhead {
+    /// Every read this subtree needs has been named.
+    Complete,
+    /// More reads depend on the tickets added to the context. Resume after a dependency settles.
+    Blocked,
 }
 
-/// A coarse progress marker returned with [`ExecPoll::Yield`].
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Progress {
-    /// Rows of input consumed since the last poll.
-    pub rows: u64,
+impl LookAhead {
+    /// Combine child results after visiting all independently runnable children.
+    pub fn merge(self, other: Self) -> Self {
+        if self == Self::Blocked || other == Self::Blocked {
+            Self::Blocked
+        } else {
+            Self::Complete
+        }
+    }
 }
 
-/// Something a node can park on.
+/// Something a worker can park on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Wait {
-    /// An IO ticket the node's own planning stream emitted.
+    /// An IO ticket an operator registered through the context.
     Io(IoTicket),
 }
 
-/// A set of [`Wait`]s. Small by construction — a node parks on the handful of cells it named.
+/// A set of [`Wait`]s. Small by construction — a morsel parks on the handful of cells it named.
 #[derive(Clone, Debug, Default)]
 pub struct WaitSet(Vec<Wait>);
 
@@ -210,202 +184,91 @@ impl FromIterator<Wait> for WaitSet {
     }
 }
 
-/// A stateful, per-morsel execution node.
+/// A per-morsel state machine that owns its children.
 ///
-/// Nodes are arena-allocated once per worker and reset when that worker's arena is recycled to
-/// another morsel. `&mut self` state survives suspension and always resumes on its owning worker.
-pub trait ExecNode: Send {
-    /// Reset this node for a new morsel covering `range` (in this node's local coordinates).
-    fn reset(&mut self, range: Range<u64>);
+/// A tree is built for one morsel on the worker that drives it and dropped when it finishes.
+/// It never leaves the thread, so nothing here is `Send`.
+pub trait Operator {
+    /// The row domain supplied when this operator was constructed.
+    fn row_domain(&self) -> &RowDomain;
 
-    /// Advance this node's planning.
+    /// Register discoverable reads, attaching live demand views from this operator's domain.
     ///
-    /// Planning only names IO; it never reads. A node that needs something before it can name
-    /// more, a child's reads or a wait of its own, returns [`PlanPoll::Blocked`] and keeps its
-    /// cursor; it is polled again once the waits are satisfied. A parent drives all of its
-    /// children on every poll: a child that has already finished answers `Complete` at once,
-    /// so only a node that can block needs a cursor.
-    fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll>;
+    /// A missing dependency is `cx.wait(ticket)` plus `LookAhead::Blocked`. Parents visit all
+    /// independent children before returning blocked. Completed children need no further calls.
+    /// There are no planning budgets or yields, and this method must never wait on storage.
+    fn look_ahead(&mut self, cx: &mut Cx<'_>) -> VortexResult<LookAhead>;
 
-    /// Advance this node's execution, producing values under the demand in `cx`.
+    /// Produce the next value under `hint`.
     ///
-    /// This method may use [`ExecCx::ready`] to attempt an inline read that the source guarantees
-    /// will not wait on storage. It must not perform blocking IO, poll background futures,
-    /// synchronously transfer device data, or wait for an external resource. A missing dependency
-    /// must return [`ExecPoll::Blocked`] so the scheduler can resume the continuation later.
-    fn execute(&mut self, cx: &mut ExecCx<'_>) -> VortexResult<ExecPoll>;
+    /// May resolve an unissued read inline through [`Cx::ready`], which the source guarantees
+    /// will not wait on storage. Must not perform blocking IO, poll a future, or wait for an
+    /// external resource: a missing dependency is [`Cx::wait`] plus [`Step::Blocked`].
+    fn next(&mut self, hint: &Mask, cx: &mut Cx<'_>) -> VortexResult<Step>;
 
-    /// Release anything this node holds for the finished morsel.
-    fn retire(&mut self, cx: &mut RetireCx<'_>);
+    /// Release everything held for the finished morsel.
+    fn close(&mut self, cx: &mut Cx<'_>);
 
-    /// This node's children, in edge order.
-    fn children(&self) -> &[NodeId];
+    /// One line naming this operator, for traces. The tree appends its construction-time row range.
+    fn describe(&self) -> String;
 }
 
-/// An arena of nodes, owned by one worker and recycled across its morsels.
-pub struct Arena {
-    nodes: Vec<Option<Box<dyn ExecNode>>>,
-    /// The morsel being worked on; a node whose stamp differs has not been reset for it yet.
-    epoch: u64,
-    stamps: Vec<u64>,
+/// The root rows and selection of one morsel.
+pub struct MorselRows<'a> {
+    /// Root coordinates.
+    pub range: Range<u64>,
+    /// The rows the caller asked for, one entry per row of `range`. This is the selection every
+    /// filter starts from; the conjuncts only ever narrow it.
+    pub demand: &'a Mask,
 }
 
-impl Arena {
-    /// Build an arena from a list of nodes.
-    pub fn new(nodes: Vec<Box<dyn ExecNode>>) -> Self {
-        let stamps = vec![0; nodes.len()];
-        Self {
-            nodes: nodes.into_iter().map(Some).collect(),
-            epoch: 0,
-            stamps,
-        }
-    }
-
-    /// The number of nodes in the arena.
-    pub fn len(&self) -> usize {
-        self.nodes.len()
-    }
-
-    /// Whether the arena is empty.
-    pub fn is_empty(&self) -> bool {
-        self.nodes.is_empty()
-    }
-
-    /// Take a node out of the arena so its children can be driven through the remaining slots.
-    ///
-    /// The node must be put back with [`Arena::put`]. The take/put pair is what lets a node hold
-    /// `&mut self` while recursively driving its children: the tree shape guarantees a node is
-    /// never reachable from its own subtree, so a taken slot is never observed as empty.
-    fn take(&mut self, id: NodeId) -> Box<dyn ExecNode> {
-        self.nodes[id as usize].take().unwrap_or_else(|| {
-            vortex_panic!("node {id} is already being driven: the exec graph is not a tree")
-        })
-    }
-
-    fn put(&mut self, id: NodeId, node: Box<dyn ExecNode>) {
-        self.nodes[id as usize] = Some(node);
-    }
-
-    /// Start a new morsel: the root is reset now, every other node the first time its parent
-    /// plans it, so a parent re-driving its children after a block never resets one twice.
-    pub fn begin_morsel(&mut self, root: NodeId, range: Range<u64>) {
-        self.epoch += 1;
-        let mut node = self.take(root);
-        node.reset(range);
-        self.stamps[root as usize] = self.epoch;
-        self.put(root, node);
-    }
-
-    /// Reset `node` (taken out of slot `id`) for the current morsel unless it already was.
-    fn reset_once(&mut self, id: NodeId, node: &mut Box<dyn ExecNode>, range: Range<u64>) {
-        if self.stamps[id as usize] != self.epoch {
-            node.reset(range);
-            self.stamps[id as usize] = self.epoch;
-        }
-    }
-}
-
-/// Context handed to [`ExecNode::next_plan`].
-pub struct PlanCx<'a> {
-    arena: &'a mut Arena,
+/// What an operator can reach while it runs: the morsel, the I/O plane, the shared caches, and
+/// the mask buffers. Operators push into it what is not a value; values come back as batches.
+pub struct Cx<'a> {
+    /// The morsel being driven.
+    pub morsel: MorselRows<'a>,
+    /// One per tee in the plan, owned by the worker, cleared per morsel. The root writes them,
+    /// filters read them.
+    pub tees: &'a mut [MaskBuffer],
     io: &'a IoPlane,
-    caches: ScanCaches<'a>,
+    cells: &'a SharedCells,
+    dictionaries: &'a Mutex<HashMap<ExactPlan, ArrayRef>>,
+    session: &'a VortexSession,
     stats: &'a mut ScanStats,
-    demand: Mask,
     priority: IoPriority,
+    waits: WaitSet,
 }
 
-impl<'a> PlanCx<'a> {
-    /// The rows the parent expects to need from the node being planned.
-    ///
-    /// A hint: it bounds which stored units are worth naming, and it is a superset of whatever
-    /// selection the scan finally applies.
-    pub fn hint(&self) -> &Mask {
-        &self.demand
+impl<'a> Cx<'a> {
+    /// Add a read with its live demand to the context, returning its dependency ticket.
+    pub fn register(&mut self, request: IoUse) -> VortexResult<IoTicket> {
+        self.stats.io_uses += 1;
+        self.io.register(request, self.priority, self.stats)
     }
 
     /// Whether a shared cell already holds the decoded value for a unit.
     ///
-    /// A hit lets the node skip issuing the read entirely: the caller's own lease (counted into
-    /// the cell before the scan started) keeps the value alive until this morsel retires.
+    /// A hit lets an operator skip naming the read: the morsel's own lease, counted into the
+    /// cell before the scan started, keeps the value alive until it closes.
     pub fn decoded_available(&self, key: IoKey) -> bool {
-        self.caches.decoded.decoded(key).is_some()
+        self.cells.decoded(key).is_some()
     }
 
-    /// Whether this scan has already decoded the values for a dictionary node.
-    pub(crate) fn dictionary_available(&self, id: NodeId) -> bool {
-        self.caches.dictionaries[id as usize].get().is_some()
+    /// Record, for the trace, that an operator will not read `key` this morsel.
+    pub fn note_no_read(&mut self, key: IoKey, reason: NoReadReason) {
+        let IoKey::Segment(segment) = key;
+        self.stats.record_event(TraceEventKind::NoRead {
+            segment: *segment,
+            reason,
+        });
     }
 
-    /// Register a batch of IO uses, returning one ticket per use.
-    pub fn register(&mut self, batch: IoBatch) -> VortexResult<Vec<IoTicket>> {
-        self.stats.io_uses += batch.uses().len() as u64;
-        self.io.register(batch, self.priority, self.stats)
-    }
-
-    /// Drive one child with an explicit scheduler priority for reads it registers.
-    pub(crate) fn plan_child_with_priority(
-        &mut self,
-        id: NodeId,
-        range: Range<u64>,
-        priority: IoPriority,
-    ) -> VortexResult<PlanPoll> {
+    /// Run `f` with reads registered under `priority`.
+    pub fn with_priority<T>(&mut self, priority: IoPriority, f: impl FnOnce(&mut Self) -> T) -> T {
         let previous = std::mem::replace(&mut self.priority, priority);
-        let result = self.plan_child(id, range);
+        let result = f(self);
         self.priority = previous;
         result
-    }
-
-    /// Plan a child over `range` (its local coordinates) under this node's hint.
-    ///
-    /// The child is reset the first time it is planned for the morsel and resumed afterwards,
-    /// so a parent calls this for every child on every poll. `Blocked` is the child's to
-    /// propagate; `Complete` means every read below it is named.
-    pub fn plan_child(&mut self, id: NodeId, range: Range<u64>) -> VortexResult<PlanPoll> {
-        self.plan_child_with_hint(id, range, self.demand.clone())
-    }
-
-    /// Plan a child under a transformed row hint.
-    pub(crate) fn plan_child_with_hint(
-        &mut self,
-        id: NodeId,
-        range: Range<u64>,
-        hint: Mask,
-    ) -> VortexResult<PlanPoll> {
-        let mut node = self.arena.take(id);
-        self.arena.reset_once(id, &mut node, range);
-        let saved = std::mem::replace(&mut self.demand, hint);
-        let poll = node.next_plan(self);
-        self.demand = saved;
-        self.arena.put(id, node);
-        poll
-    }
-}
-
-/// Context handed to [`ExecNode::execute`].
-pub struct ExecCx<'a> {
-    arena: &'a mut Arena,
-    io: &'a IoPlane,
-    caches: ScanCaches<'a>,
-    session: &'a VortexSession,
-    stats: &'a mut ScanStats,
-    demand: Mask,
-}
-
-impl<'a> ExecCx<'a> {
-    /// The rows the parent expects to need from this node.
-    ///
-    /// A hint, one entry per row of the node's local range. It is advice about which rows will
-    /// be looked at, never a selection to apply: a batch is always dense over its range. A flat
-    /// leaf uses it to load early, and to stand in placeholder rows without reading when nothing
-    /// in its range is wanted. The actual selection is applied by the filter node that holds it.
-    pub fn hint(&self) -> &Mask {
-        &self.demand
-    }
-
-    /// The session, for creating expression execution contexts.
-    pub fn session(&self) -> &VortexSession {
-        self.session
     }
 
     /// Clone ready bytes, first attempting a source-provided non-blocking inline read if unissued.
@@ -413,9 +276,14 @@ impl<'a> ExecCx<'a> {
         self.io.ready(ticket, self.stats)
     }
 
+    /// Park on this ticket. Push it, then return `Blocked`.
+    pub fn wait(&mut self, ticket: IoTicket) {
+        self.waits.push(Wait::Io(ticket));
+    }
+
     /// Take a decoded value from the shared cell for a unit, if a morsel already published one.
     pub fn shared_decoded(&mut self, key: IoKey) -> Option<ArrayRef> {
-        let hit = self.caches.decoded.decoded(key);
+        let hit = self.cells.decoded(key);
         if hit.is_some() {
             let IoKey::Segment(segment) = key;
             self.stats.record_decode_reuse(*segment);
@@ -425,79 +293,26 @@ impl<'a> ExecCx<'a> {
 
     /// Publish a decoded value into the shared cell for a unit.
     pub fn publish_decoded(&self, key: IoKey, array: &ArrayRef) {
-        self.caches.decoded.publish(key, array);
+        self.cells.publish(key, array);
     }
 
-    /// Clone dictionary values decoded earlier in this scan.
-    pub(crate) fn shared_dictionary(&self, id: NodeId) -> Option<ArrayRef> {
-        self.caches.dictionaries[id as usize].get().cloned()
+    /// Dictionary values decoded earlier in this scan for the same values plan allocation.
+    pub fn dictionary(&self, values: &ExactPlan) -> Option<ArrayRef> {
+        self.dictionaries.lock().get(values).cloned()
     }
 
     /// Publish dictionary values for reuse during this scan. First writer wins.
-    pub(crate) fn publish_dictionary(&self, id: NodeId, array: ArrayRef) -> ArrayRef {
-        self.caches.dictionaries[id as usize]
-            .get_or_init(|| array)
+    pub fn publish_dictionary(&self, values: ExactPlan, array: ArrayRef) -> ArrayRef {
+        self.dictionaries
+            .lock()
+            .entry(values)
+            .or_insert(array)
             .clone()
     }
 
-    /// Mutable access to the run's counters.
-    pub fn stats(&mut self) -> &mut ScanStats {
-        self.stats
-    }
-
-    /// Drive a child to a value under `hint`.
-    ///
-    /// The child is polled until it yields a value, blocks on exact tickets, or reports `Done`.
-    pub fn child_value(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<ValueBatch>> {
-        let mut node = self.arena.take(id);
-        let saved = std::mem::replace(&mut self.demand, hint);
-        let result = (|| {
-            loop {
-                match node.execute(self)? {
-                    ExecPoll::Value(batch) => return Ok(ChildPoll::Value(batch)),
-                    ExecPoll::Yield(_) => continue,
-                    ExecPoll::Blocked(waits) => return Ok(ChildPoll::Blocked(waits)),
-                    ExecPoll::Done => return Ok(ChildPoll::Done),
-                }
-            }
-        })();
-        self.demand = saved;
-        self.arena.put(id, node);
-        result
-    }
-
-    /// Drive a child to an array value, failing if it produced nothing.
-    pub fn child_array(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<ArrayRef>> {
-        match self.child_value(id, hint)? {
-            ChildPoll::Value(batch) => Ok(ChildPoll::Value(batch.value.into_array()?)),
-            ChildPoll::Blocked(waits) => Ok(ChildPoll::Blocked(waits)),
-            ChildPoll::Done => Ok(ChildPoll::Done),
-        }
-    }
-
-    /// Drive a child to a mask value.
-    pub fn child_mask(&mut self, id: NodeId, hint: Mask) -> VortexResult<ChildPoll<Mask>> {
-        match self.child_value(id, hint)? {
-            ChildPoll::Value(batch) => Ok(ChildPoll::Value(batch.value.into_mask()?)),
-            ChildPoll::Blocked(waits) => Ok(ChildPoll::Blocked(waits)),
-            ChildPoll::Done => Ok(ChildPoll::Done),
-        }
-    }
-}
-
-/// Context handed to [`ExecNode::retire`].
-pub struct RetireCx<'a> {
-    arena: &'a mut Arena,
-    cells: &'a SharedCells,
-    stats: &'a mut ScanStats,
-}
-
-impl<'a> RetireCx<'a> {
-    /// Retire a child subtree.
-    pub fn retire_child(&mut self, id: NodeId) {
-        let mut node = self.arena.take(id);
-        node.retire(self);
-        self.arena.put(id, node);
+    /// The session, for creating expression execution contexts.
+    pub fn session(&self) -> &VortexSession {
+        self.session
     }
 
     /// Mutable access to the run's counters.
@@ -507,73 +322,258 @@ impl<'a> RetireCx<'a> {
 
     /// Release this morsel's lease on a unit, dropping the shared cell at the last release.
     pub fn release_use(&mut self, key: IoKey) {
+        let IoKey::Segment(segment) = key;
+        self.stats
+            .record_event(TraceEventKind::Release { segment: *segment });
         self.cells.release(key);
     }
 }
 
-/// Reset an arena for one morsel before its planning continuation is queued.
-pub(crate) fn begin_morsel(arena: &mut Arena, root: NodeId, range: Range<u64>) {
-    arena.begin_morsel(root, range);
+/// An owned child: an operator plus its trace id, so every call into it is traced under a
+/// stable name.
+pub struct Child {
+    id: NodeId,
+    op: Box<dyn Operator>,
+    planned: bool,
 }
 
-/// Advance one planning quantum for a morsel.
-pub(crate) fn poll_plan_morsel(
-    arena: &mut Arena,
-    root: NodeId,
-    demand: &Mask,
-    io: &IoPlane,
-    caches: ScanCaches<'_>,
-    stats: &mut ScanStats,
-) -> VortexResult<PlanPoll> {
-    let mut cx = PlanCx {
-        arena,
-        io,
-        caches,
-        stats,
-        demand: demand.clone(),
-        priority: IoPriority::Required,
-    };
-    let mut node = cx.arena.take(root);
-    let poll = node.next_plan(&mut cx);
-    cx.arena.put(root, node);
-    poll
+impl Child {
+    /// Wrap an operator under trace id `id`.
+    pub fn new(id: NodeId, op: Box<dyn Operator>) -> Self {
+        Self {
+            id,
+            op,
+            planned: false,
+        }
+    }
+
+    /// This child's trace id.
+    pub fn id(&self) -> NodeId {
+        self.id
+    }
+
+    fn label(&self) -> String {
+        format!(
+            "{} range {}",
+            self.op.describe(),
+            rows(self.row_domain().range())
+        )
+    }
+
+    /// This child's construction-time row domain.
+    pub fn row_domain(&self) -> &RowDomain {
+        self.op.row_domain()
+    }
+
+    /// Resume look-ahead, or return complete if this child already finished it.
+    pub fn look_ahead(&mut self, cx: &mut Cx<'_>) -> VortexResult<LookAhead> {
+        if self.planned {
+            return Ok(LookAhead::Complete);
+        }
+        let traced = cx.stats.tracing();
+        if traced {
+            cx.stats.record_enter(
+                self.id,
+                TracePhase::Plan,
+                self.label(),
+                hint_summary(&self.row_domain().snapshot()),
+            );
+        }
+        let result = self.op.look_ahead(cx)?;
+        self.planned = result == LookAhead::Complete;
+        if traced {
+            cx.stats.record_return(match result {
+                LookAhead::Complete => PollOutcome::PlanComplete,
+                LookAhead::Blocked => PollOutcome::PlanBlocked(wait_keys(&cx.waits)),
+            });
+        }
+        Ok(result)
+    }
+
+    /// Pull the child under `hint`. See [`Operator::next`].
+    pub fn next(&mut self, hint: &Mask, cx: &mut Cx<'_>) -> VortexResult<Step> {
+        let traced = cx.stats.tracing();
+        if traced {
+            cx.stats.record_enter(
+                self.id,
+                TracePhase::Execute,
+                self.label(),
+                hint_summary(hint),
+            );
+        }
+        let step = self.op.next(hint, cx);
+        if traced && let Ok(step) = &step {
+            cx.stats.record_return(match step {
+                Step::Batch(batch) => PollOutcome::ExecuteValue {
+                    coverage: batch.coverage.clone(),
+                    value: match &batch.value {
+                        Value::Array(array) => ValueSummary::Array {
+                            rows: array.len(),
+                            dtype: array.dtype().to_string(),
+                        },
+                        Value::Mask(mask) => ValueSummary::Mask {
+                            selected: mask.true_count(),
+                            rows: mask.len(),
+                        },
+                    },
+                },
+                Step::Blocked => PollOutcome::ExecuteBlocked(wait_keys(&cx.waits)),
+                Step::Finished => PollOutcome::ExecuteFinished,
+            });
+        }
+        step
+    }
+
+    /// Close the child. See [`Operator::close`].
+    pub fn close(&mut self, cx: &mut Cx<'_>) {
+        let traced = cx.stats.tracing();
+        if traced {
+            cx.stats.record_retire_enter(self.id, self.label());
+        }
+        self.op.close(cx);
+        if traced {
+            cx.stats.record_retire_exit();
+        }
+    }
 }
 
-/// Advance one execution quantum for a morsel.
-pub(crate) fn poll_execute_morsel(
-    arena: &mut Arena,
-    root: NodeId,
-    demand: &Mask,
-    io: &IoPlane,
-    caches: ScanCaches<'_>,
-    session: &VortexSession,
-    stats: &mut ScanStats,
-) -> VortexResult<ExecPoll> {
-    let mut cx = ExecCx {
-        arena,
-        io,
-        caches,
-        session,
-        stats,
-        demand: demand.clone(),
-    };
-    let mut node = cx.arena.take(root);
-    let poll = node.execute(&mut cx);
-    cx.arena.put(root, node);
-    poll
+/// One morsel's operator tree and the mask buffers its filters read.
+///
+/// Built and dropped on the worker that drives the morsel; it never crosses a thread.
+pub struct Tree {
+    root: Child,
+    tees: Vec<MaskBuffer>,
 }
 
-/// Retire a completed morsel and release its decoded-cell leases.
-pub(crate) fn retire_morsel(
-    arena: &mut Arena,
-    root: NodeId,
-    cells: &SharedCells,
-    stats: &mut ScanStats,
-) {
-    let mut cx = RetireCx {
-        arena,
-        cells,
-        stats,
-    };
-    cx.retire_child(root);
+/// What the driver lends the tree for one call.
+pub(crate) struct Env<'a> {
+    pub io: &'a IoPlane,
+    pub cells: &'a SharedCells,
+    pub dictionaries: &'a Mutex<HashMap<ExactPlan, ArrayRef>>,
+    pub session: &'a VortexSession,
+    pub stats: &'a mut ScanStats,
+}
+
+impl Tree {
+    pub(crate) fn new(root: Child, tees: usize, morsel_start: u64) -> Self {
+        Self {
+            root,
+            tees: (0..tees).map(|_| MaskBuffer::new(morsel_start)).collect(),
+        }
+    }
+
+    fn cx<'a>(
+        &'a mut self,
+        range: Range<u64>,
+        demand: &'a Mask,
+        env: Env<'a>,
+    ) -> (&'a mut Child, Cx<'a>) {
+        let Tree { root, tees } = self;
+        let cx = Cx {
+            morsel: MorselRows { range, demand },
+            tees,
+            io: env.io,
+            cells: env.cells,
+            dictionaries: env.dictionaries,
+            session: env.session,
+            stats: env.stats,
+            priority: IoPriority::Required,
+            waits: WaitSet::new(),
+        };
+        (root, cx)
+    }
+
+    /// Resume look-ahead and return the dependencies that prevented further planning.
+    pub(crate) fn look_ahead(
+        &mut self,
+        range: Range<u64>,
+        demand: &Mask,
+        env: Env<'_>,
+    ) -> VortexResult<(LookAhead, WaitSet)> {
+        let (root, mut cx) = self.cx(range, demand, env);
+        let result = root.look_ahead(&mut cx)?;
+        Ok((result, cx.waits))
+    }
+
+    /// Pull the root once, returning the tickets it parked on when blocked.
+    pub(crate) fn next(
+        &mut self,
+        range: Range<u64>,
+        demand: &Mask,
+        env: Env<'_>,
+    ) -> VortexResult<(Step, WaitSet)> {
+        let (root, mut cx) = self.cx(range, demand, env);
+        let step = root.next(demand, &mut cx)?;
+        Ok((step, cx.waits))
+    }
+
+    /// Close the root, releasing every lease the morsel held.
+    pub(crate) fn close(&mut self, range: Range<u64>, demand: &Mask, env: Env<'_>) {
+        let (root, mut cx) = self.cx(range, demand, env);
+        root.close(&mut cx);
+    }
+}
+
+fn hint_summary(hint: &Mask) -> HintSummary {
+    HintSummary {
+        rows: hint.len(),
+        selected: hint.true_count(),
+    }
+}
+
+pub(crate) fn wait_keys(waits: &WaitSet) -> Vec<IoKey> {
+    waits
+        .waits()
+        .iter()
+        .map(|Wait::Io(ticket)| ticket.key())
+        .collect()
+}
+
+/// Keep exactly the rows `keep` selects, one chunk at a time.
+///
+/// The generic filter kernel turns a sparse mask over a chunked array into per-index takes,
+/// which cost Q15 about 15 percent. Filtering each chunk by its own slice of the mask keeps the
+/// cost profile the leaves have when they filter themselves.
+pub(crate) fn filter_rows(array: ArrayRef, keep: Mask) -> VortexResult<ArrayRef> {
+    if keep.all_true() {
+        return Ok(array);
+    }
+    if keep.all_false() {
+        return Ok(Canonical::empty(array.dtype()).into_array());
+    }
+    if let Some(chunked) = array.as_opt::<Chunked>() {
+        let dtype = array.dtype().clone();
+        let mut parts = Vec::with_capacity(chunked.nchunks());
+        let mut offset = 0usize;
+        for chunk in chunked.iter_chunks() {
+            let end = offset + chunk.len();
+            let part = keep.slice(offset..end);
+            if !part.all_false() {
+                parts.push(filter_rows(chunk.clone(), part)?);
+            }
+            offset = end;
+        }
+        return concat_parts(parts, &dtype);
+    }
+    if let Some(struct_) = array.as_opt::<Struct>() {
+        let len = keep.true_count();
+        let validity = struct_.struct_validity().filter(&keep)?;
+        let fields = struct_
+            .iter_unmasked_fields()
+            .map(|field| filter_rows(field.clone(), keep.clone()))
+            .collect::<VortexResult<Vec<_>>>()?;
+        return Ok(
+            StructArray::try_new(struct_.names().clone(), fields, len, validity)?.into_array(),
+        );
+    }
+    array.filter(keep)
+}
+
+/// Concatenate parts in order: empty, the single part, or a chunked array.
+pub(crate) fn concat_parts(mut parts: Vec<ArrayRef>, dtype: &DType) -> VortexResult<ArrayRef> {
+    Ok(match parts.len() {
+        0 => Canonical::empty(dtype).into_array(),
+        1 => parts.pop().vortex_expect("one part"),
+        _ => ChunkedArray::try_new(parts, dtype.clone())?.into_array(),
+    })
 }

@@ -47,6 +47,7 @@ maxdepth: 1
 morsel-executor-primer
 morsel-pull-and-push
 morsel-pull-and-push-eval
+morsel-pull-operators
 layout-reader-v1
 plan-v2
 layout27

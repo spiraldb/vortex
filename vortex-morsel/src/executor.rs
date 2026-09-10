@@ -13,7 +13,6 @@ use futures::future::BoxFuture;
 use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::expr::BoundExpression;
-use vortex_array::expr::Expression;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -28,13 +27,13 @@ use vortex_utils::aliases::hash_map::HashMap;
 use crate::ExecPlan;
 use crate::MorselExecutor;
 use crate::MorselScan;
-use crate::build::LayoutPlanners;
+use crate::build::unbind;
+use crate::build_plan;
 use crate::driver::ScanCancellation;
 use crate::morsels;
-use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
 
-type PlanCacheKey = (String, Option<String>, ConjunctMode);
+type PlanCacheKey = (String, Option<String>);
 type OutputSender = Mutex<Option<oneshot::Sender<VortexResult<Option<ArrayRef>>>>>;
 
 /// Morsels kept visible to background I/O ahead of the active workers, so the file driver sees
@@ -45,9 +44,7 @@ const DEFAULT_LOOKAHEAD_MORSELS: usize = 16;
 pub struct MorselScanExecutor {
     layout: LayoutRef,
     segments: Arc<dyn SegmentSource>,
-    planners: LayoutPlanners,
     target_rows: u64,
-    conjunct_mode: ConjunctMode,
     threads: usize,
     lookahead_morsels: usize,
     plan_cache: Mutex<HashMap<PlanCacheKey, Arc<ExecPlan>>>,
@@ -59,9 +56,7 @@ impl MorselScanExecutor {
         Self {
             layout,
             segments,
-            planners: LayoutPlanners::default(),
             target_rows: 128 * 1024,
-            conjunct_mode: ConjunctMode::Cascade,
             threads: 4,
             lookahead_morsels: DEFAULT_LOOKAHEAD_MORSELS,
             plan_cache: Mutex::default(),
@@ -74,21 +69,9 @@ impl MorselScanExecutor {
         self
     }
 
-    /// Plan with `planners` instead of the built-in layout planners.
-    pub fn with_planners(mut self, planners: LayoutPlanners) -> Self {
-        self.planners = planners;
-        self
-    }
-
     /// Set the target number of rows per morsel.
     pub fn with_target_rows(mut self, target_rows: u64) -> Self {
         self.target_rows = target_rows;
-        self
-    }
-
-    /// Set the conjunct evaluation policy.
-    pub fn with_conjunct_mode(mut self, conjunct_mode: ConjunctMode) -> Self {
-        self.conjunct_mode = conjunct_mode;
         self
     }
 
@@ -255,18 +238,12 @@ impl MorselScanExecutor {
         let key = (
             projection.to_string(),
             filter.as_ref().map(ToString::to_string),
-            self.conjunct_mode,
         );
         let mut cache = self.plan_cache.lock();
         match cache.get(&key) {
             Some(plan) => Ok(Arc::clone(plan)),
             None => {
-                let plan = Arc::new(self.planners.build_plan(
-                    &self.layout,
-                    &projection,
-                    filter.as_ref(),
-                    self.conjunct_mode,
-                )?);
+                let plan = Arc::new(build_plan(&self.layout, &projection, filter.as_ref())?);
                 cache.insert(key, Arc::clone(&plan));
                 Ok(plan)
             }
@@ -304,17 +281,4 @@ impl Drop for DeliveryGuard {
             self.cancellation.cancel();
         }
     }
-}
-
-fn unbind(expr: &BoundExpression) -> VortexResult<Expression> {
-    let Some(scalar_fn) = expr.as_scalar() else {
-        return Ok(Expression::Root);
-    };
-    Expression::try_new(
-        scalar_fn.clone(),
-        expr.children()
-            .iter()
-            .map(unbind)
-            .collect::<VortexResult<Vec<_>>>()?,
-    )
 }
