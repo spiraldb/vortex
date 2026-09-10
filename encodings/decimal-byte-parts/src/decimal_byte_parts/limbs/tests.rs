@@ -4,16 +4,60 @@
 use rstest::rstest;
 use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
+use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::Constant;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::assert_arrays_eq;
 use vortex_array::dtype::DecimalDType;
 use vortex_array::dtype::i256;
+use vortex_array::match_each_decimal_value_type;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 
 use super::*;
+
+#[rstest]
+#[case::empty_non_nullable(0, Validity::NonNullable)]
+#[case::empty_nullable(0, Validity::AllValid)]
+#[case::empty_all_null(0, Validity::AllInvalid)]
+#[case::all_null(3, Validity::AllInvalid)]
+#[case::all_null_array(3, Validity::Array(BoolArray::from_iter([false; 3]).into_array()))]
+fn test_split_without_valid_rows(
+    #[case] len: usize,
+    #[case] validity: Validity,
+    #[values(
+        DecimalType::I8,
+        DecimalType::I16,
+        DecimalType::I32,
+        DecimalType::I64,
+        DecimalType::I128,
+        DecimalType::I256
+    )]
+    values_type: DecimalType,
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let decimal = match_each_decimal_value_type!(values_type, |T| {
+        DecimalArray::new(
+            Buffer::<T>::zeroed(len),
+            DecimalDType::new(T::MAX_PRECISION, 0),
+            validity,
+        )
+    });
+    let parts = split_decimal(&decimal, &mut ctx)?;
+    assert!(parts.msp.is::<Constant>());
+    assert!(parts.lower_parts.iter().all(|part| part.is::<Constant>()));
+    assert_eq!(parts.msp.len(), len);
+    assert_eq!(
+        parts.msp.dtype().nullability(),
+        decimal.dtype().nullability()
+    );
+    let round_tripped = round_trip(decimal.clone())?;
+    assert_eq!(round_tripped.values_type(), values_type);
+    assert_arrays_eq!(decimal, round_tripped, &mut ctx);
+    Ok(())
+}
 
 #[rstest]
 #[case::non_nullable(Validity::NonNullable)]
@@ -40,16 +84,19 @@ fn test_split_zeroes_null_words(
     let decimal = decimal
         .slice(3..len + 3)?
         .execute::<DecimalArray>(&mut ctx)?;
+    let mask = decimal.validity()?.execute_mask(len, &mut ctx)?;
     let expected = PrimitiveArray::new(
-        decimal
-            .validity()?
-            .execute_mask(len, &mut ctx)?
-            .iter()
+        mask.iter()
             .map(|valid| if valid { u64::MAX } else { 0 })
             .collect::<Buffer<_>>(),
         Validity::NonNullable,
     );
     let parts = split_decimal(&decimal, &mut ctx)?;
+    assert_eq!(parts.lower_parts.len(), if wide_256 { 3 } else { 1 });
+    assert_eq!(
+        parts.msp.dtype(),
+        &DType::Primitive(PType::I64, decimal.dtype().nullability())
+    );
     for lower in parts.lower_parts {
         assert_arrays_eq!(expected.clone(), lower, &mut ctx);
     }
@@ -111,9 +158,8 @@ fn test_split_assemble_i256(#[case] value: i256) -> VortexResult<()> {
 }
 
 #[rstest]
-fn test_split_narrow_decimal_has_no_lower_parts(
-    #[values(Validity::NonNullable, Validity::AllInvalid, Validity::from_iter([true, false, true]))]
-    validity: Validity,
+fn test_split_narrow_decimal_reuses_values(
+    #[values(Validity::NonNullable, Validity::from_iter([true, false, true]))] validity: Validity,
 ) -> VortexResult<()> {
     let mut ctx = array_session().create_execution_ctx();
     let decimal = DecimalArray::new(buffer![1i32, 2, 3], DecimalDType::new(2, 0), validity);

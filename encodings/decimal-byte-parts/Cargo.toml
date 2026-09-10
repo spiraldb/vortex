@@ -31,6 +31,7 @@ hegeltest = { workspace = true }
 rand = { workspace = true }
 rstest = { workspace = true }
 vortex-array = { path = "../../vortex-array", features = ["_test-harness"] }
+vortex-bench-support = { workspace = true }
 
 [[bench]]
 name = "dbp_assemble"

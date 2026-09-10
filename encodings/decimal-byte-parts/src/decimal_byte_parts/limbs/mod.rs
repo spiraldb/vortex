@@ -20,6 +20,7 @@ use std::ops::Shl;
 use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
+use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::DecimalArray;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::dtype::DType;
@@ -31,6 +32,7 @@ use vortex_array::dtype::Nullability;
 use vortex_array::dtype::PType;
 use vortex_array::dtype::i256;
 use vortex_array::match_each_signed_integer_ptype;
+use vortex_array::scalar::Scalar;
 use vortex_array::validity::Validity;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferMut;
@@ -40,11 +42,17 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_mask::Mask;
 
-/// The maximum number of lower parts an encoded decimal can carry. Each is 64 bits.
+/// The maximum number of 64-bit lower parts an encoded `i128` decimal can carry.
+pub const MAX_I128_LOWER_PARTS: usize = 1;
+
+/// The maximum number of 64-bit lower parts an encoded `i256` decimal can carry.
+pub const MAX_I256_LOWER_PARTS: usize = 3;
+
+/// The maximum number of 64-bit lower parts an encoded decimal can carry.
 ///
 /// Since the MSP is at most 64 bits wide, three additional 64-bit parts saturates
 /// the 256-bit maximum width of a Vortex decimal.
-pub const MAX_LOWER_PARTS: usize = 3;
+pub const MAX_LOWER_PARTS: usize = MAX_I256_LOWER_PARTS;
 
 /// Number of bits stored in each lower part.
 const LOWER_PART_BITS: usize = 64;
@@ -62,15 +70,18 @@ pub struct DecimalParts {
 }
 
 impl DecimalParts {
-    /// Construct decimal parts from an MSP with no lower parts.
-    fn from_msp<T: NativePType>(values: Buffer<T>, validity: Validity) -> Self {
+    /// Construct decimal parts from the MSP buffer constituting a narrow decimal (`i64` or narrower).
+    /// Narrow decimals have an MSP at most as wide as `i64` and no lower parts.
+    fn from_narrow<T: NativePType>(values: Buffer<T>, validity: Validity) -> Self {
         Self {
             msp: PrimitiveArray::new(values, validity).into_array(),
             lower_parts: Vec::new(),
         }
     }
 
-    fn new(
+    /// Construct decimal parts arrays from the buffers constituting a wide decimal (`i128` or `i256`).
+    /// Wide decimals have an `i64` MSP and up to [`MAX_LOWER_PARTS`] `u64` lower parts.
+    fn from_wide(
         msp: Buffer<i64>,
         lower_parts: impl IntoIterator<Item = Buffer<u64>>,
         validity: Validity,
@@ -94,35 +105,63 @@ impl DecimalParts {
 ///
 /// The MSP retains the decimal's validity while lower parts are non-nullable. Lower parts
 /// are constructed with zeroes at null positions instead of invalid bytes.
+/// Empty and all-null arrays use constant parts, preserving the part types and MSP's nullability.
 ///
 /// # Errors
 ///
-/// Returns an error if the array's validity cannot be derived or executed.
+/// * If the array's validity cannot be derived or executed.
 pub fn split_decimal(decimal: &DecimalArray, ctx: &mut ExecutionCtx) -> VortexResult<DecimalParts> {
     let validity = decimal.validity()?;
+    let len = decimal.len();
+    let mask = validity.execute_mask(len, ctx)?;
+
+    if mask.all_false() || decimal.is_empty() {
+        return Ok(split_no_valid_row(decimal, &validity));
+    }
+
     Ok(match decimal.values_type() {
-        DecimalType::I8 => DecimalParts::from_msp(decimal.buffer::<i8>(), validity),
-        DecimalType::I16 => DecimalParts::from_msp(decimal.buffer::<i16>(), validity),
-        DecimalType::I32 => DecimalParts::from_msp(decimal.buffer::<i32>(), validity),
-        DecimalType::I64 => DecimalParts::from_msp(decimal.buffer::<i64>(), validity),
+        DecimalType::I8 => DecimalParts::from_narrow(decimal.buffer::<i8>(), validity),
+        DecimalType::I16 => DecimalParts::from_narrow(decimal.buffer::<i16>(), validity),
+        DecimalType::I32 => DecimalParts::from_narrow(decimal.buffer::<i32>(), validity),
+        DecimalType::I64 => DecimalParts::from_narrow(decimal.buffer::<i64>(), validity),
         DecimalType::I128 => {
-            let mask = validity.execute_mask(decimal.len(), ctx)?;
             let (msp, lower) = split_wide(&decimal.buffer::<i128>(), &mask, i128_to_parts);
-            DecimalParts::new(msp, lower, validity)
+            DecimalParts::from_wide(msp, lower, validity)
         }
         DecimalType::I256 => {
-            let mask = validity.execute_mask(decimal.len(), ctx)?;
             let (msp, lower) = split_wide(&decimal.buffer::<i256>(), &mask, i256_to_parts);
-            DecimalParts::new(msp, lower, validity)
+            DecimalParts::from_wide(msp, lower, validity)
         }
     })
+}
+
+/// Splits decimals with no valid rows (all null or empty) into constant decimal parts with the
+/// corresponding nullability.
+fn split_no_valid_row(decimal: &DecimalArray, validity: &Validity) -> DecimalParts {
+    let (msp_ptype, lower_part_count) = match decimal.values_type() {
+        DecimalType::I8 => (PType::I8, 0),
+        DecimalType::I16 => (PType::I16, 0),
+        DecimalType::I32 => (PType::I32, 0),
+        DecimalType::I64 => (PType::I64, 0),
+        DecimalType::I128 => (PType::I64, MAX_I128_LOWER_PARTS),
+        DecimalType::I256 => (PType::I64, MAX_I256_LOWER_PARTS),
+    };
+    // Empty masks are also all-false. The default scalar is null for nullable inputs
+    // and zero for non-nullable empty inputs, preserving the MSP's nullability.
+    let msp = Scalar::default_value(&DType::Primitive(msp_ptype, validity.nullability()));
+    let len = decimal.len();
+    DecimalParts {
+        msp: ConstantArray::new(msp, len).into_array(),
+        lower_parts: vec![ConstantArray::new(0u64, len).into_array(); lower_part_count],
+    }
 }
 
 /// Split wide integers into a signed MSP and `N` unsigned lower parts.
 ///
 /// `to_parts` returns the MSP and lower words in most-significant-first order.
 /// It is specialized for each input type: `i128` has one lower word and `i256`
-/// has three. Null rows get zeros in every output buffer.
+/// has three. Null rows get zeros in every output buffer. The caller handles empty
+/// and all-null arrays before calling this function.
 fn split_wide<T: Copy, const N: usize>(
     values: &Buffer<T>,
     validity: &Mask,
@@ -131,15 +170,6 @@ fn split_wide<T: Copy, const N: usize>(
     let len = values.len();
     let mut msp = BufferMut::<i64>::with_capacity(len);
     let mut lower = std::array::from_fn::<_, N, _>(|_| BufferMut::<u64>::with_capacity(len));
-
-    // Zero out all parts if all null
-    if validity.all_false() {
-        msp.push_n(0, len);
-        for part in &mut lower {
-            part.push_n(0, len);
-        }
-        return (msp.freeze(), lower.map(BufferMut::freeze));
-    }
 
     // Allocate without zeroing, then initialize every part of each row together.
     let msp_out = &mut msp.spare_capacity_mut()[..len];
@@ -180,7 +210,7 @@ fn split_wide<T: Copy, const N: usize>(
                 }
             }
         }
-        Mask::AllFalse(_) => unreachable!("AllFalse case addressed above"),
+        Mask::AllFalse(_) => unreachable!("all-null arrays are handled by split_decimal"),
     }
 
     // SAFETY: the input and all output slices have len elements. Both branches
@@ -197,7 +227,7 @@ fn split_wide<T: Copy, const N: usize>(
 
 /// Extract the high signed word and low unsigned word of an `i128`.
 #[inline]
-const fn i128_to_parts(value: i128) -> (i64, [u64; 1]) {
+const fn i128_to_parts(value: i128) -> (i64, [u64; MAX_I128_LOWER_PARTS]) {
     #[expect(
         clippy::cast_possible_truncation,
         clippy::cast_sign_loss,
@@ -208,7 +238,7 @@ const fn i128_to_parts(value: i128) -> (i64, [u64; 1]) {
 
 /// Extract the signed MSP and three unsigned lower words of an `i256`.
 #[inline]
-const fn i256_to_parts(value: i256) -> (i64, [u64; MAX_LOWER_PARTS]) {
+const fn i256_to_parts(value: i256) -> (i64, [u64; MAX_I256_LOWER_PARTS]) {
     let (low, high) = value.to_parts();
     #[expect(
         clippy::cast_possible_truncation,
