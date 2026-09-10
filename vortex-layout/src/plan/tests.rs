@@ -1093,7 +1093,7 @@ fn exact_plan_keys_use_allocation_identity() -> VortexResult<()> {
     let first = ExactPlan(lower(&flat(4, dtype.clone(), 0))?);
     let same = first.clone();
     let distinct = ExactPlan(lower(&flat(4, dtype, 0))?);
-    let mut values = HashMap::default();
+    let mut values: HashMap<ExactPlan, i32> = HashMap::default();
     values.insert(first, 10);
     values.insert(distinct.clone(), 20);
     assert_eq!(values.len(), 2);
