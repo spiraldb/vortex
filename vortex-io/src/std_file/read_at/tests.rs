@@ -2,6 +2,7 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 #![cfg(feature = "tokio")]
+#![expect(clippy::cast_possible_truncation, reason = "fixture sizes are small")]
 
 use std::io::Write;
 

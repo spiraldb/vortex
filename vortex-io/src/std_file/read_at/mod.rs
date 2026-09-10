@@ -183,7 +183,9 @@ fn open_file(path: &Path, options: FileReadAtOptions, uri: &str) -> io::Result<(
         Ok(file) => match DirectIoConstraints::probe(&file) {
             Ok(constraints) => Ok((file, ReadMode::Direct(constraints))),
             Err(err) => {
-                tracing::warn!("{uri}: direct I/O constraints unavailable, using buffered reads: {err}");
+                tracing::warn!(
+                    "{uri}: direct I/O constraints unavailable, using buffered reads: {err}"
+                );
                 Ok((File::open(path)?, ReadMode::Buffered))
             }
         },

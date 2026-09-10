@@ -84,12 +84,12 @@ mod end_to_end {
 
     use tempfile::TempDir;
     use vortex_array::IntoArray;
+    use vortex_array::VortexSessionExecute;
     use vortex_array::array_session;
     use vortex_array::arrays::ChunkedArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::arrays::StructArray;
     use vortex_array::arrays::VarBinArray;
-    use vortex_array::VortexSessionExecute;
     use vortex_array::assert_arrays_eq;
     use vortex_array::memory::BufferAllocatorRef;
     use vortex_array::stream::ArrayStreamExt;
@@ -99,8 +99,8 @@ mod end_to_end {
     use vortex_io::session::RuntimeSession;
     use vortex_io::session::RuntimeSessionExt;
     use vortex_io::std_file::FileReadAt;
-    use vortex_io::std_file::FileWrite;
     use vortex_io::std_file::FileReadAtOptions;
+    use vortex_io::std_file::FileWrite;
     use vortex_layout::session::LayoutSession;
     use vortex_session::VortexSession;
 
@@ -120,10 +120,11 @@ mod end_to_end {
 
     /// Enough chunks and columns to produce a spread of small and large segments.
     fn sample() -> VortexResult<vortex_array::ArrayRef> {
-        let numbers = ChunkedArray::from_iter(
-            (0..8).map(|c| PrimitiveArray::from_iter((0..2000i64).map(|i| i * (c + 1))).into_array()),
-        )
-        .into_array();
+        let numbers =
+            ChunkedArray::from_iter((0..8).map(|c| {
+                PrimitiveArray::from_iter((0..2000i64).map(|i| i * (c + 1))).into_array()
+            }))
+            .into_array();
         let strings = ChunkedArray::from_iter((0..8).map(|c| {
             VarBinArray::from_iter(
                 (0..2000).map(|i| Some(format!("chunk-{c}-row-{i}"))),
@@ -146,13 +147,8 @@ mod end_to_end {
     }
 
     async fn segment_specs(path: &std::path::Path) -> VortexResult<Arc<[SegmentSpec]>> {
-        Ok(SESSION
-            .open_options()
-            .open_path(path)
-            .await?
-            .footer()
-            .segment_map()
-            .clone())
+        let file = SESSION.open_options().open_path(path).await?;
+        Ok(Arc::clone(file.footer().segment_map()))
     }
 
     fn block_of(spec: &SegmentSpec) -> u64 {
