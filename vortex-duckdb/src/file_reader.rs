@@ -76,8 +76,10 @@ use crate::table_function::convert_result;
 // separate thread.
 
 fn resolve_filesystem(url: &Url) -> VortexResult<(FileSystemRef, String)> {
-    // Compat makes us use tokio which is very bad for local reads on
-    // high-core machines because reads go into blocking pool
+    // Keep local files off `Compat`, which routes reads through Tokio. Beyond the cost of
+    // pushing every local read into a blocking pool on high-core machines, a Vortex runtime
+    // that awaits a Tokio task while its driving thread sits inside `Runtime::block_on` loses
+    // the completion wakeup and stalls forever (#9817).
     if url.scheme() == "file" {
         return Ok((
             Arc::new(ObjectStoreFileSystem::local(RUNTIME.handle())),

@@ -11555,6 +11555,7 @@ dependencies = [
  "datafusion 55.0.0",
  "datafusion-functions-nested 55.0.0",
  "datafusion-sqllogictest",
+ "futures",
  "indicatif",
  "regex",
  "rstest",
