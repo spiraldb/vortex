@@ -53,7 +53,7 @@ jobs:
           RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"
         run: |
           cargo build --package ${{ inputs.benchmark_id }} --profile release_debug \
-            --features ${{ inputs.with_lance && 'lance,' || '' }}unstable_encodings
+            ${{ inputs.with_lance && '--features lance' || '' }}
       - name: Pre-upload benchmark debuginfo to Polar Signals
         if: github.event.pull_request.head.repo.fork == false
         uses: ./.github/actions/upload-parca-debuginfo

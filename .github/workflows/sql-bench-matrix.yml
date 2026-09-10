@@ -73,7 +73,7 @@ jobs:
           if [ "${{ inputs.mode }}" != "pr" ]; then
             packages+=(--bin lance-bench)
           fi
-          cargo build "${packages[@]}" --profile release_debug --features unstable_encodings
+          cargo build "${packages[@]}" --profile release_debug
       - parallel:
           - name: Upload binaries
             uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7

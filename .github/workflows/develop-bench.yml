@@ -62,7 +62,7 @@ jobs:
         env:
           RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"
         run: |
-          cargo build --bin ${{ matrix.benchmark.id }} --profile release_debug ${{ matrix.benchmark.build_args }} --features unstable_encodings
+          cargo build --bin ${{ matrix.benchmark.id }} --profile release_debug ${{ matrix.benchmark.build_args }}
       - name: Pre-upload benchmark debuginfo to Polar Signals
         uses: ./.github/actions/upload-parca-debuginfo
         continue-on-error: true
