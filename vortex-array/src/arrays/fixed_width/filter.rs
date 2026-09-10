@@ -21,7 +21,7 @@ mod tests;
 
 pub(crate) fn filter<V: FixedWidthArray>(array: &Array<V>, mask: &MaskValuesRef) -> Array<V> {
     let array = array.as_view();
-    let values = filter_records(V::values(array), V::byte_width(array), mask.as_ref());
+    let values = filter_records(V::values::<u8>(array), V::byte_width(array), mask.as_ref());
     let validity = filter_validity(
         array
             .validity()

@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::fmt::Debug;
+
 use rstest::rstest;
+use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
@@ -22,6 +25,7 @@ use crate::arrays::PrimitiveArray;
 use crate::assert_arrays_eq;
 use crate::compute::conformance::take::test_take_conformance;
 use crate::dtype::DecimalDType;
+use crate::dtype::half::f16;
 use crate::dtype::i256;
 use crate::validity::Validity;
 
@@ -66,26 +70,32 @@ fn fallback_take_rejects_out_of_bounds_index() {
     drop(take_byte_records(&values, 3, 3, &[3u32]));
 }
 
-#[test]
-fn take_variable_length_slices() -> VortexResult<()> {
-    let values = buffer![10u8, 11, 12, 13, 14].into_byte_buffer();
-    let taken = take_slices(&values, 1, 5, &[1u32, 3], &[2u32, 1], 3)?;
-    assert_eq!(taken.as_slice(), &[11, 12, 13]);
+#[rstest]
+#[case::u8(buffer![10u8, 11, 12, 13, 14])]
+#[case::u16(buffer![10u16, 11, 12, 13, 14])]
+#[case::u32(buffer![10u32, 11, 12, 13, 14])]
+#[case::u64(buffer![10u64, 11, 12, 13, 14])]
+#[case::u128(buffer![10u128, 11, 12, 13, 14])]
+#[case::i256(Buffer::from_iter((10..15).map(i256::from_i128)))]
+#[case::three_bytes(buffer![[10u8; 3], [11; 3], [12; 3], [13; 3], [14; 3]])]
+#[case::twelve_bytes(buffer![[10u8; 12], [11; 12], [12; 12], [13; 12], [14; 12]])]
+fn take_typed_slices<T: Copy + Debug + Eq>(#[case] values: Buffer<T>) -> VortexResult<()> {
+    let values = values.aligned(Alignment::new(64));
+    let taken = take_slices(&values, &[1u32, 3], &[2u32, 1], 3)?;
+    assert_eq!(taken.as_slice(), &values[1..4]);
+    assert_eq!(taken.alignment(), values.alignment());
+
+    let taken = take_slices_constant_length(&values, &[0u32, 3], 2, 4)?;
+    let expected = [&values[..2], &values[3..]].concat();
+    assert_eq!(taken.as_slice(), expected);
+    assert_eq!(taken.alignment(), values.alignment());
     Ok(())
 }
 
 #[test]
 fn variable_length_slices_validate_output_length() {
-    let values = buffer![10u8, 11, 12, 13].into_byte_buffer();
-    assert!(take_slices(&values, 1, 4, &[0u32, 2], &[1u32, 1], 3).is_err());
-}
-
-#[test]
-fn take_constant_length_slices() -> VortexResult<()> {
-    let values = buffer![10u8, 11, 12, 13, 14].into_byte_buffer();
-    let taken = take_slices_constant_length(&values, 1, 5, &[0u32, 3], 2, 4)?;
-    assert_eq!(taken.as_slice(), &[10, 11, 13, 14]);
-    Ok(())
+    let values = buffer![10u8, 11, 12, 13];
+    assert!(take_slices(&values, &[0u32, 2], &[1u32, 1], 3).is_err());
 }
 
 #[test]
@@ -131,38 +141,39 @@ fn null_index_skips_out_of_bounds_decimal_value() -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn decimal_i256_take_consumes_piecewise_indices() -> VortexResult<()> {
+#[rstest]
+#[case::u8(PrimitiveArray::from_iter([10u8, 20, 30, 40, 50]).into_array())]
+#[case::f16(PrimitiveArray::from_iter([10.0, -20.0, 30.0, -40.0, 50.0].map(f16::from_f32)).into_array())]
+#[case::f32(PrimitiveArray::from_iter([10f32, -20.0, 30.0, -40.0, 50.0]).into_array())]
+#[case::f64(PrimitiveArray::from_iter([10f64, -20.0, 30.0, -40.0, 50.0]).into_array())]
+#[case::decimal_i128(DecimalArray::new(
+    buffer![100i128, -200, 300, -400, 500],
+    DecimalDType::new(19, 2),
+    Validity::NonNullable,
+).into_array())]
+#[case::decimal_i256(DecimalArray::new(
+    Buffer::from_iter([100, -200, 300, -400, 500].map(i256::from_i128)),
+    DecimalDType::new(76, 2),
+    Validity::NonNullable,
+).into_array())]
+fn fixed_width_take_consumes_piecewise_indices(
+    #[case] values: ArrayRef,
+    #[values(false, true)] constant_length: bool,
+) -> VortexResult<()> {
     let mut ctx = array_session().create_execution_ctx();
-    let decimal_dtype = DecimalDType::new(76, 2);
-    let values = DecimalArray::new(
-        buffer![
-            i256::from_i128(100),
-            i256::from_i128(200),
-            i256::from_i128(300),
-            i256::from_i128(400),
-            i256::from_i128(500),
-        ],
-        decimal_dtype,
-        Validity::NonNullable,
-    );
     let starts = PrimitiveArray::from_iter([1u64, 3]).into_array();
-    let lengths = PrimitiveArray::from_iter([2u64, 1]).into_array();
+    let (lengths, output_len) = if constant_length {
+        (ConstantArray::new(2u64, 2).into_array(), 4)
+    } else {
+        (PrimitiveArray::from_iter([2u64, 1]).into_array(), 3)
+    };
     let multipliers = ConstantArray::new(1u64, 2).into_array();
-    let indices = PiecewiseSequenceArray::try_new(starts, lengths, multipliers, 3)?.into_array();
+    let indices =
+        PiecewiseSequenceArray::try_new(starts, lengths, multipliers, output_len)?.into_array();
 
     let taken = values.take(indices)?;
 
-    let expected = DecimalArray::new(
-        buffer![
-            i256::from_i128(200),
-            i256::from_i128(300),
-            i256::from_i128(400),
-        ],
-        decimal_dtype,
-        Validity::NonNullable,
-    );
-    assert_arrays_eq!(taken, expected, &mut ctx);
+    assert_arrays_eq!(taken, values.slice(1..1 + output_len)?, &mut ctx);
     Ok(())
 }
 
