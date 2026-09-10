@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q14.slt.no explains the upstream query unchanged.
+query ITI
+SELECT "SearchEngineID", "SearchPhrase", COUNT(*) AS c FROM hits WHERE "SearchPhrase" <> '' GROUP BY "SearchEngineID", "SearchPhrase" ORDER BY c DESC, "SearchEngineID", "SearchPhrase" LIMIT 10;
+----
+2 ведомосквы вместу 3478
+2 ведомосквы вы из 1857
+2 ведомосковский 1682
+2 ведомосквиталия страции 1434
+4 покеты рецепт засня 959
+2 рецепты сбербан 737
+3 ведомосквы вместу 660
+2 авторий 576
+3 ведомосквиталия страции 494
+4 ведомосквы вместу 442

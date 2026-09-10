@@ -31,7 +31,7 @@ use crate::arrays::BoolArray;
 use crate::arrays::ConstantArray;
 use crate::arrays::bool::BoolArrayExt;
 use crate::builders::ArrayBuilder;
-use crate::builders::builder_with_capacity;
+use crate::builders::builder_with_capacity_in;
 use crate::builtins::ArrayBuiltins;
 use crate::dtype::DType;
 use crate::expr::Expression;
@@ -354,7 +354,7 @@ fn merge_case_branches(
         return else_value.cast(output_dtype);
     }
 
-    let builder = builder_with_capacity(&output_dtype, else_value.len());
+    let builder = builder_with_capacity_in(&output_dtype, else_value.len(), ctx.allocator());
 
     let fragmented = spans.len() > else_value.len() / SLICE_CROSSOVER_RUN_LEN;
     if fragmented {

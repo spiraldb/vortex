@@ -1,0 +1,26 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+statement ok
+DROP VIEW supplier;
+
+statement ok
+DROP VIEW region;
+
+statement ok
+DROP VIEW nation;
+
+statement ok
+DROP VIEW lineitem;
+
+statement ok
+DROP VIEW orders;
+
+statement ok
+DROP VIEW customer;
+
+statement ok
+DROP VIEW partsupp;
+
+statement ok
+DROP VIEW part;

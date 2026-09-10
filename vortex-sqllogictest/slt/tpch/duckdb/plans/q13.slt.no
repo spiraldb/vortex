@@ -1,0 +1,393 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN (FORMAT json)
+select
+    c_count,
+    count(*) as custdist
+from
+    (
+        select
+            c_custkey,
+            count(o_orderkey)
+        from
+            customer left outer join orders on
+                        c_custkey = o_custkey
+                    and o_comment not like '%special%requests%'
+        group by
+            c_custkey
+    ) as c_orders (c_custkey, c_count)
+group by
+    c_count
+order by
+    custdist desc,
+    c_count desc;
+----
+logical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "AGGREGATE",
+                                        "children": [
+                                            {
+                                                "name": "COMPARISON_JOIN",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "READ_VORTEX",
+                                                                "children": [],
+                                                                "extra_info": {
+                                                                    "Filters": "",
+                                                                    "Function": "Vortex Scan"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "c_custkey",
+                                                                "c_name",
+                                                                "c_address",
+                                                                "c_nationkey",
+                                                                "c_phone",
+                                                                "c_acctbal",
+                                                                "c_mktsegment",
+                                                                "c_comment"
+                                                            ]
+                                                        }
+                                                    },
+                                                    {
+                                                        "name": "FILTER",
+                                                        "children": [
+                                                            {
+                                                                "name": "PROJECTION",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "READ_VORTEX",
+                                                                        "children": [],
+                                                                        "extra_info": {
+                                                                            "Filters": "",
+                                                                            "Function": "Vortex Scan"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Expressions": [
+                                                                        "o_orderkey",
+                                                                        "o_custkey",
+                                                                        "o_orderstatus",
+                                                                        "o_totalprice",
+                                                                        "o_orderdate",
+                                                                        "o_orderpriority",
+                                                                        "o_clerk",
+                                                                        "o_shippriority",
+                                                                        "o_comment"
+                                                                    ]
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": "(o_comment !~~ '%special%requests%')"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Join Type": "LEFT",
+                                                    "Conditions": "(c_custkey = o_custkey)"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Groups": "c_custkey",
+                                            "Expressions": "count(o_orderkey)"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": [
+                                        "c_custkey",
+                                        "count(o_orderkey)"
+                                    ]
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "c_count",
+                            "Expressions": "count_star()"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "c_count",
+                        "custdist"
+                    ]
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": [
+                "count_star()",
+                "c_orders.c_count"
+            ]
+        }
+    }
+]
+logical_opt [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "PROJECTION",
+                "children": [
+                    {
+                        "name": "AGGREGATE",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "AGGREGATE",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "COMPARISON_JOIN",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "PROJECTION",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "READ_VORTEX",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Filters": "$.o_comment not like \"%special%requests%\"",
+                                                                                    "Function": "Vortex Scan",
+                                                                                    "Estimated Cardinality": "30000"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Expressions": [
+                                                                                "o_orderkey",
+                                                                                "o_custkey"
+                                                                            ],
+                                                                            "Estimated Cardinality": "30000"
+                                                                        }
+                                                                    },
+                                                                    {
+                                                                        "name": "PROJECTION",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "READ_VORTEX",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Filters": "",
+                                                                                    "Function": "Vortex Scan",
+                                                                                    "Estimated Cardinality": "15000"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Expressions": "c_custkey",
+                                                                            "Estimated Cardinality": "15000"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Join Type": "RIGHT",
+                                                                    "Conditions": "(o_custkey = c_custkey)",
+                                                                    "Estimated Cardinality": "30000"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Expressions": [
+                                                                "#0",
+                                                                "__internal_compress_integral_usmallint(#1, 1)"
+                                                            ],
+                                                            "Estimated Cardinality": "30000"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Groups": "c_custkey",
+                                                    "Expressions": "count(o_orderkey)",
+                                                    "Estimated Cardinality": "12969"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Expressions": [
+                                                "__internal_decompress_integral_bigint(#0, 1)",
+                                                "#1"
+                                            ],
+                                            "Estimated Cardinality": "12969"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Expressions": "count(o_orderkey)",
+                                    "Estimated Cardinality": "12969"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Groups": "c_count",
+                            "Expressions": "count_star()",
+                            "Estimated Cardinality": "8681"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Expressions": [
+                        "c_count",
+                        "custdist"
+                    ],
+                    "Estimated Cardinality": "8681"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": [
+                "count_star()",
+                "c_orders.c_count"
+            ]
+        }
+    }
+]
+physical_plan [
+    {
+        "name": "ORDER_BY",
+        "children": [
+            {
+                "name": "HASH_GROUP_BY",
+                "children": [
+                    {
+                        "name": "PROJECTION",
+                        "children": [
+                            {
+                                "name": "PROJECTION",
+                                "children": [
+                                    {
+                                        "name": "PROJECTION",
+                                        "children": [
+                                            {
+                                                "name": "HASH_GROUP_BY",
+                                                "children": [
+                                                    {
+                                                        "name": "PROJECTION",
+                                                        "children": [
+                                                            {
+                                                                "name": "PROJECTION",
+                                                                "children": [
+                                                                    {
+                                                                        "name": "HASH_JOIN",
+                                                                        "children": [
+                                                                            {
+                                                                                "name": "READ_VORTEX",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Function": "Vortex Scan",
+                                                                                    "Filters": "$.o_comment not like \"%special%requests%\"",
+                                                                                    "Projections": [
+                                                                                        "o_orderkey",
+                                                                                        "o_custkey"
+                                                                                    ],
+                                                                                    "Estimated Cardinality": "30000"
+                                                                                }
+                                                                            },
+                                                                            {
+                                                                                "name": "READ_VORTEX",
+                                                                                "children": [],
+                                                                                "extra_info": {
+                                                                                    "Function": "Vortex Scan",
+                                                                                    "Projections": "c_custkey",
+                                                                                    "Estimated Cardinality": "15000"
+                                                                                }
+                                                                            }
+                                                                        ],
+                                                                        "extra_info": {
+                                                                            "Join Type": "RIGHT",
+                                                                            "Conditions": "o_custkey = c_custkey",
+                                                                            "Estimated Cardinality": "30000"
+                                                                        }
+                                                                    }
+                                                                ],
+                                                                "extra_info": {
+                                                                    "Projections": [
+                                                                        "#0",
+                                                                        "__internal_compress_integral_usmallint(#1, 1)"
+                                                                    ],
+                                                                    "Estimated Cardinality": "30000"
+                                                                }
+                                                            }
+                                                        ],
+                                                        "extra_info": {
+                                                            "Projections": [
+                                                                "c_custkey",
+                                                                "o_orderkey"
+                                                            ],
+                                                            "Estimated Cardinality": "30000"
+                                                        }
+                                                    }
+                                                ],
+                                                "extra_info": {
+                                                    "Groups": "#0",
+                                                    "Aggregates": "count(#1)",
+                                                    "Estimated Cardinality": "12969"
+                                                }
+                                            }
+                                        ],
+                                        "extra_info": {
+                                            "Projections": [
+                                                "__internal_decompress_integral_bigint(#0, 1)",
+                                                "#1"
+                                            ],
+                                            "Estimated Cardinality": "12969"
+                                        }
+                                    }
+                                ],
+                                "extra_info": {
+                                    "Projections": "count(o_orderkey)",
+                                    "Estimated Cardinality": "12969"
+                                }
+                            }
+                        ],
+                        "extra_info": {
+                            "Projections": "c_count",
+                            "Estimated Cardinality": "12969"
+                        }
+                    }
+                ],
+                "extra_info": {
+                    "Groups": "#0",
+                    "Aggregates": "count_star()",
+                    "Estimated Cardinality": "8681"
+                }
+            }
+        ],
+        "extra_info": {
+            "Order By": [
+                "count_star() DESC",
+                "c_orders.c_count DESC"
+            ]
+        }
+    }
+]

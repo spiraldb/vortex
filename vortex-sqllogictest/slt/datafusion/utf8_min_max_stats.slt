@@ -13,8 +13,39 @@ COPY (
 ----
 2
 
-query TT
-SELECT MIN(value), MAX(value)
+query T
+SELECT MIN(value)
 FROM '${WORK_DIR}/utf8_min_max_stats.vortex';
 ----
-Another string that is meant to be smaller than the previous value, with extra padding Long value used to verify that UTF-8 statistics do not replace the actual maximum value
+Another string that is meant to be smaller than the previous value, with extra padding
+
+
+query TT
+EXPLAIN SELECT MIN(value)
+FROM '${WORK_DIR}/utf8_min_max_stats.vortex';
+----
+logical_plan
+01)Aggregate: groupBy=[[]], aggr=[[min(${WORK_DIR}/utf8_min_max_stats.vortex.value)]]
+02)--TableScan: ${WORK_DIR}/utf8_min_max_stats.vortex projection=[value]
+physical_plan
+01)AggregateExec: mode=Single, gby=[], aggr=[min(${WORK_DIR}/utf8_min_max_stats.vortex.value)]
+02)--DataSourceExec: file_groups={1 group: [[${WORK_DIR}/utf8_min_max_stats.vortex]]}, projection=[value], file_type=vortex
+
+
+query T
+SELECT MAX(value)
+FROM '${WORK_DIR}/utf8_min_max_stats.vortex';
+----
+Long value used to verify that UTF-8 statistics do not replace the actual maximum value
+
+
+query TT
+EXPLAIN SELECT MAX(value)
+FROM '${WORK_DIR}/utf8_min_max_stats.vortex';
+----
+logical_plan
+01)Aggregate: groupBy=[[]], aggr=[[max(${WORK_DIR}/utf8_min_max_stats.vortex.value)]]
+02)--TableScan: ${WORK_DIR}/utf8_min_max_stats.vortex projection=[value]
+physical_plan
+01)AggregateExec: mode=Single, gby=[], aggr=[max(${WORK_DIR}/utf8_min_max_stats.vortex.value)]
+02)--DataSourceExec: file_groups={1 group: [[${WORK_DIR}/utf8_min_max_stats.vortex]]}, projection=[value], file_type=vortex

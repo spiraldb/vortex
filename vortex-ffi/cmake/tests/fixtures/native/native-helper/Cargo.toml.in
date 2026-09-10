@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+[package]
+name = "native-helper"
+version = "0.0.0"
+edition = "2024"
+[lib]
+path = "lib.rs"
+[build-dependencies]
+cc = "=@CC_VERSION@"

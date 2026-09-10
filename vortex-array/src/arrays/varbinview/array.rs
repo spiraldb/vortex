@@ -9,6 +9,7 @@ use std::sync::Arc;
 use smallvec::smallvec;
 use vortex_buffer::Alignment;
 use vortex_buffer::Buffer;
+use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
@@ -575,7 +576,11 @@ impl VarBinViewData {
         dtype: DType,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(dtype, iter.size_hint().0);
+        let mut builder = VarBinViewBuilder::with_capacity_in(
+            dtype,
+            iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
+        );
 
         for item in iter {
             match item {
@@ -589,9 +594,10 @@ impl VarBinViewData {
 
     pub fn from_iter_str<T: AsRef<str>, I: IntoIterator<Item = T>>(iter: I) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullability::NonNullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
 
         for item in iter {
@@ -605,9 +611,10 @@ impl VarBinViewData {
         iter: I,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullability::Nullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
 
         for item in iter {
@@ -622,9 +629,10 @@ impl VarBinViewData {
 
     pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Binary(Nullability::NonNullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
 
         for item in iter {
@@ -638,9 +646,10 @@ impl VarBinViewData {
         iter: I,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Binary(Nullability::Nullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
 
         for item in iter {
@@ -693,7 +702,11 @@ impl Array<VarBinView> {
         dtype: DType,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(dtype, iter.size_hint().0);
+        let mut builder = VarBinViewBuilder::with_capacity_in(
+            dtype,
+            iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
+        );
         for value in iter {
             match value {
                 Some(value) => builder.append_value(value),
@@ -705,9 +718,10 @@ impl Array<VarBinView> {
 
     pub fn from_iter_str<T: AsRef<str>, I: IntoIterator<Item = T>>(iter: I) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullability::NonNullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
         for value in iter {
             builder.append_value(value.as_ref());
@@ -719,9 +733,10 @@ impl Array<VarBinView> {
         iter: I,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Utf8(Nullability::Nullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
         for value in iter {
             match value {
@@ -734,9 +749,10 @@ impl Array<VarBinView> {
 
     pub fn from_iter_bin<T: AsRef<[u8]>, I: IntoIterator<Item = T>>(iter: I) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Binary(Nullability::NonNullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
         for value in iter {
             builder.append_value(value.as_ref());
@@ -748,9 +764,10 @@ impl Array<VarBinView> {
         iter: I,
     ) -> Self {
         let iter = iter.into_iter();
-        let mut builder = VarBinViewBuilder::with_capacity(
+        let mut builder = VarBinViewBuilder::with_capacity_in(
             DType::Binary(Nullability::Nullable),
             iter.size_hint().0,
+            BufferAllocatorRef::statically_allocated(),
         );
         for value in iter {
             match value {

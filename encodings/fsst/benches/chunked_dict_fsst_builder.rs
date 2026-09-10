@@ -9,7 +9,7 @@ use vortex_array::Canonical;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::ChunkedArray;
-use vortex_array::builders::builder_with_capacity;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::NativePType;
 use vortex_error::VortexExpect;
 use vortex_fsst::test_utils::gen_dict_fsst_test_data;
@@ -57,7 +57,8 @@ fn chunked_dict_fsst_canonical_into(
     bencher
         .with_inputs(|| (&chunk, SESSION.create_execution_ctx()))
         .bench_refs(|(chunk, ctx)| {
-            let mut builder = builder_with_capacity(chunk.dtype(), len * chunk_count);
+            let mut builder =
+                builder_with_capacity_in(chunk.dtype(), len * chunk_count, ctx.allocator());
             chunk
                 .append_to_builder(builder.as_mut(), ctx)
                 .vortex_expect("append failed");

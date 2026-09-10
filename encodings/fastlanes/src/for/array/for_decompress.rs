@@ -109,9 +109,10 @@ pub(crate) fn fused_decompress<
         &mut scratch,
     )?;
 
-    let mut builder = PrimitiveBuilder::<T>::with_capacity(
+    let mut builder = PrimitiveBuilder::<T>::with_capacity_in(
         for_.reference_scalar().dtype().nullability(),
         bp.len(),
+        ctx.allocator(),
     );
     let mut uninit_range = builder.uninit_range(bp.len());
     unsafe {

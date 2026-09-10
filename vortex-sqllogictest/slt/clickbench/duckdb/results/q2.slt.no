@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query IIR
+SELECT SUM("AdvEngineID"), COUNT(*), AVG("ResolutionWidth") FROM hits;
+----
+80778 1000000 1604.08959

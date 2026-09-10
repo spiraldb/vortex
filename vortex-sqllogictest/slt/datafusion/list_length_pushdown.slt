@@ -30,7 +30,7 @@ EXPLAIN SELECT array_length(a) AS len FROM list_test;
 logical_plan
 01)Projection: array_length(list_test.a) AS len
 02)--TableScan: list_test projection=[a]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[array_length(a@1) as len], file_type=vortex
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[array_length(a@1) as len], file_type=vortex
 
 query I
 SELECT array_length(a) FROM list_test ORDER BY id;
@@ -47,7 +47,7 @@ EXPLAIN SELECT array_length(a, 1) AS len FROM list_test;
 logical_plan
 01)Projection: array_length(list_test.a, Int64(1)) AS len
 02)--TableScan: list_test projection=[a]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[array_length(a@1, 1) as len], file_type=vortex
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[array_length(a@1, 1) as len], file_type=vortex
 
 query I
 SELECT array_length(a, 1) FROM list_test ORDER BY id;
@@ -64,7 +64,7 @@ EXPLAIN SELECT list_length(a) AS len FROM list_test;
 logical_plan
 01)Projection: array_length(list_test.a) AS list_length(list_test.a) AS len
 02)--TableScan: list_test projection=[a]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[array_length(a@1) as len], file_type=vortex
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[array_length(a@1) as len], file_type=vortex
 
 query I
 SELECT list_length(a) FROM list_test ORDER BY id;
@@ -83,7 +83,7 @@ EXPLAIN SELECT array_length(a) as len_a, array_length(b) AS len_b FROM list_test
 logical_plan
 01)Projection: array_length(list_test.a) AS len_a, array_length(list_test.b) AS len_b
 02)--TableScan: list_test projection=[a, b]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[array_length(a@1) as len_a, array_length(b@2) as len_b], file_type=vortex
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[array_length(a@1) as len_a, array_length(b@2) as len_b], file_type=vortex
 
 query II
 SELECT array_length(a), array_length(b) FROM list_test ORDER BY id;
@@ -103,7 +103,7 @@ logical_plan
 01)Projection: list_test.id
 02)--Filter: array_length(list_test.a) >= UInt64(4)
 03)----TableScan: list_test projection=[id, a], partial_filters=[array_length(list_test.a) >= UInt64(4)]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[id], file_type=vortex, predicate: array_length(a@1) >= 4
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[id], file_type=vortex, predicate: array_length(a@1) >= 4
 
 query I
 SELECT id FROM list_test WHERE array_length(a) >= 4 ORDER BY id;
@@ -120,7 +120,7 @@ logical_plan
 01)Projection: list_test.id
 02)--Filter: array_length(list_test.a) >= UInt64(4) AND array_length(list_test.b) >= UInt64(3)
 03)----TableScan: list_test projection=[id, a, b], partial_filters=[array_length(list_test.a) >= UInt64(4), array_length(list_test.b) >= UInt64(3)]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[id], file_type=vortex, predicate: array_length(a@1) >= 4 AND array_length(b@2) >= 3
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[id], file_type=vortex, predicate: array_length(a@1) >= 4 AND array_length(b@2) >= 3
 
 query I
 SELECT id FROM list_test WHERE array_length(a) >= 4 AND array_length(b) >= 3 ORDER BY id;
@@ -139,7 +139,7 @@ logical_plan
 01)Projection: array_length(list_test.a) AS len
 02)--Filter: array_length(list_test.a) >= UInt64(4)
 03)----TableScan: list_test projection=[a], partial_filters=[array_length(list_test.a) >= UInt64(4)]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[array_length(a@1) as len], file_type=vortex, predicate: array_length(a@1) >= 4
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[array_length(a@1) as len], file_type=vortex, predicate: array_length(a@1) >= 4
 
 query I
 SELECT array_length(a) FROM list_test WHERE array_length(a) >= 4 ORDER BY id;
@@ -156,7 +156,7 @@ logical_plan
 01)Projection: array_length(list_test.a) AS len
 02)--Filter: array_length(list_test.b) >= UInt64(3)
 03)----TableScan: list_test projection=[a, b], partial_filters=[array_length(list_test.b) >= UInt64(3)]
-physical_plan DataSourceExec: file_groups={<slt:ignore>}, projection=[array_length(a@1) as len], file_type=vortex, predicate: array_length(b@2) >= 3
+physical_plan DataSourceExec: file_groups={1 group: [[${WORK_DIR}/list_test/<slt:ignore>_0.vortex]]}, projection=[array_length(a@1) as len], file_type=vortex, predicate: array_length(b@2) >= 3
 
 query I
 SELECT array_length(a) FROM list_test WHERE array_length(b) >= 3 ORDER BY id;

@@ -56,7 +56,6 @@ pub struct CudaDeviceBuffer {
     /// reads without copying or repacking.
     zeroed_tail_start: Option<usize>,
 }
-
 mod private {
     use std::fmt::Debug;
     use std::sync::Arc;

@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "SearchPhrase" FROM hits WHERE "SearchPhrase" <> '' ORDER BY "SearchPhrase" LIMIT 10;
+----
+logical_plan
+01)Sort: hits.SearchPhrase ASC NULLS LAST, fetch=10
+02)--Filter: hits.SearchPhrase != Utf8View("")
+03)----TableScan: hits projection=[SearchPhrase], partial_filters=[hits.SearchPhrase != Utf8View("")]
+physical_plan
+01)SortPreservingMergeExec: [SearchPhrase@0 ASC NULLS LAST], fetch=10
+02)--SortExec: TopK(fetch=10), expr=[SearchPhrase@0 ASC NULLS LAST], preserve_partitioning=[true]
+03)----DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 

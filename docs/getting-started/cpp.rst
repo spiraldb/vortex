@@ -1,49 +1,52 @@
 C++ Quickstart
 ==============
 
-Vortex C++ API allows you to read and write ``.vortex`` files directly or via
-an Arrow compatibility layer like `nanoarrow <https://arrow.apache.org/nanoarrow/>`_.
-The only dependency apart from Vortex is ``nanoarrow``.
+The C++ API reads and writes ``.vortex`` files, with optional Arrow interoperability
+through `nanoarrow <https://arrow.apache.org/nanoarrow/>`_.
 
 .. note::
-   C++ API is a work in progress. Please reach out to us if you are interested
-   in using Vortex from C++ or you want a feature not covered yet e.g.
-   extension support.
+   The C++ API is still evolving. Please reach out if you need a missing feature.
 
-Installation
-------------
+Building from source
+--------------------
 
-We don't provide prebuilt library files (yet) so you will need to build Vortex
-from source, and for that you will need:
-
-- C++20,
-- Rust toolchain,
-- and CMake 3.10.
+Vortex currently provides source builds only, for GNU/Linux x86_64/aarch64 and
+macOS arm64. You need a C compiler, a C++20 compiler, CMake 3.25+ with a single-config
+generator, and Cargo/rustc 1.95+ on ``PATH``. Repository checkout:
 
 .. code-block:: bash
 
     git clone --depth 1 https://github.com/vortex-data/vortex
     cd vortex
-    cargo build --release -p vortex-ffi
 
-    cmake -S lang/cpp -Bbuild -DCMAKE_BUILD_TYPE=Release
-    # To build the examples, pass -DBUILD_EXAMPLES=1
-    # cmake -S lang/cpp -Bbuild -DBUILD_EXAMPLES=1
+    cmake -S lang/cpp -B build/cpp \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DVORTEX_BUILD_EXAMPLES=ON
+    cmake --build build/cpp --parallel
 
-    cmake --build build -j
+CMake builds the Rust FFI through Cargo. No separate ``cargo build`` is needed.
+The first build may download dependencies. The commands above enable the examples
+used below. Tests and examples are otherwise disabled by default.
 
-This produces a shared and a static library which you can use directly or via
+To embed Vortex in a CMake project, vendor or fetch a pinned checkout and link its
+target:
 
 .. code-block:: cmake
 
-    # static library
-    target_link_libraries(target PRIVATE vortex_cxx)
-    # shared library
-    target_link_libraries(target PRIVATE vortex_cxx_shared)
+    add_subdirectory(path/to/vortex vortex)
+    target_link_libraries(target PRIVATE Vortex::cpp_static)
 
-Have a look at the `examples
-<https://github.com/vortex-data/vortex/tree/develop/lang/cpp/examples>`_
-directory as well.
+The target includes the required headers and link dependencies. Vortex builds
+static, position-independent libraries, with no installation rules or
+``find_package(Vortex)`` package. If embedding it in a shared library, keep Vortex
+symbols private using the parent's export policy.
+
+See the `C++ README
+<https://github.com/vortex-data/vortex/blob/develop/lang/cpp/README.md>`_ for build
+options, platform limits, sanitizers, and CUDA deployment requirements, and the
+`examples directory
+<https://github.com/vortex-data/vortex/tree/develop/lang/cpp/examples>`_ for complete
+programs.
 
 Reading files
 -------------
@@ -205,7 +208,7 @@ Now you can build the example and read back the generated files:
 
 .. code-block::
 
-    ./build/examples/writer people0.vortex
-    ./build/examples/writer people1.vortex
-    ./build/examples/writer me.vortex
-    ./build/examples/reader
+    ./build/cpp/examples/writer people0.vortex
+    ./build/cpp/examples/writer people1.vortex
+    ./build/cpp/examples/writer me.vortex
+    ./build/cpp/examples/reader

@@ -28,11 +28,38 @@ use crate::debug::TruncatedDebug;
 use crate::trusted_len::TrustedLen;
 
 /// An immutable buffer of items of `T`.
+///
+/// Zero-sized element types are rejected at compile time when constructing a buffer.
+///
+/// ```compile_fail
+/// use vortex_buffer::Buffer;
+/// let _ = Buffer::<()>::empty();
+/// ```
+///
+/// ```compile_fail
+/// use vortex_buffer::Buffer;
+/// let _ = Buffer::from(vec![(); 3]);
+/// ```
+///
+/// ```compile_fail
+/// use vortex_buffer::{Buffer, ByteBuffer};
+/// let _ = Buffer::<()>::from_byte_buffer(ByteBuffer::empty());
+/// ```
+///
+/// ```compile_fail
+/// use bytes::Bytes;
+/// use vortex_buffer::{Alignment, Buffer};
+/// let _ = Buffer::<()>::from_bytes_aligned(Bytes::new(), Alignment::none());
+/// ```
 #[derive(Clone)]
 pub struct Buffer<T> {
+    /// The first element in this view; may dangle for an empty buffer.
     pub(crate) ptr: NonNull<T>,
+    /// The number of initialized `T` values visible from `ptr`.
     pub(crate) length: usize,
+    /// The minimum alignment promised for `ptr` and preserved by aligned slices.
     pub(crate) alignment: Alignment,
+    /// Shared ownership of the storage containing `ptr`, if any; `Buffer::empty` has no backing.
     pub(crate) backing: Option<Arc<BufferBacking>>,
 }
 
@@ -97,22 +124,6 @@ impl<T> Buffer<T> {
             length,
             alignment,
             backing: Some(Arc::new(BufferBacking::Owned(allocation))),
-        }
-    }
-
-    fn from_owner(owner: impl crate::BufferOwner, alignment: Alignment) -> Self {
-        let owner: Box<dyn crate::BufferOwner> = Box::new(owner);
-        let length = owner.len() / size_of::<T>();
-        let ptr = if length == 0 {
-            empty_ptr()
-        } else {
-            NonNull::new(owner.as_ptr().cast_mut().cast()).vortex_expect("owner pointer is null")
-        };
-        Self {
-            ptr,
-            length,
-            alignment,
-            backing: Some(Arc::new(BufferBacking::External { _owner: owner })),
         }
     }
 
@@ -228,6 +239,7 @@ impl<T> Buffer<T> {
     ///
     /// This does not allocate. Empty buffers use an aligned dangling pointer.
     pub fn empty_aligned(alignment: Alignment) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must align to the scalar type's alignment {}",
@@ -277,6 +289,7 @@ impl<T> Buffer<T> {
     /// Panics if the buffer is not aligned to the given alignment, if the length is not a multiple
     /// of the size of `T`, or if the given alignment is not aligned to that of `T`.
     pub fn from_byte_buffer_aligned(buffer: ByteBuffer, alignment: Alignment) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -309,6 +322,7 @@ impl<T> Buffer<T> {
     /// Panics if the buffer is not aligned to the size of `T`, or the length is not a multiple of
     /// the size of `T`.
     pub fn from_bytes_aligned(bytes: Bytes, alignment: Alignment) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         if !alignment.is_aligned_to(Alignment::of::<T>()) {
             vortex_panic!(
                 "Alignment {} must be compatible with the scalar type's alignment {}",
@@ -802,29 +816,25 @@ impl<T> FromIterator<T> for Buffer<T> {
     }
 }
 
-// Helper struct that preserves drop glue for non-native Vec elements.
-#[repr(transparent)]
-struct Wrapper<T>(Vec<T>);
-
-impl<T: Send + Sync + 'static> crate::BufferOwner for Wrapper<T> {
-    fn as_ptr(&self) -> *const u8 {
-        self.0.as_ptr().cast()
-    }
-
-    fn len(&self) -> usize {
-        self.0.len() * size_of::<T>()
-    }
-}
-
 impl<T> From<Vec<T>> for Buffer<T>
 where
     T: Send + Sync + 'static,
 {
     fn from(value: Vec<T>) -> Self {
+        const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
         let length = value.len();
         let alignment = Alignment::of::<T>();
         if std::mem::needs_drop::<T>() {
-            Self::from_owner(Wrapper(value), alignment)
+            // Keep the typed owner so its elements are dropped.
+            Self {
+                ptr: NonNull::new(value.as_ptr().cast_mut())
+                    .vortex_expect("a Vec always has a non-null pointer"),
+                length,
+                alignment,
+                backing: Some(Arc::new(BufferBacking::External {
+                    _owner: Box::new(value),
+                })),
+            }
         } else {
             Self::from_allocation(Allocation::from_vec(value), 0, length, alignment)
         }
@@ -1095,6 +1105,42 @@ mod test {
     }
 
     #[test]
+    fn byte_owner_preserves_slice_and_lifetime() {
+        struct Owner {
+            values: Vec<u8>,
+            drops: Arc<AtomicUsize>,
+        }
+
+        impl AsRef<[u8]> for Owner {
+            fn as_ref(&self) -> &[u8] {
+                &self.values[1..4]
+            }
+        }
+
+        impl Drop for Owner {
+            fn drop(&mut self) {
+                self.drops.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        let drops = Arc::new(AtomicUsize::new(0));
+        let owner = Owner {
+            values: vec![0, 1, 2, 3, 4],
+            drops: Arc::clone(&drops),
+        };
+        let ptr = owner.as_ref().as_ptr();
+        let buffer = ByteBuffer::from(Bytes::from_owner(owner));
+        assert_eq!(buffer.as_ptr(), ptr);
+        assert_eq!(buffer.as_slice(), [1, 2, 3]);
+        let view = buffer.slice(1..);
+        drop(buffer);
+        assert_eq!(drops.load(Ordering::Relaxed), 0);
+        assert_eq!(view.as_slice(), [2, 3]);
+        drop(view);
+        assert_eq!(drops.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
     fn bytes_round_trip_reuses_owner() {
         let bytes = Bytes::from_static(&[1, 2, 3, 4]);
         let ptr = bytes.as_ptr();
@@ -1151,9 +1197,15 @@ mod test {
         let Ok(mut sliced) = sliced.try_into_mut() else {
             panic!("uniquely owned slice should become mutable")
         };
+        let ptr = sliced.as_ptr();
         let capacity = sliced.capacity();
         sliced.push_n(0, capacity - sliced.len());
         assert_eq!(sliced.len(), capacity);
+        assert_eq!(sliced.as_ptr(), ptr);
+        sliced.push(42);
+        assert_eq!(&sliced[..32], (64u32..96).collect::<Vec<_>>());
+        assert_eq!(&sliced[32..capacity], vec![0; capacity - 32]);
+        assert_eq!(sliced[capacity], 42);
     }
 
     #[test]

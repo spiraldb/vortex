@@ -483,7 +483,9 @@ impl FileOpener for VortexOpener {
                 })
                 .boxed();
 
-            if let Some(file_pruner) = file_pruner {
+            if let Some(file_pruner) = file_pruner
+                && file_pruner.is_watching()
+            {
                 Ok(PrunableStream::new(file_pruner, stream).boxed())
             } else {
                 Ok(stream)

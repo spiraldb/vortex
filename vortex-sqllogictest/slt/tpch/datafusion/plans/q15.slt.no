@@ -1,0 +1,63 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+WITH revenue AS (select l_suppkey                               as supplier_no,
+                        sum(l_extendedprice * (1 - l_discount)) as total_revenue
+                 from lineitem
+                 where l_shipdate >= date '1996-01-01'
+                   and l_shipdate < date '1996-01-01' + interval '3' month
+                 group by l_suppkey)
+select s_suppkey,
+       s_name,
+       s_address,
+       s_phone,
+       total_revenue
+from supplier,
+     revenue
+where s_suppkey = supplier_no
+  and total_revenue = (select max(total_revenue)
+                       from revenue)
+order by s_suppkey;
+----
+logical_plan
+01)Sort: supplier.s_suppkey ASC NULLS LAST
+02)--Projection: supplier.s_suppkey, supplier.s_name, supplier.s_address, supplier.s_phone, revenue.total_revenue
+03)----Inner Join: supplier.s_suppkey = revenue.supplier_no
+04)------TableScan: supplier projection=[s_suppkey, s_name, s_address, s_phone]
+05)------SubqueryAlias: revenue
+06)--------Projection: lineitem.l_suppkey AS supplier_no, sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount) AS total_revenue
+07)----------Filter: sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount) = (<subquery>)
+08)------------Subquery:
+09)--------------Aggregate: groupBy=[[]], aggr=[[max(revenue.total_revenue)]]
+10)----------------SubqueryAlias: revenue
+11)------------------Projection: sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount) AS total_revenue
+12)--------------------Aggregate: groupBy=[[lineitem.l_suppkey]], aggr=[[sum(lineitem.l_extendedprice * (Decimal128(1,20,0) - lineitem.l_discount)) AS sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)]]
+13)----------------------Projection: lineitem.l_suppkey, lineitem.l_extendedprice, lineitem.l_discount
+14)------------------------Filter: lineitem.l_shipdate >= Date32("1996-01-01") AND lineitem.l_shipdate < Date32("1996-04-01")
+15)--------------------------TableScan: lineitem projection=[l_suppkey, l_extendedprice, l_discount, l_shipdate], partial_filters=[lineitem.l_shipdate >= Date32("1996-01-01"), lineitem.l_shipdate < Date32("1996-04-01")]
+16)------------Aggregate: groupBy=[[lineitem.l_suppkey]], aggr=[[sum(lineitem.l_extendedprice * (Decimal128(1,20,0) - lineitem.l_discount)) AS sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)]]
+17)--------------Projection: lineitem.l_suppkey, lineitem.l_extendedprice, lineitem.l_discount
+18)----------------Filter: lineitem.l_shipdate >= Date32("1996-01-01") AND lineitem.l_shipdate < Date32("1996-04-01")
+19)------------------TableScan: lineitem projection=[l_suppkey, l_extendedprice, l_discount, l_shipdate], partial_filters=[lineitem.l_shipdate >= Date32("1996-01-01"), lineitem.l_shipdate < Date32("1996-04-01")]
+physical_plan
+01)ScalarSubqueryExec: subqueries=1
+02)--SortPreservingMergeExec: [s_suppkey@0 ASC NULLS LAST]
+03)----SortExec: expr=[s_suppkey@0 ASC NULLS LAST], preserve_partitioning=[true]
+04)------HashJoinExec: mode=CollectLeft, join_type=Inner, on=[(s_suppkey@0, supplier_no@0)], projection=[s_suppkey@0, s_name@1, s_address@2, s_phone@3, total_revenue@5]
+05)--------DataSourceExec: file_groups={1 group: [[${WORK_DIR}/supplier.vortex]]}, projection=[s_suppkey, s_name, s_address, s_phone], file_type=vortex
+06)--------ProjectionExec: expr=[l_suppkey@0 as supplier_no, sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)@1 as total_revenue]
+07)----------FilterExec: sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)@1 = scalar_subquery(<pending>)
+08)------------AggregateExec: mode=FinalPartitioned, gby=[l_suppkey@0 as l_suppkey], aggr=[sum(lineitem.l_extendedprice * 1 - lineitem.l_discount) as sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)]
+09)--------------RepartitionExec: partitioning=Hash([l_suppkey@0], 4), input_partitions=4
+10)----------------AggregateExec: mode=Partial, gby=[l_suppkey@0 as l_suppkey], aggr=[sum(lineitem.l_extendedprice * 1 - lineitem.l_discount) as sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)]
+11)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>]]}, projection=[l_suppkey, l_extendedprice, l_discount], file_type=vortex, predicate: l_shipdate@10 >= 1996-01-01 AND l_shipdate@10 < 1996-04-01
+12)--AggregateExec: mode=Final, gby=[], aggr=[max(revenue.total_revenue)]
+13)----CoalescePartitionsExec
+14)------AggregateExec: mode=Partial, gby=[], aggr=[max(revenue.total_revenue)]
+15)--------ProjectionExec: expr=[sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)@1 as total_revenue]
+16)----------AggregateExec: mode=FinalPartitioned, gby=[l_suppkey@0 as l_suppkey], aggr=[sum(lineitem.l_extendedprice * 1 - lineitem.l_discount) as sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)]
+17)------------RepartitionExec: partitioning=Hash([l_suppkey@0], 4), input_partitions=4
+18)--------------AggregateExec: mode=Partial, gby=[l_suppkey@0 as l_suppkey], aggr=[sum(lineitem.l_extendedprice * 1 - lineitem.l_discount) as sum(lineitem.l_extendedprice * Int64(1) - lineitem.l_discount)]
+19)----------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>], [${WORK_DIR}/lineitem.vortex:<slt:ignore>]]}, projection=[l_suppkey, l_extendedprice, l_discount], file_type=vortex, predicate: l_shipdate@10 >= 1996-01-01 AND l_shipdate@10 < 1996-04-01

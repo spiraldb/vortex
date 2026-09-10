@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "RegionID", COUNT(DISTINCT "UserID") AS u FROM hits GROUP BY "RegionID" ORDER BY u DESC LIMIT 10;
+----
+logical_plan
+01)Sort: u DESC NULLS FIRST, fetch=10
+02)--Projection: hits.RegionID, count(alias1) AS u
+03)----Aggregate: groupBy=[[hits.RegionID]], aggr=[[count(alias1)]]
+04)------Aggregate: groupBy=[[hits.RegionID, hits.UserID AS alias1]], aggr=[[]]
+05)--------TableScan: hits projection=[RegionID, UserID]
+physical_plan
+01)SortPreservingMergeExec: [u@1 DESC], fetch=10
+02)--ProjectionExec: expr=[RegionID@0 as RegionID, count(alias1)@1 as u]
+03)----SortExec: TopK(fetch=10), expr=[count(alias1)@1 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[RegionID@0 as RegionID], aggr=[count(alias1)]
+05)--------RepartitionExec: partitioning=Hash([RegionID@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[RegionID@0 as RegionID], aggr=[count(alias1)]
+07)------------AggregateExec: mode=FinalPartitioned, gby=[RegionID@0 as RegionID, alias1@1 as alias1], aggr=[]
+08)--------------RepartitionExec: partitioning=Hash([RegionID@0, alias1@1], 4), input_partitions=4
+09)----------------AggregateExec: mode=Partial, gby=[RegionID@0 as RegionID, UserID@1 as alias1], aggr=[]
+10)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[RegionID, UserID], file_type=vortex

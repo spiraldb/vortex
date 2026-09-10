@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# The upstream query leaves the order of tied rows unspecified, so this record adds
+# tie-breaking ORDER BY columns. plans/q17.slt.no explains the upstream query unchanged.
+query ITI
+SELECT "UserID", "SearchPhrase", COUNT(*) FROM hits GROUP BY "UserID", "SearchPhrase" ORDER BY "UserID", "SearchPhrase" LIMIT 10;
+----
+-9219796849203399214 (empty) 3
+-9219054275930888834 (empty) 1
+-9218024831767047585 жена дата киноафиша анке 1
+-9214794650081452866 (empty) 4
+-9214751021948998350 авомосква веб каменисный 2
+-9213728704863893851 (empty) 2
+-9213728704863893851 чагин выпуска на волна 2 сезон 24 резюме онлайн 2
+-9213106781151947221 (empty) 9
+-9208956738506700293 (empty) 2
+-9206351631809765116 (empty) 5

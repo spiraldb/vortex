@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+query TT
+EXPLAIN
+SELECT "SearchPhrase", COUNT(DISTINCT "UserID") AS u FROM hits WHERE "SearchPhrase" <> '' GROUP BY "SearchPhrase" ORDER BY u DESC LIMIT 10;
+----
+logical_plan
+01)Sort: u DESC NULLS FIRST, fetch=10
+02)--Projection: hits.SearchPhrase, count(alias1) AS u
+03)----Aggregate: groupBy=[[hits.SearchPhrase]], aggr=[[count(alias1)]]
+04)------Aggregate: groupBy=[[hits.SearchPhrase, hits.UserID AS alias1]], aggr=[[]]
+05)--------Filter: hits.SearchPhrase != Utf8View("")
+06)----------TableScan: hits projection=[UserID, SearchPhrase], partial_filters=[hits.SearchPhrase != Utf8View("")]
+physical_plan
+01)SortPreservingMergeExec: [u@1 DESC], fetch=10
+02)--ProjectionExec: expr=[SearchPhrase@0 as SearchPhrase, count(alias1)@1 as u]
+03)----SortExec: TopK(fetch=10), expr=[count(alias1)@1 DESC], preserve_partitioning=[true]
+04)------AggregateExec: mode=FinalPartitioned, gby=[SearchPhrase@0 as SearchPhrase], aggr=[count(alias1)]
+05)--------RepartitionExec: partitioning=Hash([SearchPhrase@0], 4), input_partitions=4
+06)----------AggregateExec: mode=Partial, gby=[SearchPhrase@0 as SearchPhrase], aggr=[count(alias1)]
+07)------------AggregateExec: mode=FinalPartitioned, gby=[SearchPhrase@0 as SearchPhrase, alias1@1 as alias1], aggr=[]
+08)--------------RepartitionExec: partitioning=Hash([SearchPhrase@0, alias1@1], 4), input_partitions=4
+09)----------------AggregateExec: mode=Partial, gby=[SearchPhrase@1 as SearchPhrase, UserID@0 as alias1], aggr=[]
+10)------------------DataSourceExec: file_groups={4 groups: [[${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>], [${WORK_DIR}/hits.vortex:<slt:ignore>]]}, projection=[UserID, SearchPhrase], file_type=vortex, predicate: SearchPhrase@39 != 
