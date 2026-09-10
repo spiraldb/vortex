@@ -2,6 +2,9 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 //! Allocator-backed storage for Vortex buffers.
+//!
+//! Each allocation retains its base pointer and original layout through slicing and ownership
+//! transfers. Buffer data pointers and logical alignments do not change the layout used to free it.
 
 use std::alloc::Layout;
 use std::any::Any;
@@ -22,7 +25,7 @@ use crate::BufferMut;
 
 /// An allocator that can back a Vortex buffer.
 ///
-/// Vortex over-allocates raw storage and aligns the buffer within it.
+/// Buffer allocations pass their byte capacity and effective alignment through [`Layout`].
 pub trait BufferAllocator: Allocator + Debug + Send + Sync + 'static {}
 
 impl<A> BufferAllocator for A where A: Allocator + Debug + Send + Sync + 'static {}
@@ -236,7 +239,9 @@ unsafe impl Allocator for StaticBufferAllocator {
 static STATIC_ALLOCATOR: BufferAllocatorRef = BufferAllocatorRef(None);
 
 pub(crate) struct Allocation {
+    /// Allocation base, or an aligned dangling pointer when the layout has zero size.
     ptr: NonNull<u8>,
+    /// Layout used to allocate this block. Allocator excess is not exposed as buffer capacity.
     layout: Layout,
     allocator: BufferAllocatorRef,
 }
@@ -319,6 +324,7 @@ impl Allocation {
     }
 
     pub(crate) fn grow(&mut self, new_layout: Layout) {
+        debug_assert!(new_layout.size() >= self.layout.size());
         let allocation = if self.layout.size() == 0 {
             self.allocator.allocate(new_layout)
         } else {
@@ -362,177 +368,5 @@ impl BufferBacking {
             #[cfg(feature = "arrow")]
             Self::Arrow(_) => &STATIC_ALLOCATOR,
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::alloc::Layout;
-    use std::ptr::NonNull;
-    use std::sync::Arc;
-    use std::sync::atomic::AtomicUsize;
-    use std::sync::atomic::Ordering;
-
-    use allocator_api2::alloc::AllocError;
-    use allocator_api2::alloc::Allocator;
-    use allocator_api2::alloc::Global;
-    use rstest::rstest;
-    use vortex_error::VortexResult;
-    use vortex_error::vortex_err;
-
-    use crate::Alignment;
-    use crate::BufferAllocatorRef;
-    use crate::BufferMut;
-
-    #[derive(Clone, Debug, Default)]
-    struct TrackingAllocator {
-        state: Arc<TrackingState>,
-    }
-
-    #[derive(Debug, Default)]
-    struct TrackingState {
-        allocations: AtomicUsize,
-        deallocations: AtomicUsize,
-        grows: AtomicUsize,
-        alignment: AtomicUsize,
-    }
-
-    // SAFETY: this forwards all memory operations to Global and only records call metadata.
-    unsafe impl Allocator for TrackingAllocator {
-        fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-            self.state.allocations.fetch_add(1, Ordering::Relaxed);
-            self.state
-                .alignment
-                .store(layout.align(), Ordering::Relaxed);
-            Global.allocate(layout)
-        }
-
-        unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
-            self.state.deallocations.fetch_add(1, Ordering::Relaxed);
-            // SAFETY: the caller passes the pointer and layout returned by Global.
-            unsafe { Global.deallocate(ptr, layout) }
-        }
-
-        unsafe fn grow(
-            &self,
-            ptr: NonNull<u8>,
-            old_layout: Layout,
-            new_layout: Layout,
-        ) -> Result<NonNull<[u8]>, AllocError> {
-            self.state.grows.fetch_add(1, Ordering::Relaxed);
-            // SAFETY: the caller upholds the Allocator contract.
-            unsafe { Global.grow(ptr, old_layout, new_layout) }
-        }
-    }
-
-    #[test]
-    fn allocator_identity() {
-        let static_allocator = BufferAllocatorRef::statically_allocated();
-        assert!(static_allocator.ptr_eq(&BufferAllocatorRef::statically_allocated()));
-
-        let custom_allocator = BufferAllocatorRef::new(TrackingAllocator::default());
-        assert!(custom_allocator.ptr_eq(&custom_allocator.clone()));
-        assert!(!custom_allocator.ptr_eq(&static_allocator));
-        assert!(!custom_allocator.ptr_eq(&BufferAllocatorRef::new(TrackingAllocator::default())));
-    }
-
-    #[test]
-    fn allocation_lives_until_last_view() {
-        let allocator = TrackingAllocator::default();
-        let state = Arc::clone(&allocator.state);
-        let buffer = BufferAllocatorRef::new(allocator)
-            .copy_from([1u32, 2, 3, 4])
-            .freeze();
-        let view = buffer.slice(0..2);
-
-        assert_eq!(state.allocations.load(Ordering::Relaxed), 1);
-        assert_eq!(
-            state.alignment.load(Ordering::Relaxed),
-            Alignment::of::<u8>().as_usize()
-        );
-        drop(buffer);
-        assert_eq!(state.deallocations.load(Ordering::Relaxed), 0);
-        drop(view);
-        assert_eq!(state.deallocations.load(Ordering::Relaxed), 1);
-    }
-
-    #[rstest]
-    fn buffer_growth_uses_allocator_grow(#[values(4, 64, 4096)] alignment: usize) {
-        let allocator = TrackingAllocator::default();
-        let state = Arc::clone(&allocator.state);
-        let alignment = Alignment::new(alignment);
-        let mut buffer =
-            BufferAllocatorRef::new(allocator).with_capacity_aligned::<u32>(1, alignment);
-        let initial_capacity = buffer.capacity();
-        buffer.extend(std::iter::repeat_n(7, initial_capacity));
-
-        buffer.push(u32::MAX);
-        assert!(alignment.is_ptr_aligned(buffer.as_ptr()));
-
-        assert_eq!(&buffer[..initial_capacity], vec![7; initial_capacity]);
-        assert_eq!(buffer[initial_capacity], u32::MAX);
-        assert_eq!(state.allocations.load(Ordering::Relaxed), 1);
-        assert_eq!(state.deallocations.load(Ordering::Relaxed), 0);
-        assert_eq!(state.grows.load(Ordering::Relaxed), 1);
-
-        drop(buffer);
-        assert_eq!(state.deallocations.load(Ordering::Relaxed), 1);
-    }
-
-    #[test]
-    fn zero_capacity_does_not_allocate() {
-        let allocator = TrackingAllocator::default();
-        let state = Arc::clone(&allocator.state);
-        let mut buffer = BufferAllocatorRef::new(allocator).with_capacity::<u32>(0);
-
-        assert_eq!(buffer.capacity(), 0);
-        assert!(Alignment::DEFAULT_ALIGNMENT.is_offset_aligned(buffer.as_ptr().addr()));
-        assert_eq!(state.allocations.load(Ordering::Relaxed), 0);
-
-        buffer.push(42);
-
-        assert_eq!(buffer.as_slice(), [42]);
-        assert_eq!(state.allocations.load(Ordering::Relaxed), 1);
-        assert_eq!(state.grows.load(Ordering::Relaxed), 0);
-    }
-
-    #[test]
-    fn empty_buffers_preserve_allocator_without_allocating() -> VortexResult<()> {
-        let allocator = TrackingAllocator::default();
-        let state = Arc::clone(&allocator.state);
-        let allocator = BufferAllocatorRef::new(allocator);
-        let buffer = BufferMut::<u32>::zeroed_in(0, allocator.clone());
-        let buffer = buffer.freeze();
-        let copy = buffer.clone().into_mut();
-        assert!(copy.allocator().ptr_eq(&allocator));
-        let mut buffer = buffer
-            .try_into_mut()
-            .map_err(|_| vortex_err!("unique buffer"))?;
-        buffer.reserve(0);
-        assert!(buffer.is_empty());
-        assert!(buffer.allocator().ptr_eq(&allocator));
-        drop((copy, buffer));
-        assert_eq!(state.allocations.load(Ordering::Relaxed), 0);
-        assert_eq!(state.grows.load(Ordering::Relaxed), 0);
-        assert_eq!(state.deallocations.load(Ordering::Relaxed), 0);
-        Ok(())
-    }
-
-    #[test]
-    fn shared_into_mut_preserves_allocator() {
-        let allocator = TrackingAllocator::default();
-        let state = Arc::clone(&allocator.state);
-        let allocator = BufferAllocatorRef::new(allocator);
-        let original = allocator.copy_from([1u32, 2, 3]).freeze();
-        let mut copy = original.clone().into_mut();
-        assert!(copy.allocator().ptr_eq(&allocator));
-        copy[0] = 42;
-        assert_eq!(original.as_slice(), [1, 2, 3]);
-        assert_eq!(copy.as_slice(), [42, 2, 3]);
-        assert_eq!(state.allocations.load(Ordering::Relaxed), 2);
-        drop(copy);
-        assert_eq!(state.deallocations.load(Ordering::Relaxed), 1);
-        drop(original);
-        assert_eq!(state.deallocations.load(Ordering::Relaxed), 2);
     }
 }

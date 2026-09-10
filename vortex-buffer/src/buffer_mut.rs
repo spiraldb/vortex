@@ -36,15 +36,15 @@ use crate::trusted_len::TrustedLen;
 /// let _ = BufferMut::<()>::zeroed(3);
 /// ```
 pub struct BufferMut<T> {
-    /// The owned allocation, including any bytes before `ptr` used for alignment.
+    /// Owns the allocation base and the layout used to allocate it.
     pub(crate) allocation: Allocation,
-    /// The first element, aligned to `alignment`; it may dangle for an empty buffer.
+    /// Aligned data pointer, possibly dangling for empty buffers or interior to a sliced allocation.
     pub(crate) ptr: std::ptr::NonNull<T>,
-    /// The number of initialized `T` values starting at `ptr`.
+    /// Number of initialized elements, at most `capacity`.
     pub(crate) length: usize,
-    /// The number of `T` values that fit from `ptr`.
+    /// Number of usable elements starting at `ptr`, excluding any allocation prefix.
     pub(crate) capacity: usize,
-    /// The minimum alignment maintained for `ptr` across reallocations.
+    /// Requested alignment. The backing allocation can have a stronger preferred alignment.
     pub(crate) alignment: Alignment,
     /// Marks the buffer as logically owning values of `T` despite storing an erased allocation.
     pub(crate) _marker: std::marker::PhantomData<T>,
@@ -135,22 +135,11 @@ impl<T> BufferMut<T> {
         let size = capacity
             .checked_mul(size_of::<T>())
             .vortex_expect("buffer capacity overflow");
-        let layout = if size == 0 {
-            Layout::from_size_align(0, actual.as_usize())
-                .unwrap_or_else(|_| vortex_panic!("invalid empty buffer alignment"))
-        } else {
-            let allocation_size = size
-                .checked_add(actual.as_usize())
-                .vortex_expect("buffer capacity overflow");
-            Layout::from_size_align(allocation_size, 1).unwrap_or_else(|_| {
-                vortex_panic!("buffer capacity exceeds maximum allocation size")
-            })
-        };
+        let layout = Layout::from_size_align(size, actual.as_usize())
+            .unwrap_or_else(|_| vortex_panic!("buffer capacity exceeds maximum allocation size"));
         let allocation = Allocation::allocate(layout, allocator);
-        let offset = allocation.ptr().as_ptr().align_offset(actual.as_usize());
-        // SAFETY: the allocation includes enough padding to reach this aligned pointer.
-        let ptr = unsafe { allocation.ptr().add(offset).cast() };
-        let capacity = (allocation.size() - offset) / size_of::<T>();
+        let ptr = allocation.ptr().cast();
+
         Self {
             allocation,
             ptr,
@@ -220,34 +209,30 @@ impl<T> BufferMut<T> {
         allocator: BufferAllocatorRef,
     ) -> Self {
         const { assert!(size_of::<T>() != 0, "ZSTs are not supported") };
+
+        if !alignment.is_aligned_to(Alignment::of::<T>()) {
+            vortex_panic!(
+                "Alignment {} must align to the scalar type's alignment {}",
+                alignment,
+                align_of::<T>()
+            );
+        }
+
         let preferred_alignment = preferred_alignment.unwrap_or(Alignment::of::<u8>());
         let actual_alignment = max(preferred_alignment, alignment);
         let size = len
             .checked_mul(size_of::<T>())
             .vortex_expect("buffer length overflow");
-        let layout = if size == 0 {
-            Layout::from_size_align(0, actual_alignment.as_usize())
-                .unwrap_or_else(|_| vortex_panic!("invalid empty buffer alignment"))
-        } else {
-            let allocation_size = size
-                .checked_add(actual_alignment.as_usize())
-                .vortex_expect("buffer length overflow");
-            Layout::from_size_align(allocation_size, 1)
-                .unwrap_or_else(|_| vortex_panic!("buffer length exceeds maximum allocation size"))
-        };
+        let layout = Layout::from_size_align(size, actual_alignment.as_usize())
+            .unwrap_or_else(|_| vortex_panic!("buffer length exceeds maximum allocation size"));
         let allocation = Allocation::allocate_zeroed(layout, allocator);
-        let offset = allocation
-            .ptr()
-            .as_ptr()
-            .align_offset(actual_alignment.as_usize());
-        // SAFETY: the allocation includes enough padding to reach this aligned pointer.
-        let ptr = unsafe { allocation.ptr().add(offset).cast() };
-        let capacity = (allocation.size() - offset) / size_of::<T>();
+        let ptr = allocation.ptr().cast();
+
         Self {
             allocation,
             ptr,
             length: len,
-            capacity,
+            capacity: len,
             alignment,
             _marker: Default::default(),
         }
@@ -477,7 +462,6 @@ impl<T> BufferMut<T> {
             return;
         }
 
-        // Otherwise, reserve additional + alignment bytes in case we need to realign the buffer.
         self.reserve_allocate(additional);
     }
 
@@ -490,7 +474,6 @@ impl<T> BufferMut<T> {
         let required_size = required
             .checked_mul(size_of::<T>())
             .vortex_expect("buffer capacity overflow");
-        let alignment = self.alignment;
         let current_size = self
             .capacity
             .checked_mul(size_of::<T>())
@@ -498,55 +481,43 @@ impl<T> BufferMut<T> {
         let logical_size = required_size
             .max(current_size.saturating_mul(2))
             .max(Alignment::DEFAULT_ALIGNMENT.as_usize());
-        let allocation_size = logical_size
-            .checked_add(alignment.as_usize())
-            .vortex_expect("buffer capacity overflow");
-        let allocation_alignment = if self.allocation.size() == 0 {
-            1
-        } else {
-            self.allocation.alignment()
-        };
-        let layout = Layout::from_size_align(allocation_size, allocation_alignment)
+        let alignment = self.alignment.as_usize().max(self.allocation.alignment());
+        let layout = Layout::from_size_align(logical_size, alignment)
             .unwrap_or_else(|_| vortex_panic!("buffer capacity exceeds maximum allocation size"));
 
         let old_offset = self.ptr.cast::<u8>().addr().get() - self.allocation.ptr().addr().get();
-        let new_offset = if self.allocation.allocator().is_statically_allocated() {
-            let allocation =
-                Allocation::allocate(layout, BufferAllocatorRef::statically_allocated());
-            let new_offset = allocation.ptr().as_ptr().align_offset(alignment.as_usize());
+        // A short slice can need more capacity while still needing fewer bytes than its backing
+        // allocation. Allocator::grow cannot shrink that backing layout. The static path also uses
+        // a fresh allocation so it copies only initialized data.
+        if self.allocation.allocator().is_statically_allocated()
+            || layout.size() < self.allocation.size()
+        {
+            let allocation = Allocation::allocate(layout, self.allocation.allocator().clone());
             // SAFETY: both allocations have room for the initialized elements and do not overlap.
             unsafe {
                 std::ptr::copy_nonoverlapping(
                     self.ptr.cast::<u8>().as_ptr(),
-                    allocation.ptr().as_ptr().add(new_offset),
+                    allocation.ptr().as_ptr(),
                     self.length * size_of::<T>(),
                 );
             }
             self.allocation = allocation;
-            new_offset
         } else {
             self.allocation.grow(layout);
-            let new_offset = self
-                .allocation
-                .ptr()
-                .as_ptr()
-                .align_offset(alignment.as_usize());
-            if new_offset != old_offset {
-                // SAFETY: grow preserved the initialized elements at old_offset. The new allocation
-                // has room for the requested elements plus alignment padding, and copy permits
-                // overlap.
+            if old_offset != 0 {
+                // SAFETY: grow preserves the old layout's bytes, including the initialized range
+                // at old_offset. The new base is aligned, has enough capacity, and copy permits
+                // overlap when moving the slice to the base.
                 unsafe {
                     std::ptr::copy(
                         self.allocation.ptr().as_ptr().add(old_offset),
-                        self.allocation.ptr().as_ptr().add(new_offset),
+                        self.allocation.ptr().as_ptr(),
                         self.length * size_of::<T>(),
                     );
                 }
             }
-            new_offset
-        };
-        // SAFETY: new_offset was computed within the allocation for alignment.
-        self.ptr = unsafe { self.allocation.ptr().add(new_offset).cast() };
+        }
+        self.ptr = self.allocation.ptr().cast();
         self.capacity = logical_size / size_of::<T>();
     }
 
@@ -557,9 +528,7 @@ impl<T> BufferMut<T> {
     /// reading from a file) before marking the data as initialized using the
     /// [`set_len`] method.
     ///
-    /// Note that the returned slice may be larger than the capacity requested at
-    /// construction, since the underlying allocation can be rounded up (e.g. to
-    /// satisfy alignment requirements).
+    /// Growth and ownership transfers can provide more capacity than originally requested.
     ///
     /// [`set_len`]: BufferMut::set_len
     /// [`Vec::spare_capacity_mut`]: Vec::spare_capacity_mut
@@ -994,7 +963,7 @@ impl<T> FromIterator<T> for BufferMut<T> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use crate::Alignment;
     use crate::BufferMut;
     use crate::buffer_mut;
