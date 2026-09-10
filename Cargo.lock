@@ -10977,6 +10977,7 @@ name = "vortex-edition"
 version = "0.1.0"
 dependencies = [
  "parking_lot",
+ "vortex-error",
  "vortex-session",
 ]
 

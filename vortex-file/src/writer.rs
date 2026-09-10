@@ -773,7 +773,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn array_context_only_permits_enabled_encodings() -> Result<(), vortex_edition::EditionError> {
+    fn array_context_only_permits_enabled_encodings() -> VortexResult<()> {
         const EDITION: EditionId = EditionId::new("test", 2026, 7, 0);
         static DECLARATION: EditionDeclaration = EditionDeclaration {
             edition: Edition {
@@ -815,7 +815,7 @@ mod tests {
 
     /// This test edition declares only arrays, so every other kind must forbid all components.
     #[test]
-    fn kind_filters_are_active_when_empty() -> Result<(), vortex_edition::EditionError> {
+    fn kind_filters_are_active_when_empty() -> VortexResult<()> {
         const EDITION: EditionId = EditionId::new("test", 2026, 8, 0);
         static ARRAYS_ONLY: EditionDeclaration = EditionDeclaration {
             edition: Edition {
@@ -870,12 +870,8 @@ mod tests {
         };
 
         let session = array_session().with::<EditionSession>();
-        session
-            .register_edition(&DECLARATION)
-            .map_err(|error| vortex_err!("{error}"))?;
-        session
-            .enable_edition(EDITION)
-            .map_err(|error| vortex_err!("{error}"))?;
+        session.register_edition(&DECLARATION)?;
+        session.enable_edition(EDITION)?;
 
         let date = DType::Extension(Date::new(TimeUnit::Days, Nullability::NonNullable).erased());
         let nested = DType::struct_([("date", date)], Nullability::NonNullable);
