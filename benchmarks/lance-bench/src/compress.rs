@@ -148,7 +148,11 @@ impl Compressor for LanceCompressor {
             .to_str()
             .ok_or_else(|| anyhow!("Failed to convert path to str"))?;
         let reader_iter = RecordBatchIterator::new(batches.into_iter().map(Ok), Arc::clone(schema));
-        let write_params = WriteParams::with_storage_version(LanceFileVersion::V2_0);
+        // 2.1 is Lance's default and the first version with structural encoding, which is what
+        // turns on its compressive encodings (bitpacking, FSST, general compression). Writing 2.0
+        // here measured a near-uncompressed Lance file against compressed Vortex and Parquet.
+        // The other Lance writers in this crate already use 2.1.
+        let write_params = WriteParams::with_storage_version(LanceFileVersion::V2_1);
         Dataset::write(reader_iter, path_str, Some(write_params)).await?;
 
         let elapsed = start.elapsed();

@@ -83,8 +83,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--formats",
-        default="arrow-ipc,parquet,vortex",
-        help="comma-separated formats to forward to compress-bench",
+        default="arrow-ipc,parquet,lance,vortex",
+        help="comma-separated formats to forward to compress-bench "
+        "(lance requires a binary built with --features lance)",
     )
     parser.add_argument(
         "--emit-ingest-records",

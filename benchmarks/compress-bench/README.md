@@ -1,7 +1,7 @@
 # Compression benchmark
 
 Measures compression and decompression throughput, plus resulting file sizes, for Vortex,
-Parquet, uncompressed Arrow IPC, and optionally Lance.
+Parquet, uncompressed Arrow IPC, and Lance.
 
 [Arrow IPC](https://arrow.apache.org/docs/format/Columnar.html#ipc-file-format) is Apache
 Arrow's built-in file format, formerly called Feather V2. This suite writes it without
@@ -22,6 +22,20 @@ See [`src/main.rs`](./src/main.rs) for the dataset list and CLI flags (`--format
 ```bash
 cargo run -p compress-bench --profile release_debug
 ```
+
+Lance is behind the `lance` feature, and `--formats` accepts it only in a binary built with
+it. CI always builds with the feature, so both the PR `Compression` comment and the `develop`
+run cover Lance:
+
+```bash
+cargo run -p compress-bench --profile release_debug --features lance \
+  -- --formats arrow-ipc,parquet,lance,vortex
+```
+
+Lance files are written at storage version 2.1, the first version with structural encoding and
+therefore the first that applies Lance's compressive encodings. Version 2.0 writes an
+essentially uncompressed file, which is not a meaningful comparison against compressed Vortex
+and Parquet.
 
 ## GPU decompression
 
