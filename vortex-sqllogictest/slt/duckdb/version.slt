@@ -1,10 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-import sys
+include ../setup.slt.no
 
-
-def main() -> None:
-    from vortex._lib.cli import launch
-
-    launch(sys.argv)
+query B
+SELECT length(vortex_version()) > 0;
+----
+true

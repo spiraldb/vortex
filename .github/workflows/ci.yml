@@ -85,13 +85,13 @@ jobs:
         run: uvx ruff format --check .
       - name: Python Lint - Ruff
         run: uvx ruff check .
-      # PyRight needs the project for type information, so use uv run
-      - name: Python Lint - PyRight
-        env:
-          MATURIN_PEP517_ARGS: "--profile ci"
+      # ty needs the Python dependencies for type information, but resolves the
+      # vortex package itself from the in-tree sources and stubs, so skip the
+      # Rust extension build entirely.
+      - name: Python Lint - ty
         run: |
-          uv sync --all-packages
-          uv run basedpyright vortex-python
+          uv sync --all-packages --no-install-package vortex-data --no-install-package vortex-data-cuda
+          uv run --no-sync ty check vortex-python
 
   python-test:
     name: "Python (test)"
@@ -578,21 +578,15 @@ jobs:
       - uses: ./.github/actions/setup-prebuild
         with:
           enable-sccache: "true"
-      # The golden suite pins the compressor's decisions per feature variant, and the
-      # variants are mutually exclusive at compile time: the `default` variant only exists
-      # without `unstable_encodings` (which changes ALL_SCHEMES), so the `--all-features`
-      # workspace test jobs cannot run it. Run each feature combination explicitly.
-      - name: Golden corpus (default features)
+      # The golden suite pins compressor decisions for the core-only and explicitly enabled
+      # edition configurations. Compact compression additionally needs its optional schemes.
+      - name: Golden corpus (edition configurations)
         run: |
           cargo nextest run --cargo-profile ci --locked --no-fail-fast -p vortex-btrblocks --test golden
-      - name: Golden corpus (unstable_encodings)
+      - name: Golden corpus (compact, zstd + pco)
         run: |
           cargo nextest run --cargo-profile ci --locked --no-fail-fast -p vortex-btrblocks --test golden \
-            --features unstable_encodings
-      - name: Golden corpus (compact, unstable_encodings + zstd + pco)
-        run: |
-          cargo nextest run --cargo-profile ci --locked --no-fail-fast -p vortex-btrblocks --test golden \
-            --features unstable_encodings,zstd,pco
+            --features zstd,pco -E 'test(golden_compact)'
 
   build-java:
     name: "Java"

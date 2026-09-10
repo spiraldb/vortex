@@ -12,7 +12,9 @@
 
 #include "duckdb.h"
 #include "duckdb/catalog/catalog.hpp"
+#include "duckdb/catalog/default/default_functions.hpp"
 #include "duckdb/common/insertion_order_preserving_map.hpp"
+#include "duckdb/parser/keyword_helper.hpp"
 #include "duckdb/common/multi_file/multi_file_reader.hpp"
 #include "duckdb/function/table_function.hpp"
 #include "duckdb/main/capi/capi_internal.hpp"
@@ -215,6 +217,32 @@ duckdb_state register_table_function(DatabaseInstance &db, LogicalType parameter
     } catch (const std::exception &e) {
         ErrorData data(e);
         DUCKDB_LOG_ERROR(db, "Failed to create Vortex table function:\t" + data.Message());
+        return DuckDBError;
+    }
+    return DuckDBSuccess;
+}
+
+extern "C" duckdb_state duckdb_vx_register_version_function(duckdb_database ffi_db, const char *version) {
+    D_ASSERT(ffi_db);
+    D_ASSERT(version);
+    const DatabaseWrapper &wrapper = *reinterpret_cast<DatabaseWrapper *>(ffi_db);
+    DatabaseInstance &db = *wrapper.database->instance;
+
+    const string quoted = KeywordHelper::WriteQuoted(version);
+
+    const DefaultMacro macro {DEFAULT_SCHEMA,
+                              "vortex_version",
+                              {nullptr},
+                              {{nullptr, nullptr}},
+                              quoted.c_str()};
+    try {
+        auto info = DefaultFunctionGenerator::CreateInternalMacroInfo(macro);
+        auto &system_catalog = Catalog::GetSystemCatalog(db);
+        auto data = CatalogTransaction::GetSystemTransaction(db);
+        system_catalog.CreateFunction(data, *info);
+    } catch (const std::exception &e) {
+        ErrorData data(e);
+        DUCKDB_LOG_ERROR(db, "Failed to create the vortex_version macro:\t" + data.Message());
         return DuckDBError;
     }
     return DuckDBSuccess;

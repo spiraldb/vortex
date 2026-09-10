@@ -76,6 +76,7 @@ typedef struct {
 } duckdb_vx_written_column_statistics;
 
 duckdb_state duckdb_vx_register_table_functions(duckdb_database ffi_db);
+duckdb_state duckdb_vx_register_version_function(duckdb_database ffi_db, const char *version);
 
 typedef struct duckdb_vx_agg_input_ *duckdb_vx_agg_input;
 idx_t duckdb_vx_aggregate_len(duckdb_vx_agg_input ffi);
