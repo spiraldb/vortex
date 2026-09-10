@@ -67,7 +67,14 @@ impl ArrayReduceRule<Filter> for TrivialFilterRule {
         match array.filter_mask() {
             Mask::AllTrue(_) => Ok(Some(array.child().clone())),
             Mask::AllFalse(_) => Ok(Some(Canonical::empty(array.dtype()).into_array())),
-            Mask::Values(_) => Ok(None),
+            mask @ Mask::Values(_) => {
+                if let (Some(first), Some(last)) = (mask.first(), mask.last())
+                    && last - first + 1 == mask.true_count()
+                {
+                    return Ok(Some(array.child().slice(first..last + 1)?));
+                }
+                Ok(None)
+            }
         }
     }
 }
