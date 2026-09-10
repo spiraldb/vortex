@@ -4,10 +4,9 @@ Guidance for Claude, Codex and other coding agents working in the Vortex reposit
 
 ## Task Routing
 
-- When asked a question about the PR or codebase, especially via `/query`, use the
-  `.agents/skills/query` skill.
 - When asked to investigate a CI failure, especially via `/ci-failure-analysis`, use the
-  `.agents/skills/ci-failure-analysis` skill.
+  `.agents/skills/ci-failure-analysis` skill. It is the source of truth for fetching logs,
+  classifying failures, and attributing causation.
 
 ## Overview
 
@@ -40,97 +39,90 @@ Before changing files in a subtree, read the closest nested `AGENTS.md`. In part
 - `docs/AGENTS.md` covers Sphinx documentation.
 - `vortex-python/AGENTS.md` covers Python and PyO3 binding work.
 
-## Build
+## Verification
 
-Prefer narrow crate builds while iterating:
+Run the narrowest check that covers the files you changed. CI already runs the workspace-wide
+version of everything below, so reproducing that breadth locally costs far more than the round
+trip it saves.
 
-```bash
-cargo build -p <crate-name>
-```
+Do not run Rust checks at all for changes that only touch Markdown, RST, Sphinx configuration,
+agent configuration, comments outside Rust code, symlinks, or other metadata with no Rust/API
+behavior impact. Validate those by inspection or with a targeted doc/config command, and verify
+symlink or path changes with `ls`, `find`, and `git status`.
 
-Use workspace-wide builds only when the change spans crate boundaries or before handing off a
-broad refactor:
+### Rust
 
-```bash
-cargo build --workspace
-```
-
-## Testing
-
-Run tests for the crate or binding you touched before broader checks:
+For Rust code, public API, feature flag, or generated-file changes, run these before stopping:
 
 ```bash
 cargo nextest run -p <crate-name>
+cargo clippy -p <crate-name> --all-targets --all-features -- -D warnings
+cargo +nightly-<pinned> fmt -p <crate-name>
 ```
 
-If cargo-nextest is not available, you can install it with:
+Two details make these match CI rather than merely resemble it:
 
-```bash
-cargo install --locked cargo-nextest
-```
+- `-D warnings` is required. Without it clippy exits successfully on exactly the warnings CI
+  rejects, so a local pass predicts nothing.
+- Use the nightly pinned as `NIGHTLY_TOOLCHAIN` in `.github/workflows/ci.yml`. A floating
+  `+nightly` can format differently from the toolchain CI checks against, so the reformatted tree
+  still fails `fmt --check`.
 
-For Rust doc comments or crate documentation, run doctests for the affected crate:
+There is no separate build step. `cargo nextest run` and `cargo clippy --all-targets` each compile
+the crate; a preceding `cargo build` only repeats that work under a third profile.
+
+For Rust doc comments or crate documentation, also run doctests for the affected crate:
 
 ```bash
 cargo test --doc -p <crate-name>
 ```
 
-## Linting, Formatting, and Generated Files
+If cargo-nextest is not available, install it with `cargo install --locked cargo-nextest`.
 
-Run verification that matches the files changed. Do not run expensive Rust checks for changes that
-only touch Markdown, agent configuration, comments outside Rust code, symlinks, or other metadata
-with no Rust/API behavior impact. For docs/config-only changes, validate formatting by inspection
-or with a targeted doc/config command, and verify symlink or path changes with `ls`, `find`, and
-`git status`.
+### C++ and CUDA
 
-For Rust code, public API, feature flag, or generated-file changes, run these before stopping:
-
-```bash
-cargo +nightly fmt --all
-cargo clippy --all-targets --all-features
-```
-
-For changed C++ and CUDA source or header files covered by CI (`.cpp`, `.hpp`, `.cu`, `.cuh`, and
-`.h` files under `lang/cpp`, `vortex-cuda`, `vortex-duckdb`, and `vortex-ffi`), format with the
-repository's `.clang-format` configuration and verify the result:
+Format changed `.cpp`, `.hpp`, `.cu`, `.cuh`, and `.h` files under `lang/cpp`, `vortex-cuda`,
+`vortex-duckdb`, and `vortex-ffi` with the repository's `.clang-format` configuration:
 
 ```bash
 clang-format --style=file -i <changed-files>
-clang-format --dry-run --Werror --style=file <changed-files>
 ```
 
 Pass only the files you changed; CI excludes vendored or generated CUDA and Arrow headers from its
-repository-wide check.
+repository-wide check. clang-format is idempotent, so a `--dry-run --Werror` pass over the files
+you just formatted cannot fail and is not worth running.
 
-Notes:
+### New and generated files
 
-- For `.github/` changes, follow `.github/AGENTS.md` and run
-  `yamllint --strict -c .yamllint.yaml` on changed workflow files.
+These CI checks are the ones most often missed when adding files rather than editing them:
+
+- Every source file needs SPDX headers, in the comment syntax of its language:
+
+  ```text
+  SPDX-License-Identifier: Apache-2.0
+  SPDX-FileCopyrightText: Copyright the Vortex contributors
+  ```
+
+  `REUSE.toml` records the exceptions, including the CC-BY-4.0 licensing of `docs/**`.
+
+- Spelling is checked by `typos` against `_typos.toml`.
+- CI asserts `git status --porcelain` is empty after a build. Regenerate generated files with the
+  repository's tooling rather than editing them by hand, and commit the result.
+
+### Notes
+
+- For `.github/` changes, follow `.github/AGENTS.md`, which covers both the yamllint invocation and
+  the nightly toolchain pin.
 - If cargo fails with exactly `sccache: error: Operation not permitted`, rerun that command
   with `RUSTC_WRAPPER=` so rustc runs directly. Only do this for that exact error.
 
-## CI Investigation
-
-- When iterating on CI failures, fetch only failed job logs first:
-  `gh run view <run-id> --job <job-id> --log-failed`.
-- Run narrow local repro commands for the affected crate, test, docs target, or binding before
-  running workspace-wide checks.
-- If a `gh` command fails with `error connecting to api.github.com` in the sandbox, immediately
-  rerun it with escalated network permissions instead of retrying in the sandbox.
-- Verify causation from logs, diffs, and local repros before attributing a failure to a PR.
-
 ## Rust Code Style
 
-- Follow `STYLE.md` for Rust formatting, documentation, API, error-handling, import, and safety
-  conventions.
+- Follow `STYLE.md` for Rust formatting, documentation, API, error-handling, import, safety, and
+  performance conventions. Its hidden-cost accessor table is the reference for changes to
+  per-element loops; back such changes with the benchmarks it names.
 - Only write comments that explain non-obvious logic or important context. Do not comment
   self-explanatory code.
-- Keep public APIs small and consistent with neighboring crates.
-
-## Performance
-
-Avoid hidden-cost per-element accessors in hot loops, follow the performance guidance in
-`STYLE.md`, and benchmark changes to hot paths.
 
 ## Tests
 
@@ -151,17 +143,10 @@ Avoid hidden-cost per-element accessors in hot loops, follow the performance gui
 
 Check new and modified lines against this list before finishing:
 
-- Running broad CI-style commands before trying a narrow local repro.
-- Using `unwrap`, `expect`, or panic-oriented assertions in tests where `VortexResult<()>` and
-  `?` would be clearer.
-- Comparing arrays element by element instead of using `assert_arrays_eq!`.
 - Adding imports inside functions when module-level imports would work.
-- Introducing `unsafe` without proving that safe Rust cannot express the same operation.
 - Updating expected test output to match buggy behavior without independently verifying the
   intended semantics.
 - Silently reducing the scope of an approved plan when implementation is harder than expected.
-- Calling a hidden-cost per-element accessor (`Validity::is_valid`, `scalar_at`, `BitBuffer::
-  value` accumulation) inside a hot loop instead of materializing once.
 
 ## Summaries
 
