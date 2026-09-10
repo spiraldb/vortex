@@ -18,7 +18,7 @@ EXPLAIN
 SELECT sum(i), min(i), max(i), avg(i), mean(i), any_value(i), first(i), count(*), count(i)
 FROM '${WORK_DIR}/agg-pushdown.vortex';
 ----
-<!REGEX>:.*UNGROUPED_AGGREGATE.*
+<REGEX>:.*UNGROUPED_AGGREGATE.*
 
 query I
 SELECT sum(i) FROM '${WORK_DIR}/agg-pushdown.vortex';

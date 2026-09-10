@@ -502,9 +502,9 @@ fn can_push_projection_aggregate(
 
     let mean_or_sum = matches!(aggregate, PushedAggregate::Sum | PushedAggregate::Mean);
 
-    // duckdb's sum() and avg() on i64/u64 accumulate in i128/u128, vortex
-    // sum()/avg() work on i64/u64 max and overflow to null
-    if mean_or_sum && dtype.is_primitive() && matches!(dtype.as_ptype(), PType::I64 | PType::U64) {
+    // DuckDB uses wider integer accumulators than Vortex's i64/u64 sum state. Even narrow
+    // integer inputs can overflow that state with enough rows, producing null instead of a value.
+    if mean_or_sum && dtype.is_int() {
         return false;
     }
 
