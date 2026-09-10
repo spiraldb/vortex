@@ -55,7 +55,9 @@ pub const ALL_SCHEMES: &[&dyn Scheme] = &[
     // selector keeps whichever is smaller per column.
     &string::FSSTScheme,
     #[cfg(feature = "unstable_encodings")]
-    &string::OnPairScheme::new(),
+    // TODO: Remove this explicit opt-in before opening the PR so the optional
+    // index is disabled by default.
+    &string::OnPairScheme::new().with_token_frequency_index(),
     &string::NullDominatedSparseScheme,
     ////////////////////////////////////////////////////////////////////////////////////////////////
     // Binary schemes.
