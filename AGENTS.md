@@ -40,33 +40,29 @@ Before changing files in a subtree, read the closest nested `AGENTS.md`. In part
 
 ## Verification
 
-Run the narrowest check that covers the files you changed. CI already runs the workspace-wide
-version of everything below, so reproducing that breadth locally costs far more than the round
-trip it saves.
+Linting, formatting, testing, builds, benchmarks, and other verification commands are optional.
+Users decide which checks to run and when. Do not run them automatically or make task completion
+depend on them. The commands below, and verification commands in scoped guidance or contributor
+workflows, are reference instructions for when the user requests a check.
 
-Test execution is optional and left to the user. The commands below document how tests are run
-in this repository; they are not mandatory completion checks. Run tests when the user requests
-them, and report which tests ran or were not run. Continue to run applicable lint, formatting,
-and static checks.
-
-Do not run Rust checks at all for changes that only touch Markdown, RST, Sphinx configuration,
-agent configuration, comments outside Rust code, symlinks, or other metadata with no Rust/API
-behavior impact. Validate those by inspection or with a targeted doc/config command, and verify
-symlink or path changes with `ls`, `find`, and `git status`.
+When verification is requested, use the narrowest check that covers the relevant changes. CI
+already runs workspace-wide checks. Markdown, RST, Sphinx configuration, agent configuration,
+comments outside Rust code, symlinks, and other metadata with no Rust/API behavior impact do not
+need Rust checks. Targeted doc/config commands or path inspection with `ls`, `find`, and
+`git status` are available for those changes.
 
 ### Rust
 
-For Rust code, public API, feature flag, or generated-file changes, run these before stopping:
+For requested Rust linting and formatting, scope these commands to the affected crate:
 
 ```bash
 cargo clippy -p <crate-name> --all-targets --all-features -- -D warnings
 cargo +nightly-<pinned> fmt -p <crate-name>
 ```
 
-Two details make these match CI rather than merely resemble it:
+To match CI when running these commands:
 
-- `-D warnings` is required. Without it clippy exits successfully on exactly the warnings CI
-  rejects, so a local pass predicts nothing.
+- Include `-D warnings` so clippy fails on the warnings that CI rejects.
 - Use the nightly pinned as `NIGHTLY_TOOLCHAIN` in `.github/workflows/ci.yml`. A floating
   `+nightly` can format differently from the toolchain CI checks against, so the reformatted tree
   still fails `fmt --check`.
@@ -86,14 +82,15 @@ If needed for a requested test run, install cargo-nextest with `cargo install --
 ### Python
 
 The following applies to Python bindings and their PyO3 implementation under `vortex-python/`,
-and to CUDA bindings under `vortex-python-cuda/`. Run commands from the repository root.
+and to CUDA bindings under `vortex-python-cuda/`. These commands use the repository root as their
+working directory.
 
 Follow the [Python binding development workflow](CONTRIBUTING.md#python-bindings) for environment
 setup, Maturin rebuilds, targeted testing, Cargo features, and the full Python check. Keep the
-contributor guide as the source of truth for shared commands; its test workflows are available
-when the user chooses to run them.
+contributor guide as the source of truth for shared commands; its verification workflows are
+available when the user chooses to run them.
 
-Run the lint, formatting, and type checks that match the files changed:
+Python linting, formatting, and type-checking commands:
 
 ```bash
 uvx ruff format --check <changed-python-files>
@@ -103,12 +100,12 @@ uvx ty check vortex-python vortex-python-cuda vortex-ffi/cmake/tests scripts/tes
 
 Use `uvx` for both Ruff and ty, matching CI. The command above covers both binding packages and the
 CMake and script tests. For a narrower check, pass the affected directory, such as
-`uvx ty check vortex-python` or `uvx ty check vortex-ffi/cmake/tests`. Type-check the whole binding
-package when changing stubs or annotations so their callers are checked too.
+`uvx ty check vortex-python` or `uvx ty check vortex-ffi/cmake/tests`. Checking the whole binding
+package covers callers affected by stub or annotation changes.
 
-ty reads Python sources and stubs and needs third-party dependencies for type information. Prepare
-them with `uv sync --all-packages --no-install-workspace` to avoid building the Rust extensions for
-type checking. Runtime tests still need the installed extensions.
+ty reads Python sources and stubs and needs third-party dependencies for type information.
+`uv sync --all-packages --no-install-workspace` prepares those dependencies without building the
+Rust extensions. Runtime tests still need the installed extensions.
 
 Use targeted `# ty: ignore[rule-name]` comments for intentional violations, such as invalid-input
 tests or third-party stub limitations, and explain non-obvious suppressions. Pyright suppression
@@ -125,20 +122,17 @@ When the user wants Python tests, run the targeted suite with:
 uv run --all-packages pytest <changed-python-tests>
 ```
 
-Do not add a `python -m py_compile` pass: syntax errors are already reported by `ruff check`,
-`ty check`, and pytest collection.
-
 For Python docstrings, `docs/api/python/`, or Sphinx configuration changes, follow
-`docs/AGENTS.md`; the contributor guide documents clean Sphinx builds and doctests. Test execution
-remains the user's choice. If PyO3 Rust files change, run the Rust lint and formatting checks above,
-scoped to the affected binding crate (`-p vortex-python` or `-p vortex-python-cuda`).
+`docs/AGENTS.md`; the contributor guide documents clean Sphinx builds and doctests. All verification
+remains the user's choice. The Rust commands above cover PyO3 files when scoped to the affected
+binding crate (`-p vortex-python` or `-p vortex-python-cuda`).
 
-Always finish Python binding work with `git diff --check`.
+`git diff --check` is available for checking patch whitespace.
 
 ### C++ and CUDA
 
-Format changed `.cpp`, `.hpp`, `.cu`, `.cuh`, and `.h` files under `lang/cpp`, `vortex-cuda`,
-`vortex-duckdb`, and `vortex-ffi` with the repository's `.clang-format` configuration:
+For requested formatting of `.cpp`, `.hpp`, `.cu`, `.cuh`, and `.h` files under `lang/cpp`,
+`vortex-cuda`, `vortex-duckdb`, and `vortex-ffi`, use the repository's `.clang-format` configuration:
 
 ```bash
 clang-format --style=file -i <changed-files>
