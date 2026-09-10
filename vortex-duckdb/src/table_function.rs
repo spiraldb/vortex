@@ -379,8 +379,6 @@ pub(crate) fn convert_result(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexR
     Ok(if let Some(array) = array.as_opt::<Struct>() {
         array.into_owned()
     } else {
-        // In very rare cases we may get a DType::Struct which is not a Struct
-        // array
         array.execute::<Canonical>(ctx)?.into_struct()
     })
 }
