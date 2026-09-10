@@ -142,8 +142,11 @@ pub struct MemoryMeasurementResult {
     /// Memory change during the operation (can be negative)
     pub physical_memory_delta: i64,
     pub virtual_memory_delta: i64,
-    /// Peak memory usage reached by the global tracker
+    /// Peak resident-set bytes during the query. On Linux this is the kernel
+    /// `VmHWM` high-water mark, reset at query start; elsewhere it is the
+    /// maximum of the values sampled at query start and end.
     pub peak_physical_memory: u64,
+    /// Maximum virtual-memory bytes sampled at query start and end.
     pub peak_virtual_memory: u64,
 }
 
@@ -151,6 +154,7 @@ pub struct MemoryMeasurementResult {
 pub struct BenchmarkMemoryTracker {
     global_tracker: MemoryTracker,
     baseline_memory: Option<MemoryStats>,
+    hwm_reset: bool,
 }
 
 impl Default for BenchmarkMemoryTracker {
@@ -165,11 +169,14 @@ impl BenchmarkMemoryTracker {
         Self {
             global_tracker: MemoryTracker::new(),
             baseline_memory: None,
+            hwm_reset: false,
         }
     }
 
     /// Mark the start of a query execution - should be called before running a query
     pub fn start_query(&mut self) {
+        self.hwm_reset = reset_peak_rss();
+        self.global_tracker.reset_peak();
         self.baseline_memory = self.global_tracker.current_memory();
     }
 
@@ -180,17 +187,18 @@ impl BenchmarkMemoryTracker {
         let after_memory = self.global_tracker.current_memory()?;
         let usage_diff = after_memory.diff(&baseline);
 
-        let (peak_physical_memory, peak_virtual_memory) =
-            process_peak_memory().unwrap_or_else(|| {
-                let peak = self.global_tracker.peak_memory();
-                (peak.physical_memory, peak.virtual_memory)
-            });
+        let sampled_peak = self.global_tracker.peak_memory();
+        let peak_physical_memory = if self.hwm_reset {
+            peak_rss().unwrap_or(sampled_peak.physical_memory)
+        } else {
+            sampled_peak.physical_memory
+        };
 
         Some(MemoryMeasurementResult {
             physical_memory_delta: usage_diff.physical_memory_delta,
             virtual_memory_delta: usage_diff.virtual_memory_delta,
             peak_physical_memory,
-            peak_virtual_memory,
+            peak_virtual_memory: sampled_peak.virtual_memory,
         })
     }
 
@@ -218,20 +226,22 @@ impl MemoryMeasurement {
     }
 }
 
-/// RSS,VSZ peak memory
+/// Peak resident-set size (`VmHWM`) of the current process.
 #[cfg(target_os = "linux")]
-fn process_peak_memory() -> Option<(u64, u64)> {
+fn peak_rss() -> Option<u64> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
-    let mut peak_rss = None;
-    let mut peak_vsz = None;
-    for line in status.lines() {
-        if let Some(rest) = line.strip_prefix("VmHWM:") {
-            peak_rss = parse_status_kib(rest);
-        } else if let Some(rest) = line.strip_prefix("VmPeak:") {
-            peak_vsz = parse_status_kib(rest);
-        }
-    }
-    Some((peak_rss?, peak_vsz?))
+    status
+        .lines()
+        .find_map(|line| line.strip_prefix("VmHWM:"))
+        .and_then(parse_status_kib)
+}
+
+/// Reset the kernel `VmHWM` high-water mark to the current RSS, so subsequent
+/// [`peak_rss`] reads report the peak since this call. Returns whether the
+/// reset took effect.
+#[cfg(target_os = "linux")]
+fn reset_peak_rss() -> bool {
+    std::fs::write("/proc/self/clear_refs", "5").is_ok()
 }
 
 #[cfg(target_os = "linux")]
@@ -245,8 +255,13 @@ fn parse_status_kib(field: &str) -> Option<u64> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn process_peak_memory() -> Option<(u64, u64)> {
+fn peak_rss() -> Option<u64> {
     None
+}
+
+#[cfg(not(target_os = "linux"))]
+fn reset_peak_rss() -> bool {
+    false
 }
 
 #[cfg(test)]
@@ -279,20 +294,39 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn peak_memory() {
-        let (rss, vsz) = process_peak_memory().unwrap();
-        assert!(rss > 0);
-        assert!(vsz >= rss);
+        assert!(peak_rss().unwrap() > 0);
     }
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn query_end_peak() {
+    fn per_query_peak() -> anyhow::Result<()> {
+        const BIG: usize = 256 << 20;
+
+        // Anonymous mmap instead of Vec: unmapping bypasses mimalloc, so the
+        // pages verifiably leave RSS between the two queries.
+        fn touched_map(len: usize) -> anyhow::Result<memmap2::MmapMut> {
+            let mut map = memmap2::MmapMut::map_anon(len)?;
+            for page in map.chunks_mut(4096) {
+                page[0] = 7;
+            }
+            std::hint::black_box(&mut map);
+            Ok(map)
+        }
+
         let mut tracker = BenchmarkMemoryTracker::new();
+
         tracker.start_query();
-        let _data: Vec<u8> = vec![7u8; 8 * 1024 * 1024];
-        let result = tracker.end_query().unwrap();
-        let (rss, _) = process_peak_memory().unwrap();
-        assert!(result.peak_physical_memory > 0);
-        assert!(result.peak_physical_memory <= rss);
+        let big = touched_map(BIG)?;
+        let first = tracker.end_query().unwrap();
+        drop(big);
+
+        tracker.start_query();
+        let _small = touched_map(1 << 20)?;
+        let second = tracker.end_query().unwrap();
+
+        assert!(first.peak_physical_memory >= BIG as u64);
+        assert!(first.physical_memory_delta > 0);
+        assert!(second.peak_physical_memory < first.peak_physical_memory - (BIG as u64 / 2));
+        Ok(())
     }
 }

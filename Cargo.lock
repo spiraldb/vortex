@@ -9700,6 +9700,7 @@ dependencies = [
  "indicatif",
  "insta",
  "itertools 0.14.0",
+ "memmap2",
  "mimalloc",
  "noodles-bgzf",
  "noodles-vcf",
