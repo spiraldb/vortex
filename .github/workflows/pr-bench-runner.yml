@@ -135,8 +135,6 @@ jobs:
         run: |
           python3 scripts/random-access-split.py
 
-      # `compress-split.py` includes Lance in its default `--formats`, so compress-bench must be
-      # called with `with_lance: true` or the run fails on an unimplemented Lance compressor.
       - name: Run ${{ inputs.benchmark_name }} benchmark (per-dataset)
         if: inputs.benchmark_id == 'compress-bench'
         shell: bash
