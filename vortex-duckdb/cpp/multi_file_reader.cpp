@@ -112,7 +112,9 @@ void VortexReaderInterface::BindReader(ClientContext &context,
     const void *const ffi_file = initial_reader.ffi_file->DataPtr();
     duckdb_bind_result ffi_result = reinterpret_cast<duckdb_bind_result>(&result);
 
-    duckdb_vx_data ffi_bind_data = duckdb_reader_bind(ffi_file, ffi_result, &error);
+    // Capture this before pruning can replace the file list with a different single file.
+    const bool single_file = bind_data.file_list->GetExpandResult() == FileExpandResult::SINGLE_FILE;
+    duckdb_vx_data ffi_bind_data = duckdb_reader_bind(ffi_file, single_file, ffi_result, &error);
     if (error) {
         throw BinderException(IntoErrString(error));
     }

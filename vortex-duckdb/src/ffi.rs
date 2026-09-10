@@ -169,6 +169,7 @@ pub unsafe extern "C-unwind" fn duckdb_table_function_init_local(
 #[unsafe(no_mangle)]
 pub unsafe extern "C-unwind" fn duckdb_reader_bind(
     first_file: *const c_void,
+    single_file: bool,
     result: cpp::duckdb_bind_result,
     error_out: *mut cpp::duckdb_vx_error,
 ) -> cpp::duckdb_vx_data {
@@ -177,7 +178,7 @@ pub unsafe extern "C-unwind" fn duckdb_reader_bind(
     let mut result = unsafe { BindResult::own(result) };
 
     try_or_null(error_out, || {
-        let bind_data = reader_bind(first_file, &mut result)?;
+        let bind_data = reader_bind(first_file, single_file, &mut result)?;
         Ok(Data::from(Box::new(bind_data)).as_ptr())
     })
 }

@@ -142,7 +142,13 @@ pub fn reader_open(file_path: &str) -> VortexResult<OpenFileReader> {
 /// with first file schema which is the scan schema. Unlike Parquet, we don't
 /// support schema evolution, so if any file schema doesn't match first schema,
 /// we break.
-pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexResult<BindState> {
+///
+/// `single_file` must be true only when the initial scan contains exactly this file.
+pub fn reader_bind(
+    file: &OpenFileReader,
+    single_file: bool,
+    result: &mut BindResultRef,
+) -> VortexResult<BindState> {
     let dtype = file.reader.dtype().clone();
     let columns = extract_schema_from_dtype(&dtype)?;
 
@@ -153,6 +159,7 @@ pub fn reader_bind(file: &OpenFileReader, result: &mut BindResultRef) -> VortexR
     Ok(BindState {
         dtype,
         first_file_row_count: file.reader.row_count(),
+        max_row_count: single_file.then(|| file.reader.row_count()),
         filters: vec![],
         columns,
         has_non_optional_filter: AtomicBool::new(false),

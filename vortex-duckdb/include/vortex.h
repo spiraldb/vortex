@@ -50,6 +50,7 @@ extern duckdb_vx_data duckdb_table_function_init_local(const void *bind, const v
 
 extern
 duckdb_vx_data duckdb_reader_bind(const void *first_file,
+                                  bool single_file,
                                   duckdb_bind_result result,
                                   duckdb_vx_error *error_out);
 

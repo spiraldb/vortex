@@ -505,6 +505,8 @@ pub enum PushedAggregate {
     Min,
     Max,
     Sum,
+    /// DuckDB's `sum_no_overflow`, which proves `i64` bounds for integer inputs.
+    SumNoOverflow,
     Mean,
     // Also used for ANY_VALUE() which is allowed by definition
     First,
@@ -517,7 +519,7 @@ impl Display for PushedAggregate {
         match self {
             PushedAggregate::Min => f.write_str("min"),
             PushedAggregate::Max => f.write_str("max"),
-            PushedAggregate::Sum => f.write_str("sum"),
+            PushedAggregate::Sum | PushedAggregate::SumNoOverflow => f.write_str("sum"),
             PushedAggregate::Mean => f.write_str("mean"),
             PushedAggregate::First => f.write_str("first"),
             PushedAggregate::Count => f.write_str("count"),
@@ -536,7 +538,7 @@ impl PushedAggregate {
         Ok(match self {
             Self::Min => Box::new(Accumulator::try_new(Min, opts, dtype)?),
             Self::Max => Box::new(Accumulator::try_new(Max, opts, dtype)?),
-            Self::Sum => Box::new(Accumulator::try_new(SumV2, opts, dtype)?),
+            Self::Sum | Self::SumNoOverflow => Box::new(Accumulator::try_new(SumV2, opts, dtype)?),
             Self::Mean => Box::new(Accumulator::try_new(
                 Mean::combined(),
                 PairOptions(opts, opts),
@@ -561,7 +563,8 @@ pub fn try_from_projection_aggregate(
     Ok(Some(match agg.aggregate_function.name() {
         "min" => PushedAggregate::Min,
         "max" => PushedAggregate::Max,
-        "sum" | "sum_no_overflow" => PushedAggregate::Sum,
+        "sum" => PushedAggregate::Sum,
+        "sum_no_overflow" => PushedAggregate::SumNoOverflow,
         "avg" | "mean" => PushedAggregate::Mean,
         "first" | "any_value" => PushedAggregate::First,
         "count" => PushedAggregate::Count,

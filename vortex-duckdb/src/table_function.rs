@@ -78,6 +78,8 @@ pub const COUNT_STAR_PROJ_IDX: u64 = u64::MAX;
 pub(crate) struct BindState {
     pub dtype: DType,
     pub first_file_row_count: u64,
+    /// Upper bound on scan rows, known only when binding a single file.
+    pub max_row_count: Option<u64>,
     pub filters: Vec<Expression>,
     pub columns: Vec<DuckdbField>,
     // There exists at least one non-optional table filter or at least one
@@ -95,6 +97,7 @@ impl Clone for BindState {
         Self {
             dtype: self.dtype.clone(),
             first_file_row_count: self.first_file_row_count,
+            max_row_count: self.max_row_count,
             filters: vec![],
             columns: self.columns.clone(),
             has_non_optional_filter: AtomicBool::new(
@@ -500,12 +503,21 @@ fn can_push_projection_aggregate(
         return false;
     }
 
-    let mean_or_sum = matches!(aggregate, PushedAggregate::Sum | PushedAggregate::Mean);
+    let mean_or_sum = matches!(
+        aggregate,
+        PushedAggregate::Sum | PushedAggregate::SumNoOverflow | PushedAggregate::Mean
+    );
 
-    // DuckDB uses wider integer accumulators than Vortex's i64/u64 sum state. Even narrow
-    // integer inputs can overflow that state with enough rows, producing null instead of a value.
-    if mean_or_sum && dtype.is_int() {
-        return false;
+    // Vortex's i64/u64 sum state must fit every partial, not just the final result. DuckDB's
+    // sum_no_overflow carries that proof. Otherwise, bound the sum using the input type and the
+    // unfiltered row count. Cardinality estimates cannot establish this guarantee.
+    if mean_or_sum && dtype.is_int() && *aggregate != PushedAggregate::SumNoOverflow {
+        let fits = bind_data
+            .max_row_count
+            .is_some_and(|rows| integer_sum_fits(dtype.as_ptype(), rows));
+        if !fits {
+            return false;
+        }
     }
 
     // duckdb decimal sum() overflows to error, vortex sum overflows to NULL
@@ -534,6 +546,19 @@ fn can_push_projection_aggregate(
     }
 
     true
+}
+
+/// Prove that every subset of at most `rows` values fits the integer sum state.
+fn integer_sum_fits(ptype: PType, rows: u64) -> bool {
+    let max_rows = if ptype.is_signed_int() {
+        // The negative limit is tighter: 2^63 / 2^(input_bits - 1).
+        1u64 << (64 - ptype.bit_width())
+    } else if ptype.is_unsigned_int() {
+        u64::MAX / ptype.max_value_as_u64()
+    } else {
+        return false;
+    };
+    rows <= max_rows
 }
 
 /// Turn a scan into an aggregate scan. Input is N aggregations, possibly over
