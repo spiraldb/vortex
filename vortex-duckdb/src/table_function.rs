@@ -19,11 +19,8 @@ use vortex::aggregate_fn::DynAccumulator;
 use vortex::array::ArrayRef;
 use vortex::array::Canonical;
 use vortex::array::ExecutionCtx;
-use vortex::array::arrays::ScalarFn;
 use vortex::array::arrays::Struct;
 use vortex::array::arrays::StructArray;
-use vortex::array::arrays::scalar_fn::ScalarFnArrayExt;
-use vortex::array::optimizer::ArrayOptimizer;
 use vortex::dtype::DType;
 use vortex::dtype::PType;
 use vortex::error::VortexExpect;
@@ -36,7 +33,6 @@ use vortex::metrics::tracing::get_global_labels;
 use vortex::scalar::Scalar;
 use vortex::scalar_fn::fns::binary::Binary;
 use vortex::scalar_fn::fns::operators::Operator;
-use vortex::scalar_fn::fns::pack::Pack;
 use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::convert::PushedAggregate;
@@ -378,20 +374,12 @@ pub(crate) fn optimize_and_bind(expr: Expression, dtype: &DType) -> VortexResult
 }
 
 pub(crate) fn convert_result(array: ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<StructArray> {
-    let array_result = array.optimize_recursive(ctx.session())?;
-    Ok(if let Some(array) = array_result.as_opt::<Struct>() {
+    // By the time we got here, array is fully optimized, don't call
+    // optimize_recursive or similar functions here.
+    Ok(if let Some(array) = array.as_opt::<Struct>() {
         array.into_owned()
-    } else if let Some(array) = array_result.as_opt::<ScalarFn>()
-        && let Some(pack_options) = array.scalar_fn().as_opt::<Pack>()
-    {
-        StructArray::new(
-            pack_options.names.clone(),
-            array.children(),
-            array.len(),
-            pack_options.nullability.into(),
-        )
     } else {
-        array_result.execute::<Canonical>(ctx)?.into_struct()
+        array.execute::<Canonical>(ctx)?.into_struct()
     })
 }
 
