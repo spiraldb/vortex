@@ -37,8 +37,8 @@ use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::literal::Literal;
 use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_array::stats::bound::stat;
-use vortex_array::stats::rewrite::StatsRewriteCtx;
 use vortex_error::VortexResult;
+use vortex_session::VortexSession;
 
 use crate::aggregate_fn::GeometryAabb;
 use crate::extension::is_native_geometry;
@@ -81,7 +81,7 @@ fn geometry_and_constant(
 /// so whatever holds for the box holds for the geometry.
 fn query_aabb(
     constant: &Scalar,
-    ctx: &StatsRewriteCtx<'_>,
+    session: &VortexSession,
 ) -> VortexResult<Option<SpatialRect<f64>>> {
     // A null geometry literal has no extent to prove against, so it can never prune.
     if constant.is_null() {
@@ -89,7 +89,7 @@ fn query_aabb(
     }
     // Decoding the constant into a concrete geometry runs through the compute stack, which needs
     // an execution context.
-    let mut exec = ctx.session().create_execution_ctx();
+    let mut exec = session.create_execution_ctx();
     Ok(single_geometry(constant, &mut exec)?.bounding_rect())
 }
 

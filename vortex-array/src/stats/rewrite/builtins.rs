@@ -3,8 +3,10 @@
 
 use std::sync::Arc;
 
+use vortex_array::stats::rewrite::falsify;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
+use vortex_session::VortexSession;
 
 use crate::aggregate_fn::AggregateFnRef;
 use crate::aggregate_fn::AggregateFnVTableExt;
@@ -48,7 +50,6 @@ use crate::scalar_fn::fns::operators::CompareOperator;
 use crate::scalar_fn::fns::operators::Operator;
 use crate::scalar_fn::internal::row_count::RowCount;
 use crate::stats::bound::stat;
-use crate::stats::rewrite::StatsRewriteCtx;
 use crate::stats::rewrite::StatsRewriteRule;
 use crate::stats::session::StatsSession;
 
@@ -87,9 +88,9 @@ impl StatsRewriteRule for BinaryNanCountStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        ctx: &StatsRewriteCtx<'_>,
+        session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
-        binary_falsify::<NanCountProof>(expr, ctx)
+        binary_falsify::<NanCountProof>(expr, session)
     }
 }
 
@@ -104,15 +105,15 @@ impl StatsRewriteRule for BinaryAllNonNanStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        ctx: &StatsRewriteCtx<'_>,
+        session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
-        binary_falsify::<AllNonNanProof>(expr, ctx)
+        binary_falsify::<AllNonNanProof>(expr, session)
     }
 }
 
 fn binary_falsify<P: NonNanProof>(
     expr: &BoundExpression,
-    ctx: &StatsRewriteCtx<'_>,
+    session: &VortexSession,
 ) -> VortexResult<Option<BoundExpression>> {
     let operator = expr.as_::<Binary>();
     let lhs = expr.child(0);
@@ -163,8 +164,8 @@ fn binary_falsify<P: NonNanProof>(
                 return Ok(None);
             }
 
-            let lhs_falsifier = ctx.falsify(lhs)?;
-            let rhs_falsifier = ctx.falsify(rhs)?;
+            let lhs_falsifier = falsify(lhs, session)?;
+            let rhs_falsifier = falsify(rhs, session)?;
             or_collect(lhs_falsifier.into_iter().chain(rhs_falsifier))
         }
         Operator::Or => {
@@ -175,7 +176,7 @@ fn binary_falsify<P: NonNanProof>(
                 return Ok(None);
             }
 
-            match (ctx.falsify(lhs)?, ctx.falsify(rhs)?) {
+            match (falsify(lhs, session)?, falsify(rhs, session)?) {
                 (Some(lhs), Some(rhs)) => Some(and(lhs, rhs)),
                 _ => None,
             }
@@ -195,7 +196,7 @@ impl StatsRewriteRule for BetweenStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        ctx: &StatsRewriteCtx<'_>,
+        session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         let options = expr.as_::<Between>();
         let arr = expr.child(0).clone();
@@ -204,7 +205,7 @@ impl StatsRewriteRule for BetweenStatsRewrite {
 
         let lhs = binary(options.lower_strict.to_operator(), lower, arr.clone());
         let rhs = binary(options.upper_strict.to_operator(), arr, upper);
-        ctx.falsify(&and(lhs, rhs))
+        falsify(&and(lhs, rhs), session)
     }
 }
 
@@ -219,7 +220,7 @@ impl StatsRewriteRule for IsNullNullCountStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(null_count(expr.child(0)).map(|null_count| eq(null_count, lit(0u64))))
     }
@@ -227,7 +228,7 @@ impl StatsRewriteRule for IsNullNullCountStatsRewrite {
     fn satisfy(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(null_count(expr.child(0)).map(|null_count| eq(null_count, row_count())))
     }
@@ -244,7 +245,7 @@ impl StatsRewriteRule for IsNullAllNonNullStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(Some(all_non_null(expr.child(0))))
     }
@@ -261,7 +262,7 @@ impl StatsRewriteRule for IsNullAllNullStatsRewrite {
     fn satisfy(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(Some(all_null(expr.child(0))))
     }
@@ -278,7 +279,7 @@ impl StatsRewriteRule for IsNotNullNullCountStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(null_count(expr.child(0)).map(|null_count| eq(null_count, row_count())))
     }
@@ -286,7 +287,7 @@ impl StatsRewriteRule for IsNotNullNullCountStatsRewrite {
     fn satisfy(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(null_count(expr.child(0)).map(|null_count| eq(null_count, lit(0u64))))
     }
@@ -303,7 +304,7 @@ impl StatsRewriteRule for IsNotNullAllNullStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(Some(all_null(expr.child(0))))
     }
@@ -320,7 +321,7 @@ impl StatsRewriteRule for IsNotNullAllNonNullStatsRewrite {
     fn satisfy(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         Ok(Some(all_non_null(expr.child(0))))
     }
@@ -337,7 +338,7 @@ impl StatsRewriteRule for LikeStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         let like_options = expr.as_::<Like>();
         if like_options.negated || like_options.case_insensitive {
@@ -392,7 +393,7 @@ impl StatsRewriteRule for ListContainsNanCountStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         list_contains_falsify::<NanCountProof>(expr)
     }
@@ -409,7 +410,7 @@ impl StatsRewriteRule for ListContainsAllNonNanStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         list_contains_falsify::<AllNonNanProof>(expr)
     }
@@ -465,7 +466,7 @@ impl StatsRewriteRule for DynamicComparisonNanCountStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         dynamic_comparison_falsify::<NanCountProof>(expr)
     }
@@ -482,7 +483,7 @@ impl StatsRewriteRule for DynamicComparisonAllNonNanStatsRewrite {
     fn falsify(
         &self,
         expr: &BoundExpression,
-        _ctx: &StatsRewriteCtx<'_>,
+        _session: &VortexSession,
     ) -> VortexResult<Option<BoundExpression>> {
         dynamic_comparison_falsify::<AllNonNanProof>(expr)
     }
@@ -744,7 +745,6 @@ mod tests {
     use crate::scalar_fn::internal::row_count::RowCount;
     use crate::stats::expr::StatFn;
     use crate::stats::expr::StatOptions;
-    use crate::stats::rewrite::StatsRewriteCtx;
     use crate::stats::rewrite::StatsRewriteRule;
     use crate::stats::session::StatsSessionExt;
 
@@ -881,7 +881,7 @@ mod tests {
         fn falsify(
             &self,
             _expr: &BoundExpression,
-            _ctx: &StatsRewriteCtx<'_>,
+            _session: &VortexSession,
         ) -> VortexResult<Option<BoundExpression>> {
             self.0.fetch_add(1, Ordering::Relaxed);
             Ok(None)
