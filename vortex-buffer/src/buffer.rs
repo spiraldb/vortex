@@ -125,12 +125,7 @@ pub(crate) fn copy_to_vec<T: Copy>(buffer: &[T]) -> Vec<T> {
 #[cold]
 #[inline(never)]
 fn copy_to_mut<T>(buffer: &Buffer<T>) -> BufferMut<T> {
-    BufferMut::<T>::copy_from_preferred_aligned_in(
-        buffer,
-        buffer.alignment(),
-        Some(buffer.bytes.preferred_alignment()),
-        buffer.allocator().clone(),
-    )
+    BufferMut::<T>::copy_from_aligned_in(buffer, buffer.alignment(), buffer.allocator().clone())
 }
 
 /// The number of `T`s that `bytes` bytes hold.

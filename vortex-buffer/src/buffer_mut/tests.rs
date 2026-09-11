@@ -57,7 +57,7 @@ fn growth_keeps_live_data() {
     buffer.push(u32::MAX);
 
     assert!(buffer.capacity() > capacity);
-    assert!(Alignment::DEFAULT_ALIGNMENT.is_ptr_aligned(buffer.as_ptr()));
+    assert!(buffer.alignment().is_ptr_aligned(buffer.as_ptr()));
     assert_eq!(&buffer[..capacity], vec![7; capacity]);
     assert_eq!(buffer[capacity], u32::MAX);
 }

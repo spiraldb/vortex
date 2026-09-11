@@ -731,12 +731,7 @@ impl<T> BufferMut<T> {
         } else {
             let capacity = self.capacity();
             let allocator = self.allocator().clone();
-            let mut aligned = Self::with_capacity_preferred_aligned_in(
-                capacity,
-                alignment,
-                Some(self.bytes.preferred_alignment()),
-                allocator,
-            );
+            let mut aligned = Self::with_capacity_aligned_in(capacity, alignment, allocator);
             aligned.extend_from_slice(&self);
             aligned
         }
@@ -766,10 +761,9 @@ impl<T> BufferMut<T> {
 
 impl<T> Clone for BufferMut<T> {
     fn clone(&self) -> Self {
-        let mut buffer = BufferMut::<T>::with_capacity_preferred_aligned_in(
+        let mut buffer = BufferMut::<T>::with_capacity_aligned_in(
             self.capacity(),
             self.alignment(),
-            Some(self.bytes.preferred_alignment()),
             self.allocator().clone(),
         );
         buffer.extend_from_slice(self.as_slice());

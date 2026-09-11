@@ -29,9 +29,8 @@ use crate::shared_state;
 ///
 /// The window promises that its start is aligned to [`alignment`](Self::alignment), and every
 /// operation that moves the start - [`slice`](Self::slice), [`advance`](Self::advance) - keeps
-/// that promise or panics. A second, [`preferred`](Self::preferred_alignment) alignment records
-/// what the region was allocated with, so that a window thawed back into a [`UniqueBytes`] grows
-/// as aligned as it started.
+/// that promise or panics. The region may well be more aligned than promised, and
+/// [`ensure_aligned`](Self::ensure_aligned) raises the promise to whatever the address supports.
 ///
 /// A handle that has never been shared describes its region inline (see the crate docs for the
 /// state encoding) and allocates no refcount; the first [`clone`](Clone::clone) promotes it.
@@ -48,8 +47,6 @@ pub struct SharedBytes {
     state: AtomicPtr<()>,
     /// The alignment promised for `ptr`.
     alignment: Alignment,
-    /// The alignment the region was allocated with, and is grown with: at least `alignment`.
-    preferred: Alignment,
 }
 
 // SAFETY: `Shared` is `Send`/`Sync`, and a `SharedBytes` only ever hands out `&[u8]` into a region
@@ -82,7 +79,6 @@ impl SharedBytes {
             base: dangling(),
             state: AtomicPtr::new(State::STATIC.0),
             alignment,
-            preferred: alignment,
         }
     }
 
@@ -99,7 +95,6 @@ impl SharedBytes {
             base: ptr,
             state: AtomicPtr::new(State::STATIC.0),
             alignment: Alignment::none(),
-            preferred: Alignment::none(),
         }
     }
 
@@ -150,15 +145,13 @@ impl SharedBytes {
         }
         .into_raw();
 
-        let alignment = Alignment::of::<T>();
         Self {
             ptr: base,
             len: size,
             base,
             // SAFETY: we just created `shared` and take over its single reference.
             state: AtomicPtr::new(unsafe { State::shared(shared) }.0),
-            alignment,
-            preferred: alignment,
+            alignment: Alignment::of::<T>(),
         }
     }
 
@@ -176,7 +169,6 @@ impl SharedBytes {
         base: NonNull<u8>,
         state: State,
         alignment: Alignment,
-        preferred: Alignment,
     ) -> Self {
         debug_assert!(alignment.is_ptr_aligned(ptr.as_ptr()));
         Self {
@@ -185,7 +177,6 @@ impl SharedBytes {
             base,
             state: AtomicPtr::new(state.0),
             alignment,
-            preferred,
         }
     }
 
@@ -222,22 +213,13 @@ impl SharedBytes {
         self.alignment
     }
 
-    /// The alignment the region was allocated with, which is at least
-    /// [`alignment`](Self::alignment). A window thawed into a [`UniqueBytes`] grows with it.
-    #[inline]
-    pub fn preferred_alignment(&self) -> Alignment {
-        self.preferred
-    }
-
     /// Whether the start of the window is aligned to `alignment`, whatever it promises.
     #[inline]
     pub fn is_aligned(&self, alignment: Alignment) -> bool {
         alignment.is_ptr_aligned(self.ptr.as_ptr())
     }
 
-    /// Promise `alignment` for the start of the window.
-    ///
-    /// This may lower as well as raise the promise; the preferred alignment only ever rises.
+    /// Promise `alignment` for the start of the window. This may lower as well as raise it.
     ///
     /// ## Panics
     ///
@@ -248,7 +230,6 @@ impl SharedBytes {
             bytes_panic!("buffer is not aligned to {alignment}");
         }
         self.alignment = alignment;
-        self.preferred = self.preferred.max(alignment);
     }
 
     /// How far into its region the window starts.
@@ -392,12 +373,9 @@ impl SharedBytes {
         if !alignment.is_offset_aligned(begin) {
             bytes_panic!("range start {begin} is not aligned to {alignment}");
         }
-        let preferred = self.preferred.max(alignment);
         if begin == end {
             // An empty window need not keep the region alive.
-            let mut empty = Self::empty_aligned(alignment);
-            empty.preferred = preferred;
-            return empty;
+            return Self::empty_aligned(alignment);
         }
         // The start of the window is aligned to `self.alignment`, so an offset that is a multiple
         // of `alignment` keeps it aligned only when `alignment` divides `self.alignment`. A
@@ -411,7 +389,6 @@ impl SharedBytes {
         sliced.ptr = ptr;
         sliced.len = end - begin;
         sliced.alignment = alignment;
-        sliced.preferred = preferred;
         sliced
     }
 
@@ -460,7 +437,6 @@ impl SharedBytes {
         sliced.ptr = ptr;
         sliced.len = subset.len();
         sliced.alignment = alignment;
-        sliced.preferred = self.preferred.max(alignment);
         sliced
     }
 
@@ -543,7 +519,6 @@ impl SharedBytes {
                     this.base,
                     state,
                     this.alignment,
-                    this.preferred,
                 )
             });
         }
@@ -558,15 +533,7 @@ impl SharedBytes {
         let this = ManuallyDrop::new(self);
         // SAFETY: the refcount is one, so we hold the only handle and take over its reference.
         Ok(unsafe {
-            UniqueBytes::from_parts(
-                this.ptr,
-                this.len,
-                capacity,
-                base,
-                state,
-                this.alignment,
-                this.preferred,
-            )
+            UniqueBytes::from_parts(this.ptr, this.len, capacity, base, state, this.alignment)
         })
     }
 
@@ -601,7 +568,6 @@ impl Clone for SharedBytes {
             base: self.base,
             state: AtomicPtr::new(state.0),
             alignment: self.alignment,
-            preferred: self.preferred,
         }
     }
 }

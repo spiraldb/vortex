@@ -17,10 +17,10 @@ documentation in `docs/`, and benchmark tooling in `vortex-bench/` and `benchmar
 ## Repository Layout
 
 - `vortex-bytes` owns memory and nothing else: `Alignment`, plus the untyped `SharedBytes` and
-  `UniqueBytes` windows into reference-counted regions, each carrying the alignment it promises
-  and the alignment it grows with. All of the allocation `unsafe` lives here, non-generic so it
-  compiles once. It has no dependencies, including on `vortex-error`; `vortex-error` converts its
-  `InvalidAlignment` behind a `vortex-bytes` feature.
+  `UniqueBytes` windows into reference-counted regions, each carrying the alignment it promises.
+  All of the allocation `unsafe` lives here, non-generic so it compiles once. It has no
+  dependencies, including on `vortex-error`; `vortex-error` converts its `InvalidAlignment`
+  behind a `vortex-bytes` feature.
 - `vortex-buffer` defines zero-copy aligned `Buffer<T>` and `BufferMut<T>`: typed views over
   `vortex-bytes` windows, guaranteed to be aligned to `T` or to a requested runtime alignment.
   Zero-sized `T` is rejected at compile time.
