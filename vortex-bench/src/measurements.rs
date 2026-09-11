@@ -483,6 +483,8 @@ impl ToJson for MemoryMeasurement {
             storage: self.storage.clone(),
             dataset: self.benchmark_dataset.clone(),
             runner: self.benchmark_runner.clone(),
+            unit: "MB".to_string(),
+            value: self.peak_physical_memory as f64 / 1024.0 / 1024.0,
             physical_memory_delta: self.physical_memory_delta,
             virtual_memory_delta: self.virtual_memory_delta,
             peak_physical_memory: self.peak_physical_memory,
@@ -517,6 +519,10 @@ pub struct MemoryMeasurementJson {
     pub storage: String,
     pub dataset: BenchmarkDataset,
     pub runner: String,
+    /// Peak resident-set size in mebibytes; the compare script reads this
+    /// pair to fill the row's value in the PR comment.
+    pub unit: String,
+    pub value: f64,
     pub physical_memory_delta: i64,
     pub virtual_memory_delta: i64,
     pub peak_physical_memory: u64,

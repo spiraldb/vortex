@@ -86,4 +86,5 @@ wkb = { workspace = true }
 
 [dev-dependencies]
 insta = { workspace = true }
+memmap2 = { workspace = true }
 rstest = { workspace = true }
