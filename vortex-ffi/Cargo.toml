@@ -23,7 +23,6 @@ all-features = true
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-fs = { workspace = true }
-bytes = { workspace = true }
 futures = { workspace = true }
 mimalloc = { workspace = true, optional = true }
 paste = { workspace = true }

@@ -4,7 +4,6 @@
 use std::io;
 use std::sync::Arc;
 
-use bytes::BytesMut;
 use futures::TryStreamExt;
 use futures::stream::FuturesUnordered;
 use object_store::MultipartUpload;
@@ -13,6 +12,8 @@ use object_store::ObjectStoreExt;
 use object_store::PutPayload;
 use object_store::PutResult;
 use object_store::path::Path;
+use vortex_buffer::ByteBuffer;
+use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 
 use crate::IoBuf;
@@ -23,7 +24,7 @@ use crate::VortexWrite;
 /// After writing, the caller must make sure to call `shutdown`, in order to ensure the data is actually persisted.
 pub struct ObjectStoreWrite {
     upload: Box<dyn MultipartUpload>,
-    buffer: BytesMut,
+    buffer: ByteBufferMut,
     put_result: Option<PutResult>,
 }
 
@@ -35,13 +36,19 @@ impl ObjectStoreWrite {
         let upload = object_store.put_multipart(location).await?;
         Ok(Self {
             upload,
-            buffer: BytesMut::with_capacity(CHUNK_SIZE),
+            buffer: ByteBufferMut::with_capacity(CHUNK_SIZE),
             put_result: None,
         })
     }
 
     pub fn put_result(&self) -> Option<&PutResult> {
         self.put_result.as_ref()
+    }
+
+    /// Split the first `CHUNK_SIZE` buffered bytes off as an upload part, without copying.
+    fn take_chunk(&mut self) -> ByteBuffer {
+        let rest = self.buffer.split_off(CHUNK_SIZE);
+        std::mem::replace(&mut self.buffer, rest).freeze()
     }
 }
 
@@ -54,8 +61,10 @@ impl VortexWrite for ObjectStoreWrite {
         if self.buffer.len() > BUFFER_SIZE {
             // Split off chunks while buffer is larger than CHUNKS_SIZE
             while self.buffer.len() > CHUNK_SIZE {
-                let payload = self.buffer.split_to(CHUNK_SIZE).freeze();
-                let part_fut = self.upload.put_part(PutPayload::from_bytes(payload));
+                let payload = self.take_chunk();
+                let part_fut = self
+                    .upload
+                    .put_part(PutPayload::from_bytes(payload.into_bytes()));
 
                 parts.push(part_fut);
             }
@@ -70,8 +79,10 @@ impl VortexWrite for ObjectStoreWrite {
         let parts = FuturesUnordered::new();
 
         while self.buffer.len() > CHUNK_SIZE {
-            let payload = self.buffer.split_to(CHUNK_SIZE).freeze();
-            let part_fut = self.upload.put_part(PutPayload::from_bytes(payload));
+            let payload = self.take_chunk();
+            let part_fut = self
+                .upload
+                .put_part(PutPayload::from_bytes(payload.into_bytes()));
 
             parts.push(part_fut);
         }
@@ -87,7 +98,7 @@ impl VortexWrite for ObjectStoreWrite {
         if !self.buffer.is_empty() {
             let payload = std::mem::take(&mut self.buffer).freeze();
             self.upload
-                .put_part(PutPayload::from_bytes(payload))
+                .put_part(PutPayload::from_bytes(payload.into_bytes()))
                 .await?;
         }
 

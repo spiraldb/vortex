@@ -5,7 +5,6 @@ use std::ffi::c_void;
 use std::ptr;
 use std::slice;
 
-use bytes::Bytes;
 use vortex::buffer::ByteBuffer;
 use vortex::error::VortexResult;
 use vortex::error::vortex_ensure;
@@ -140,7 +139,7 @@ pub unsafe extern "C-unwind" fn vx_data_source_new_buffer(
         let session = vx_session::as_ref(session);
         let bytes: &'static [u8] =
             unsafe { slice::from_raw_parts(buffer.cast::<u8>(), buffer_len) };
-        let buffer = ByteBuffer::from(Bytes::from_static(bytes));
+        let buffer = ByteBuffer::from_static(bytes);
         let file = session.open_options().open_buffer(buffer)?;
         let ds = MultiLayoutDataSource::new_with_first(
             file.layout_reader()?,

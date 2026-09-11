@@ -4,12 +4,12 @@
 use std::io::Read;
 use std::io::Write;
 
-use bytes::Bytes;
-use bytes::BytesMut;
 use itertools::Itertools;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
 use vortex_array::iter::ArrayIterator;
+use vortex_buffer::ByteBuffer;
+use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -123,23 +123,23 @@ impl<I: ArrayIterator + 'static> ArrayIteratorIPC for I {
 pub struct ArrayIteratorIPCBytes {
     inner: Box<dyn ArrayIterator + 'static>,
     encoder: MessageEncoder,
-    buffers: Vec<Bytes>,
+    buffers: Vec<ByteBuffer>,
 }
 
 impl ArrayIteratorIPCBytes {
-    /// Collects the IPC bytes into a single `Bytes`.
-    pub fn collect_to_buffer(self) -> VortexResult<Bytes> {
-        let buffers: Vec<Bytes> = self.try_collect()?;
-        let mut buffer = BytesMut::with_capacity(buffers.iter().map(|b| b.len()).sum());
+    /// Collects the IPC bytes into a single buffer.
+    pub fn collect_to_buffer(self) -> VortexResult<ByteBuffer> {
+        let buffers: Vec<ByteBuffer> = self.try_collect()?;
+        let mut buffer = ByteBufferMut::with_capacity(buffers.iter().map(|b| b.len()).sum());
         for buf in buffers {
-            buffer.extend_from_slice(buf.as_ref());
+            buffer.extend_from_slice(&buf);
         }
         Ok(buffer.freeze())
     }
 }
 
 impl Iterator for ArrayIteratorIPCBytes {
-    type Item = VortexResult<Bytes>;
+    type Item = VortexResult<ByteBuffer>;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Try to flush any buffers we have

@@ -11114,7 +11114,6 @@ dependencies = [
  "arrow-array 59.3.0",
  "arrow-schema 59.3.0",
  "async-fs",
- "bytes",
  "cbindgen",
  "futures",
  "mimalloc",
@@ -11269,7 +11268,6 @@ dependencies = [
 name = "vortex-ipc"
 version = "0.1.0"
 dependencies = [
- "bytes",
  "flatbuffers",
  "futures",
  "itertools 0.14.0",

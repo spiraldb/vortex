@@ -4,13 +4,13 @@
 pub(crate) mod context;
 pub(crate) mod parts;
 
-use bytes::Bytes;
 use pyo3::Bound;
 use pyo3::Python;
 use pyo3::buffer::PyBuffer;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use vortex::array::ArrayRef;
+use vortex::buffer::ByteBuffer;
 use vortex::dtype::DType;
 use vortex::ipc::messages::DecoderMessage;
 use vortex::ipc::messages::EncoderMessage;
@@ -102,7 +102,7 @@ fn decode_ipc_array_from_bytes(
 ) -> PyVortexResult<ArrayRef> {
     let mut decoder = MessageDecoder::default();
 
-    let mut dtype_buf = Bytes::from(dtype_bytes);
+    let mut dtype_buf = ByteBuffer::from(dtype_bytes);
     let dtype = match decoder.read_next(&mut dtype_buf)? {
         PollRead::Some(DecoderMessage::DType(dtype)) => dtype,
         PollRead::Some(_) => {
@@ -114,7 +114,7 @@ fn decode_ipc_array_from_bytes(
     };
     let dtype = DType::from_flatbuffer(dtype, session)?;
 
-    let mut array_buf = Bytes::from(array_bytes);
+    let mut array_buf = ByteBuffer::from(array_bytes);
     let array = match decoder.read_next(&mut array_buf)? {
         PollRead::Some(DecoderMessage::Array((parts, ctx, row_count))) => {
             parts.decode(&dtype, row_count, &ctx, session)?

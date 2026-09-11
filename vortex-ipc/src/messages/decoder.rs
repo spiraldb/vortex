@@ -4,12 +4,10 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use bytes::Buf;
 use flatbuffers::root;
 use flatbuffers::root_unchecked;
 use vortex_array::ArrayId;
 use vortex_array::serde::SerializedArray;
-use vortex_buffer::AlignedBuf;
 use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexExpect;
@@ -44,25 +42,19 @@ pub enum PollRead {
     Some(DecoderMessage),
     /// The decoder needs more data to make progress.
     ///
-    /// The inner value is the **total*k number of bytes the buffer should contain, not the
-    /// incremental amount needed. Callers should:
-    ///
-    /// 1. Resize the buffer to this length.
-    /// 2. Fill the buffer completely (handling partial reads as needed).
-    /// 3. Only then call [`MessageDecoder::read_next`] again.
-    ///
-    /// The decoder checks [`bytes::Buf::remaining`] to determine available data, which for
-    /// [`bytes::BytesMut`] returns the buffer length regardless of how many bytes were actually
-    /// written. Calling `read_next` before the buffer is fully populated will cause the decoder
-    /// to read garbage data.
+    /// The inner value is the **total** number of bytes the buffer handed to the next
+    /// [`MessageDecoder::read_next`] call must hold, not the incremental amount needed: whatever
+    /// the decoder did not consume from the previous buffer, followed by enough new bytes to make
+    /// up the total. Callers should fill the buffer completely before calling `read_next` again.
     NeedMore(usize),
 }
 
-// NOTE(ngates): we should design some trait that the Decoder can take that doesn't require unique
-//  ownership of the underlying bytes. The decoder needs to split out bytes, and advance a cursor,
-//  but it doesn't need to mutate any bytes. So in theory, we should be able to do this zero-copy
-//  over a shared buffer of bytes, instead of requiring a `BytesMut`.
 /// A stateful reader for decoding IPC messages from an arbitrary stream of bytes.
+///
+/// The decoder consumes from the front of the [`ByteBuffer`] it is given and hands message bodies
+/// out as slices of it wherever their alignment allows, so a caller that provides buffers aligned
+/// to [`Alignment::DEFAULT_ALIGNMENT`] decodes without copying. A body that does not lie at the
+/// alignment its message asks for is copied.
 #[derive(Default)]
 pub struct MessageDecoder {
     /// The current state of the decoder.
@@ -70,28 +62,36 @@ pub struct MessageDecoder {
 }
 
 impl MessageDecoder {
-    /// Attempt to read the next message from the bytes object.
+    /// Attempt to read the next message from `bytes`, consuming what it reads from the front.
     ///
     /// If the message is incomplete, the function will return `NeedMore` with the _total_ number
     /// of bytes needed to make progress. The next call to read_next _should_ provide at least
     /// this number of bytes otherwise it will be given the same `NeedMore` response.
-    pub fn read_next<B: AlignedBuf>(&mut self, bytes: &mut B) -> VortexResult<PollRead> {
+    pub fn read_next(&mut self, bytes: &mut ByteBuffer) -> VortexResult<PollRead> {
         loop {
             match &self.state {
                 State::Length => {
-                    if bytes.remaining() < 4 {
+                    if bytes.len() < 4 {
                         return Ok(PollRead::NeedMore(4));
                     }
 
-                    let msg_length = bytes.get_u32_le();
+                    let length = take(bytes, 4, Alignment::none());
+                    let msg_length = u32::from_le_bytes(
+                        length
+                            .as_slice()
+                            .try_into()
+                            .ok()
+                            .vortex_expect("four bytes were taken"),
+                    );
                     self.state = State::Header(msg_length as usize);
                 }
                 State::Header(msg_length) => {
-                    if bytes.remaining() < *msg_length {
+                    if bytes.len() < *msg_length {
                         return Ok(PollRead::NeedMore(*msg_length));
                     }
 
-                    let msg_bytes = bytes.copy_to_const_aligned(*msg_length);
+                    let msg_bytes =
+                        FlatBuffer::try_from(take(bytes, *msg_length, FlatBuffer::alignment()))?;
                     let msg = root::<fb::Message>(msg_bytes.as_ref())?;
                     if msg.version() != MessageVersion::V0 {
                         vortex_bail!("Unsupported message version {:?}", msg.version());
@@ -107,14 +107,14 @@ impl MessageDecoder {
                     let body_length = usize::try_from(msg.body_size()).map_err(|_| {
                         vortex_err!("body size {} is too large for usize", msg.body_size())
                     })?;
-                    if bytes.remaining() < body_length {
+                    if bytes.len() < body_length {
                         return Ok(PollRead::NeedMore(body_length));
                     }
 
                     match msg.header_type() {
                         MessageHeader::ArrayMessage => {
                             // We don't care about alignment here since ArrayParts will handle it.
-                            let body = bytes.copy_to_aligned(body_length, Alignment::new(1));
+                            let body = take(bytes, body_length, Alignment::none());
                             let parts = SerializedArray::try_from(body)?;
 
                             let header = msg
@@ -138,20 +138,22 @@ impl MessageDecoder {
                             ))));
                         }
                         MessageHeader::BufferMessage => {
-                            let body = bytes.copy_to_aligned(
-                                body_length,
-                                Alignment::try_from_untrusted_exponent(
-                                    msg.header_as_buffer_message()
-                                        .vortex_expect("header is buffer")
-                                        .alignment_exponent(),
-                                )?,
-                            );
+                            let alignment = Alignment::try_from_untrusted_exponent(
+                                msg.header_as_buffer_message()
+                                    .vortex_expect("header is buffer")
+                                    .alignment_exponent(),
+                            )?;
+                            let body = take(bytes, body_length, alignment);
 
                             self.state = Default::default();
                             return Ok(PollRead::Some(DecoderMessage::Buffer(body)));
                         }
                         MessageHeader::DTypeMessage => {
-                            let dtype: FlatBuffer = bytes.copy_to_const_aligned::<8>(body_length);
+                            let dtype = FlatBuffer::try_from(take(
+                                bytes,
+                                body_length,
+                                FlatBuffer::alignment(),
+                            ))?;
                             self.state = Default::default();
                             return Ok(PollRead::Some(DecoderMessage::DType(dtype)));
                         }
@@ -165,12 +167,23 @@ impl MessageDecoder {
     }
 }
 
+/// Split the first `len` bytes off the front of `bytes`, aligned to `alignment`.
+///
+/// The part is a slice of `bytes` when its address already satisfies `alignment`, and a copy
+/// otherwise. What remains in `bytes` may start anywhere, so it promises no alignment.
+fn take(bytes: &mut ByteBuffer, len: usize, alignment: Alignment) -> ByteBuffer {
+    let unaligned = std::mem::take(bytes).aligned(Alignment::none());
+    let part = unaligned.slice(0..len).aligned(alignment);
+    *bytes = unaligned.slice(len..);
+    part
+}
+
 #[cfg(test)]
 mod test {
-    use bytes::BytesMut;
     use vortex_array::ArrayRef;
     use vortex_array::IntoArray;
     use vortex_array::arrays::ConstantArray;
+    use vortex_buffer::ByteBufferMut;
     use vortex_buffer::buffer;
     use vortex_error::vortex_panic;
 
@@ -180,20 +193,21 @@ mod test {
     use crate::test::SESSION;
 
     fn write_and_read(expected: &ArrayRef) {
-        let mut ipc_bytes = BytesMut::new();
+        let mut ipc_bytes = ByteBufferMut::empty();
         let mut encoder = MessageEncoder::new(SESSION.clone());
         for buf in encoder.encode(EncoderMessage::Array(expected)).unwrap() {
-            ipc_bytes.extend_from_slice(buf.as_ref());
+            ipc_bytes.extend_from_slice(&buf);
         }
 
         let mut decoder = MessageDecoder::default();
 
         // Since we provide all bytes up-front, we should never hit a NeedMore.
-        let mut buffer = BytesMut::from(ipc_bytes.as_ref());
+        let mut buffer = ipc_bytes.freeze();
         let (array_parts, ctx, row_count) = match decoder.read_next(&mut buffer).unwrap() {
             PollRead::Some(DecoderMessage::Array(array_parts)) => array_parts,
             otherwise => vortex_panic!("Expected an array, got {:?}", otherwise),
         };
+        assert!(buffer.is_empty(), "the whole message was consumed");
 
         // Decode the array parts with the context
         let actual = array_parts
@@ -215,5 +229,32 @@ mod test {
         let array = ConstantArray::new(10i32, 20);
         assert_eq!(array.nbuffers(), 1, "Array should have a single buffer");
         write_and_read(&array.into_array());
+    }
+
+    #[test]
+    fn aligned_frames_decode_without_copying() {
+        let expected =
+            ByteBuffer::copy_from_aligned([1u8, 2, 3, 4, 5, 6, 7, 8], Alignment::new(64));
+        let mut encoder = MessageEncoder::new(SESSION.clone());
+        let frames = encoder.encode(EncoderMessage::Buffer(&expected)).unwrap();
+
+        // Hand the decoder each frame in a fresh, default-aligned buffer, as the stream readers
+        // do, and check that the body it hands back is a slice of the frame it arrived in.
+        let mut decoder = MessageDecoder::default();
+        let mut decoded = None;
+        for frame in frames {
+            let mut buffer = ByteBuffer::copy_from(&frame);
+            let frame_ptr = buffer.as_ptr();
+            if let PollRead::Some(DecoderMessage::Buffer(body)) =
+                decoder.read_next(&mut buffer).unwrap()
+            {
+                assert!(buffer.is_empty(), "the whole frame was consumed");
+                decoded = Some((body, frame_ptr));
+            }
+        }
+        let (body, frame_ptr) = decoded.expect("a buffer message");
+        assert_eq!(body.as_slice(), expected.as_slice());
+        assert_eq!(body.alignment(), Alignment::new(64));
+        assert_eq!(body.as_ptr(), frame_ptr, "the body aliases its frame");
     }
 }

@@ -6,10 +6,12 @@ use std::task::Context;
 use std::task::Poll;
 use std::task::ready;
 
-use bytes::BytesMut;
 use futures::AsyncRead;
 use futures::Stream;
 use pin_project_lite::pin_project;
+use vortex_buffer::Alignment;
+use vortex_buffer::ByteBuffer;
+use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 
@@ -19,10 +21,14 @@ use crate::messages::PollRead;
 
 pin_project! {
     /// An IPC message reader backed by an `AsyncRead` stream.
+    ///
+    /// Every frame the decoder asks for is read into a fresh buffer aligned to
+    /// [`Alignment::DEFAULT_ALIGNMENT`], so message bodies are handed out as slices of it rather
+    /// than copied.
     pub struct AsyncMessageReader<R> {
         #[pin]
         read: R,
-        buffer: BytesMut,
+        buffer: ByteBuffer,
         decoder: MessageDecoder,
         state: ReadState,
     }
@@ -32,7 +38,7 @@ impl<R> AsyncMessageReader<R> {
     pub fn new(read: R) -> Self {
         AsyncMessageReader {
             read,
-            buffer: BytesMut::new(),
+            buffer: ByteBuffer::empty(),
             decoder: MessageDecoder::default(),
             state: ReadState::default(),
         }
@@ -45,20 +51,22 @@ enum ReadState {
     /// Ready to consult the decoder for the next operation.
     #[default]
     AwaitingDecoder,
-    /// Filling the buffer with data from the underlying reader.
+    /// Filling a frame with data from the underlying reader.
     ///
     /// Async readers may return fewer bytes than requested (partial reads), especially over network
-    /// connections. This state persists across multiple `poll_next` calls until the buffer is
+    /// connections. This state persists across multiple `poll_next` calls until the frame is
     /// completely filled, at which point we transition back to [`Self::AwaitingDecoder`].
     Filling {
-        /// The number of bytes read into the buffer so far.
-        total_bytes_read: usize,
+        /// The frame being filled.
+        frame: ByteBufferMut,
+        /// The number of bytes the frame already holds.
+        filled: usize,
     },
 }
 
-/// Result of polling the reader to fill the buffer.
+/// Result of polling the reader to fill the frame.
 enum FillResult {
-    /// The buffer has been completely filled.
+    /// The frame has been completely filled.
     Filled,
     /// Need more data (partial read occurred).
     Pending,
@@ -66,33 +74,33 @@ enum FillResult {
     Eof,
 }
 
-/// Polls the reader to fill the buffer, handling partial reads.
-fn poll_fill_buffer<R: AsyncRead>(
+/// Polls the reader to fill the frame, handling partial reads.
+fn poll_fill_frame<R: AsyncRead>(
     read: Pin<&mut R>,
-    buffer: &mut [u8],
-    total_bytes_read: &mut usize,
+    frame: &mut [u8],
+    filled: &mut usize,
     cx: &mut Context<'_>,
 ) -> Poll<VortexResult<FillResult>> {
-    let unfilled = &mut buffer[*total_bytes_read..];
+    let unfilled = &mut frame[*filled..];
 
     let bytes_read = ready!(read.poll_read(cx, unfilled))?;
 
     // `0` bytes read indicates an EOF.
     Poll::Ready(if bytes_read == 0 {
-        if *total_bytes_read > 0 {
+        if *filled > 0 {
             Err(vortex_err!(
-                "unexpected EOF during partial read: read {total_bytes_read} of {} expected bytes",
-                buffer.len()
+                "unexpected EOF during partial read: read {filled} of {} expected bytes",
+                frame.len()
             ))
         } else {
             Ok(FillResult::Eof)
         }
     } else {
-        *total_bytes_read += bytes_read;
-        if *total_bytes_read == buffer.len() {
+        *filled += bytes_read;
+        if *filled == frame.len() {
             Ok(FillResult::Filled)
         } else {
-            debug_assert!(*total_bytes_read < buffer.len());
+            debug_assert!(*filled < frame.len());
             Ok(FillResult::Pending)
         }
     })
@@ -107,24 +115,30 @@ impl<R: AsyncRead> Stream for AsyncMessageReader<R> {
             match this.state {
                 ReadState::AwaitingDecoder => match this.decoder.read_next(this.buffer)? {
                     PollRead::Some(msg) => return Poll::Ready(Some(Ok(msg))),
-                    PollRead::NeedMore(new_len) => {
-                        this.buffer.resize(new_len, 0x00);
+                    PollRead::NeedMore(nbytes) => {
+                        // Start the new frame with whatever the decoder left unconsumed.
+                        let leftover = std::mem::take(this.buffer);
+                        let mut frame =
+                            ByteBufferMut::zeroed_aligned(nbytes, Alignment::DEFAULT_ALIGNMENT);
+                        frame[..leftover.len()].copy_from_slice(&leftover);
                         *this.state = ReadState::Filling {
-                            total_bytes_read: 0,
+                            frame,
+                            filled: leftover.len(),
                         };
                     }
                 },
-                ReadState::Filling { total_bytes_read } => {
-                    match ready!(poll_fill_buffer(
-                        this.read.as_mut(),
-                        this.buffer,
-                        total_bytes_read,
-                        cx
-                    )) {
+                ReadState::Filling { frame, filled } => {
+                    match ready!(poll_fill_frame(this.read.as_mut(), frame, filled, cx)) {
                         Err(e) => return Poll::Ready(Some(Err(e))),
                         Ok(FillResult::Eof) => return Poll::Ready(None),
-                        Ok(FillResult::Filled) => *this.state = ReadState::AwaitingDecoder,
                         Ok(FillResult::Pending) => {}
+                        Ok(FillResult::Filled) => {
+                            let ReadState::Filling { frame, .. } = std::mem::take(this.state)
+                            else {
+                                unreachable!("the frame was being filled")
+                            };
+                            *this.buffer = frame.freeze();
+                        }
                     }
                 }
             }

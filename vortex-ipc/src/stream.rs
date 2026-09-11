@@ -6,8 +6,6 @@ use std::pin::Pin;
 use std::task::Poll;
 use std::task::ready;
 
-use bytes::Bytes;
-use bytes::BytesMut;
 use futures::AsyncRead;
 use futures::AsyncWrite;
 use futures::AsyncWriteExt;
@@ -18,6 +16,8 @@ use pin_project_lite::pin_project;
 use vortex_array::ArrayRef;
 use vortex_array::dtype::DType;
 use vortex_array::stream::ArrayStream;
+use vortex_buffer::ByteBuffer;
+use vortex_buffer::ByteBufferMut;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
@@ -152,24 +152,24 @@ impl<S: ArrayStream + 'static> ArrayStreamIPC for S {
 pub struct ArrayStreamIPCBytes {
     stream: Pin<Box<dyn ArrayStream + 'static>>,
     encoder: MessageEncoder,
-    buffers: Vec<Bytes>,
+    buffers: Vec<ByteBuffer>,
     written_dtype: bool,
 }
 
 impl ArrayStreamIPCBytes {
-    /// Collects the IPC bytes into a single `Bytes`.
-    pub async fn collect_to_buffer(self) -> VortexResult<Bytes> {
-        let buffers: Vec<Bytes> = self.try_collect().await?;
-        let mut buffer = BytesMut::with_capacity(buffers.iter().map(|b| b.len()).sum());
+    /// Collects the IPC bytes into a single buffer.
+    pub async fn collect_to_buffer(self) -> VortexResult<ByteBuffer> {
+        let buffers: Vec<ByteBuffer> = self.try_collect().await?;
+        let mut buffer = ByteBufferMut::with_capacity(buffers.iter().map(|b| b.len()).sum());
         for buf in buffers {
-            buffer.extend_from_slice(buf.as_ref());
+            buffer.extend_from_slice(&buf);
         }
         Ok(buffer.freeze())
     }
 }
 
 impl Stream for ArrayStreamIPCBytes {
-    type Item = VortexResult<Bytes>;
+    type Item = VortexResult<ByteBuffer>;
 
     fn poll_next(
         self: Pin<&mut Self>,

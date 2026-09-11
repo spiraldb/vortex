@@ -246,3 +246,6 @@ vortex-python/.benchmarks/
 # For local benchmarks website server and things like the WAL
 **.duckdb*
 .bench-env
+
+# hegel property-test databases
+.hegel/

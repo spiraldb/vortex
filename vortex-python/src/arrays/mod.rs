@@ -979,14 +979,14 @@ impl PyArray {
         for buf in array_buffers.into_iter() {
             // PyBytes wraps bytes::Bytes and implements the buffer protocol
             // This allows PickleBuffer to reference the data without copying
-            let py_bytes = PyBufferBytes::new(buf).into_py_any(py)?;
+            let py_bytes = PyBufferBytes::new(buf.into_bytes()).into_py_any(py)?;
             let pickle_buffer = pickle_buffer_class.call1((py_bytes,))?;
             pickle_buffers.push(pickle_buffer);
         }
 
         let mut dtype_pickle_buffers = Vec::new();
         for buf in dtype_buffers.into_iter() {
-            let py_bytes = PyBufferBytes::new(buf).into_py_any(py)?;
+            let py_bytes = PyBufferBytes::new(buf.into_bytes()).into_py_any(py)?;
             let pickle_buffer = pickle_buffer_class.call1((py_bytes,))?;
             dtype_pickle_buffers.push(pickle_buffer);
         }

@@ -14,7 +14,6 @@ rust-version = { workspace = true }
 version = { workspace = true }
 
 [dependencies]
-bytes = { workspace = true }
 flatbuffers = { workspace = true }
 futures = { workspace = true }
 itertools = { workspace = true }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use bytes::Buf;
+use vortex_buffer::ByteBuffer;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 
@@ -9,14 +9,14 @@ use crate::messages::DecoderMessage;
 use crate::messages::MessageDecoder;
 use crate::messages::PollRead;
 
-/// An IPC message reader backed by a `Read` stream.
-pub struct BufMessageReader<B> {
-    buffer: B,
+/// An IPC message reader over a buffer that already holds the whole stream.
+pub struct BufMessageReader {
+    buffer: ByteBuffer,
     decoder: MessageDecoder,
 }
 
-impl<B: Buf> BufMessageReader<B> {
-    pub fn new(buffer: B) -> Self {
+impl BufMessageReader {
+    pub fn new(buffer: ByteBuffer) -> Self {
         BufMessageReader {
             buffer,
             decoder: MessageDecoder::default(),
@@ -24,11 +24,11 @@ impl<B: Buf> BufMessageReader<B> {
     }
 }
 
-impl<B: Buf> Iterator for BufMessageReader<B> {
+impl Iterator for BufMessageReader {
     type Item = VortexResult<DecoderMessage>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if !self.buffer.has_remaining() {
+        if self.buffer.is_empty() {
             // End-of-buffer reached
             return None;
         }
