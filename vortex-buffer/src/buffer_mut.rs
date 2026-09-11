@@ -538,19 +538,24 @@ impl<T> BufferMut<T> {
         self.capacity = logical_size / size_of::<T>();
     }
 
-    /// Returns the spare capacity of the buffer as a slice of `MaybeUninit<T>`.
-    /// Has identical semantics to [`Vec::spare_capacity_mut`].
+    /// Returns the first `len` elements of the buffer's spare capacity as a slice of
+    /// `MaybeUninit<T>`.
     ///
     /// The returned slice can be used to fill the buffer with data (e.g. by
     /// reading from a file) before marking the data as initialized using the
     /// [`set_len`] method.
     ///
-    /// Note that the returned slice may be larger than the capacity requested at
-    /// construction, since the underlying allocation can be rounded up (e.g. to
-    /// satisfy alignment requirements).
+    /// `len` is the number of additional elements, not the buffer's final length.
+    /// Pass `self.capacity() - self.len()` to access the full spare capacity, as with
+    /// [`Vec::spare_capacity_mut`]. The allocation can be rounded up to satisfy alignment
+    /// requirements, so the full spare capacity may exceed the capacity requested at construction.
     ///
     /// [`set_len`]: BufferMut::set_len
     /// [`Vec::spare_capacity_mut`]: Vec::spare_capacity_mut
+    ///
+    /// # Panics
+    ///
+    /// Panics if `len` exceeds `self.capacity() - self.len()`.
     ///
     /// # Examples
     ///
@@ -561,7 +566,7 @@ impl<T> BufferMut<T> {
     /// let mut b = BufferMut::<u64>::with_capacity(10);
     ///
     /// // Fill in the first 3 elements.
-    /// let uninit = b.spare_capacity_mut();
+    /// let uninit = b.spare_capacity_mut(3);
     /// uninit[0].write(0);
     /// uninit[1].write(1);
     /// uninit[2].write(2);
@@ -574,10 +579,15 @@ impl<T> BufferMut<T> {
     /// assert_eq!(b.as_slice(), &[0u64, 1, 2]);
     /// ```
     #[inline]
-    pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
-        // SAFETY: offset + length is within the allocation and points at spare capacity.
+    pub fn spare_capacity_mut(&mut self, len: usize) -> &mut [MaybeUninit<T>] {
+        assert!(
+            len <= self.capacity() - self.length,
+            "requested spare capacity exceeds available capacity"
+        );
+        // SAFETY: self.length is within the allocation and points at spare capacity.
         let dst = unsafe { self.as_mut_ptr().add(self.length) }.cast::<MaybeUninit<T>>();
-        unsafe { std::slice::from_raw_parts_mut(dst, self.capacity() - self.length) }
+        // SAFETY: the check above ensures that all `len` elements are within spare capacity.
+        unsafe { std::slice::from_raw_parts_mut(dst, len) }
     }
 
     /// Sets the length of the buffer.
@@ -848,7 +858,7 @@ impl<T> BufferMut<T> {
         let unwritten = self.capacity() - self.len();
 
         // We store `begin` in the case that the lower bound hint is incorrect.
-        let begin: *const T = self.spare_capacity_mut().as_mut_ptr().cast();
+        let begin: *const T = self.spare_capacity_mut(unwritten).as_mut_ptr().cast();
         let mut dst: *mut T = begin.cast_mut();
 
         // As a first step, we manually iterate the iterator up to the known capacity.
@@ -893,7 +903,10 @@ impl<T> BufferMut<T> {
                 .vortex_expect("`TrustedLen` iterator somehow didn't have valid upper bound"),
         );
 
-        let begin: *const T = self.spare_capacity_mut().as_mut_ptr().cast();
+        let begin: *const T = self
+            .spare_capacity_mut(self.capacity() - self.len())
+            .as_mut_ptr()
+            .cast();
         let mut dst: *mut T = begin.cast_mut();
 
         iter.for_each(|item| {
@@ -982,10 +995,53 @@ impl<T> FromIterator<T> for BufferMut<T> {
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
+    use rstest::rstest;
+
     use crate::Alignment;
     use crate::BufferMut;
     use crate::buffer_mut;
+
+    #[test]
+    fn spare_capacity_mut_prefix() {
+        let mut buffer = BufferMut::<i64>::with_capacity_aligned(4, Alignment::new(64));
+        buffer.push(10);
+        assert!(buffer.spare_capacity_mut(0).is_empty());
+        let slots = buffer.spare_capacity_mut(2);
+        assert_eq!(slots.len(), 2);
+        slots[0].write(20);
+        slots[1].write(30);
+        assert_eq!(buffer.len(), 1);
+        // SAFETY: the existing element and both new elements are initialized.
+        unsafe { buffer.set_len(3) };
+        assert_eq!(buffer.as_slice(), &[10, 20, 30]);
+        let spare = buffer.capacity() - buffer.len();
+        assert_eq!(buffer.spare_capacity_mut(spare).len(), spare);
+    }
+
+    #[test]
+    fn spare_capacity_mut_without_spare_capacity() {
+        let mut buffer = BufferMut::<i64>::with_capacity(0);
+        assert!(buffer.spare_capacity_mut(0).is_empty());
+        let mut buffer = BufferMut::<i64>::with_capacity(1);
+        buffer.push_n(10, buffer.capacity());
+        assert!(buffer.spare_capacity_mut(0).is_empty());
+    }
+
+    #[rstest]
+    #[case(false)]
+    #[case(true)]
+    #[should_panic(expected = "requested spare capacity exceeds available capacity")]
+    fn spare_capacity_mut_exceeds_spare_capacity(#[case] overflowing: bool) {
+        let mut buffer = BufferMut::<i64>::with_capacity(4);
+        buffer.push(10);
+        let len = if overflowing {
+            usize::MAX
+        } else {
+            buffer.capacity()
+        };
+        let _ = buffer.spare_capacity_mut(len);
+    }
 
     #[test]
     fn capacity() {

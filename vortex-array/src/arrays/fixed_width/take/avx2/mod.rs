@@ -114,7 +114,7 @@ where
     let max_index = Idx::from(values.len());
     let mut buffer =
         BufferMut::<Out>::with_capacity_aligned(indices_len, Alignment::of::<__m256i>());
-    let buf_uninit = buffer.spare_capacity_mut();
+    let buf_uninit = buffer.spare_capacity_mut(indices_len);
 
     let mut offset = 0;
     // SAFETY: `exec_take` is only called by `take_avx2`, whose caller guarantees AVX2 support.

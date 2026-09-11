@@ -152,7 +152,7 @@ fn extend_views_single_buffer(
     // loop-invariant, so it reloads and rewrites the output cursor through the stack each
     // iteration. Writing into the spare slice keeps the cursor in a register and the length is
     // set once after the loop.
-    let spare = &mut views.spare_capacity_mut()[..count];
+    let spare = views.spare_capacity_mut(count);
     for (i, slot) in spare.iter_mut().enumerate() {
         let len = len_at(i);
         let value = &data[offset..offset + len];

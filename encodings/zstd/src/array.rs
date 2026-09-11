@@ -1401,8 +1401,8 @@ impl ZstdData {
             // the ones before it, bounded by the size the metadata declared, so a frame that
             // expands further than advertised is refused by zstd rather than overrunning.
             let mut destination = UninitDestination::new(
-                &mut decompressed.spare_capacity_mut()
-                    [uncompressed_start..uncompressed_size_to_decompress],
+                &mut decompressed.spare_capacity_mut(uncompressed_size_to_decompress)
+                    [uncompressed_start..],
             );
             uncompressed_start +=
                 decompressor.decompress_to_buffer(frame.as_slice(), &mut destination)?;

@@ -331,8 +331,8 @@ fn transpose<I: IntegerPType, V: NativePType>(
     }
 
     // Loop over patches, writing them to final positions.
-    let indices_out = indices_buffer.spare_capacity_mut();
-    let values_out = values_buffer.spare_capacity_mut();
+    let indices_out = indices_buffer.spare_capacity_mut(indices_in.len());
+    let values_out = values_buffer.spare_capacity_mut(values_in.len());
     for (index, &value) in std::iter::zip(indices_in, values_in) {
         let index = index.as_() - offset;
         let chunk = index / 1024;

@@ -15,7 +15,10 @@ pub(crate) fn take_values_scalar<T: Copy, I: IntegerPType>(
     // The explicit pointer loop keeps the source length in a register and avoids a capacity check
     // for every output value.
     let mut result = BufferMut::with_capacity(indices.len());
-    let result_ptr = result.spare_capacity_mut().as_mut_ptr().cast::<T>();
+    let result_ptr = result
+        .spare_capacity_mut(indices.len())
+        .as_mut_ptr()
+        .cast::<T>();
 
     for (output_index, index) in indices.iter().enumerate() {
         // SAFETY: `indices.len()` elements were reserved and each output position is written once.

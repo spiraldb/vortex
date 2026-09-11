@@ -121,7 +121,9 @@ fn filter_chunk_into<T: Copy>(
         return;
     }
 
-    let out_ptr = out.spare_capacity_mut().as_mut_ptr();
+    let out_ptr = out
+        .spare_capacity_mut(out.capacity() - out.len())
+        .as_mut_ptr();
     if chunk.len() == 8 && mask_byte == 0xFF {
         // All 8 selected, so bulk copy.
         // SAFETY: write_pos + 8 <= capacity.

@@ -145,7 +145,7 @@ pub(crate) fn onpair_decode_bytes(
 ) -> VortexResult<(ByteBufferMut, PrimitiveArray)> {
     let plan = OnPairDecodePlan::new(array, ctx)?;
     let mut out_bytes = ByteBufferMut::with_capacity(plan.total_size);
-    let written = plan.decode_into(out_bytes.spare_capacity_mut())?;
+    let written = plan.decode_into(out_bytes.spare_capacity_mut(plan.total_size))?;
     // SAFETY: `decode_into` initialised exactly `written` bytes.
     unsafe { out_bytes.set_len(written) };
     Ok((out_bytes, plan.lengths))

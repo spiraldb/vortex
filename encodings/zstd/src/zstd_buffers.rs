@@ -262,7 +262,7 @@ impl ZstdBuffersData {
             let compressed = buf.clone().try_to_host_sync()?;
             validate_frame_content_size(compressed.as_slice(), uncompressed_size, i)?;
             let mut output = ByteBufferMut::with_capacity_aligned(size, aligned);
-            let spare = output.spare_capacity_mut();
+            let spare = output.spare_capacity_mut(size);
 
             // This is currently guaranteed, but still good to check because
             // of the unsafe calls below.

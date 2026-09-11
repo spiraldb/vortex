@@ -191,7 +191,10 @@ fn take_advancing_ptr_safe(
 ) -> Buffer<u16> {
     let mut result = BufferMut::<u16>::with_capacity(output_len);
     let mut cursor = 0usize;
-    let mut dst = result.spare_capacity_mut().as_mut_ptr().cast::<u16>();
+    let mut dst = result
+        .spare_capacity_mut(output_len)
+        .as_mut_ptr()
+        .cast::<u16>();
     for (&start, &length) in starts.iter().zip(lengths) {
         let end = cursor.checked_add(length).unwrap();
         assert!(end <= output_len);
@@ -261,7 +264,10 @@ fn take_preverify_advancing_ptr_unchecked(
     preverify(values.len(), starts, lengths, output_len);
 
     let mut result = BufferMut::<u16>::with_capacity(output_len);
-    let mut dst = result.spare_capacity_mut().as_mut_ptr().cast::<u16>();
+    let mut dst = result
+        .spare_capacity_mut(output_len)
+        .as_mut_ptr()
+        .cast::<u16>();
     for (&start, &length) in starts.iter().zip(lengths) {
         // SAFETY: `preverify` checked every source range and the summed output length.
         unsafe {
@@ -289,7 +295,7 @@ fn preverify(source_len: usize, starts: &[usize], lengths: &[usize], output_len:
 }
 
 fn copy_to_spare(result: &mut BufferMut<u16>, cursor: usize, source: &[u16]) {
-    let dst = &mut result.spare_capacity_mut()[cursor..][..source.len()];
+    let dst = &mut result.spare_capacity_mut(cursor + source.len())[cursor..];
     // SAFETY: `dst` has exactly `source.len()` spare slots and does not overlap with source.
     unsafe { copy_to_uninit(dst.as_mut_ptr().cast(), source) };
 }
@@ -298,7 +304,7 @@ unsafe fn copy_to_spare_unchecked(result: &mut BufferMut<u16>, cursor: usize, so
     // SAFETY: callers ensure `cursor..cursor + source.len()` is within spare capacity.
     let dst = unsafe {
         result
-            .spare_capacity_mut()
+            .spare_capacity_mut(result.capacity() - result.len())
             .get_unchecked_mut(cursor..cursor + source.len())
     };
     // SAFETY: `dst` has exactly `source.len()` spare slots and does not overlap with source.

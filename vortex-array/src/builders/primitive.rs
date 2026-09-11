@@ -245,7 +245,7 @@ impl<T> UninitRange<'_, T> {
     #[inline]
     pub fn set_value(&mut self, index: usize, value: T) {
         assert!(index < self.len, "index out of bounds");
-        let spare = self.builder.values.spare_capacity_mut();
+        let spare = self.builder.values.spare_capacity_mut(self.len);
         spare[index] = MaybeUninit::new(value);
     }
 
@@ -304,10 +304,10 @@ impl<T> UninitRange<'_, T> {
         // SAFETY: &[T] and &[MaybeUninit<T>] have the same layout.
         let uninit_src: &[MaybeUninit<T>] = unsafe { std::mem::transmute(src) };
 
-        // Note: spare_capacity_mut() returns the spare capacity starting from the current length,
+        // Note: spare_capacity_mut returns the spare capacity starting from the current length,
         // so we just use local_offset directly.
-        let dst =
-            &mut self.builder.values.spare_capacity_mut()[local_offset..local_offset + src.len()];
+        let dst = &mut self.builder.values.spare_capacity_mut(self.len)
+            [local_offset..local_offset + src.len()];
         dst.copy_from_slice(uninit_src);
     }
 
@@ -332,7 +332,7 @@ impl<T> UninitRange<'_, T> {
             len,
             self.len
         );
-        &mut self.builder.values.spare_capacity_mut()[offset..offset + len]
+        &mut self.builder.values.spare_capacity_mut(self.len)[offset..offset + len]
     }
 
     /// Finish building this range, marking it as initialized and advancing the length of the

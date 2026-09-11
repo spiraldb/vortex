@@ -121,7 +121,7 @@ pub(crate) fn fsst_decode_bytes(
     let mut uncompressed_bytes = ByteBufferMut::with_capacity(plan.total_size + FSST_DECODE_SLACK);
     let len = plan.decode_into(
         &fsst_array.decompressor(),
-        uncompressed_bytes.spare_capacity_mut(),
+        uncompressed_bytes.spare_capacity_mut(plan.total_size + FSST_DECODE_SLACK),
     )?;
     // SAFETY: `decode_into` initialized the first `len` bytes.
     unsafe { uncompressed_bytes.set_len(len) };

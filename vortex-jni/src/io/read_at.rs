@@ -154,7 +154,7 @@ impl VortexReadAt for JavaReadable {
                         // the buffer after it returns.
                         let dst = unsafe {
                             env.new_direct_byte_buffer(
-                                buffer.spare_capacity_mut().as_mut_ptr().cast(),
+                                buffer.spare_capacity_mut(length).as_mut_ptr().cast(),
                                 length,
                             )?
                         };

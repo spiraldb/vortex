@@ -405,7 +405,7 @@ impl DeviceBuffer for CudaDeviceBuffer {
         // `cuMemcpyDtoHAsync_v2` fully initializes the memory.
         unsafe {
             sys::cuMemcpyDtoHAsync_v2(
-                host_buffer.spare_capacity_mut().as_mut_ptr().cast(),
+                host_buffer.spare_capacity_mut(len).as_mut_ptr().cast(),
                 src_ptr,
                 len,
                 stream.cu_stream(),

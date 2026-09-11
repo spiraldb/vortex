@@ -415,12 +415,12 @@ where
     let mut buffer = BufferMut::<T>::with_capacity(values.len());
     match valid_values {
         Mask::AllTrue(_) => {
-            values.try_map_into(&mut buffer.spare_capacity_mut()[..values.len()], &cast)?;
+            values.try_map_into(buffer.spare_capacity_mut(values.len()), &cast)?;
         }
         Mask::Values(mask) => {
             values.try_map_masked_into(
                 mask.bit_buffer(),
-                &mut buffer.spare_capacity_mut()[..values.len()],
+                buffer.spare_capacity_mut(values.len()),
                 &cast,
             )?;
         }
@@ -526,7 +526,7 @@ where
             }
             None => {
                 let mut buffer = BufferMut::<T>::with_capacity(len);
-                values.map_into(&mut buffer.spare_capacity_mut()[..len], |v| v.as_());
+                values.map_into(buffer.spare_capacity_mut(len), |v| v.as_());
                 // SAFETY: map_into initializes every lane.
                 unsafe { buffer.set_len(len) };
                 Ok(PrimitiveArray::new(buffer.freeze(), new_validity).into_array())
@@ -548,9 +548,7 @@ where
         (Mask::AllTrue(_), None) => {
             let mut buffer = BufferMut::<T>::with_capacity(len);
             values
-                .try_map_into(&mut buffer.spare_capacity_mut()[..len], |v| {
-                    <T as NumCast>::from(v)
-                })
+                .try_map_into(buffer.spare_capacity_mut(len), |v| <T as NumCast>::from(v))
                 .map_err(|_| overflow())?;
             // SAFETY: initialized every lane.
             unsafe { buffer.set_len(len) };
@@ -568,11 +566,9 @@ where
         (Mask::Values(m), None) => {
             let mut buffer = BufferMut::<T>::with_capacity(len);
             values
-                .try_map_masked_into(
-                    m.bit_buffer(),
-                    &mut buffer.spare_capacity_mut()[..len],
-                    |v| <T as NumCast>::from(v),
-                )
+                .try_map_masked_into(m.bit_buffer(), buffer.spare_capacity_mut(len), |v| {
+                    <T as NumCast>::from(v)
+                })
                 .map_err(|_| overflow())?;
             // SAFETY: initialized every lane.
             unsafe { buffer.set_len(len) };

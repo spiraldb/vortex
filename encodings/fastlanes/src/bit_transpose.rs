@@ -65,13 +65,8 @@ fn bits_op_with_copy<F: Fn(&[u64; 16], &mut [u64; 16])>(
     let output_len = bytes.len().div_ceil(8).next_multiple_of(16);
     let mut output = BufferMut::<u64>::with_capacity(output_len);
     let (input_chunks, input_trailer) = bytes.as_chunks::<128>();
-    // Bound to the requested `output_len`: `spare_capacity_mut` may expose extra over-aligned
-    // capacity, which would otherwise split into spurious trailing chunks and make `last_mut`
-    // below target a chunk past the data we actually initialize.
     let (output_chunks, _) = unsafe {
-        mem::transmute::<&mut [MaybeUninit<u64>], &mut [u64]>(
-            &mut output.spare_capacity_mut()[..output_len],
-        )
+        mem::transmute::<&mut [MaybeUninit<u64>], &mut [u64]>(output.spare_capacity_mut(output_len))
     }
     .as_chunks_mut::<16>();
 
