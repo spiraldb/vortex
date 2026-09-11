@@ -19,7 +19,6 @@ all-features = true
 [dependencies]
 async-stream = { workspace = true }
 async-trait = { workspace = true }
-bytes = { workspace = true }
 flatbuffers = { workspace = true }
 futures = { workspace = true, features = ["std", "async-await"] }
 itertools = { workspace = true }
@@ -62,6 +61,7 @@ vortex-zstd = { workspace = true, optional = true }
 
 [dev-dependencies]
 allocator-api2 = { workspace = true }
+bytes = { workspace = true }
 divan = { workspace = true }
 rstest = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
