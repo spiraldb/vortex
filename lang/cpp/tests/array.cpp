@@ -182,7 +182,7 @@ TEST_CASE("Bool array", "[array]") {
         }
     }
 
-    BoolView bool_view = {bitpacked, ELEMENTS};
+    BoolView bool_view = {bitpacked.data(), ELEMENTS, 0};
     Array array = Array::bool_array(bool_view);
     REQUIRE(array.size() == data.size());
     REQUIRE(array.has_dtype(DataTypeVariant::Bool));
@@ -190,7 +190,7 @@ TEST_CASE("Bool array", "[array]") {
 
     auto view = array.bools(session);
     BoolView values = view.values();
-    for (size_t i = 0; i < values.elements(); ++i) {
+    for (size_t i = 0; i < values.elements; ++i) {
         REQUIRE(values[i] == data[i]);
     }
 

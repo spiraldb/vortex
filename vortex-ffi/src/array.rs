@@ -455,7 +455,8 @@ pub extern "C-unwind" fn vx_array_new_bool(
         let byte_len = bits.len();
 
         let slice = if bits.ptr.is_null() {
-            unsafe { std::slice::from_raw_parts(NonNull::dangling().as_ptr(), byte_len) }
+            vortex_ensure!(byte_len == 0, "nonzero length but null pointer for view");
+            &[]
         } else {
             unsafe { std::slice::from_raw_parts(bits.ptr, byte_len) }
         };

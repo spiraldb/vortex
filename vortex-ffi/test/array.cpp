@@ -64,7 +64,7 @@ TEST_CASE("Bool view", "[array]") {
     constexpr size_t OFFSET = 6;
     vx_bool_view view {.ptr = buffer.data(), .elements = ELEMENTS, .bit_offset = OFFSET};
 
-    REQUIRE(vx_bool_view_len(view) == 2);
+    REQUIRE(vx_bool_view_words(view) == 2);
 
     for (size_t i = 0; i < view.elements; ++i) {
         REQUIRE(vx_bool_view_nth(view, i) == 1);
@@ -115,6 +115,11 @@ TEST_CASE("Bool array", "[array]") {
 }
 
 TEST_CASE("Array with validity", "[array]") {
+    vx_session *session = vx_session_new();
+    defer {
+        vx_session_free(session);
+    };
+
     const std::vector<bool> valid = {true, false, true, true, false};
     std::vector<uint8_t> words(1, 0);
     for (size_t i = 0; i < valid.size(); ++i) {
@@ -148,7 +153,7 @@ TEST_CASE("Array with validity", "[array]") {
     REQUIRE(vx_array_len(array) == valid.size());
 
     for (size_t i = 0; i < valid.size(); ++i) {
-        REQUIRE(vx_array_element_is_invalid(array, i, &error) == !valid[i]);
+        REQUIRE(vx_array_element_is_invalid(session, array, i, &error) == !valid[i]);
         require_no_error(error);
     }
     REQUIRE(vx_array_invalid_count(array, &error) == 2);

@@ -81,7 +81,7 @@ bool ValidityBits::is_null(size_t index) const {
     if (owner_ == nullptr) {
         return false;
     }
-    return view_[index];
+    return !view_[index];
 }
 
 ValidityBits::ValidityBits(const Session &session, const vx_array *canonical) {
@@ -111,7 +111,8 @@ ValidityBits::ValidityBits(const Session &session, const vx_array *canonical) {
     }
     throw_on_error(error);
     view_.bit_offset = view.bit_offset;
-    view_.bytes = {view.ptr, view.elements};
+    view_.ptr = view.ptr;
+    view_.elements = view.elements;
 }
 
 ValidityBits::ValidityBits(ValidityBits &&other) noexcept
@@ -186,13 +187,13 @@ Array Array::bool_array(const BoolView &view, const Validity &validity) {
     }
 
     vx_error *error = nullptr;
-    vx_bool_view bool_view {view.bytes.data(), view.elements(), view.bit_offset};
+    vx_bool_view bool_view {view.ptr, view.elements, view.bit_offset};
     const vx_array *out = vx_array_new_bool(&bool_view, &raw, &error);
     throw_on_error(error);
     return Access::adopt<Array>(out);
 }
 
-Array Array::from_arrow(const Session& session, ArrowArray *array, ArrowSchema *schema, bool nullable) {
+Array Array::from_arrow(const Session &session, ArrowArray *array, ArrowSchema *schema, bool nullable) {
     vx_error *error = nullptr;
     const vx_array *out = vx_array_from_arrow(Access::c_ptr(session), array, schema, nullable, &error);
     throw_on_error(error);
@@ -350,7 +351,7 @@ BoolView PrimitiveView<bool>::values() const {
     vx_error *error = nullptr;
     const vx_bool_view view = vx_array_data_ptr_bool(Access::c_ptr(canonical_), &error);
     throw_on_error(error);
-    return {{view.ptr, vx_bool_view_len(view)}, view.bit_offset};
+    return {view.ptr, view.elements, view.bit_offset};
 }
 
 std::string_view StringView::operator[](size_t i) const {
