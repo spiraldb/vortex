@@ -213,10 +213,6 @@ typedef enum {
      */
     VX_ERROR_CODE_OUT_OF_BOUNDS = 1,
     /**
-     * Compute kernel execute error
-     */
-    VX_ERROR_CODE_COMPUTE = 2,
-    /**
      * An invalid argument was provided.
      */
     VX_ERROR_CODE_INVALID_ARGUMENT = 3,

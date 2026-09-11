@@ -105,7 +105,7 @@ impl CastKernel for Primitive {
         if same_rep {
             if !values_fit_in(array, new_ptype, ctx, true) {
                 vortex_bail!(
-                    Compute: "Cannot cast {} to {} — values exceed target range",
+                    Overflow: "Cannot cast {} to {} — values exceed target range",
                     src_ptype, new_ptype,
                 );
             }
@@ -130,7 +130,7 @@ fn cast_to_decimal(
 ) -> VortexResult<ArrayRef> {
     if !array.ptype().is_int() {
         vortex_bail!(
-            Compute: "Cannot cast floating primitive {} to decimal {}",
+            MismatchedTypes: "Cannot cast floating primitive {} to decimal {}",
             array.ptype(), decimal_dtype
         );
     }
@@ -378,14 +378,14 @@ where
         (-(scale as i16)) as u32
     };
     let ten = <T as BigCast>::from(10i8).ok_or_else(
-        || vortex_err!(Compute: "Cannot create decimal scale factor for scale {scale}"),
+        || vortex_err!(Overflow: "Cannot create decimal scale factor for scale {scale}"),
     )?;
     let mut factor = <T as BigCast>::from(1i8).ok_or_else(
-        || vortex_err!(Compute: "Cannot create decimal scale factor for scale {scale}"),
+        || vortex_err!(Overflow: "Cannot create decimal scale factor for scale {scale}"),
     )?;
     for _ in 0..exponent {
         factor = factor.checked_mul(&ten).ok_or_else(
-            || vortex_err!(Compute: "Cannot create decimal scale factor for scale {scale}"),
+            || vortex_err!(Overflow: "Cannot create decimal scale factor for scale {scale}"),
         )?;
     }
     Ok(factor)
@@ -437,7 +437,7 @@ where
 {
     let Some(value) = <i256 as BigCast>::from(value) else {
         return vortex_err!(
-            Compute: "primitive value cannot be represented while casting to {}",
+            Overflow: "primitive value cannot be represented while casting to {}",
             decimal_dtype
         );
     };
@@ -452,7 +452,7 @@ where
                 "primitive-to-decimal fast path rejected a value that the scalar cast accepts"
             );
             vortex_err!(
-                Compute: "primitive value cannot be represented while casting to {}",
+                Overflow: "primitive value cannot be represented while casting to {}",
                 decimal_dtype
             )
         }
@@ -471,7 +471,7 @@ where
 {
     let overflow = || {
         vortex_err!(
-            Compute: "Cannot cast {} to {} — value exceeds target range",
+            Overflow: "Cannot cast {} to {} — value exceeds target range",
             F::PTYPE, T::PTYPE,
         )
     };
@@ -1015,7 +1015,7 @@ mod test {
             .cast(PType::U32.into())
             .and_then(|a| a.to_canonical().map(|c| c.into_array()))
             .unwrap_err();
-        assert_eq!(error.kind(), VortexErrorKind::Compute);
+        assert_eq!(error.kind(), VortexErrorKind::Overflow);
         assert!(error.to_string().contains("values exceed target range"));
     }
 
@@ -1097,7 +1097,7 @@ mod test {
             .cast(PType::I32.into())
             .and_then(|a| a.to_canonical().map(|c| c.into_array()))
             .unwrap_err();
-        assert_eq!(err.kind(), VortexErrorKind::Compute);
+        assert_eq!(err.kind(), VortexErrorKind::Overflow);
     }
 
     /// All-null array cast between same-width types should succeed without

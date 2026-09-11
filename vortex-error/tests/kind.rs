@@ -47,8 +47,8 @@ fn test_tagged_err_carries_kind() {
         ),
         (vortex_err!(Serde: "corrupt footer"), VortexErrorKind::Serde),
         (
-            vortex_err!(Compute: "kernel failed"),
-            VortexErrorKind::Compute,
+            vortex_err!(AssertionFailed: "invariant broken"),
+            VortexErrorKind::AssertionFailed,
         ),
     ];
     for (err, kind) in cases {
@@ -125,7 +125,7 @@ fn test_external_preserves_concrete_source() {
 
 #[test]
 fn test_clone_and_shared_round_trip() {
-    let err = vortex_err!(Compute: "kernel exploded");
+    let err = vortex_err!(Io: "device disappeared");
     let clone = err.clone();
 
     assert_eq!(clone.kind(), err.kind());
@@ -136,7 +136,7 @@ fn test_clone_and_shared_round_trip() {
     let borrowed = VortexError::from(&shared);
     let owned = VortexError::from(shared);
 
-    assert_eq!(borrowed.kind(), VortexErrorKind::Compute);
-    assert_eq!(owned.kind(), VortexErrorKind::Compute);
+    assert_eq!(borrowed.kind(), VortexErrorKind::Io);
+    assert_eq!(owned.kind(), VortexErrorKind::Io);
     assert_eq!(borrowed.to_string(), owned.to_string());
 }

@@ -12,7 +12,6 @@ namespace vortex {
 enum class ErrorCode {
     Other = VX_ERROR_CODE_OTHER,
     OutOfBounds = VX_ERROR_CODE_OUT_OF_BOUNDS,
-    Compute = VX_ERROR_CODE_COMPUTE,
     InvalidArgument = VX_ERROR_CODE_INVALID_ARGUMENT,
     Serialization = VX_ERROR_CODE_SERIALIZATION,
     NotImplemented = VX_ERROR_CODE_NOT_IMPLEMENTED,

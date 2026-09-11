@@ -22,8 +22,8 @@ pub enum vx_error_code {
     VX_ERROR_CODE_OTHER = 0,
     /// Index out of bounds
     VX_ERROR_CODE_OUT_OF_BOUNDS = 1,
-    /// Compute kernel execute error
-    VX_ERROR_CODE_COMPUTE = 2,
+    // 2 is retired. It was VX_ERROR_CODE_COMPUTE, which classified an error by the code it came
+    // from rather than by what went wrong. Leaving the value unused keeps every code below stable.
     /// An invalid argument was provided.
     VX_ERROR_CODE_INVALID_ARGUMENT = 3,
     /// Serialization/deserialization error
@@ -49,7 +49,6 @@ fn error_code(error: &VortexError) -> vx_error_code {
         VortexErrorKind::OutOfBounds => vx_error_code::VX_ERROR_CODE_OUT_OF_BOUNDS,
         VortexErrorKind::NotFound => vx_error_code::VX_ERROR_CODE_NOT_FOUND,
         VortexErrorKind::Overflow => vx_error_code::VX_ERROR_CODE_OVERFLOW,
-        VortexErrorKind::Compute => vx_error_code::VX_ERROR_CODE_COMPUTE,
         VortexErrorKind::InvalidArgument => vx_error_code::VX_ERROR_CODE_INVALID_ARGUMENT,
         VortexErrorKind::Serde => vx_error_code::VX_ERROR_CODE_SERIALIZATION,
         VortexErrorKind::NotImplemented => vx_error_code::VX_ERROR_CODE_NOT_IMPLEMENTED,

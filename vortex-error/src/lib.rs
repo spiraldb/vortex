@@ -94,8 +94,6 @@ pub enum VortexErrorKind {
     NotFound,
     /// A numeric value does not fit its target type. The analogue of Python's `OverflowError`.
     Overflow,
-    /// An error occurred while executing a compute kernel.
-    Compute,
     /// An invalid argument was provided. The analogue of Python's `ValueError`.
     InvalidArgument,
     /// An error occurred while serializing or deserializing. Closest to Python's `ValueError`,
@@ -119,7 +117,6 @@ impl VortexErrorKind {
             Self::OutOfBounds => "Out of bounds error: ",
             Self::NotFound => "Not found error: ",
             Self::Overflow => "Overflow error: ",
-            Self::Compute => "Compute error: ",
             Self::InvalidArgument => "Invalid argument error: ",
             Self::Serde => "Serde error: ",
             Self::NotImplemented => "Not implemented error: ",
