@@ -27,10 +27,12 @@ use crate::shared_state;
 ///
 /// This is the storage behind `vortex-buffer`'s `Buffer<T>`. Cloning and slicing are `O(1)`.
 ///
-/// The window promises that its start is aligned to [`alignment`](Self::alignment), and every
-/// operation that moves the start - [`slice`](Self::slice), [`advance`](Self::advance) - keeps
-/// that promise or panics. The region may well be more aligned than promised, and
-/// [`ensure_aligned`](Self::ensure_aligned) raises the promise to whatever the address supports.
+/// The window promises that its start is aligned to [`alignment`](Self::alignment). The promise
+/// is a declaration for consumers, not a constraint on what may be done with the bytes: an
+/// operation that moves the start - [`slice`](Self::slice), [`advance`](Self::advance) - lowers
+/// the promise to whatever the new start still satisfies rather than refusing to move. The
+/// region may well be more aligned than promised, and [`ensure_aligned`](Self::ensure_aligned)
+/// raises the promise to whatever the address supports.
 ///
 /// A handle that has never been shared describes its region inline (see the crate docs for the
 /// state encoding) and allocates no refcount; the first [`clone`](Clone::clone) promotes it.
@@ -347,14 +349,26 @@ impl SharedBytes {
         }
     }
 
-    /// Returns a new handle to `self[begin..end]`, promising the same alignment.
+    /// Returns a new handle to `self[begin..end]`.
+    ///
+    /// The new window promises the strongest alignment that both this window's promise and its
+    /// own start satisfy. Slicing at an offset the promise does not divide lowers the promise
+    /// rather than failing, so a declared alignment never stands in the way of cutting up the
+    /// bytes. Use [`slice_aligned`](Self::slice_aligned) to require a particular alignment of the
+    /// result instead.
     ///
     /// ## Panics
     ///
-    /// Panics if the range is out of bounds, or `begin` is not a multiple of the alignment.
+    /// Panics if the range is out of bounds.
     #[inline]
     pub fn slice(&self, begin: usize, end: usize) -> Self {
-        self.slice_aligned(begin, end, self.alignment)
+        self.slice_aligned(begin, end, self.sliced_alignment(begin))
+    }
+
+    /// The strongest alignment a window starting `offset` bytes into this one can promise.
+    #[inline]
+    fn sliced_alignment(&self, offset: usize) -> Alignment {
+        self.alignment.min(Alignment::of_offset(offset))
     }
 
     /// Returns a new handle to `self[begin..end]`, promising `alignment`.
@@ -392,16 +406,27 @@ impl SharedBytes {
         sliced
     }
 
-    /// Returns a new handle to `subset`, which must be contained within this window, promising
-    /// the same alignment.
+    /// Returns a new handle to `subset`, which must be contained within this window.
+    ///
+    /// Like [`slice`](Self::slice), the new window promises the strongest alignment that both
+    /// this window's promise and the subset's start satisfy.
     ///
     /// ## Panics
     ///
-    /// Panics if `subset` is not contained within this window, or does not start at a multiple of
-    /// the alignment.
+    /// Panics if `subset` is not contained within this window.
     #[inline]
     pub fn slice_ref(&self, subset: &[u8]) -> Self {
-        self.slice_ref_aligned(subset, self.alignment)
+        // An empty subset carries no address to derive an offset from, and keeps the promise.
+        if subset.is_empty() {
+            return Self::empty_aligned(self.alignment);
+        }
+        // A subset starting before the window wraps to a nonsense offset, which only weakens the
+        // alignment we ask for; `slice_ref_aligned` rejects the range itself.
+        let offset = subset
+            .as_ptr()
+            .addr()
+            .wrapping_sub(self.ptr.as_ptr().addr());
+        self.slice_ref_aligned(subset, self.sliced_alignment(offset))
     }
 
     /// Returns a new handle to `subset`, which must be contained within this window, promising
@@ -440,11 +465,12 @@ impl SharedBytes {
         sliced
     }
 
-    /// Advance the start of the window by `cnt` bytes.
+    /// Advance the start of the window by `cnt` bytes, lowering the promised alignment to
+    /// whatever the new start still satisfies.
     ///
     /// ## Panics
     ///
-    /// Panics if `cnt > len`, or `cnt` is not a multiple of the alignment.
+    /// Panics if `cnt > len`.
     #[inline]
     pub fn advance(&mut self, cnt: usize) {
         if cnt > self.len {
@@ -453,12 +479,7 @@ impl SharedBytes {
                 self.len
             );
         }
-        if !self.alignment.is_offset_aligned(cnt) {
-            bytes_panic!(
-                "cannot advance by {cnt} bytes: the start would no longer be aligned to {}",
-                self.alignment
-            );
-        }
+        self.alignment = self.sliced_alignment(cnt);
         // SAFETY: `cnt <= len`, so the new start stays inside (or exactly at the end of) the
         // window. The region's start is tracked separately, so this cannot lose it.
         self.ptr = unsafe { self.ptr.add(cnt) };

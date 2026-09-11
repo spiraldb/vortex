@@ -652,9 +652,12 @@ impl<T> BufferMut<T> {
     /// Both halves keep pointing into the same allocation, so neither moves; the split point may
     /// lie past the current length, in which case the returned half is empty but has capacity.
     ///
+    /// The half we keep reports this buffer's alignment; the half we hand back starts at `at` and
+    /// reports the strongest alignment that offset still satisfies.
+    ///
     /// ## Panics
     ///
-    /// Panics if `at` exceeds the capacity, or is not aligned to the buffer's alignment.
+    /// Panics if `at` exceeds the capacity.
     pub fn split_off(&mut self, at: usize) -> Self {
         if at > self.capacity() {
             vortex_panic!(
@@ -670,9 +673,8 @@ impl<T> BufferMut<T> {
     ///
     /// `O(1)` when the two are still adjacent in the same allocation; otherwise this copies.
     ///
-    /// ## Panics
-    ///
-    /// Panics if the buffers have different alignments.
+    /// The result starts where this buffer started, so it keeps this buffer's alignment whatever
+    /// `other` reported.
     pub fn unsplit(&mut self, other: Self) {
         self.bytes.unsplit(other.bytes);
     }

@@ -42,9 +42,11 @@ const MIN_GROWTH: usize = 256;
 /// shared with the other half of a [`split_off`](Self::split_off).
 ///
 /// The window promises that its start is aligned to [`alignment`](Self::alignment), and keeps
-/// that promise through every operation that moves or reallocates it. A region may be allocated
-/// more aligned than promised (see [`with_capacity_preferred_in`](Self::with_capacity_preferred_in)),
-/// but only the promise is carried along: growth re-aligns to that.
+/// that promise through every operation that reallocates it. [`split_off`](Self::split_off) may
+/// lower the promise on the half it hands back, because that half starts wherever the split
+/// point falls. A region may be allocated more aligned than promised (see
+/// [`with_capacity_preferred_in`](Self::with_capacity_preferred_in)), but only the promise is
+/// carried along: growth re-aligns to that.
 ///
 /// Like [`SharedBytes`], a window that has never been split describes its region inline and
 /// allocates no refcount.
@@ -483,13 +485,12 @@ impl UniqueBytes {
         self.len = len;
     }
 
-    /// Advance the start of the window by `cnt` bytes, giving up the bytes skipped over.
-    ///
-    /// The window keeps its alignment promise, so `cnt` must be a multiple of it.
+    /// Advance the start of the window by `cnt` bytes, giving up the bytes skipped over and
+    /// lowering the promised alignment to whatever the new start still satisfies.
     ///
     /// ## Panics
     ///
-    /// Panics if `cnt > len`, or `cnt` is not a multiple of the alignment.
+    /// Panics if `cnt > len`.
     #[inline]
     pub fn advance(&mut self, cnt: usize) {
         if cnt > self.len {
@@ -498,12 +499,7 @@ impl UniqueBytes {
                 self.len
             );
         }
-        if !self.alignment.is_offset_aligned(cnt) {
-            bytes_panic!(
-                "cannot advance by {cnt} bytes: the start would no longer be aligned to {}",
-                self.alignment
-            );
-        }
+        self.alignment = self.alignment.min(Alignment::of_offset(cnt));
         // SAFETY: `cnt <= len <= cap`, so the new start stays inside the window. The region's
         // start is tracked separately, so this cannot lose it.
         self.ptr = unsafe { self.ptr.add(cnt) };
@@ -627,10 +623,15 @@ impl UniqueBytes {
             return false;
         }
         let old_offset = self.ptr.as_ptr().addr() - self.base.as_ptr().addr();
-        // The window sits at the alignment shift unless `advance` moved it further in. When most
-        // of the region has been given up that way, growing would carry it all along; a fresh
-        // region copies only the live bytes.
-        let advanced = old_offset.saturating_sub(shift(self.base, alignment));
+        // The window sits at the shift its region was laid out with unless it was moved further
+        // in, by `advance` before a thaw or by being the far half of a `split_off`. That shift
+        // has to be recovered from the start's own address, not from the promise: a region may be
+        // laid out more aligned than the window promises, and reading the promise here would
+        // mistake the extra padding for a window that had walked most of the way through its
+        // region. When most of the region really has been given up, growing would carry it all
+        // along; a fresh region copies only the live bytes.
+        let start_alignment = Alignment::of_offset(self.ptr.as_ptr().addr());
+        let advanced = old_offset.saturating_sub(shift(self.base, start_alignment));
         if advanced > layout.size() / 2 {
             return false;
         }
@@ -801,23 +802,19 @@ impl UniqueBytes {
 
     /// Split the window in two at `at`, keeping `..at` and returning `at..`.
     ///
-    /// Both halves keep pointing into the same region; neither moves. Both promise the same
-    /// alignment, so `at` must be a multiple of it.
+    /// Both halves keep pointing into the same region; neither moves. The half we keep starts
+    /// where this window started and so keeps its promise; the half we hand back starts at `at`
+    /// and promises the strongest alignment that offset still satisfies.
     ///
     /// ## Panics
     ///
-    /// Panics if `at` exceeds the capacity, or is not a multiple of the alignment.
+    /// Panics if `at` exceeds the capacity.
     #[inline]
     pub fn split_off(&mut self, at: usize) -> Self {
         if at > self.cap {
             bytes_panic!("cannot split buffer of capacity {} at {at}", self.cap);
         }
-        if !self.alignment.is_offset_aligned(at) {
-            bytes_panic!(
-                "cannot split buffer at {at}: the second half would not be aligned to {}",
-                self.alignment
-            );
-        }
+        let alignment = self.alignment.min(Alignment::of_offset(at));
 
         let state = if self.state.is_static() {
             debug_assert_eq!(self.cap, 0);
@@ -838,7 +835,7 @@ impl UniqueBytes {
             cap: self.cap - at,
             base: self.base,
             state,
-            alignment: self.alignment,
+            alignment,
         };
         self.cap = at;
         self.len = self.len.min(at);
@@ -850,17 +847,9 @@ impl UniqueBytes {
     /// `O(1)` when the two windows are still adjacent in the same region; otherwise this
     /// degenerates to a copy.
     ///
-    /// ## Panics
-    ///
-    /// Panics if the windows promise different alignments.
+    /// The result starts where this window started, so it keeps this window's promise whatever
+    /// `other` promised.
     pub fn unsplit(&mut self, other: Self) {
-        if self.alignment != other.alignment {
-            bytes_panic!(
-                "cannot unsplit buffers with different alignments: {} and {}",
-                self.alignment,
-                other.alignment
-            );
-        }
         if self.cap == 0 {
             *self = other;
             return;

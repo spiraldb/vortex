@@ -128,6 +128,12 @@ fn copy_to_mut<T>(buffer: &Buffer<T>) -> BufferMut<T> {
     BufferMut::<T>::copy_from_aligned_in(buffer, buffer.alignment(), buffer.allocator().clone())
 }
 
+/// View a slice of `T` as the bytes it occupies.
+fn as_bytes<T>(values: &[T]) -> &[u8] {
+    // SAFETY: any `[T]` is a valid `[u8]` of `size_of_val` bytes for the purposes of reading.
+    unsafe { std::slice::from_raw_parts(values.as_ptr().cast::<u8>(), size_of_val(values)) }
+}
+
 /// The number of `T`s that `bytes` bytes hold.
 ///
 /// ## Panics
@@ -485,24 +491,27 @@ impl<T> Buffer<T> {
 
     /// Returns a slice of self for the provided range.
     ///
+    /// The slice reports the strongest alignment that both this buffer's alignment and the
+    /// slice's own start satisfy, which is never weaker than `T`'s own alignment. A range that
+    /// does not preserve the buffer's alignment lowers it rather than failing; use
+    /// [`slice_with_alignment`](Self::slice_with_alignment) to require a particular alignment of
+    /// the result.
+    ///
     /// # Panics
     ///
     /// Requires that `begin <= end` and `end <= self.len()`.
-    /// Also requires that both `begin` and `end` are aligned to the buffer's required alignment.
     #[inline]
     pub fn slice(&self, range: impl RangeBounds<usize>) -> Self {
-        self.slice_with_alignment(range, self.alignment())
-    }
-
-    /// Returns a slice of self for the provided range, with no guarantees about the resulting
-    /// alignment.
-    ///
-    /// # Panics
-    ///
-    /// Requires that `begin <= end` and `end <= self.len()`.
-    #[inline]
-    pub fn slice_unaligned(&self, range: impl RangeBounds<usize>) -> Self {
-        self.slice_with_alignment(range, Alignment::of::<u8>())
+        let (begin, end) = self.resolve_range(range);
+        if end == begin {
+            // We prefer to return a new empty buffer instead of sharing this one and creating a
+            // strong reference just to hold an empty slice.
+            return Self::empty_aligned(self.alignment());
+        }
+        Self::from_shared(
+            self.bytes
+                .slice(begin * size_of::<T>(), end * size_of::<T>()),
+        )
     }
 
     /// Returns a slice of self for the provided range, ensuring the resulting slice has the
@@ -511,12 +520,33 @@ impl<T> Buffer<T> {
     /// # Panics
     ///
     /// Requires that `begin <= end` and `end <= self.len()`.
-    /// Also requires that both `begin` and `end` are aligned to the given alignment.
+    /// Also requires that `alignment` is aligned to `T`, and that the slice starts at a multiple
+    /// of `alignment`.
     pub fn slice_with_alignment(
         &self,
         range: impl RangeBounds<usize>,
         alignment: Alignment,
     ) -> Self {
+        Self::check_alignment(alignment);
+        let (begin, end) = self.resolve_range(range);
+        if end == begin {
+            // We prefer to return a new empty buffer instead of sharing this one and creating a
+            // strong reference just to hold an empty slice.
+            return Self::empty_aligned(alignment);
+        }
+        let begin_byte = begin * size_of::<T>();
+        let end_byte = end * size_of::<T>();
+        if !alignment.is_offset_aligned(begin_byte) {
+            vortex_panic!(
+                "range start must be aligned to {alignment:?}, byte {}",
+                begin_byte
+            );
+        }
+        Self::from_shared(self.bytes.slice_aligned(begin_byte, end_byte, alignment))
+    }
+
+    /// Resolve a range into `begin..end` element indices, bounds-checked against the length.
+    fn resolve_range(&self, range: impl RangeBounds<usize>) -> (usize, usize) {
         let len = self.len();
         let begin = match range.start_bound() {
             Bound::Included(&n) => n,
@@ -539,25 +569,7 @@ impl<T> Buffer<T> {
         if end > len {
             vortex_panic!("range end out of bounds: {:?} > {:?}", end, len);
         }
-        if !alignment.is_aligned_to(Alignment::of::<T>()) {
-            vortex_panic!("Slice alignment must at least align to type T")
-        }
-
-        if end == begin {
-            // We prefer to return a new empty buffer instead of sharing this one and creating a
-            // strong reference just to hold an empty slice.
-            return Self::empty_aligned(alignment);
-        }
-
-        let begin_byte = begin * size_of::<T>();
-        let end_byte = end * size_of::<T>();
-        if !alignment.is_offset_aligned(begin_byte) {
-            vortex_panic!(
-                "range start must be aligned to {alignment:?}, byte {}",
-                begin_byte
-            );
-        }
-        Self::from_shared(self.bytes.slice_aligned(begin_byte, end_byte, alignment))
+        (begin, end)
     }
 
     /// Returns a slice of self that is equivalent to the given subset.
@@ -566,11 +578,14 @@ impl<T> Buffer<T> {
     /// of the underlying buffer. This function turns the slice into a slice of the buffer
     /// it has been taken from.
     ///
+    /// Like [`slice`](Self::slice), the result reports the strongest alignment that both this
+    /// buffer's alignment and the subset's start satisfy.
+    ///
     /// # Panics:
     /// Requires that the given sub slice is in fact contained within the Bytes buffer; otherwise this function will panic.
     #[inline]
     pub fn slice_ref(&self, subset: &[T]) -> Self {
-        self.slice_ref_with_alignment(subset, Alignment::of::<T>())
+        Self::from_shared(self.bytes.slice_ref(as_bytes(subset)))
     }
 
     /// Returns a slice of self that is equivalent to the given subset.
@@ -595,11 +610,7 @@ impl<T> Buffer<T> {
             vortex_panic!("slice_ref subset must be aligned to {:?}", alignment);
         }
 
-        // SAFETY: any `[T]` is a valid `[u8]` of `size_of_val` bytes for the purposes of reading.
-        let subset_bytes = unsafe {
-            std::slice::from_raw_parts(subset.as_ptr().cast::<u8>(), size_of_val(subset))
-        };
-        Self::from_shared(self.bytes.slice_ref_aligned(subset_bytes, alignment))
+        Self::from_shared(self.bytes.slice_ref_aligned(as_bytes(subset), alignment))
     }
 
     /// Returns the underlying bytes without copying.

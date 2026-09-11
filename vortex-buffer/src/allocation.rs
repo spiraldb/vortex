@@ -240,6 +240,122 @@ mod tests {
         assert_eq!(state.deallocations.load(Ordering::Relaxed), 1);
     }
 
+    /// The period over which [`ShiftedAllocator`] varies the address it hands back.
+    ///
+    /// Matches the alignment buffers are laid out at, so sweeping a gap across it covers every
+    /// alignment shift a region can be given.
+    const SHIFT_PERIOD: usize = Alignment::DEFAULT_ALIGNMENT.as_usize();
+
+    /// An allocator that hands back blocks `gap` bytes past a [`SHIFT_PERIOD`] boundary.
+    ///
+    /// How much alignment padding a region gets depends on the address the system allocator
+    /// happens to return, which makes it a poor thing for a test to depend on. This pins it.
+    #[derive(Clone, Debug)]
+    struct ShiftedAllocator {
+        gap: usize,
+        state: Arc<TrackingState>,
+    }
+
+    impl ShiftedAllocator {
+        fn new(gap: usize) -> Self {
+            assert!(gap < SHIFT_PERIOD, "the gap is an offset within one period");
+            Self {
+                gap,
+                state: Arc::default(),
+            }
+        }
+
+        /// The block actually asked of `Global`: one period larger, so the gap fits in front, and
+        /// aligned to the period, so the gap alone decides the address.
+        fn raw_layout(layout: Layout) -> Layout {
+            Layout::from_size_align(
+                layout.size() + SHIFT_PERIOD,
+                layout.align().max(SHIFT_PERIOD),
+            )
+            .expect("shifted test layout")
+        }
+
+        /// Recover the block we asked of `Global` from the pointer we handed out.
+        ///
+        /// ## Safety
+        ///
+        /// `ptr` must be a pointer this allocator returned.
+        unsafe fn raw_ptr(&self, ptr: NonNull<u8>) -> NonNull<u8> {
+            // SAFETY: every pointer we hand out sits exactly `gap` bytes into its block.
+            unsafe { NonNull::new_unchecked(ptr.as_ptr().sub(self.gap)) }
+        }
+    }
+
+    // SAFETY: this forwards all memory operations to Global, offsetting each block by a fixed
+    // amount that `raw_layout` reserves room for and `raw_ptr` undoes.
+    unsafe impl Allocator for ShiftedAllocator {
+        fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+            self.state.allocations.fetch_add(1, Ordering::Relaxed);
+            let raw = Global.allocate(Self::raw_layout(layout))?;
+            // SAFETY: the raw block is a whole period longer than the request, so the window
+            // starting `gap` bytes in still holds `layout.size()` bytes.
+            Ok(unsafe {
+                NonNull::slice_from_raw_parts(
+                    NonNull::new_unchecked(raw.cast::<u8>().as_ptr().add(self.gap)),
+                    layout.size(),
+                )
+            })
+        }
+
+        unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
+            self.state.deallocations.fetch_add(1, Ordering::Relaxed);
+            // SAFETY: the caller passes back a pointer we returned, so it sits `gap` bytes into a
+            // block Global gave us for `raw_layout(layout)`.
+            unsafe { Global.deallocate(self.raw_ptr(ptr), Self::raw_layout(layout)) }
+        }
+
+        unsafe fn grow(
+            &self,
+            ptr: NonNull<u8>,
+            old_layout: Layout,
+            new_layout: Layout,
+        ) -> Result<NonNull<[u8]>, AllocError> {
+            self.state.grows.fetch_add(1, Ordering::Relaxed);
+            // Growing the raw block would move the gap, so take a fresh one and copy. This counts
+            // as a grow and not an allocation, which is exactly what the caller asked for.
+            let raw = Global.allocate(Self::raw_layout(new_layout))?;
+            // SAFETY: both blocks are live and at least `old_layout.size()` bytes long past their
+            // gaps, and they cannot overlap.
+            let grown = unsafe {
+                let grown = NonNull::new_unchecked(raw.cast::<u8>().as_ptr().add(self.gap));
+                std::ptr::copy_nonoverlapping(ptr.as_ptr(), grown.as_ptr(), old_layout.size());
+                Global.deallocate(self.raw_ptr(ptr), Self::raw_layout(old_layout));
+                grown
+            };
+            Ok(NonNull::slice_from_raw_parts(grown, new_layout.size()))
+        }
+    }
+
+    #[rstest]
+    fn over_aligned_regions_still_grow_in_place(
+        #[values(0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240)]
+        gap: usize,
+    ) {
+        // A region is laid out at `DEFAULT_ALIGNMENT` even when the buffer promises no more than
+        // its element type's alignment, so the window starts at a shift the promise knows nothing
+        // about. Growth has to recover that shift from the window's own address: reading it off
+        // the promise mistakes the padding for a window that has walked most of the way through
+        // its region, and the buffer then reallocates and copies instead of growing in place.
+        //
+        // The shift follows the address the allocator returns, so sweep every one it can take.
+        let allocator = ShiftedAllocator::new(gap);
+        let state = Arc::clone(&allocator.state);
+        let mut buffer = BufferAllocatorRef::new(allocator).with_capacity::<u32>(1);
+        assert_eq!(buffer.alignment(), Alignment::of::<u32>());
+
+        buffer.extend(std::iter::repeat_n(7u32, 4096));
+
+        assert_eq!(buffer.len(), 4096);
+        assert_eq!(buffer.as_slice(), vec![7u32; 4096]);
+        assert_eq!(state.allocations.load(Ordering::Relaxed), 1);
+        assert!(state.grows.load(Ordering::Relaxed) >= 1);
+    }
+
     #[test]
     fn zero_capacity_does_not_allocate() {
         let allocator = TrackingAllocator::default();

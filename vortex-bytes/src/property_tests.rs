@@ -171,13 +171,9 @@ fn split_off_then_unsplit_is_the_identity(tc: TestCase) {
     bytes.extend_from_slice(&data);
     let capacity = bytes.capacity();
 
-    // Both halves keep the alignment promise, so the split has to fall on a multiple of it.
-    let steps = tc.draw(
-        gs::integers::<usize>()
-            .min_value(0)
-            .max_value(capacity / alignment.as_usize()),
-    );
-    let at = steps * alignment.as_usize();
+    // The split may fall anywhere: the half handed back reports whatever alignment its own start
+    // satisfies rather than refusing to be cut.
+    let at = tc.draw(gs::integers::<usize>().min_value(0).max_value(capacity));
     let other = bytes.split_off(at);
 
     // The two windows partition the original one.
@@ -185,6 +181,12 @@ fn split_off_then_unsplit_is_the_identity(tc: TestCase) {
     assert_eq!(bytes.len() + other.len(), data.len());
     assert_eq!(bytes.as_slice(), &data[..bytes.len()]);
     assert_eq!(other.as_slice(), &data[bytes.len()..]);
+
+    // Each half reports an alignment its own start really has.
+    assert!(bytes.alignment().is_ptr_aligned(bytes.as_ptr()));
+    assert!(other.alignment().is_ptr_aligned(other.as_ptr()));
+    // The half we kept has not moved, so it keeps the full promise.
+    assert_eq!(bytes.alignment(), alignment);
 
     bytes.unsplit(other);
     assert_eq!(bytes.as_slice(), data.as_slice());
@@ -312,14 +314,13 @@ impl WindowModel {
         self.bytes.unsplit(other);
     }
 
-    /// A split point within the capacity, on a multiple of the alignment as `split_off` requires.
+    /// Any split point within the capacity; `split_off` lowers the promise rather than refusing.
     fn draw_split_point(&self, tc: &TestCase) -> usize {
-        let steps = tc.draw(
+        tc.draw(
             gs::integers::<usize>()
                 .min_value(0)
-                .max_value(self.bytes.capacity() / self.alignment.as_usize()),
-        );
-        steps * self.alignment.as_usize()
+                .max_value(self.bytes.capacity()),
+        )
     }
 
     /// Freeze the window and take it straight back. Nothing else holds it, so this must succeed

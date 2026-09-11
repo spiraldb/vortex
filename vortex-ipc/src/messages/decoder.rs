@@ -170,11 +170,11 @@ impl MessageDecoder {
 /// Split the first `len` bytes off the front of `bytes`, aligned to `alignment`.
 ///
 /// The part is a slice of `bytes` when its address already satisfies `alignment`, and a copy
-/// otherwise. What remains in `bytes` may start anywhere, so it promises no alignment.
+/// otherwise. What remains in `bytes` reports whatever alignment its own start still satisfies.
 fn take(bytes: &mut ByteBuffer, len: usize, alignment: Alignment) -> ByteBuffer {
-    let unaligned = std::mem::take(bytes).aligned(Alignment::none());
-    let part = unaligned.slice(0..len).aligned(alignment);
-    *bytes = unaligned.slice(len..);
+    let whole = std::mem::take(bytes);
+    let part = whole.slice(0..len).aligned(alignment);
+    *bytes = whole.slice(len..);
     part
 }
 

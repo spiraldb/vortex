@@ -359,7 +359,7 @@ mod custom_allocator {
         // The refcount lives inside the block, so sharing allocates nothing more.
         let shared = bytes.freeze();
         let clone = shared.clone();
-        let slice = shared.slice_aligned(10, 50, Alignment::none());
+        let slice = shared.slice(10, 50);
         assert!(slice.allocator().ptr_eq(&allocator));
         assert_eq!(counts.allocations.load(Relaxed), 1);
         // Alignment is reached by shifting, never by asking the allocator for it.
@@ -492,5 +492,74 @@ mod custom_allocator {
         );
         drop(unique);
         assert_eq!(counts.deallocations.load(Relaxed), 1);
+    }
+}
+
+mod alignment_promise {
+    use super::*;
+
+    #[test]
+    fn slicing_lowers_the_promise_to_what_the_new_start_satisfies() {
+        let mut bytes = UniqueBytes::with_capacity(256, Alignment::new(64));
+        bytes.extend_from_slice(&pattern(256));
+        let shared = bytes.freeze();
+        assert_eq!(shared.alignment(), Alignment::new(64));
+
+        // A cut on a multiple of the promise keeps it.
+        assert_eq!(shared.slice(128, 192).alignment(), Alignment::new(64));
+        // One that is not lowers it to the strongest alignment the offset does satisfy.
+        assert_eq!(shared.slice(16, 32).alignment(), Alignment::new(16));
+        assert_eq!(shared.slice(1, 2).alignment(), Alignment::none());
+        // Never above the parent's promise, however aligned the offset is.
+        assert_eq!(shared.slice(0, 8).alignment(), Alignment::new(64));
+
+        // Whatever it reports, the address really does satisfy it.
+        for begin in 0..64 {
+            let slice = shared.slice(begin, 128);
+            assert!(slice.alignment().is_ptr_aligned(slice.as_ptr()));
+            assert_eq!(slice.as_slice(), &pattern(256)[begin..128]);
+        }
+    }
+
+    #[test]
+    fn advancing_lowers_the_promise() {
+        let mut bytes = UniqueBytes::with_capacity(256, Alignment::new(64));
+        bytes.extend_from_slice(&pattern(256));
+        let mut shared = bytes.freeze();
+
+        shared.advance(64);
+        assert_eq!(shared.alignment(), Alignment::new(64));
+        shared.advance(4);
+        assert_eq!(shared.alignment(), Alignment::new(4));
+        assert!(shared.alignment().is_ptr_aligned(shared.as_ptr()));
+        assert_eq!(shared.as_slice(), &pattern(256)[68..]);
+    }
+
+    #[test]
+    fn splitting_off_lowers_only_the_half_that_moves() {
+        let mut bytes = UniqueBytes::with_capacity(256, Alignment::new(64));
+        bytes.extend_from_slice(&pattern(256));
+
+        let other = bytes.split_off(24);
+        assert_eq!(bytes.alignment(), Alignment::new(64));
+        assert_eq!(other.alignment(), Alignment::new(8));
+        assert!(other.alignment().is_ptr_aligned(other.as_ptr()));
+
+        // Rejoining restores the promise of the half that never moved.
+        bytes.unsplit(other);
+        assert_eq!(bytes.alignment(), Alignment::new(64));
+        assert_eq!(bytes.as_slice(), pattern(256).as_slice());
+    }
+
+    #[test]
+    fn slice_aligned_still_refuses_what_it_cannot_honour() {
+        let mut bytes = UniqueBytes::with_capacity(256, Alignment::new(64));
+        bytes.extend_from_slice(&pattern(256));
+        let shared = bytes.freeze();
+
+        // Asking for an alignment the offset cannot give is still an error, unlike `slice`.
+        assert!(
+            std::panic::catch_unwind(|| shared.slice_aligned(8, 16, Alignment::new(64))).is_err()
+        );
     }
 }

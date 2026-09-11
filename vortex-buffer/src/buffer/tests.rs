@@ -43,23 +43,27 @@ fn slice() {
 }
 
 #[test]
-fn slice_unaligned() {
+fn slicing_off_the_alignment_lowers_it_rather_than_panicking() {
     let buf = buffer![0i32, 1, 2, 3, 4].into_byte_buffer();
-    // With a regular slice, this would panic. See [`slice_bad_alignment`].
-    let sliced = buf.slice_unaligned(1..2);
-    // Verify the slice has the expected length (1 byte from index 1 to 2).
-    assert_eq!(sliced.len(), 1);
-    // The original buffer has i32 values [0, 1, 2, 3, 4].
-    // In little-endian bytes, 0i32 = [0, 0, 0, 0], so byte at index 1 is 0.
+    assert_eq!(buf.alignment(), Alignment::of::<i32>());
+
+    // The original buffer has i32 values [0, 1, 2, 3, 4]. In little-endian bytes, 0i32 is
+    // [0, 0, 0, 0], so the byte at index 1 is 0.
+    let sliced = buf.slice(1..2);
     assert_eq!(sliced.as_slice(), &[0]);
+    // Byte 1 is odd, so the only alignment it can still claim is 1.
+    assert_eq!(sliced.alignment(), Alignment::none());
+
+    // A cut that does preserve the alignment keeps reporting it.
+    assert_eq!(buf.slice(4..8).alignment(), Alignment::of::<i32>());
 }
 
 #[test]
 #[should_panic]
-fn slice_bad_alignment() {
+fn slice_with_alignment_still_asserts() {
     let buf = buffer![0i32, 1, 2, 3, 4].into_byte_buffer();
-    // We should only be able to slice this buffer on 4-byte (i32) boundaries.
-    buf.slice(1..2);
+    // Asking for a 4-byte-aligned result from byte 1 cannot be honoured.
+    buf.slice_with_alignment(1..2, Alignment::of::<i32>());
 }
 
 #[test]
@@ -303,7 +307,7 @@ fn empty_into_mut_preserves_alignment() {
 }
 
 #[test]
-fn test_slice_unaligned_end_pos() {
+fn slice_end_position_need_not_be_aligned() {
     let data = vec![0u8; 2];
     // Overalign the u8 vector.
     let aligned_buffer = Buffer::copy_from_aligned(&data, Alignment::new(8));
