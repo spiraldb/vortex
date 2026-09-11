@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright the Vortex contributors
+
+# Two scans of one Vortex file with different pushed-down filters must stay
+# separate. Pushed-down filters live in the FFI bind data, which has no
+# serializer, so DuckDB's common-subplan optimizer used to see both scans as
+# identical and merge them into one shared CTE, giving one branch the other's
+# rows. See `verify_serialization` in vortex-duckdb/cpp/table_function.cpp.
+
+include ../setup.slt.no
+
+query I
+COPY (SELECT i AS x, i * 10 AS y FROM range(1, 101) t(i))
+TO '${WORK_DIR}/subplan.vortex';
+----
+100
+
+query II
+SELECT *
+FROM (SELECT count(*) c FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 1 AND 20) b1,
+     (SELECT count(*) c FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 31 AND 60) b2;
+----
+20 30
+
+query RR
+SELECT *
+FROM (SELECT avg(y) a FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 1 AND 20) b1,
+     (SELECT avg(y) a FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 31 AND 60) b2;
+----
+105 455
+
+query II
+SELECT *
+FROM (SELECT sum(y) s FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 1 AND 20) b1,
+     (SELECT sum(y) s FROM '${WORK_DIR}/subplan.vortex' WHERE x BETWEEN 31 AND 60) b2;
+----
+2100 13650
