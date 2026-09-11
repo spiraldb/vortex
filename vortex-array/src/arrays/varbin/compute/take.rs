@@ -585,10 +585,9 @@ where
     S: UnsignedPType,
     Offset: IntegerPType,
 {
-    let computed_len = starts
-        .len()
-        .checked_mul(length)
-        .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
+    let computed_len = starts.len().checked_mul(length).ok_or_else(
+        || vortex_err!(Overflow: "PiecewiseSequenceArray output length overflows usize"),
+    )?;
     vortex_ensure!(
         computed_len == output_len,
         "PiecewiseSequenceArray expanded length {computed_len} does not match declared length {output_len}"
@@ -615,18 +614,18 @@ where
 
         for &offset in &offset_range[1..] {
             let offset = offset.as_();
-            let relative = offset.checked_sub(byte_start).ok_or_else(|| {
-                vortex_err!("VarBin offsets are not monotonic at offset {offset}")
-            })?;
-            let output_offset = output_bytes.checked_add(relative).ok_or_else(|| {
-                vortex_err!("PiecewiseSequence VarBin output byte length overflow")
-            })?;
+            let relative = offset.checked_sub(byte_start).ok_or_else(
+                || vortex_err!(Serde: "VarBin offsets are not monotonic at offset {offset}"),
+            )?;
+            let output_offset = output_bytes.checked_add(relative).ok_or_else(
+                || vortex_err!(Overflow: "PiecewiseSequence VarBin output byte length overflow"),
+            )?;
             new_offsets.push(output_offset);
         }
 
-        output_bytes = output_bytes
-            .checked_add(byte_end - byte_start)
-            .ok_or_else(|| vortex_err!("PiecewiseSequence VarBin output byte length overflow"))?;
+        output_bytes = output_bytes.checked_add(byte_end - byte_start).ok_or_else(
+            || vortex_err!(Overflow: "PiecewiseSequence VarBin output byte length overflow"),
+        )?;
     }
 
     let mut new_data = ByteBufferMut::with_capacity(output_bytes);
@@ -702,18 +701,18 @@ where
 
         for &offset in &offset_range[1..] {
             let offset = offset.as_();
-            let relative = offset.checked_sub(byte_start).ok_or_else(|| {
-                vortex_err!("VarBin offsets are not monotonic at offset {offset}")
-            })?;
-            let output_offset = output_bytes.checked_add(relative).ok_or_else(|| {
-                vortex_err!("PiecewiseSequence VarBin output byte length overflow")
-            })?;
+            let relative = offset.checked_sub(byte_start).ok_or_else(
+                || vortex_err!(Serde: "VarBin offsets are not monotonic at offset {offset}"),
+            )?;
+            let output_offset = output_bytes.checked_add(relative).ok_or_else(
+                || vortex_err!(Overflow: "PiecewiseSequence VarBin output byte length overflow"),
+            )?;
             new_offsets.push(output_offset);
         }
 
-        output_bytes = output_bytes
-            .checked_add(byte_end - byte_start)
-            .ok_or_else(|| vortex_err!("PiecewiseSequence VarBin output byte length overflow"))?;
+        output_bytes = output_bytes.checked_add(byte_end - byte_start).ok_or_else(
+            || vortex_err!(Overflow: "PiecewiseSequence VarBin output byte length overflow"),
+        )?;
     }
     vortex_ensure!(
         new_offsets.len() == output_len + 1,

@@ -43,7 +43,9 @@ impl ExtVTable for Uuid {
         let version = match metadata.len() {
             0 => None,
             1 => Some(u8_to_version(metadata[0])?),
-            other => vortex_bail!("UUID metadata must be 0 or 1 bytes, got {other}"),
+            other => {
+                vortex_bail!(InvalidArgument: "UUID metadata must be 0 or 1 bytes, got {other}")
+            }
         };
 
         Ok(UuidMetadata { version })
@@ -52,7 +54,7 @@ impl ExtVTable for Uuid {
     fn validate_dtype(ext_dtype: &ExtDType<Self>) -> VortexResult<()> {
         let storage_dtype = ext_dtype.storage_dtype();
         let DType::FixedSizeList(element_dtype, list_size, _nullability) = storage_dtype else {
-            vortex_bail!("UUID storage dtype must be a FixedSizeList, got {storage_dtype}");
+            vortex_bail!(InvalidArgument: "UUID storage dtype must be a FixedSizeList, got {storage_dtype}");
         };
 
         vortex_ensure_eq!(
@@ -62,7 +64,7 @@ impl ExtVTable for Uuid {
         );
 
         let DType::Primitive(ptype, elem_nullability) = element_dtype.as_ref() else {
-            vortex_bail!("UUID element dtype must be Primitive(U8), got {element_dtype}");
+            vortex_bail!(MismatchedTypes: "UUID element dtype must be Primitive(U8), got {element_dtype}");
         };
 
         vortex_ensure_eq!(
@@ -93,10 +95,10 @@ impl ExtVTable for Uuid {
         let mut bytes = [0u8; UUID_BYTE_LEN];
         for (i, elem) in elements.iter().enumerate() {
             let Some(scalar_value) = elem else {
-                vortex_bail!("UUID byte at index {i} must not be null");
+                vortex_bail!(InvalidArgument: "UUID byte at index {i} must not be null");
             };
             let PValue::U8(b) = scalar_value.as_primitive() else {
-                vortex_bail!("UUID byte at index {i} must be U8");
+                vortex_bail!(InvalidArgument: "UUID byte at index {i} must be U8");
             };
             bytes[i] = *b;
         }
@@ -246,9 +248,9 @@ mod tests {
             Nullability::NonNullable,
         );
 
-        let storage_value = storage_scalar
-            .value()
-            .ok_or_else(|| vortex_error::vortex_err!("expected non-null scalar"))?;
+        let storage_value = storage_scalar.value().ok_or_else(
+            || vortex_error::vortex_err!(MismatchedTypes: "expected non-null scalar"),
+        )?;
         let result = Uuid::unpack_native(&ext_dtype, storage_value)?;
         assert_eq!(result, expected);
         assert_eq!(result.to_string(), "550e8400-e29b-41d4-a716-446655440000");
@@ -281,9 +283,9 @@ mod tests {
             Nullability::NonNullable,
         );
 
-        let storage_value = storage_scalar
-            .value()
-            .ok_or_else(|| vortex_error::vortex_err!("expected non-null scalar"))?;
+        let storage_value = storage_scalar.value().ok_or_else(
+            || vortex_error::vortex_err!(MismatchedTypes: "expected non-null scalar"),
+        )?;
         assert!(Uuid::unpack_native(&ext_dtype, storage_value).is_err());
         Ok(())
     }

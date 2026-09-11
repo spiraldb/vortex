@@ -90,11 +90,16 @@ pub enum VortexErrorKind {
     Other,
     /// An index is out of bounds. The analogue of Python's `IndexError`.
     OutOfBounds,
+    /// A name was looked up and nothing was bound to it. The analogue of Python's `KeyError`.
+    NotFound,
+    /// A numeric value does not fit its target type. The analogue of Python's `OverflowError`.
+    Overflow,
     /// An error occurred while executing a compute kernel.
     Compute,
     /// An invalid argument was provided. The analogue of Python's `ValueError`.
     InvalidArgument,
-    /// An error occurred while serializing or deserializing.
+    /// An error occurred while serializing or deserializing. Closest to Python's `ValueError`,
+    /// as raised by `json.JSONDecodeError`.
     Serde,
     /// An unimplemented function was called. The analogue of Python's `NotImplementedError`.
     NotImplemented,
@@ -112,6 +117,8 @@ impl VortexErrorKind {
         match self {
             Self::Other => "Other error: ",
             Self::OutOfBounds => "Out of bounds error: ",
+            Self::NotFound => "Not found error: ",
+            Self::Overflow => "Overflow error: ",
             Self::Compute => "Compute error: ",
             Self::InvalidArgument => "Invalid argument error: ",
             Self::Serde => "Serde error: ",
@@ -295,30 +302,10 @@ impl<T> VortexExpect for Option<T> {
 /// A convenient macro for creating a VortexError.
 ///
 /// The optional leading `Kind:` names a [`VortexErrorKind`]; without one the error is
-/// [`VortexErrorKind::Other`].
+/// [`VortexErrorKind::Other`]. Every kind takes the same `Kind: "format", args..` shape, so no
+/// kind gets a bespoke argument grammar that a format string could be mistaken for.
 #[macro_export]
 macro_rules! vortex_err {
-    (OutOfBounds: $idx:expr, $start:expr, $stop:expr) => {{
-        $crate::__private::must_use($crate::VortexError::new(
-            $crate::VortexErrorKind::OutOfBounds,
-            format!(
-                "index {} out of bounds from {} to {}",
-                $idx, $start, $stop
-            ),
-        ))
-    }};
-    (NotImplemented: $func:expr, $by_whom:expr) => {{
-        $crate::__private::must_use($crate::VortexError::new(
-            $crate::VortexErrorKind::NotImplemented,
-            format!("function {} not implemented for {}", $func, $by_whom),
-        ))
-    }};
-    (MismatchedTypes: $expected:expr, $actual:expr) => {{
-        $crate::__private::must_use($crate::VortexError::new(
-            $crate::VortexErrorKind::MismatchedTypes,
-            format!("expected type: {} but instead got {}", $expected, $actual),
-        ))
-    }};
     (Context: $msg:literal, $err:expr) => {{
         $crate::__private::must_use($crate::VortexError::with_context($err, $msg))
     }};
@@ -382,15 +369,6 @@ macro_rules! vortex_ensure_eq {
 /// (e.g., an invariant has been violated).
 #[macro_export]
 macro_rules! vortex_panic {
-    (OutOfBounds: $idx:expr, $start:expr, $stop:expr) => {{
-        $crate::vortex_panic!($crate::vortex_err!(OutOfBounds: $idx, $start, $stop))
-    }};
-    (NotImplemented: $func:expr, $for_whom:expr) => {{
-        $crate::vortex_panic!($crate::vortex_err!(NotImplemented: $func, $for_whom))
-    }};
-    (MismatchedTypes: $expected:expr, $actual:expr) => {{
-        $crate::vortex_panic!($crate::vortex_err!(MismatchedTypes: $expected, $actual))
-    }};
     (Context: $msg:literal, $err:expr) => {{
         $crate::vortex_panic!($crate::vortex_err!(Context: $msg, $err))
     }};
@@ -461,7 +439,7 @@ impl From<tokio::task::JoinError> for VortexError {
 
 impl From<TryFromIntError> for VortexError {
     fn from(value: TryFromIntError) -> Self {
-        VortexError::external(value)
+        VortexError::wrap(VortexErrorKind::Overflow, value)
     }
 }
 

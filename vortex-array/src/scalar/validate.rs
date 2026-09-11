@@ -37,7 +37,7 @@ impl Scalar {
             }
             DType::Primitive(ptype, _) => {
                 let ScalarValue::Primitive(pvalue) = value else {
-                    vortex_bail!("primitive dtype {ptype} expected Primitive value, got {value}",);
+                    vortex_bail!(MismatchedTypes: "primitive dtype {ptype} expected Primitive value, got {value}",);
                 };
 
                 // Note that this is a backwards compatibility check for poor design in the
@@ -54,7 +54,7 @@ impl Scalar {
             }
             DType::Decimal(dec_dtype, _) => {
                 let ScalarValue::Decimal(dvalue) = value else {
-                    vortex_bail!("decimal dtype expected Decimal value, got {value}");
+                    vortex_bail!(MismatchedTypes: "decimal dtype expected Decimal value, got {value}");
                 };
 
                 vortex_ensure!(
@@ -76,7 +76,7 @@ impl Scalar {
             }
             DType::List(elem_dtype, _) => {
                 let ScalarValue::Tuple(elements) = value else {
-                    vortex_bail!("list dtype expected Tuple value, got {value}");
+                    vortex_bail!(MismatchedTypes: "list dtype expected Tuple value, got {value}");
                 };
 
                 for (i, element) in elements.iter().enumerate() {
@@ -86,7 +86,7 @@ impl Scalar {
             }
             DType::FixedSizeList(elem_dtype, size, _) => {
                 let ScalarValue::Tuple(elements) = value else {
-                    vortex_bail!("fixed-size list dtype expected Tuple value, got {value}",);
+                    vortex_bail!(MismatchedTypes: "fixed-size list dtype expected Tuple value, got {value}",);
                 };
 
                 let len = elements.len();
@@ -104,18 +104,18 @@ impl Scalar {
             }
             DType::Map(map, _) => {
                 let ScalarValue::Tuple(entries) = value else {
-                    vortex_bail!("map dtype expected Tuple value, got {value}");
+                    vortex_bail!(MismatchedTypes: "map dtype expected Tuple value, got {value}");
                 };
                 let key_dtype = map.key_dtype();
                 let value_dtype = map.value_dtype();
 
                 for (index, entry) in entries.iter().enumerate() {
                     let entry = entry.as_ref().ok_or_else(|| {
-                        vortex_error::vortex_err!("map entry at index {index} cannot be null")
+                        vortex_error::vortex_err!(InvalidArgument: "map entry at index {index} cannot be null")
                     })?;
                     let ScalarValue::Tuple(values) = entry else {
                         vortex_bail!(
-                            "map entry at index {index} expected Tuple value, got {entry}"
+                            MismatchedTypes: "map entry at index {index} expected Tuple value, got {entry}"
                         );
                     };
                     vortex_ensure_eq!(
@@ -135,7 +135,7 @@ impl Scalar {
             }
             DType::Struct(fields, _) => {
                 let ScalarValue::Tuple(values) = value else {
-                    vortex_bail!("struct dtype expected Tuple value, got {value}");
+                    vortex_bail!(MismatchedTypes: "struct dtype expected Tuple value, got {value}");
                 };
 
                 let nfields = fields.nfields();
@@ -152,13 +152,13 @@ impl Scalar {
             }
             DType::Union(variants, _) => {
                 let ScalarValue::Union(union_value) = value else {
-                    vortex_bail!("union dtype expected Union value, got {value}");
+                    vortex_bail!(MismatchedTypes: "union dtype expected Union value, got {value}");
                 };
 
                 let type_id = union_value.type_id();
                 let Some(child_index) = variants.tag_to_child_index(type_id) else {
                     vortex_bail!(
-                        "union value has unknown type ID {type_id}; expected one of {:?}",
+                        NotFound: "union value has unknown type ID {type_id}; expected one of {:?}",
                         variants.type_ids()
                     );
                 };
@@ -169,14 +169,14 @@ impl Scalar {
 
                 Self::validate(&child_dtype, union_value.child_value()).map_err(|error| {
                     vortex_error::vortex_err!(
-                        "union value for type ID {type_id} is invalid for dtype {child_dtype}: \
+                        InvalidArgument: "union value for type ID {type_id} is invalid for dtype {child_dtype}: \
                          {error}"
                     )
                 })?;
             }
             DType::Variant(_) => {
                 let ScalarValue::Variant(inner) = value else {
-                    vortex_bail!("variant dtype expected Variant value, got {value}");
+                    vortex_bail!(MismatchedTypes: "variant dtype expected Variant value, got {value}");
                 };
 
                 Self::validate(inner.dtype(), inner.value())?;

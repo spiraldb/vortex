@@ -37,9 +37,9 @@ use crate::utils::validate_tensor_float_input;
 
 /// Returns the common float element type of tensor row-function arguments.
 pub fn tensor_element_ptype(args: &[DType]) -> VortexResult<PType> {
-    let (first, rest) = args
-        .split_first()
-        .ok_or_else(|| vortex_err!("tensor row function requires at least one input"))?;
+    let (first, rest) = args.split_first().ok_or_else(
+        || vortex_err!(InvalidArgument: "tensor row function requires at least one input"),
+    )?;
 
     for argument in rest {
         vortex_ensure!(

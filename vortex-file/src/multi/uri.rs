@@ -88,7 +88,7 @@ fn file_path_to_url(path: &str) -> VortexResult<Url> {
 )))]
 fn file_path_to_url(path: &str) -> VortexResult<Url> {
     Err(vortex_err!(
-        "bare file paths are not supported on this platform: {path}"
+        InvalidArgument: "bare file paths are not supported on this platform: {path}"
     ))
 }
 

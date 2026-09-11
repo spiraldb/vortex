@@ -133,7 +133,7 @@ impl VTable for Slice {
         _session: &VortexSession,
     ) -> VortexResult<Option<Vec<u8>>> {
         // TODO(joe): make this configurable
-        vortex_bail!("Slice array is not serializable")
+        vortex_bail!(Serde: "Slice array is not serializable")
     }
 
     fn deserialize(
@@ -146,7 +146,7 @@ impl VTable for Slice {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("Slice array is not serializable")
+        vortex_bail!(Serde: "Slice array is not serializable")
     }
 
     fn execute(array: Array<Self>, _ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {

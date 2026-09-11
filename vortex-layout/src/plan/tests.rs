@@ -73,7 +73,7 @@ fn make_row_idx_plan(expression: Expression, child: PlanRef) -> VortexResult<Pla
 
 fn child_of(plan: &PlanRef, index: usize) -> VortexResult<PlanRef> {
     plan.child(index)?
-        .ok_or_else(|| vortex_err!("missing child {index}"))
+        .ok_or_else(|| vortex_err!(NotFound: "missing child {index}"))
 }
 
 fn assert_unsupported(error: vortex_error::VortexError) {
@@ -89,11 +89,9 @@ fn assert_unsupported(error: vortex_error::VortexError) {
 fn unsupported_layout_has_no_plan() -> VortexResult<()> {
     let layout = unsupported(3, DType::Null);
 
-    assert_unsupported(
-        lower(&layout)
-            .err()
-            .ok_or_else(|| vortex_err!("unsupported layout unexpectedly produced a plan"))?,
-    );
+    assert_unsupported(lower(&layout).err().ok_or_else(
+        || vortex_err!(InvalidArgument: "unsupported layout unexpectedly produced a plan"),
+    )?);
     Ok(())
 }
 
@@ -140,11 +138,9 @@ fn chunked_plan_lowers_each_chunk_on_access() -> VortexResult<()> {
 
     let plan = make_plan(layout)?;
     assert_eq!(child_of(&plan, 0)?.row_count(), 1);
-    assert_unsupported(
-        child_of(&plan, 1)
-            .err()
-            .ok_or_else(|| vortex_err!("unsupported chunk unexpectedly produced a plan"))?,
-    );
+    assert_unsupported(child_of(&plan, 1).err().ok_or_else(
+        || vortex_err!(InvalidArgument: "unsupported chunk unexpectedly produced a plan"),
+    )?);
     Ok(())
 }
 
@@ -163,11 +159,9 @@ fn struct_plan_lowers_each_field_on_access() -> VortexResult<()> {
 
     let plan = make_plan(layout)?;
     assert_eq!(child_of(&plan, 0)?.row_count(), 1);
-    assert_unsupported(
-        child_of(&plan, 1)
-            .err()
-            .ok_or_else(|| vortex_err!("unsupported field unexpectedly produced a plan"))?,
-    );
+    assert_unsupported(child_of(&plan, 1).err().ok_or_else(
+        || vortex_err!(InvalidArgument: "unsupported field unexpectedly produced a plan"),
+    )?);
     Ok(())
 }
 
@@ -276,7 +270,7 @@ fn with_children_rejects_mismatched_arity() -> VortexResult<()> {
     let error = plan
         .with_children(vec![child_of(&plan, 0)?])
         .err()
-        .ok_or_else(|| vortex_err!("mismatched arity unexpectedly succeeded"))?;
+        .ok_or_else(|| vortex_err!(MismatchedTypes: "mismatched arity unexpectedly succeeded"))?;
     assert!(
         error
             .to_string()
@@ -309,9 +303,9 @@ fn eval_try_new_validates_expression_root_dtype() -> VortexResult<()> {
     let expression = root().bind(&primitive(PType::I32, Nullability::NonNullable))?;
     let child = make_plan(flat(3, primitive(PType::I64, Nullability::NonNullable), 0))?;
 
-    let error = EvalPlan::try_new(expression, child)
-        .err()
-        .ok_or_else(|| vortex_err!("mismatched Eval root dtype unexpectedly succeeded"))?;
+    let error = EvalPlan::try_new(expression, child).err().ok_or_else(
+        || vortex_err!(MismatchedTypes: "mismatched Eval root dtype unexpectedly succeeded"),
+    )?;
     assert!(
         error
             .to_string()

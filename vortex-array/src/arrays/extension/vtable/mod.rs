@@ -163,7 +163,7 @@ impl VTable for Extension {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                "ExtensionArray expects empty metadata, got {} bytes",
+                InvalidArgument: "ExtensionArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
@@ -171,7 +171,7 @@ impl VTable for Extension {
             vortex_bail!("Not an extension DType");
         };
         if children.len() != 1 {
-            vortex_bail!("Expected 1 child, got {}", children.len());
+            vortex_bail!(MismatchedTypes: "Expected 1 child, got {}", children.len());
         }
         let storage = children.get(0, ext_dtype.storage_dtype(), len)?;
         Ok(
@@ -194,7 +194,7 @@ impl VTable for Extension {
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
         let Some(builder) = builder.as_any_mut().downcast_mut::<ExtensionBuilder>() else {
-            vortex_bail!("append_to_builder for Extension requires an ExtensionBuilder");
+            vortex_bail!(InvalidArgument: "append_to_builder for Extension requires an ExtensionBuilder");
         };
         builder.append_extension_array(&array.into_owned(), ctx)
     }

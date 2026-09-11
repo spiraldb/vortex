@@ -175,7 +175,7 @@ pub(crate) fn deserialize_row_encoding_options(
     let expected = 4 + 2 * n;
     if bytes.len() != expected {
         vortex_error::vortex_bail!(
-            "RowEncodingOptions metadata wrong size: got {}, expected {}",
+            InvalidArgument: "RowEncodingOptions metadata wrong size: got {}, expected {}",
             bytes.len(),
             expected
         );

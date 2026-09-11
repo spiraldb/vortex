@@ -109,9 +109,9 @@ impl AggregateFnVTable for SumV2 {
         options: &Self::Options,
         input_dtype: &DType,
     ) -> VortexResult<Self::Partial> {
-        let return_dtype = self
-            .return_dtype(options, input_dtype)
-            .ok_or_else(|| vortex_err!("Unsupported sum_v2 dtype: {}", input_dtype))?;
+        let return_dtype = self.return_dtype(options, input_dtype).ok_or_else(
+            || vortex_err!(InvalidArgument: "Unsupported sum_v2 dtype: {}", input_dtype),
+        )?;
         let sum = make_zero_state(&return_dtype);
         Ok(SumV2Partial {
             return_dtype,
@@ -232,7 +232,9 @@ impl AggregateFnVTable for SumV2 {
                 }
                 Canonical::Bool(array) => accumulate_bool(&mut partial.sum, array, ctx),
                 Canonical::Decimal(array) => accumulate_decimal(&mut partial.sum, array, ctx),
-                _ => vortex_bail!("Unsupported canonical type for sum_v2: {}", batch.dtype()),
+                _ => {
+                    vortex_bail!(InvalidArgument: "Unsupported canonical type for sum_v2: {}", batch.dtype())
+                }
             },
             Columnar::Constant(_) => unreachable!(),
         };
@@ -319,7 +321,7 @@ fn decode_partial_scalar(scalar: Scalar) -> VortexResult<(Scalar, bool, bool)> {
     vortex_ensure!(!scalar.is_null(), "SumV2 partial must not be null");
 
     let Some(fields) = scalar.as_struct_opt() else {
-        vortex_bail!("SumV2 partial must be a struct, got {}", scalar.dtype());
+        vortex_bail!(MismatchedTypes: "SumV2 partial must be a struct, got {}", scalar.dtype());
     };
     let sum = fields
         .field(SUM_FIELD)

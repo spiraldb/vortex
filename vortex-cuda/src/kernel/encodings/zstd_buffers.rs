@@ -43,7 +43,7 @@ impl CudaExecute for ZstdBuffersExecutor {
     ) -> VortexResult<Canonical> {
         let zstd_buffers = array
             .try_downcast::<ZstdBuffers>()
-            .map_err(|_| vortex_err!("expected zstd buffers array"))?;
+            .map_err(|_| vortex_err!(InvalidArgument: "expected zstd buffers array"))?;
         decode_zstd_buffers(zstd_buffers, ctx).await
     }
 }
@@ -207,7 +207,7 @@ async fn validate_decompress_results(
         }
         if actual != expected {
             return Err(vortex_err!(
-                "nvcomp chunk {} decompressed size mismatch: expected {}, got {}",
+                MismatchedTypes: "nvcomp chunk {} decompressed size mismatch: expected {}, got {}",
                 idx,
                 expected,
                 actual

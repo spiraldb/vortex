@@ -20,6 +20,8 @@ enum class ErrorCode {
     AssertionFailed = VX_ERROR_CODE_ASSERTION_FAILED,
     Io = VX_ERROR_CODE_IO,
     Panic = VX_ERROR_CODE_PANIC,
+    NotFound = VX_ERROR_CODE_NOT_FOUND,
+    Overflow = VX_ERROR_CODE_OVERFLOW,
 };
 
 class VortexException : public std::runtime_error {

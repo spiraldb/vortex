@@ -94,7 +94,7 @@ impl PlanVTable for Eval {
         check_child_count("Eval", children, 1)?;
         let child = children
             .get(0)?
-            .ok_or_else(|| vortex_error::vortex_err!("Eval child is absent"))?;
+            .ok_or_else(|| vortex_error::vortex_err!(AssertionFailed: "Eval child is absent"))?;
         validate_expression_child(plan.expression(), &child)?;
         if child.row_count() != plan.row_count() {
             vortex_error::vortex_bail!(

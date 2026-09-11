@@ -174,7 +174,7 @@ impl Interleave {
                     );
                 }
                 other => vortex_bail!(
-                    "interleave {name} must be a non-nullable unsigned integer, got {other}"
+                    InvalidArgument: "interleave {name} must be a non-nullable unsigned integer, got {other}"
                 ),
             }
         }
@@ -368,7 +368,7 @@ impl VTable for Interleave {
         _array: ArrayView<'_, Self>,
         _session: &VortexSession,
     ) -> VortexResult<Option<Vec<u8>>> {
-        vortex_bail!("Interleave array is not serializable")
+        vortex_bail!(Serde: "Interleave array is not serializable")
     }
 
     fn deserialize(
@@ -380,7 +380,7 @@ impl VTable for Interleave {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("Interleave array is not serializable")
+        vortex_bail!(Serde: "Interleave array is not serializable")
     }
 
     fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {

@@ -111,7 +111,7 @@ where
     let output =
         BufferMut::try_from_trusted_len_iter(branches.iter().zip(rows).map(|(branch, row)| {
             let Some(source) = values.get((*branch).as_()) else {
-                vortex_bail!("interleave array index out of bounds");
+                vortex_bail!(OutOfBounds: "interleave array index out of bounds");
             };
             let row = (*row).as_();
             vortex_ensure!(row < source.len, "interleave row index out of bounds");

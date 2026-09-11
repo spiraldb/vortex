@@ -154,8 +154,8 @@ pub fn read_layout_tree(bytes: ByteBuffer) -> VortexResult<()> {
                 &session,
                 &Default::default(),
             )?;
-            let len =
-                usize::try_from(row_count).map_err(|e| vortex_err!("row count overflow: {e}"))?;
+            let len = usize::try_from(row_count)
+                .map_err(|e| vortex_err!(Overflow: "row count overflow: {e}"))?;
             let expr = root().bind(reader.dtype())?;
             reader
                 .projection_evaluation(&(0..row_count), &expr, MaskFuture::new_true(len))?

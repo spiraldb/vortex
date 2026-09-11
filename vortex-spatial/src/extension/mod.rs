@@ -174,7 +174,7 @@ pub(crate) fn geometries(
     } else if ext.is::<Rect>() {
         rect_geometries(&storage, ctx)
     } else {
-        vortex_bail!("spatial: unsupported geometry extension {}", array.dtype())
+        vortex_bail!(InvalidArgument: "spatial: unsupported geometry extension {}", array.dtype())
     }
 }
 
@@ -202,7 +202,7 @@ pub fn native_geometry_scalar_from_wkb(
         &binary as &dyn arrow_array::Array,
         WkbType::new(Arc::clone(&metadata)),
     ))
-    .map_err(|e| vortex_err!("failed to read WKB literal: {e}"))?;
+    .map_err(|e| vortex_err!(Io: "failed to read WKB literal: {e}"))?;
 
     // Cast the WKB value to `target`, import its native storage as a Vortex array.
     let to_storage = |target: &GeoArrowType| -> VortexResult<ArrayRef> {

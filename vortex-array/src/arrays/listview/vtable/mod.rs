@@ -174,7 +174,7 @@ impl VTable for ListView {
         );
 
         let DType::List(element_dtype, _) = dtype else {
-            vortex_bail!("Expected List dtype, got {:?}", dtype);
+            vortex_bail!(MismatchedTypes: "Expected List dtype, got {:?}", dtype);
         };
 
         let validity = if children.len() == 3 {
@@ -184,7 +184,7 @@ impl VTable for ListView {
             Validity::Array(validity)
         } else {
             vortex_bail!(
-                "`ListViewArray::build` expects 3 or 4 children, got {}",
+                InvalidArgument: "`ListViewArray::build` expects 3 or 4 children, got {}",
                 children.len()
             );
         };

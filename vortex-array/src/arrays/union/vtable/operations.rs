@@ -29,7 +29,7 @@ impl OperationsVTable<Union> for Union {
         };
         let child = array
             .child(child_index)
-            .ok_or_else(|| vortex_err!("UnionArray is missing child {child_index}"))?;
+            .ok_or_else(|| vortex_err!(NotFound: "UnionArray is missing child {child_index}"))?;
         let child_scalar = child.execute_scalar(index, ctx)?;
 
         Scalar::union(

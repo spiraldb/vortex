@@ -108,7 +108,7 @@ impl VTable for Primitive {
         slots: &[Option<ArrayRef>],
     ) -> VortexResult<()> {
         let DType::Primitive(_, nullability) = dtype else {
-            vortex_bail!("Expected primitive dtype, got {dtype:?}");
+            vortex_bail!(MismatchedTypes: "Expected primitive dtype, got {dtype:?}");
         };
         vortex_ensure!(
             data.len() == len,
@@ -142,7 +142,7 @@ impl VTable for Primitive {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                "PrimitiveArray expects empty metadata, got {} bytes",
+                InvalidArgument: "PrimitiveArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
@@ -159,7 +159,7 @@ impl VTable for Primitive {
 
         if buffer.len() != ptype.byte_width() * len {
             vortex_bail!(
-                "Buffer length {} does not match expected length {} for {}, {}",
+                MismatchedTypes: "Buffer length {} does not match expected length {} for {}, {}",
                 buffer.len(),
                 ptype.byte_width() * len,
                 ptype.byte_width(),
@@ -192,7 +192,7 @@ impl VTable for Primitive {
             }
         });
 
-        vortex_bail!("append_to_builder for Primitive requires a matching PrimitiveBuilder");
+        vortex_bail!(InvalidArgument: "append_to_builder for Primitive requires a matching PrimitiveBuilder");
     }
 
     fn reduce_parent(

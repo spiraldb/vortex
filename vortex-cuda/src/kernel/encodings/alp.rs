@@ -47,7 +47,7 @@ impl CudaExecute for ALPExecutor {
     ) -> VortexResult<Canonical> {
         let array = array
             .try_downcast::<ALP>()
-            .map_err(|_| vortex_err!("Expected ALPArray"))?;
+            .map_err(|_| vortex_err!(InvalidArgument: "Expected ALPArray"))?;
 
         match_each_alp_float_ptype!(array.dtype().as_ptype(), |A| {
             decode_alp::<A>(array, ctx).await

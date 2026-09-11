@@ -200,7 +200,8 @@ impl CudaExecute for ZstdExecutor {
         array: ArrayRef,
         ctx: &mut CudaExecutionCtx,
     ) -> VortexResult<Canonical> {
-        let zstd = Self::try_specialize(array).ok_or_else(|| vortex_err!("Expected ZstdArray"))?;
+        let zstd = Self::try_specialize(array)
+            .ok_or_else(|| vortex_err!(InvalidArgument: "Expected ZstdArray"))?;
 
         match zstd.dtype() {
             DType::Binary(_) | DType::Utf8(_) => decode_zstd(zstd, ctx).await,
@@ -231,7 +232,7 @@ async fn decode_zstd(array: ZstdArray, ctx: &mut CudaExecutionCtx) -> VortexResu
 
     // nvCOMP doesn't support ZSTD dictionaries.
     if dictionary.is_some() {
-        return Err(vortex_err!("ZSTD dictionary not supported on GPU"));
+        return Err(vortex_err!(InvalidArgument: "ZSTD dictionary not supported on GPU"));
     }
 
     if frames.is_empty() {

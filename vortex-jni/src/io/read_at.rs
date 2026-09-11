@@ -135,13 +135,13 @@ impl VortexReadAt for JavaReadable {
                     let _permit = permit;
                     let end = offset
                         .checked_add(length as u64)
-                        .ok_or_else(|| vortex_err!("read {offset}+{length} overflows u64"))?;
+                        .ok_or_else(|| vortex_err!(Overflow: "read {offset}+{length} overflows u64"))?;
                     if end > len {
-                        vortex_bail!("read {offset}..{end} out of bounds for file of length {len}");
+                        vortex_bail!(OutOfBounds: "read {offset}..{end} out of bounds for file of length {len}");
                     }
                     // `java.nio.Buffer` capacities are Java ints.
                     if i32::try_from(length).is_err() {
-                        vortex_bail!("read length {length} exceeds ByteBuffer limit");
+                        vortex_bail!(Overflow: "read length {length} exceeds ByteBuffer limit");
                     }
                     let joffset = i64::try_from(offset)
                         .map_err(|_| vortex_err!("read offset {offset} exceeds i64"))?;
@@ -308,6 +308,6 @@ impl FileSystem for JavaFileSystem {
     }
 
     async fn delete(&self, path: &str) -> VortexResult<()> {
-        vortex_bail!("delete('{path}') is not supported by a Java-readable file system")
+        vortex_bail!(InvalidArgument: "delete('{path}') is not supported by a Java-readable file system")
     }
 }

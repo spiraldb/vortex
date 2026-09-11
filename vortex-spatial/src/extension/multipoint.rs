@@ -96,7 +96,7 @@ pub(crate) fn multipoint_storage_dtype(dim: Dimension, nullability: Nullability)
 /// Validate `dtype` is `List<coordinate-struct>` and return its [`Dimension`].
 pub(crate) fn multipoint_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::List(coords, _) = dtype else {
-        vortex_bail!("multipoint storage must be a List of coordinates, was {dtype}");
+        vortex_bail!(MismatchedTypes: "multipoint storage must be a List of coordinates, was {dtype}");
     };
     coordinate_dimension(coords)
 }
@@ -117,7 +117,9 @@ pub(crate) fn multipoint_geometries(
         .iter()
         .map(|geometry| -> VortexResult<Geometry<f64>> {
             Ok(geometry
-                .ok_or_else(|| vortex_err!("spatial: null geometry is not supported"))?
+                .ok_or_else(
+                    || vortex_err!(InvalidArgument: "spatial: null geometry is not supported"),
+                )?
                 .map_err(|e| vortex_err!("spatial: geometry access failed: {e}"))?
                 .to_geometry())
         })

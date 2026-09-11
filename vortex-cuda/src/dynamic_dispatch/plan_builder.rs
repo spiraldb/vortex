@@ -358,7 +358,7 @@ impl FusedPlan {
     fn build(array: &ArrayRef) -> VortexResult<(Self, Vec<ArrayRef>)> {
         let output_ptype_rust = PType::try_from(array.dtype()).map_err(|_| {
             vortex_err!(
-                "dyn dispatch requires primitive dtype, got {:?}",
+                InvalidArgument: "dyn dispatch requires primitive dtype, got {:?}",
                 array.dtype()
             )
         })?;
@@ -418,7 +418,7 @@ impl FusedPlan {
         // Copy each source buffer to the device and record its pointer.
         for source_buf in self.source_buffers {
             let source_buf = source_buf.ok_or_else(|| {
-                vortex_err!("all source buffer slots must be filled before materialize")
+                vortex_err!(InvalidArgument: "all source buffer slots must be filled before materialize")
             })?;
             let device_buf = ctx.ensure_on_device_sync(source_buf)?;
             let ptr = device_buf.cuda_device_ptr()?;
@@ -531,7 +531,7 @@ impl FusedPlan {
             self.walk_cast(array, pending_subtrees)
         } else {
             vortex_bail!(
-                "Encoding {:?} not supported by dynamic dispatch plan builder",
+                InvalidArgument: "Encoding {:?} not supported by dynamic dispatch plan builder",
                 id
             )
         }
@@ -722,7 +722,7 @@ impl FusedPlan {
                 PTypeTag_PTYPE_F64,
             ),
             other => vortex_bail!(
-                "ALP encoded ptype must be I32 (f32) or I64 (f64), got {:?}",
+                InvalidArgument: "ALP encoded ptype must be I32 (f32) or I64 (f64), got {:?}",
                 other
             ),
         };

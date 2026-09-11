@@ -667,7 +667,9 @@ fn test_kernel_output_rejects_nulls_at_function_boundary() -> VortexResult<()> {
         Err(error) => error,
         Ok(output) => match output.execute::<PrimitiveArray>(&mut ctx) {
             Err(error) => error,
-            Ok(_) => vortex_bail!("an invalid row kernel output passed boundary validation"),
+            Ok(_) => {
+                vortex_bail!(InvalidArgument: "an invalid row kernel output passed boundary validation")
+            }
         },
     };
     let error = error.to_string();

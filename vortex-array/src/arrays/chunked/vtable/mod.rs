@@ -182,7 +182,7 @@ impl VTable for Chunked {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                "ChunkedArray expects empty metadata, got {} bytes",
+                InvalidArgument: "ChunkedArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
@@ -206,7 +206,7 @@ impl VTable for Chunked {
             .copied()
             .map(|offset| {
                 usize::try_from(offset)
-                    .map_err(|_| vortex_err!("chunk offset {offset} exceeds usize range"))
+                    .map_err(|_| vortex_err!(Overflow: "chunk offset {offset} exceeds usize range"))
             })
             .collect::<VortexResult<Vec<_>>>()?;
         let mut slots = SmallVec::with_capacity(children.len());

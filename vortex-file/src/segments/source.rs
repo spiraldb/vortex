@@ -101,7 +101,7 @@ fn validate_read_result(
     result.and_then(|buffer| {
         if request.len() != buffer.len() {
             return Err(vortex_err!(
-                "FileSegmentSource: expected buffer of length {} but received {}. {:?}",
+                MismatchedTypes: "FileSegmentSource: expected buffer of length {} but received {}. {:?}",
                 request.len(),
                 buffer.len(),
                 request
@@ -368,7 +368,8 @@ impl SegmentSource for FileSegmentSource {
         let spec = *match self.segments.get(*id as usize) {
             Some(spec) => spec,
             None => {
-                return future::ready(Err(vortex_err!("Missing segment: {}", id))).boxed();
+                return future::ready(Err(vortex_err!(NotFound: "Missing segment: {}", id)))
+                    .boxed();
             }
         };
 
@@ -538,7 +539,8 @@ impl SegmentSource for BufferSegmentSource {
         let spec = match self.segments.get(*id as usize) {
             Some(spec) => spec,
             None => {
-                return future::ready(Err(vortex_err!("Missing segment: {}", id))).boxed();
+                return future::ready(Err(vortex_err!(NotFound: "Missing segment: {}", id)))
+                    .boxed();
             }
         };
 
@@ -546,7 +548,7 @@ impl SegmentSource for BufferSegmentSource {
         let end = start + spec.length as usize;
         if end > self.buffer.len() {
             return future::ready(Err(vortex_err!(
-                "Segment {} range {}..{} out of bounds for buffer of length {}",
+                OutOfBounds: "Segment {} range {}..{} out of bounds for buffer of length {}",
                 *id,
                 start,
                 end,

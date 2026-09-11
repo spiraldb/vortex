@@ -113,8 +113,8 @@ impl CudaExecute for BitPackedExecutor {
         array: ArrayRef,
         ctx: &mut CudaExecutionCtx,
     ) -> VortexResult<Canonical> {
-        let (array, patch_range) =
-            Self::try_specialize(array)?.ok_or_else(|| vortex_err!("Expected BitPackedArray"))?;
+        let (array, patch_range) = Self::try_specialize(array)?
+            .ok_or_else(|| vortex_err!(InvalidArgument: "Expected BitPackedArray"))?;
         let ptype = array.ptype(array.dtype());
 
         match_each_integer_ptype!(ptype, |A| {

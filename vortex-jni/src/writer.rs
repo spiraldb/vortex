@@ -86,7 +86,7 @@ fn resolve_store(
     if url.scheme() == "file" {
         let path = url
             .to_file_path()
-            .map_err(|_| vortex_err!("invalid file URL: {url_or_path}"))?;
+            .map_err(|_| vortex_err!(InvalidArgument: "invalid file URL: {url_or_path}"))?;
         Ok(ResolvedStore::Path(path))
     } else {
         let (store, path) = make_object_store(&url, properties)?;
@@ -148,7 +148,7 @@ impl NativeWriter {
             .from_arrow_record_batch(batch, self.arrow_schema.as_ref())?;
         if !vortex_batch.dtype().eq(&self.write_schema) {
             return Err(vortex_err!(
-                "write schema mismatch: expected {}, got {}",
+                MismatchedTypes: "write schema mismatch: expected {}, got {}",
                 self.write_schema,
                 vortex_batch.dtype()
             ));
@@ -178,7 +178,8 @@ impl NativeWriter {
 }
 
 fn checked_jlong(value: u64, name: &str) -> VortexResult<jlong> {
-    jlong::try_from(value).map_err(|_| vortex_err!("{name} exceeds Java long range: {value}"))
+    jlong::try_from(value)
+        .map_err(|_| vortex_err!(Overflow: "{name} exceeds Java long range: {value}"))
 }
 
 fn exact_count_jlong(
@@ -287,7 +288,7 @@ fn write_summary_to_java<'local>(
     let file_stats = summary.footer().statistics();
     let columns = env.new_object_array(
         i32::try_from(column_sizes.len())
-            .map_err(|_| vortex_err!("column count exceeds Java array range"))?,
+            .map_err(|_| vortex_err!(Overflow: "column count exceeds Java array range"))?,
         jni::jni_str!("dev/vortex/api/VortexColumnStatistics"),
         JObject::null(),
     )?;
@@ -322,10 +323,9 @@ fn write_summary_to_java<'local>(
                 jni::jni_str!("dev/vortex/api/VortexColumnStatistics"),
                 jni::jni_sig!("(IJJJJLjava/lang/Object;Ljava/lang/Object;)V"),
                 &[
-                    JValue::Int(
-                        i32::try_from(column_index)
-                            .map_err(|_| vortex_err!("column index exceeds Java int range"))?,
-                    ),
+                    JValue::Int(i32::try_from(column_index).map_err(
+                        |_| vortex_err!(Overflow: "column index exceeds Java int range"),
+                    )?),
                     JValue::Long(checked_jlong(compressed_size, "compressed column size")?),
                     JValue::Long(checked_jlong(summary.row_count(), "row count")?),
                     JValue::Long(null_count),

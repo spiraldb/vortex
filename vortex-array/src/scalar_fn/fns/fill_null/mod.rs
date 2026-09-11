@@ -101,9 +101,9 @@ impl ScalarFnVTable for FillNull {
         let input = args.get(0)?;
         let fill_value = args.get(1)?;
 
-        let fill_scalar = fill_value
-            .as_constant()
-            .ok_or_else(|| vortex_err!("fill_null fill_value must be a constant/scalar"))?;
+        let fill_scalar = fill_value.as_constant().ok_or_else(
+            || vortex_err!(InvalidArgument: "fill_null fill_value must be a constant/scalar"),
+        )?;
 
         vortex_ensure!(
             !fill_scalar.is_null(),

@@ -346,7 +346,7 @@ impl ArrowSession {
                         return Ok(field);
                     }
                 }
-                vortex_bail!("extension type cannot be converted to Arrow without a plugin: {ext}");
+                vortex_bail!(InvalidArgument: "extension type cannot be converted to Arrow without a plugin: {ext}");
             }
             DType::Variant(_) => {
                 // TODO(Adam): This currently encodes information about parquet-variant
@@ -384,7 +384,7 @@ impl ArrowSession {
     /// extensions are preserved via [`Self::to_arrow_field`].
     pub fn to_arrow_schema(&self, dtype: &DType) -> VortexResult<Schema> {
         let DType::Struct(struct_dtype, _) = dtype else {
-            vortex_bail!("to_arrow_schema requires a top-level struct dtype, got {dtype}");
+            vortex_bail!(InvalidArgument: "to_arrow_schema requires a top-level struct dtype, got {dtype}");
         };
         let mut fields = Vec::with_capacity(struct_dtype.names().len());
         for (name, field_dtype) in struct_dtype.names().iter().zip(struct_dtype.fields()) {
@@ -766,7 +766,7 @@ impl ArrowSession {
                     DataType::Int32 => self.run_end_from_arrow::<Int32Type>(array, &values_field),
                     DataType::Int64 => self.run_end_from_arrow::<Int64Type>(array, &values_field),
                     ends_dt => vortex_bail!(
-                        "Arrow run-end array run ends must be Int16, Int32 or Int64, got {ends_dt}"
+                        InvalidArgument: "Arrow run-end array run ends must be Int16, Int32 or Int64, got {ends_dt}"
                     ),
                 }
             }
@@ -803,7 +803,7 @@ impl ArrowSession {
         let run_array = array
             .as_any()
             .downcast_ref::<RunArray<R>>()
-            .ok_or_else(|| vortex_err!("expected an Arrow RunArray, got {}", array.data_type()))?;
+            .ok_or_else(|| vortex_err!(MismatchedTypes: "expected an Arrow RunArray, got {}", array.data_type()))?;
         let values =
             self.from_arrow_array_inner(ArrowArrayRef::clone(run_array.values()), values_field)?;
         run_end_from_arrow(run_array, values)
@@ -1255,7 +1255,7 @@ mod tests {
             .downcast_ref::<RunArray<Int32Type>>()
             .ok_or_else(|| {
                 vortex_err!(
-                    "expected an Int32 run-end array, got {}",
+                    MismatchedTypes: "expected an Int32 run-end array, got {}",
                     exported.data_type()
                 )
             })?;

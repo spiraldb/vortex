@@ -105,7 +105,7 @@ impl FromStr for Target {
             engine: Engine::from_str(engine_str, true)
                 .map_err(|e| {
                     vortex_err!(
-                        "cannot convert str ({}) to an Engine oneof([{}]), got error {}",
+                        MismatchedTypes: "cannot convert str ({}) to an Engine oneof([{}]), got error {}",
                         *engine_str,
                         Engine::value_variants().iter().join(","),
                         e
@@ -115,7 +115,7 @@ impl FromStr for Target {
             format: Format::from_str(format_str, true)
                 .map_err(|e| {
                     vortex_err!(
-                        "cannot convert str ({}) to a Format oneof([{}]), got error {}",
+                        MismatchedTypes: "cannot convert str ({}) to a Format oneof([{}]), got error {}",
                         *format_str,
                         Format::value_variants().iter().join(","),
                         e

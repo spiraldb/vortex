@@ -335,7 +335,9 @@ fn export_canonical(
                 }
                 export_varbinview(varbinview, ctx).await
             }
-            c => vortex_bail!("unsupported Arrow Device export for {} array", c.dtype()),
+            c => {
+                vortex_bail!(InvalidArgument: "unsupported Arrow Device export for {} array", c.dtype())
+            }
         }
     })
 }
@@ -397,7 +399,7 @@ async fn export_dictionary_codes(
     .execute_cuda(ctx)
     .await?;
     let Canonical::Primitive(codes) = codes else {
-        vortex_bail!("dictionary codes must be primitive, got {}", codes.dtype());
+        vortex_bail!(MismatchedTypes: "dictionary codes must be primitive, got {}", codes.dtype());
     };
 
     let parts = codes.into_data_parts();
@@ -446,7 +448,7 @@ async fn export_decimal_values(
 ) -> VortexResult<BufferHandle> {
     if values_type.byte_width() > target_type.byte_width() {
         vortex_bail!(
-            "cannot export decimal values from {values_type} storage to Arrow {target_type}: narrowing would require a device-to-host overflow check",
+            Overflow: "cannot export decimal values from {values_type} storage to Arrow {target_type}: narrowing would require a device-to-host overflow check",
         );
     }
     let values = ctx.ensure_on_device(values).await?;
@@ -731,7 +733,7 @@ fn check_binary_status(status: u32) -> VortexResult<()> {
     match status {
         0 => Ok(()),
         1 => vortex_bail!(
-            "cannot export BinaryView as Arrow Binary: a view references an invalid data buffer"
+            InvalidArgument: "cannot export BinaryView as Arrow Binary: a view references an invalid data buffer"
         ),
         2 => vortex_bail!(
             "cannot export BinaryView as Arrow Binary: offsets exceed i32 range required by Arrow Binary"
@@ -863,7 +865,7 @@ pub(super) async fn export_arrow_validity_buffer(
         Validity::Array(array) => {
             let array = array.try_downcast::<Bool>().map_err(|array| {
                 vortex_err!(
-                    "canonical validity array must be bool, got {}",
+                    MismatchedTypes: "canonical validity array must be bool, got {}",
                     array.dtype()
                 )
             })?;
@@ -892,7 +894,7 @@ pub(super) async fn export_arrow_validity_buffer(
 fn validity_bitmap_byte_len(len: usize, arrow_offset: usize) -> VortexResult<usize> {
     Ok(len
         .checked_add(arrow_offset)
-        .ok_or_else(|| vortex_err!("Arrow validity bit length overflows usize"))?
+        .ok_or_else(|| vortex_err!(Overflow: "Arrow validity bit length overflows usize"))?
         .div_ceil(8))
 }
 
@@ -1061,7 +1063,7 @@ pub fn repack_arrow_validity_buffer(
         .cuda_device_ptr()?
         .is_multiple_of(size_of::<u64>() as u64)
     {
-        vortex_bail!("Arrow validity repack requires an 8-byte aligned device buffer");
+        vortex_bail!(InvalidArgument: "Arrow validity repack requires an 8-byte aligned device buffer");
     }
 
     let mut output = ctx.device_alloc::<u64>(allocation_words.max(1))?;
@@ -1266,9 +1268,9 @@ fn fixed_size_list_offsets(
         .checked_mul(list_size)
         .ok_or_else(|| vortex_err!("FixedSizeList Arrow List offsets exceed i32 range"))?;
 
-    let output_len = len
-        .checked_add(1)
-        .ok_or_else(|| vortex_err!("FixedSizeList Arrow List offsets length overflows usize"))?;
+    let output_len = len.checked_add(1).ok_or_else(
+        || vortex_err!(Overflow: "FixedSizeList Arrow List offsets length overflows usize"),
+    )?;
     let mut offsets = ctx.device_alloc::<i32>(output_len)?;
     let base = 0i32;
     let output_len_u64 = output_len as u64;
@@ -1298,7 +1300,7 @@ async fn export_arrow_list_offsets(
     };
     let offsets = offsets.execute_cuda(ctx).await?;
     let Canonical::Primitive(offsets) = offsets else {
-        vortex_bail!("list offsets must be primitive, got {}", offsets.dtype());
+        vortex_bail!(MismatchedTypes: "list offsets must be primitive, got {}", offsets.dtype());
     };
 
     let PrimitiveDataParts { ptype, buffer, .. } = offsets.into_data_parts();
@@ -2509,7 +2511,7 @@ mod tests {
 
         let field = Field::try_from(&exported.schema)?;
         let DataType::List(element_field) = field.data_type() else {
-            vortex_bail!("expected List schema, got {:?}", field.data_type());
+            vortex_bail!(MismatchedTypes: "expected List schema, got {:?}", field.data_type());
         };
         assert_eq!(element_field.data_type(), &expected_element_type);
 
@@ -3137,7 +3139,7 @@ mod tests {
         let err = match array.export_device_array(&mut ctx).await {
             Ok(mut exported) => {
                 unsafe { release_exported_array(&raw mut exported.array) };
-                vortex_bail!("nullable dictionary codes should be unsupported")
+                vortex_bail!(AssertionFailed: "nullable dictionary codes should be unsupported")
             }
             Err(err) => err,
         };
@@ -3171,7 +3173,7 @@ mod tests {
         let err = match array.export_device_array(&mut ctx).await {
             Ok(mut exported) => {
                 unsafe { release_exported_array(&raw mut exported.array) };
-                vortex_bail!("invalid device list view should be unsupported")
+                vortex_bail!(AssertionFailed: "invalid device list view should be unsupported")
             }
             Err(err) => err,
         };
@@ -3204,7 +3206,7 @@ mod tests {
         let err = match array.export_device_array(&mut ctx).await {
             Ok(mut exported) => {
                 unsafe { release_exported_array(&raw mut exported.array) };
-                vortex_bail!("non-contiguous nested list view should be unsupported")
+                vortex_bail!(AssertionFailed: "non-contiguous nested list view should be unsupported")
             }
             Err(err) => err,
         };
@@ -3235,7 +3237,7 @@ mod tests {
         let err = match array.export_device_array(&mut ctx).await {
             Ok(mut exported) => {
                 unsafe { release_exported_array(&raw mut exported.array) };
-                vortex_bail!("non-contiguous nullable primitive list view should be unsupported")
+                vortex_bail!(AssertionFailed: "non-contiguous nullable primitive list view should be unsupported")
             }
             Err(err) => err,
         };

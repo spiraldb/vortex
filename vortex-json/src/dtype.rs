@@ -49,7 +49,7 @@ impl ExtVTable for Json {
         storage_value: &'a ScalarValue,
     ) -> VortexResult<Self::NativeValue<'a>> {
         let ScalarValue::Utf8(value) = storage_value else {
-            vortex_bail!("JSON storage scalar must be utf8, got {storage_value}");
+            vortex_bail!(MismatchedTypes: "JSON storage scalar must be utf8, got {storage_value}");
         };
         Ok(value.as_str())
     }

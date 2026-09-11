@@ -172,10 +172,9 @@ impl VTable for TransposedBool {
             "TransposedBoolArray offset {} must be less than {FL_CHUNK_SIZE}",
             data.offset
         );
-        let end = data
-            .offset
-            .checked_add(len)
-            .ok_or_else(|| vortex_error::vortex_err!("TransposedBoolArray range end overflow"))?;
+        let end = data.offset.checked_add(len).ok_or_else(
+            || vortex_error::vortex_err!(Overflow: "TransposedBoolArray range end overflow"),
+        )?;
         vortex_ensure!(
             end <= transposed.len(),
             "TransposedBoolArray range {}..{} exceeds transposed child length {}",

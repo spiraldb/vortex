@@ -1334,17 +1334,19 @@ mod test {
             .execute::<CanonicalValidity>(&mut ctx)?
             .0
         else {
-            return Err(vortex_err!("expected canonical variant"));
+            return Err(vortex_err!(MismatchedTypes: "expected canonical variant"));
         };
 
         let nested_variant = canonical
             .shredded()
             .and_then(|shredded| shredded.as_opt::<Variant>())
-            .ok_or_else(|| vortex_err!("expected nested variant shredded child"))?;
+            .ok_or_else(
+                || vortex_err!(InvalidArgument: "expected nested variant shredded child"),
+            )?;
         let nested_struct = nested_variant
             .shredded()
             .and_then(|shredded| shredded.as_opt::<Struct>())
-            .ok_or_else(|| vortex_err!("expected nested struct shredded child"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected nested struct shredded child"))?;
         let value = nested_struct.unmasked_field_by_name("value")?;
 
         assert!(value.is::<Primitive>());

@@ -43,14 +43,14 @@ impl<V: AggregateFnVTable> Accumulator<V> {
     pub fn try_new(vtable: V, options: V::Options, dtype: DType) -> VortexResult<Self> {
         let return_dtype = vtable.return_dtype(&options, &dtype).ok_or_else(|| {
             vortex_err!(
-                "Aggregate function {} cannot be applied to dtype {}",
+                InvalidArgument: "Aggregate function {} cannot be applied to dtype {}",
                 vtable.id(),
                 dtype
             )
         })?;
         let partial_dtype = vtable.partial_dtype(&options, &dtype).ok_or_else(|| {
             vortex_err!(
-                "Aggregate function {} cannot be applied to dtype {}",
+                InvalidArgument: "Aggregate function {} cannot be applied to dtype {}",
                 vtable.id(),
                 dtype
             )

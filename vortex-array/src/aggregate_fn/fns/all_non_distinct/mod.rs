@@ -63,7 +63,7 @@ use crate::validity::Validity;
 pub fn all_non_distinct(a: &ArrayRef, b: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<bool> {
     if a.dtype() != b.dtype() {
         vortex_bail!(
-            "all_non_distinct: dtype mismatch: {} vs {}",
+            MismatchedTypes: "all_non_distinct: dtype mismatch: {} vs {}",
             a.dtype(),
             b.dtype()
         );
@@ -71,7 +71,7 @@ pub fn all_non_distinct(a: &ArrayRef, b: &ArrayRef, ctx: &mut ExecutionCtx) -> V
 
     if a.len() != b.len() {
         vortex_bail!(
-            "all_non_distinct: length mismatch: {} vs {}",
+            MismatchedTypes: "all_non_distinct: length mismatch: {} vs {}",
             a.len(),
             b.len()
         );
@@ -202,7 +202,7 @@ impl AggregateFnVTable for AllNonDistinct {
             Columnar::Canonical(c) => {
                 let Canonical::Struct(s) = c else {
                     vortex_bail!(
-                        "AllNonDistinct expects a Struct canonical, got {:?}",
+                        InvalidArgument: "AllNonDistinct expects a Struct canonical, got {:?}",
                         c.dtype()
                     );
                 };
@@ -236,7 +236,7 @@ impl AggregateFnVTable for AllNonDistinct {
     }
 
     fn finalize(&self, _partials: ArrayRef) -> VortexResult<ArrayRef> {
-        vortex_bail!("AllNonDistinct does not support array finalization");
+        vortex_bail!(InvalidArgument: "AllNonDistinct does not support array finalization");
     }
 
     fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
@@ -275,7 +275,7 @@ fn check_canonical_identical(
             check_variant_identical(lhs, rhs, ctx)
         }
         _ => Err(vortex_err!(
-            "Canonical type mismatch in AllNonDistinct: {:?} vs {:?}",
+            MismatchedTypes: "Canonical type mismatch in AllNonDistinct: {:?} vs {:?}",
             lhs.dtype(),
             rhs.dtype()
         )),

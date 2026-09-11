@@ -73,7 +73,7 @@ impl VTable for Union {
             .enumerate()
             .map(|(index, slot)| {
                 slot.as_ref()
-                    .ok_or_else(|| vortex_err!("UnionArray is missing child {index}"))
+                    .ok_or_else(|| vortex_err!(NotFound: "UnionArray is missing child {index}"))
             })
             .collect::<VortexResult<Vec<_>>>()?;
 
@@ -119,7 +119,7 @@ impl VTable for Union {
         vortex_ensure!(metadata.is_empty(), "UnionArray expects empty metadata");
         vortex_ensure!(buffers.is_empty(), "UnionArray expects no buffers");
         let DType::Union(variants, nullability) = dtype else {
-            vortex_bail!("Expected union dtype, found {dtype}")
+            vortex_bail!(InvalidArgument: "Expected union dtype, found {dtype}")
         };
         vortex_ensure_eq!(
             children.len(),

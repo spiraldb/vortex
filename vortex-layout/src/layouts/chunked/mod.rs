@@ -134,7 +134,7 @@ fn chunk_offsets(children: &dyn LayoutChildren) -> VortexResult<Vec<u64>> {
         offsets.push(
             offsets[idx]
                 .checked_add(children.child_row_count(idx))
-                .ok_or_else(|| vortex_err!("Chunked child row counts overflow"))?,
+                .ok_or_else(|| vortex_err!(Overflow: "Chunked child row counts overflow"))?,
         );
     }
     Ok(offsets)

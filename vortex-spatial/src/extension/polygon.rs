@@ -101,10 +101,10 @@ pub(crate) fn polygon_storage_dtype(dim: Dimension, nullability: Nullability) ->
 /// Validate `dtype` is `List<List<coordinate-struct>>` and return its [`Dimension`].
 pub(crate) fn polygon_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::List(ring, _) = dtype else {
-        vortex_bail!("polygon storage must be a List of rings, was {dtype}");
+        vortex_bail!(MismatchedTypes: "polygon storage must be a List of rings, was {dtype}");
     };
     let DType::List(coords, _) = ring.as_ref() else {
-        vortex_bail!("polygon ring storage must be a List of coordinates, was {ring}");
+        vortex_bail!(MismatchedTypes: "polygon ring storage must be a List of coordinates, was {ring}");
     };
     coordinate_dimension(coords)
 }
@@ -172,7 +172,9 @@ pub(crate) fn polygon_geometries(
         .iter()
         .map(|geometry| -> VortexResult<Geometry<f64>> {
             Ok(geometry
-                .ok_or_else(|| vortex_err!("spatial: null geometry is not supported"))?
+                .ok_or_else(
+                    || vortex_err!(InvalidArgument: "spatial: null geometry is not supported"),
+                )?
                 .map_err(|e| vortex_err!("spatial: geometry access failed: {e}"))?
                 .to_geometry())
         })

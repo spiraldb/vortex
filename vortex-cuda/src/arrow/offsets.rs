@@ -56,7 +56,7 @@ where
 {
     let scan_len = len
         .checked_add(1)
-        .ok_or_else(|| vortex_err!("Arrow offset count overflow"))?;
+        .ok_or_else(|| vortex_err!(Overflow: "Arrow offset count overflow"))?;
     let mut status = ctx.device_alloc::<u32>(1)?;
     ctx.stream()
         .memset_zeros(&mut status)
@@ -90,7 +90,7 @@ where
     match Buffer::<u32>::from_byte_buffer(status_bytes)[0] {
         0 => {}
         1 => vortex_bail!("cannot build Arrow offsets from a negative length"),
-        2 => vortex_bail!("length sum exceeds Arrow i32 offset range"),
+        2 => vortex_bail!(Overflow: "length sum exceeds Arrow i32 offset range"),
         status => vortex_bail!("unexpected Arrow offset status {status}"),
     }
 

@@ -86,7 +86,9 @@ impl FromLogicalType for DType {
         nullability: Nullability,
     ) -> VortexResult<DType> {
         Ok(match logical_type.as_type_id() {
-            DUCKDB_TYPE::DUCKDB_TYPE_INVALID => vortex_bail!("invalid duckdb type"),
+            DUCKDB_TYPE::DUCKDB_TYPE_INVALID => {
+                vortex_bail!(InvalidArgument: "invalid duckdb type")
+            }
             DUCKDB_TYPE::DUCKDB_TYPE_SQLNULL => DType::Null,
             DUCKDB_TYPE::DUCKDB_TYPE_BOOLEAN => DType::Bool(nullability),
             DUCKDB_TYPE::DUCKDB_TYPE_TINYINT => DType::Primitive(I8, nullability),
@@ -200,7 +202,7 @@ impl FromLogicalType for DType {
             | DUCKDB_TYPE::DUCKDB_TYPE_BIGNUM
             | DUCKDB_TYPE::DUCKDB_TYPE_STRING_LITERAL
             | DUCKDB_TYPE::DUCKDB_TYPE_INTEGER_LITERAL) => {
-                vortex_bail!("{other:?} -> DType conversion is not supported")
+                vortex_bail!(InvalidArgument: "{other:?} -> DType conversion is not supported")
             }
         })
     }
@@ -280,7 +282,7 @@ impl TryFrom<&DType> for LogicalType {
                     return LogicalType::geometry_type(spatial_metadata.crs.as_deref());
                 }
 
-                vortex_bail!("Unsupported extension type \"{}\"", ext_dtype.id());
+                vortex_bail!(InvalidArgument: "Unsupported extension type \"{}\"", ext_dtype.id());
             }
         };
 
@@ -303,14 +305,14 @@ fn temporal_to_duckdb(temporal: TemporalMetadata) -> VortexResult<LogicalType> {
             TimeUnit::Microseconds => DUCKDB_TYPE::DUCKDB_TYPE_TIMESTAMP,
             TimeUnit::Milliseconds => DUCKDB_TYPE::DUCKDB_TYPE_TIMESTAMP_MS,
             TimeUnit::Seconds => DUCKDB_TYPE::DUCKDB_TYPE_TIMESTAMP_S,
-            _ => vortex_bail!("Invalid TimeUnit {} for timestamp", unit),
+            _ => vortex_bail!(InvalidArgument: "Invalid TimeUnit {} for timestamp", unit),
         },
         // TIMESTAMP_TZ's timezone is a display unit, time is stored in UTC
         // microseconds
         TemporalMetadata::Timestamp(unit, Some(_)) => {
             if unit != &TimeUnit::Microseconds {
                 vortex_bail!(
-                    "Invalid TimeUnit {} for timestamp_tz, must be Microseconds",
+                    InvalidArgument: "Invalid TimeUnit {} for timestamp_tz, must be Microseconds",
                     unit
                 );
             }
@@ -318,12 +320,12 @@ fn temporal_to_duckdb(temporal: TemporalMetadata) -> VortexResult<LogicalType> {
         }
         TemporalMetadata::Date(unit) => match unit {
             TimeUnit::Days => DUCKDB_TYPE::DUCKDB_TYPE_DATE,
-            _ => vortex_bail!("Invalid TimeUnit {} for date", unit),
+            _ => vortex_bail!(InvalidArgument: "Invalid TimeUnit {} for date", unit),
         },
         TemporalMetadata::Time(unit) => match unit {
             TimeUnit::Microseconds => DUCKDB_TYPE::DUCKDB_TYPE_TIME,
             TimeUnit::Nanoseconds => DUCKDB_TYPE::DUCKDB_TYPE_TIME_NS,
-            _ => vortex_bail!("Invalid TimeUnit {} for time", unit),
+            _ => vortex_bail!(InvalidArgument: "Invalid TimeUnit {} for time", unit),
         },
     };
 
@@ -355,8 +357,9 @@ impl TryFrom<&StructFields> for LogicalType {
                 if name_set.replace(field_name.as_ref()).is_some() {
                     vortex_bail!("Duplicate field '{field_name}'");
                 }
-                CString::new(field_name.as_ref())
-                    .map_err(|e| vortex_err!("Invalid field name '{field_name}': {e}"))
+                CString::new(field_name.as_ref()).map_err(
+                    |e| vortex_err!(InvalidArgument: "Invalid field name '{field_name}': {e}"),
+                )
             })
             .collect::<Result<_, _>>()?;
 
@@ -379,7 +382,9 @@ impl TryFrom<PType> for LogicalType {
             U64 => LogicalType::new(DUCKDB_TYPE::DUCKDB_TYPE_UBIGINT),
             F32 => LogicalType::new(DUCKDB_TYPE::DUCKDB_TYPE_FLOAT),
             F64 => LogicalType::new(DUCKDB_TYPE::DUCKDB_TYPE_DOUBLE),
-            PType::F16 => return Err(vortex_err!("F16 type not supported in DuckDB")),
+            PType::F16 => {
+                return Err(vortex_err!(InvalidArgument: "F16 type not supported in DuckDB"));
+            }
         })
     }
 }

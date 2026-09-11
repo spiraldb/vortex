@@ -308,7 +308,9 @@ pub trait ListArrayExt: ListArraySlotsExt {
                 .execute_scalar(index, &mut legacy_session().create_execution_ctx())?
                 .as_primitive()
                 .as_::<usize>()
-                .ok_or_else(|| vortex_error::vortex_err!("offset value does not fit in usize"))
+                .ok_or_else(
+                    || vortex_error::vortex_err!(Overflow: "offset value does not fit in usize"),
+                )
         }
     }
 

@@ -59,7 +59,7 @@ impl CudaExecute for DeltaExecutor {
     ) -> VortexResult<Canonical> {
         let delta = array
             .try_downcast::<Delta>()
-            .map_err(|_| vortex_err!("Expected DeltaArray"))?;
+            .map_err(|_| vortex_err!(InvalidArgument: "Expected DeltaArray"))?;
         decode_delta(delta, ctx).await
     }
 }

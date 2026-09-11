@@ -280,7 +280,7 @@ impl PValue {
             PValue::F64(f) => T::from_f64(f),
         };
         let to = T::PTYPE;
-        res.ok_or_else(|| vortex_err!("Cannot cast {self} to {to}"))
+        res.ok_or_else(|| vortex_err!(MismatchedTypes: "Cannot cast {self} to {to}"))
     }
 
     /// Returns true if the value of float type and is NaN.
@@ -550,14 +550,12 @@ impl CoercePValue for f16 {
                 Ok(Self::from_bits(u as u16))
             }
             PValue::F16(u) => Ok(u),
-            PValue::F32(f) => {
-                <Self as NumCast>::from(f).ok_or_else(|| vortex_err!("Cannot convert f32 to f16"))
-            }
-            PValue::F64(f) => {
-                <Self as NumCast>::from(f).ok_or_else(|| vortex_err!("Cannot convert f64 to f16"))
-            }
+            PValue::F32(f) => <Self as NumCast>::from(f)
+                .ok_or_else(|| vortex_err!(MismatchedTypes: "Cannot convert f32 to f16")),
+            PValue::F64(f) => <Self as NumCast>::from(f)
+                .ok_or_else(|| vortex_err!(MismatchedTypes: "Cannot convert f64 to f16")),
             PValue::I8(_) | PValue::I16(_) | PValue::I32(_) | PValue::I64(_) => {
-                vortex_bail!("Cannot coerce {value:?} to f16: type not supported for coercion")
+                vortex_bail!(InvalidArgument: "Cannot coerce {value:?} to f16: type not supported for coercion")
             }
         }
     }
@@ -581,15 +579,13 @@ impl CoercePValue for f32 {
                 );
                 Ok(Self::from_bits(u as u32))
             }
-            PValue::F16(f) => {
-                <Self as NumCast>::from(f).ok_or_else(|| vortex_err!("Cannot convert f16 to f32"))
-            }
+            PValue::F16(f) => <Self as NumCast>::from(f)
+                .ok_or_else(|| vortex_err!(MismatchedTypes: "Cannot convert f16 to f32")),
             PValue::F32(f) => Ok(f),
-            PValue::F64(f) => {
-                <Self as NumCast>::from(f).ok_or_else(|| vortex_err!("Cannot convert f64 to f32"))
-            }
+            PValue::F64(f) => <Self as NumCast>::from(f)
+                .ok_or_else(|| vortex_err!(MismatchedTypes: "Cannot convert f64 to f32")),
             PValue::I8(_) | PValue::I16(_) | PValue::I32(_) | PValue::I64(_) => {
-                vortex_bail!("Unsupported PValue {value:?} type for f32")
+                vortex_bail!(InvalidArgument: "Unsupported PValue {value:?} type for f32")
             }
         }
     }
@@ -603,15 +599,13 @@ impl CoercePValue for f64 {
             PValue::U16(u) => Ok(Self::from_bits(u as u64)),
             PValue::U32(u) => Ok(Self::from_bits(u as u64)),
             PValue::U64(u) => Ok(Self::from_bits(u)),
-            PValue::F16(f) => {
-                <Self as NumCast>::from(f).ok_or_else(|| vortex_err!("Cannot convert f16 to f64"))
-            }
-            PValue::F32(f) => {
-                <Self as NumCast>::from(f).ok_or_else(|| vortex_err!("Cannot convert f32 to f64"))
-            }
+            PValue::F16(f) => <Self as NumCast>::from(f)
+                .ok_or_else(|| vortex_err!(MismatchedTypes: "Cannot convert f16 to f64")),
+            PValue::F32(f) => <Self as NumCast>::from(f)
+                .ok_or_else(|| vortex_err!(MismatchedTypes: "Cannot convert f32 to f64")),
             PValue::F64(f) => Ok(f),
             PValue::I8(_) | PValue::I16(_) | PValue::I32(_) | PValue::I64(_) => {
-                vortex_bail!("Unsupported PValue {value:?} type for f64")
+                vortex_bail!(InvalidArgument: "Unsupported PValue {value:?} type for f64")
             }
         }
     }

@@ -57,7 +57,7 @@ pub trait AggregateFnVTable: 'static + Sized + Clone + Send + Sync {
         _metadata: &[u8],
         _session: &VortexSession,
     ) -> VortexResult<Self::Options> {
-        vortex_bail!("Aggregate function {} is not deserializable", self.id());
+        vortex_bail!(Serde: "Aggregate function {} is not deserializable", self.id());
     }
 
     /// Return whether this stored aggregate can satisfy `requested`.

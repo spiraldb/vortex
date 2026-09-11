@@ -38,7 +38,7 @@ pub fn nan_count(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<usize
     // Short-circuit using cached array statistics.
     if let Precision::Exact(nan_count_scalar) = array.statistics().get(Stat::NaNCount) {
         return usize::try_from(&nan_count_scalar)
-            .map_err(|e| vortex_err!("Failed to convert NaN count stat to usize: {e}"));
+            .map_err(|e| vortex_err!(Overflow: "Failed to convert NaN count stat to usize: {e}"));
     }
 
     // Short-circuit for non-float types.
@@ -165,7 +165,7 @@ impl AggregateFnVTable for NanCount {
             Columnar::Canonical(c) => match c {
                 Canonical::Primitive(p) => accumulate_primitive(partial, p, ctx),
                 _ => vortex_bail!(
-                    "Unsupported canonical type for nan_count: {}",
+                    InvalidArgument: "Unsupported canonical type for nan_count: {}",
                     batch.dtype()
                 ),
             },

@@ -37,8 +37,9 @@ impl dyn FileSystem + '_ {
             return Ok(stream);
         }
 
-        let glob_pattern = glob::Pattern::new(pattern)
-            .map_err(|e| vortex_err!("Invalid glob pattern '{}': {}", pattern, e))?;
+        let glob_pattern = glob::Pattern::new(pattern).map_err(
+            |e| vortex_err!(InvalidArgument: "Invalid glob pattern '{}': {}", pattern, e),
+        )?;
 
         let listing_prefix = glob_list_prefix(pattern).trim_end_matches('/');
 

@@ -90,7 +90,7 @@ impl<'a> Utf8Scalar<'a> {
     pub(crate) fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         if !matches!(dtype, DType::Utf8(..)) {
             vortex_bail!(
-                "Cannot cast utf8 to {dtype}: UTF-8 scalars can only be cast to UTF-8 types with different nullability"
+                MismatchedTypes: "Cannot cast utf8 to {dtype}: UTF-8 scalars can only be cast to UTF-8 types with different nullability"
             )
         }
         Scalar::try_new(

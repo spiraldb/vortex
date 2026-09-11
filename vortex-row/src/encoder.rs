@@ -112,7 +112,7 @@ impl RowEncoder {
             reject_extension_dtype(col.dtype())?;
             if col.len() != nrows {
                 vortex_bail!(
-                    "RowEncoder: column {} has length {} but expected {}",
+                    InvalidArgument: "RowEncoder: column {} has length {} but expected {}",
                     i,
                     col.len(),
                     nrows
@@ -127,7 +127,7 @@ fn reject_extension_dtype(dtype: &DType) -> VortexResult<()> {
     match dtype {
         DType::Extension(ext_dtype) => {
             vortex_bail!(
-                "row encoding does not support Extension arrays yet: {}",
+                InvalidArgument: "row encoding does not support Extension arrays yet: {}",
                 ext_dtype.id()
             )
         }

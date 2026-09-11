@@ -323,7 +323,7 @@ pub fn flat_vector_to_vortex(vector: &VectorRef, len: usize) -> VortexResult<Arr
                     let data = Buffer::from_iter(vector_i128_values(vector, len));
                     DecimalArray::try_new(data, decimal_dtype, validity)
                 }
-                _ => vortex_bail!("Unsupported decimal precision: {precision}"),
+                _ => vortex_bail!(InvalidArgument: "Unsupported decimal precision: {precision}"),
             }
             .map(|a| a.into_array())
         }
@@ -392,7 +392,9 @@ pub fn flat_vector_to_vortex(vector: &VectorRef, len: usize) -> VortexResult<Arr
             StructArray::try_new(names, children, len, vector.validity_ref(len).to_validity())
                 .map(|a| a.into_array())
         }
-        type_id => vortex_bail!("{type_id:?} flat Vector to Vortex array not supported"),
+        type_id => {
+            vortex_bail!(InvalidArgument: "{type_id:?} flat Vector to Vortex array not supported")
+        }
     }
 }
 

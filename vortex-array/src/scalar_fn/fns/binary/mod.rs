@@ -149,7 +149,7 @@ impl ScalarFnVTable for Binary {
             && !lhs.is_extension()
             && !rhs.is_extension()
         {
-            vortex_bail!("Cannot compare different DTypes {} and {}", lhs, rhs);
+            vortex_bail!(MismatchedTypes: "Cannot compare different DTypes {} and {}", lhs, rhs);
         }
 
         Ok(DType::Bool((lhs.is_nullable() || rhs.is_nullable()).into()))

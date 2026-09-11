@@ -147,7 +147,7 @@ impl SequenceData {
     ) -> VortexResult<()> {
         let steps = (length - 1) as u64;
         let (ascending, magnitude) = eval::step_parts(multiplier)
-            .ok_or_else(|| vortex_err!("step {multiplier} must be an integer"))?;
+            .ok_or_else(|| vortex_err!(MismatchedTypes: "step {multiplier} must be an integer"))?;
         if steps == 0 || magnitude == 0 {
             return Ok(());
         }
@@ -210,7 +210,7 @@ impl SequenceData {
                 let v: i64 = v.as_();
                 PValue::from(v)
             },
-            float: |v| { vortex_bail!("step {v} must be an integer") }
+            float: |v| { vortex_bail!(MismatchedTypes: "step {v} must be an integer") }
         );
 
         Ok((base, multiplier))
@@ -245,7 +245,7 @@ impl SequenceData {
     pub(crate) fn wrapping_parts<O: SequenceValue>(&self) -> VortexResult<(O, O)> {
         eval::wrapping_parts(self.base, self.multiplier).ok_or_else(|| {
             vortex_err!(
-                "SequenceArray values must be integers, got base {:?} and step {:?}",
+                MismatchedTypes: "SequenceArray values must be integers, got base {:?} and step {:?}",
                 self.base,
                 self.multiplier
             )

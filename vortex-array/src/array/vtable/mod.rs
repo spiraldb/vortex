@@ -263,7 +263,7 @@ pub fn unsupported_buffer_replacement<V: VTable>(
     _buffers: &[BufferHandle],
 ) -> VortexResult<ArrayParts<V>> {
     vortex_bail!(
-        "Array {} does not support in-memory buffer replacement",
+        InvalidArgument: "Array {} does not support in-memory buffer replacement",
         array.encoding_id()
     )
 }

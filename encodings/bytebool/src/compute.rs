@@ -127,7 +127,7 @@ impl BooleanKernel for ByteBool {
             let rhs = rhs
                 .scalar()
                 .as_bool_opt()
-                .ok_or_else(|| vortex_err!("expected boolean scalar"))?;
+                .ok_or_else(|| vortex_err!(MismatchedTypes: "expected boolean scalar"))?;
             return kleene_boolean_buffer_scalar(
                 lhs_values,
                 lhs.validity()?,

@@ -97,7 +97,7 @@ pub trait BinaryCombined: 'static + Send + Sync + Clone {
     ) -> VortexResult<CombinedOptions<Self>> {
         let _ = (metadata, session);
         vortex_bail!(
-            "Combined aggregate function {} is not deserializable",
+            Serde: "Combined aggregate function {} is not deserializable",
             BinaryCombined::id(self)
         );
     }

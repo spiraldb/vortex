@@ -115,12 +115,12 @@ impl VTable for ZigZag {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                "ZigZagArray expects empty metadata, got {} bytes",
+                InvalidArgument: "ZigZagArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
         if children.len() != 1 {
-            vortex_bail!("Expected 1 child, got {}", children.len());
+            vortex_bail!(MismatchedTypes: "Expected 1 child, got {}", children.len());
         }
 
         let ptype = PType::try_from(dtype)?;
@@ -215,7 +215,7 @@ impl ZigZagData {
 
     pub fn try_new(encoded_dtype: &DType) -> VortexResult<Self> {
         if !encoded_dtype.is_unsigned_int() {
-            vortex_bail!(MismatchedTypes: "unsigned int", encoded_dtype);
+            vortex_bail!(MismatchedTypes: "expected type: unsigned int but instead got {}", encoded_dtype);
         }
 
         Self::dtype_from_encoded_dtype(encoded_dtype)?;

@@ -49,7 +49,7 @@ impl<D: NativeDecimalType> PrecisionScale<D> {
     pub fn try_new(precision: u8, scale: i8) -> VortexResult<Self> {
         let precision = NonZero::new(precision).ok_or_else(|| {
             vortex_err!(
-                "precision cannot be 0, has to be between [1, {}]",
+                InvalidArgument: "precision cannot be 0, has to be between [1, {}]",
                 D::MAX_PRECISION
             )
         })?;

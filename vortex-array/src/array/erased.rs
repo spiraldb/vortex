@@ -274,7 +274,13 @@ impl ArrayRef {
 
     /// Execute the array to extract a scalar at the given index.
     pub fn execute_scalar(&self, index: usize, ctx: &mut ExecutionCtx) -> VortexResult<Scalar> {
-        vortex_ensure!(index < self.len(), OutOfBounds: index, 0, self.len());
+        vortex_ensure!(
+            index < self.len(),
+            OutOfBounds: "index {} out of bounds from {} to {}",
+            index,
+            0,
+            self.len()
+        );
         if self.dtype().is_nullable() && self.is_invalid(index, ctx)? {
             return Ok(Scalar::null(self.dtype().clone()));
         }
@@ -285,7 +291,13 @@ impl ArrayRef {
 
     /// Returns whether the item at `index` is valid.
     pub fn is_valid(&self, index: usize, ctx: &mut ExecutionCtx) -> VortexResult<bool> {
-        vortex_ensure!(index < self.len(), OutOfBounds: index, 0, self.len());
+        vortex_ensure!(
+            index < self.len(),
+            OutOfBounds: "index {} out of bounds from {} to {}",
+            index,
+            0,
+            self.len()
+        );
         match self.validity()? {
             Validity::NonNullable | Validity::AllValid => Ok(true),
             Validity::AllInvalid => Ok(false),

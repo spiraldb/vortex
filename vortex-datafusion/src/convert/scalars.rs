@@ -66,7 +66,7 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                             Some(v32) => ScalarValue::Decimal32(Some(v32), precision, scale),
                             None => {
                                 vortex_bail!(
-                                    "invalid ScalarValue {value} for decimal with precision {precision}",
+                                    InvalidArgument: "invalid ScalarValue {value} for decimal with precision {precision}",
                                 )
                             }
                         },
@@ -78,7 +78,7 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                             Some(v64) => ScalarValue::Decimal64(Some(v64), precision, scale),
                             None => {
                                 vortex_bail!(
-                                    "invalid ScalarValue {value} for decimal with precision {precision}",
+                                    InvalidArgument: "invalid ScalarValue {value} for decimal with precision {precision}",
                                 )
                             }
                         },
@@ -90,7 +90,7 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                             Some(v128) => ScalarValue::Decimal128(Some(v128), precision, scale),
                             None => {
                                 vortex_bail!(
-                                    "invalid ScalarValue {value} for decimal with precision {precision}",
+                                    InvalidArgument: "invalid ScalarValue {value} for decimal with precision {precision}",
                                 )
                             }
                         },
@@ -104,7 +104,7 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                             }
                             None => {
                                 vortex_bail!(
-                                    "invalid ScalarValue {value} for decimal with precision {precision}",
+                                    InvalidArgument: "invalid ScalarValue {value} for decimal with precision {precision}",
                                 )
                             }
                         },
@@ -122,17 +122,17 @@ impl TryToDataFusion<ScalarValue> for Scalar {
                     .map(|b| Vec::<u8>::from(b.into_bytes())),
             ),
             dtype @ DType::List(..) => vortex_bail!(
-                "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
+                MismatchedTypes: "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
             ),
             dtype @ DType::FixedSizeList(..) => vortex_bail!(
-                "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
+                MismatchedTypes: "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
             ),
             dtype @ DType::Map(..) => vortex_bail!(
-                "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
+                MismatchedTypes: "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
             ),
             DType::Struct(..) => struct_to_df(self)?,
             dtype @ DType::Union(..) => vortex_bail!(
-                "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
+                MismatchedTypes: "cannot convert Vortex scalar dtype {dtype} to DataFusion ScalarValue: unsupported scalar type"
             ),
             DType::Variant(_) => vortex_bail!("Variant scalars aren't supported with DF"),
             DType::Extension(ext) => {

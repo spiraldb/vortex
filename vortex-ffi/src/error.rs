@@ -38,11 +38,17 @@ pub enum vx_error_code {
     VX_ERROR_CODE_IO = 8,
     /// Panic inside FFI
     VX_ERROR_CODE_PANIC = 9,
+    /// A name was looked up and nothing was bound to it
+    VX_ERROR_CODE_NOT_FOUND = 10,
+    /// A numeric value does not fit its target type
+    VX_ERROR_CODE_OVERFLOW = 11,
 }
 
 fn error_code(error: &VortexError) -> vx_error_code {
     match error.kind() {
         VortexErrorKind::OutOfBounds => vx_error_code::VX_ERROR_CODE_OUT_OF_BOUNDS,
+        VortexErrorKind::NotFound => vx_error_code::VX_ERROR_CODE_NOT_FOUND,
+        VortexErrorKind::Overflow => vx_error_code::VX_ERROR_CODE_OVERFLOW,
         VortexErrorKind::Compute => vx_error_code::VX_ERROR_CODE_COMPUTE,
         VortexErrorKind::InvalidArgument => vx_error_code::VX_ERROR_CODE_INVALID_ARGUMENT,
         VortexErrorKind::Serde => vx_error_code::VX_ERROR_CODE_SERIALIZATION,
@@ -228,8 +234,7 @@ mod tests {
 
         assert_eq!(
             try_or(&raw mut error, -1, || Err::<i32, _>(vortex_err!(
-                OutOfBounds: 5, 0, 3
-            ))),
+                OutOfBounds: "index {} out of bounds from {} to {}", 5, 0, 3))),
             -1
         );
         assert_eq!(

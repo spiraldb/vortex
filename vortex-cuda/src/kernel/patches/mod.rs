@@ -62,7 +62,7 @@ pub(crate) fn ptype_to_chunk_offset_type(ptype: PType) -> VortexResult<ChunkOffs
         PType::U16 => Ok(ChunkOffsetType_CO_U16),
         PType::U32 => Ok(ChunkOffsetType_CO_U32),
         PType::U64 => Ok(ChunkOffsetType_CO_U64),
-        _ => vortex_bail!("Invalid PType for chunk_offsets: {:?}", ptype),
+        _ => vortex_bail!(InvalidArgument: "Invalid PType for chunk_offsets: {:?}", ptype),
     }
 }
 

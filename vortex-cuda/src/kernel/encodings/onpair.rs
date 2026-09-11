@@ -113,7 +113,7 @@ impl CudaExecute for OnPairExecutor {
     ) -> VortexResult<Canonical> {
         let onpair = array
             .as_typed::<OnPair>()
-            .ok_or_else(|| vortex_err!("Expected OnPairArray"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "Expected OnPairArray"))?;
         decode_onpair(onpair, ctx).await
     }
 }
@@ -650,7 +650,7 @@ fn sum_lengths(lengths: &PrimitiveArray) -> VortexResult<u64> {
         for &length in lengths.as_slice::<P>() {
             acc = acc
                 .checked_add(AsPrimitive::<u64>::as_(length))
-                .ok_or_else(|| vortex_err!("OnPair decoded size overflow"))?;
+                .ok_or_else(|| vortex_err!(Overflow: "OnPair decoded size overflow"))?;
         }
         Ok(acc)
     })
@@ -999,7 +999,7 @@ mod tests {
             &mut cuda_ctx,
         )?
         .try_downcast::<OnPair>()
-        .map_err(|array| vortex_err!("expected OnPair array, got {}", array.encoding_id()))?;
+        .map_err(|array| vortex_err!(MismatchedTypes: "expected OnPair array, got {}", array.encoding_id()))?;
 
         let output = decode_onpair_varbin(onpair, &mut cuda_ctx).await?;
         assert_eq!(output.dtype, DType::Utf8(Nullability::NonNullable));

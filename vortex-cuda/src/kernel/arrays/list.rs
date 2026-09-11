@@ -50,7 +50,7 @@ impl CudaExecute for ListExecutor {
     ) -> VortexResult<Canonical> {
         let list = array
             .try_downcast::<List>()
-            .map_err(|_| vortex_err!("Expected ListArray"))?;
+            .map_err(|_| vortex_err!(MismatchedTypes: "Expected ListArray"))?;
 
         let list_len = list.len();
         let validity = execute_validity_cuda(list.list_validity(), list_len, ctx).await?;

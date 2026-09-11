@@ -202,14 +202,14 @@ impl<V: AggregateFnVTable> GroupedAccumulator<V> {
         let aggregate_fn = AggregateFn::new(vtable.clone(), options.clone()).erased();
         let return_dtype = vtable.return_dtype(&options, &dtype).ok_or_else(|| {
             vortex_err!(
-                "Aggregate function {} cannot be applied to dtype {}",
+                InvalidArgument: "Aggregate function {} cannot be applied to dtype {}",
                 vtable.id(),
                 dtype
             )
         })?;
         let partial_dtype = vtable.partial_dtype(&options, &dtype).ok_or_else(|| {
             vortex_err!(
-                "Aggregate function {} cannot be applied to dtype {}",
+                InvalidArgument: "Aggregate function {} cannot be applied to dtype {}",
                 vtable.id(),
                 dtype
             )
@@ -248,7 +248,7 @@ impl<V: AggregateFnVTable> DynGroupedAccumulator for GroupedAccumulator<V> {
             DType::List(elem, _) => elem,
             DType::FixedSizeList(elem, ..) => elem,
             _ => vortex_bail!(
-                "Input DType mismatch: expected List or FixedSizeList, got {}",
+                MismatchedTypes: "Input DType mismatch: expected List or FixedSizeList, got {}",
                 groups.dtype()
             ),
         };

@@ -131,7 +131,7 @@ impl VTable for ByteBool {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                "ByteBoolArray expects empty metadata, got {} bytes",
+                InvalidArgument: "ByteBoolArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
@@ -141,11 +141,11 @@ impl VTable for ByteBool {
             let validity = children.get(0, &Validity::DTYPE, len)?;
             Validity::Array(validity)
         } else {
-            vortex_bail!("Expected 0 or 1 child, got {}", children.len());
+            vortex_bail!(MismatchedTypes: "Expected 0 or 1 child, got {}", children.len());
         };
 
         if buffers.len() != 1 {
-            vortex_bail!("Expected 1 buffer, got {}", buffers.len());
+            vortex_bail!(MismatchedTypes: "Expected 1 buffer, got {}", buffers.len());
         }
         let buffer = buffers[0].clone();
 

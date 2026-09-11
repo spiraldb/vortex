@@ -486,17 +486,17 @@ mod tests {
             .into_array()
             .execute::<Canonical>(&mut ctx)?
         else {
-            return Err(vortex_err!("expected canonical variant"));
+            return Err(vortex_err!(MismatchedTypes: "expected canonical variant"));
         };
 
         let core_storage = variant
             .core_storage()
             .as_opt::<ParquetVariant>()
-            .ok_or_else(|| vortex_err!("expected parquet variant core storage"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected parquet variant core storage"))?;
         assert!(core_storage.typed_value().is_none());
         let shredded = variant
             .shredded()
-            .ok_or_else(|| vortex_err!("expected canonical shredded child"))?;
+            .ok_or_else(|| vortex_err!(MismatchedTypes: "expected canonical shredded child"))?;
         assert_eq!(
             shredded.dtype(),
             &DType::Primitive(PType::I32, Nullability::Nullable)
@@ -596,10 +596,10 @@ mod tests {
         assert!(array.array_eq(&decoded, EqMode::Value));
         let decoded_pv = decoded
             .as_opt::<ParquetVariant>()
-            .ok_or_else(|| vortex_err!("expected parquet variant array"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected parquet variant array"))?;
         let typed = decoded_pv
             .typed_value()
-            .ok_or_else(|| vortex_err!("expected typed_value child"))?;
+            .ok_or_else(|| vortex_err!(MismatchedTypes: "expected typed_value child"))?;
         assert_eq!(typed.dtype(), &DType::Variant(Nullability::NonNullable));
         Ok(())
     }
@@ -619,7 +619,7 @@ mod tests {
         assert_eq!(decoded.dtype(), &DType::Variant(Nullability::Nullable));
         let decoded_pv = decoded
             .as_opt::<ParquetVariant>()
-            .ok_or_else(|| vortex_err!("expected parquet variant array"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected parquet variant array"))?;
         assert!(decoded_pv.value().is_some());
         assert!(decoded_pv.typed_value().is_none());
         Ok(())
@@ -643,10 +643,10 @@ mod tests {
         assert!(array.array_eq(&decoded, EqMode::Value));
         let decoded_pv = decoded
             .as_opt::<ParquetVariant>()
-            .ok_or_else(|| vortex_err!("expected parquet variant array"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected parquet variant array"))?;
         let typed = decoded_pv
             .typed_value()
-            .ok_or_else(|| vortex_err!("expected typed_value child"))?;
+            .ok_or_else(|| vortex_err!(MismatchedTypes: "expected typed_value child"))?;
         assert_eq!(
             typed.dtype(),
             &DType::Primitive(PType::I32, Nullability::NonNullable)

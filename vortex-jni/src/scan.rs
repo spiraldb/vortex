@@ -128,7 +128,7 @@ fn build_scan_request(
 
 fn deserialize_roaring_selection(bytes: &[u8]) -> VortexResult<roaring::RoaringTreemap> {
     if bytes.is_empty() {
-        vortex_bail!("serialized roaring row selection must not be empty");
+        vortex_bail!(Serde: "serialized roaring row selection must not be empty");
     }
     let cursor = Cursor::new(bytes);
     Ok(roaring::RoaringTreemap::deserialize_from(cursor)?)

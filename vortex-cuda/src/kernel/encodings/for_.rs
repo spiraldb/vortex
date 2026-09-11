@@ -55,7 +55,8 @@ impl CudaExecute for FoRExecutor {
         array: ArrayRef,
         ctx: &mut CudaExecutionCtx,
     ) -> VortexResult<Canonical> {
-        let array = Self::try_specialize(array).ok_or_else(|| vortex_err!("Expected FoRArray"))?;
+        let array = Self::try_specialize(array)
+            .ok_or_else(|| vortex_err!(InvalidArgument: "Expected FoRArray"))?;
 
         // Fuse FOR + BP => FFOR
         if let Some(bitpacked) = array.encoded().as_opt::<BitPacked>() {

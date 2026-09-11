@@ -93,7 +93,7 @@ impl ValueRef {
                 let cstr = unsafe { CStr::from_ptr(ptr) };
                 let string = BufferString::from(
                     cstr.to_str()
-                        .map_err(|e| vortex_err!("Invalid UTF-8 string from DuckDB: {e}"))
+                        .map_err(|e| vortex_err!(InvalidArgument: "Invalid UTF-8 string from DuckDB: {e}"))
                         .vortex_expect("Invalid UTF-8 string from DuckDB"),
                 );
                 unsafe { cpp::duckdb_free(ptr.cast()) };
@@ -279,7 +279,7 @@ impl Value {
         let crs_c = crs
             .map(CString::new)
             .transpose()
-            .map_err(|_| vortex_err!("CRS must not contain NUL bytes"))?;
+            .map_err(|_| vortex_err!(InvalidArgument: "CRS must not contain NUL bytes"))?;
         let crs_ptr = crs_c.as_ref().map_or(ptr::null(), |c| c.as_ptr());
         Ok(unsafe {
             Self::own(cpp::duckdb_vx_value_create_geometry(

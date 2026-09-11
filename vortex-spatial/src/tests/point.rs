@@ -176,7 +176,7 @@ fn roundtrips_through_arrow() -> VortexResult<()> {
     let ext = reimported
         .dtype()
         .as_extension_opt()
-        .ok_or_else(|| vortex_err!("expected Extension dtype"))?;
+        .ok_or_else(|| vortex_err!(MismatchedTypes: "expected Extension dtype"))?;
     assert_eq!(ext.metadata::<Point>().crs.as_deref(), Some("EPSG:4326"));
 
     assert_eq!(

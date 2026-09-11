@@ -276,7 +276,7 @@ where
         .and_then(|value| {
             value.cast::<T>().ok_or_else(|| {
                 vortex_err!(
-                    "decimal value cannot be represented as {} after casting to {}",
+                    InvalidArgument: "decimal value cannot be represented as {} after casting to {}",
                     T::DECIMAL_TYPE,
                     to_decimal_dtype
                 )
@@ -292,7 +292,7 @@ where
                  (from {from_decimal_dtype} to {to_decimal_dtype})"
             );
             vortex_err!(
-                "decimal value cannot be represented as {} after casting from {} to {}",
+                InvalidArgument: "decimal value cannot be represented as {} after casting from {} to {}",
                 T::DECIMAL_TYPE,
                 from_decimal_dtype,
                 to_decimal_dtype

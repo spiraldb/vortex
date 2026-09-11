@@ -131,12 +131,12 @@ pub trait PatchedArrayExt: PatchedArraySlotsExt {
         let start = start
             .as_primitive()
             .as_::<usize>()
-            .ok_or_else(|| vortex_err!("could not cast lane_offset to usize"))?;
+            .ok_or_else(|| vortex_err!(Overflow: "could not cast lane_offset to usize"))?;
 
         let stop = stop
             .as_primitive()
             .as_::<usize>()
-            .ok_or_else(|| vortex_err!("could not cast lane_offset to usize"))?;
+            .ok_or_else(|| vortex_err!(Overflow: "could not cast lane_offset to usize"))?;
 
         Ok(start..stop)
     }

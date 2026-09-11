@@ -174,7 +174,7 @@ impl VTable for ALPRD {
         let metadata = ALPRDMetadata::decode(metadata)?;
         if children.len() < 2 {
             vortex_bail!(
-                "Expected at least 2 children for ALPRD encoding, found {}",
+                InvalidArgument: "Expected at least 2 children for ALPRD encoding, found {}",
                 children.len()
             );
         }
@@ -185,8 +185,9 @@ impl VTable for ALPRD {
             [0..metadata.dict_len as usize]
             .iter()
             .map(|&i| {
-                u16::try_from(i)
-                    .map_err(|_| vortex_err!("left_parts_dictionary code {i} does not fit in u16"))
+                u16::try_from(i).map_err(
+                    |_| vortex_err!(Overflow: "left_parts_dictionary code {i} does not fit in u16"),
+                )
             })
             .try_collect()?;
 
@@ -197,7 +198,7 @@ impl VTable for ALPRD {
             DType::Primitive(PType::F64, _) => {
                 DType::Primitive(PType::U64, Nullability::NonNullable)
             }
-            _ => vortex_bail!("Expected f32 or f64 dtype, got {:?}", dtype),
+            _ => vortex_bail!(MismatchedTypes: "Expected f32 or f64 dtype, got {:?}", dtype),
         };
         let right_parts = children.get(1, &right_parts_dtype, len)?;
 
@@ -472,7 +473,7 @@ fn validate_parts(
     left_parts_patches: Option<&Patches>,
 ) -> VortexResult<()> {
     if !dtype.is_float() {
-        vortex_bail!("ALPRDArray given invalid DType ({dtype})");
+        vortex_bail!(InvalidArgument: "ALPRDArray given invalid DType ({dtype})");
     }
 
     vortex_ensure!(
@@ -487,7 +488,7 @@ fn validate_parts(
     );
 
     if !left_parts.dtype().is_unsigned_int() {
-        vortex_bail!("left_parts dtype must be uint");
+        vortex_bail!(InvalidArgument: "left_parts dtype must be uint");
     }
     if dtype.is_nullable() != left_parts.dtype().is_nullable() {
         vortex_bail!(
@@ -500,7 +501,7 @@ fn validate_parts(
     let expected_right_parts_dtype = match dtype {
         DType::Primitive(PType::F32, _) => DType::Primitive(PType::U32, Nullability::NonNullable),
         DType::Primitive(PType::F64, _) => DType::Primitive(PType::U64, Nullability::NonNullable),
-        _ => vortex_bail!("Expected f32 or f64 dtype, got {:?}", dtype),
+        _ => vortex_bail!(MismatchedTypes: "Expected f32 or f64 dtype, got {:?}", dtype),
     };
     vortex_ensure!(
         right_parts.dtype() == &expected_right_parts_dtype,

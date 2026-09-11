@@ -99,10 +99,10 @@ pub(crate) fn multilinestring_storage_dtype(dim: Dimension, nullability: Nullabi
 /// Validate `dtype` is `List<List<coordinate-struct>>` and return its [`Dimension`].
 pub(crate) fn multilinestring_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::List(line, _) = dtype else {
-        vortex_bail!("multilinestring storage must be a List of line strings, was {dtype}");
+        vortex_bail!(MismatchedTypes: "multilinestring storage must be a List of line strings, was {dtype}");
     };
     let DType::List(coords, _) = line.as_ref() else {
-        vortex_bail!("multilinestring line storage must be a List of coordinates, was {line}");
+        vortex_bail!(MismatchedTypes: "multilinestring line storage must be a List of coordinates, was {line}");
     };
     coordinate_dimension(coords)
 }
@@ -126,7 +126,9 @@ pub(crate) fn multilinestring_geometries(
         .iter()
         .map(|geometry| -> VortexResult<Geometry<f64>> {
             Ok(geometry
-                .ok_or_else(|| vortex_err!("spatial: null geometry is not supported"))?
+                .ok_or_else(
+                    || vortex_err!(InvalidArgument: "spatial: null geometry is not supported"),
+                )?
                 .map_err(|e| vortex_err!("spatial: geometry access failed: {e}"))?
                 .to_geometry())
         })

@@ -47,7 +47,7 @@ impl ExtVTable for DivisibleInt {
         vortex_ensure!(data.len() == 8, "divisible int metadata must be 8 bytes");
         let bytes: [u8; 8] = data
             .try_into()
-            .map_err(|_| vortex_error::vortex_err!("divisible int metadata must be 8 bytes"))?;
+            .map_err(|_| vortex_error::vortex_err!(InvalidArgument: "divisible int metadata must be 8 bytes"))?;
         let n = u64::from_le_bytes(bytes);
         vortex_ensure!(n > 0, "divisor must be greater than 0");
         Ok(Divisor(n))

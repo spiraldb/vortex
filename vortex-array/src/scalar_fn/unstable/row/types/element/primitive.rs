@@ -33,7 +33,7 @@ unsafe impl<T: NativePType> InputElement for T {
     fn validate(dtype: &DType) -> VortexResult<()> {
         let expected = T::PTYPE;
         let DType::Primitive(ptype, _) = dtype else {
-            vortex_bail!("expected a {expected} column, got {dtype}");
+            vortex_bail!(MismatchedTypes: "expected a {expected} column, got {dtype}");
         };
         vortex_ensure_eq!(
             *ptype,

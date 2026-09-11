@@ -107,7 +107,8 @@ impl CudaExecute for FSSTExecutor {
         array: ArrayRef,
         ctx: &mut CudaExecutionCtx,
     ) -> VortexResult<Canonical> {
-        let fsst = Self::try_specialize(array).ok_or_else(|| vortex_err!("Expected FSSTArray"))?;
+        let fsst = Self::try_specialize(array)
+            .ok_or_else(|| vortex_err!(InvalidArgument: "Expected FSSTArray"))?;
 
         let dtype = fsst.dtype().clone();
         let validity = fsst.codes().validity()?;

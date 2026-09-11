@@ -167,11 +167,11 @@ impl VTable for List {
             let validity = children.get(2, &Validity::DTYPE, len)?;
             Validity::Array(validity)
         } else {
-            vortex_bail!("Expected 2 or 3 children, got {}", children.len());
+            vortex_bail!(MismatchedTypes: "Expected 2 or 3 children, got {}", children.len());
         };
 
         let DType::List(element_dtype, _) = &dtype else {
-            vortex_bail!("Expected List dtype, got {:?}", dtype);
+            vortex_bail!(MismatchedTypes: "Expected List dtype, got {:?}", dtype);
         };
         let elements = children.get(
             0,

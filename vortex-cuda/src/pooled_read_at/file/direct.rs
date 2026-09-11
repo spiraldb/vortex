@@ -117,18 +117,18 @@ fn direct_io_range(offset: u64, length: usize, alignment: usize) -> VortexResult
 
     let alignment_u64 = u64::try_from(alignment)?;
     let length_u64 = u64::try_from(length)?;
-    let requested_end = offset.checked_add(length_u64).ok_or_else(|| {
-        vortex_err!("direct I/O range overflow: offset={offset}, length={length}")
-    })?;
+    let requested_end = offset.checked_add(length_u64).ok_or_else(
+        || vortex_err!(Overflow: "direct I/O range overflow: offset={offset}, length={length}"),
+    )?;
     let read_offset = offset - offset % alignment_u64;
     let read_end = requested_end
         .checked_next_multiple_of(alignment_u64)
-        .ok_or_else(|| vortex_err!("direct I/O aligned end overflow"))?;
+        .ok_or_else(|| vortex_err!(Overflow: "direct I/O aligned end overflow"))?;
     let read_length = usize::try_from(read_end - read_offset)?;
     let slice_start = usize::try_from(offset - read_offset)?;
-    let slice_end = slice_start.checked_add(length).ok_or_else(|| {
-        vortex_err!("direct I/O range overflow: offset={offset}, length={length}")
-    })?;
+    let slice_end = slice_start.checked_add(length).ok_or_else(
+        || vortex_err!(Overflow: "direct I/O range overflow: offset={offset}, length={length}"),
+    )?;
 
     Ok(DirectIoRange {
         read_offset,

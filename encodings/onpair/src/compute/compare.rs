@@ -220,7 +220,7 @@ mod tests {
         let mut ctx = SESSION.create_execution_ctx();
         let arr = onpair_compress(input.as_array(), DEFAULT_CONFIG, &mut ctx)?
             .try_downcast::<OnPair>()
-            .map_err(|array| vortex_err!("expected OnPair array, got {}", array.encoding_id()))?;
+            .map_err(|array| vortex_err!(MismatchedTypes: "expected OnPair array, got {}", array.encoding_id()))?;
         let rhs = ConstantArray::new("hello", arr.len()).into_array();
 
         let eq =

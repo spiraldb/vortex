@@ -261,7 +261,7 @@ fn validate_output_label(
 
     let DType::Extension(output_label) = output_dtype else {
         vortex_bail!(
-            "a declared row output dtype must be an extension dtype over the storage dtype \
+            InvalidArgument: "a declared row output dtype must be an extension dtype over the storage dtype \
              {storage_dtype}, got {output_dtype}",
         );
     };

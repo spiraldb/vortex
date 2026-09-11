@@ -169,7 +169,7 @@ impl ScalarFnVTable for JsonToVariant {
         // looping.
         let no_kernel = || {
             vortex_err!(
-                "json_to_variant requires a registered Variant encoding to build Variant values \
+                InvalidArgument: "json_to_variant requires a registered Variant encoding to build Variant values \
                  from JSON, but none is registered with this session"
             )
         };
@@ -185,7 +185,7 @@ impl ScalarFnVTable for JsonToVariant {
             input.execute::<ExtensionArray>(ctx)?.into_array()
         } else {
             vortex_bail!(
-                "JsonToVariant input must be a Json extension, found {}",
+                InvalidArgument: "JsonToVariant input must be a Json extension, found {}",
                 input.dtype()
             );
         };

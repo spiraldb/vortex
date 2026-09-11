@@ -223,7 +223,7 @@ fn scalar_from_shredded_object_scalar(
         let unshredded = scalar_from_unshredded_value(metadata, &value)?;
         if !unshredded.is_null() {
             let Some(unshredded) = unshredded.as_struct_opt() else {
-                vortex_bail!("Variant typed_value must be object if typed_value is a struct");
+                vortex_bail!(InvalidArgument: "Variant typed_value must be object if typed_value is a struct");
             };
             for name in unshredded.names().iter() {
                 if names

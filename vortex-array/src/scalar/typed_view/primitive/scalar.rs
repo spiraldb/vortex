@@ -181,7 +181,7 @@ impl<'a> PrimitiveScalar<'a> {
                 *decimal_dtype,
                 *nullability,
             )),
-            _ => vortex_bail!("Cannot cast primitive scalar to {dtype}"),
+            _ => vortex_bail!(MismatchedTypes: "Cannot cast primitive scalar to {dtype}"),
         }
     }
 
@@ -290,7 +290,7 @@ fn pvalue_to_decimal(pvalue: PValue, decimal_dtype: DecimalDType) -> VortexResul
         PValue::I32(v) => i256::from_i128(i128::from(v)),
         PValue::I64(v) => i256::from_i128(i128::from(v)),
         PValue::F16(_) | PValue::F32(_) | PValue::F64(_) => {
-            vortex_bail!("Cannot cast floating primitive {pvalue} to decimal {decimal_dtype}")
+            vortex_bail!(MismatchedTypes: "Cannot cast floating primitive {pvalue} to decimal {decimal_dtype}")
         }
     };
 

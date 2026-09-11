@@ -160,7 +160,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
     pub fn append_n_values(&mut self, value: impl AsRef<[u8]>, n: usize) -> VortexResult<()> {
         let value = value.as_ref();
         let Some(num_bytes) = value.len().checked_mul(n) else {
-            vortex_bail!("Byte count overflow: {} values of {} bytes", n, value.len());
+            vortex_bail!(Overflow: "Byte count overflow: {} values of {} bytes", n, value.len());
         };
         // Checking the total up front is what keeps `push_value` below from panicking.
         self.check_offset_limit(self.data.len(), num_bytes)?;
@@ -282,7 +282,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
         usize: AsPrimitive<O>,
     {
         let Some(capacity) = num_bytes.checked_add(slack) else {
-            vortex_bail!("Decoded size overflow: {num_bytes} + {slack}");
+            vortex_bail!(Overflow: "Decoded size overflow: {num_bytes} + {slack}");
         };
         // Checked before decoding: an `i32` builder that the decoded bytes would overflow should
         // not pay for the decompression first.
@@ -603,7 +603,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
     /// Checks that an offset past `num_bytes` more bytes is representable as an `O`.
     fn check_offset_limit(&self, data_start: usize, num_bytes: usize) -> VortexResult<()> {
         let Some(limit) = data_start.checked_add(num_bytes) else {
-            vortex_bail!("Byte offset overflow: {data_start} + {num_bytes}");
+            vortex_bail!(Overflow: "Byte offset overflow: {data_start} + {num_bytes}");
         };
         vortex_ensure!(
             u64::try_from(limit).is_ok_and(|limit| limit <= O::max_value_as_u64()),

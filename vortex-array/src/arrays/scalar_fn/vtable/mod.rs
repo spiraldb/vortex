@@ -155,7 +155,7 @@ impl VTable for ScalarFn {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("Deserialization of ScalarFnVTable metadata is not supported");
+        vortex_bail!(Serde: "Deserialization of ScalarFnVTable metadata is not supported");
     }
 
     fn slot_name(array: ArrayView<'_, Self>, idx: usize) -> String {

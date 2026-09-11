@@ -39,7 +39,7 @@ impl ExtVTable for FixedShapeTensor {
         let storage_dtype = ext_dtype.storage_dtype();
         let DType::FixedSizeList(element_dtype, list_size, _nullability) = storage_dtype else {
             vortex_bail!(
-                "FixedShapeTensor storage dtype must be a FixedSizeList, got {storage_dtype}"
+                InvalidArgument: "FixedShapeTensor storage dtype must be a FixedSizeList, got {storage_dtype}"
             );
         };
 

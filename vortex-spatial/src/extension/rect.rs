@@ -140,7 +140,7 @@ pub(crate) fn box_storage_dtype(dim: Dimension, nullability: Nullability) -> DTy
 /// [`Dimension`].
 pub(crate) fn box_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::Struct(fields, _) = dtype else {
-        vortex_bail!("box storage must be a Struct, was {dtype}");
+        vortex_bail!(MismatchedTypes: "box storage must be a Struct, was {dtype}");
     };
     for (name, field) in fields.names().iter().zip(fields.fields()) {
         vortex_ensure!(
@@ -198,7 +198,9 @@ pub(crate) fn rect_geometries(
         .iter()
         .map(|geometry| -> VortexResult<Geometry<f64>> {
             Ok(geometry
-                .ok_or_else(|| vortex_err!("spatial: null geometry is not supported"))?
+                .ok_or_else(
+                    || vortex_err!(InvalidArgument: "spatial: null geometry is not supported"),
+                )?
                 .map_err(|e| vortex_err!("spatial: geometry access failed: {e}"))?
                 .to_geometry())
         })

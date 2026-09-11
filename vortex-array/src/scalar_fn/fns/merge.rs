@@ -70,7 +70,7 @@ impl ScalarFnVTable for Merge {
             [0x00] => DuplicateHandling::RightMost,
             [0x01] => DuplicateHandling::Error,
             _ => {
-                vortex_bail!("invalid metadata for Merge expression");
+                vortex_bail!(InvalidArgument: "invalid metadata for Merge expression");
             }
         };
         Ok(instance)
@@ -92,10 +92,10 @@ impl ScalarFnVTable for Merge {
 
         for dtype in arg_dtypes {
             let Some(fields) = dtype.as_struct_fields_opt() else {
-                vortex_bail!("merge expects struct input");
+                vortex_bail!(InvalidArgument: "merge expects struct input");
             };
             if dtype.is_nullable() {
-                vortex_bail!("merge expects non-nullable input");
+                vortex_bail!(InvalidArgument: "merge expects non-nullable input");
             }
 
             merge_nullability |= dtype.nullability();
@@ -138,7 +138,7 @@ impl ScalarFnVTable for Merge {
         for i in 0..args.num_inputs() {
             let array = args.get(i)?.execute::<StructArray>(ctx)?;
             if array.dtype().is_nullable() {
-                vortex_bail!("merge expects non-nullable input");
+                vortex_bail!(InvalidArgument: "merge expects non-nullable input");
             }
 
             for (field_name, field_array) in array

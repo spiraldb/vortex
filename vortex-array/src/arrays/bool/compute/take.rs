@@ -149,10 +149,9 @@ fn take_bit_slices_constant_length<S>(
 where
     S: UnsignedPType,
 {
-    let computed_len = starts
-        .len()
-        .checked_mul(length)
-        .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
+    let computed_len = starts.len().checked_mul(length).ok_or_else(
+        || vortex_err!(Overflow: "PiecewiseSequenceArray output length overflows usize"),
+    )?;
     vortex_ensure!(
         computed_len == output_len,
         "PiecewiseSequenceArray expanded length {computed_len} does not match declared length {output_len}"

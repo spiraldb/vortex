@@ -96,9 +96,9 @@ impl TryFrom<&Scalar> for DecimalValue {
     type Error = VortexError;
 
     fn try_from(scalar: &Scalar) -> Result<Self, Self::Error> {
-        let decimal_scalar = scalar
-            .as_decimal_opt()
-            .ok_or_else(|| vortex_err!("Expected decimal scalar, found {}", scalar.dtype()))?;
+        let decimal_scalar = scalar.as_decimal_opt().ok_or_else(
+            || vortex_err!(MismatchedTypes: "Expected decimal scalar, found {}", scalar.dtype()),
+        )?;
 
         decimal_scalar
             .decimal_value()
@@ -122,7 +122,7 @@ impl TryFrom<&Scalar> for Option<DecimalValue> {
     fn try_from(scalar: &Scalar) -> Result<Self, Self::Error> {
         Ok(scalar
             .as_decimal_opt()
-            .ok_or_else(|| vortex_err!("Expected decimal scalar, found {}", scalar.dtype()))?
+            .ok_or_else(|| vortex_err!(MismatchedTypes: "Expected decimal scalar, found {}", scalar.dtype()))?
             .decimal_value())
     }
 }

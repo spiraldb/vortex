@@ -122,7 +122,7 @@ pub fn search_sorted_canonical_array(
                     .decimal_value()
                     .map(|v| {
                         v.cast::<D>().ok_or_else(|| {
-                            vortex_err!("cannot cast value {v} to decimal value type {d}")
+                            vortex_err!(MismatchedTypes: "cannot cast value {v} to decimal value type {d}")
                         })
                     })
                     .transpose()?

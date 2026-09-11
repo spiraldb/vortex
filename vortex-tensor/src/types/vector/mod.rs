@@ -23,7 +23,7 @@ use vortex_error::vortex_ensure;
 /// elements. The outer nullability is not constrained.
 pub(crate) fn validate_vector_storage_dtype(storage: &DType) -> VortexResult<()> {
     let DType::FixedSizeList(element_dtype, _list_size, _nullability) = storage else {
-        vortex_bail!("Vector storage dtype must be a FixedSizeList, got {storage}");
+        vortex_bail!(InvalidArgument: "Vector storage dtype must be a FixedSizeList, got {storage}");
     };
 
     vortex_ensure!(

@@ -66,7 +66,7 @@ fn collect_dtype(dtypes: &[DType]) -> VortexResult<ExtDTypeRef> {
         dtypes.len()
     );
     let DType::List(element_dtype, nullability) = &dtypes[0] else {
-        vortex_bail!("spatial: collect operand {} is not a list", dtypes[0]);
+        vortex_bail!(MismatchedTypes: "spatial: collect operand {} is not a list", dtypes[0]);
     };
     // Execution ignores null list elements, so the result's element storage is non-nullable.
     let multi_storage = |element: &ExtDTypeRef| {

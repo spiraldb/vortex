@@ -188,7 +188,7 @@ pub(crate) fn row_width_for_dtype(dtype: &DType) -> VortexResult<RowWidth> {
         DType::Decimal(dt, _) => {
             let vt = decimal_key_type(dt);
             if matches!(vt, DecimalType::I256) {
-                vortex_bail!("row encoding for Decimal256 is not yet implemented");
+                vortex_bail!(NotImplemented: "row encoding for Decimal256 is not yet implemented");
             }
             Ok(RowWidth::Fixed(encoded_size_for_fixed(byte_width_u32(
                 vt.byte_width(),
@@ -199,12 +199,12 @@ pub(crate) fn row_width_for_dtype(dtype: &DType) -> VortexResult<RowWidth> {
             // FSL is fixed iff its element type is fixed. Add a sentinel byte for the FSL
             // itself, then `n` copies of the element width.
             RowWidth::Fixed(w) => {
-                let body = w
-                    .checked_mul(*n)
-                    .ok_or_else(|| vortex_error::vortex_err!("FSL row width overflows u32"))?;
-                let total = body
-                    .checked_add(1)
-                    .ok_or_else(|| vortex_error::vortex_err!("FSL row width overflows u32"))?;
+                let body = w.checked_mul(*n).ok_or_else(
+                    || vortex_error::vortex_err!(Overflow: "FSL row width overflows u32"),
+                )?;
+                let total = body.checked_add(1).ok_or_else(
+                    || vortex_error::vortex_err!(Overflow: "FSL row width overflows u32"),
+                )?;
                 Ok(RowWidth::Fixed(total))
             }
             RowWidth::Variable => Ok(RowWidth::Variable),
@@ -216,7 +216,7 @@ pub(crate) fn row_width_for_dtype(dtype: &DType) -> VortexResult<RowWidth> {
                 match row_width_for_dtype(&field_dtype)? {
                     RowWidth::Fixed(w) => {
                         total = total.checked_add(w).ok_or_else(|| {
-                            vortex_error::vortex_err!("Struct row width overflows u32")
+                            vortex_error::vortex_err!(Overflow: "Struct row width overflows u32")
                         })?;
                     }
                     RowWidth::Variable => return Ok(RowWidth::Variable),
@@ -226,14 +226,16 @@ pub(crate) fn row_width_for_dtype(dtype: &DType) -> VortexResult<RowWidth> {
         }
         DType::List(..) | DType::Map(..) => {
             vortex_bail!(
-                "row encoding does not support variable-size List or Map arrays (no well-defined ordering)"
+                InvalidArgument: "row encoding does not support variable-size List or Map arrays (no well-defined ordering)"
             )
         }
         DType::Variant(_) => {
-            vortex_bail!("row encoding does not support Variant arrays (no well-defined ordering)")
+            vortex_bail!(InvalidArgument: "row encoding does not support Variant arrays (no well-defined ordering)")
         }
-        DType::Union(..) => vortex_bail!("row encoding does not support Union arrays"),
-        dtype => vortex_bail!("row encoding does not support dtype: {dtype:?}"),
+        DType::Union(..) => {
+            vortex_bail!(InvalidArgument: "row encoding does not support Union arrays")
+        }
+        dtype => vortex_bail!(InvalidArgument: "row encoding does not support dtype: {dtype:?}"),
     }
 }
 
@@ -260,15 +262,15 @@ pub(crate) fn field_size(
         Canonical::Struct(arr) => add_size_struct(arr, field, sizes, ctx)?,
         Canonical::FixedSizeList(arr) => add_size_fsl(arr, field, sizes, ctx)?,
         Canonical::List(_) => vortex_bail!(
-            "row encoding does not support canonical List arrays: {:?}",
+            InvalidArgument: "row encoding does not support canonical List arrays: {:?}",
             canonical.dtype()
         ),
         Canonical::Variant(_) => {
-            vortex_bail!("row encoding does not support Variant arrays (no well-defined ordering)")
+            vortex_bail!(InvalidArgument: "row encoding does not support Variant arrays (no well-defined ordering)")
         }
         unsupported => {
             vortex_bail!(
-                "row encoding does not support canonical array: {:?}",
+                InvalidArgument: "row encoding does not support canonical array: {:?}",
                 unsupported.dtype()
             )
         }
@@ -352,15 +354,15 @@ pub(crate) fn field_encode(
         Canonical::Struct(arr) => encode_struct(arr, field, offsets, cursors, out, ctx)?,
         Canonical::FixedSizeList(arr) => encode_fsl(arr, field, offsets, cursors, out, ctx)?,
         Canonical::List(_) => vortex_bail!(
-            "row encoding does not support canonical List arrays: {:?}",
+            InvalidArgument: "row encoding does not support canonical List arrays: {:?}",
             canonical.dtype()
         ),
         Canonical::Variant(_) => {
-            vortex_bail!("row encoding does not support Variant arrays (no well-defined ordering)")
+            vortex_bail!(InvalidArgument: "row encoding does not support Variant arrays (no well-defined ordering)")
         }
         unsupported => {
             vortex_bail!(
-                "row encoding does not support canonical array: {:?}",
+                InvalidArgument: "row encoding does not support canonical array: {:?}",
                 unsupported.dtype()
             )
         }
@@ -663,7 +665,7 @@ fn encode_decimal(
             encode_decimal_typed::<i128>(arr, &mask, field, row_offsets, col_offset, out)
         }
         DecimalType::I256 => {
-            vortex_bail!("row encoding for Decimal256 is not yet implemented")
+            vortex_bail!(NotImplemented: "row encoding for Decimal256 is not yet implemented")
         }
     }
 }

@@ -188,7 +188,7 @@ impl VTable for BitPacked {
     ) -> VortexResult<ArrayParts<Self>> {
         let metadata = BitPackedMetadata::decode(metadata)?;
         if buffers.len() != 1 {
-            vortex_bail!("Expected 1 buffer, got {}", buffers.len());
+            vortex_bail!(MismatchedTypes: "Expected 1 buffer, got {}", buffers.len());
         }
         let packed = buffers[0].clone();
 
@@ -200,7 +200,7 @@ impl VTable for BitPacked {
                 Ok(Validity::Array(validity))
             } else {
                 vortex_bail!(
-                    "Expected {} or {} children, got {}",
+                    MismatchedTypes: "Expected {} or {} children, got {}",
                     child_idx,
                     child_idx + 1,
                     children.len()
@@ -241,13 +241,13 @@ impl VTable for BitPacked {
             patches,
             u8::try_from(metadata.bit_width).map_err(|_| {
                 vortex_err!(
-                    "BitPackedMetadata bit_width {} does not fit in u8",
+                    Overflow: "BitPackedMetadata bit_width {} does not fit in u8",
                     metadata.bit_width
                 )
             })?,
             u16::try_from(metadata.offset).map_err(|_| {
                 vortex_err!(
-                    "BitPackedMetadata offset {} does not fit in u16",
+                    Overflow: "BitPackedMetadata offset {} does not fit in u16",
                     metadata.offset
                 )
             })?,

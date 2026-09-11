@@ -551,11 +551,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!("expected patches"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
             .clone()
             .execute::<PrimitiveArray>(&mut ctx)?;
 
@@ -587,11 +587,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!("expected patches"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
             .clone()
             .execute::<PrimitiveArray>(&mut ctx)?;
 
@@ -619,11 +619,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!("expected patches"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
             .clone()
             .execute::<PrimitiveArray>(&mut ctx)?;
 
@@ -656,11 +656,11 @@ mod test {
 
         let patches = bitpacked
             .patches()
-            .ok_or_else(|| vortex_err!("expected patches"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected patches"))?;
         let chunk_offsets = patches
             .chunk_offsets()
             .as_ref()
-            .ok_or_else(|| vortex_err!("expected chunk offsets"))?
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected chunk offsets"))?
             .clone()
             .execute::<PrimitiveArray>(&mut ctx)?;
 

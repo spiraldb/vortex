@@ -106,7 +106,7 @@ pub(crate) fn linestring_storage_dtype(dim: Dimension, nullability: Nullability)
 /// Validate `dtype` is `List<coordinate-struct>` and return its [`Dimension`].
 pub(crate) fn linestring_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::List(coords, _) = dtype else {
-        vortex_bail!("linestring storage must be a List of coordinates, was {dtype}");
+        vortex_bail!(MismatchedTypes: "linestring storage must be a List of coordinates, was {dtype}");
     };
     coordinate_dimension(coords)
 }
@@ -139,11 +139,11 @@ pub(crate) fn linestring_array_from_point_pairs(
     );
     let vertex_count = len
         .checked_mul(2)
-        .ok_or_else(|| vortex_err!("spatial: two-vertex line string length overflow"))?;
+        .ok_or_else(|| vortex_err!(Overflow: "spatial: two-vertex line string length overflow"))?;
     let last_offset = i32::try_from(vertex_count)
-        .map_err(|_| vortex_err!("spatial: two-vertex line string offset overflow"))?;
+        .map_err(|_| vortex_err!(Overflow: "spatial: two-vertex line string offset overflow"))?;
     let row_count = u32::try_from(len)
-        .map_err(|_| vortex_err!("spatial: two-vertex line string row count overflow"))?;
+        .map_err(|_| vortex_err!(Overflow: "spatial: two-vertex line string row count overflow"))?;
     let dimension = linestring_dimension(ext_dtype.storage_dtype())?;
     let start_dimension = coordinate_dimension(starts.dtype())?;
     let end_dimension = coordinate_dimension(ends.dtype())?;
@@ -199,7 +199,9 @@ pub(crate) fn linestring_geometries(
         .iter()
         .map(|geometry| -> VortexResult<Geometry<f64>> {
             Ok(geometry
-                .ok_or_else(|| vortex_err!("spatial: null geometry is not supported"))?
+                .ok_or_else(
+                    || vortex_err!(InvalidArgument: "spatial: null geometry is not supported"),
+                )?
                 .map_err(|e| vortex_err!("spatial: geometry access failed: {e}"))?
                 .to_geometry())
         })

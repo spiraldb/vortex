@@ -136,7 +136,7 @@ impl VTable for FoR {
         );
         if children.len() != 1 {
             vortex_bail!(
-                "Expected 1 child for FoR encoding, found {}",
+                InvalidArgument: "Expected 1 child for FoR encoding, found {}",
                 children.len()
             )
         }

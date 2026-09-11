@@ -74,7 +74,7 @@ impl VTable for Map {
         );
 
         let DType::Map(map_dtype, nullability) = dtype else {
-            vortex_bail!("Expected map dtype, got {dtype}");
+            vortex_bail!(MismatchedTypes: "Expected map dtype, got {dtype}");
         };
         let slots = MapSlotsView::from_slots(slots);
         validate_entries(map_dtype, *nullability, len, slots.entries)
@@ -118,14 +118,14 @@ impl VTable for Map {
     ) -> VortexResult<ArrayParts<Self>> {
         if !metadata.is_empty() {
             vortex_bail!(
-                "MapArray expects empty metadata, got {} bytes",
+                InvalidArgument: "MapArray expects empty metadata, got {} bytes",
                 metadata.len()
             );
         }
         vortex_ensure!(buffers.is_empty(), "MapArray expects no buffers");
 
         let DType::Map(map_dtype, nullability) = dtype else {
-            vortex_bail!("Expected map dtype, got {dtype}");
+            vortex_bail!(MismatchedTypes: "Expected map dtype, got {dtype}");
         };
         vortex_ensure!(
             children.len() == MapSlots::COUNT,

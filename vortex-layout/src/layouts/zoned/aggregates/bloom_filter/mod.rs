@@ -109,8 +109,9 @@ impl BloomOptions {
         let hash_fn = HashFn::try_from(u32::from_le_bytes(chunks[1]))?;
 
         Ok(Self {
-            blocks_count: NonZeroU32::new(blocks_count)
-                .ok_or_else(|| vortex_err!("bloom blocks length must be non-zero"))?,
+            blocks_count: NonZeroU32::new(blocks_count).ok_or_else(
+                || vortex_err!(InvalidArgument: "bloom blocks length must be non-zero"),
+            )?,
             hash_fn,
         })
     }
@@ -410,7 +411,7 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
         let bytes = state
             .as_binary()
             .value()
-            .ok_or_else(|| vortex_err!("bloom state must be non-null"))?;
+            .ok_or_else(|| vortex_err!(InvalidArgument: "bloom state must be non-null"))?;
 
         let bloom_filter = BloomPartial::deserialize(bytes.as_slice())?;
 

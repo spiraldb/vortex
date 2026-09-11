@@ -154,7 +154,7 @@ impl Display for Coordinate {
 /// [`Dimension`]. Any of the four GeoArrow dimensions validates.
 pub(crate) fn coordinate_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::Struct(fields, _) = dtype else {
-        vortex_bail!("coordinate storage must be a Struct, was {dtype}");
+        vortex_bail!(MismatchedTypes: "coordinate storage must be a Struct, was {dtype}");
     };
     for (name, field) in fields.names().iter().zip(fields.fields()) {
         vortex_ensure!(

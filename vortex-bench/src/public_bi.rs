@@ -152,8 +152,9 @@ impl PBIDatasets {
                     .into_string()
                     .map_err(|e| vortex_err!("Not a unicode name: {e:?}"))?;
                 Ok((
-                    <PBIDataset as ValueEnum>::from_str(name.trim(), true)
-                        .map_err(|_e| vortex_err!("unsupported dataset: {} {_e}", &name))?,
+                    <PBIDataset as ValueEnum>::from_str(name.trim(), true).map_err(
+                        |_e| vortex_err!(InvalidArgument: "unsupported dataset: {} {_e}", &name),
+                    )?,
                     PBIBenchmark {
                         name,
                         base_path: path.path(),
@@ -167,7 +168,7 @@ impl PBIDatasets {
     pub fn get(&self, dataset: PBIDataset) -> &PBIBenchmark {
         self.benchmarks
             .get(&dataset)
-            .ok_or_else(|| vortex_err!("{:?} not found", dataset))
+            .ok_or_else(|| vortex_err!(NotFound: "{:?} not found", dataset))
             .unwrap()
     }
 }

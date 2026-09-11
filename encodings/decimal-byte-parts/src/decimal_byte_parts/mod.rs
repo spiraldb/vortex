@@ -88,7 +88,7 @@ impl VTable for DecimalByteParts {
         slots: &[Option<ArrayRef>],
     ) -> VortexResult<()> {
         let Some(decimal_dtype) = dtype.as_decimal_opt() else {
-            vortex_bail!("expected decimal dtype, got {}", dtype)
+            vortex_bail!(MismatchedTypes: "expected decimal dtype, got {}", dtype)
         };
         let msp = DecimalBytePartsSlotsView::from_slots(slots).msp;
         DecimalBytePartsData::validate(msp, *decimal_dtype, dtype, len)
@@ -210,7 +210,7 @@ impl DecimalBytePartsData {
         len: usize,
     ) -> VortexResult<()> {
         if !msp.dtype().is_signed_int() {
-            vortex_bail!("decimal bytes parts, first part must be a signed array")
+            vortex_bail!(InvalidArgument: "decimal bytes parts, first part must be a signed array")
         }
 
         let expected_dtype = DType::Decimal(decimal_dtype, msp.dtype().nullability());

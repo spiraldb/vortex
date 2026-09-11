@@ -192,7 +192,7 @@ impl VTable for StackParent {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("StackParent cannot be deserialized")
+        vortex_bail!(Serde: "StackParent cannot be deserialized")
     }
 
     fn with_buffers(
@@ -301,7 +301,7 @@ impl VTable for StackChild {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("StackChild cannot be deserialized")
+        vortex_bail!(Serde: "StackChild cannot be deserialized")
     }
 
     fn with_buffers(

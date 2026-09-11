@@ -214,17 +214,20 @@ impl ExtVTable for Timestamp {
                 Span::new().seconds(ts_value),
                 TimestampValue::Seconds(ts_value, tz),
             ),
-            TimeUnit::Days => vortex_bail!("Timestamp does not support Days time unit"),
+            TimeUnit::Days => {
+                vortex_bail!(InvalidArgument: "Timestamp does not support Days time unit")
+            }
         };
 
         // Validate the storage value is within the valid range for Timestamp.
         let ts = jiff::Timestamp::UNIX_EPOCH
             .checked_add(span)
-            .map_err(|e| vortex_err!("Invalid timestamp scalar: {}", e))?;
+            .map_err(|e| vortex_err!(InvalidArgument: "Invalid timestamp scalar: {}", e))?;
 
         if let Some(tz) = tz {
-            ts.in_tz(tz.as_ref())
-                .map_err(|e| vortex_err!("Invalid timezone for timestamp scalar: {}", e))?;
+            ts.in_tz(tz.as_ref()).map_err(
+                |e| vortex_err!(InvalidArgument: "Invalid timezone for timestamp scalar: {}", e),
+            )?;
         }
 
         Ok(value)

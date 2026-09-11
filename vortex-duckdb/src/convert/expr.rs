@@ -86,7 +86,9 @@ use crate::projection::DuckdbField;
 fn from_bound_str(value: &duckdb::ExpressionRef) -> VortexResult<String> {
     match value.as_class().vortex_expect("unknown class") {
         BoundConstant(constant) => Ok(constant.value.as_string().as_str().to_owned()),
-        _ => vortex_bail!("Expected string expression, got {:?}", value.as_class_id()),
+        _ => {
+            vortex_bail!(MismatchedTypes: "Expected string expression, got {:?}", value.as_class_id())
+        }
     }
 }
 
@@ -755,14 +757,16 @@ impl TryFrom<DUCKDB_VX_EXPR_TYPE> for Operator {
 
     fn try_from(value: DUCKDB_VX_EXPR_TYPE) -> VortexResult<Self> {
         Ok(match value {
-            DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_INVALID => vortex_bail!("invalid expression"),
+            DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_INVALID => {
+                vortex_bail!(InvalidArgument: "invalid expression")
+            }
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_EQUAL => Operator::Eq,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_NOTEQUAL => Operator::NotEq,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_LESSTHAN => Operator::Lt,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_GREATERTHAN => Operator::Gt,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_LESSTHANOREQUALTO => Operator::Lte,
             DUCKDB_VX_EXPR_TYPE::DUCKDB_VX_EXPR_TYPE_COMPARE_GREATERTHANOREQUALTO => Operator::Gte,
-            _ => vortex_bail!("cannot convert {:?}", value),
+            _ => vortex_bail!(MismatchedTypes: "cannot convert {:?}", value),
         })
     }
 }

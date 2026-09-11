@@ -109,7 +109,7 @@ impl VTable for PythonVTable {
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
         _ = bytes;
-        vortex_bail!("PythonArray deserialization is not supported");
+        vortex_bail!(Serde: "PythonArray deserialization is not supported");
     }
 
     fn slot_name(_array: ArrayView<'_, Self>, _idx: usize) -> String {

@@ -63,7 +63,7 @@ impl CudaExecute for DictExecutor {
             DType::Decimal(..) => execute_dict_decimal(dict_array, ctx).await,
             DType::Primitive(..) => execute_dict_prim(dict_array, ctx).await,
             DType::Utf8(..) | DType::Binary(..) => execute_dict_varbinview(dict_array, ctx).await,
-            dt => vortex_bail!("unsupported decompress for DType={dt}"),
+            dt => vortex_bail!(InvalidArgument: "unsupported decompress for DType={dt}"),
         }
     }
 }

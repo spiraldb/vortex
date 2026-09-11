@@ -48,8 +48,8 @@ impl CudaExecute for ZigZagExecutor {
         array: ArrayRef,
         ctx: &mut CudaExecutionCtx,
     ) -> VortexResult<Canonical> {
-        let array =
-            Self::try_specialize(array).ok_or_else(|| vortex_err!("Expected ZigZagArray"))?;
+        let array = Self::try_specialize(array)
+            .ok_or_else(|| vortex_err!(InvalidArgument: "Expected ZigZagArray"))?;
 
         // The encoded array is unsigned, we decode to signed of the same width.
         let encoded_ptype = array.encoded().dtype().as_ptype();

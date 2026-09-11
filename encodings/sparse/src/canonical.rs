@@ -346,7 +346,9 @@ pub(super) fn execute_sparse(parts: SparseParts, ctx: &mut ExecutionCtx) -> Vort
         DType::FixedSizeList(.., nullability) => {
             execute_sparse_fixed_size_list(&patches, &fill_value, len, *nullability, ctx)?
         }
-        DType::Map(..) => vortex_bail!("Sparse canonicalization does not support Map arrays yet"),
+        DType::Map(..) => {
+            vortex_bail!(InvalidArgument: "Sparse canonicalization does not support Map arrays yet")
+        }
         DType::Struct(struct_fields, ..) => execute_sparse_struct(
             struct_fields,
             fill_value.as_struct(),
@@ -356,7 +358,9 @@ pub(super) fn execute_sparse(parts: SparseParts, ctx: &mut ExecutionCtx) -> Vort
             ctx,
         )?,
         DType::Union(..) => todo!("TODO(connor)[Union]: unimplemented"),
-        DType::Variant(_) => vortex_bail!("Sparse canonicalization does not support Variant"),
+        DType::Variant(_) => {
+            vortex_bail!(InvalidArgument: "Sparse canonicalization does not support Variant")
+        }
         DType::Extension(_ext_dtype) => todo!(),
     })
 }

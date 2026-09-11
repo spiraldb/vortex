@@ -51,7 +51,7 @@ pub(crate) fn with_values<V: FixedWidthArray>(
 ) -> VortexResult<Array<V>> {
     let expected_len = len
         .checked_mul(V::byte_width(array))
-        .ok_or_else(|| vortex_err!("Fixed-width values buffer length overflows usize"))?;
+        .ok_or_else(|| vortex_err!(Overflow: "Fixed-width values buffer length overflows usize"))?;
     vortex_ensure_eq!(
         values.len(),
         expected_len,

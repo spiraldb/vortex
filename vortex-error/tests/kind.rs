@@ -19,41 +19,62 @@ fn test_untagged_err_is_other() {
 
 #[test]
 fn test_tagged_err_carries_kind() {
-    assert_eq!(
-        vortex_err!(InvalidArgument: "bad {}", 1).kind(),
-        VortexErrorKind::InvalidArgument
+    // Every kind takes the same `Kind: "format", args..` shape.
+    let cases: [(VortexError, VortexErrorKind); 8] = [
+        (
+            vortex_err!(InvalidArgument: "bad {}", 1),
+            VortexErrorKind::InvalidArgument,
+        ),
+        (
+            vortex_err!(OutOfBounds: "index {} past {}", 5, 3),
+            VortexErrorKind::OutOfBounds,
+        ),
+        (
+            vortex_err!(MismatchedTypes: "want i32, got {}", "u8"),
+            VortexErrorKind::MismatchedTypes,
+        ),
+        (
+            vortex_err!(NotImplemented: "take on {}", "Sparse"),
+            VortexErrorKind::NotImplemented,
+        ),
+        (
+            vortex_err!(NotFound: "no field {}", "a"),
+            VortexErrorKind::NotFound,
+        ),
+        (
+            vortex_err!(Overflow: "{} exceeds u32", 1u64 << 40),
+            VortexErrorKind::Overflow,
+        ),
+        (vortex_err!(Serde: "corrupt footer"), VortexErrorKind::Serde),
+        (
+            vortex_err!(Compute: "kernel failed"),
+            VortexErrorKind::Compute,
+        ),
+    ];
+    for (err, kind) in cases {
+        assert_eq!(err.kind(), kind, "{err}");
+    }
+}
+
+#[test]
+fn test_kind_prefixes_the_display() {
+    assert!(
+        vortex_err!(NotFound: "no field a")
+            .to_string()
+            .starts_with("Not found error: no field a")
     );
-    assert_eq!(
-        vortex_err!(OutOfBounds: 5usize, 0usize, 3usize).kind(),
-        VortexErrorKind::OutOfBounds
-    );
-    assert_eq!(
-        vortex_err!(MismatchedTypes: "i32", "u8").kind(),
-        VortexErrorKind::MismatchedTypes
-    );
-    assert_eq!(
-        vortex_err!(NotImplemented: "take", "SparseArray").kind(),
-        VortexErrorKind::NotImplemented
+    assert!(
+        vortex_err!(Overflow: "too big")
+            .to_string()
+            .starts_with("Overflow error: too big")
     );
 }
 
 #[test]
-fn test_structured_messages() {
-    assert!(
-        vortex_err!(OutOfBounds: 5usize, 0usize, 3usize)
-            .to_string()
-            .contains("index 5 out of bounds from 0 to 3")
-    );
-    assert!(
-        vortex_err!(MismatchedTypes: "i32", "u8")
-            .to_string()
-            .contains("expected type: i32 but instead got u8")
-    );
-    assert!(
-        vortex_err!(NotImplemented: "take", "SparseArray")
-            .to_string()
-            .contains("function take not implemented for SparseArray")
-    );
+fn test_int_conversion_is_overflow() {
+    // `?` on a fallible integer cast must land in Overflow, not Other.
+    let err = VortexError::from(u8::try_from(300u32).unwrap_err());
+    assert_eq!(err.kind(), VortexErrorKind::Overflow);
 }
 
 #[test]

@@ -193,7 +193,9 @@ pub(crate) fn cuda_backing_allocation(handle: &BufferHandle) -> VortexResult<Buf
     let cuda_buf = device_buffer
         .as_any()
         .downcast_ref::<CudaDeviceBuffer>()
-        .ok_or_else(|| vortex_err!("expected CudaDeviceBuffer, was {device_buffer:?}"))?;
+        .ok_or_else(
+            || vortex_err!(InvalidArgument: "expected CudaDeviceBuffer, was {device_buffer:?}"),
+        )?;
     let len = cuda_buf.allocation.as_bytes_view().len();
 
     Ok(BufferHandle::new_device(Arc::new(CudaDeviceBuffer {
@@ -217,7 +219,7 @@ pub(crate) fn with_cuda_view_mut<T: DeviceRepr + Send + Sync + 'static, R>(
     let device_buffer = handle.unwrap_device();
     if !device_buffer.as_any().is::<CudaDeviceBuffer>() {
         return Err(vortex_err!(
-            "expected CudaDeviceBuffer, was {device_buffer:?}"
+            InvalidArgument: "expected CudaDeviceBuffer, was {device_buffer:?}"
         ));
     }
 
@@ -262,7 +264,9 @@ impl CudaBufferExt for BufferHandle {
         let cuda_buf = device_buffer
             .as_any()
             .downcast_ref::<CudaDeviceBuffer>()
-            .ok_or_else(|| vortex_err!("expected CudaDeviceBuffer, was {device_buffer:?}"))?;
+            .ok_or_else(
+                || vortex_err!(InvalidArgument: "expected CudaDeviceBuffer, was {device_buffer:?}"),
+            )?;
 
         Ok(cuda_buf.as_view::<T>())
     }
@@ -273,7 +277,7 @@ impl CudaBufferExt for BufferHandle {
             .ok_or_else(|| vortex_err!("Buffer is not on device"))?
             .as_any()
             .downcast_ref::<CudaDeviceBuffer>()
-            .ok_or_else(|| vortex_err!("expected CudaDeviceBuffer"))?
+            .ok_or_else(|| vortex_err!(InvalidArgument: "expected CudaDeviceBuffer"))?
             .offset_ptr();
 
         Ok(ptr)
@@ -287,7 +291,9 @@ impl CudaBufferExt for BufferHandle {
         let cuda_buf = device_buffer
             .as_any()
             .downcast_ref::<CudaDeviceBuffer>()
-            .ok_or_else(|| vortex_err!("expected CudaDeviceBuffer, was {device_buffer:?}"))?;
+            .ok_or_else(
+                || vortex_err!(InvalidArgument: "expected CudaDeviceBuffer, was {device_buffer:?}"),
+            )?;
 
         if logical_len > padded_len || logical_len > cuda_buf.len {
             return Ok(false);

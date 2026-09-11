@@ -128,7 +128,7 @@ impl VTable for Null {
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
         let Some(builder) = builder.as_any_mut().downcast_mut::<NullBuilder>() else {
-            vortex_bail!("append_to_builder for Null requires a NullBuilder");
+            vortex_bail!(InvalidArgument: "append_to_builder for Null requires a NullBuilder");
         };
         builder.append_nulls(array.len());
         Ok(())

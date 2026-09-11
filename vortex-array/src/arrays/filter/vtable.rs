@@ -136,7 +136,7 @@ impl VTable for Filter {
         _session: &VortexSession,
     ) -> VortexResult<Option<Vec<u8>>> {
         // TODO(joe): make this configurable
-        vortex_bail!("Filter array is not serializable")
+        vortex_bail!(Serde: "Filter array is not serializable")
     }
 
     fn deserialize(
@@ -149,7 +149,7 @@ impl VTable for Filter {
         _children: &dyn ArrayChildren,
         _session: &VortexSession,
     ) -> VortexResult<ArrayParts<Self>> {
-        vortex_bail!("Filter array is not serializable")
+        vortex_bail!(Serde: "Filter array is not serializable")
     }
 
     fn execute(array: Array<Self>, ctx: &mut ExecutionCtx) -> VortexResult<ExecutionResult> {

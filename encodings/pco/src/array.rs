@@ -212,7 +212,7 @@ impl VTable for Pco {
             let validity = children.get(0, &Validity::DTYPE, len)?;
             Validity::Array(validity)
         } else {
-            vortex_bail!("PcoArray expected 0 or 1 child, got {}", children.len());
+            vortex_bail!(MismatchedTypes: "PcoArray expected 0 or 1 child, got {}", children.len());
         };
 
         vortex_ensure!(buffers.len() >= metadata.chunks.len());
@@ -456,9 +456,9 @@ impl PcoData {
                     page_n_values != 0,
                     "Pco chunk {chunk_idx} contains an empty page"
                 );
-                chunk_n_values = chunk_n_values.checked_add(page_n_values).ok_or_else(|| {
-                    vortex_err!("Pco chunk {chunk_idx} value count overflows usize")
-                })?;
+                chunk_n_values = chunk_n_values.checked_add(page_n_values).ok_or_else(
+                    || vortex_err!(Overflow: "Pco chunk {chunk_idx} value count overflows usize"),
+                )?;
             }
             vortex_ensure!(
                 chunk_n_values <= VALUES_PER_CHUNK,
@@ -466,7 +466,7 @@ impl PcoData {
             );
             n_values = n_values
                 .checked_add(chunk_n_values)
-                .ok_or_else(|| vortex_err!("Pco value count overflows usize"))?;
+                .ok_or_else(|| vortex_err!(Overflow: "Pco value count overflows usize"))?;
         }
         vortex_ensure!(
             n_values <= self.unsliced_n_rows,

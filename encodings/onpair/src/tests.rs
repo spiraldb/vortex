@@ -44,7 +44,7 @@ fn compress_onpair(
     onpair_compress(array, DEFAULT_CONFIG, ctx)?
         .try_downcast::<OnPair>()
         .map_err(|array| {
-            vortex_error::vortex_err!("expected OnPair array, got {}", array.encoding_id())
+            vortex_error::vortex_err!(MismatchedTypes: "expected OnPair array, got {}", array.encoding_id())
         })
 }
 

@@ -164,8 +164,9 @@ impl VTable for Delta {
         let lanes = lane_count(ptype);
 
         // Compute the length of the bases array
-        let deltas_len = usize::try_from(metadata.deltas_len)
-            .map_err(|_| vortex_err!("deltas_len {} overflowed usize", metadata.deltas_len))?;
+        let deltas_len = usize::try_from(metadata.deltas_len).map_err(
+            |_| vortex_err!(Overflow: "deltas_len {} overflowed usize", metadata.deltas_len),
+        )?;
         let num_chunks = deltas_len / 1024;
         let remainder_base_size = if deltas_len % 1024 > 0 { 1 } else { 0 };
         let bases_len = num_chunks * lanes + remainder_base_size;

@@ -93,7 +93,7 @@ impl ScalarFnVTable for CaseWhen {
         // let num_children = options.num_when_then_pairs * 2 + u32::from(options.has_else);
         // Ok(Some(pb::CaseWhenOpts { num_children }.encode_to_vec()))
         // stabilize the expr
-        vortex_bail!("cannot serialize")
+        vortex_bail!(Serde: "cannot serialize")
     }
 
     fn deserialize(
@@ -104,7 +104,7 @@ impl ScalarFnVTable for CaseWhen {
         let opts = pb::CaseWhenOpts::decode(metadata)?;
         if opts.num_children < 2 {
             vortex_bail!(
-                "CaseWhen expects at least 2 children, got {}",
+                InvalidArgument: "CaseWhen expects at least 2 children, got {}",
                 opts.num_children
             );
         }
@@ -164,7 +164,7 @@ impl ScalarFnVTable for CaseWhen {
         let expected_len = options.num_children();
         if arg_dtypes.len() != expected_len {
             vortex_bail!(
-                "CaseWhen expects {expected_len} argument dtypes, got {}",
+                InvalidArgument: "CaseWhen expects {expected_len} argument dtypes, got {}",
                 arg_dtypes.len()
             );
         }

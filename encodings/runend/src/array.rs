@@ -377,14 +377,14 @@ impl RunEndData {
         if offset != 0 && length != 0 {
             let first_run_end = usize::try_from(&ends.execute_scalar(0, ctx)?)?;
             if first_run_end < offset {
-                vortex_bail!("First run end {first_run_end} must be >= offset {offset}");
+                vortex_bail!(InvalidArgument: "First run end {first_run_end} must be >= offset {offset}");
             }
         }
 
         let last_run_end = usize::try_from(&ends.execute_scalar(ends.len() - 1, ctx)?)?;
         let min_required_end = offset + length;
         if last_run_end < min_required_end {
-            vortex_bail!("Last run end {last_run_end} must be >= offset+length {min_required_end}");
+            vortex_bail!(InvalidArgument: "Last run end {last_run_end} must be >= offset+length {min_required_end}");
         }
 
         Ok(())
@@ -512,7 +512,7 @@ pub(super) fn run_end_canonicalize(
                 .execute_as::<ListViewArray>("values", ctx)?;
             runend_decode_listview(pends, values, array.offset(), array.len())?.into_array()
         }
-        _ => vortex_bail!("Unsupported RunEnd value type: {}", array.dtype()),
+        _ => vortex_bail!(InvalidArgument: "Unsupported RunEnd value type: {}", array.dtype()),
     })
 }
 

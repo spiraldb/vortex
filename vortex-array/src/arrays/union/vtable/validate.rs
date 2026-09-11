@@ -17,7 +17,7 @@ pub(super) fn validate_union_components(
     len: usize,
 ) -> VortexResult<()> {
     let DType::Union(variants, nullability) = dtype else {
-        vortex_bail!("Expected union dtype, found {dtype}")
+        vortex_bail!(InvalidArgument: "Expected union dtype, found {dtype}")
     };
     vortex_ensure_eq!(
         variant_arrays.len(),

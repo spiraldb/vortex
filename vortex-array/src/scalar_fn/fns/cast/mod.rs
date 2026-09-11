@@ -302,9 +302,9 @@ mod tests {
         );
         let optimized = expr.optimize(&test_harness::struct_dtype())?;
 
-        let scalar = optimized
-            .as_opt::<Literal>()
-            .ok_or_else(|| vortex_err!("expected a bare literal, got {optimized}"))?;
+        let scalar = optimized.as_opt::<Literal>().ok_or_else(
+            || vortex_err!(MismatchedTypes: "expected a bare literal, got {optimized}"),
+        )?;
         assert_eq!(scalar, &Scalar::primitive(3.0f64, Nullability::NonNullable));
         Ok(())
     }
@@ -322,9 +322,9 @@ mod tests {
         );
         let optimized = expr.optimize(&test_harness::struct_dtype())?;
 
-        let scalar = optimized
-            .as_opt::<Literal>()
-            .ok_or_else(|| vortex_err!("expected a bare literal, got {optimized}"))?;
+        let scalar = optimized.as_opt::<Literal>().ok_or_else(
+            || vortex_err!(MismatchedTypes: "expected a bare literal, got {optimized}"),
+        )?;
         assert_eq!(
             scalar,
             &Scalar::primitive(3.19f64, Nullability::NonNullable)

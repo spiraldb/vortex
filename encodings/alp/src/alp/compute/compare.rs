@@ -45,7 +45,7 @@ impl CompareKernel for ALP {
         if let Some(const_scalar) = rhs.as_constant() {
             let pscalar = const_scalar.as_primitive_opt().ok_or_else(|| {
                 vortex_err!(
-                    "ALP Compare RHS had the wrong type {}, expected {}",
+                    InvalidArgument: "ALP Compare RHS had the wrong type {}, expected {}",
                     const_scalar,
                     const_scalar.dtype()
                 )

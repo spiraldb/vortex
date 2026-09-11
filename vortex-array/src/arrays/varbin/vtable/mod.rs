@@ -177,7 +177,7 @@ impl VTable for VarBin {
             let validity = children.get(1, &Validity::DTYPE, len)?;
             Validity::Array(validity)
         } else {
-            vortex_bail!("Expected 1 or 2 children, got {}", children.len());
+            vortex_bail!(MismatchedTypes: "Expected 1 or 2 children, got {}", children.len());
         };
 
         let offsets = children.get(
@@ -187,7 +187,7 @@ impl VTable for VarBin {
         )?;
 
         if buffers.len() != 1 {
-            vortex_bail!("Expected 1 buffer, got {}", buffers.len());
+            vortex_bail!(MismatchedTypes: "Expected 1 buffer, got {}", buffers.len());
         }
         let bytes = buffers[0].clone().try_to_host_sync()?;
 
@@ -222,7 +222,7 @@ impl VTable for VarBin {
         // The two arms here are every builder a `Utf8`/`Binary` dtype has: all four
         // `VarBinBuilder` widths above, and `VarBinViewBuilder` below.
         let Some(builder) = builder.as_any_mut().downcast_mut::<VarBinViewBuilder>() else {
-            vortex_bail!("append_to_builder for VarBin requires a variable-binary builder")
+            vortex_bail!(InvalidArgument: "append_to_builder for VarBin requires a variable-binary builder")
         };
         append_to_varbinview(array, builder, ctx)
     }

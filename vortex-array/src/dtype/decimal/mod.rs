@@ -48,7 +48,7 @@ impl DecimalDType {
     pub fn try_new(precision: u8, scale: i8) -> VortexResult<Self> {
         let precision = NonZero::new(precision).ok_or_else(|| {
             vortex_err!(
-                "decimal precision must be between 1 and {} (inclusive)",
+                InvalidArgument: "decimal precision must be between 1 and {} (inclusive)",
                 MAX_PRECISION
             )
         })?;
@@ -122,7 +122,7 @@ impl TryFrom<&DType> for DecimalDType {
         if let DType::Decimal(dt, _) = value {
             Ok(*dt)
         } else {
-            vortex_bail!("Cannot convert DType {value} into DecimalType")
+            vortex_bail!(MismatchedTypes: "Cannot convert DType {value} into DecimalType")
         }
     }
 }

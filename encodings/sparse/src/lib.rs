@@ -263,7 +263,7 @@ impl VTable for Sparse {
         // Once we have the patches metadata, we need to get the fill value from the buffers.
 
         if buffers.len() != 1 {
-            vortex_bail!("Expected 1 buffer, got {}", buffers.len());
+            vortex_bail!(MismatchedTypes: "Expected 1 buffer, got {}", buffers.len());
         }
         let scalar_bytes: &[u8] = &buffers[0].clone().try_to_host_sync()?;
 

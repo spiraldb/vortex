@@ -222,7 +222,7 @@ impl LogicalType {
     /// Pass `None` for a GEOMETRY with no associated CRS.
     pub fn geometry_type(crs: Option<&str>) -> VortexResult<Self> {
         let Ok(crs) = CString::new(crs.unwrap_or("")) else {
-            vortex_bail!("CRS must not contain NUL bytes");
+            vortex_bail!(InvalidArgument: "CRS must not contain NUL bytes");
         };
         let ptr = unsafe { duckdb_vx_create_geometry(crs.as_ptr()) };
         if ptr.is_null() {

@@ -88,13 +88,13 @@ impl PackPlan {
     ) -> VortexResult<Self> {
         if field_plans.len() != fields.nfields() {
             vortex_bail!(
-                "Pack expects {} field children but got {}",
+                InvalidArgument: "Pack expects {} field children but got {}",
                 fields.nfields(),
                 field_plans.len()
             );
         }
         if validity.is_some() != (nullability == Nullability::Nullable) {
-            vortex_bail!("Pack validity child must be present exactly when the struct is nullable");
+            vortex_bail!(InvalidArgument: "Pack validity child must be present exactly when the struct is nullable");
         }
 
         for (index, (field_dtype, field_plan)) in
@@ -173,21 +173,21 @@ impl PlanVTable for Pack {
         let expected_children = plan.nfields() + usize::from(plan.dtype().is_nullable());
         if children.len() != expected_children {
             vortex_bail!(
-                "Pack expects {expected_children} children but got {}",
+                InvalidArgument: "Pack expects {expected_children} children but got {}",
                 children.len()
             );
         }
 
         for (index, field_dtype) in plan.fields().fields().enumerate() {
-            let child = children
-                .get(index)?
-                .ok_or_else(|| vortex_err!("Pack field child {index} is absent"))?;
+            let child = children.get(index)?.ok_or_else(
+                || vortex_err!(AssertionFailed: "Pack field child {index} is absent"),
+            )?;
             validate_field_child(index, &field_dtype, plan.row_count(), &child)?;
         }
         if plan.dtype().is_nullable() {
             let validity = children
                 .get(plan.nfields())?
-                .ok_or_else(|| vortex_err!("Pack validity child is absent"))?;
+                .ok_or_else(|| vortex_err!(AssertionFailed: "Pack validity child is absent"))?;
             validate_validity_child(plan.row_count(), &validity)?;
         }
         Ok(())
@@ -332,10 +332,10 @@ impl PlanParentReduceRule<Pack> for ExpressionPackRule {
             let name = partitioned
                 .partition_names
                 .get(0)
-                .ok_or_else(|| vortex_err!("Struct expression partition has no field"))?;
-            let index = fields.find(name).ok_or_else(|| {
-                vortex_err!("Struct expression references unknown field '{name}'")
-            })?;
+                .ok_or_else(|| vortex_err!(NotFound: "Struct expression partition has no field"))?;
+            let index = fields.find(name).ok_or_else(
+                || vortex_err!(NotFound: "Struct expression references unknown field '{name}'"),
+            )?;
             let field = field_plan(child, index)?;
             let lowered = step_into_struct_field(expanded, name, field.dtype().clone())?;
             return Ok(Some(EvalPlan::try_new(lowered, field)?.into_plan()));
@@ -347,9 +347,9 @@ impl PlanParentReduceRule<Pack> for ExpressionPackRule {
         for index in 0..partitioned.partitions.len() {
             let name = &partitioned.partition_names[index];
             let partition = &partitioned.partitions[index];
-            let field_index = fields.find(name).ok_or_else(|| {
-                vortex_err!("Struct expression references unknown field '{name}'")
-            })?;
+            let field_index = fields.find(name).ok_or_else(
+                || vortex_err!(NotFound: "Struct expression references unknown field '{name}'"),
+            )?;
             let field = field_plan(child, field_index)?;
             let lowered = if let Some(pack) = partition
                 .as_scalar()
@@ -512,7 +512,7 @@ fn expand_struct_root(
 
             if let Some(field_name) = scalar_fn.as_opt::<GetItem>() {
                 let index = fields.find(field_name).ok_or_else(|| {
-                    vortex_err!("Field {field_name} not found while expanding struct root")
+                    vortex_err!(NotFound: "Field {field_name} not found while expanding struct root")
                 })?;
                 return Ok(Transformed {
                     value: expanded_root.children()[index].clone(),

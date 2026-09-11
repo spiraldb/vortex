@@ -34,7 +34,7 @@ pub(crate) fn new_exporter(
         Canonical::FixedSizeList(array) => fixed_size_list::new_exporter(array, cache, ctx),
         Canonical::Struct(array) => struct_::new_exporter(array, cache, ctx),
         Canonical::Union(_) => {
-            vortex_bail!("TODO(connor)[Union]: implement DuckDB export for Union arrays")
+            vortex_bail!(NotImplemented: "TODO(connor)[Union]: implement DuckDB export for Union arrays")
         }
         Canonical::Extension(ext) => extension::new_exporter(ext, ctx),
         Canonical::Variant(_) => {

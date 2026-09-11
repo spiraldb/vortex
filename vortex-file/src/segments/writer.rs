@@ -54,7 +54,7 @@ impl SegmentSink for BufferedSegmentSink {
             let mut specs = self.segment_specs.lock();
             let segment_id = SegmentId::from(
                 u32::try_from(specs.len())
-                    .map_err(|_| vortex_err!("Too mant segments, u32 overflow"))?,
+                    .map_err(|_| vortex_err!(Overflow: "Too mant segments, u32 overflow"))?,
             );
 
             // The API requires us to write these buffers contiguously. Therefore, we can only

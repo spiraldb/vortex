@@ -42,6 +42,6 @@ pub(crate) fn deserialize_validity(
     match children.len() {
         0 => Ok(Validity::from(nullability)),
         1 => Ok(Validity::Array(children.get(0, &Validity::DTYPE, len)?)),
-        child_count => vortex_bail!("Expected 0 or 1 child, got {child_count}"),
+        child_count => vortex_bail!(MismatchedTypes: "Expected 0 or 1 child, got {child_count}"),
     }
 }

@@ -695,17 +695,17 @@ where
         vortex_ensure!(offset >= O::zero(), "cannot have negative offsets");
         vortex_ensure!(size >= S::zero(), "cannot have negative size");
 
-        let offset_u64 = offset
-            .to_u64()
-            .ok_or_else(|| vortex_err!("offset[{i}] = {offset:?} cannot be converted to u64"))?;
+        let offset_u64 = offset.to_u64().ok_or_else(
+            || vortex_err!(Overflow: "offset[{i}] = {offset:?} cannot be converted to u64"),
+        )?;
 
-        let size_u64 = size
-            .to_u64()
-            .ok_or_else(|| vortex_err!("size[{i}] = {size:?} cannot be converted to u64"))?;
+        let size_u64 = size.to_u64().ok_or_else(
+            || vortex_err!(Overflow: "size[{i}] = {size:?} cannot be converted to u64"),
+        )?;
 
         // Check for overflow when adding offset + size.
         let end = offset_u64.checked_add(size_u64).ok_or_else(|| {
-            vortex_err!("offset[{i}] ({offset_u64}) + size[{i}] ({size_u64}) would overflow u64")
+            vortex_err!(Overflow: "offset[{i}] ({offset_u64}) + size[{i}] ({size_u64}) would overflow u64")
         })?;
 
         if offset_u64 == elements_len {

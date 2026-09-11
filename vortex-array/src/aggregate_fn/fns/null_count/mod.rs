@@ -29,7 +29,7 @@ use crate::scalar::ScalarValue;
 pub fn null_count(array: &ArrayRef, ctx: &mut ExecutionCtx) -> VortexResult<usize> {
     if let Precision::Exact(null_count_scalar) = array.statistics().get(Stat::NullCount) {
         return usize::try_from(&null_count_scalar)
-            .map_err(|e| vortex_err!("Failed to convert null count stat to usize: {e}"));
+            .map_err(|e| vortex_err!(Overflow: "Failed to convert null count stat to usize: {e}"));
     }
 
     let mut acc = Accumulator::try_new(NullCount, EmptyOptions, array.dtype().clone())?;

@@ -393,7 +393,7 @@ mod tests {
         let input = PrimitiveArray::from_iter([10_i64, 20]).into_array();
         let args = VecExecutionArgs::new(vec![input], 2);
         let Mask::Values(valid) = Mask::from_iter([false, true]) else {
-            vortex_bail!("the test validity must be partially valid");
+            vortex_bail!(InvalidArgument: "the test validity must be partially valid");
         };
         let mut ctx = array_session().create_execution_ctx();
 

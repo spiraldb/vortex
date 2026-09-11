@@ -145,11 +145,11 @@ impl ScalarFnVTable for Like {
         let pattern = &arg_dtypes[1];
 
         if !input.is_utf8() {
-            vortex_bail!("LIKE expression requires UTF8 input dtype, got {}", input);
+            vortex_bail!(InvalidArgument: "LIKE expression requires UTF8 input dtype, got {}", input);
         }
         if !pattern.is_utf8() {
             vortex_bail!(
-                "LIKE expression requires UTF8 pattern dtype, got {}",
+                InvalidArgument: "LIKE expression requires UTF8 pattern dtype, got {}",
                 pattern
             );
         }

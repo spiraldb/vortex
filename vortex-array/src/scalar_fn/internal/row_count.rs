@@ -80,7 +80,7 @@ impl ScalarFnVTable for RowCount {
         _args: &dyn ExecutionArgs,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
-        vortex_bail!("RowCount must be substituted before evaluation")
+        vortex_bail!(InvalidArgument: "RowCount must be substituted before evaluation")
     }
 
     fn is_strict(&self, _options: &Self::Options) -> bool {

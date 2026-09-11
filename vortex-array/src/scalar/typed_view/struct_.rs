@@ -116,7 +116,7 @@ impl<'a> StructScalar<'a> {
     /// Creates a new [`StructScalar`] from a [`DType`] and optional [`ScalarValue`].
     pub(crate) fn try_new(dtype: &'a DType, value: Option<&'a ScalarValue>) -> VortexResult<Self> {
         if !matches!(dtype, DType::Struct(..)) {
-            vortex_bail!("Expected struct scalar, found {}", dtype)
+            vortex_bail!(MismatchedTypes: "Expected struct scalar, found {}", dtype)
         }
 
         Ok(Self {
@@ -204,7 +204,7 @@ impl<'a> StructScalar<'a> {
     pub fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         let DType::Struct(st, _) = dtype else {
             vortex_bail!(
-                "Cannot cast struct to {}: struct can only be cast to struct",
+                MismatchedTypes: "Cannot cast struct to {}: struct can only be cast to struct",
                 dtype
             )
         };
@@ -212,7 +212,7 @@ impl<'a> StructScalar<'a> {
 
         if st.fields().len() != own_st.fields().len() {
             vortex_bail!(
-                "Cannot cast between structs with different number of fields: {} and {}",
+                MismatchedTypes: "Cannot cast between structs with different number of fields: {} and {}",
                 own_st.fields().len(),
                 st.fields().len()
             );
@@ -251,7 +251,7 @@ impl<'a> StructScalar<'a> {
         let struct_dtype = self
             .dtype
             .as_struct_fields_opt()
-            .ok_or_else(|| vortex_err!("Not a struct dtype"))?;
+            .ok_or_else(|| vortex_err!(MismatchedTypes: "Not a struct dtype"))?;
         let projected_dtype = DType::Struct(
             struct_dtype.project(projection)?,
             self.dtype().nullability(),

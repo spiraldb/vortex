@@ -157,7 +157,7 @@ impl VTable for CudaFlat {
             vortex_bail!("CudaFlatLayout must have exactly one segment ID");
         }
         if args.children.nchildren() != 0 {
-            vortex_bail!("CudaFlatLayout must not have children");
+            vortex_bail!(InvalidArgument: "CudaFlatLayout must not have children");
         }
         let host_buffers = metadata
             .host_buffers
@@ -173,7 +173,7 @@ impl VTable for CudaFlat {
     }
 
     fn child_dtype(_layout: &Layout<Self>, idx: usize) -> VortexResult<DType> {
-        vortex_bail!("CudaFlatLayout has no child {idx}");
+        vortex_bail!(NotFound: "CudaFlatLayout has no child {idx}");
     }
 
     fn child_type(_layout: &Layout<Self>, _idx: usize) -> LayoutChildType {

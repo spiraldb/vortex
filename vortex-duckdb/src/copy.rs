@@ -240,7 +240,7 @@ fn column_stats_from_summary(
     let stats_sets = file_stats.stats_sets();
     if column_index >= stats_sets.len() {
         vortex_bail!(
-            "column index {column_index} out of range for {} statistics sets",
+            OutOfBounds: "column index {column_index} out of range for {} statistics sets",
             stats_sets.len()
         );
     }

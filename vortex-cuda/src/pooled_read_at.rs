@@ -129,7 +129,7 @@ impl VortexReadAt for PooledObjectStoreReadAt {
         async move {
             let end = offset.checked_add(length as u64).ok_or_else(|| {
                 vortex_err!(
-                    "Object store read range overflow: offset={}, length={}",
+                    Overflow: "Object store read range overflow: offset={}, length={}",
                     offset,
                     length
                 )
@@ -250,8 +250,9 @@ impl VortexReadAt for PooledByteBufferReadAt {
         let pool = Arc::clone(&self.pool);
 
         async move {
-            let offset = usize::try_from(offset)
-                .map_err(|_| vortex_err!("Byte buffer read offset overflow: offset={}", offset))?;
+            let offset = usize::try_from(offset).map_err(
+                |_| vortex_err!(Overflow: "Byte buffer read offset overflow: offset={}", offset),
+            )?;
             let src = &buffer.as_ref()[offset..offset + length];
 
             let mut target = pool.get(length)?;

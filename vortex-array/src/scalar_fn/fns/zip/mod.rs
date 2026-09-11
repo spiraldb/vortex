@@ -224,7 +224,7 @@ pub(crate) fn zip_impl(
 fn zip_return_dtype(if_true: &DType, if_false: &DType) -> VortexResult<DType> {
     zip_nullability_union(if_true, if_false).ok_or_else(|| {
         vortex_err!(
-            "zip requires if_true and if_false to have the same base type, got {} and {}",
+            InvalidArgument: "zip requires if_true and if_false to have the same base type, got {} and {}",
             if_true,
             if_false
         )

@@ -94,7 +94,7 @@ impl<'a> BinaryScalar<'a> {
     pub(crate) fn cast(&self, dtype: &DType) -> VortexResult<Scalar> {
         if !matches!(dtype, DType::Binary(..)) {
             vortex_bail!(
-                "Cannot cast binary to {dtype}: binary scalars can only be cast to binary types with different nullability"
+                MismatchedTypes: "Cannot cast binary to {dtype}: binary scalars can only be cast to binary types with different nullability"
             )
         }
         Scalar::try_new(

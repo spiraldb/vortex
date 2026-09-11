@@ -154,7 +154,11 @@ impl BitPackedData {
         length: usize,
         offset: u16,
     ) -> VortexResult<()> {
-        vortex_ensure!(ptype.is_int(), MismatchedTypes: "integer", ptype);
+        vortex_ensure!(
+            ptype.is_int(),
+            MismatchedTypes: "expected type: integer but instead got {}",
+            ptype
+        );
         vortex_ensure!(bit_width <= 64, "Unsupported bit width {bit_width}");
 
         if let Some(validity_len) = validity.maybe_len() {

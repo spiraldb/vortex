@@ -82,15 +82,15 @@ impl AggregateFnVTable for ForeignAggregateFnVTable {
         _options: &Self::Options,
         _input_dtype: &DType,
     ) -> VortexResult<Self::Partial> {
-        vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
+        vortex_bail!(NotFound: "Cannot execute unknown aggregate function '{}'", self.id)
     }
 
     fn combine_partials(&self, _partial: &mut Self::Partial, _other: Scalar) -> VortexResult<()> {
-        vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
+        vortex_bail!(NotFound: "Cannot execute unknown aggregate function '{}'", self.id)
     }
 
     fn to_scalar(&self, _partial: &Self::Partial) -> VortexResult<Scalar> {
-        vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
+        vortex_bail!(NotFound: "Cannot execute unknown aggregate function '{}'", self.id)
     }
 
     fn reset(&self, _partial: &mut Self::Partial) {}
@@ -105,15 +105,15 @@ impl AggregateFnVTable for ForeignAggregateFnVTable {
         _batch: &Columnar,
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
-        vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
+        vortex_bail!(NotFound: "Cannot execute unknown aggregate function '{}'", self.id)
     }
 
     fn finalize(&self, _states: ArrayRef) -> VortexResult<ArrayRef> {
-        vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
+        vortex_bail!(NotFound: "Cannot execute unknown aggregate function '{}'", self.id)
     }
 
     fn finalize_scalar(&self, _partial: &Self::Partial) -> VortexResult<Scalar> {
-        vortex_bail!("Cannot execute unknown aggregate function '{}'", self.id)
+        vortex_bail!(NotFound: "Cannot execute unknown aggregate function '{}'", self.id)
     }
 }
 

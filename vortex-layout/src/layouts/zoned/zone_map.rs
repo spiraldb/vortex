@@ -77,7 +77,7 @@ impl ZoneMap {
     ) -> VortexResult<Self> {
         let expected_dtype = aggregate_stats_table_dtype(&column_dtype, &aggregate_fns);
         if &expected_dtype != array.dtype() {
-            vortex_bail!("Array dtype does not match expected zone map dtype: {expected_dtype}");
+            vortex_bail!(MismatchedTypes: "Array dtype does not match expected zone map dtype: {expected_dtype}");
         }
 
         // SAFETY: We checked that the array matches the expected stats-table schema.
@@ -118,7 +118,7 @@ impl ZoneMap {
     ) -> VortexResult<Self> {
         let expected_dtype = legacy_stats_table_dtype(&column_dtype, &stats);
         if &expected_dtype != array.dtype() {
-            vortex_bail!("Array dtype does not match expected zone map dtype: {expected_dtype}");
+            vortex_bail!(MismatchedTypes: "Array dtype does not match expected zone map dtype: {expected_dtype}");
         }
 
         // SAFETY: We checked that the array matches the expected legacy stats-table schema.

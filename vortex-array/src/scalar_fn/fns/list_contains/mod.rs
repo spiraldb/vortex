@@ -104,7 +104,7 @@ impl ScalarFnVTable for ListContains {
             DType::List(_, list_nullability) => list_nullability,
             _ => {
                 vortex_bail!(
-                    "First argument to ListContains must be a List, got {:?}",
+                    MismatchedTypes: "First argument to ListContains must be a List, got {:?}",
                     list_dtype
                 );
             }
@@ -154,7 +154,7 @@ fn compute_contains_scalar(list: &Scalar, needle: &Scalar) -> VortexResult<Scala
     let list_scalar = list.as_list();
     let elements = list_scalar
         .elements()
-        .ok_or_else(|| vortex_err!("Expected non-null list"))?;
+        .ok_or_else(|| vortex_err!(MismatchedTypes: "Expected non-null list"))?;
 
     let contains = elements.iter().any(|elem| elem == needle);
     Ok(Scalar::bool(contains, nullability))
@@ -166,11 +166,11 @@ fn compute_list_contains(
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<ArrayRef> {
     let DType::List(elem_dtype, _) = array.dtype() else {
-        vortex_bail!("Array must be of List type");
+        vortex_bail!(InvalidArgument: "Array must be of List type");
     };
     if !elem_dtype.as_ref().eq_ignore_nullability(value.dtype()) {
         vortex_bail!(
-            "Element type {} of list does not match search value {}",
+            MismatchedTypes: "Element type {} of list does not match search value {}",
             elem_dtype,
             value.dtype(),
         );

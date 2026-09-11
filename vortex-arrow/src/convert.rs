@@ -613,14 +613,14 @@ pub(crate) fn map_from_arrow_parts(
 
     let key_dtype = struct_dtype
         .field_by_index(0)
-        .ok_or_else(|| vortex_err!("Arrow map entries struct missing key field"))?;
+        .ok_or_else(|| vortex_err!(NotFound: "Arrow map entries struct missing key field"))?;
     vortex_ensure!(
         !key_dtype.is_nullable(),
         "Arrow map key field must be non-nullable"
     );
     let value_dtype = struct_dtype
         .field_by_index(1)
-        .ok_or_else(|| vortex_err!("Arrow map entries struct missing value field"))?;
+        .ok_or_else(|| vortex_err!(NotFound: "Arrow map entries struct missing value field"))?;
     let map_dtype = MapDType::try_new(key_dtype, value_dtype, keys_sorted)?;
     let entries_struct = entries.as_::<Struct>();
     let entries = StructArray::try_new(
@@ -843,9 +843,11 @@ pub fn from_arrow_dyn(array: &dyn ArrowArray, nullable: bool) -> VortexResult<Ar
                 nullable,
             )?
             .into_array()),
-            key_dt => vortex_bail!("Unsupported dictionary key type: {key_dt}"),
+            key_dt => vortex_bail!(InvalidArgument: "Unsupported dictionary key type: {key_dt}"),
         },
-        dt => vortex_bail!("Array encoding not implemented for Arrow data type {dt}"),
+        dt => {
+            vortex_bail!(NotImplemented: "Array encoding not implemented for Arrow data type {dt}")
+        }
     }
 }
 

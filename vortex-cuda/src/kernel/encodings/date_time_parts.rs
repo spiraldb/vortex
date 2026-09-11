@@ -53,11 +53,11 @@ impl CudaExecute for DateTimePartsExecutor {
         let output_len = array.len();
         let array = array
             .try_downcast::<DateTimeParts>()
-            .map_err(|_| vortex_err!("Expected DateTimePartsArray"))?;
+            .map_err(|_| vortex_err!(InvalidArgument: "Expected DateTimePartsArray"))?;
 
         // Extract the temporal metadata from the dtype
         let DType::Extension(ext) = array.dtype().clone() else {
-            vortex_bail!("DateTimePartsArray dtype must be an Extension type")
+            vortex_bail!(InvalidArgument: "DateTimePartsArray dtype must be an Extension type")
         };
 
         let Some(options) = ext.metadata_opt::<Timestamp>() else {

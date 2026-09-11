@@ -891,7 +891,7 @@ impl TryFrom<&DType> for PType {
         if let DType::Primitive(p, _) = value {
             Ok(*p)
         } else {
-            vortex_bail!("Cannot convert DType {value} into PType")
+            vortex_bail!(MismatchedTypes: "Cannot convert DType {value} into PType")
         }
     }
 }

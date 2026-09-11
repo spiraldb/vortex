@@ -183,9 +183,9 @@ impl ToDuckDBScalar for ExtScalar<'_> {
     fn try_to_duckdb_scalar(&self) -> VortexResult<Value> {
         if let Some(wkb) = self.ext_dtype().metadata_opt::<WellKnownBinary>() {
             let storage = self.to_storage_scalar();
-            let binary = storage
-                .as_binary_opt()
-                .ok_or_else(|| vortex_err!("WellKnownBinary storage must be a binary scalar"))?;
+            let binary = storage.as_binary_opt().ok_or_else(
+                || vortex_err!(InvalidArgument: "WellKnownBinary storage must be a binary scalar"),
+            )?;
             return Ok(match binary.value() {
                 Some(bytes) => Value::new_geometry(bytes.as_slice(), wkb.crs.as_deref())?,
                 None => Value::null(&*ext_logical_type(self)?),
@@ -193,14 +193,14 @@ impl ToDuckDBScalar for ExtScalar<'_> {
         }
 
         let Some(temporal) = self.ext_dtype().metadata_opt::<AnyTemporal>() else {
-            vortex_bail!("Cannot convert non-temporal extension scalar to duckdb value");
+            vortex_bail!(MismatchedTypes: "Cannot convert non-temporal extension scalar to duckdb value");
         };
 
         let storage = PrimitiveScalar::try_new(self.ext_dtype().storage_dtype(), self.value())?;
         let value = || {
             storage
                 .as_::<i64>()
-                .ok_or_else(|| vortex_err!("temporal types must be convertible to i64"))
+                .ok_or_else(|| vortex_err!(Overflow: "temporal types must be convertible to i64"))
         };
 
         Ok(match temporal {
@@ -219,7 +219,7 @@ impl ToDuckDBScalar for ExtScalar<'_> {
                     TimeUnit::Milliseconds => Value::new_timestamp_ms(value()?),
                     TimeUnit::Seconds => Value::new_timestamp_s(value()?),
                     TimeUnit::Days => {
-                        vortex_bail!("timestamp(d) is cannot be converted to duckdb scalar")
+                        vortex_bail!(InvalidArgument: "timestamp(d) is cannot be converted to duckdb scalar")
                     }
                 }
             }
@@ -236,7 +236,7 @@ impl ToDuckDBScalar for ExtScalar<'_> {
                 TimeUnit::Seconds => Value::new_time(value()? * 1000 * 1000),
                 TimeUnit::Nanoseconds => Value::new_time_ns(value()?),
                 TimeUnit::Days => {
-                    vortex_bail!("cannot convert timeunit {unit} to a duckdb time")
+                    vortex_bail!(MismatchedTypes: "cannot convert timeunit {unit} to a duckdb time")
                 }
             },
         })
@@ -248,7 +248,8 @@ fn ext_logical_type(scalar: &ExtScalar<'_>) -> VortexResult<LogicalType> {
 }
 
 fn timestamp_tz_micros(unit: TimeUnit, raw: i64) -> VortexResult<i64> {
-    let overflow = || vortex_err!("timestamp_tz overflow rescaling {raw}{unit} to micros");
+    let overflow =
+        || vortex_err!(Overflow: "timestamp_tz overflow rescaling {raw}{unit} to micros");
     match unit {
         TimeUnit::Seconds => raw.checked_mul(1_000_000).ok_or_else(overflow),
         TimeUnit::Milliseconds => raw.checked_mul(1_000).ok_or_else(overflow),
@@ -319,7 +320,9 @@ impl<'a> TryFrom<&'a ValueRef> for Scalar {
                     );
                     Ok(Scalar::extension_ref(ext.clone(), storage))
                 }
-                _ => vortex_bail!("Cannot convert DuckDB blob to Vortex scalar of dtype {dtype}"),
+                _ => {
+                    vortex_bail!(MismatchedTypes: "Cannot convert DuckDB blob to Vortex scalar of dtype {dtype}")
+                }
             },
             ExtractedValue::Date(days) => Ok(Scalar::extension::<Date>(
                 TimeUnit::Days,
@@ -412,11 +415,11 @@ impl<'a> TryFrom<&'a ValueRef> for Scalar {
                         .collect::<VortexResult<Vec<_>>>()?,
                 )),
                 _ => {
-                    vortex_bail!("List value must be a list or struct dtype")
+                    vortex_bail!(MismatchedTypes: "List value must be a list or struct dtype")
                 }
             },
             ExtractedValue::Unsupported(type_id) => {
-                vortex_bail!("Unsupported DuckDB value type {type_id:?}")
+                vortex_bail!(InvalidArgument: "Unsupported DuckDB value type {type_id:?}")
             }
         }
     }

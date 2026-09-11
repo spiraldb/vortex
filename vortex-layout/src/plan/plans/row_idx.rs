@@ -161,7 +161,7 @@ pub fn plan_row_idx_expression(
             .and_then(|scalar_fn| scalar_fn.as_opt::<PackFn>()),
     ) else {
         return Err(vortex_err!(
-            "Row-index expression partitions must be struct packs"
+            MismatchedTypes: "Row-index expression partitions must be struct packs"
         ));
     };
     let row_idx_partition_name = partitioned.partition_names[row_idx_index].clone();

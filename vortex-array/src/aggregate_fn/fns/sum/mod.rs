@@ -147,9 +147,9 @@ impl AggregateFnVTable for Sum {
         options: &Self::Options,
         input_dtype: &DType,
     ) -> VortexResult<Self::Partial> {
-        let return_dtype = self
-            .return_dtype(options, input_dtype)
-            .ok_or_else(|| vortex_err!("Unsupported sum dtype: {}", input_dtype))?;
+        let return_dtype = self.return_dtype(options, input_dtype).ok_or_else(
+            || vortex_err!(InvalidArgument: "Unsupported sum dtype: {}", input_dtype),
+        )?;
         let initial = make_zero_state(&return_dtype);
 
         Ok(SumPartial {
@@ -306,7 +306,9 @@ impl AggregateFnVTable for Sum {
                 Canonical::Primitive(p) => accumulate_primitive(&mut inner, p, ctx, skip_nans),
                 Canonical::Bool(b) => accumulate_bool(&mut inner, b, ctx),
                 Canonical::Decimal(d) => accumulate_decimal(&mut inner, d, ctx),
-                _ => vortex_bail!("Unsupported canonical type for sum: {}", batch.dtype()),
+                _ => {
+                    vortex_bail!(InvalidArgument: "Unsupported canonical type for sum: {}", batch.dtype())
+                }
             },
             Columnar::Constant(_) => unreachable!(),
         };
@@ -447,7 +449,7 @@ mod tests {
         }
 
         let sum_dtype = Stat::Sum.dtype(array.dtype()).ok_or_else(|| {
-            vortex_error::vortex_err!("Sum not supported for dtype: {}", array.dtype())
+            vortex_error::vortex_err!(InvalidArgument: "Sum not supported for dtype: {}", array.dtype())
         })?;
 
         // For non-float types, try statistics short-circuit with accumulator.

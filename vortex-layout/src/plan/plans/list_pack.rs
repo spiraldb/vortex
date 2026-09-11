@@ -127,20 +127,20 @@ impl PlanVTable for ListPack {
 }
 
 fn validate_children(dtype: &DType, row_count: u64, children: &PlanChildren) -> VortexResult<()> {
-    let elements_dtype = dtype
-        .as_list_element_opt()
-        .ok_or_else(|| vortex_err!("ListPack output dtype must be a list, got {dtype}"))?;
+    let elements_dtype = dtype.as_list_element_opt().ok_or_else(
+        || vortex_err!(MismatchedTypes: "ListPack output dtype must be a list, got {dtype}"),
+    )?;
     let expected_children = 2 + usize::from(dtype.is_nullable());
     if children.len() != expected_children {
         vortex_bail!(
-            "ListPack expects {expected_children} children but got {}",
+            InvalidArgument: "ListPack expects {expected_children} children but got {}",
             children.len()
         );
     }
 
     let elements = children
         .get(ELEMENTS)?
-        .ok_or_else(|| vortex_err!("ListPack elements child is absent"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "ListPack elements child is absent"))?;
     if elements.dtype() != elements_dtype.as_ref() {
         vortex_bail!(
             "ListPack elements child has dtype {} but the list element dtype is {}",
@@ -151,7 +151,7 @@ fn validate_children(dtype: &DType, row_count: u64, children: &PlanChildren) -> 
 
     let offsets = children
         .get(OFFSETS)?
-        .ok_or_else(|| vortex_err!("ListPack offsets child is absent"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "ListPack offsets child is absent"))?;
     if !offsets.dtype().is_int() || offsets.dtype().is_nullable() {
         vortex_bail!(
             "ListPack offsets child must have a non-nullable integer dtype, got {}",
@@ -160,7 +160,7 @@ fn validate_children(dtype: &DType, row_count: u64, children: &PlanChildren) -> 
     }
     let offsets_row_count = row_count
         .checked_add(1)
-        .ok_or_else(|| vortex_err!("ListPack offsets row count overflow"))?;
+        .ok_or_else(|| vortex_err!(Overflow: "ListPack offsets row count overflow"))?;
     if offsets.row_count() != offsets_row_count {
         vortex_bail!(
             "ListPack offsets child has {} rows but must have {offsets_row_count}",
@@ -171,7 +171,7 @@ fn validate_children(dtype: &DType, row_count: u64, children: &PlanChildren) -> 
     if dtype.is_nullable() {
         let validity = children
             .get(VALIDITY)?
-            .ok_or_else(|| vortex_err!("ListPack validity child is absent"))?;
+            .ok_or_else(|| vortex_err!(AssertionFailed: "ListPack validity child is absent"))?;
         let validity_dtype = DType::Bool(Nullability::NonNullable);
         if validity.dtype() != &validity_dtype {
             vortex_bail!(

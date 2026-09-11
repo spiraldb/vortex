@@ -159,9 +159,9 @@ impl Scalar {
         dtype: DType,
         entries: impl IntoIterator<Item = (Scalar, Scalar)>,
     ) -> VortexResult<Self> {
-        let map = dtype
-            .as_map_opt()
-            .ok_or_else(|| vortex_error::vortex_err!("Expected map dtype, found {dtype}"))?;
+        let map = dtype.as_map_opt().ok_or_else(
+            || vortex_error::vortex_err!(InvalidArgument: "Expected map dtype, found {dtype}"),
+        )?;
         let key_dtype = map.key_dtype();
         let value_dtype = map.value_dtype();
 
@@ -171,13 +171,13 @@ impl Scalar {
             .map(|(index, (key, value))| {
                 if key.dtype() != &key_dtype {
                     vortex_bail!(
-                        "map entry {index} expected key dtype {key_dtype}, got {}",
+                        MismatchedTypes: "map entry {index} expected key dtype {key_dtype}, got {}",
                         key.dtype()
                     );
                 }
                 if value.dtype() != &value_dtype {
                     vortex_bail!(
-                        "map entry {index} expected value dtype {value_dtype}, got {}",
+                        MismatchedTypes: "map entry {index} expected value dtype {value_dtype}, got {}",
                         value.dtype()
                     );
                 }

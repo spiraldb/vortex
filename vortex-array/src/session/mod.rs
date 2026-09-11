@@ -133,7 +133,7 @@ pub trait ArraySessionExt: SessionExt {
     fn array_serialize(&self, array: &ArrayRef) -> VortexResult<Option<ArraySerialization>> {
         let Some(plugin) = self.arrays().serializer(&array.encoding_id()) else {
             vortex_bail!(
-                "Array {} is not registered for serialization",
+                Serde: "Array {} is not registered for serialization",
                 array.encoding_id()
             );
         };

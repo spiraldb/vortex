@@ -97,13 +97,13 @@ pub(crate) fn multipolygon_storage_dtype(dim: Dimension, nullability: Nullabilit
 /// Validate `dtype` is `List<List<List<coordinate-struct>>>` and return its [`Dimension`].
 pub(crate) fn multipolygon_dimension(dtype: &DType) -> VortexResult<Dimension> {
     let DType::List(polygon, _) = dtype else {
-        vortex_bail!("multipolygon storage must be a List of polygons, was {dtype}");
+        vortex_bail!(MismatchedTypes: "multipolygon storage must be a List of polygons, was {dtype}");
     };
     let DType::List(ring, _) = polygon.as_ref() else {
-        vortex_bail!("multipolygon polygon storage must be a List of rings, was {polygon}");
+        vortex_bail!(MismatchedTypes: "multipolygon polygon storage must be a List of rings, was {polygon}");
     };
     let DType::List(coords, _) = ring.as_ref() else {
-        vortex_bail!("multipolygon ring storage must be a List of coordinates, was {ring}");
+        vortex_bail!(MismatchedTypes: "multipolygon ring storage must be a List of coordinates, was {ring}");
     };
     coordinate_dimension(coords)
 }
@@ -124,7 +124,9 @@ pub(crate) fn multipolygon_geometries(
         .iter()
         .map(|geometry| -> VortexResult<Geometry<f64>> {
             Ok(geometry
-                .ok_or_else(|| vortex_err!("spatial: null geometry is not supported"))?
+                .ok_or_else(
+                    || vortex_err!(InvalidArgument: "spatial: null geometry is not supported"),
+                )?
                 .map_err(|e| vortex_err!("spatial: geometry access failed: {e}"))?
                 .to_geometry())
         })

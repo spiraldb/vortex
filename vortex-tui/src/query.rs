@@ -82,7 +82,7 @@ pub async fn exec_query(session: &VortexSession, args: QueryArgs) -> VortexResul
     };
 
     let json_output = serde_json::to_string_pretty(&output)
-        .map_err(|e| vortex_err!("Failed to serialize JSON: {e}"))?;
+        .map_err(|e| vortex_err!(Serde: "Failed to serialize JSON: {e}"))?;
     println!("{json_output}");
 
     Ok(())

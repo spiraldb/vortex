@@ -123,7 +123,7 @@ impl MultiFileDataSource {
     /// and creates lazy factories for the remaining files.
     pub async fn build(self) -> VortexResult<MultiLayoutDataSource> {
         if self.glob_sources.is_empty() {
-            vortex_bail!("MultiFileDataSource requires at least one glob pattern");
+            vortex_bail!(InvalidArgument: "MultiFileDataSource requires at least one glob pattern");
         }
 
         // Create local filesystem lazily if needed (only if any glob lacks a filesystem).

@@ -37,7 +37,7 @@ impl Scalar {
             && !source.keys_sorted()
         {
             return Err(vortex_err!(
-                "Cannot cast {} to {target_dtype}: source does not assert sorted map keys",
+                MismatchedTypes: "Cannot cast {} to {target_dtype}: source does not assert sorted map keys",
                 self.dtype()
             ));
         }
@@ -71,7 +71,7 @@ impl Scalar {
             DType::Map(..) => self.as_map().cast(target_dtype),
             DType::Struct(..) => self.as_struct().cast(target_dtype),
             DType::Union(..) => vortex_bail!(
-                "union scalar cast from {} to {target_dtype} is not supported (yet)",
+                InvalidArgument: "union scalar cast from {} to {target_dtype} is not supported (yet)",
                 self.dtype()
             ),
             DType::Variant(_) => vortex_bail!("Variant scalars can't be cast to {target_dtype}"),

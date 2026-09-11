@@ -177,7 +177,7 @@ where
     let value_width = values_ptype.byte_width();
     let output_values_bytes = total_values
         .checked_mul(value_width)
-        .ok_or_else(|| vortex_err!("rebuilt list child byte length overflow"))?;
+        .ok_or_else(|| vortex_err!(Overflow: "rebuilt list child byte length overflow"))?;
 
     let output_values = gather_rebuilt_primitive_values::<O, S>(
         &offsets,
@@ -219,7 +219,7 @@ fn check_list_view_rebuild_status(
     match status {
         0 => Ok(()),
         1 => vortex_bail!(
-            "cannot export device-resident ListViewArray as Arrow List: offsets/sizes are invalid for the child elements"
+            InvalidArgument: "cannot export device-resident ListViewArray as Arrow List: offsets/sizes are invalid for the child elements"
         ),
         2 => vortex_bail!(
             "cannot export device-resident ListViewArray as Arrow List: offsets exceed i32 range required by cuDF"
@@ -496,7 +496,7 @@ async fn primitive_device_buffer(
 ) -> VortexResult<(PType, BufferHandle)> {
     let canonical = array.execute_cuda(ctx).await?;
     let Canonical::Primitive(primitive) = canonical else {
-        vortex_bail!("{name} must be primitive, got {}", canonical.dtype());
+        vortex_bail!(MismatchedTypes: "{name} must be primitive, got {}", canonical.dtype());
     };
 
     let PrimitiveDataParts { ptype, buffer, .. } = primitive.into_data_parts();

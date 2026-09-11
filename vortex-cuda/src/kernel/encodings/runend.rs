@@ -55,8 +55,8 @@ impl CudaExecute for RunEndExecutor {
         array: ArrayRef,
         ctx: &mut CudaExecutionCtx,
     ) -> VortexResult<Canonical> {
-        let array =
-            Self::try_specialize(array).ok_or_else(|| vortex_err!("Expected RunEndArray"))?;
+        let array = Self::try_specialize(array)
+            .ok_or_else(|| vortex_err!(InvalidArgument: "Expected RunEndArray"))?;
 
         if !array.dtype().is_primitive() {
             vortex_bail!("RunEndExecutor only supports primitive types")

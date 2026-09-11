@@ -108,7 +108,7 @@ impl Array<ScalarFn> {
 
     fn infer_len(children: &[ArrayRef]) -> VortexResult<usize> {
         let Some(child) = children.first() else {
-            vortex_bail!("ScalarFnArray length cannot be inferred without children");
+            vortex_bail!(InvalidArgument: "ScalarFnArray length cannot be inferred without children");
         };
         Ok(child.len())
     }

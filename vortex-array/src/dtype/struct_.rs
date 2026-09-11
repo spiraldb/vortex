@@ -418,7 +418,7 @@ impl StructFields {
         for field in projection {
             let idx = self
                 .find(field)
-                .ok_or_else(|| vortex_err!("{field} not found"))?;
+                .ok_or_else(|| vortex_err!(NotFound: "{field} not found"))?;
             names.push(self.0.names[idx].clone());
             dtypes.push(self.0.dtypes[idx].clone());
         }
@@ -433,7 +433,7 @@ impl StructFields {
     pub fn without_field(&self, index: usize) -> VortexResult<Self> {
         if index >= self.nfields() {
             vortex_bail!(
-                "index {} out of bounds for struct with {} fields",
+                OutOfBounds: "index {} out of bounds for struct with {} fields",
                 index,
                 self.nfields()
             );

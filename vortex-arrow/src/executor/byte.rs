@@ -60,7 +60,7 @@ where
 {
     if !matches!(array.dtype(), DType::Utf8(_) | DType::Binary(_)) {
         vortex_bail!(
-            "Cannot convert Vortex array with dtype {} to Arrow byte array type {}",
+            MismatchedTypes: "Cannot convert Vortex array with dtype {} to Arrow byte array type {}",
             array.dtype(),
             T::DATA_TYPE
         );
@@ -138,7 +138,7 @@ fn validate_live_values_utf8<T: ByteArrayType>(
     let value_at = |index: usize, start: usize, end: usize| -> VortexResult<&[u8]> {
         values
             .get(start..end)
-            .ok_or_else(|| vortex_err!("Offsets {start}..{end} at index {index} are out of bounds"))
+            .ok_or_else(|| vortex_err!(OutOfBounds: "Offsets {start}..{end} at index {index} are out of bounds"))
     };
 
     let Some(nulls) = nulls.filter(|nulls| nulls.null_count() > 0) else {

@@ -38,9 +38,9 @@ pub(crate) fn resolve_store(
             // If the URL does not parse
             match Url::parse(url_or_path) {
                 Ok(url) if url.scheme() == "file" => {
-                    let path = url
-                        .to_file_path()
-                        .map_err(|_| vortex_err!("invalid file URL: {url_or_path}"))?;
+                    let path = url.to_file_path().map_err(
+                        |_| vortex_err!(InvalidArgument: "invalid file URL: {url_or_path}"),
+                    )?;
                     Ok(ResolvedStore::Path(path))
                 }
                 Ok(url) => {

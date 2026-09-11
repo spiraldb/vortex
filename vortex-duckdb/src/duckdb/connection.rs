@@ -35,8 +35,8 @@ impl ConnectionRef {
     /// Execute SQL query and return the result.
     pub fn query(&self, query: &str) -> VortexResult<QueryResult> {
         let mut result: cpp::duckdb_result = unsafe { std::mem::zeroed() };
-        let query_cstr =
-            std::ffi::CString::new(query).map_err(|_| vortex_err!("Invalid query string"))?;
+        let query_cstr = std::ffi::CString::new(query)
+            .map_err(|_| vortex_err!(InvalidArgument: "Invalid query string"))?;
 
         let status =
             unsafe { cpp::duckdb_query(self.as_ptr(), query_cstr.as_ptr(), &raw mut result) };

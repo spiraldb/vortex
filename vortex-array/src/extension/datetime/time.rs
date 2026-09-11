@@ -37,8 +37,9 @@ impl Time {
     ///
     /// Note that Days units are not supported for Time.
     pub fn try_new(time_unit: TimeUnit, nullability: Nullability) -> VortexResult<ExtDType<Self>> {
-        let ptype = time_ptype(&time_unit)
-            .ok_or_else(|| vortex_err!("Time type does not support time unit {}", time_unit))?;
+        let ptype = time_ptype(&time_unit).ok_or_else(
+            || vortex_err!(InvalidArgument: "Time type does not support time unit {}", time_unit),
+        )?;
         ExtDType::try_new(time_unit, DType::Primitive(ptype, nullability))
     }
 
@@ -97,8 +98,9 @@ impl ExtVTable for Time {
 
     fn validate_dtype(ext_dtype: &ExtDType<Self>) -> VortexResult<()> {
         let metadata = ext_dtype.metadata();
-        let ptype = time_ptype(metadata)
-            .ok_or_else(|| vortex_err!("Time type does not support time unit {}", metadata))?;
+        let ptype = time_ptype(metadata).ok_or_else(
+            || vortex_err!(InvalidArgument: "Time type does not support time unit {}", metadata),
+        )?;
 
         vortex_ensure!(
             ext_dtype.storage_dtype().as_ptype() == ptype,
@@ -135,13 +137,15 @@ impl ExtVTable for Time {
                 Span::new().nanoseconds(length_of_time),
                 TimeValue::Nanoseconds(length_of_time),
             ),
-            d @ TimeUnit::Days => vortex_bail!("Time type does not support time unit {d}"),
+            d @ TimeUnit::Days => {
+                vortex_bail!(InvalidArgument: "Time type does not support time unit {d}")
+            }
         };
 
         // Validate the storage value is within the valid range for Time.
         jiff::civil::Time::MIN
             .checked_add(span)
-            .map_err(|e| vortex_err!("Invalid time scalar: {}", e))?;
+            .map_err(|e| vortex_err!(InvalidArgument: "Invalid time scalar: {}", e))?;
 
         Ok(value)
     }

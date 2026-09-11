@@ -96,7 +96,7 @@ impl VTable for Dict {
         match idx {
             0 => Ok(layout.dtype().clone()),
             1 => Ok(layout.codes_dtype.clone()),
-            _ => vortex_bail!("Dict child index out of bounds: {idx}"),
+            _ => vortex_bail!(OutOfBounds: "Dict child index out of bounds: {idx}"),
         }
     }
 

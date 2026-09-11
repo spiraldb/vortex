@@ -115,7 +115,7 @@ pub(crate) fn to_arrow_time_unit(value: TimeUnit) -> VortexResult<ArrowTimeUnit>
         TimeUnit::Milliseconds => ArrowTimeUnit::Millisecond,
         TimeUnit::Microseconds => ArrowTimeUnit::Microsecond,
         TimeUnit::Nanoseconds => ArrowTimeUnit::Nanosecond,
-        _ => vortex_bail!("Cannot convert {value} to Arrow TimeUnit"),
+        _ => vortex_bail!(MismatchedTypes: "Cannot convert {value} to Arrow TimeUnit"),
     })
 }
 
@@ -134,7 +134,7 @@ pub(crate) fn ptype_from_arrow(value: &DataType) -> VortexResult<PType> {
         DataType::Float32 => Ok(PType::F32),
         DataType::Float64 => Ok(PType::F64),
         _ => Err(vortex_err!(
-            "Arrow datatype {:?} cannot be converted to ptype",
+            InvalidArgument: "Arrow datatype {:?} cannot be converted to ptype",
             value
         )),
     }
@@ -149,7 +149,7 @@ pub(crate) fn decimal_dtype_from_arrow(value: &DataType) -> VortexResult<Decimal
         | DataType::Decimal256(precision, scale) => DecimalDType::try_new(*precision, *scale),
 
         _ => Err(vortex_err!(
-            "Arrow datatype {:?} cannot be converted to DecimalDType",
+            InvalidArgument: "Arrow datatype {:?} cannot be converted to DecimalDType",
             value
         )),
     }
@@ -238,7 +238,7 @@ pub(crate) fn from_arrow_data_type(
         DataType::RunEndEncoded(_, value_type) => {
             from_arrow_data_type(value_type.data_type(), nullability)?
         }
-        _ => vortex_bail!("Arrow data type not supported: {data_type:?}"),
+        _ => vortex_bail!(InvalidArgument: "Arrow data type not supported: {data_type:?}"),
     })
 }
 
@@ -285,7 +285,7 @@ fn to_arrow_schema_naive(dtype: &DType) -> VortexResult<Schema> {
     };
 
     if *nullable != Nullability::NonNullable {
-        vortex_bail!("top-level struct in Schema must be NonNullable");
+        vortex_bail!(InvalidArgument: "top-level struct in Schema must be NonNullable");
     }
 
     let mut builder = SchemaBuilder::with_capacity(struct_dtype.names().len());
@@ -387,7 +387,7 @@ pub(crate) fn to_data_type_naive(dtype: &DType) -> VortexResult<DataType> {
         }
         DType::Union(..) => todo!("TODO(connor)[Union]: unimplemented"),
         DType::Variant(_) => vortex_bail!(
-            "DType::Variant requires Arrow Field metadata; use to_arrow_schema or a Field helper"
+            InvalidArgument: "DType::Variant requires Arrow Field metadata; use to_arrow_schema or a Field helper"
         ),
         DType::Extension(ext_dtype) => {
             // NOTE: Temporal are the only builtin and default-loaded extension types, and they map
@@ -418,7 +418,7 @@ pub(crate) fn to_data_type_naive(dtype: &DType) -> VortexResult<DataType> {
                 });
             };
 
-            vortex_bail!("Unsupported extension type \"{}\"", ext_dtype.id())
+            vortex_bail!(InvalidArgument: "Unsupported extension type \"{}\"", ext_dtype.id())
         }
     })
 }

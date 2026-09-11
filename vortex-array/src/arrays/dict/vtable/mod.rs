@@ -144,7 +144,7 @@ impl VTable for Dict {
                 codes_ptype: PType::try_from(array.codes().dtype())? as i32,
                 values_len: u32::try_from(array.values().len()).map_err(|_| {
                     vortex_err!(
-                        "Dictionary values size {} overflowed u32",
+                        Overflow: "Dictionary values size {} overflowed u32",
                         array.values().len()
                     )
                 })?,
@@ -167,7 +167,7 @@ impl VTable for Dict {
         let metadata = DictMetadata::decode(metadata)?;
         if children.len() != 2 {
             vortex_bail!(
-                "Expected 2 children for dict encoding, found {}",
+                InvalidArgument: "Expected 2 children for dict encoding, found {}",
                 children.len()
             )
         }

@@ -244,6 +244,14 @@ typedef enum {
      * Panic inside FFI
      */
     VX_ERROR_CODE_PANIC = 9,
+    /**
+     * A name was looked up and nothing was bound to it
+     */
+    VX_ERROR_CODE_NOT_FOUND = 10,
+    /**
+     * A numeric value does not fit its target type
+     */
+    VX_ERROR_CODE_OVERFLOW = 11,
 } vx_error_code;
 
 /**
