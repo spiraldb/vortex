@@ -18,7 +18,6 @@ use crate::node::ExecNode;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::PushBatch;
 use crate::node::PushCx;
@@ -60,7 +59,6 @@ pub struct ConjunctExec {
     plan_cursor: usize,
     plan_started: bool,
     done: bool,
-    children: Vec<NodeId>,
     push_cursor: u64,
     push_heads: Vec<VecDeque<PendingMask>>,
     push_ended: Vec<bool>,
@@ -91,7 +89,6 @@ impl ConjunctExec {
         mode: ConjunctMode,
     ) -> Self {
         debug_assert_eq!(slots.len(), push_predicates.len());
-        let children = slots.iter().map(|slot| slot.input).collect();
         Self {
             slots,
             push_predicates,
@@ -100,7 +97,6 @@ impl ConjunctExec {
             plan_cursor: 0,
             plan_started: false,
             done: false,
-            children,
             push_cursor: 0,
             push_heads: Vec::new(),
             push_ended: Vec::new(),
@@ -150,7 +146,7 @@ impl ExecNode for ConjunctExec {
         // to defer naming it here.
         while self.plan_cursor < self.slots.len() {
             if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
             let fresh = !self.plan_started;
             self.plan_started = true;
@@ -162,7 +158,7 @@ impl ExecNode for ConjunctExec {
                 self.plan_cursor += 1;
                 self.plan_started = false;
             } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
         }
         Ok(PlanPoll::Complete)
@@ -217,13 +213,9 @@ impl ExecNode for ConjunctExec {
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {
-        for &child in &self.children {
-            cx.retire_child(child);
+        for slot in &self.slots {
+            cx.retire_child(slot.input);
         }
-    }
-
-    fn children(&self) -> &[NodeId] {
-        &self.children
     }
 }
 

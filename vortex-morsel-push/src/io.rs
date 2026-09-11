@@ -3,8 +3,8 @@
 
 //! The scheduler-visible IO plane.
 //!
-//! Nodes *name* reads during planning: [`PlanCx::register`](crate::PlanCx::register) takes an
-//! [`IoBatch`] of [`IoUse`]s, each keyed to a whole stored unit, and hands back an [`IoTicket`].
+//! Nodes *name* reads during planning: [`PlanCx::register`](crate::PlanCx::register) takes a
+//! batch of [`IoKey`]s, each naming a whole stored unit, and hands back an [`IoTicket`].
 //! Execution may resolve an unissued required ticket through a caller-provided non-blocking
 //! probe; otherwise it can only clone an already-ready cell or suspend on that exact ticket.
 //!
@@ -15,7 +15,6 @@
 //! worker parks on its exact cells until they are completed.
 
 use std::cell::RefCell;
-use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::Weak;
@@ -66,61 +65,9 @@ pub enum IoPriority {
     Speculative,
 }
 
-/// Identifies the node that emitted a use, so the scheduler can attribute and cancel it.
+/// Identifies a source node in planning errors.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProducerId(pub u32);
-
-/// One named read.
-#[derive(Clone, Debug)]
-pub struct IoUse {
-    /// The whole stored unit this use covers.
-    pub key: IoKey,
-    /// The rows of the stored unit, frozen at emission.
-    pub extent: Range<u64>,
-    /// The inverse image of `extent` in root coordinates, stamped at emission. The scheduler
-    /// reads demand verdicts over this range without ever seeing an offset map.
-    pub source_range: Range<u64>,
-    /// The node that emitted this use.
-    pub producer: ProducerId,
-    /// The estimated size of the read, for admission accounting.
-    pub estimated_bytes: usize,
-}
-
-/// A batch of uses emitted by one planning step.
-#[derive(Clone, Debug, Default)]
-pub struct IoBatch {
-    uses: Vec<IoUse>,
-}
-
-impl IoBatch {
-    /// An empty batch.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Add a use to the batch.
-    pub fn push(&mut self, r#use: IoUse) {
-        self.uses.push(r#use);
-    }
-
-    /// The uses in this batch.
-    pub fn uses(&self) -> &[IoUse] {
-        &self.uses
-    }
-
-    /// Whether the batch is empty.
-    pub fn is_empty(&self) -> bool {
-        self.uses.is_empty()
-    }
-}
-
-impl FromIterator<IoUse> for IoBatch {
-    fn from_iter<T: IntoIterator<Item = IoUse>>(iter: T) -> Self {
-        Self {
-            uses: iter.into_iter().collect(),
-        }
-    }
-}
 
 /// One read the scan wants performed, handed out of plan execution.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -167,11 +114,6 @@ impl IoCompletions {
             }
             None => false,
         }
-    }
-
-    /// Whether the scan these completions belong to has been dropped.
-    pub fn is_closed(&self) -> bool {
-        self.service.strong_count() == 0
     }
 }
 
@@ -868,30 +810,30 @@ impl IoPlane {
     /// Register a batch of uses, creating any cell that does not already exist.
     pub(crate) fn register(
         &self,
-        batch: IoBatch,
+        keys: &[IoKey],
         priority: IoPriority,
         stats: &mut ScanStats,
-    ) -> VortexResult<Vec<IoTicket>> {
+    ) -> Vec<IoTicket> {
         let mut cells = self.cells.borrow_mut();
-        let mut tickets = Vec::with_capacity(batch.uses().len());
-        for r#use in batch.uses() {
-            if !cells.contains_key(&r#use.key) {
+        let mut tickets = Vec::with_capacity(keys.len());
+        for &key in keys {
+            if !cells.contains_key(&key) {
                 stats.io_registered += 1;
-                let (cell, created) = self.service.register(r#use.key, priority);
+                let (cell, created) = self.service.register(key, priority);
                 if !created {
                     stats.io_cell_hits += 1;
                 }
                 self.unsubmitted.borrow_mut().push(Arc::clone(&cell));
-                cells.insert(r#use.key, cell);
+                cells.insert(key, cell);
             } else {
                 stats.io_cell_hits += 1;
                 if priority == IoPriority::Required {
-                    cells[&r#use.key].required.store(true, Ordering::Release);
+                    cells[&key].required.store(true, Ordering::Release);
                 }
             }
-            tickets.push(IoTicket(r#use.key));
+            tickets.push(IoTicket(key));
         }
-        Ok(tickets)
+        tickets
     }
 
     /// Take newly registered reads for submission to the scheduler.

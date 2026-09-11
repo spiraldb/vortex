@@ -101,10 +101,8 @@ enum NodeSpec {
 /// A shared, immutable execution plan for one scan.
 pub struct ExecPlan {
     nodes: Vec<NodeSpec>,
-    /// Reverse child-to-parent routes, indexed by child node ID.
-    routes: Vec<Option<Route>>,
-    /// Forward parent-port-to-child edges, indexed by parent node ID and input port.
-    inputs: Vec<Vec<Option<NodeId>>>,
+    /// Input counts used to size each node's reusable sideband storage.
+    input_widths: Vec<usize>,
     /// Every push source and the root-coordinate rows it can produce.
     sources: Vec<SourceActivation>,
     source_catalog: SourceCatalog,
@@ -503,28 +501,6 @@ impl ExecPlan {
         self.root
     }
 
-    /// The static route from `node` to its parent, or `None` for the plan root.
-    pub fn route(&self, node: NodeId) -> Option<Route> {
-        self.routes.get(node as usize).copied().flatten()
-    }
-
-    /// Every reverse child-to-parent route, indexed by child node ID.
-    pub fn routes(&self) -> &[Option<Route>] {
-        &self.routes
-    }
-
-    /// The child connected to one parent input port.
-    ///
-    /// Push credit acknowledgements use this inverse of [`ExecPlan::route`] to resume the child
-    /// after its parent fully consumes one retained input head.
-    pub fn input(&self, parent: NodeId, port: InputPort) -> Option<NodeId> {
-        self.inputs
-            .get(parent as usize)
-            .and_then(|inputs| inputs.get(port.index()))
-            .copied()
-            .flatten()
-    }
-
     /// The catalog of source nodes that may activate for a morsel.
     pub fn sources(&self) -> &[SourceActivation] {
         &self.sources
@@ -587,17 +563,6 @@ impl ExecPlan {
 
     pub(crate) fn topology(&self) -> &Arc<PhysicalTopology> {
         &self.topology
-    }
-
-    /// Pipeline that drains values produced by `node`.
-    pub fn pipeline_for_node(&self, node: NodeId) -> Option<(&PhysicalPipeline, usize)> {
-        self.topology.pipelines.iter().find_map(|pipeline| {
-            pipeline
-                .stages
-                .iter()
-                .position(|stage| stage.node == node)
-                .map(|stage| (pipeline, stage))
-        })
     }
 
     /// Every I/O-backed push source with its exact key, root-coordinate extent, and role.
@@ -716,7 +681,7 @@ impl ExecPlan {
             })
             .collect();
         let mut arena = Arena::new_compiled(nodes);
-        arena.prepare_push_sidebands(self.inputs.iter().map(|inputs| inputs.len()));
+        arena.prepare_push_sidebands(self.input_widths.iter().copied());
         arena
     }
 }
@@ -781,8 +746,8 @@ pub(crate) fn build_plan_with_row_offset(
         }
     };
 
-    // The projection.
-    let push_batching = projection_push_batching(predicate.is_some());
+    // Projection fields run independently, then align at the morsel boundary.
+    let push_batching = PushBatching::Morsel;
     let (projection_input, projection_bound, _) =
         builder.build_scoped(projection, push_batching, false)?;
     let output_dtype = projection_bound.dtype().clone();
@@ -810,8 +775,7 @@ pub(crate) fn build_plan_with_row_offset(
 
     Ok(ExecPlan {
         nodes,
-        routes,
-        inputs,
+        input_widths: inputs.iter().map(Vec::len).collect(),
         sources,
         source_catalog,
         topology,
@@ -820,12 +784,6 @@ pub(crate) fn build_plan_with_row_offset(
         row_count,
         natural_splits,
     })
-}
-
-// A projection Struct is a morsel boundary: its field pipelines still run independently and
-// directly, while the fan-in retains each field's ordered fragments without cross-field slicing.
-fn projection_push_batching(_filtered: bool) -> PushBatching {
-    PushBatching::Morsel
 }
 
 /// Optimize adjacent conjuncts without changing the query's declared cascade order.
@@ -1426,7 +1384,6 @@ mod tests {
     use super::optimize_ordered_filter;
     use super::physical_pipelines;
     use super::physical_topology;
-    use super::projection_push_batching;
     use super::reverse_routes;
     use crate::node::ActivationTarget;
 
@@ -1442,12 +1399,6 @@ mod tests {
             ),
             Nullability::NonNullable,
         )
-    }
-
-    #[test]
-    fn every_projection_uses_field_independent_morsel_batching() {
-        assert_eq!(projection_push_batching(true), PushBatching::Morsel);
-        assert_eq!(projection_push_batching(false), PushBatching::Morsel);
     }
 
     #[test]

@@ -21,7 +21,6 @@ use crate::node::ExecNode;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::PushBatch;
 use crate::node::PushCx;
@@ -128,7 +127,7 @@ impl ExecNode for StructExec {
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
         while self.plan_cursor < self.children.len() {
             if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
             let fresh = !self.plan_started;
             self.plan_started = true;
@@ -136,7 +135,7 @@ impl ExecNode for StructExec {
                 self.plan_cursor += 1;
                 self.plan_started = false;
             } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
         }
         Ok(PlanPoll::Complete)
@@ -234,10 +233,6 @@ impl ExecNode for StructExec {
         for &child in self.children.iter() {
             cx.retire_child(child);
         }
-    }
-
-    fn children(&self) -> &[NodeId] {
-        &self.children
     }
 }
 

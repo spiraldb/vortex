@@ -43,7 +43,7 @@ use crate::io::IoService;
 use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
 
-type PlanCacheKey = (String, Option<String>, ConjunctMode, u64);
+type PlanCacheKey = (Expression, Option<Expression>, ConjunctMode, u64);
 
 /// Morsels kept visible to background I/O ahead of the active workers in shared scans, so the
 /// file driver sees enough adjacent segments to coalesce and cold reads overlap execution.
@@ -51,6 +51,10 @@ const SHARED_LOOKAHEAD_MORSELS: usize = 16;
 
 /// Keep stats evaluation bounded while exposing enough adjacent morsels for stats reads to batch.
 const PRUNING_LOOKAHEAD_MORSELS: usize = 16;
+
+/// Bridge small zone-map holes so requests from one physical segment remain visible together.
+/// The scan's exact predicate still filters these false-positive rows.
+const MAX_PRUNING_GAP_ROWS: u64 = 8 * 1024;
 
 /// Push-morsel execution backend over a raw layout and segment source.
 pub struct PushMorselScanExecutor {
@@ -305,8 +309,8 @@ impl PushMorselScanExecutor {
         let projection = unbind(projection)?;
         let filter = filter.map(unbind).transpose()?;
         let plan_key = (
-            projection.to_string(),
-            filter.as_ref().map(ToString::to_string),
+            projection.clone(),
+            filter.clone(),
             self.conjunct_mode,
             row_offset,
         );
@@ -426,7 +430,8 @@ async fn prune_morsel(
             })
             .collect::<VortexResult<Vec<_>>>()?;
         let mask = Mask::intersect_owned(try_join_all(futures).await?);
-        selected_ranges.extend(mask_ranges(&range, &mask));
+        let ranges = coalesce_ranges(mask_ranges(&range, &mask), MAX_PRUNING_GAP_ROWS);
+        selected_ranges.extend(ranges);
     }
     Ok(SelectedMorsel { selected_ranges })
 }
@@ -565,6 +570,19 @@ fn mask_ranges(range: &Range<u64>, mask: &Mask) -> Vec<Range<u64>> {
     }
 }
 
+fn coalesce_ranges(ranges: Vec<Range<u64>>, max_gap: u64) -> Vec<Range<u64>> {
+    let mut coalesced = Vec::<Range<u64>>::with_capacity(ranges.len());
+    for range in ranges {
+        match coalesced.last_mut() {
+            Some(previous) if range.start.saturating_sub(previous.end) <= max_gap => {
+                previous.end = previous.end.max(range.end);
+            }
+            _ => coalesced.push(range),
+        }
+    }
+    coalesced
+}
+
 fn unbind(expr: &BoundExpression) -> VortexResult<Expression> {
     let Some(scalar_fn) = expr.as_scalar() else {
         return Ok(Expression::Root);
@@ -601,4 +619,22 @@ fn selected_morsels(
             (!selected_ranges.is_empty()).then_some(SelectedMorsel { selected_ranges })
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::coalesce_ranges;
+
+    #[test]
+    fn coalesces_only_small_gaps() {
+        assert_eq!(
+            coalesce_ranges(vec![0..10, 18..20, 30..40, 40..50], 8),
+            vec![0..20, 30..50]
+        );
+    }
+
+    #[test]
+    fn coalesces_empty_ranges() {
+        assert!(coalesce_ranges(Vec::new(), 8).is_empty());
+    }
 }

@@ -8,24 +8,19 @@ use std::time::Instant;
 use vortex_array::ArrayRef;
 use vortex_array::Canonical;
 use vortex_array::IntoArray;
-use vortex_array::dtype::DType;
 use vortex_array::serde::SerializedArray;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_layout::layouts::flat::FlatLayout;
 
-use crate::io::IoBatch;
 use crate::io::IoKey;
 use crate::io::IoTicket;
-use crate::io::IoUse;
 use crate::io::ProducerId;
 use crate::node::ActivationRows;
 use crate::node::ExecNode;
-use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::PushBatch;
 use crate::node::PushCx;
@@ -70,14 +65,6 @@ pub struct FlatExec {
 }
 
 impl FlatExec {
-    /// Build a source over one flat layout.
-    pub fn new(layout: &FlatLayout, root_offset: u64, producer: ProducerId) -> Self {
-        Self::from_segments(
-            Arc::from([FlatSegment::new(layout.clone(), root_offset)]),
-            producer,
-        )
-    }
-
     pub(crate) fn from_segments(segments: Arc<[FlatSegment]>, producer: ProducerId) -> Self {
         Self {
             segments,
@@ -214,34 +201,28 @@ impl ExecNode for FlatExec {
             return Ok(PlanPoll::Complete);
         }
         if cx.out_of_budget() {
-            return Ok(PlanPoll::Item(PlanItem::Plan));
+            return Ok(PlanPoll::Yield);
         }
-        let mut batch = IoBatch::new();
+        let mut keys = Vec::new();
         let mut ticket_indices = Vec::new();
-        while self.planned < self.active.len() && batch.uses().len() < cx.budget() as usize {
+        while self.planned < self.active.len() && keys.len() < cx.budget() as usize {
             let segment = &self.segments[self.active.start + self.planned];
             let layout = &segment.layout;
             let key = IoKey::Segment(layout.segment_id());
             if !cx.decoded_available(key) {
-                batch.push(IoUse {
-                    key,
-                    extent: 0..layout.row_count(),
-                    source_range: segment.range.clone(),
-                    producer: self.producer,
-                    estimated_bytes: estimate_bytes(layout.dtype(), layout.row_count()),
-                });
+                keys.push(key);
                 ticket_indices.push(self.planned);
             }
             self.planned += 1;
         }
-        if batch.uses().is_empty() {
+        if keys.is_empty() {
             return Ok(PlanPoll::Complete);
         }
-        let tickets = cx.register(batch.clone())?;
+        let tickets = cx.register(&keys);
         for (index, ticket) in ticket_indices.into_iter().zip(tickets) {
             self.tickets[index] = Some(ticket);
         }
-        Ok(PlanPoll::Item(PlanItem::Io(batch)))
+        Ok(PlanPoll::Continue)
     }
 
     fn push_start(
@@ -317,25 +298,4 @@ impl ExecNode for FlatExec {
         self.selections.clear();
         self.planned = 0;
     }
-
-    fn children(&self) -> &[NodeId] {
-        &[]
-    }
-}
-
-/// A rough per-row byte estimate, used only for admission accounting.
-///
-/// The layout does not carry segment byte sizes, so this is a width estimate rather than a
-/// measurement; P2's cost model replaces it with the footer's real segment extents.
-fn estimate_bytes(dtype: &DType, rows: u64) -> usize {
-    let per_row = match dtype {
-        DType::Bool(_) => 1,
-        DType::Primitive(ptype, _) => ptype.byte_width(),
-        DType::Decimal(..) => 16,
-        DType::Utf8(_) | DType::Binary(_) => 16,
-        _ => 8,
-    };
-    usize::try_from(rows)
-        .unwrap_or(usize::MAX)
-        .saturating_mul(per_row)
 }

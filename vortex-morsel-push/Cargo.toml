@@ -52,9 +52,7 @@ arrow-schema = { workspace = true, optional = true }
 tpchgen = { workspace = true, optional = true }
 tpchgen-arrow = { workspace = true, optional = true }
 vortex = { workspace = true, optional = true, features = ["files"] }
-itertools = { workspace = true }
 parking_lot = { workspace = true }
-tracing = { workspace = true }
 rustix = { workspace = true, features = ["fs"], optional = true }
 sysinfo = { workspace = true, optional = true }
 

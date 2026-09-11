@@ -77,6 +77,7 @@ use vortex_session::VortexSession;
 use crate::DemandHintDelivery;
 use crate::PushMorselScanExecutor;
 use crate::SegmentSourceDriver;
+use crate::driver::StreamCancellation;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
@@ -587,6 +588,109 @@ fn leaf_batch_crosses_multiple_parent_edges_inline() -> VortexResult<()> {
         "typed routing must move selection with the batch instead of cloning it"
     );
     assert_eq!(stats.push_dispatch_spills, 0);
+    Ok(())
+}
+
+#[rstest]
+fn completion_sink_receives_each_morsel_in_order(
+    #[values(1, 4)] threads: usize,
+    #[values(false, true)] bounded: bool,
+) -> VortexResult<()> {
+    let session = session();
+    let values: Vec<i32> = (0..32).collect();
+    let fixture = block_on(|_handle| async {
+        write_fixture(
+            vec![Column::new("a", i32_chunks(&values, &[3, 11, 19, 27, 32]))],
+            &session,
+        )
+        .await
+    })?;
+    let filter = and(
+        gt_eq(get_item("a", root()), lit(8i32)),
+        lt(get_item("a", root()), lit(20i32)),
+    );
+    let plan = Arc::new(crate::build_plan(
+        &fixture.layout,
+        &get_item("a", root()),
+        Some(&filter),
+        ConjunctMode::Cascade,
+    )?);
+    let outputs = Arc::new(Mutex::new(Vec::new()));
+    let sink_outputs = Arc::clone(&outputs);
+    let mut scan = crate::MorselScan::new(plan, session.clone())
+        .with_threads(threads)
+        .with_morsels(vec![0..8, 8..16, 16..24, 24..32])
+        .with_completion_sink(move |index, batch| {
+            sink_outputs
+                .lock()
+                .push((index, batch, std::thread::current().id()));
+        });
+    if bounded {
+        scan = scan.with_output_capacity(1, 1);
+    }
+    let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
+    let (batches, _) = SegmentSourceDriver::new(segments)
+        .connect_on_thread(scan)?
+        .run()?;
+    assert!(batches.is_empty());
+    let outputs = std::mem::take(&mut *outputs.lock());
+    assert_eq!(outputs.len(), 4);
+    for (expected_index, (index, batch, thread)) in outputs.into_iter().enumerate() {
+        assert_eq!(index, expected_index);
+        if threads == 1 && !bounded {
+            assert_eq!(thread, std::thread::current().id());
+        }
+        let batch = batch?;
+        match index {
+            1 | 2 => {
+                let batch = batch.ok_or_else(|| vortex_err!("missing nonempty morsel {index}"))?;
+                let range = if index == 1 { 8..16 } else { 16..20 };
+                let expected = PrimitiveArray::from_iter(range).into_array();
+                assert_arrays_eq!(batch, expected, &mut session.create_execution_ctx());
+            }
+            _ => assert!(batch.is_none()),
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn inline_completion_can_cancel_remaining_morsels() -> VortexResult<()> {
+    let session = session();
+    let fixture = aligned_fixture(&session, 32)?;
+    let plan = Arc::new(crate::build_plan(
+        &fixture.layout,
+        &get_item("a", root()),
+        None,
+        ConjunctMode::Cascade,
+    )?);
+    let cancellation = StreamCancellation::new();
+    let outputs = Arc::new(Mutex::new(Vec::new()));
+    let sink_outputs = Arc::clone(&outputs);
+    let sink_cancellation = Arc::clone(&cancellation);
+    let scan = crate::MorselScan::new(plan, session.clone())
+        .with_threads(1)
+        .with_morsels(vec![0..8, 8..16, 16..24, 24..32])
+        .with_cancellation(cancellation)
+        .with_completion_sink(move |index, batch| {
+            sink_outputs.lock().push((index, batch));
+            sink_cancellation.cancel();
+        });
+    let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
+    let (batches, _) = SegmentSourceDriver::new(segments)
+        .connect_on_thread(scan)?
+        .run()?;
+    assert!(batches.is_empty());
+    let outputs = std::mem::take(&mut *outputs.lock());
+    assert_eq!(outputs.len(), 1);
+    let (index, batch) = outputs
+        .into_iter()
+        .next()
+        .ok_or_else(|| vortex_err!("missing first morsel"))?;
+    assert_eq!(index, 0);
+    let batch = batch?.ok_or_else(|| vortex_err!("first morsel has no rows"))?;
+    let expected = PrimitiveArray::from_iter(0i32..8).into_array();
+    assert_arrays_eq!(batch, expected, &mut session.create_execution_ctx());
     Ok(())
 }
 

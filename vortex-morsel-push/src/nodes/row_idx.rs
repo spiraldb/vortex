@@ -12,7 +12,6 @@ use vortex_mask::AllOr;
 
 use crate::node::ActivationRows;
 use crate::node::ExecNode;
-use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
 use crate::node::PlanPoll;
@@ -146,9 +145,5 @@ impl ExecNode for RowIdxExec {
     fn retire(&mut self, _cx: &mut RetireCx<'_>) {
         self.pending.clear();
         self.done = false;
-    }
-
-    fn children(&self) -> &[NodeId] {
-        &[]
     }
 }

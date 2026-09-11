@@ -7,8 +7,8 @@
 //! boundary. Planning names segment reads; the scheduler hands them out through the service's
 //! demand stream, and whoever answers that demand completes the cells. A suspended worker waits
 //! for a signal rather than polling anything; exact ticket completion wakes only the worker whose
-//! continuation parked on that ticket. Output order is restored by morsel index after all workers
-//! finish.
+//! continuation parked on that ticket. Completed morsels are delivered in index order as output
+//! capacity becomes available.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -266,7 +266,6 @@ struct PipelineFrame {
     stage: usize,
     output: StageOutput,
     resume: bool,
-    yield_after_outputs: bool,
 }
 
 struct StageInvocation {
@@ -794,14 +793,13 @@ impl PhysicalRuntime {
                     #[cfg(test)]
                     SidebandAction::Poll(poll) => return Ok(Some(poll)),
                     SidebandAction::Start(activation) => {
-                        let resume = matches!(state, NodeState::Ready | NodeState::Yield(_));
+                        let resume = matches!(state, NodeState::Ready);
                         if !output.is_empty() || resume {
                             self.frames.push(PipelineFrame {
                                 pipeline,
                                 stage,
                                 output,
                                 resume,
-                                yield_after_outputs: matches!(state, NodeState::Yield(_)),
                             });
                         } else {
                             self.sideband_scratch[node as usize] = output.into_sidebands();
@@ -816,8 +814,7 @@ impl PhysicalRuntime {
                         pipeline,
                         stage,
                         output,
-                        resume: matches!(state, NodeState::Ready | NodeState::Yield(_)),
-                        yield_after_outputs: matches!(state, NodeState::Yield(_)),
+                        resume: matches!(state, NodeState::Ready),
                     });
                     self.work_since_yield = 0;
                     return Ok(Some(PipelinePoll::Yield));
@@ -958,8 +955,7 @@ impl PhysicalRuntime {
                 pipeline,
                 stage,
                 output,
-                resume: matches!(state, NodeState::Ready | NodeState::Yield(_)),
-                yield_after_outputs: matches!(state, NodeState::Yield(_)),
+                resume: matches!(state, NodeState::Ready),
             });
             return Ok(None);
         }
@@ -1119,21 +1115,8 @@ impl PhysicalRuntime {
                 let pipeline = frame.pipeline;
                 let stage = frame.stage;
                 let resume = frame.resume;
-                let yield_after_outputs = frame.yield_after_outputs;
                 let node = self.topology.pipelines()[pipeline as usize].stages()[stage].node();
                 self.sideband_scratch[node as usize] = frame.output.into_sidebands();
-                if yield_after_outputs {
-                    if resume {
-                        self.pending.push_front(PipelineActivation {
-                            pipeline,
-                            stage,
-                            call: PipelineCall::Resume,
-                            ancestors: None,
-                        });
-                    }
-                    self.work_since_yield = 0;
-                    return Ok(PipelinePoll::Yield);
-                }
                 if resume {
                     self.work_since_yield += 1;
                     if let Some(poll) = self.invoke(
@@ -1459,12 +1442,6 @@ struct PushHost<'a> {
     control: &'a mut PushControlState,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct WaitToken {
-    generation: usize,
-    epoch: usize,
-}
-
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct PipelineStage {
     pipeline: PipelineId,
@@ -1581,7 +1558,6 @@ struct LocalMorsel<'a> {
     active: bool,
     generation: usize,
     wait_epoch: usize,
-    waiting: Option<WaitToken>,
     pipeline_waiting: HashMap<PipelineStage, PipelineContinuation>,
     push_control: PushControlState,
     push_root_done: bool,
@@ -1971,7 +1947,6 @@ fn round_robin<T>(groups: Vec<Vec<T>>) -> Vec<T> {
 
 #[derive(Clone)]
 enum WorkerSignal {
-    Wake(WaitToken),
     PushWake(PipelineWaitToken),
     Credit(OutputWaitToken),
     Shutdown,
@@ -2037,7 +2012,8 @@ impl MorselWorkerPool {
                                 signals,
                                 done,
                             } => {
-                                let stats = scheduler.worker_loop(worker, &signals, &mut arena);
+                                let stats =
+                                    scheduler.worker_loop(worker, &signals, &mut arena, None);
                                 let _ = done.send(stats);
                             }
                             WorkerMessage::Shutdown => break,
@@ -2513,6 +2489,7 @@ impl Scheduler {
         worker: usize,
         signals: &Receiver<WorkerSignal>,
         arena: &mut Arena,
+        completion: Option<&CompletionSink>,
     ) -> ScanStats {
         let mut morsel = LocalMorsel::new(&self.run, arena);
         let mut runnable = morsel.assign_next(self);
@@ -2533,20 +2510,6 @@ impl Scheduler {
                 match poll {
                     Ok(LocalPoll::Runnable) => runnable = true,
                     Ok(LocalPoll::Idle) => runnable = false,
-                    Ok(LocalPoll::Blocked(waits)) => {
-                        let token = morsel.next_wait_token();
-                        match self.park(worker, WorkerSignal::Wake(token), &waits) {
-                            Ok(true) => {
-                                morsel.waiting = Some(token);
-                                runnable = false;
-                            }
-                            Ok(false) => runnable = true,
-                            Err(err) => {
-                                self.fail(err);
-                                break;
-                            }
-                        }
-                    }
                     Ok(LocalPoll::PushBlocked {
                         pipeline,
                         stage,
@@ -2583,7 +2546,12 @@ impl Scheduler {
                         }
                     }
                     Ok(LocalPoll::Complete { index, batch }) => {
-                        if let Some(batch) = batch {
+                        if let Some(completion) = completion {
+                            completion(index, Ok(batch));
+                            self.complete(index);
+                            runnable =
+                                !self.stopped.load(Ordering::Acquire) && morsel.assign_next(self);
+                        } else if let Some(batch) = batch {
                             let rows = batch.len();
                             let bytes = batch.nbytes();
                             let token = morsel.next_output_wait_token();
@@ -2627,11 +2595,6 @@ impl Scheduler {
             }
 
             match signals.recv() {
-                Ok(WorkerSignal::Wake(token)) if morsel.waiting == Some(token) => {
-                    morsel.waiting = None;
-                    runnable = true;
-                }
-                Ok(WorkerSignal::Wake(_)) => {}
                 Ok(WorkerSignal::PushWake(token)) => {
                     runnable = morsel.wake_pipeline(token);
                 }
@@ -2649,12 +2612,7 @@ impl Scheduler {
             if let Some(physical) = morsel.physical.as_mut() {
                 physical.reset(morsel.range.clone());
             }
-            retire_morsel(
-                morsel.arena,
-                self.run.plan.root(),
-                &self.run.cells,
-                &mut morsel.stats,
-            );
+            retire_morsel(morsel.arena, self.run.plan.root(), &self.run.cells);
             morsel.io.clear();
             morsel.active = false;
         }
@@ -2820,7 +2778,6 @@ impl Scheduler {
 enum LocalPoll {
     Runnable,
     Idle,
-    Blocked(WaitSet),
     PushBlocked {
         pipeline: PipelineId,
         stage: usize,
@@ -2838,11 +2795,7 @@ impl<'a> LocalMorsel<'a> {
         signal: Result<WorkerSignal, crossbeam_channel::TryRecvError>,
     ) -> Option<bool> {
         match signal {
-            Ok(WorkerSignal::Wake(token)) if self.waiting == Some(token) => {
-                self.waiting = None;
-                Some(true)
-            }
-            Ok(WorkerSignal::Wake(_)) | Err(crossbeam_channel::TryRecvError::Empty) => Some(false),
+            Err(crossbeam_channel::TryRecvError::Empty) => Some(false),
             Ok(WorkerSignal::PushWake(token)) => Some(self.wake_pipeline(token)),
             Ok(WorkerSignal::Credit(token)) if self.credit_waiting == Some(token) => {
                 self.credit_waiting = None;
@@ -2874,7 +2827,6 @@ impl<'a> LocalMorsel<'a> {
             active: false,
             generation: 0,
             wait_epoch: 0,
-            waiting: None,
             pipeline_waiting: HashMap::default(),
             push_control: PushControlState::with_node_count(run.plan.len()),
             push_root_done: false,
@@ -2908,7 +2860,6 @@ impl<'a> LocalMorsel<'a> {
         self.active = true;
         self.generation = self.generation.wrapping_add(1);
         self.wait_epoch = 0;
-        self.waiting = None;
         if let Some(physical) = self.physical.as_mut() {
             physical.reset(range.clone());
         }
@@ -2948,14 +2899,6 @@ impl<'a> LocalMorsel<'a> {
         self.io.clear();
         begin_morsel(self.arena, scheduler.run.plan.root(), range);
         true
-    }
-
-    fn next_wait_token(&mut self) -> WaitToken {
-        self.wait_epoch = self.wait_epoch.wrapping_add(1);
-        WaitToken {
-            generation: self.generation,
-            epoch: self.wait_epoch,
-        }
     }
 
     fn next_pipeline_wait_token(
@@ -3019,8 +2962,7 @@ impl<'a> LocalMorsel<'a> {
                 self.stats.io_requests += started;
                 self.stats.io_batches += batches;
                 match poll {
-                    PlanPoll::Item(_) => Ok(LocalPoll::Runnable),
-                    PlanPoll::Blocked(waits) => Ok(LocalPoll::Blocked(waits)),
+                    PlanPoll::Continue | PlanPoll::Yield => Ok(LocalPoll::Runnable),
                     PlanPoll::Complete => {
                         self.stats.morsels += 1;
                         self.phase = TaskPhase::Execute;
@@ -3341,12 +3283,7 @@ impl<'a> LocalMorsel<'a> {
         if let Some(physical) = self.physical.as_mut() {
             physical.reset(self.range.clone());
         }
-        retire_morsel(
-            self.arena,
-            scheduler.run.plan.root(),
-            &scheduler.run.cells,
-            &mut self.stats,
-        );
+        retire_morsel(self.arena, scheduler.run.plan.root(), &scheduler.run.cells);
         self.io.clear();
         if batch.is_some() && self.stats.time_to_first_batch.is_none() {
             self.stats.time_to_first_batch = Some(scheduler.run.start.elapsed());
@@ -3704,11 +3641,6 @@ impl MorselScan {
         counts
     }
 
-    /// The morsels this scan will drive.
-    pub fn morsel_ranges(&self) -> &[Range<u64>] {
-        &self.morsels
-    }
-
     /// Run the scan, returning batches in row order plus the run's counters.
     pub fn run(&self) -> VortexResult<(Vec<ArrayRef>, ScanStats)> {
         let (batches, stats, _) = self.run_timed()?;
@@ -3766,7 +3698,7 @@ impl MorselScan {
             let Some((_, arena)) = slot.as_mut() else {
                 unreachable!("external arena was initialized above")
             };
-            scheduler.worker_loop(0, &signals, arena)
+            scheduler.worker_loop(0, &signals, arena, None)
         });
         let stats = scheduler.finish(vec![worker_stats])?;
         let batches = scheduler.take_ordered_batches();
@@ -3810,16 +3742,21 @@ impl MorselScan {
         self.validate_morsels()?;
         self.ensure_io_taken()?;
         let (output_tx, output_rx) = bounded::<CreditedBatch>(self.threads.max(1));
-        let collector = std::thread::spawn(move || {
-            output_rx
-                .into_iter()
-                .map(CreditedBatch::receive)
-                .collect::<Vec<_>>()
+        let collector = self.completion.is_none().then(|| {
+            std::thread::spawn(move || {
+                output_rx
+                    .into_iter()
+                    .map(CreditedBatch::receive)
+                    .collect::<Vec<_>>()
+            })
         });
         let (mut stats, wall) = self.run_timed_to(output_tx, self.cancellation.as_ref())?;
-        let batches = collector
-            .join()
-            .map_err(|_| vortex_err!("output collector panicked"))?;
+        let batches = match collector {
+            Some(collector) => collector
+                .join()
+                .map_err(|_| vortex_err!("output collector panicked"))?,
+            None => Vec::new(),
+        };
         if let Some(oracle) = self.io.oracle_snapshot() {
             oracle.apply_to(&mut stats);
         }
@@ -3863,10 +3800,18 @@ impl MorselScan {
         if let Some(cancellation) = cancellation {
             cancellation.install(&scheduler);
         }
-        let output_scheduler = Arc::clone(&scheduler);
-        let completion = self.completion.clone();
-        let coordinator = std::thread::spawn(move || {
-            output_scheduler.stream_ordered(&output_tx, completion.as_ref());
+        // One worker completes morsels in order and can deliver directly when output credit is
+        // unbounded. No result queue or coordinator handoff is needed for this sink.
+        let inline_completion =
+            (workers.is_none() && self.output_rows == usize::MAX && self.output_bytes == u64::MAX)
+                .then_some(self.completion.as_ref())
+                .flatten();
+        let coordinator = inline_completion.is_none().then(|| {
+            let output_scheduler = Arc::clone(&scheduler);
+            let completion = self.completion.clone();
+            std::thread::spawn(move || {
+                output_scheduler.stream_ordered(&output_tx, completion.as_ref());
+            })
         });
         scheduler.submit_exact_lookahead();
         let worker_stats = match (&workers, inline_arena.as_mut()) {
@@ -3876,14 +3821,16 @@ impl MorselScan {
                     .into_iter()
                     .next()
                     .ok_or_else(|| vortex_err!("inline morsel worker signal channel is missing"))?;
-                vec![scheduler.worker_loop(0, &signals, arena)]
+                vec![scheduler.worker_loop(0, &signals, arena, inline_completion)]
             }
             (None, None) => unreachable!("inline arena exists whenever the pool does not"),
         };
         let stats = scheduler.finish(worker_stats)?;
-        coordinator
-            .join()
-            .map_err(|_| vortex_err!("ordered output coordinator panicked"))?;
+        if let Some(coordinator) = coordinator {
+            coordinator
+                .join()
+                .map_err(|_| vortex_err!("ordered output coordinator panicked"))?;
+        }
 
         if scheduler.remaining.load(Ordering::Acquire) == 0 {
             debug_assert_eq!(
@@ -4980,10 +4927,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     #[test]
@@ -5086,10 +5029,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     #[test]
@@ -5176,10 +5115,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     #[test]
@@ -5255,10 +5190,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     struct PassiveSink {
@@ -5285,10 +5216,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     #[test]
@@ -5380,10 +5307,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     struct TerminalRoot {
@@ -5456,10 +5379,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     impl ExecNode for TerminalRoot {
@@ -5496,10 +5415,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     #[test]
@@ -5607,10 +5522,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     #[test]
@@ -5705,10 +5616,6 @@ mod tests {
         }
 
         fn retire(&mut self, _cx: &mut RetireCx<'_>) {}
-
-        fn children(&self) -> &[u32] {
-            &[]
-        }
     }
 
     #[test]

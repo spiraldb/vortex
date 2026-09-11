@@ -13,7 +13,6 @@ use crate::node::ExecNode;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::PushBatch;
 use crate::node::PushCx;
@@ -186,7 +185,7 @@ impl ExecNode for ChunkedExec {
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
         while self.plan_cursor < self.cuts.len() {
             if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
             let cut = self.cuts[self.plan_cursor].clone();
             let fresh = !self.plan_started;
@@ -195,7 +194,7 @@ impl ExecNode for ChunkedExec {
                 self.plan_cursor += 1;
                 self.plan_started = false;
             } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
         }
         Ok(PlanPoll::Complete)
@@ -251,10 +250,6 @@ impl ExecNode for ChunkedExec {
         for cut in std::mem::take(&mut self.cuts) {
             cx.retire_child(self.children[cut.chunk]);
         }
-    }
-
-    fn children(&self) -> &[NodeId] {
-        &self.children
     }
 }
 

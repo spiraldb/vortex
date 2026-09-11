@@ -17,7 +17,6 @@ use crate::node::ExecNode;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
-use crate::node::PlanItem;
 use crate::node::PlanPoll;
 use crate::node::PushBatch;
 use crate::node::PushCx;
@@ -38,7 +37,6 @@ pub struct FilterExec {
     plan_stage: u8,
     plan_started: bool,
     done: bool,
-    children: Vec<NodeId>,
     push_cursor: u64,
     /// Authoritative mask fragments awaiting projection. Unlike general input batches, these are
     /// consumed into compact coverage-domain state before predicate credit is returned.
@@ -85,7 +83,6 @@ impl FilterExec {
         projection_expr: BoundExpression,
         push_batching: PushBatching,
     ) -> Self {
-        let children = predicate.into_iter().chain([projection]).collect();
         Self {
             predicate,
             projection,
@@ -95,7 +92,6 @@ impl FilterExec {
             plan_stage: 0,
             plan_started: false,
             done: false,
-            children,
             push_cursor: 0,
             push_predicate: VecDeque::new(),
             push_predicate_received: 0,
@@ -138,7 +134,7 @@ impl ExecNode for FilterExec {
                 _ => return Ok(PlanPoll::Complete),
             };
             if cx.out_of_budget() {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
             let fresh = !self.plan_started;
             self.plan_started = true;
@@ -155,7 +151,7 @@ impl ExecNode for FilterExec {
                 };
                 self.plan_started = false;
             } else {
-                return Ok(PlanPoll::Item(PlanItem::Plan));
+                return Ok(PlanPoll::Yield);
             }
         }
     }
@@ -207,13 +203,9 @@ impl ExecNode for FilterExec {
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {
-        for &child in &self.children {
+        for child in self.predicate.into_iter().chain([self.projection]) {
             cx.retire_child(child);
         }
-    }
-
-    fn children(&self) -> &[NodeId] {
-        &self.children
     }
 }
 

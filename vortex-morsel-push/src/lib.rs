@@ -72,7 +72,6 @@ pub use node::ExecNode;
 pub use node::InputPort;
 pub use node::NodeState;
 pub use node::PlanCx;
-pub use node::PlanItem;
 pub use node::PlanPoll;
 pub use node::PushBatch;
 pub use node::PushCx;

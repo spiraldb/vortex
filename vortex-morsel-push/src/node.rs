@@ -16,7 +16,6 @@ use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use crate::cells::SharedCells;
-use crate::io::IoBatch;
 use crate::io::IoKey;
 use crate::io::IoPlane;
 use crate::io::IoPriority;
@@ -440,35 +439,18 @@ pub enum NodeState {
     NeedInput,
     /// The node needs exact external dependencies before it can resume.
     Waiting(WaitSet),
-    /// The fairness quantum ended after making progress.
-    Yield(Progress),
     /// The node has produced everything it will produce for this morsel.
     Done,
 }
 
-/// What a node's planning stream produced.
-pub enum PlanItem {
-    /// A batch of named IO uses, already registered with the IO plane.
-    Io(IoBatch),
-    /// The node yielded before refining further; call `next_plan` again to resume.
-    Plan,
-}
-
 /// The result of polling a node's planning stream.
 pub enum PlanPoll {
-    /// An item was produced.
-    Item(PlanItem),
-    /// Planning is suspended on the given waits; no worker thread is parked.
-    Blocked(WaitSet),
+    /// Reads were registered; call `next_plan` again within the current planning quantum.
+    Continue,
+    /// The planning quantum ended; resume from the node's retained cursor.
+    Yield,
     /// Planning has finished. This forfeits any further refinement of this node's IO.
     Complete,
-}
-
-/// A coarse progress marker returned with [`NodeState::Yield`].
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Progress {
-    /// Rows of input consumed since the last poll.
-    pub rows: u64,
 }
 
 /// Something a node can park on.
@@ -526,7 +508,7 @@ pub trait ExecNode: Send {
     /// Advance this node's planning stream.
     ///
     /// Planning only names IO; it never reads. A node that has more planning to do than its
-    /// budget allows returns [`PlanItem::Plan`] and resumes from its own cursor.
+    /// budget allows returns [`PlanPoll::Yield`] and resumes from its own cursor.
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll>;
 
     /// Activate a push source for one root-coordinate span.
@@ -585,9 +567,6 @@ pub trait ExecNode: Send {
 
     /// Release anything this node holds for the finished morsel.
     fn retire(&mut self, cx: &mut RetireCx<'_>);
-
-    /// This node's children, in edge order.
-    fn children(&self) -> &[NodeId];
 }
 
 /// Benchmark-only physical-stage category.
@@ -612,8 +591,7 @@ pub enum PushProfileKind {
 /// Payloads stay boxed so the arena retains the pointer-sized storage and per-node allocation
 /// behavior of the former trait-object representation. Dispatch is closed over the operators the
 /// plan builder can produce, allowing the compiler to specialize each forwarding arm. The
-/// dynamic escape hatch preserves [`Arena::new`] compatibility for external arenas; plans built by
-/// [`crate::build_plan`] never instantiate it.
+/// dynamic variant allows runtime tests to inject custom nodes.
 pub(crate) enum Node {
     Flat(Box<crate::nodes::FlatExec>),
     RowIdx(Box<crate::nodes::RowIdxExec>),
@@ -621,6 +599,7 @@ pub(crate) enum Node {
     Struct(Box<crate::nodes::StructExec>),
     Conjunct(Box<crate::nodes::ConjunctExec>),
     Filter(Box<crate::nodes::FilterExec>),
+    #[cfg(test)]
     Dynamic(Box<Box<dyn ExecNode>>),
 }
 
@@ -635,12 +614,14 @@ macro_rules! dispatch_node {
             Node::Struct($inner) => $call,
             Node::Conjunct($inner) => $call,
             Node::Filter($inner) => $call,
+            #[cfg(test)]
             Node::Dynamic($inner) => $call,
         }
     };
 }
 
 impl Node {
+    #[cfg(test)]
     pub(crate) fn dynamic(node: Box<dyn ExecNode>) -> Self {
         Self::Dynamic(Box::new(node))
     }
@@ -730,11 +711,6 @@ impl ExecNode for Node {
     fn retire(&mut self, cx: &mut RetireCx<'_>) {
         dispatch_node!(self, node => node.retire(cx))
     }
-
-    #[inline]
-    fn children(&self) -> &[NodeId] {
-        dispatch_node!(self, node => node.children())
-    }
 }
 
 /// Context handed to the typed push-stage methods on [`ExecNode`].
@@ -800,15 +776,6 @@ pub struct Arena {
 }
 
 impl Arena {
-    /// Build an arena from a list of dynamically dispatched nodes.
-    ///
-    /// This compatibility constructor retains vtable dispatch for the supplied nodes. Execution
-    /// plans use a crate-private constructor whose five built-in node variants dispatch through a
-    /// closed enum instead.
-    pub fn new(nodes: Vec<Box<dyn ExecNode>>) -> Self {
-        Self::new_compiled(nodes.into_iter().map(Node::dynamic).collect())
-    }
-
     pub(crate) fn new_compiled(nodes: Vec<Node>) -> Self {
         let push_sidebands = (0..nodes.len()).map(|_| VecDeque::new()).collect();
         Self {
@@ -906,12 +873,12 @@ impl<'a> PlanCx<'a> {
     }
 
     /// Register a batch of IO uses, spending budget and returning tickets.
-    pub fn register(&mut self, batch: IoBatch) -> VortexResult<Vec<IoTicket>> {
+    pub fn register(&mut self, keys: &[IoKey]) -> Vec<IoTicket> {
         self.budget = self
             .budget
-            .saturating_sub(u32::try_from(batch.uses().len()).unwrap_or(u32::MAX));
-        self.stats.io_uses += batch.uses().len() as u64;
-        self.io.register(batch, self.priority, self.stats)
+            .saturating_sub(u32::try_from(keys.len()).unwrap_or(u32::MAX));
+        self.stats.io_uses += keys.len() as u64;
+        self.io.register(keys, self.priority, self.stats)
     }
 
     /// Drive one child with an explicit scheduler priority for reads it registers.
@@ -940,12 +907,8 @@ impl<'a> PlanCx<'a> {
             }
             loop {
                 match node.next_plan(self)? {
-                    PlanPoll::Item(PlanItem::Io(_)) => continue,
-                    PlanPoll::Item(PlanItem::Plan) => return Ok(false),
-                    PlanPoll::Blocked(_) => {
-                        // P1 has no gated planning: nothing can park a planning stream.
-                        return Ok(false);
-                    }
+                    PlanPoll::Continue => continue,
+                    PlanPoll::Yield => return Ok(false),
                     PlanPoll::Complete => return Ok(true),
                 }
             }
@@ -959,7 +922,6 @@ impl<'a> PlanCx<'a> {
 pub struct RetireCx<'a> {
     arena: &'a mut Arena,
     cells: &'a SharedCells,
-    stats: &'a mut ScanStats,
 }
 
 impl<'a> RetireCx<'a> {
@@ -968,11 +930,6 @@ impl<'a> RetireCx<'a> {
         let mut node = self.arena.take(id);
         node.retire(self);
         self.arena.put(id, node);
-    }
-
-    /// Mutable access to the run's counters.
-    pub fn stats(&mut self) -> &mut ScanStats {
-        self.stats
     }
 
     /// Release this morsel's lease on a unit, dropping the shared cell at the last release.
@@ -1012,17 +969,8 @@ pub(crate) fn poll_plan_morsel(
 }
 
 /// Retire a completed morsel and release its decoded-cell leases.
-pub(crate) fn retire_morsel(
-    arena: &mut Arena,
-    root: NodeId,
-    cells: &SharedCells,
-    stats: &mut ScanStats,
-) {
-    let mut cx = RetireCx {
-        arena,
-        cells,
-        stats,
-    };
+pub(crate) fn retire_morsel(arena: &mut Arena, root: NodeId, cells: &SharedCells) {
+    let mut cx = RetireCx { arena, cells };
     cx.retire_child(root);
 }
 
