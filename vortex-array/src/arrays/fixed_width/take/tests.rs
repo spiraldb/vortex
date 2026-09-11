@@ -9,19 +9,21 @@ use vortex_buffer::Buffer;
 use vortex_buffer::buffer;
 use vortex_error::VortexResult;
 
-use super::records::take_byte_records;
 use super::slices::take_slices;
 use super::slices::take_slices_constant_length;
 use super::take_values;
 use crate::ArrayRef;
 use crate::IntoArray;
 use crate::VortexSessionExecute;
+use crate::array::Array;
 use crate::array_session;
 use crate::arrays::BoolArray;
 use crate::arrays::ConstantArray;
 use crate::arrays::DecimalArray;
 use crate::arrays::PiecewiseSequenceArray;
 use crate::arrays::PrimitiveArray;
+use crate::arrays::fixed_width::FixedWidthArray;
+use crate::arrays::fixed_width::with_values;
 use crate::assert_arrays_eq;
 use crate::compute::conformance::take::test_take_conformance;
 use crate::dtype::DecimalDType;
@@ -43,31 +45,55 @@ fn take_eight_byte_values() {
 }
 
 #[rstest]
-#[case(1)]
-#[case(2)]
-#[case(4)]
-#[case(8)]
-#[case(16)]
-#[case(32)]
-#[case::fallback(3)]
-#[case::fallback_wide(12)]
-fn take_runtime_width_records(#[case] byte_width: usize) -> VortexResult<()> {
-    let values = Buffer::from_iter((0u8..).take(3 * byte_width));
+#[case::u8(PrimitiveArray::from_iter([10u8, 20, 30]))]
+#[case::u16(PrimitiveArray::from_iter([10u16, 20, 30]))]
+#[case::u32(PrimitiveArray::from_iter([10u32, 20, 30]))]
+#[case::u64(PrimitiveArray::from_iter([10u64, 20, 30]))]
+#[case::u128(DecimalArray::new(
+    buffer![10i128, -20, -30],
+    DecimalDType::new(19, 0),
+    Validity::NonNullable,
+))]
+#[case::i256(DecimalArray::new(
+    Buffer::from_iter([10, -20, -30].map(|value| i256::from_parts(1, value))),
+    DecimalDType::new(76, 0),
+    Validity::NonNullable,
+))]
+fn take_typed_records<V: FixedWidthArray>(
+    #[case] array: Array<V>,
+    #[values(
+        PrimitiveArray::from_iter([2u8, 0]),
+        PrimitiveArray::from_iter([2u16, 0]),
+        PrimitiveArray::from_iter([2u32, 0]),
+        PrimitiveArray::from_iter([2u64, 0])
+    )]
+    indices: PrimitiveArray,
+) -> VortexResult<()> {
+    let mut ctx = array_session().create_execution_ctx();
+    let byte_width = V::byte_width(array.as_view());
+    let values = V::values::<u8>(array.as_view()).aligned(Alignment::new(64));
     let expected = values[2 * byte_width..3 * byte_width]
         .iter()
         .chain(&values[..byte_width])
         .copied()
         .collect::<Vec<_>>();
-    let taken = take_byte_records(&values.into_byte_buffer(), byte_width, 3, &[2u32, 0])?;
-    assert_eq!(taken.as_slice(), expected);
+    let array = with_values(array.as_view(), values, array.len(), Validity::NonNullable)?;
+    let alignment = V::values::<u8>(array.as_view()).alignment();
+    let taken = super::take(array.as_view(), &indices.into_array(), &mut ctx)?
+        .expect("native-width take must be supported");
+    let buffers = taken.buffers();
+    assert_eq!(buffers[0].as_slice(), expected);
+    assert_eq!(buffers[0].alignment(), alignment);
     Ok(())
 }
 
 #[test]
-#[should_panic(expected = "take index 3 out of bounds for length 3")]
-fn fallback_take_rejects_out_of_bounds_index() {
-    let values = Buffer::from_iter((0u8..).take(9)).into_byte_buffer();
-    drop(take_byte_records(&values, 3, 3, &[3u32]));
+#[should_panic(expected = "out of bounds")]
+fn typed_take_rejects_out_of_bounds_index() {
+    let mut ctx = array_session().create_execution_ctx();
+    let array = PrimitiveArray::from_iter([10u32, 20, 30]);
+    let indices = PrimitiveArray::from_iter([3u32]).into_array();
+    drop(super::take(array.as_view(), &indices, &mut ctx));
 }
 
 #[rstest]

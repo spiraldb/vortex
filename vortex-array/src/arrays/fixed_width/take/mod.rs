@@ -18,7 +18,7 @@ use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
 use vortex_mask::Mask;
 
-use self::records::take_byte_records;
+use self::records::take_records;
 use self::scalar::take_values_scalar;
 use self::slices::take_slices;
 use self::slices::take_slices_constant_length;
@@ -73,7 +73,9 @@ macro_rules! impl_fixed_width_take_value {
     };
 }
 
-impl_fixed_width_take_value!(u8, u16, u32, u64, i8, i16, i32, i64, f16, f32, f64,);
+impl_fixed_width_take_value!(
+    u8, u16, u32, u64, u128, i8, i16, i32, i64, i256, f16, f32, f64,
+);
 
 // SAFETY: Byte arrays have no padding and every byte is initialized.
 unsafe impl<const N: usize> FixedWidthTakeValue for [u8; N] {}
@@ -146,15 +148,15 @@ pub(crate) fn take<V: FixedWidthArray>(
         .take(&indices.clone().into_array())?
         .and(indices_validity)?;
 
-    let source = V::values::<u8>(array);
-    let values = match_each_unsigned_integer_ptype!(indices.ptype(), |I| {
-        take_byte_records(
-            &source,
-            V::byte_width(array),
-            array.len(),
-            indices.as_slice::<I>(),
-        )
-    })?;
+    let values = match V::byte_width(array) {
+        1 => take_records::<V, u8>(array, &indices)?,
+        2 => take_records::<V, u16>(array, &indices)?,
+        4 => take_records::<V, u32>(array, &indices)?,
+        8 => take_records::<V, u64>(array, &indices)?,
+        16 => take_records::<V, u128>(array, &indices)?,
+        32 => take_records::<V, i256>(array, &indices)?,
+        _ => return Ok(None),
+    };
     Ok(Some(
         with_values(array, values, indices.len(), validity)?.into_array(),
     ))
