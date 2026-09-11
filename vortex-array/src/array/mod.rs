@@ -31,6 +31,13 @@ pub use erased::*;
 mod plugin;
 pub use plugin::*;
 
+mod probe;
+pub use probe::ArrayProbe;
+pub use probe::ProbeChildren;
+pub use probe::ProbeCtx;
+use probe::ProbeStorage;
+pub use probe::ProbeUsage;
+
 mod foreign;
 pub(crate) use foreign::*;
 
@@ -227,6 +234,14 @@ pub(crate) trait DynArrayData: 'static + private::Sealed + Send + Sync + Debug {
         &self,
         this: &ArrayRef,
         index: usize,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Scalar>;
+
+    fn probe_scalar<'a>(
+        &'a self,
+        this: &'a ArrayRef,
+        index: usize,
+        state: Option<&mut ProbeStorage<'a>>,
         ctx: &mut ExecutionCtx,
     ) -> VortexResult<Scalar>;
 }
@@ -498,6 +513,29 @@ impl<V: VTable> DynArrayData for ArrayData<V> {
     ) -> VortexResult<Scalar> {
         let view = unsafe { ArrayView::new_unchecked(this, &self.data) };
         <V::OperationsVTable as OperationsVTable<V>>::scalar_at(view, index, ctx)
+    }
+
+    fn probe_scalar<'a>(
+        &'a self,
+        this: &'a ArrayRef,
+        index: usize,
+        state: Option<&mut ProbeStorage<'a>>,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Scalar> {
+        // SAFETY: this adapter belongs to the ArrayData<V> stored in `this`.
+        let view = unsafe { ArrayView::new_unchecked(this, &self.data) };
+        let state = state.map(|storage| {
+            // SAFETY: ArrayProbe fixes its source for its entire lifetime, so this storage
+            // is accessed only through this adapter with the same associated context type.
+            unsafe {
+                storage.get_or_init(|| {
+                    ProbeCtx::<<V::OperationsVTable as OperationsVTable<V>>::ProbeState<'a>>::new(
+                        this,
+                    )
+                })
+            }
+        });
+        <V::OperationsVTable as OperationsVTable<V>>::probe_scalar(view, index, state, ctx)
     }
 }
 

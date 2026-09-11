@@ -12,6 +12,8 @@ use crate::scalar::Scalar;
 use crate::scalar::ScalarValue;
 
 impl OperationsVTable<Struct> for Struct {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         array: ArrayView<'_, Struct>,
         index: usize,

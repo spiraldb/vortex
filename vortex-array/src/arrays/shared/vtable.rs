@@ -125,6 +125,8 @@ impl VTable for Shared {
     }
 }
 impl OperationsVTable<Shared> for Shared {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         array: ArrayView<'_, Shared>,
         index: usize,

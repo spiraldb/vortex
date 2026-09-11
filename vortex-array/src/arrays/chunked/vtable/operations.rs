@@ -11,6 +11,8 @@ use crate::arrays::chunked::ChunkedArrayExt;
 use crate::scalar::Scalar;
 
 impl OperationsVTable<Chunked> for Chunked {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         array: ArrayView<'_, Chunked>,
         index: usize,

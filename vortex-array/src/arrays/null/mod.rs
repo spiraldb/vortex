@@ -175,6 +175,8 @@ impl Array<Null> {
 }
 
 impl OperationsVTable<Null> for Null {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         _array: ArrayView<'_, Null>,
         _index: usize,
