@@ -5,6 +5,7 @@ use std::any::Any;
 use std::mem::MaybeUninit;
 
 use vortex_buffer::BufferAllocatorRef;
+use vortex_buffer::BufferAllocatorExt;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
