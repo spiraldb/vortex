@@ -8,6 +8,7 @@ use std::ptr;
 use std::sync::Arc;
 
 use vortex::error::VortexError;
+use vortex::error::VortexErrorKind;
 use vortex::error::VortexResult;
 
 use crate::box_wrapper;
@@ -40,17 +41,15 @@ pub enum vx_error_code {
 }
 
 fn error_code(error: &VortexError) -> vx_error_code {
-    match error {
-        VortexError::OutOfBounds(..) => vx_error_code::VX_ERROR_CODE_OUT_OF_BOUNDS,
-        VortexError::Compute(..) => vx_error_code::VX_ERROR_CODE_COMPUTE,
-        VortexError::InvalidArgument(..) => vx_error_code::VX_ERROR_CODE_INVALID_ARGUMENT,
-        VortexError::Serde(..) => vx_error_code::VX_ERROR_CODE_SERIALIZATION,
-        VortexError::NotImplemented(..) => vx_error_code::VX_ERROR_CODE_NOT_IMPLEMENTED,
-        VortexError::MismatchedTypes(..) => vx_error_code::VX_ERROR_CODE_MISMATCHED_TYPES,
-        VortexError::AssertionFailed(..) => vx_error_code::VX_ERROR_CODE_ASSERTION_FAILED,
-        VortexError::Io(..) => vx_error_code::VX_ERROR_CODE_IO,
-        VortexError::Context(_, inner) => error_code(inner),
-        VortexError::Shared(inner) => error_code(inner),
+    match error.kind() {
+        VortexErrorKind::OutOfBounds => vx_error_code::VX_ERROR_CODE_OUT_OF_BOUNDS,
+        VortexErrorKind::Compute => vx_error_code::VX_ERROR_CODE_COMPUTE,
+        VortexErrorKind::InvalidArgument => vx_error_code::VX_ERROR_CODE_INVALID_ARGUMENT,
+        VortexErrorKind::Serde => vx_error_code::VX_ERROR_CODE_SERIALIZATION,
+        VortexErrorKind::NotImplemented => vx_error_code::VX_ERROR_CODE_NOT_IMPLEMENTED,
+        VortexErrorKind::MismatchedTypes => vx_error_code::VX_ERROR_CODE_MISMATCHED_TYPES,
+        VortexErrorKind::AssertionFailed => vx_error_code::VX_ERROR_CODE_ASSERTION_FAILED,
+        VortexErrorKind::Io => vx_error_code::VX_ERROR_CODE_IO,
         _ => vx_error_code::VX_ERROR_CODE_OTHER,
     }
 }

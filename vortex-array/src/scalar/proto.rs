@@ -532,7 +532,7 @@ mod tests {
     use std::sync::Arc;
 
     use vortex_buffer::BufferString;
-    use vortex_error::VortexError;
+    use vortex_error::VortexErrorKind;
     use vortex_error::vortex_panic;
     use vortex_proto::scalar as pb;
     use vortex_session::VortexSession;
@@ -867,10 +867,12 @@ mod tests {
             }))),
         };
 
-        assert!(matches!(
-            ScalarValue::from_proto(&missing_child, &dtype, &session()),
-            Err(VortexError::Serde(..))
-        ));
+        assert_eq!(
+            ScalarValue::from_proto(&missing_child, &dtype, &session())
+                .unwrap_err()
+                .kind(),
+            VortexErrorKind::Serde
+        );
 
         let wrong_child_value = pb::ScalarValue {
             kind: Some(Kind::UnionValue(Box::new(PbUnionValue {
@@ -881,10 +883,12 @@ mod tests {
             }))),
         };
 
-        assert!(matches!(
-            ScalarValue::from_proto(&wrong_child_value, &dtype, &session()),
-            Err(VortexError::Serde(..))
-        ));
+        assert_eq!(
+            ScalarValue::from_proto(&wrong_child_value, &dtype, &session())
+                .unwrap_err()
+                .kind(),
+            VortexErrorKind::Serde
+        );
 
         Ok(())
     }

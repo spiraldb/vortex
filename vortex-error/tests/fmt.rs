@@ -46,7 +46,7 @@ fn test_from_arrow_with_backtrace() {
 
         assert!(
             display
-                .contains("Arrow error: Not yet implemented: This feature isn't implemented yet"),
+                .contains("Other error: Not yet implemented: This feature isn't implemented yet"),
             "should contain arrow error message"
         );
         assert!(
@@ -72,7 +72,7 @@ fn test_from_arrow_no_backtrace() {
 
             assert!(
                 display.contains(
-                    "Arrow error: Not yet implemented: This feature isn't implemented yet"
+                    "Other error: Not yet implemented: This feature isn't implemented yet"
                 ),
                 "should contain arrow error message"
             );
