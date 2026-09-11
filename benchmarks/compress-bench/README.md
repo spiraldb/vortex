@@ -32,11 +32,10 @@ cargo run -p compress-bench --profile release_debug --features lance \
   -- --formats arrow-ipc,parquet,lance,vortex
 ```
 
-Lance files are written at storage version 2.2, the newest stable version. Structural encoding
-arrives in 2.1, and that is what applies Lance's compressive encodings, so version 2.0 wrote an
-essentially uncompressed file — not a meaningful comparison against compressed Vortex and
-Parquet. Note that `LanceFileVersion::Stable` resolves to 2.1, the default for new datasets,
-rather than to the newest stable version, so 2.2 has to be named explicitly.
+Lance files are written at storage version 2.2, the newest stable version. Storage versions at or
+above 2.1 use structural encoding, which is what applies Lance's compressive encodings — bitpacking,
+FSST, general compression. Note that `LanceFileVersion::Stable` resolves to 2.1, the default for new
+datasets, rather than to the newest stable version, so 2.2 has to be named explicitly.
 
 ## GPU decompression
 

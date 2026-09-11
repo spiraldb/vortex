@@ -148,13 +148,9 @@ impl Compressor for LanceCompressor {
             .to_str()
             .ok_or_else(|| anyhow!("Failed to convert path to str"))?;
         let reader_iter = RecordBatchIterator::new(batches.into_iter().map(Ok), Arc::clone(schema));
-        // 2.2 is the newest stable storage version: `is_unstable` is `self >= Next`, and 2.2
-        // orders below `Next`. Anything at or above 2.1 has structural encoding, which is what
-        // turns on Lance's compressive encodings (bitpacking, FSST, general compression); writing
-        // 2.0 here measured a near-uncompressed Lance file against compressed Vortex and Parquet.
-        //
-        // Named explicitly rather than via `LanceFileVersion::Stable`, which resolves to the
-        // default version for new datasets (2.1) rather than to the newest stable one.
+        // Storage versions at or above 2.1 use structural encoding, which is what applies
+        // Lance's compressive encodings. Not `Stable`: that resolves to the default version for
+        // new datasets, 2.1, rather than to the newest stable one, which is 2.2.
         let write_params = WriteParams::with_storage_version(LanceFileVersion::V2_2);
         Dataset::write(reader_iter, path_str, Some(write_params)).await?;
 
