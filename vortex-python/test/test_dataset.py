@@ -192,7 +192,7 @@ def test_filter_with_nested_null_dtype(tmp_path: Path) -> None:
 
 
 def test_duckdb(ds: vx.dataset.VortexDataset) -> None:
-    assert ds  # the type checker cannot determine that ds is used by duckdb.execute
+    _ = ds  # DuckDB resolves the dataset from the SQL query below.
 
     tbl = duckdb.execute("select * from ds where string >= '950000' and float < 975.0").arrow().read_all()
     assert len(tbl) == 6176

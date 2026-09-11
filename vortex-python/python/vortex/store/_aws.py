@@ -3,7 +3,7 @@
 
 from collections.abc import Coroutine
 from datetime import datetime
-from typing import Any, Literal, NotRequired, Protocol, Self, TypeAlias, TypedDict, Unpack, cast
+from typing import Any, Literal, NotRequired, Protocol, Self, TypeAlias, TypedDict, Unpack
 
 from typing_extensions import override
 
@@ -515,16 +515,13 @@ class S3Store(_store.S3Store):
             S3Store
 
         """
-        return cast(
-            Self,
-            super(cls).from_url(  # ty: ignore[unresolved-attribute]
-                url,
-                config=config,
-                client_options=client_options,
-                retry_config=retry_config,
-                credential_provider=credential_provider,
-                **kwargs,
-            ),
+        return super().from_url(
+            url,
+            config=config,
+            client_options=client_options,
+            retry_config=retry_config,
+            credential_provider=credential_provider,
+            **kwargs,
         )
 
     @override

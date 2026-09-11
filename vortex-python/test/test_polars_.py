@@ -37,8 +37,7 @@ from vortex.polars_ import polars_to_vortex
     ],
 )
 def test_exprs(polars: pl.Expr, vortex: ve.Expr) -> None:
-    # Dump the clickbench filters
-    assert polars_to_vortex(polars) == vortex
+    assert polars_to_vortex(polars).serialize() == vortex.serialize()
 
 
 @pytest.fixture(scope="module")
