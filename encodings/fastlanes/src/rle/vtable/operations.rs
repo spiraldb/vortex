@@ -3,6 +3,7 @@
 
 use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
+use vortex_array::ProbeCtx;
 use vortex_array::scalar::Scalar;
 use vortex_array::vtable::OperationsVTable;
 use vortex_error::VortexExpect;
@@ -12,9 +13,20 @@ use super::RLE;
 use crate::FL_CHUNK_SIZE;
 use crate::rle::RLEArrayExt;
 use crate::rle::RLEArraySlotsExt;
+use crate::rle::probe;
+use crate::rle::probe::RleProbeState;
 
 impl OperationsVTable<RLE> for RLE {
-    type ProbeState<'a> = ();
+    type ProbeState<'a> = RleProbeState<'a>;
+
+    fn probe_scalar<'a>(
+        array: ArrayView<'a, RLE>,
+        index: usize,
+        probe: Option<&mut ProbeCtx<'a, Self::ProbeState<'a>>>,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Scalar> {
+        probe::scalar_at(array, index, probe, ctx)
+    }
 
     fn scalar_at(
         array: ArrayView<'_, RLE>,

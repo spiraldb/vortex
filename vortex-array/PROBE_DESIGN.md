@@ -40,9 +40,9 @@ fn probe_scalar<'a>(
 }
 ```
 
-All encodings initially select `ProbeState<'a> = ()` and use this default, including
-primitive, PCO, FastLanes RLE, RunEnd, ScalarFn, and Zstd. The API change provides no
-encoding-specific speedup on its own; optimized hooks are a separate follow-up.
+Encodings can select `ProbeState<'a> = ()` and use this default without implementing a
+hook. Primitive, PCO, FastLanes RLE, and RunEnd override it; other encodings, including
+ScalarFn and Zstd, retain their existing scalar execution path.
 
 An encoding opting into preparation chooses its own concrete `ProbeState`. `Default`
 should be cheap and avoid allocation or execution. Fallible preparation belongs in the
@@ -104,6 +104,10 @@ provides 128 inline bytes aligned to 16 bytes and a heap fallback for larger or 
 contexts. The child-cache header counts toward that capacity. Child tables, indexes, and
 decoded buffers may allocate separately when an encoding needs them.
 
+On the measured ARM64 build, the combined contexts occupy 48 bytes for Primitive, 32 for
+RunEnd, 128 for PCO, and 136 for RLE. RLE therefore spills once on first repeated use;
+the other contexts fit inline. These sizes are implementation details, not ABI guarantees.
+
 ```text
 ArrayProbe::scalar_at
   -> existing DynArrayData::probe_scalar dispatch
@@ -126,5 +130,23 @@ encoding state is not required to implement those traits.
 Tests cover inline and spilled storage, alignment, moves, borrowed state, exactly-once
 initialization and destruction, default scalar behavior, bounds and nulls, lazy child
 creation, repeated slot reuse, source binding, independent slots/contexts, and simultaneous
-local-state and child access. Encoding follow-ups should test recursive cache reuse and
-benchmark complete probe lifetimes, including preparation and teardown.
+local-state and child access.
+
+## Encoding implementations
+
+| Encoding | Local state | Child access |
+|---|---|---|
+| Primitive | Prepared validity mask or a marker for lazy validity. | Lazy validity uses the validity slot's retained probe and evaluates only requested rows. |
+| FastLanes RLE | Borrowed primitive readers with prepared validity, or slot IDs for encoded children; the slice base offset. | Materialized primitive slots are read directly. Other slots use the context's child probes. |
+| RunEnd | Unit state. | Reuses the ends probe across binary-search comparisons and lookups, then probes the selected value, including its nullness. |
+| PCO | Validity, non-null prefix ranks, page boundaries, and one decoded page. | Reads compressed buffers directly; no child probe is needed. |
+
+For `RunEnd(ends=PCO, values=PCO)`, the RunEnd context owns both child probes and each
+PCO context retains its own page. This applies recursively: the regression fixture
+`RunEnd(PCO, RunEnd(PCO, PCO))` verifies one initialization and decode per single-page
+PCO leaf across repeated reads, and one drop per state. Independent root probes prepare
+independent state. Page changes can still require decoding; PCO retains only one page.
+
+The [runnable example](../encodings/pco/examples/probe.rs) covers both usage modes and
+stacked encodings. [Paired benchmarks](../encodings/pco/benches/probe.md) include complete
+probe lifetimes, including preparation and teardown, alongside unchanged `execute_scalar`.

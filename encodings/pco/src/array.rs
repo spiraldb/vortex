@@ -29,6 +29,7 @@ use vortex_array::EqMode;
 use vortex_array::ExecutionCtx;
 use vortex_array::ExecutionResult;
 use vortex_array::IntoArray;
+use vortex_array::ProbeCtx;
 use vortex_array::TypedArrayRef;
 use vortex_array::array_slots;
 use vortex_array::arrays::Primitive;
@@ -778,7 +779,19 @@ impl ValidityVTable<Pco> for Pco {
 }
 
 impl OperationsVTable<Pco> for Pco {
-    type ProbeState<'a> = ();
+    type ProbeState<'a> = crate::probe::PcoProbeState;
+
+    fn probe_scalar<'a>(
+        array: ArrayView<'a, Pco>,
+        index: usize,
+        probe: Option<&mut ProbeCtx<'a, Self::ProbeState<'a>>>,
+        ctx: &mut ExecutionCtx,
+    ) -> VortexResult<Scalar> {
+        match probe {
+            Some(probe) => crate::probe::scalar_at(array, index, probe.state_mut(), ctx),
+            None => array.array().execute_scalar(index, ctx),
+        }
+    }
 
     fn scalar_at(
         array: ArrayView<'_, Pco>,
