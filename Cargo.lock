@@ -11405,6 +11405,7 @@ dependencies = [
  "vortex-arrow",
  "vortex-cloud",
  "vortex-python-abi",
+ "vortex-tensor",
  "vortex-tui",
 ]
 
