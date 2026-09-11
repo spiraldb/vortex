@@ -24,6 +24,7 @@ use vortex_array::dtype::FieldName;
 use vortex_array::dtype::FieldNames;
 use vortex_array::dtype::FieldPath;
 use vortex_array::dtype::Nullability;
+use vortex_array::dtype::PType;
 use vortex_array::dtype::StructFields;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::Expression;
@@ -41,6 +42,8 @@ use vortex_error::vortex_err;
 use vortex_layout::LayoutRef;
 use vortex_layout::layouts::chunked::Chunked;
 use vortex_layout::layouts::flat::Flat;
+use vortex_layout::layouts::row_idx::RowIdx;
+use vortex_layout::layouts::row_idx::row_idx;
 use vortex_layout::layouts::struct_::Struct;
 use vortex_layout::layouts::zoned::LegacyStats;
 use vortex_layout::layouts::zoned::Zoned;
@@ -62,12 +65,16 @@ use crate::nodes::FilterExec;
 use crate::nodes::FlatExec;
 use crate::nodes::FlatSegment;
 use crate::nodes::PushBatching;
+use crate::nodes::RowIdxExec;
 use crate::nodes::StructExec;
 
 /// The immutable blueprint of one node.
 enum NodeSpec {
     Flat {
         segments: Arc<[FlatSegment]>,
+    },
+    RowIdx {
+        row_offset: u64,
     },
     Chunked {
         chunk_offsets: Arc<[u64]>,
@@ -658,6 +665,9 @@ impl ExecPlan {
                     Arc::clone(segments),
                     ProducerId(u32::try_from(idx).unwrap_or(u32::MAX)),
                 ))),
+                NodeSpec::RowIdx { row_offset } => {
+                    Node::RowIdx(Box::new(RowIdxExec::new(*row_offset)))
+                }
                 NodeSpec::Chunked {
                     chunk_offsets,
                     children,
@@ -722,6 +732,16 @@ pub fn build_plan(
     filter: Option<&Expression>,
     mode: ConjunctMode,
 ) -> VortexResult<ExecPlan> {
+    build_plan_with_row_offset(layout, projection, filter, mode, 0)
+}
+
+pub(crate) fn build_plan_with_row_offset(
+    layout: &LayoutRef,
+    projection: &Expression,
+    filter: Option<&Expression>,
+    mode: ConjunctMode,
+    row_offset: u64,
+) -> VortexResult<ExecPlan> {
     let root_dtype = layout.dtype().clone();
     let root_fields = root_dtype
         .as_struct_fields_opt()
@@ -742,6 +762,7 @@ pub fn build_plan(
         layout: LayoutRef::clone(layout),
         root_fields,
         splits: Vec::new(),
+        row_offset,
     };
 
     // The filter: one subtree per conjunct, each over just that conjunct's fields.
@@ -888,7 +909,7 @@ fn physical_pipelines(
     sources: &[SourceActivation],
 ) -> VortexResult<Vec<PhysicalPipeline>> {
     let is_breaker = |node: NodeId| match &nodes[node as usize] {
-        NodeSpec::Flat { .. } => false,
+        NodeSpec::Flat { .. } | NodeSpec::RowIdx { .. } => false,
         NodeSpec::Chunked { children, .. } | NodeSpec::Struct { children, .. } => {
             children.len() != 1
         }
@@ -988,7 +1009,7 @@ fn reverse_routes(nodes: &[NodeSpec], root: NodeId) -> VortexResult<Vec<Option<R
         };
 
         match spec {
-            NodeSpec::Flat { .. } => {}
+            NodeSpec::Flat { .. } | NodeSpec::RowIdx { .. } => {}
             NodeSpec::Chunked { children, .. } | NodeSpec::Struct { children, .. } => {
                 for (port, &child) in children.iter().enumerate() {
                     register(child, port)?;
@@ -1040,6 +1061,7 @@ fn source_activations(
                 .first()
                 .zip(segments.last())
                 .map(|(first, last)| (node, first.range.start..last.range.end)),
+            NodeSpec::RowIdx { .. } => Some((node, 0..row_count)),
             NodeSpec::Struct { children, .. } if children.is_empty() => Some((node, 0..row_count)),
             _ => None,
         })
@@ -1119,6 +1141,7 @@ struct Builder {
     layout: LayoutRef,
     root_fields: StructFields,
     splits: Vec<u64>,
+    row_offset: u64,
 }
 
 impl Builder {
@@ -1136,9 +1159,10 @@ impl Builder {
         allow_predicate_passthrough: bool,
     ) -> VortexResult<(NodeId, BoundExpression, Option<BoundExpression>)> {
         let full = expr.bind(self.layout.dtype())?;
-        let names = self.referenced_top_level_fields(&full)?;
+        let uses_row_idx = full.contains::<RowIdx>()?;
+        let mut names = self.referenced_top_level_fields(&full)?;
 
-        let dtypes = names
+        let mut dtypes = names
             .iter()
             .map(|name| {
                 self.root_fields
@@ -1146,23 +1170,37 @@ impl Builder {
                     .ok_or_else(|| vortex_err!("field {name} not found in the scan dtype"))
             })
             .collect::<VortexResult<Vec<_>>>()?;
+        let physical_field_count = names.len();
+        let scoped_expr = if uses_row_idx {
+            let row_idx_name = unique_row_idx_name(&self.root_fields);
+            names.push(row_idx_name.clone());
+            dtypes.push(DType::Primitive(PType::U64, Nullability::NonNullable));
+            replace(expr.clone(), &row_idx(), get_item(row_idx_name, root()))
+        } else {
+            expr.clone()
+        };
         let narrowed = DType::Struct(
             StructFields::new(FieldNames::from(names.clone()), dtypes.clone()),
             Nullability::NonNullable,
         );
-        let bound = expr.bind(&narrowed)?;
-        let push_predicate = allow_predicate_passthrough
+        let bound = scoped_expr.bind(&narrowed)?;
+        let push_predicate = (!uses_row_idx && allow_predicate_passthrough)
             .then(|| direct_single_field_predicate(expr, &full, &names, &dtypes))
             .flatten();
 
         let mut children = Vec::with_capacity(names.len());
-        for name in &names {
+        for name in &names[..physical_field_count] {
             let idx = self
                 .root_fields
                 .find(name)
                 .ok_or_else(|| vortex_err!("field {name} not found in the scan dtype"))?;
             let field_layout = self.field_layout(idx)?;
             children.push(self.build_layout(&field_layout, 0)?);
+        }
+        if uses_row_idx {
+            children.push(self.push(NodeSpec::RowIdx {
+                row_offset: self.row_offset,
+            }));
         }
 
         let node = self.push(NodeSpec::Struct {
@@ -1268,6 +1306,21 @@ impl Builder {
             layout.encoding_id(),
             root_offset
         )
+    }
+}
+
+fn unique_row_idx_name(fields: &StructFields) -> FieldName {
+    let mut suffix = 0u32;
+    loop {
+        let name = if suffix == 0 {
+            FieldName::from("__vortex_row_idx")
+        } else {
+            FieldName::from(format!("__vortex_row_idx_{suffix}"))
+        };
+        if fields.find(&name).is_none() {
+            return name;
+        }
+        suffix += 1;
     }
 }
 

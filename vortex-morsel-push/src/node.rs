@@ -616,6 +616,7 @@ pub enum PushProfileKind {
 /// [`crate::build_plan`] never instantiate it.
 pub(crate) enum Node {
     Flat(Box<crate::nodes::FlatExec>),
+    RowIdx(Box<crate::nodes::RowIdxExec>),
     Chunked(Box<crate::nodes::ChunkedExec>),
     Struct(Box<crate::nodes::StructExec>),
     Conjunct(Box<crate::nodes::ConjunctExec>),
@@ -629,6 +630,7 @@ macro_rules! dispatch_node {
     ($node:expr, $inner:ident => $call:expr) => {
         match $node {
             Node::Flat($inner) => $call,
+            Node::RowIdx($inner) => $call,
             Node::Chunked($inner) => $call,
             Node::Struct($inner) => $call,
             Node::Conjunct($inner) => $call,

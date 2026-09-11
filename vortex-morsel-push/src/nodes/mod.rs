@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-//! The five operator state machines: FLAT, CHUNKED, STRUCT, CONJUNCT and FILTER.
+//! The operator state machines used by the push executor.
 
 mod chunked;
 mod conjunct;
 mod filter;
 mod flat;
+mod row_idx;
 mod struct_;
 
 pub use chunked::ChunkedExec;
@@ -16,6 +17,7 @@ pub use conjunct::ConjunctSlot;
 pub use filter::FilterExec;
 pub use flat::FlatExec;
 pub(crate) use flat::FlatSegment;
+pub use row_idx::RowIdxExec;
 pub use struct_::StructExec;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

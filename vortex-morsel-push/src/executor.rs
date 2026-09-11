@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 
 use futures::channel::oneshot;
 use futures::future::BoxFuture;
+use futures::future::try_join_all;
 use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
@@ -17,11 +18,16 @@ use vortex_array::arrays::ChunkedArray;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::Expression;
+use vortex_array::scalar_fn::fns::binary::Binary;
+use vortex_array::scalar_fn::fns::dynamic::DynamicComparison;
+use vortex_array::scalar_fn::fns::operators::Operator;
 use vortex_error::VortexResult;
-use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_io::session::RuntimeSessionExt;
+use vortex_layout::LayoutReaderContext;
+use vortex_layout::LayoutReaderRef;
 use vortex_layout::LayoutRef;
+use vortex_layout::layouts::row_idx::RowIdx;
 use vortex_layout::segments::SegmentSource;
 use vortex_mask::AllOr;
 use vortex_mask::Mask;
@@ -30,18 +36,21 @@ use vortex_utils::aliases::hash_map::HashMap;
 
 use crate::MorselScan;
 use crate::build::ExecPlan;
-use crate::build::build_plan;
+use crate::build::build_plan_with_row_offset;
 use crate::driver::StreamCancellation;
 use crate::driver::morsels;
 use crate::io::IoService;
 use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
 
-type PlanCacheKey = (String, Option<String>, ConjunctMode);
+type PlanCacheKey = (String, Option<String>, ConjunctMode, u64);
 
 /// Morsels kept visible to background I/O ahead of the active workers in shared scans, so the
 /// file driver sees enough adjacent segments to coalesce and cold reads overlap execution.
 const SHARED_LOOKAHEAD_MORSELS: usize = 16;
+
+/// Keep stats evaluation bounded while exposing enough adjacent morsels for stats reads to batch.
+const PRUNING_LOOKAHEAD_MORSELS: usize = 16;
 
 /// Push-morsel execution backend over a raw layout and segment source.
 pub struct PushMorselScanExecutor {
@@ -98,7 +107,7 @@ impl PushMorselScanExecutor {
         projection: &BoundExpression,
         filter: Option<&BoundExpression>,
     ) -> VortexResult<Vec<u64>> {
-        let plan = self.plan(projection, filter)?;
+        let plan = self.plan(projection, filter, 0)?;
         let mut boundaries = Vec::with_capacity(plan.natural_splits().len() + 1);
         boundaries.push(0);
         boundaries.extend(
@@ -126,14 +135,11 @@ impl PushMorselScanExecutor {
         limit: Option<u64>,
         row_offset: u64,
     ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
-        if row_offset != 0 {
-            vortex_bail!("the morsel scan executor does not support row offsets");
-        }
         if limit == Some(0) {
             return Ok(Vec::new());
         }
 
-        let plan = self.plan(&projection, filter.as_ref())?;
+        let plan = self.plan(&projection, filter.as_ref(), row_offset)?;
         let full_range = row_range.unwrap_or_else(|| 0..plan.row_count());
         let mut morsels =
             selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
@@ -162,6 +168,27 @@ impl PushMorselScanExecutor {
             row_caps = Some(caps);
         }
 
+        // Build a fresh pruning reader for this scan. Its zone-map state is shared only by the
+        // morsels in this invocation; nothing survives into a later scan. Dynamic filters are
+        // intentionally excluded because their bounds can change after this one-shot prepass.
+        let pruner = filter
+            .as_ref()
+            .map(static_conjuncts)
+            .transpose()?
+            .filter(|conjuncts| !conjuncts.is_empty())
+            .map(|conjuncts| {
+                Ok::<_, vortex_error::VortexError>(StaticPruner {
+                    reader: self.layout.new_reader(
+                        "morsel-pruning".into(),
+                        Arc::clone(&self.segments),
+                        &session,
+                        &LayoutReaderContext::new(),
+                    )?,
+                    conjuncts: conjuncts.into(),
+                })
+            })
+            .transpose()?;
+
         if let Some(driver) = &self.external_driver {
             return build_external_outputs(
                 session,
@@ -170,6 +197,7 @@ impl PushMorselScanExecutor {
                 morsels,
                 row_caps,
                 Arc::clone(driver),
+                pruner,
             );
         }
 
@@ -178,30 +206,15 @@ impl PushMorselScanExecutor {
         // cancelled.
         let cancellation = StreamCancellation::new();
         let undelivered = Arc::new(AtomicUsize::new(morsels.len()));
-        let mut ranges = Vec::new();
-        let mut targets = Vec::new();
-        let mut groups = Vec::with_capacity(morsels.len());
+        let mut senders = Vec::with_capacity(morsels.len());
         let mut outputs = Vec::with_capacity(morsels.len());
-        for (morsel_index, morsel) in morsels.into_iter().enumerate() {
+        for _ in 0..morsels.len() {
             let (sender, receiver) = oneshot::channel();
-            let group = Arc::new(OutputGroup::new(
-                morsel.selected_ranges.len(),
-                plan.output_dtype().clone(),
-                sender,
-                row_caps.as_ref().map(|caps| caps[morsel_index]),
-            ));
+            senders.push(sender);
             let guard = DeliveryGuard {
                 undelivered: Arc::clone(&undelivered),
                 cancellation: Arc::clone(&cancellation),
             };
-            for (local_index, range) in morsel.selected_ranges.into_iter().enumerate() {
-                ranges.push(range);
-                targets.push(CompletionTarget {
-                    group: Arc::clone(&group),
-                    local_index,
-                });
-            }
-            groups.push(group);
             outputs.push(Box::pin(async move {
                 let _guard = guard;
                 receiver
@@ -211,17 +224,51 @@ impl PushMorselScanExecutor {
                 as BoxFuture<'static, VortexResult<Option<ArrayRef>>>);
         }
 
-        if ranges.is_empty() {
-            return Ok(outputs);
-        }
-
         let driver = SegmentSourceDriver::new(Arc::clone(&self.segments));
         let handle = session.handle();
         let coordinator_handle = handle.clone();
         let driver_handle = handle.clone();
-        let threads = ranges.len().min(self.threads);
+        let max_threads = self.threads;
         handle
             .spawn(async move {
+                let morsels = match prune_morsels(pruner.as_ref(), morsels).await {
+                    Ok(morsels) => morsels,
+                    Err(err) => {
+                        let message = err.to_string();
+                        fail_senders(senders, &message);
+                        return;
+                    }
+                };
+
+                let mut ranges = Vec::new();
+                let mut targets = Vec::new();
+                let mut groups = Vec::with_capacity(morsels.len());
+                for (morsel_index, (morsel, sender)) in morsels.into_iter().zip(senders).enumerate()
+                {
+                    if morsel.selected_ranges.is_empty() {
+                        drop(sender.send(Ok(None)));
+                        continue;
+                    }
+                    let group = Arc::new(OutputGroup::new(
+                        morsel.selected_ranges.len(),
+                        plan.output_dtype().clone(),
+                        sender,
+                        row_caps.as_ref().map(|caps| caps[morsel_index]),
+                    ));
+                    for (local_index, range) in morsel.selected_ranges.into_iter().enumerate() {
+                        ranges.push(range);
+                        targets.push(CompletionTarget {
+                            group: Arc::clone(&group),
+                            local_index,
+                        });
+                    }
+                    groups.push(group);
+                }
+
+                if ranges.is_empty() {
+                    return;
+                }
+                let threads = ranges.len().min(max_threads);
                 let result = coordinator_handle
                     .spawn_blocking(move || {
                         let scan = MorselScan::new(plan, session)
@@ -253,6 +300,7 @@ impl PushMorselScanExecutor {
         &self,
         projection: &BoundExpression,
         filter: Option<&BoundExpression>,
+        row_offset: u64,
     ) -> VortexResult<Arc<ExecPlan>> {
         let projection = unbind(projection)?;
         let filter = filter.map(unbind).transpose()?;
@@ -260,16 +308,18 @@ impl PushMorselScanExecutor {
             projection.to_string(),
             filter.as_ref().map(ToString::to_string),
             self.conjunct_mode,
+            row_offset,
         );
         let mut cache = self.plan_cache.lock();
         match cache.get(&plan_key) {
             Some(plan) => Ok(Arc::clone(plan)),
             None => {
-                let plan = Arc::new(build_plan(
+                let plan = Arc::new(build_plan_with_row_offset(
                     &self.layout,
                     &projection,
                     filter.as_ref(),
                     self.conjunct_mode,
+                    row_offset,
                 )?);
                 cache.insert(plan_key, Arc::clone(&plan));
                 Ok(plan)
@@ -285,6 +335,7 @@ fn build_external_outputs(
     morsels: Vec<SelectedMorsel>,
     row_caps: Option<Vec<usize>>,
     driver: Arc<dyn Fn() -> bool + Send + Sync>,
+    pruner: Option<StaticPruner>,
 ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
     // One I/O service, and therefore one demand stream, spans every morsel of this file so
     // reads dedupe across them. The engine's threads advance the runtime the driver runs on.
@@ -303,8 +354,9 @@ fn build_external_outputs(
         let io = Arc::clone(&io);
         let driver = Arc::clone(&driver);
         let session = session.clone();
+        let pruner = pruner.clone();
         outputs.push(Box::pin(async move {
-            let ranges = morsel.selected_ranges;
+            let ranges = prune_morsel(pruner.as_ref(), morsel).await?.selected_ranges;
             if ranges.is_empty() {
                 return Ok(None);
             }
@@ -323,6 +375,85 @@ fn build_external_outputs(
             as BoxFuture<'static, VortexResult<Option<ArrayRef>>>);
     }
     Ok(outputs)
+}
+
+#[derive(Clone)]
+struct StaticPruner {
+    reader: LayoutReaderRef,
+    conjuncts: Arc<[BoundExpression]>,
+}
+
+async fn prune_morsels(
+    pruner: Option<&StaticPruner>,
+    morsels: Vec<SelectedMorsel>,
+) -> VortexResult<Vec<SelectedMorsel>> {
+    let mut pruned = Vec::with_capacity(morsels.len());
+    let mut morsels = morsels.into_iter();
+    loop {
+        let pending = morsels
+            .by_ref()
+            .take(PRUNING_LOOKAHEAD_MORSELS)
+            .map(|morsel| prune_morsel(pruner, morsel))
+            .collect::<Vec<_>>();
+        if pending.is_empty() {
+            return Ok(pruned);
+        }
+        pruned.extend(try_join_all(pending).await?);
+    }
+}
+
+async fn prune_morsel(
+    pruner: Option<&StaticPruner>,
+    morsel: SelectedMorsel,
+) -> VortexResult<SelectedMorsel> {
+    let Some(pruner) = pruner else {
+        return Ok(morsel);
+    };
+
+    let mut selected_ranges = Vec::new();
+    for range in morsel.selected_ranges {
+        let len = usize::try_from(range.end - range.start).unwrap_or(usize::MAX);
+        // Construct every independent stats future before awaiting any of them. Besides avoiding
+        // an artificial conjunct-by-conjunct dependency, this exposes all auxiliary segments to
+        // the file source together so adjacent stats reads can coalesce just as they do in V1.
+        let futures = pruner
+            .conjuncts
+            .iter()
+            .map(|conjunct| {
+                pruner
+                    .reader
+                    .pruning_evaluation(&range, conjunct, Mask::new_true(len))
+            })
+            .collect::<VortexResult<Vec<_>>>()?;
+        let mask = Mask::intersect_owned(try_join_all(futures).await?);
+        selected_ranges.extend(mask_ranges(&range, &mask));
+    }
+    Ok(SelectedMorsel { selected_ranges })
+}
+
+fn static_conjuncts(filter: &BoundExpression) -> VortexResult<Vec<BoundExpression>> {
+    let mut conjuncts = Vec::new();
+    let mut pending = vec![filter];
+    while let Some(expr) = pending.pop() {
+        let is_and = expr
+            .as_scalar()
+            .and_then(|scalar_fn| scalar_fn.as_opt::<Binary>())
+            .is_some_and(|operator| *operator == Operator::And);
+        if is_and {
+            pending.extend(expr.children().iter().rev());
+        } else if !expr.contains::<DynamicComparison>()? && !expr.contains::<RowIdx>()? {
+            conjuncts.push(expr.clone());
+        }
+    }
+    Ok(conjuncts)
+}
+
+fn fail_senders(senders: Vec<oneshot::Sender<VortexResult<Option<ArrayRef>>>>, message: &str) {
+    for sender in senders {
+        drop(sender.send(Err(vortex_err!(
+            "shared morsel scan pruning failed: {message}"
+        ))));
+    }
 }
 
 fn combine_batches(mut batches: Vec<ArrayRef>) -> VortexResult<Option<ArrayRef>> {

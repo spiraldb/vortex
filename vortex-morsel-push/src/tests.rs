@@ -12,6 +12,7 @@
 // only makes the generators harder to read.
 #![allow(clippy::cast_possible_truncation)]
 
+use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -22,13 +23,17 @@ use std::time::Duration;
 
 use futures::FutureExt;
 use futures::future::poll_fn;
+use futures::future::try_join_all;
 use parking_lot::Mutex;
 use rstest::rstest;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
+use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
 use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::assert_arrays_eq;
 use vortex_array::buffer::BufferHandle;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::Nullability;
@@ -51,10 +56,17 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_io::runtime::single::block_on;
 use vortex_io::session::RuntimeSession;
+use vortex_io::session::RuntimeSessionExt;
 use vortex_layout::LayoutRef;
 use vortex_layout::layout_children;
 use vortex_layout::layouts::chunked::ChunkedLayout;
+use vortex_layout::layouts::flat::Flat;
+use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
+use vortex_layout::layouts::row_idx::row_idx;
 use vortex_layout::layouts::struct_::StructLayout;
+use vortex_layout::layouts::zoned::Zoned;
+use vortex_layout::layouts::zoned::writer::ZonedLayoutOptions;
+use vortex_layout::layouts::zoned::writer::ZonedStrategy;
 use vortex_layout::segments::ReadAtNowait;
 use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
@@ -68,6 +80,7 @@ use crate::SegmentSourceDriver;
 use crate::fixtures::Column;
 use crate::fixtures::Fixture;
 use crate::fixtures::write_fixture;
+use crate::fixtures::write_fixture_with;
 use crate::harness::MorselConfig;
 use crate::harness::Query;
 use crate::harness::RunOutcome;
@@ -1008,6 +1021,199 @@ fn shared_cells_reuse_straddled_chunks() -> VortexResult<()> {
 struct CountingSegmentSource {
     inner: Arc<dyn SegmentSource>,
     requests: Arc<AtomicUsize>,
+}
+
+struct RecordingSegmentSource {
+    inner: Arc<dyn SegmentSource>,
+    requests: Arc<Mutex<Vec<SegmentId>>>,
+}
+
+impl SegmentSource for RecordingSegmentSource {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.requests.lock().push(id);
+        self.inner.request(id)
+    }
+}
+
+#[test]
+fn executor_prunes_zones_before_registering_data_io() -> VortexResult<()> {
+    let session = session();
+    let values: Vec<i32> = (0..12).collect();
+    let strategy = ZonedStrategy::new(
+        FlatLayoutStrategy::default(),
+        FlatLayoutStrategy::default(),
+        ZonedLayoutOptions {
+            block_size: NonZeroUsize::new(4).ok_or_else(|| vortex_err!("zero block size"))?,
+            ..Default::default()
+        },
+    );
+    let fixture = block_on(|handle| {
+        let runtime_session = session.clone().with_handle(handle);
+        async move {
+            write_fixture_with(
+                vec![Column::new("a", i32_chunks(&values, &[4, 8, 12]))],
+                Arc::new(strategy),
+                &runtime_session,
+            )
+            .await
+        }
+    })?;
+
+    let field = fixture
+        .layout
+        .slot(1)?
+        .ok_or_else(|| vortex_err!("fixture has no field layout"))?;
+    let mut data_ids = Vec::new();
+    let mut stats_ids = Vec::new();
+    for index in 0..field.nchildren() {
+        let zoned = field
+            .slot(index)?
+            .ok_or_else(|| vortex_err!("fixture has no zoned child {index}"))?;
+        assert!(zoned.is::<Zoned>());
+        let data = zoned
+            .slot(0)?
+            .ok_or_else(|| vortex_err!("zoned fixture has no data child"))?;
+        let stats = zoned
+            .slot(1)?
+            .ok_or_else(|| vortex_err!("zoned fixture has no stats child"))?;
+        data_ids.push(data.as_::<Flat>().segment_id());
+        stats_ids.push(stats.as_::<Flat>().segment_id());
+    }
+
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let source: Arc<dyn SegmentSource> = Arc::new(RecordingSegmentSource {
+        inner: Arc::clone(&fixture.segments),
+        requests: Arc::clone(&requests),
+    });
+    let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
+    let filter = gt(get_item("a", root()), lit(100i32)).bind(fixture.layout.dtype())?;
+    let executor = PushMorselScanExecutor::new(Arc::clone(&fixture.layout), source)
+        .with_target_rows(4)
+        .with_threads(2);
+    let outputs = block_on(|handle| async move {
+        let mut outputs = Vec::new();
+        for _ in 0..2 {
+            let tasks = executor.build(
+                session.clone().with_handle(handle.clone()),
+                projection.clone(),
+                Some(filter.clone()),
+                None,
+                vortex_scan::selection::Selection::All,
+                None,
+                0,
+            )?;
+            outputs.extend(try_join_all(tasks).await?);
+        }
+        Ok::<_, vortex_error::VortexError>(outputs)
+    })?;
+
+    assert!(outputs.iter().all(Option::is_none));
+    let requests = requests.lock();
+    assert!(data_ids.iter().all(|id| !requests.contains(id)));
+    assert!(
+        stats_ids
+            .iter()
+            .all(|id| requests.iter().filter(|requested| *requested == id).count() == 2)
+    );
+    Ok(())
+}
+
+#[test]
+fn executor_projects_row_idx_with_offset() -> VortexResult<()> {
+    let session = session();
+    let values: Vec<i32> = (0..12).collect();
+    let fixture = block_on(|handle| {
+        let runtime_session = session.clone().with_handle(handle);
+        async move {
+            write_fixture(
+                vec![Column::new("a", i32_chunks(&values, &[4, 8, 12]))],
+                &runtime_session,
+            )
+            .await
+        }
+    })?;
+    let projection =
+        pack([("idx", row_idx())], Nullability::NonNullable).bind(fixture.layout.dtype())?;
+    let executor =
+        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments));
+    let runtime_session = session.clone();
+    let outputs = block_on(|handle| async move {
+        let tasks = executor.build(
+            runtime_session.with_handle(handle),
+            projection,
+            None,
+            None,
+            vortex_scan::selection::Selection::All,
+            None,
+            100,
+        )?;
+        try_join_all(tasks).await
+    })?;
+    let output = outputs
+        .into_iter()
+        .next()
+        .flatten()
+        .ok_or_else(|| vortex_err!("row-index projection produced no rows"))?;
+    let expected = StructArray::try_new(
+        ["idx"].into(),
+        vec![PrimitiveArray::from_iter(100u64..112).into_array()],
+        12,
+        Validity::NonNullable,
+    )?
+    .into_array();
+    assert_arrays_eq!(output, expected, &mut session.create_execution_ctx());
+    Ok(())
+}
+
+#[test]
+fn executor_filters_on_row_idx_with_offset() -> VortexResult<()> {
+    let session = session();
+    let values: Vec<i32> = (0..12).collect();
+    let fixture = block_on(|handle| {
+        let runtime_session = session.clone().with_handle(handle);
+        async move {
+            write_fixture(
+                vec![Column::new("a", i32_chunks(&values, &[12]))],
+                &runtime_session,
+            )
+            .await
+        }
+    })?;
+    let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
+    let filter = gt_eq(row_idx(), lit(105u64)).bind(fixture.layout.dtype())?;
+    let executor =
+        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments));
+    let runtime_session = session.clone();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .build()
+        .map_err(|err| vortex_err!("failed to build test runtime: {err}"))?;
+    let outputs = runtime.block_on(async move {
+        let tasks = executor.build(
+            runtime_session.with_tokio(),
+            projection,
+            Some(filter),
+            None,
+            vortex_scan::selection::Selection::All,
+            None,
+            100,
+        )?;
+        try_join_all(tasks).await
+    })?;
+    let output = outputs
+        .into_iter()
+        .next()
+        .flatten()
+        .ok_or_else(|| vortex_err!("row-index filter produced no rows"))?;
+    let expected = StructArray::try_new(
+        ["a"].into(),
+        vec![PrimitiveArray::from_iter(5i32..12).into_array()],
+        7,
+        Validity::NonNullable,
+    )?
+    .into_array();
+    assert_arrays_eq!(output, expected, &mut session.create_execution_ctx());
+    Ok(())
 }
 
 struct BackgroundCountingSource {
