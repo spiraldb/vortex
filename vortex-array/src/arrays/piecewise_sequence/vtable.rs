@@ -145,6 +145,8 @@ impl VTable for PiecewiseSequence {
 }
 
 impl OperationsVTable<PiecewiseSequence> for PiecewiseSequence {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         array: ArrayView<'_, PiecewiseSequence>,
         index: usize,

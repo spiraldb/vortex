@@ -12,6 +12,8 @@ use crate::arrays::variant::VariantArraySlotsExt;
 use crate::scalar::Scalar;
 
 impl OperationsVTable<Variant> for Variant {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         array: ArrayView<'_, Variant>,
         index: usize,

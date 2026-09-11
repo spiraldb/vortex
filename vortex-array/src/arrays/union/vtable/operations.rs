@@ -14,6 +14,8 @@ use crate::arrays::union::UnionArraySlotsExt;
 use crate::scalar::Scalar;
 
 impl OperationsVTable<Union> for Union {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         array: ArrayView<'_, Union>,
         index: usize,

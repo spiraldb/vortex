@@ -256,6 +256,8 @@ impl VTable for TransposedBool {
 }
 
 impl OperationsVTable<TransposedBool> for TransposedBool {
+    type ProbeState<'a> = ();
+
     fn scalar_at(
         array: ArrayView<'_, TransposedBool>,
         index: usize,
