@@ -435,7 +435,7 @@ pub extern "C-unwind" fn vx_array_new_primitive(
 /// vx_validity validity = {};
 /// validity.type = VX_VALIDITY_NON_NULLABLE;
 ///
-/// uint8_t words[2] = {0xff, 0}; // 11111111 00000000
+/// uint8_t words\[2\] = {0xff, 0}; // 11111111 00000000
 /// vx_bool_view view = {words, 9, 0};
 ///
 /// const vx_array* array = vx_array_new_bool(&view, &validity, &error);
@@ -667,7 +667,7 @@ pub unsafe extern "C-unwind" fn vx_array_data_ptr_primitive(
 /// vx_validity validity = {};
 /// validity.type = VX_VALIDITY_NON_NULLABLE;
 ///
-/// uint8_t words[2] = {0xff, 0}; // 11111111 00000000
+/// uint8_t words\[2\] = {0xff, 0}; // 11111111 00000000
 /// vx_bool_view view = {words, 9, 0};
 ///
 /// const vx_array* array = vx_array_new_bool(&view, &validity, &error);
