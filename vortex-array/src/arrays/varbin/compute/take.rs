@@ -630,7 +630,7 @@ where
     }
 
     let mut new_data = ByteBufferMut::with_capacity(output_bytes);
-    let spare = &mut new_data.spare_capacity_mut()[..output_bytes];
+    let spare = new_data.spare_capacity_mut(output_bytes);
     let mut cursor = 0usize;
     for start in starts {
         let start = start.as_();
@@ -722,7 +722,7 @@ where
     );
 
     let mut new_data = ByteBufferMut::with_capacity(output_bytes);
-    let spare = &mut new_data.spare_capacity_mut()[..output_bytes];
+    let spare = new_data.spare_capacity_mut(output_bytes);
     let mut cursor = 0usize;
     for (&start, &length) in starts.iter().zip_eq(lengths) {
         let start = start.as_();

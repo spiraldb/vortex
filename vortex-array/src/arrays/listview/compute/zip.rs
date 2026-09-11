@@ -93,8 +93,8 @@ impl ZipKernel for ListView {
             let false_offsets = false_offsets.as_slice();
             let false_sizes = false_sizes.as_slice();
 
-            let offsets_out = offsets.spare_capacity_mut();
-            let sizes_out = sizes.spare_capacity_mut();
+            let offsets_out = offsets.spare_capacity_mut(len);
+            let sizes_out = sizes.spare_capacity_mut(len);
 
             // We matched `Mask::Values` above, so the bit buffer is materialized. `unaligned_chunks`
             // iterates faster than `chunks`: it exposes the byte-aligned body as a plain `&[u64]`

@@ -86,7 +86,9 @@ where
     // Allocate result arrays.
     let mut bases = BufferMut::with_capacity(bases_len);
     let mut deltas = BufferMut::with_capacity(padded_len);
-    let (output_deltas, _) = deltas.spare_capacity_mut().as_chunks_mut::<FL_CHUNK_SIZE>();
+    let (output_deltas, _) = deltas
+        .spare_capacity_mut(padded_len)
+        .as_chunks_mut::<FL_CHUNK_SIZE>();
 
     // Loop over all full 1024-element chunks.
     let mut transposed: [T; FL_CHUNK_SIZE] = [T::default(); FL_CHUNK_SIZE];

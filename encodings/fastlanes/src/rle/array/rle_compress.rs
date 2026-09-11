@@ -58,10 +58,9 @@ where
     // Pre-allocate for one offset per chunk.
     let mut values_idx_offsets = BufferMut::<u64>::with_capacity(len.div_ceil(FL_CHUNK_SIZE));
 
-    let values_uninit = values_buf.spare_capacity_mut();
-    // We don't care about the trailing chunk that exists due to overallocation by the underlying allocator.
+    let values_uninit = values_buf.spare_capacity_mut(padded_len);
     let (indices_uninit, _) = indices_buf
-        .spare_capacity_mut()
+        .spare_capacity_mut(padded_len)
         .as_chunks_mut::<FL_CHUNK_SIZE>();
     let mut value_count_acc = 0; // Chunk value count prefix sum.
 
@@ -104,8 +103,6 @@ where
         // accounting for an additional value change.
         let mut padded_chunk = [values[len - 1]; FL_CHUNK_SIZE];
         padded_chunk[..remainder.len()].copy_from_slice(remainder);
-        // There might be more entries in indices_uninit than necessary if the allocator gave us extra memory.
-        // Remainder has to go to the last chunk after full chunks have been processed.
         let last_idx_chunk = &mut indices_uninit[chunks.len()];
         process_chunk(&padded_chunk, last_idx_chunk);
     }

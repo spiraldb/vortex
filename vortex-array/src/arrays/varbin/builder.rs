@@ -290,7 +290,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
         self.data.reserve(capacity);
 
         let data_len = self.data.len();
-        let written = decode(self.data.spare_capacity_mut())?;
+        let written = decode(self.data.spare_capacity_mut(capacity))?;
         vortex_ensure!(
             written == num_bytes,
             "Decoded {written} bytes, expected {num_bytes}"
@@ -508,7 +508,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
 
         // Writing into the spare capacity keeps the output cursor in a register: `push` rewrites
         // the buffer length on every value, which the optimizer cannot hoist out of the loop.
-        let spare = &mut self.offsets.spare_capacity_mut()[..count];
+        let spare = self.offsets.spare_capacity_mut(count);
         let mut end_offsets = end_offsets;
         let mut previous = 0usize;
         for slot in spare.iter_mut() {
@@ -561,7 +561,7 @@ impl<O: OffsetBuilderPType> VarBinBuilder<O> {
         // Disjoint field borrows: the offsets spare capacity stays valid while the byte buffer
         // grows, since the two are separate allocations.
         let Self { offsets, data, .. } = self;
-        let spare = &mut offsets.spare_capacity_mut()[..count];
+        let spare = offsets.spare_capacity_mut(count);
 
         match validity.bit_buffer() {
             AllOr::All => {

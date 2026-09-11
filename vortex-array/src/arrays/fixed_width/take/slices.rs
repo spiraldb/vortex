@@ -71,7 +71,7 @@ fn copy_slices(
         .checked_mul(byte_width)
         .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
     let mut result = BufferMut::<u8>::with_capacity_aligned(output_byte_len, values.alignment());
-    let spare = &mut result.spare_capacity_mut()[..output_byte_len];
+    let spare = result.spare_capacity_mut(output_byte_len);
     let mut cursor = 0usize;
 
     for (start, length) in slices {

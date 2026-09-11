@@ -171,7 +171,7 @@ fn cast_to_f64(
             let values = array.buffer::<F>();
             let values = values.as_slice();
             let mut out = BufferMut::<f64>::with_capacity(n);
-            values.map_into(&mut out.spare_capacity_mut()[..n], |v: F| {
+            values.map_into(out.spare_capacity_mut(n), |v: F| {
                 to_f64_lossy::<F>(v) * inv_factor
             });
             // SAFETY: map_into wrote every lane before returning.
@@ -184,7 +184,7 @@ fn cast_to_f64(
             let mut out = BufferMut::<f64>::with_capacity(n);
             let write_result = values.try_map_masked_into(
                 mask_values.bit_buffer(),
-                &mut out.spare_capacity_mut()[..n],
+                out.spare_capacity_mut(n),
                 |v: F| Some(to_f64_lossy::<F>(v) * inv_factor),
             );
             debug_assert!(write_result.is_ok());
@@ -244,13 +244,13 @@ where
     let mut buffer = BufferMut::<T>::with_capacity(values.len());
     match valid_values {
         Mask::AllTrue(_) => {
-            values.try_map_into(&mut buffer.spare_capacity_mut()[..values.len()], &cast)?;
+            values.try_map_into(buffer.spare_capacity_mut(values.len()), &cast)?;
         }
         Mask::AllFalse(_) => return Ok(BufferMut::<T>::zeroed(values.len()).freeze()),
         Mask::Values(mask) => {
             values.try_map_masked_into(
                 mask.bit_buffer(),
-                &mut buffer.spare_capacity_mut()[..values.len()],
+                buffer.spare_capacity_mut(values.len()),
                 &cast,
             )?;
         }

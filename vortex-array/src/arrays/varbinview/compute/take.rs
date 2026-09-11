@@ -175,7 +175,7 @@ where
     );
 
     let mut views = BufferMut::<BinaryView>::with_capacity(output_len);
-    let spare = &mut views.spare_capacity_mut()[..output_len];
+    let spare = views.spare_capacity_mut(output_len);
     let mut cursor = 0usize;
     for &start in starts {
         let start = start.as_();
@@ -213,7 +213,7 @@ where
     L: UnsignedPType,
 {
     let mut views = BufferMut::<BinaryView>::with_capacity(output_len);
-    let spare = &mut views.spare_capacity_mut()[..output_len];
+    let spare = views.spare_capacity_mut(output_len);
     let mut cursor = 0usize;
     for (&start, &length) in starts.iter().zip_eq(lengths) {
         let start = start.as_();

@@ -48,7 +48,7 @@ where
     };
 
     let mut values = BufferMut::<T>::with_capacity(len);
-    let out = &mut values.spare_capacity_mut()[..len];
+    let out = values.spare_capacity_mut(len);
     match valid_bits {
         None => source.try_map_into(out, apply)?,
         Some(valid_bits) => source.try_map_masked_into(valid_bits, out, apply)?,

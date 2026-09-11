@@ -64,7 +64,7 @@ pub(super) fn filter_slice_by_bitmap<T: Copy>(slice: &[T], mask: &MaskValues) ->
     let output_len = mask.true_count();
     let mut out = BufferMut::<T>::with_capacity(output_len);
     let src_ptr = slice.as_ptr();
-    let out_ptr = out.spare_capacity_mut().as_mut_ptr().cast::<T>();
+    let out_ptr = out.spare_capacity_mut(output_len).as_mut_ptr().cast::<T>();
     let mut write_pos = 0;
 
     for_each_mask_word(mask, |word, word_start, word_len| {
@@ -102,7 +102,10 @@ pub(super) fn filter_slice_by_bitmap<T: Copy>(slice: &[T], mask: &MaskValues) ->
 pub(super) fn filter_slice_by_indices<T: Copy>(slice: &[T], indices: &[usize]) -> Buffer<T> {
     let mut out = BufferMut::<T>::with_capacity(indices.len());
     let src_ptr = slice.as_ptr();
-    let out_ptr = out.spare_capacity_mut().as_mut_ptr().cast::<T>();
+    let out_ptr = out
+        .spare_capacity_mut(indices.len())
+        .as_mut_ptr()
+        .cast::<T>();
 
     for (write_pos, &index) in indices.iter().enumerate() {
         // SAFETY: mask indices are validated when the mask is constructed and the output has one

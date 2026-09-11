@@ -62,7 +62,9 @@ pub(super) fn filter_slice_by_bitmap<T: Copy>(
     let written = unsafe {
         kernel(
             values.as_ptr().cast(),
-            out.spare_capacity_mut().as_mut_ptr().cast(),
+            out.spare_capacity_mut(true_count + SLACK_BYTES / size_of::<T>())
+                .as_mut_ptr()
+                .cast(),
             mask,
         )
     };

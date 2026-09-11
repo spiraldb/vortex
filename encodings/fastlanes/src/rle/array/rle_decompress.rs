@@ -91,7 +91,9 @@ where
     let num_chunks = chunk_end_idx - chunk_start_idx;
 
     let mut buffer = BufferMut::<V>::with_capacity(num_chunks * FL_CHUNK_SIZE);
-    let (out_buf, _) = buffer.spare_capacity_mut().as_chunks_mut::<FL_CHUNK_SIZE>();
+    let (out_buf, _) = buffer
+        .spare_capacity_mut(num_chunks * FL_CHUNK_SIZE)
+        .as_chunks_mut::<FL_CHUNK_SIZE>();
 
     for (chunk_idx, (chunk_indices, chunk_out)) in
         indices_sl.iter().zip(out_buf.iter_mut()).enumerate()

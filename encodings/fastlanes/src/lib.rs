@@ -157,7 +157,7 @@ pub(crate) fn fill_forward_nulls<T: Copy + Default>(
                         .iter()
                         .zip(
                             to_fill_mut
-                                .spare_capacity_mut()
+                                .spare_capacity_mut(to_fill.len())
                                 .iter_mut()
                                 .zip(bit_buffer.iter()),
                         )

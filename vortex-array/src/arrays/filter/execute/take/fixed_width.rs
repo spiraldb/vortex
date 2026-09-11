@@ -207,7 +207,7 @@ where
     L: Fn(usize) -> usize,
 {
     let mut out = BufferMut::<T>::with_capacity(ranks.len());
-    let out_ptr = out.spare_capacity_mut().as_mut_ptr().cast::<T>();
+    let out_ptr = out.spare_capacity_mut(ranks.len()).as_mut_ptr().cast::<T>();
     for (idx, rank) in ranks.iter().enumerate() {
         let value = if ranks_validity.value(idx) {
             let rank = validate_rank(*rank, translated_len)?;
@@ -240,7 +240,7 @@ where
     L: Fn(usize) -> usize,
 {
     let mut out = BufferMut::<T>::with_capacity(ranks.len());
-    let out_ptr = out.spare_capacity_mut().as_mut_ptr().cast::<T>();
+    let out_ptr = out.spare_capacity_mut(ranks.len()).as_mut_ptr().cast::<T>();
     for (idx, rank) in ranks.iter().enumerate() {
         let rank = validate_rank(*rank, translated_len)?;
         let child_idx = translate(rank);

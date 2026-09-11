@@ -365,7 +365,7 @@ impl<T> Buffer<T> {
                 let allocator = buf.allocator().clone();
                 let mut out_buf = BufferMut::with_capacity_in(len, allocator);
                 out_buf
-                    .spare_capacity_mut()
+                    .spare_capacity_mut(len)
                     .iter_mut()
                     .zip(buf)
                     .for_each(|(out, in_)| {

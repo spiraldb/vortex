@@ -87,7 +87,7 @@ where
     let exponents = ::alp::encode_into(
         values_slice,
         exponents,
-        &mut encoded.spare_capacity_mut()[..values_slice.len()],
+        encoded.spare_capacity_mut(values_slice.len()),
         &mut exceptional_positions,
         &mut exceptional_values,
         &mut chunk_offsets,

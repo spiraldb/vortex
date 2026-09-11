@@ -114,7 +114,7 @@ pub(super) fn bitwise_unary_op_copy<F: FnMut(u64) -> u64>(buffer: &BitBuffer, op
     let src = buffer.inner().as_slice();
     let mut bytes = ByteBufferMut::with_capacity(src.len());
     map_u64_words(
-        OutOfPlaceBitWordTarget::new(src, bytes.spare_capacity_mut()),
+        OutOfPlaceBitWordTarget::new(src, bytes.spare_capacity_mut(src.len())),
         op,
     );
     // SAFETY: `map_u64_words` initializes every byte in `0..src.len()` for

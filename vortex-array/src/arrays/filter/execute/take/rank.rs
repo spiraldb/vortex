@@ -103,7 +103,10 @@ where
     L: Fn(usize) -> usize,
 {
     let mut translated = BufferMut::<u64>::with_capacity(ranks.len());
-    let translated_ptr = translated.spare_capacity_mut().as_mut_ptr().cast::<u64>();
+    let translated_ptr = translated
+        .spare_capacity_mut(ranks.len())
+        .as_mut_ptr()
+        .cast::<u64>();
 
     for (idx, rank) in ranks.iter().enumerate() {
         let translated_rank = match ranks_validity {

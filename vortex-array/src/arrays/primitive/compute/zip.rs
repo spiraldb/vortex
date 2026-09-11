@@ -78,7 +78,7 @@ fn select_values<T: NativePType>(
     let len = true_values.len();
     let mut out = BufferMut::<T>::with_capacity(len);
     {
-        let out_slice = out.spare_capacity_mut();
+        let out_slice = out.spare_capacity_mut(len);
 
         let mask_bits = mask
             .values()
