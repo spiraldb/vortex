@@ -180,9 +180,18 @@ impl BitBufferMut {
         Self::with_capacity_in(0, allocator)
     }
 
-    /// Returns the allocator that owns this buffer.
-    pub fn allocator(&self) -> &BufferAllocatorRef {
+    #[cfg(test)]
+    pub(crate) fn allocator(&self) -> &BufferAllocatorRef {
         self.buffer.allocator()
+    }
+
+    /// Takes the buffer, leaving an empty buffer with the same allocator.
+    pub fn take(&mut self) -> Self {
+        Self {
+            buffer: self.buffer.take(),
+            offset: std::mem::take(&mut self.offset),
+            len: std::mem::take(&mut self.len),
+        }
     }
 
     /// Create a new mutable buffer with requested `len` and all bits set to `value`.
@@ -740,8 +749,10 @@ impl FromIterator<bool> for BitBufferMut {
 
 #[cfg(test)]
 mod tests {
+    use allocator_api2::alloc::Global;
     use rstest::rstest;
 
+    use crate::BufferAllocatorRef;
     use crate::BufferMut;
     use crate::bit::buf_mut::BitBufferMut;
     use crate::bitbuffer;
@@ -760,6 +771,27 @@ mod tests {
             assert!(!bools.value(i));
         }
         assert!(bools.value(9));
+    }
+
+    #[test]
+    fn take_preserves_allocator() {
+        let allocator = BufferAllocatorRef::new(Global);
+        let mut buffer = BitBufferMut::with_capacity_in(4, allocator.clone());
+        buffer.append(true);
+        buffer.append(false);
+        buffer.append(true);
+
+        let taken = buffer.take();
+
+        assert_eq!(
+            (0..taken.len())
+                .map(|index| taken.value(index))
+                .collect::<Vec<_>>(),
+            [true, false, true]
+        );
+        assert!(taken.allocator().ptr_eq(&allocator));
+        assert!(buffer.is_empty());
+        assert!(buffer.allocator().ptr_eq(&allocator));
     }
 
     #[test]
