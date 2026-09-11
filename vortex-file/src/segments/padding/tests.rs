@@ -16,6 +16,15 @@ const BLOCK: Alignment = Alignment::new(4096);
 #[case(SegmentPadding::block_aligned(), 4096, 4, Alignment::new(8), 0)]
 // A segment demanding more than a block is aligned to its own requirement.
 #[case(SegmentPadding::block_aligned(), 10, 4, Alignment::new(1 << 16), 65526)]
+// Grouping leaves a segment that fits in the rest of the current block where it is.
+#[case(SegmentPadding::grouped(), 10, 4, Alignment::new(8), 6)]
+#[case(SegmentPadding::grouped(), 4000, 96, Alignment::new(8), 0)]
+// One byte more than the block has room for, and it moves to the next block.
+#[case(SegmentPadding::grouped(), 4000, 97, Alignment::new(8), 96)]
+// Anything larger than a block is aligned, exactly as `always` would.
+#[case(SegmentPadding::grouped(), 10, 1 << 20, Alignment::new(8), 4086)]
+// A segment demanding more than a block still only pays its own alignment.
+#[case(SegmentPadding::grouped(), 10, 4, Alignment::new(1 << 16), 65526)]
 // Proportional pads a large segment, but leaves a small one packed.
 #[case(SegmentPadding::proportional(), 10, 1 << 20, Alignment::new(8), 4086)]
 #[case(SegmentPadding::proportional(), 10, 4, Alignment::new(8), 6)]
@@ -34,6 +43,7 @@ fn pads_segments(
 
 #[rstest]
 #[case(SegmentPadding::block_aligned())]
+#[case(SegmentPadding::grouped())]
 #[case(SegmentPadding::proportional())]
 #[case(SegmentPadding::None)]
 fn padding_always_satisfies_the_segments_own_alignment(#[case] padding: SegmentPadding) {
@@ -68,6 +78,83 @@ fn proportional_padding_is_bounded_by_the_overhead_budget() {
 }
 
 /// Block alignment must never cost more than a block per segment.
+/// The whole point of grouping: the same blocks are touched, for a fraction of the padding.
+#[test]
+fn grouping_reads_like_block_alignment_for_less_padding() {
+    let (mut grouped_offset, mut always_offset) = (0u64, 0u64);
+    let (mut grouped_pad, mut always_pad) = (0u64, 0u64);
+    for i in 0..10_000u64 {
+        // Segments small enough to share blocks, which is where the two policies differ.
+        let length = 1 + (i * 7919) % (1 << 12);
+        let alignment = Alignment::new(1 << (i % 5));
+
+        let pad = SegmentPadding::grouped().padding(grouped_offset, length, alignment);
+        grouped_offset += pad;
+        grouped_pad += pad;
+        let pad = SegmentPadding::block_aligned().padding(always_offset, length, alignment);
+        always_offset += pad;
+        always_pad += pad;
+
+        assert_eq!(
+            blocks_spanned(grouped_offset, length),
+            blocks_spanned(always_offset, length),
+            "segment {i} of {length} bytes spans a different number of blocks"
+        );
+
+        grouped_offset += length;
+        always_offset += length;
+    }
+    // Grouping pads about a third of what block-aligning does on this distribution.
+    assert!(
+        grouped_pad * 2 < always_pad,
+        "grouping padded {grouped_pad} against {always_pad} block-aligned"
+    );
+}
+
+/// A grouped segment never straddles a block it could have fit inside.
+#[test]
+fn grouping_never_splits_a_segment_that_fits_in_a_block() {
+    let mut offset = 0u64;
+    for i in 0..10_000u64 {
+        let length = 1 + (i * 4099) % (1 << 13);
+        offset += SegmentPadding::grouped().padding(offset, length, Alignment::new(8));
+        if length <= BLOCK.as_usize() as u64 {
+            assert_eq!(blocks_spanned(offset, length), 1, "segment {i} was split");
+        }
+        offset += length;
+    }
+}
+
+fn blocks_spanned(offset: u64, length: u64) -> u64 {
+    let block = BLOCK.as_usize() as u64;
+    (offset % block + length).div_ceil(block)
+}
+
+#[rstest]
+#[case("none", SegmentPadding::None)]
+#[case("always", SegmentPadding::block_aligned())]
+#[case("grouped", SegmentPadding::grouped())]
+#[case("proportional", SegmentPadding::proportional())]
+#[case(" grouped ", SegmentPadding::grouped())]
+#[case(
+    "proportional:8",
+    SegmentPadding::Proportional { block: BLOCK, max_overhead_ratio: 8 }
+)]
+fn parses_a_padding_policy(#[case] value: &str, #[case] expected: SegmentPadding) {
+    assert_eq!(SegmentPadding::parse(value), Some(expected));
+}
+
+#[rstest]
+#[case("")]
+#[case("grouped:4096")]
+#[case("aligned")]
+#[case("proportional:0")]
+#[case("proportional:-1")]
+#[case("proportional:")]
+fn rejects_an_unknown_padding_policy(#[case] value: &str) {
+    assert_eq!(SegmentPadding::parse(value), None);
+}
+
 #[test]
 fn block_alignment_costs_at_most_one_block_per_segment() {
     let padding = SegmentPadding::block_aligned();
@@ -240,6 +327,7 @@ mod end_to_end {
     #[rstest]
     #[case(SegmentPadding::None)]
     #[case(SegmentPadding::block_aligned())]
+    #[case(SegmentPadding::grouped())]
     #[case(SegmentPadding::proportional())]
     #[tokio::test]
     async fn direct_reads_round_trip_every_padding_policy(

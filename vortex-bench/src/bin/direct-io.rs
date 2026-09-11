@@ -116,6 +116,8 @@ enum Padding {
     None,
     /// Start every segment on a 4KiB boundary.
     Block,
+    /// Pack consecutive segments into shared 4KiB blocks.
+    Grouped,
     /// Block-align a segment when the padding is within 1/64 of its length.
     Proportional,
 }
@@ -125,6 +127,7 @@ impl Padding {
         match self {
             Self::None => SegmentPadding::None,
             Self::Block => SegmentPadding::block_aligned(),
+            Self::Grouped => SegmentPadding::grouped(),
             Self::Proportional => SegmentPadding::proportional(),
         }
     }
@@ -133,6 +136,7 @@ impl Padding {
         match self {
             Self::None => "none",
             Self::Block => "block",
+            Self::Grouped => "grouped",
             Self::Proportional => "proportional",
         }
     }
@@ -364,6 +368,7 @@ async fn analyze(inputs: &[PathBuf], ratios: &[u32]) -> anyhow::Result<()> {
     let mut policies = vec![
         ("none".to_string(), SegmentPadding::None),
         ("always (4KiB)".to_string(), SegmentPadding::block_aligned()),
+        ("grouped (4KiB)".to_string(), SegmentPadding::grouped()),
     ];
     for ratio in ratios {
         policies.push((

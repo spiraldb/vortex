@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::sync::LazyLock;
+
 use vortex_buffer::Alignment;
 
 /// The block size assumed by [`SegmentPadding::block_aligned`], matching the direct-I/O and page
@@ -10,6 +12,26 @@ pub const DEFAULT_BLOCK_SIZE: Alignment = Alignment::new(4096);
 /// The default overhead budget for [`SegmentPadding::proportional`], bounding the padding the
 /// writer may add to at most `1/64` (1.6%) of the segment bytes written.
 pub const DEFAULT_MAX_OVERHEAD_RATIO: u32 = 64;
+
+/// Environment variable selecting the default [`SegmentPadding`] policy.
+pub const SEGMENT_PADDING_ENV_VAR: &str = "VORTEX_SEGMENT_PADDING";
+
+static PADDING_FROM_ENV: LazyLock<SegmentPadding> = LazyLock::new(|| {
+    let Ok(value) = std::env::var(SEGMENT_PADDING_ENV_VAR) else {
+        return SegmentPadding::None;
+    };
+    // An empty value reads as unset, so a workflow can template the variable in unconditionally.
+    if value.trim().is_empty() {
+        return SegmentPadding::None;
+    }
+    SegmentPadding::parse(&value).unwrap_or_else(|| {
+        tracing::warn!(
+            "ignoring unrecognised {SEGMENT_PADDING_ENV_VAR}={value}, \
+             expected none, always, grouped, or proportional[:ratio]"
+        );
+        SegmentPadding::None
+    })
+});
 
 /// How the file writer positions segments relative to storage block boundaries.
 ///
@@ -36,6 +58,17 @@ pub enum SegmentPadding {
         /// The storage block size to align to.
         block: Alignment,
     },
+    /// Start a segment on a `block` boundary only when it would otherwise straddle one.
+    ///
+    /// A segment that fits in what is left of the current block is written there, so runs of
+    /// small consecutive segments share a block instead of each burning a whole one. Every
+    /// segment still occupies the same blocks it would under [`Self::Always`] — one apiece for
+    /// anything up to a block, `len / block` rounded up for anything larger — so this reads
+    /// identically while padding strictly less.
+    Grouped {
+        /// The storage block size to align to.
+        block: Alignment,
+    },
     /// Start a segment on a `block` boundary only when the padding is worth it.
     ///
     /// A segment is aligned when its padding is at most `1/max_overhead_ratio` of the segment's
@@ -58,11 +91,47 @@ impl SegmentPadding {
         }
     }
 
+    /// Pack consecutive segments into shared [`DEFAULT_BLOCK_SIZE`] blocks.
+    pub const fn grouped() -> Self {
+        Self::Grouped {
+            block: DEFAULT_BLOCK_SIZE,
+        }
+    }
+
     /// Block-align segments within the default [`DEFAULT_MAX_OVERHEAD_RATIO`] padding budget.
     pub const fn proportional() -> Self {
         Self::Proportional {
             block: DEFAULT_BLOCK_SIZE,
             max_overhead_ratio: DEFAULT_MAX_OVERHEAD_RATIO,
+        }
+    }
+
+    /// The policy named by `VORTEX_SEGMENT_PADDING`, or [`Self::None`] if it is unset.
+    ///
+    /// Accepts `none`, `always`, `grouped`, and `proportional[:ratio]`, all at the
+    /// [`DEFAULT_BLOCK_SIZE`] block size, so a deployment or benchmark can switch policies
+    /// without recompiling. Other block sizes are reachable only through the variants.
+    pub fn from_env() -> Self {
+        *PADDING_FROM_ENV
+    }
+
+    fn parse(value: &str) -> Option<Self> {
+        let value = value.trim();
+        let (name, ratio) = match value.split_once(':') {
+            Some((name, ratio)) => (name, Some(ratio.parse().ok()?)),
+            None => (value, None),
+        };
+        match (name, ratio) {
+            ("none", None) => Some(Self::None),
+            ("always", None) => Some(Self::block_aligned()),
+            ("grouped", None) => Some(Self::grouped()),
+            ("proportional", None) => Some(Self::proportional()),
+            // A zero budget would pad everything, which `always` already says more clearly.
+            ("proportional", Some(ratio)) if ratio > 0 => Some(Self::Proportional {
+                block: DEFAULT_BLOCK_SIZE,
+                max_overhead_ratio: ratio,
+            }),
+            _ => None,
         }
     }
 
@@ -75,6 +144,17 @@ impl SegmentPadding {
             // A segment whose own alignment exceeds the block size still has to satisfy it, so
             // align to whichever is larger. Both are powers of two, so the larger subsumes both.
             Self::Always { block } => pad_to(byte_offset, block.max(alignment)),
+            // Only a segment that would cross a block boundary is pushed to the next one, so a
+            // segment small enough to fit in the current block's remainder rides along for free.
+            Self::Grouped { block } => {
+                let start = byte_offset + required;
+                let offset_in_block = start % block.as_usize() as u64;
+                if offset_in_block == 0 || offset_in_block + length <= block.as_usize() as u64 {
+                    required
+                } else {
+                    pad_to(byte_offset, block.max(alignment))
+                }
+            }
             Self::Proportional {
                 block,
                 max_overhead_ratio,

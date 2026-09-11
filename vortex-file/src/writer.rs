@@ -111,16 +111,16 @@ impl VortexWriteOptions {
             file_statistics: PRUNING_STATS.to_vec(),
             max_variable_length_statistics_size: 64,
             metadata: HashMap::default(),
-            segment_padding: SegmentPadding::default(),
+            segment_padding: SegmentPadding::from_env(),
         }
     }
 
     /// Control how segments are positioned relative to storage block boundaries.
     ///
     /// By default segments are packed contiguously, padded only as far as their own memory
-    /// alignment requires. Block-aligning them lets a direct-I/O reader issue each read without
-    /// widening it to the enclosing blocks, at the cost of the padding bytes. See
-    /// [`SegmentPadding`] for the trade-off.
+    /// alignment requires, unless `VORTEX_SEGMENT_PADDING` names another policy. Block-aligning
+    /// them lets a direct-I/O reader issue each read without widening it to the enclosing blocks,
+    /// at the cost of the padding bytes. See [`SegmentPadding`] for the trade-off.
     pub fn with_segment_padding(mut self, segment_padding: SegmentPadding) -> Self {
         self.segment_padding = segment_padding;
         self
