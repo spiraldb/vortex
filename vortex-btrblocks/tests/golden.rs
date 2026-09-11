@@ -59,7 +59,6 @@ use vortex_edition::EditionSession;
 use vortex_edition::EditionSessionExt;
 use vortex_edition::declarations::core::CORE_2026_08_3;
 use vortex_error::VortexResult;
-use vortex_error::vortex_err;
 use vortex_session::VortexSession;
 
 static SESSION: LazyLock<VortexSession> = LazyLock::new(vortex_array::array_session);
@@ -404,20 +403,13 @@ fn without_onpair(builder: BtrBlocksCompressorBuilder) -> BtrBlocksCompressorBui
 fn edition_session(editions: &[EditionId]) -> VortexResult<VortexSession> {
     let session = vortex_array::array_session().with::<EditionSession>();
     for family in EDITION_FAMILIES {
-        session
-            .editions()
-            .declare_family(family)
-            .map_err(|error| vortex_err!("{error}"))?;
+        session.editions().declare_family(family)?;
     }
     for declaration in EDITION_DECLARATIONS {
-        session
-            .register_edition(declaration)
-            .map_err(|error| vortex_err!("{error}"))?;
+        session.register_edition(declaration)?;
     }
     for edition in editions {
-        session
-            .enable_edition(*edition)
-            .map_err(|error| vortex_err!("{error}"))?;
+        session.enable_edition(*edition)?;
     }
     Ok(session)
 }
@@ -471,9 +463,7 @@ fn golden_onpair() -> VortexResult<()> {
 fn golden_compact() -> VortexResult<()> {
     let session = edition_session(&[CORE_2026_08_3])?;
     vortex_zstd::initialize(&session);
-    session
-        .enable_edition(vortex_zstd::editions::ZSTD_2026_02)
-        .map_err(|error| vortex_err!("{error}"))?;
+    session.enable_edition(vortex_zstd::editions::ZSTD_2026_02)?;
     let compressor = compressor_for_session(
         &session,
         BtrBlocksCompressorBuilder::default().with_compact(),
