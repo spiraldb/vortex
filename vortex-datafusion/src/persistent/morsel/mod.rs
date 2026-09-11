@@ -463,10 +463,9 @@ impl std::fmt::Debug for State {
                 .field("byte_range", byte_range)
                 .field("split_ranges", &"<once_cell>")
                 .finish(),
-            Self::PrepareScan { state } => f
-                .debug_struct("PrepareScan")
-                .field("state", state)
-                .finish(),
+            Self::PrepareScan { state } => {
+                f.debug_struct("PrepareScan").field("state", state).finish()
+            }
             Self::PreparedScan {
                 file_pruner,
                 output_schema,
@@ -670,7 +669,9 @@ impl MorselPlanner for VortexMorselPlanner {
                     .optimize_recursive(vxf.dtype())
                     .and_then(|projection| projection.bind(vxf.dtype()))
                     .map_err(|_e| {
-                        exec_datafusion_err!("Couldn't get the dtype for the underlying Vortex scan")
+                        exec_datafusion_err!(
+                            "Couldn't get the dtype for the underlying Vortex scan"
+                        )
                     })?;
                 let scan_dtype = scan_projection.dtype().clone();
 
@@ -767,10 +768,8 @@ impl MorselPlanner for VortexMorselPlanner {
                     projector,
                 };
                 let state = if let Some(byte_range) = byte_range {
-                    let split_ranges = natural_split_cell_for_file(
-                        natural_splits.as_ref(),
-                        &state.file_location,
-                    );
+                    let split_ranges =
+                        natural_split_cell_for_file(natural_splits.as_ref(), &state.file_location);
                     State::CalculateLayoutSplits {
                         state,
                         byte_range,
@@ -790,33 +789,37 @@ impl MorselPlanner for VortexMorselPlanner {
                 byte_range,
                 total_size,
                 split_ranges,
-            } => Ok(Some(MorselPlan::new().with_pending_planner(
-                async move {
-                    let natural_splits = Arc::clone(
-                        split_ranges
-                            .get_or_try_init(|| async {
-                                compute_natural_splits(&state.scan_builder, total_size)
-                            })
-                            .await?,
-                    );
+            } => Ok(Some(
+                MorselPlan::new().with_pending_planner(
+                    async move {
+                        let natural_splits = Arc::clone(
+                            split_ranges
+                                .get_or_try_init(|| async {
+                                    compute_natural_splits(&state.scan_builder, total_size)
+                                })
+                                .await?,
+                        );
 
-                    let new_state =
-                        match split_aligned_row_range(byte_range, natural_splits.as_ref()) {
-                            Some(row_range) => {
-                                state.scan_builder = state
-                                    .scan_builder
-                                    .with_row_range(row_range)
-                                    .with_natural_splits(Arc::clone(&natural_splits.row_boundaries));
-                                State::PrepareScan { state }
-                            }
-                            None => State::Done,
-                        };
+                        let new_state =
+                            match split_aligned_row_range(byte_range, natural_splits.as_ref()) {
+                                Some(row_range) => {
+                                    state.scan_builder = state
+                                        .scan_builder
+                                        .with_row_range(row_range)
+                                        .with_natural_splits(Arc::clone(
+                                            &natural_splits.row_boundaries,
+                                        ));
+                                    State::PrepareScan { state }
+                                }
+                                None => State::Done,
+                            };
 
-                    Ok(Box::new(VortexMorselPlanner { state: new_state })
-                        as Box<dyn MorselPlanner>)
-                }
-                .in_current_span(),
-            ))),
+                        Ok(Box::new(VortexMorselPlanner { state: new_state })
+                            as Box<dyn MorselPlanner>)
+                    }
+                    .in_current_span(),
+                ),
+            )),
             State::PrepareScan { state } => {
                 let ScanState {
                     scan_builder,

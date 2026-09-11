@@ -511,11 +511,7 @@ async fn test_file_pruning_creation_errors_are_reported() -> anyhow::Result<()> 
     statistics.column_statistics[0].null_count = Precision::Exact(0);
     let file = PartitionedFile::new(file_path, data_size).with_statistics(Arc::new(statistics));
 
-    let mut morselizer = make_morselizer(
-        object_store,
-        TableSchema::from(batch.schema()),
-        None,
-    );
+    let mut morselizer = make_morselizer(object_store, TableSchema::from(batch.schema()), None);
     morselizer.file_pruning_predicate = Some(Arc::new(SnapshotErrorExpr));
     let df_metrics = morselizer.df_metrics.clone();
 
