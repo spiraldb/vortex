@@ -24,11 +24,19 @@ fn main() {
     divan::main();
 }
 
+#[vortex_bench_support::cpu_features]
 #[divan::bench(args = cases())]
 fn dbp_split_all_valid(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
     bench_split(bencher, values_type, len, Validity::AllValid);
 }
 
+#[vortex_bench_support::cpu_features]
+#[divan::bench(args = cases())]
+fn dbp_split_all_null(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
+    bench_split(bencher, values_type, len, Validity::AllInvalid);
+}
+
+#[vortex_bench_support::cpu_features]
 #[divan::bench(args = cases())]
 fn dbp_split_mixed_null(bencher: Bencher, (values_type, len): (DecimalType, usize)) {
     let mut rng = StdRng::seed_from_u64(42);
