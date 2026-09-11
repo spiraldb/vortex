@@ -59,7 +59,7 @@ fn growth_preserves_contents_and_alignment(tc: TestCase) {
     let mut bytes = UniqueBytes::with_capacity(0, alignment);
     let mut model: Vec<u8> = Vec::new();
     for chunk in &chunks {
-        bytes.extend_from_slice(chunk, alignment);
+        bytes.extend_from_slice(chunk);
         model.extend_from_slice(chunk);
 
         assert_eq!(bytes.as_slice(), model.as_slice());
@@ -75,7 +75,7 @@ fn growth_preserves_contents_and_alignment(tc: TestCase) {
 fn slices_agree_with_the_equivalent_slice(tc: TestCase) {
     let data = draw_bytes(&tc, 512);
     let mut bytes = UniqueBytes::with_capacity(data.len(), Alignment::none());
-    bytes.extend_from_slice(&data, Alignment::none());
+    bytes.extend_from_slice(&data);
     let shared = bytes.freeze();
 
     let begin = tc.draw(gs::integers::<usize>().min_value(0).max_value(data.len()));
@@ -105,7 +105,7 @@ fn slices_agree_with_the_equivalent_slice(tc: TestCase) {
 fn slice_ref_recovers_the_subslice(tc: TestCase) {
     let data = tc.draw(gs::vecs(gs::integers::<u8>()).min_size(1).max_size(512));
     let mut bytes = UniqueBytes::with_capacity(data.len(), Alignment::none());
-    bytes.extend_from_slice(&data, Alignment::none());
+    bytes.extend_from_slice(&data);
     let shared = bytes.freeze();
 
     let begin = tc.draw(gs::integers::<usize>().min_value(0).max_value(data.len()));
@@ -151,7 +151,7 @@ fn only_exactly_aligned_regions_become_vecs(tc: TestCase) {
     let len = tc.draw(gs::integers::<usize>().min_value(0).max_value(256));
 
     let mut bytes = UniqueBytes::with_capacity(len * size_of::<u32>(), alignment);
-    bytes.extend_from_slice(&vec![0u8; len * size_of::<u32>()], alignment);
+    bytes.extend_from_slice(&vec![0u8; len * size_of::<u32>()]);
 
     let exactly_aligned = alignment == Alignment::of::<u32>();
     // A zero-length window is always handed over as an empty `Vec`, whatever it was aligned to.
@@ -168,10 +168,16 @@ fn split_off_then_unsplit_is_the_identity(tc: TestCase) {
     let data = draw_bytes(&tc, 512);
 
     let mut bytes = UniqueBytes::with_capacity(data.len(), alignment);
-    bytes.extend_from_slice(&data, alignment);
+    bytes.extend_from_slice(&data);
     let capacity = bytes.capacity();
 
-    let at = tc.draw(gs::integers::<usize>().min_value(0).max_value(capacity));
+    // Both halves keep the alignment promise, so the split has to fall on a multiple of it.
+    let steps = tc.draw(
+        gs::integers::<usize>()
+            .min_value(0)
+            .max_value(capacity / alignment.as_usize()),
+    );
+    let at = steps * alignment.as_usize();
     let other = bytes.split_off(at);
 
     // The two windows partition the original one.
@@ -180,7 +186,7 @@ fn split_off_then_unsplit_is_the_identity(tc: TestCase) {
     assert_eq!(bytes.as_slice(), &data[..bytes.len()]);
     assert_eq!(other.as_slice(), &data[bytes.len()..]);
 
-    bytes.unsplit(other, alignment);
+    bytes.unsplit(other);
     assert_eq!(bytes.as_slice(), data.as_slice());
     assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
 }
@@ -191,7 +197,7 @@ fn split_off_then_unsplit_is_the_identity(tc: TestCase) {
 fn advance_drops_only_the_front(tc: TestCase) {
     let data = draw_bytes(&tc, 512);
     let mut bytes = UniqueBytes::with_capacity(data.len(), Alignment::none());
-    bytes.extend_from_slice(&data, Alignment::none());
+    bytes.extend_from_slice(&data);
 
     let cnt = tc.draw(gs::integers::<usize>().min_value(0).max_value(data.len()));
     let capacity = bytes.capacity();
@@ -202,7 +208,7 @@ fn advance_drops_only_the_front(tc: TestCase) {
 
     let mut shared = {
         let mut b = UniqueBytes::with_capacity(data.len(), Alignment::none());
-        b.extend_from_slice(&data, Alignment::none());
+        b.extend_from_slice(&data);
         b.freeze()
     };
     shared.advance(cnt);
@@ -218,7 +224,7 @@ fn ownership_is_recoverable_only_when_unique(tc: TestCase) {
     let clones = tc.draw(gs::integers::<usize>().min_value(0).max_value(3));
 
     let mut bytes = UniqueBytes::with_capacity(data.len(), Alignment::none());
-    bytes.extend_from_slice(&data, Alignment::none());
+    bytes.extend_from_slice(&data);
     let shared = bytes.freeze();
 
     let held: Vec<SharedBytes> = (0..clones).map(|_| shared.clone()).collect();
@@ -253,20 +259,18 @@ impl WindowModel {
     #[rule]
     fn extend(&mut self, tc: TestCase) {
         let chunk = tc.draw(gs::vecs(gs::integers::<u8>()).max_size(128));
-        self.bytes.extend_from_slice(&chunk, self.alignment);
+        self.bytes.extend_from_slice(&chunk);
         self.model.extend_from_slice(&chunk);
     }
 
     #[rule]
     fn reserve(&mut self, tc: TestCase) {
         let additional = tc.draw(gs::integers::<usize>().min_value(0).max_value(4096));
-        self.bytes.reserve(additional, self.alignment);
+        self.bytes.reserve(additional);
         assert!(self.bytes.capacity() >= self.bytes.len() + additional);
     }
 
-    /// Advance by a multiple of the alignment. `advance` itself does not preserve alignment - it
-    /// is `BufferMut`'s `Buf::advance` that rejects anything else - so this rule keeps to the
-    /// contract the public API enforces, which is what makes the alignment invariant meaningful.
+    /// Advance by a multiple of the alignment, which is all `advance` accepts.
     #[rule]
     fn advance(&mut self, tc: TestCase) {
         let steps = tc.draw(
@@ -295,11 +299,7 @@ impl WindowModel {
     /// eligible to reclaim the region on its next growth.
     #[rule]
     fn split_and_drop(&mut self, tc: TestCase) {
-        let at = tc.draw(
-            gs::integers::<usize>()
-                .min_value(0)
-                .max_value(self.bytes.capacity()),
-        );
+        let at = self.draw_split_point(&tc);
         drop(self.bytes.split_off(at));
         self.model.truncate(at);
     }
@@ -307,13 +307,19 @@ impl WindowModel {
     /// Split the window and put it straight back together.
     #[rule]
     fn split_and_unsplit(&mut self, tc: TestCase) {
-        let at = tc.draw(
+        let at = self.draw_split_point(&tc);
+        let other = self.bytes.split_off(at);
+        self.bytes.unsplit(other);
+    }
+
+    /// A split point within the capacity, on a multiple of the alignment as `split_off` requires.
+    fn draw_split_point(&self, tc: &TestCase) -> usize {
+        let steps = tc.draw(
             gs::integers::<usize>()
                 .min_value(0)
-                .max_value(self.bytes.capacity()),
+                .max_value(self.bytes.capacity() / self.alignment.as_usize()),
         );
-        let other = self.bytes.split_off(at);
-        self.bytes.unsplit(other, self.alignment);
+        steps * self.alignment.as_usize()
     }
 
     /// Freeze the window and take it straight back. Nothing else holds it, so this must succeed

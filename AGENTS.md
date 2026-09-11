@@ -17,11 +17,13 @@ documentation in `docs/`, and benchmark tooling in `vortex-bench/` and `benchmar
 ## Repository Layout
 
 - `vortex-bytes` owns memory and nothing else: `Alignment`, plus the untyped `SharedBytes` and
-  `UniqueBytes` windows into reference-counted, aligned regions. All of the allocation `unsafe`
-  lives here, non-generic so it compiles once. It has no dependencies, including on
-  `vortex-error`; `vortex-error` converts its `InvalidAlignment` behind a `vortex-bytes` feature.
-- `vortex-buffer` defines zero-copy aligned `Buffer<T>` and `BufferMut<T>`, guaranteed to
-  be aligned to `T` or to a requested runtime alignment, on top of `vortex-bytes`.
+  `UniqueBytes` windows into reference-counted regions, each carrying the alignment it promises
+  and the alignment it grows with. All of the allocation `unsafe` lives here, non-generic so it
+  compiles once. It has no dependencies, including on `vortex-error`; `vortex-error` converts its
+  `InvalidAlignment` behind a `vortex-bytes` feature.
+- `vortex-buffer` defines zero-copy aligned `Buffer<T>` and `BufferMut<T>`: typed views over
+  `vortex-bytes` windows, guaranteed to be aligned to `T` or to a requested runtime alignment.
+  Zero-sized `T` is rejected at compile time.
 - `vortex-array/src/dtype` contains the `DType` logical type system used throughout Vortex.
 - `vortex-array` contains the core `Array` trait and the base encodings, including most
   Apache Arrow-style encodings.

@@ -66,7 +66,7 @@ impl ByteBuffer {
     /// window. Anything else is wrapped without copying.
     pub fn into_arrow_buffer(self) -> arrow_buffer::Buffer {
         let offset = self.bytes.offset_in_region();
-        let length = self.length;
+        let length = self.len();
         let bytes = match self.bytes.try_into_owner::<ArrowOwner>() {
             Ok(arrow) => return arrow.0.slice_with_length(offset, length),
             Err(bytes) => bytes,
@@ -74,7 +74,7 @@ impl ByteBuffer {
         if let Some(arrow) = bytes.owner::<ArrowOwner>() {
             return arrow.0.slice_with_length(offset, length);
         }
-        arrow_buffer::Buffer::from(ByteBuffer::from_shared(bytes).into_bytes())
+        arrow_buffer::Buffer::from(ByteBuffer::from(bytes).into_bytes())
     }
 
     /// Convert an Arrow scalar buffer into a Vortex scalar buffer.

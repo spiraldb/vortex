@@ -7,9 +7,12 @@ use std::sync::atomic::Ordering;
 
 use bytes::Buf;
 use bytes::Bytes;
+use vortex_bytes::SharedBytes;
+use vortex_bytes::UniqueBytes;
 
 use crate::Alignment;
 use crate::Buffer;
+use crate::BufferMut;
 use crate::ByteBuffer;
 use crate::buffer;
 
@@ -226,7 +229,7 @@ fn from_u8_vec_preserves_capacity() {
 
 #[test]
 fn sliced_buffer_into_mut_has_safe_capacity() {
-    let mut original = crate::BufferMut::with_capacity(128);
+    let mut original = BufferMut::with_capacity(128);
     original.extend(0u32..100);
     let original = original.freeze();
     let sliced = original.slice(64..96);
@@ -328,11 +331,11 @@ fn auto_traits_follow_the_element_type() {
 
     assert_send_sync::<Buffer<u8>>();
     assert_send_sync::<Buffer<i64>>();
-    assert_send_sync::<crate::BufferMut<i64>>();
+    assert_send_sync::<BufferMut<i64>>();
     // `Cell` is `Send` but not `Sync`. A uniquely owned buffer of it is still `Send`, exactly as
     // a `Vec<Cell<u8>>` is; a shared one is not, which the `compile_fail` doctest on `Buffer`
     // pins down.
-    assert_send::<crate::BufferMut<std::cell::Cell<u8>>>();
+    assert_send::<BufferMut<std::cell::Cell<u8>>>();
 }
 
 #[test]
@@ -394,7 +397,7 @@ fn over_aligned_buffers_copy_into_vecs() {
 fn foreign_buffer_is_mutable_when_unique() {
     let owner = vec![1u32, 2, 3];
     let ptr = owner.as_ptr();
-    let buffer = crate::BufferMut::from_owner(owner).freeze();
+    let buffer = BufferMut::from_owner(owner).freeze();
     let shared = buffer.clone();
     let Err(buffer) = buffer.try_into_mut() else {
         panic!("a shared foreign buffer must not become mutable")
@@ -428,7 +431,7 @@ fn from_static_is_zero_copy_and_never_unique() {
 
 #[test]
 fn try_into_mut_recovers_spare_capacity() {
-    let mut buffer = crate::BufferMut::<u8>::with_capacity(64);
+    let mut buffer = BufferMut::<u8>::with_capacity(64);
     buffer.extend_from_slice(&[1, 2, 3]);
     let frozen = buffer.freeze();
     let thawed = frozen.try_into_mut().expect("unique");
@@ -456,41 +459,22 @@ fn into_bytes_of_our_own_region_does_not_copy() {
     assert_eq!(bytes.as_ref(), &[1, 2, 3, 4]);
 }
 
-// --- Zero-sized types --------------------------------------------------------------------------
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Marker;
+// --- Layout ------------------------------------------------------------------------------------
 
 #[test]
-fn zst_buffers_count_without_bytes() {
-    let buffer = Buffer::from(vec![Marker; 5]);
-    assert_eq!(buffer.len(), 5);
-    assert!(buffer.as_bytes().is_empty());
-    assert_eq!(buffer.as_slice(), &[Marker; 5]);
-    assert_eq!(buffer.slice(1..3).len(), 2);
-    assert_eq!(buffer.clone().into_iter().count(), 5);
-    assert_eq!(buffer.clone(), buffer);
-    assert!(buffer.is_aligned(Alignment::of::<Marker>()));
+fn typed_views_add_nothing_to_the_untyped_handles() {
+    assert_eq!(size_of::<Buffer<u64>>(), size_of::<SharedBytes>());
+    assert_eq!(size_of::<BufferMut<u64>>(), size_of::<UniqueBytes>());
+    assert_eq!(size_of::<Option<Buffer<u64>>>(), size_of::<Buffer<u64>>());
 }
 
 #[test]
-fn zst_buffers_round_trip_through_vecs() {
-    let buffer = Buffer::from(vec![(); 7]);
-    let thawed = buffer.try_into_mut().expect("nothing to share");
-    assert_eq!(thawed.len(), 7);
-    assert_eq!(thawed.capacity(), usize::MAX);
-    let vec = thawed.try_into_vec().expect("a ZST Vec owns nothing");
-    assert_eq!(vec.len(), 7);
-}
-
-#[test]
-fn zst_from_empty_byte_buffer() {
-    let buffer = Buffer::<()>::from_byte_buffer(ByteBuffer::empty());
-    assert!(buffer.is_empty());
-}
-
-#[test]
-#[should_panic(expected = "cannot be reinterpreted as the zero-sized type")]
-fn zst_from_non_empty_byte_buffer_panics() {
-    drop(Buffer::<()>::from_byte_buffer(ByteBuffer::copy_from([1u8])));
+fn alignment_survives_the_round_trip_through_bytes() {
+    let buffer = Buffer::<u32>::copy_from_aligned([1, 2, 3, 4], Alignment::new(64));
+    let bytes: SharedBytes = buffer.into_byte_buffer().into();
+    assert_eq!(bytes.alignment(), Alignment::new(64));
+    assert_eq!(bytes.len(), 16);
+    let back = Buffer::<u32>::from_byte_buffer_aligned(ByteBuffer::from(bytes), Alignment::new(64));
+    assert_eq!(back.alignment(), Alignment::new(64));
+    assert_eq!(back.as_slice(), &[1, 2, 3, 4]);
 }

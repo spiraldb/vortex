@@ -291,32 +291,3 @@ fn freeze_does_not_allocate_and_thaw_keeps_capacity() {
     assert_eq!(thawed.as_ptr(), ptr);
     assert!(thawed.capacity() >= 32);
 }
-
-// --- Zero-sized types --------------------------------------------------------------------------
-
-#[test]
-fn zst_buffers_grow_without_allocating() {
-    let mut buffer = BufferMut::<()>::with_capacity(3);
-    assert_eq!(buffer.capacity(), usize::MAX);
-    for _ in 0..1000 {
-        buffer.push(());
-    }
-    buffer.extend_from_slice(&[(); 24]);
-    buffer.extend(std::iter::repeat_n((), 10));
-    assert_eq!(buffer.len(), 1034);
-    assert!(buffer.as_slice().len() == 1034);
-    buffer.truncate(5);
-    assert_eq!(buffer.len(), 5);
-    let tail = buffer.split_off(2);
-    assert_eq!((buffer.len(), tail.len()), (2, 3));
-    buffer.unsplit(tail);
-    assert_eq!(buffer.len(), 5);
-    assert_eq!(buffer.freeze().into_vec().len(), 5);
-}
-
-#[test]
-fn zst_zeroed_and_full() {
-    assert_eq!(BufferMut::<()>::zeroed(9).len(), 9);
-    assert_eq!(BufferMut::full((), 4).len(), 4);
-    assert_eq!(BufferMut::from_iter(std::iter::repeat_n((), 6)).len(), 6);
-}

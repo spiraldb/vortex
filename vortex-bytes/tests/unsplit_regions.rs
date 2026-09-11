@@ -91,7 +91,7 @@ static ALLOCATOR: Adjacent = Adjacent;
 
 fn probe_window(fill: u8) -> UniqueBytes {
     let mut window = UniqueBytes::with_capacity(PROBE_SIZE, Alignment::none());
-    window.extend_from_slice(&[fill; PROBE_SIZE], Alignment::none());
+    window.extend_from_slice(&[fill; PROBE_SIZE]);
     window
 }
 
@@ -112,7 +112,7 @@ fn copies_out_of_a_neighbouring_region() {
         "the arena is supposed to hand out adjacent blocks"
     );
 
-    first.unsplit(second, Alignment::none());
+    first.unsplit(second);
 
     assert_eq!(first.len(), PROBE_SIZE * 2);
     assert!(
@@ -130,7 +130,7 @@ fn merges_the_two_halves_of_one_region() {
     let second = first.split_off(PROBE_SIZE / 2);
     let start = first.as_ptr();
 
-    first.unsplit(second, Alignment::none());
+    first.unsplit(second);
 
     assert_eq!(first.len(), PROBE_SIZE);
     assert!(

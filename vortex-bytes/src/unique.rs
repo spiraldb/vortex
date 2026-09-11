@@ -41,6 +41,11 @@ const MIN_GROWTH: usize = 256;
 /// exclusively ours: no other handle may read or write it, even when the underlying region is
 /// shared with the other half of a [`split_off`](Self::split_off).
 ///
+/// The window promises that its start is aligned to [`alignment`](Self::alignment), and keeps
+/// that promise through every operation that moves or reallocates it. Growth re-aligns to the
+/// [`preferred`](Self::preferred_alignment) alignment the region was allocated with, so a buffer
+/// built to be SIMD-friendly stays that way however much it grows.
+///
 /// Like [`SharedBytes`], a window that has never been split describes its region inline and
 /// allocates no refcount.
 pub struct UniqueBytes {
@@ -55,6 +60,10 @@ pub struct UniqueBytes {
     base: NonNull<u8>,
     /// The ownership state. Plain rather than atomic: this handle is never shared by reference.
     state: State,
+    /// The alignment promised for `ptr`.
+    alignment: Alignment,
+    /// The alignment the region is allocated and grown with: at least `alignment`.
+    preferred: Alignment,
 }
 
 // SAFETY: `Shared` is `Send`/`Sync`, and the window is exclusively owned by this handle.
@@ -63,15 +72,26 @@ unsafe impl Send for UniqueBytes {}
 unsafe impl Sync for UniqueBytes {}
 
 impl UniqueBytes {
-    /// A window that owns nothing, aligned to [`Alignment::MAX`].
+    /// A window that owns nothing and promises no alignment.
+    ///
+    /// Its start is nevertheless aligned to [`Alignment::MAX`], so any promise can be made about
+    /// it with [`ensure_aligned`](Self::ensure_aligned).
     #[inline]
     pub fn empty() -> Self {
+        Self::empty_aligned(Alignment::none())
+    }
+
+    /// A window that owns nothing and promises `alignment`.
+    #[inline]
+    pub fn empty_aligned(alignment: Alignment) -> Self {
         Self {
             ptr: dangling(),
             len: 0,
             cap: 0,
             base: dangling(),
             state: State::STATIC,
+            alignment,
+            preferred: alignment,
         }
     }
 
@@ -93,7 +113,23 @@ impl UniqueBytes {
         alignment: Alignment,
         allocator: BufferAllocatorRef,
     ) -> Self {
-        Self::allocate(capacity, alignment, false, allocator)
+        Self::allocate(capacity, alignment, alignment, false, allocator)
+    }
+
+    /// Allocate an empty window with room for `capacity` bytes that promises `alignment` but is
+    /// allocated, and grown, at the larger of `alignment` and `preferred`.
+    ///
+    /// This is how a buffer promises no more than its element type's alignment while still being
+    /// laid out for SIMD: slices at any element boundary stay valid, and growth keeps the wider
+    /// layout.
+    #[inline]
+    pub fn with_capacity_preferred_in(
+        capacity: usize,
+        alignment: Alignment,
+        preferred: Alignment,
+        allocator: BufferAllocatorRef,
+    ) -> Self {
+        Self::allocate(capacity, alignment, preferred, false, allocator)
     }
 
     /// Allocate a window of `len` zeroed bytes, aligned to `alignment`, from the global allocator.
@@ -105,7 +141,21 @@ impl UniqueBytes {
     /// Allocate a window of `len` zeroed bytes, aligned to `alignment`.
     #[inline]
     pub fn zeroed_in(len: usize, alignment: Alignment, allocator: BufferAllocatorRef) -> Self {
-        let mut this = Self::allocate(len, alignment, true, allocator);
+        Self::zeroed_preferred_in(len, alignment, alignment, allocator)
+    }
+
+    /// Allocate a window of `len` zeroed bytes that promises `alignment` but is allocated at the
+    /// larger of `alignment` and `preferred`. See [`with_capacity_preferred_in`].
+    ///
+    /// [`with_capacity_preferred_in`]: Self::with_capacity_preferred_in
+    #[inline]
+    pub fn zeroed_preferred_in(
+        len: usize,
+        alignment: Alignment,
+        preferred: Alignment,
+        allocator: BufferAllocatorRef,
+    ) -> Self {
+        let mut this = Self::allocate(len, alignment, preferred, true, allocator);
         this.len = len;
         this
     }
@@ -114,18 +164,22 @@ impl UniqueBytes {
     fn allocate(
         capacity: usize,
         alignment: Alignment,
+        preferred: Alignment,
         zeroed: bool,
         allocator: BufferAllocatorRef,
     ) -> Self {
+        let preferred = preferred.max(alignment);
         if !allocator.is_statically_allocated() {
-            return Self::allocate_in(capacity, alignment, zeroed, allocator);
+            return Self::allocate_in(capacity, alignment, preferred, zeroed, allocator);
         }
         if capacity == 0 {
             // Nothing to allocate: the dangling pointer satisfies every alignment.
-            return Self::empty();
+            let mut empty = Self::empty_aligned(alignment);
+            empty.preferred = preferred;
+            return empty;
         }
 
-        let (base, layout, offset) = allocate_shifted(capacity, alignment, zeroed, &allocator);
+        let (base, layout, offset) = allocate_shifted(capacity, preferred, zeroed, &allocator);
         let state = match State::owned(layout.size(), Alignment::of_layout(layout)) {
             Some(state) => state,
             // A region too large to describe inline.
@@ -140,6 +194,8 @@ impl UniqueBytes {
             cap: capacity,
             base,
             state,
+            alignment,
+            preferred,
         }
     }
 
@@ -152,6 +208,7 @@ impl UniqueBytes {
     fn allocate_in(
         capacity: usize,
         alignment: Alignment,
+        preferred: Alignment,
         zeroed: bool,
         allocator: BufferAllocatorRef,
     ) -> Self {
@@ -165,10 +222,12 @@ impl UniqueBytes {
                 cap: 0,
                 base: dangling(),
                 state,
+                alignment,
+                preferred,
             };
         }
 
-        let layout = embedded_layout(capacity, alignment);
+        let layout = embedded_layout(capacity, preferred);
         let block = if zeroed {
             allocator.allocate_zeroed(layout)
         } else {
@@ -191,7 +250,7 @@ impl UniqueBytes {
                 release: Release::Embedded { layout, allocator },
             });
         }
-        let offset = shift(base, alignment);
+        let offset = shift(base, preferred);
         debug_assert!(HEADER + offset + capacity <= layout.size());
         Self {
             // SAFETY: `embedded_layout` pads the region by the largest shift that could be
@@ -202,10 +261,13 @@ impl UniqueBytes {
             base,
             // SAFETY: we just wrote `header` and take over its single reference.
             state: unsafe { State::shared(header.as_ptr()) },
+            alignment,
+            preferred,
         }
     }
 
-    /// Take ownership of a `Vec<T>`'s allocation without copying it.
+    /// Take ownership of a `Vec<T>`'s allocation without copying it. The window promises the
+    /// alignment of `T`.
     ///
     /// The buffer treats the elements as plain bytes and never runs `T`'s destructor. Callers that
     /// need destructors must keep the `Vec` alive themselves, e.g. through
@@ -215,11 +277,12 @@ impl UniqueBytes {
         let mut vec = ManuallyDrop::new(vec);
         let capacity = vec.capacity();
         let len = vec.len();
+        let alignment = Alignment::of::<T>();
         // A `Vec` with no capacity owns no allocation, so there is nothing to adopt. Zero-sized
         // elements have no byte representation at all.
         if capacity == 0 || size_of::<T>() == 0 {
             drop(ManuallyDrop::into_inner(vec));
-            return Self::empty();
+            return Self::empty_aligned(alignment);
         }
 
         // SAFETY: `as_mut_ptr` is derived from a unique reference to the `Vec`'s buffer, giving
@@ -243,10 +306,13 @@ impl UniqueBytes {
             cap: layout.size(),
             base,
             state,
+            alignment,
+            preferred: alignment,
         }
     }
 
-    /// Adopt a writable region kept alive by `owner`, without copying it.
+    /// Adopt a writable region kept alive by `owner`, without copying it. The window promises the
+    /// alignment of `T`, which a `[T]` always has.
     ///
     /// Taking `owner` by value and going through [`AsMut`] is what makes this safe: it proves that
     /// nothing else can be observing the region while we hold it.
@@ -283,6 +349,7 @@ impl UniqueBytes {
         }
         .into_raw();
 
+        let alignment = Alignment::of::<T>();
         Self {
             ptr: base,
             len: size,
@@ -290,6 +357,8 @@ impl UniqueBytes {
             base,
             // SAFETY: we just created `shared` and take over its single reference.
             state: unsafe { State::shared(shared) },
+            alignment,
+            preferred: alignment,
         }
     }
 
@@ -299,8 +368,8 @@ impl UniqueBytes {
     ///
     /// The caller must hold the only handle to `ptr..ptr + cap`, that range must lie within the
     /// region `state` describes, `base` must be that region's first byte, the region must be
-    /// writable, the first `len` bytes must be initialised, and the caller must hand over its
-    /// ownership.
+    /// writable, the first `len` bytes must be initialised, `ptr` must be aligned to `alignment`,
+    /// and the caller must hand over its ownership.
     #[inline]
     pub(crate) unsafe fn from_parts(
         ptr: NonNull<u8>,
@@ -308,14 +377,19 @@ impl UniqueBytes {
         cap: usize,
         base: NonNull<u8>,
         state: State,
+        alignment: Alignment,
+        preferred: Alignment,
     ) -> Self {
         debug_assert!(len <= cap);
+        debug_assert!(alignment.is_ptr_aligned(ptr.as_ptr()));
         Self {
             ptr,
             len,
             cap,
             base,
             state,
+            alignment,
+            preferred,
         }
     }
 
@@ -341,6 +415,41 @@ impl UniqueBytes {
     #[inline]
     pub fn capacity(&self) -> usize {
         self.cap
+    }
+
+    /// The alignment the start of the window is promised to have.
+    #[inline]
+    pub fn alignment(&self) -> Alignment {
+        self.alignment
+    }
+
+    /// The alignment the region is allocated and grown with, which is at least
+    /// [`alignment`](Self::alignment).
+    #[inline]
+    pub fn preferred_alignment(&self) -> Alignment {
+        self.preferred
+    }
+
+    /// Whether the start of the window is aligned to `alignment`, whatever it promises.
+    #[inline]
+    pub fn is_aligned(&self, alignment: Alignment) -> bool {
+        alignment.is_ptr_aligned(self.ptr.as_ptr())
+    }
+
+    /// Promise `alignment` for the start of the window.
+    ///
+    /// This may lower as well as raise the promise; the preferred alignment only ever rises.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the start of the window is not aligned to `alignment`.
+    #[inline]
+    pub fn ensure_aligned(&mut self, alignment: Alignment) {
+        if !self.is_aligned(alignment) {
+            bytes_panic!("buffer is not aligned to {alignment}");
+        }
+        self.alignment = alignment;
+        self.preferred = self.preferred.max(alignment);
     }
 
     /// The allocator the region came from, and so the one to allocate any derived region with.
@@ -398,17 +507,25 @@ impl UniqueBytes {
 
     /// Advance the start of the window by `cnt` bytes, giving up the bytes skipped over.
     ///
-    /// This does not preserve alignment: advancing by anything that is not a multiple of the
-    /// buffer's alignment leaves the window unaligned. Keeping to a multiple is the caller's
-    /// business - `vortex-buffer`'s `BufferMut::advance` rejects the rest - and a
-    /// subsequent [`reserve`](Self::reserve) will re-align by reallocating rather than reclaiming
-    /// in place.
+    /// The window keeps its alignment promise, so `cnt` must be a multiple of it. It need not be a
+    /// multiple of the preferred alignment; a subsequent [`reserve`](Self::reserve) then
+    /// re-aligns by reallocating rather than growing in place.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `cnt > len`, or `cnt` is not a multiple of the alignment.
     #[inline]
     pub fn advance(&mut self, cnt: usize) {
         if cnt > self.len {
             bytes_panic!(
                 "cannot advance past the end of the buffer: {cnt} > {}",
                 self.len
+            );
+        }
+        if !self.alignment.is_offset_aligned(cnt) {
+            bytes_panic!(
+                "cannot advance by {cnt} bytes: the start would no longer be aligned to {}",
+                self.alignment
             );
         }
         // SAFETY: `cnt <= len <= cap`, so the new start stays inside the window. The region's
@@ -459,38 +576,39 @@ impl UniqueBytes {
 
     /// Ensure the window has room for `additional` more bytes past its length.
     ///
-    /// The resulting window is aligned to at least `alignment`.
+    /// A window that has to move is re-aligned to the preferred alignment.
     #[inline]
-    pub fn reserve(&mut self, additional: usize, alignment: Alignment) {
+    pub fn reserve(&mut self, additional: usize) {
         if additional <= self.cap - self.len {
             return;
         }
-        self.reserve_slow(additional, alignment);
+        self.reserve_slow(additional);
     }
 
     /// The slow path of [`reserve`](Self::reserve), kept out of line so the common case inlines.
     /// Not marked cold: a buffer built up from empty lands here on its very first append.
     #[inline(never)]
-    fn reserve_slow(&mut self, additional: usize, alignment: Alignment) {
+    fn reserve_slow(&mut self, additional: usize) {
         let required = self
             .len
             .checked_add(additional)
             .unwrap_or_else(|| bytes_panic!("buffer capacity overflow"));
 
-        if self.reclaim(required, alignment) {
+        if self.reclaim(required) {
             return;
         }
 
         // Amortise the cost of growing by at least doubling each time.
         let target = max(required, self.cap.saturating_mul(2)).max(MIN_GROWTH);
-        if self.grow_in_place(target, alignment) {
+        if self.grow_in_place(target) {
             return;
         }
 
         // Fall back to a fresh region from the same allocator.
         let allocator = self.allocator().clone();
-        let mut grown = Self::with_capacity_in(target, alignment, allocator);
-        grown.extend_from_slice(self.as_slice(), alignment);
+        let mut grown =
+            Self::with_capacity_preferred_in(target, self.alignment, self.preferred, allocator);
+        grown.extend_from_slice(self.as_slice());
         *self = grown;
     }
 
@@ -502,11 +620,9 @@ impl UniqueBytes {
     /// A region described inline has never been split, so there is nothing to reclaim but the
     /// alignment padding the shift did not use. That is skipped on purpose: how much of it there
     /// is depends on the address the allocator happened to return, and capacity should not.
-    fn reclaim(&mut self, required: usize, alignment: Alignment) -> bool {
-        if self.state.is_owned()
-            || !alignment.is_ptr_aligned(self.ptr.as_ptr())
-            || !self.owns_region()
-        {
+    fn reclaim(&mut self, required: usize) -> bool {
+        // A window that `advance` moved off the preferred alignment is re-aligned by reallocating.
+        if self.state.is_owned() || !self.is_aligned(self.preferred) || !self.owns_region() {
             return false;
         }
         let available = self.region_end() - self.ptr.as_ptr().addr();
@@ -521,12 +637,13 @@ impl UniqueBytes {
     ///
     /// Only possible when we hold the region alone, we allocated it ourselves, and the window sits
     /// at its front - behind nothing but alignment padding. Growing keeps the region's base
-    /// alignment, so the window may have to shift within the grown region to stay aligned; the
-    /// padding accounts for that.
-    fn grow_in_place(&mut self, target: usize, alignment: Alignment) -> bool {
+    /// alignment, so the window may have to shift within the grown region to stay aligned to the
+    /// preferred alignment; the padding accounts for that.
+    fn grow_in_place(&mut self, target: usize) -> bool {
         if !self.owns_region() {
             return false;
         }
+        let alignment = self.preferred;
         let Some(layout) = self.allocated_layout() else {
             return false;
         };
@@ -548,7 +665,7 @@ impl UniqueBytes {
             // SAFETY: we hold a reference to the `Shared`, so it is live.
             let shared = unsafe { &*self.state.as_shared() };
             if matches!(shared.release, Release::Embedded { .. }) {
-                return self.grow_embedded(layout, target, alignment, old_offset);
+                return self.grow_embedded(layout, target, old_offset);
             }
         }
 
@@ -596,13 +713,8 @@ impl UniqueBytes {
     }
 
     /// Grow a region whose `Shared` is embedded in its block. The header moves with the block.
-    fn grow_embedded(
-        &mut self,
-        layout: Layout,
-        target: usize,
-        alignment: Alignment,
-        old_offset: usize,
-    ) -> bool {
+    fn grow_embedded(&mut self, layout: Layout, target: usize, old_offset: usize) -> bool {
+        let alignment = self.preferred;
         let new_layout = embedded_layout(target, alignment);
         if new_layout.size() <= layout.size() {
             return false;
@@ -670,8 +782,8 @@ impl UniqueBytes {
 
     /// Append `slice` to the window, growing it if needed.
     #[inline]
-    pub fn extend_from_slice(&mut self, slice: &[u8], alignment: Alignment) {
-        self.reserve(slice.len(), alignment);
+    pub fn extend_from_slice(&mut self, slice: &[u8]) {
+        self.reserve(slice.len());
         // `unsplit` is the one caller that can hand us a slice from our own region, so the
         // non-overlap argument is worth spelling out: live windows into a region are disjoint, so
         // `slice` starts at or after our window's end, while the copy below stays within
@@ -715,11 +827,22 @@ impl UniqueBytes {
 
     /// Split the window in two at `at`, keeping `..at` and returning `at..`.
     ///
-    /// Both halves keep pointing into the same region; neither moves.
+    /// Both halves keep pointing into the same region; neither moves. Both promise the same
+    /// alignment, so `at` must be a multiple of it.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `at` exceeds the capacity, or is not a multiple of the alignment.
     #[inline]
     pub fn split_off(&mut self, at: usize) -> Self {
         if at > self.cap {
             bytes_panic!("cannot split buffer of capacity {} at {at}", self.cap);
+        }
+        if !self.alignment.is_offset_aligned(at) {
+            bytes_panic!(
+                "cannot split buffer at {at}: the second half would not be aligned to {}",
+                self.alignment
+            );
         }
 
         let state = if self.state.is_static() {
@@ -741,6 +864,8 @@ impl UniqueBytes {
             cap: self.cap - at,
             base: self.base,
             state,
+            alignment: self.alignment,
+            preferred: self.preferred,
         };
         self.cap = at;
         self.len = self.len.min(at);
@@ -751,7 +876,18 @@ impl UniqueBytes {
     ///
     /// `O(1)` when the two windows are still adjacent in the same region; otherwise this
     /// degenerates to a copy.
-    pub fn unsplit(&mut self, other: Self, alignment: Alignment) {
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the windows promise different alignments.
+    pub fn unsplit(&mut self, other: Self) {
+        if self.alignment != other.alignment {
+            bytes_panic!(
+                "cannot unsplit buffers with different alignments: {} and {}",
+                self.alignment,
+                other.alignment
+            );
+        }
         if self.cap == 0 {
             *self = other;
             return;
@@ -772,7 +908,7 @@ impl UniqueBytes {
             drop(other);
             return;
         }
-        self.extend_from_slice(other.as_slice(), alignment);
+        self.extend_from_slice(other.as_slice());
     }
 
     /// Freeze the window into an immutable, shareable one.
@@ -780,7 +916,16 @@ impl UniqueBytes {
     pub fn freeze(self) -> SharedBytes {
         let this = ManuallyDrop::new(self);
         // SAFETY: the window lies within the region, and we hand its reference over.
-        unsafe { SharedBytes::from_parts(this.ptr, this.len, this.base, this.state) }
+        unsafe {
+            SharedBytes::from_parts(
+                this.ptr,
+                this.len,
+                this.base,
+                this.state,
+                this.alignment,
+                this.preferred,
+            )
+        }
     }
 
     /// Hand the region out as a `Vec<T>`, if it is exactly a `Vec<T>`'s allocation.
@@ -868,6 +1013,7 @@ impl std::fmt::Debug for UniqueBytes {
             .field("ptr", &self.ptr)
             .field("len", &self.len)
             .field("cap", &self.cap)
+            .field("alignment", &self.alignment)
             .field("owned", &self.state.is_owned())
             .finish()
     }

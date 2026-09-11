@@ -10,7 +10,7 @@ use crate::Alignment;
 /// A window of `len` bytes filled with the low byte of each index.
 fn filled(len: usize, alignment: Alignment) -> UniqueBytes {
     let mut bytes = UniqueBytes::with_capacity(len, alignment);
-    bytes.extend_from_slice(&pattern(len), alignment);
+    bytes.extend_from_slice(&pattern(len));
     bytes
 }
 
@@ -61,7 +61,7 @@ fn growth_preserves_contents_and_alignment() {
     let alignment = Alignment::new(512);
     let mut bytes = filled(16, alignment);
     for i in 0..1000u32 {
-        bytes.extend_from_slice(&i.to_le_bytes(), alignment);
+        bytes.extend_from_slice(&i.to_le_bytes());
     }
     assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
     assert_eq!(bytes.len(), 16 + 4000);
@@ -118,7 +118,7 @@ fn try_into_unique_requires_sole_ownership() {
 #[test]
 fn try_into_unique_recovers_capacity_to_the_end_of_the_region() {
     let mut bytes = UniqueBytes::with_capacity(1024, Alignment::none());
-    bytes.extend_from_slice(&[1, 2, 3, 4], Alignment::none());
+    bytes.extend_from_slice(&[1, 2, 3, 4]);
     let unique = bytes
         .freeze()
         .try_into_unique()
@@ -143,7 +143,7 @@ fn split_off_windows_are_disjoint_and_rejoin_in_place() {
 
     let mut a = filled(64, Alignment::none());
     let b = a.split_off(16);
-    a.unsplit(b, Alignment::none());
+    a.unsplit(b);
     assert_eq!(a.len(), 64);
     assert_eq!(a.as_slice(), &pattern(64)[..]);
 }
@@ -152,21 +152,21 @@ fn split_off_windows_are_disjoint_and_rejoin_in_place() {
 fn unsplit_of_unrelated_windows_copies() {
     let mut a = filled(4, Alignment::none());
     let b = filled(4, Alignment::none());
-    a.unsplit(b, Alignment::none());
+    a.unsplit(b);
     assert_eq!(a.as_slice(), &[0, 1, 2, 3, 0, 1, 2, 3]);
 }
 
 #[test]
 fn reclaim_after_sibling_is_dropped() {
     let mut a = UniqueBytes::with_capacity(1024, Alignment::none());
-    a.extend_from_slice(&[1, 2, 3, 4], Alignment::none());
+    a.extend_from_slice(&[1, 2, 3, 4]);
     let b = a.split_off(4);
     let ptr = a.as_ptr();
     assert_eq!(a.capacity(), 4);
 
     drop(b);
     // The whole region is ours again, so growing must not move the data.
-    a.reserve(500, Alignment::none());
+    a.reserve(500);
     assert_eq!(a.as_ptr(), ptr);
     assert!(a.capacity() >= 504);
     assert_eq!(a.as_slice(), &[1, 2, 3, 4]);
@@ -206,7 +206,7 @@ fn vec_round_trip_keeps_the_allocation() {
 fn vec_round_trip_survives_growth() {
     let vec: Vec<u32> = (0..100).collect();
     let mut bytes = UniqueBytes::from_vec(vec);
-    bytes.extend_from_slice(&[0u8; 4096], Alignment::of::<u32>());
+    bytes.extend_from_slice(&[0u8; 4096]);
 
     let vec = bytes.try_into_vec::<u32>().expect("still a u32 allocation");
     assert_eq!(vec.len(), 1124);
@@ -352,14 +352,14 @@ mod custom_allocator {
         let alignment = Alignment::new(256);
         let (allocator, counts) = counting();
         let mut bytes = UniqueBytes::with_capacity_in(100, alignment, allocator.clone());
-        bytes.extend_from_slice(&pattern(100), alignment);
+        bytes.extend_from_slice(&pattern(100));
         assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
         assert!(bytes.allocator().ptr_eq(&allocator));
 
         // The refcount lives inside the block, so sharing allocates nothing more.
         let shared = bytes.freeze();
         let clone = shared.clone();
-        let slice = shared.slice(10, 50);
+        let slice = shared.slice_aligned(10, 50, Alignment::none());
         assert!(slice.allocator().ptr_eq(&allocator));
         assert_eq!(counts.allocations.load(Relaxed), 1);
         // Alignment is reached by shifting, never by asking the allocator for it.
@@ -381,8 +381,8 @@ mod custom_allocator {
         let alignment = Alignment::new(alignment);
         let (allocator, counts) = counting();
         let mut bytes = UniqueBytes::with_capacity_in(8, alignment, allocator);
-        bytes.extend_from_slice(&pattern(8), alignment);
-        bytes.extend_from_slice(&pattern(10_000)[8..], alignment);
+        bytes.extend_from_slice(&pattern(8));
+        bytes.extend_from_slice(&pattern(10_000)[8..]);
 
         assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
         assert_eq!(bytes.as_slice(), &pattern(10_000));
@@ -399,9 +399,9 @@ mod custom_allocator {
         let alignment = Alignment::new(64);
         let (allocator, counts) = counting();
         let mut bytes = UniqueBytes::with_capacity_in(256, alignment, allocator);
-        bytes.extend_from_slice(&pattern(256), alignment);
+        bytes.extend_from_slice(&pattern(256));
         bytes.advance(64);
-        bytes.extend_from_slice(&pattern(4096), alignment);
+        bytes.extend_from_slice(&pattern(4096));
 
         assert!(alignment.is_ptr_aligned(bytes.as_ptr()));
         assert_eq!(&bytes.as_slice()[..192], &pattern(256)[64..]);
@@ -415,7 +415,7 @@ mod custom_allocator {
         let alignment = Alignment::new(64);
         let (allocator, counts) = counting();
         let mut bytes = UniqueBytes::with_capacity_in(256, alignment, allocator);
-        bytes.extend_from_slice(&pattern(256), alignment);
+        bytes.extend_from_slice(&pattern(256));
         let other = bytes.split_off(128);
         assert_eq!(counts.allocations.load(Relaxed), 1);
         assert_eq!(bytes.as_slice(), &pattern(256)[..128]);
@@ -424,7 +424,7 @@ mod custom_allocator {
         drop(other);
         assert_eq!(counts.deallocations.load(Relaxed), 0);
         // With the other half gone, the survivor grows back over the region on its own.
-        bytes.extend_from_slice(&pattern(256)[128..], alignment);
+        bytes.extend_from_slice(&pattern(256)[128..]);
         assert_eq!(bytes.as_slice(), &pattern(256));
         assert_eq!(counts.allocations.load(Relaxed), 1);
         assert_eq!(counts.grows.load(Relaxed), 0);
@@ -437,9 +437,9 @@ mod custom_allocator {
         let alignment = Alignment::new(8);
         let (allocator, counts) = counting();
         let mut bytes = UniqueBytes::with_capacity_in(64, alignment, allocator);
-        bytes.extend_from_slice(&pattern(64), alignment);
+        bytes.extend_from_slice(&pattern(64));
         let other = bytes.split_off(32);
-        bytes.unsplit(other, alignment);
+        bytes.unsplit(other);
         assert_eq!(bytes.capacity(), 64);
         assert_eq!(bytes.as_slice(), &pattern(64));
         assert_eq!(counts.allocations.load(Relaxed), 1);
@@ -461,7 +461,7 @@ mod custom_allocator {
         let alignment = Alignment::new(1);
         let (allocator, counts) = counting();
         let mut bytes = UniqueBytes::with_capacity_in(16, alignment, allocator);
-        bytes.extend_from_slice(&pattern(16), alignment);
+        bytes.extend_from_slice(&pattern(16));
         // A `Vec` would free the block through the wrong allocator.
         let result = bytes.try_into_vec::<u8>();
         assert!(result.is_err());
@@ -477,7 +477,7 @@ mod custom_allocator {
         assert!(bytes.allocator().ptr_eq(&allocator));
         assert_eq!(counts.allocations.load(Relaxed), 0);
 
-        bytes.extend_from_slice(&pattern(10), alignment);
+        bytes.extend_from_slice(&pattern(10));
         assert!(bytes.allocator().ptr_eq(&allocator));
         assert_eq!(counts.allocations.load(Relaxed), 1);
         assert_eq!(counts.grows.load(Relaxed), 0);

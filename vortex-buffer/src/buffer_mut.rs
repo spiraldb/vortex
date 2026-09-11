@@ -3,7 +3,6 @@
 
 use core::mem::MaybeUninit;
 use std::any::type_name;
-use std::cmp::max;
 use std::fmt::Debug;
 use std::fmt::Formatter;
 use std::marker::PhantomData;
@@ -20,38 +19,48 @@ use crate::Buffer;
 use crate::BufferAllocatorRef;
 use crate::ByteBufferMut;
 use crate::buffer::copy_to_vec;
-use crate::buffer::elements_in;
-use crate::buffer::zst_vec;
 use crate::debug::TruncatedDebug;
 use crate::trusted_len::TrustedLen;
 
 /// A mutable buffer that maintains a runtime-defined alignment through resizing operations.
 ///
-/// Elements are treated as plain data: the buffer never runs `T`'s destructor, and never will.
+/// This is a typed view over a [`UniqueBytes`] window: the bytes, the alignment promise, and the
+/// allocation all live there, and this type only reinterprets them as `T`s. Elements are treated
+/// as plain data: the buffer never runs `T`'s destructor, and never will.
 ///
-/// Zero-sized element types are supported. Such a buffer holds a count and no bytes, so it never
-/// allocates and reports an unbounded capacity, exactly as a `Vec` of a zero-sized type does.
+/// Zero-sized element types are rejected at compile time when constructing a buffer.
+///
+/// ```compile_fail
+/// use vortex_buffer::BufferMut;
+/// let _ = BufferMut::<()>::empty();
+/// ```
+///
+/// ```compile_fail
+/// use vortex_buffer::BufferMut;
+/// let _ = BufferMut::<()>::from_vec(vec![(); 3]);
+/// ```
 pub struct BufferMut<T> {
-    /// The bytes of the initialised elements, the spare capacity after them, and the region they
-    /// live in.
+    /// The bytes of the initialised elements, the spare capacity after them, the region they live
+    /// in, and the alignment promised for the first of them.
     pub(crate) bytes: UniqueBytes,
-    /// The number of initialised elements. Kept separately from the byte length so that
-    /// zero-sized types, which have no bytes at all, still have a count.
-    pub(crate) length: usize,
-    /// The minimum alignment maintained for the start of the buffer across reallocations.
-    pub(crate) alignment: Alignment,
-    /// The alignment the region is allocated and grown with: at least `alignment`, and usually
-    /// [`Alignment::DEFAULT_ALIGNMENT`]. Growing re-aligns to this rather than to `alignment`, so
-    /// a buffer built to be SIMD-friendly stays that way however much it grows.
-    pub(crate) preferred: Alignment,
     /// Marks the buffer as logically owning values of `T` despite storing erased bytes.
     pub(crate) _marker: PhantomData<T>,
 }
 
 impl<T> BufferMut<T> {
+    /// View `bytes` as `T`s.
+    ///
+    /// `bytes` must hold a whole number of `T`s and promise at least `T`'s alignment; every
+    /// constructor arranges for both.
     #[inline]
-    const fn is_zst() -> bool {
-        size_of::<T>() == 0
+    pub(crate) fn from_unique(bytes: UniqueBytes) -> Self {
+        const { assert!(size_of::<T>() != 0, "zero-sized types are not supported") };
+        debug_assert!(bytes.len().is_multiple_of(size_of::<T>()));
+        debug_assert!(bytes.alignment().is_aligned_to(Alignment::of::<T>()));
+        Self {
+            bytes,
+            _marker: PhantomData,
+        }
     }
 
     /// The number of bytes `n` elements occupy.
@@ -59,6 +68,18 @@ impl<T> BufferMut<T> {
     fn bytes_for(n: usize) -> usize {
         n.checked_mul(size_of::<T>())
             .vortex_expect("buffer capacity overflow")
+    }
+
+    /// Reject an alignment that `T` itself could not be stored at.
+    #[inline]
+    fn check_alignment(alignment: Alignment) {
+        if !alignment.is_aligned_to(Alignment::of::<T>()) {
+            vortex_panic!(
+                "Alignment {} must align to the scalar type's alignment {}",
+                alignment,
+                align_of::<T>()
+            );
+        }
     }
 
     /// Create a new `BufferMut` with the requested alignment and capacity.
@@ -123,29 +144,13 @@ impl<T> BufferMut<T> {
         preferred_alignment: Option<Alignment>,
         allocator: BufferAllocatorRef,
     ) -> Self {
-        let actual = Self::check_alignment(alignment, preferred_alignment);
-        Self {
-            bytes: UniqueBytes::with_capacity_in(Self::bytes_for(capacity), actual, allocator),
-            length: 0,
+        Self::check_alignment(alignment);
+        Self::from_unique(UniqueBytes::with_capacity_preferred_in(
+            Self::bytes_for(capacity),
             alignment,
-            preferred: actual,
-            _marker: PhantomData,
-        }
-    }
-
-    /// Validate the requested alignment and return the alignment to allocate with.
-    fn check_alignment(alignment: Alignment, preferred_alignment: Option<Alignment>) -> Alignment {
-        if !alignment.is_aligned_to(Alignment::of::<T>()) {
-            vortex_panic!(
-                "Alignment {} must align to the scalar type's alignment {}",
-                alignment,
-                align_of::<T>()
-            );
-        }
-        max(
-            alignment,
-            preferred_alignment.unwrap_or(Alignment::of::<u8>()),
-        )
+            preferred_alignment.unwrap_or(alignment),
+            allocator,
+        ))
     }
 
     /// Create a new zeroed `BufferMut`.
@@ -206,14 +211,13 @@ impl<T> BufferMut<T> {
         preferred_alignment: Option<Alignment>,
         allocator: BufferAllocatorRef,
     ) -> Self {
-        let actual = Self::check_alignment(alignment, preferred_alignment);
-        Self {
-            bytes: UniqueBytes::zeroed_in(Self::bytes_for(len), actual, allocator),
-            length: len,
+        Self::check_alignment(alignment);
+        Self::from_unique(UniqueBytes::zeroed_preferred_in(
+            Self::bytes_for(len),
             alignment,
-            preferred: actual,
-            _marker: PhantomData,
-        }
+            preferred_alignment.unwrap_or(alignment),
+            allocator,
+        ))
     }
 
     /// Create a new empty `BufferMut` aligned to `T`.
@@ -348,14 +352,7 @@ impl<T> BufferMut<T> {
     /// The buffer treats the elements as plain data and never runs `T`'s destructor. Prefer
     /// [`Buffer::from_vec`] for a `T` with a destructor: it keeps the `Vec` alive instead.
     pub fn from_vec(vec: Vec<T>) -> Self {
-        let length = vec.len();
-        Self {
-            bytes: UniqueBytes::from_vec(vec),
-            length,
-            alignment: Alignment::of::<T>(),
-            preferred: Alignment::of::<T>(),
-            _marker: PhantomData,
-        }
+        Self::from_unique(UniqueBytes::from_vec(vec))
     }
 
     /// Take zero-copy, *writable* ownership of memory kept alive by `owner`.
@@ -365,10 +362,6 @@ impl<T> BufferMut<T> {
     /// looking at the memory in the meantime. That is what lets the buffer write straight into a
     /// writable memory map or an Arrow `MutableBuffer` without copying, and it is why freezing and
     /// thawing such a buffer never copies either.
-    ///
-    /// ## Panics
-    ///
-    /// Panics if the owner's memory is not aligned to `align_of::<T>()`.
     ///
     /// ## Example
     ///
@@ -385,26 +378,13 @@ impl<T> BufferMut<T> {
     where
         O: AsMut<[T]> + Send + 'static,
     {
-        let mut owner = owner;
-        let length = owner.as_mut().len();
-        let bytes = UniqueBytes::from_owner::<O, T>(owner);
-        let alignment = Alignment::of::<T>();
-        if !alignment.is_ptr_aligned(bytes.as_ptr()) {
-            vortex_panic!("Foreign buffer is not aligned to {alignment}");
-        }
-        Self {
-            bytes,
-            length,
-            alignment,
-            preferred: alignment,
-            _marker: PhantomData,
-        }
+        Self::from_unique(UniqueBytes::from_owner::<O, T>(owner))
     }
 
     /// Get the alignment of the buffer.
     #[inline]
     pub fn alignment(&self) -> Alignment {
-        self.alignment
+        self.bytes.alignment()
     }
 
     /// Returns the allocator that owns this buffer.
@@ -416,25 +396,19 @@ impl<T> BufferMut<T> {
     /// Returns the length of the buffer.
     #[inline]
     pub fn len(&self) -> usize {
-        self.length
+        self.bytes.len() / size_of::<T>()
     }
 
     /// Returns whether the buffer is empty.
     #[inline]
     pub fn is_empty(&self) -> bool {
-        self.length == 0
+        self.bytes.is_empty()
     }
 
     /// Returns the capacity of the buffer, in elements.
-    ///
-    /// A buffer of a zero-sized type never runs out of room, so it reports `usize::MAX`.
     #[inline]
     pub fn capacity(&self) -> usize {
-        if Self::is_zst() {
-            usize::MAX
-        } else {
-            self.bytes.capacity() / size_of::<T>()
-        }
+        self.bytes.capacity() / size_of::<T>()
     }
 
     /// Returns a raw pointer to the buffer's data.
@@ -452,15 +426,15 @@ impl<T> BufferMut<T> {
     /// Returns a slice over the buffer of elements of type T.
     #[inline]
     pub fn as_slice(&self) -> &[T] {
-        // SAFETY: the bytes hold `length` initialised `T`s (none, for a zero-sized `T`), and the
-        // pointer is aligned for `T` by construction.
-        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.length) }
+        // SAFETY: the bytes hold `len()` initialised `T`s, and the pointer is aligned for `T` by
+        // construction.
+        unsafe { std::slice::from_raw_parts(self.as_ptr(), self.len()) }
     }
 
     /// Returns a mutable slice over the buffer of elements of type T.
     #[inline]
     pub fn as_mut_slice(&mut self) -> &mut [T] {
-        let length = self.length;
+        let length = self.len();
         // SAFETY: as for `as_slice`, and the window is exclusively ours.
         unsafe { std::slice::from_raw_parts_mut(self.as_mut_ptr(), length) }
     }
@@ -468,7 +442,6 @@ impl<T> BufferMut<T> {
     /// Clear the buffer, retaining any existing capacity.
     #[inline]
     pub fn clear(&mut self) {
-        self.length = 0;
         // SAFETY: shrinking to zero cannot expose uninitialised bytes.
         unsafe { self.bytes.set_len(0) }
     }
@@ -488,11 +461,7 @@ impl<T> BufferMut<T> {
     /// Reserves capacity for at least `additional` more elements to be inserted in the buffer.
     #[inline]
     pub fn reserve(&mut self, additional: usize) {
-        if Self::is_zst() {
-            return;
-        }
-        self.bytes
-            .reserve(Self::bytes_for(additional), self.preferred);
+        self.bytes.reserve(Self::bytes_for(additional));
     }
 
     /// Returns the spare capacity of the buffer as a slice of `MaybeUninit<T>`.
@@ -532,10 +501,10 @@ impl<T> BufferMut<T> {
     /// ```
     #[inline]
     pub fn spare_capacity_mut(&mut self) -> &mut [MaybeUninit<T>] {
-        let spare = self.capacity() - self.length;
-        // SAFETY: `length..capacity` is within the window, which is exclusively ours. For a
-        // zero-sized `T` the slice has no bytes, whatever its length.
-        let dst = unsafe { self.as_mut_ptr().add(self.length) }.cast::<MaybeUninit<T>>();
+        let length = self.len();
+        let spare = self.capacity() - length;
+        // SAFETY: `length..capacity` is within the window, which is exclusively ours.
+        let dst = unsafe { self.as_mut_ptr().add(length) }.cast::<MaybeUninit<T>>();
         unsafe { std::slice::from_raw_parts_mut(dst, spare) }
     }
 
@@ -550,7 +519,6 @@ impl<T> BufferMut<T> {
     #[inline]
     pub unsafe fn set_len(&mut self, len: usize) {
         debug_assert!(len <= self.capacity());
-        self.length = len;
         // SAFETY: the caller guarantees the elements, and so their bytes, are initialised.
         unsafe { self.bytes.set_len(Self::bytes_for(len)) }
     }
@@ -570,11 +538,12 @@ impl<T> BufferMut<T> {
     /// The caller must ensure there is sufficient capacity in the array.
     #[inline]
     pub unsafe fn push_unchecked(&mut self, item: T) {
+        let length = self.len();
         // SAFETY: the caller ensures we have sufficient capacity.
         unsafe {
-            let dst = self.as_mut_ptr().add(self.length);
+            let dst = self.as_mut_ptr().add(length);
             dst.write(item);
-            self.set_len(self.length + 1);
+            self.set_len(length + 1);
         }
     }
 
@@ -601,8 +570,9 @@ impl<T> BufferMut<T> {
     where
         T: Copy,
     {
+        let length = self.len();
         // SAFETY: the caller guarantees enough spare capacity.
-        let mut dst = unsafe { self.as_mut_ptr().add(self.length) };
+        let mut dst = unsafe { self.as_mut_ptr().add(length) };
         // SAFETY: we checked the capacity in the reserve call
         unsafe {
             let end = dst.add(n);
@@ -610,7 +580,7 @@ impl<T> BufferMut<T> {
                 dst.write(item);
                 dst = dst.add(1);
             }
-            self.set_len(self.length + n);
+            self.set_len(length + n);
         }
     }
 
@@ -629,28 +599,23 @@ impl<T> BufferMut<T> {
     #[inline]
     pub fn extend_from_slice(&mut self, slice: &[T]) {
         self.reserve(slice.len());
+        let length = self.len();
         // SAFETY: reserve made the destination valid and non-overlapping for slice.len() values.
         unsafe {
             std::ptr::copy_nonoverlapping(
                 slice.as_ptr(),
-                self.as_mut_ptr().add(self.length),
+                self.as_mut_ptr().add(length),
                 slice.len(),
             );
-            self.set_len(self.length + slice.len());
+            self.set_len(length + slice.len());
         }
     }
 
     /// Return the [`ByteBufferMut`] for this [`BufferMut`].
     ///
-    /// A buffer of a zero-sized type has no bytes, so its byte buffer is empty.
+    /// The byte buffer keeps this buffer's alignment.
     pub fn into_byte_buffer(self) -> ByteBufferMut {
-        ByteBufferMut {
-            length: self.bytes.len(),
-            bytes: self.bytes,
-            alignment: self.alignment,
-            preferred: self.preferred,
-            _marker: PhantomData,
-        }
+        ByteBufferMut::from_unique(self.bytes)
     }
 
     /// Freeze the `BufferMut` into a `Buffer`.
@@ -658,13 +623,7 @@ impl<T> BufferMut<T> {
     /// This never allocates: the region simply changes hands.
     #[inline]
     pub fn freeze(self) -> Buffer<T> {
-        Buffer {
-            bytes: self.bytes.freeze(),
-            length: self.length,
-            alignment: self.alignment,
-            preferred: self.preferred,
-            _marker: PhantomData,
-        }
+        Buffer::from_shared(self.bytes.freeze())
     }
 
     /// Convert the buffer into a `Vec<T>`, without copying where possible.
@@ -685,19 +644,7 @@ impl<T> BufferMut<T> {
     ///
     /// See [`into_vec`](Self::into_vec) for when this succeeds.
     pub fn try_into_vec(self) -> Result<Vec<T>, Self> {
-        if Self::is_zst() {
-            return Ok(zst_vec::<T>(self.length));
-        }
-        let length = self.length;
-        let alignment = self.alignment;
-        let preferred = self.preferred;
-        self.bytes.try_into_vec::<T>().map_err(|bytes| Self {
-            bytes,
-            length,
-            alignment,
-            preferred,
-            _marker: PhantomData,
-        })
+        self.bytes.try_into_vec::<T>().map_err(Self::from_unique)
     }
 
     /// Split the buffer in two at `at`, keeping `..at` and returning `at..`.
@@ -716,30 +663,7 @@ impl<T> BufferMut<T> {
                 at
             );
         }
-        let bytes_at = Self::bytes_for(at);
-        if !self.alignment.is_offset_aligned(bytes_at) {
-            vortex_panic!(
-                "Cannot split buffer at {}, resulting alignment is not {}",
-                at,
-                self.alignment
-            );
-        }
-
-        let bytes = if Self::is_zst() {
-            UniqueBytes::empty()
-        } else {
-            self.bytes.split_off(bytes_at)
-        };
-        let length = self.length.saturating_sub(at);
-        self.length = self.length.min(at);
-
-        BufferMut {
-            bytes,
-            length,
-            alignment: self.alignment,
-            preferred: self.preferred,
-            _marker: PhantomData,
-        }
+        Self::from_unique(self.bytes.split_off(Self::bytes_for(at)))
     }
 
     /// Absorb a buffer previously produced by [`split_off`](Self::split_off).
@@ -750,20 +674,7 @@ impl<T> BufferMut<T> {
     ///
     /// Panics if the buffers have different alignments.
     pub fn unsplit(&mut self, other: Self) {
-        if self.alignment != other.alignment {
-            vortex_panic!(
-                "Cannot unsplit buffers with different alignments: {} and {}",
-                self.alignment,
-                other.alignment
-            );
-        }
-        if Self::is_zst() {
-            self.length += other.length;
-            return;
-        }
-        let alignment = self.alignment;
-        self.bytes.unsplit(other.bytes, alignment);
-        self.length = elements_in::<T>(self.bytes.len());
+        self.bytes.unsplit(other.bytes);
     }
 
     /// Map each element of the buffer with a closure, reusing the buffer's allocation.
@@ -792,10 +703,9 @@ impl<T> BufferMut<T> {
             align_of::<R>(),
             "Alignment of T and R do not match"
         );
-        // SAFETY: `T` and `R` have the same size and alignment, so the buffer's bytes, length and
-        // capacity are all equally valid for `R`, and `BufferMut` stores `R` only in a
-        // `PhantomData`.
-        let mut buf: BufferMut<R> = unsafe { std::mem::transmute(self) };
+        // `T` and `R` have the same size and alignment, so the bytes, length and capacity are all
+        // equally valid for `R`.
+        let mut buf = BufferMut::<R>::from_unique(self.bytes);
         buf.iter_mut().for_each(|item| {
             // SAFETY: the element still holds a `T`, and `T` and `R` have the same size.
             let value = unsafe { std::mem::transmute_copy::<R, T>(item) };
@@ -809,20 +719,22 @@ impl<T> BufferMut<T> {
     /// If the data is already properly aligned, this is a metadata-only operation.
     ///
     /// If the data is not aligned, we copy it into a new allocation.
-    pub fn aligned(self, alignment: Alignment) -> Self {
-        if alignment.is_ptr_aligned(self.as_ptr()) {
-            Self {
-                alignment,
-                preferred: self.preferred.max(alignment),
-                ..self
-            }
+    ///
+    /// ## Panics
+    ///
+    /// Panics when the requested alignment isn't itself aligned to type T.
+    pub fn aligned(mut self, alignment: Alignment) -> Self {
+        Self::check_alignment(alignment);
+        if self.bytes.is_aligned(alignment) {
+            self.bytes.ensure_aligned(alignment);
+            self
         } else {
             let capacity = self.capacity();
             let allocator = self.allocator().clone();
             let mut aligned = Self::with_capacity_preferred_aligned_in(
                 capacity,
                 alignment,
-                Some(self.preferred),
+                Some(self.bytes.preferred_alignment()),
                 allocator,
             );
             aligned.extend_from_slice(&self);
@@ -848,14 +760,7 @@ impl<T> BufferMut<T> {
             align_of::<U>(),
             "Buffer type alignment mismatch"
         );
-
-        BufferMut {
-            bytes: self.bytes,
-            length: self.length,
-            alignment: self.alignment,
-            preferred: self.preferred,
-            _marker: PhantomData,
-        }
+        BufferMut::<U>::from_unique(self.bytes)
     }
 }
 
@@ -863,8 +768,8 @@ impl<T> Clone for BufferMut<T> {
     fn clone(&self) -> Self {
         let mut buffer = BufferMut::<T>::with_capacity_preferred_aligned_in(
             self.capacity(),
-            self.alignment,
-            Some(self.preferred),
+            self.alignment(),
+            Some(self.bytes.preferred_alignment()),
             self.allocator().clone(),
         );
         buffer.extend_from_slice(self.as_slice());
@@ -883,8 +788,8 @@ impl<T: Eq> Eq for BufferMut<T> {}
 impl<T: Debug> Debug for BufferMut<T> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.debug_struct(&format!("BufferMut<{}>", type_name::<T>()))
-            .field("length", &self.length)
-            .field("alignment", &self.alignment)
+            .field("length", &self.len())
+            .field("alignment", &self.alignment())
             .field("as_slice", &TruncatedDebug(self.as_slice()))
             .finish()
     }
@@ -926,6 +831,21 @@ impl<T> AsMut<[T]> for BufferMut<T> {
     }
 }
 
+impl From<UniqueBytes> for ByteBufferMut {
+    /// Bytes need no reinterpretation, so this is free and keeps the window's alignment.
+    #[inline]
+    fn from(bytes: UniqueBytes) -> Self {
+        Self::from_unique(bytes)
+    }
+}
+
+impl From<ByteBufferMut> for UniqueBytes {
+    #[inline]
+    fn from(buffer: ByteBufferMut) -> Self {
+        buffer.bytes
+    }
+}
+
 impl<T> BufferMut<T> {
     /// A helper method for the two [`Extend`] implementations.
     ///
@@ -939,13 +859,7 @@ impl<T> BufferMut<T> {
         // We choose not to use the optional upper bound size hint to match the standard library.
 
         self.reserve(lower_bound);
-
-        // A zero-sized type has unbounded capacity; write no more than the hint promised.
-        let unwritten = if Self::is_zst() {
-            lower_bound
-        } else {
-            self.capacity() - self.len()
-        };
+        let unwritten = self.capacity() - self.len();
 
         // We store `begin` in the case that the lower bound hint is incorrect.
         let begin: *const T = self.spare_capacity_mut().as_mut_ptr().cast();

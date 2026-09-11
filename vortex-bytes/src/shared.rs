@@ -11,6 +11,7 @@ use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering as AtomicOrdering;
 
+use crate::Alignment;
 use crate::BufferAllocatorRef;
 use crate::Release;
 use crate::Shared;
@@ -26,6 +27,12 @@ use crate::shared_state;
 ///
 /// This is the storage behind `vortex-buffer`'s `Buffer<T>`. Cloning and slicing are `O(1)`.
 ///
+/// The window promises that its start is aligned to [`alignment`](Self::alignment), and every
+/// operation that moves the start - [`slice`](Self::slice), [`advance`](Self::advance) - keeps
+/// that promise or panics. A second, [`preferred`](Self::preferred_alignment) alignment records
+/// what the region was allocated with, so that a window thawed back into a [`UniqueBytes`] grows
+/// as aligned as it started.
+///
 /// A handle that has never been shared describes its region inline (see the crate docs for the
 /// state encoding) and allocates no refcount; the first [`clone`](Clone::clone) promotes it.
 pub struct SharedBytes {
@@ -39,6 +46,10 @@ pub struct SharedBytes {
     /// The ownership state. Written only by promotion, which is why it is atomic. Holding a
     /// pointer rather than a `usize` is what keeps the `SHARED` case's provenance.
     state: AtomicPtr<()>,
+    /// The alignment promised for `ptr`.
+    alignment: Alignment,
+    /// The alignment the region was allocated with, and is grown with: at least `alignment`.
+    preferred: Alignment,
 }
 
 // SAFETY: `Shared` is `Send`/`Sync`, and a `SharedBytes` only ever hands out `&[u8]` into a region
@@ -53,18 +64,29 @@ impl SharedBytes {
         State(self.state.load(AtomicOrdering::Acquire))
     }
 
-    /// An empty window that owns nothing, aligned to [`Alignment::MAX`](crate::Alignment::MAX).
+    /// An empty window that owns nothing and promises no alignment.
+    ///
+    /// Its start is nevertheless aligned to [`Alignment::MAX`], so any promise can be made about
+    /// it with [`ensure_aligned`](Self::ensure_aligned).
     #[inline]
     pub fn empty() -> Self {
+        Self::empty_aligned(Alignment::none())
+    }
+
+    /// An empty window that owns nothing and promises `alignment`.
+    #[inline]
+    pub fn empty_aligned(alignment: Alignment) -> Self {
         Self {
             ptr: dangling(),
             len: 0,
             base: dangling(),
             state: AtomicPtr::new(State::STATIC.0),
+            alignment,
+            preferred: alignment,
         }
     }
 
-    /// Borrow a `'static` slice without copying it.
+    /// Borrow a `'static` slice without copying it. The window promises no alignment.
     #[inline]
     pub fn from_static(slice: &'static [u8]) -> Self {
         if slice.is_empty() {
@@ -76,15 +98,18 @@ impl SharedBytes {
             len: slice.len(),
             base: ptr,
             state: AtomicPtr::new(State::STATIC.0),
+            alignment: Alignment::none(),
+            preferred: Alignment::none(),
         }
     }
 
     /// Adopt a region kept alive by `owner`, without copying it.
     ///
-    /// The window covers exactly the bytes `owner` currently references. The region is recorded as
-    /// read-only, so [`try_into_unique`](Self::try_into_unique) will refuse it: the pointer is
-    /// derived from a shared reference, and writing through such a pointer is undefined behaviour
-    /// even when the memory itself is writable.
+    /// The window covers exactly the bytes `owner` currently references, and promises the
+    /// alignment of `T`, which a `[T]` always has. The region is recorded as read-only, so
+    /// [`try_into_unique`](Self::try_into_unique) will refuse it: the pointer is derived from a
+    /// shared reference, and writing through such a pointer is undefined behaviour even when the
+    /// memory itself is writable.
     ///
     /// The owner can be had back through [`owner`](Self::owner) and
     /// [`try_into_owner`](Self::try_into_owner), which is what keeps round trips through foreign
@@ -125,12 +150,15 @@ impl SharedBytes {
         }
         .into_raw();
 
+        let alignment = Alignment::of::<T>();
         Self {
             ptr: base,
             len: size,
             base,
             // SAFETY: we just created `shared` and take over its single reference.
             state: AtomicPtr::new(unsafe { State::shared(shared) }.0),
+            alignment,
+            preferred: alignment,
         }
     }
 
@@ -139,19 +167,25 @@ impl SharedBytes {
     /// ## Safety
     ///
     /// `ptr..ptr + len` must lie within the region `state` describes, `base` must be its first
-    /// byte, and the caller must hand over one reference to it.
+    /// byte, `ptr` must be aligned to `alignment`, and the caller must hand over one reference to
+    /// the region.
     #[inline]
     pub(crate) unsafe fn from_parts(
         ptr: NonNull<u8>,
         len: usize,
         base: NonNull<u8>,
         state: State,
+        alignment: Alignment,
+        preferred: Alignment,
     ) -> Self {
+        debug_assert!(alignment.is_ptr_aligned(ptr.as_ptr()));
         Self {
             ptr,
             len,
             base,
             state: AtomicPtr::new(state.0),
+            alignment,
+            preferred,
         }
     }
 
@@ -180,6 +214,41 @@ impl SharedBytes {
         // is zero `ptr` may dangle, which `from_raw_parts` permits so long as it is aligned and
         // non-null.
         unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
+    }
+
+    /// The alignment the start of the window is promised to have.
+    #[inline]
+    pub fn alignment(&self) -> Alignment {
+        self.alignment
+    }
+
+    /// The alignment the region was allocated with, which is at least
+    /// [`alignment`](Self::alignment). A window thawed into a [`UniqueBytes`] grows with it.
+    #[inline]
+    pub fn preferred_alignment(&self) -> Alignment {
+        self.preferred
+    }
+
+    /// Whether the start of the window is aligned to `alignment`, whatever it promises.
+    #[inline]
+    pub fn is_aligned(&self, alignment: Alignment) -> bool {
+        alignment.is_ptr_aligned(self.ptr.as_ptr())
+    }
+
+    /// Promise `alignment` for the start of the window.
+    ///
+    /// This may lower as well as raise the promise; the preferred alignment only ever rises.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the start of the window is not aligned to `alignment`.
+    #[inline]
+    pub fn ensure_aligned(&mut self, alignment: Alignment) {
+        if !self.is_aligned(alignment) {
+            bytes_panic!("buffer is not aligned to {alignment}");
+        }
+        self.alignment = alignment;
+        self.preferred = self.preferred.max(alignment);
     }
 
     /// How far into its region the window starts.
@@ -297,40 +366,78 @@ impl SharedBytes {
         }
     }
 
-    /// Returns a new handle to `self[begin..end]`.
+    /// Returns a new handle to `self[begin..end]`, promising the same alignment.
     ///
     /// ## Panics
     ///
-    /// Panics if the range is out of bounds.
+    /// Panics if the range is out of bounds, or `begin` is not a multiple of the alignment.
     #[inline]
     pub fn slice(&self, begin: usize, end: usize) -> Self {
+        self.slice_aligned(begin, end, self.alignment)
+    }
+
+    /// Returns a new handle to `self[begin..end]`, promising `alignment`.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if the range is out of bounds, or `begin` is not a multiple of `alignment`.
+    #[inline]
+    pub fn slice_aligned(&self, begin: usize, end: usize, alignment: Alignment) -> Self {
         if begin > end {
             bytes_panic!("range start must not be greater than end: {begin} <= {end}");
         }
         if end > self.len {
             bytes_panic!("range end out of bounds: {end} > {}", self.len);
         }
+        if !alignment.is_offset_aligned(begin) {
+            bytes_panic!("range start {begin} is not aligned to {alignment}");
+        }
+        let preferred = self.preferred.max(alignment);
         if begin == end {
-            return Self::empty();
+            // An empty window need not keep the region alive.
+            let mut empty = Self::empty_aligned(alignment);
+            empty.preferred = preferred;
+            return empty;
+        }
+        // The start of the window is aligned to `self.alignment`, so an offset that is a multiple
+        // of `alignment` keeps it aligned only when `alignment` divides `self.alignment`. A
+        // greater promise has to be checked against the address itself.
+        if !alignment.is_aligned_to(self.alignment) && !self.is_aligned(alignment) {
+            bytes_panic!("buffer is not aligned to {alignment}");
         }
         // SAFETY: `begin < len`, so the offset stays inside the window.
         let ptr = unsafe { self.ptr.add(begin) };
         let mut sliced = self.clone();
         sliced.ptr = ptr;
         sliced.len = end - begin;
+        sliced.alignment = alignment;
+        sliced.preferred = preferred;
         sliced
     }
 
-    /// Returns a new handle to `subset`, which must be contained within this window.
+    /// Returns a new handle to `subset`, which must be contained within this window, promising
+    /// the same alignment.
     ///
     /// ## Panics
     ///
-    /// Panics if `subset` is not contained within this window.
+    /// Panics if `subset` is not contained within this window, or does not start at a multiple of
+    /// the alignment.
     #[inline]
     pub fn slice_ref(&self, subset: &[u8]) -> Self {
+        self.slice_ref_aligned(subset, self.alignment)
+    }
+
+    /// Returns a new handle to `subset`, which must be contained within this window, promising
+    /// `alignment`.
+    ///
+    /// ## Panics
+    ///
+    /// Panics if `subset` is not contained within this window, or is not aligned to `alignment`.
+    #[inline]
+    pub fn slice_ref_aligned(&self, subset: &[u8], alignment: Alignment) -> Self {
         // An empty subset carries no address we can meaningfully check against.
         if subset.is_empty() {
-            return Self::empty();
+            return Self::empty_aligned(alignment);
         }
 
         let self_start = self.ptr.as_ptr().addr();
@@ -342,24 +449,38 @@ impl SharedBytes {
         if sub_start + subset.len() > self_start + self.len {
             bytes_panic!("subset pointer ends past the end of the buffer");
         }
+        if !alignment.is_ptr_aligned(subset.as_ptr()) {
+            bytes_panic!("subset is not aligned to {alignment}");
+        }
 
         let offset = sub_start - self_start;
-        self.slice(offset, offset + subset.len())
+        // SAFETY: `offset < len`, so the offset stays inside the window.
+        let ptr = unsafe { self.ptr.add(offset) };
+        let mut sliced = self.clone();
+        sliced.ptr = ptr;
+        sliced.len = subset.len();
+        sliced.alignment = alignment;
+        sliced.preferred = self.preferred.max(alignment);
+        sliced
     }
 
     /// Advance the start of the window by `cnt` bytes.
     ///
-    /// This does not preserve alignment; see [`UniqueBytes::advance`].
-    ///
     /// ## Panics
     ///
-    /// Panics if `cnt > len`.
+    /// Panics if `cnt > len`, or `cnt` is not a multiple of the alignment.
     #[inline]
     pub fn advance(&mut self, cnt: usize) {
         if cnt > self.len {
             bytes_panic!(
                 "cannot advance past the end of the buffer: {cnt} > {}",
                 self.len
+            );
+        }
+        if !self.alignment.is_offset_aligned(cnt) {
+            bytes_panic!(
+                "cannot advance by {cnt} bytes: the start would no longer be aligned to {}",
+                self.alignment
             );
         }
         // SAFETY: `cnt <= len`, so the new start stays inside (or exactly at the end of) the
@@ -401,7 +522,7 @@ impl SharedBytes {
 
         if state.is_static() {
             return if self.len == 0 {
-                Ok(UniqueBytes::empty())
+                Ok(UniqueBytes::empty_aligned(self.alignment))
             } else {
                 Err(self)
             };
@@ -415,7 +536,15 @@ impl SharedBytes {
             // SAFETY: we hold the only handle, the window lies in the region, and a region we
             // allocated ourselves is always writable. `this` will not release it.
             return Ok(unsafe {
-                UniqueBytes::from_parts(this.ptr, this.len, capacity, this.base, state)
+                UniqueBytes::from_parts(
+                    this.ptr,
+                    this.len,
+                    capacity,
+                    this.base,
+                    state,
+                    this.alignment,
+                    this.preferred,
+                )
             });
         }
 
@@ -428,7 +557,17 @@ impl SharedBytes {
         let base = shared.base;
         let this = ManuallyDrop::new(self);
         // SAFETY: the refcount is one, so we hold the only handle and take over its reference.
-        Ok(unsafe { UniqueBytes::from_parts(this.ptr, this.len, capacity, base, state) })
+        Ok(unsafe {
+            UniqueBytes::from_parts(
+                this.ptr,
+                this.len,
+                capacity,
+                base,
+                state,
+                this.alignment,
+                this.preferred,
+            )
+        })
     }
 
     /// Hand the region out as a `Vec<T>`, if this is the only handle to it and it is exactly a
@@ -461,6 +600,8 @@ impl Clone for SharedBytes {
             len: self.len,
             base: self.base,
             state: AtomicPtr::new(state.0),
+            alignment: self.alignment,
+            preferred: self.preferred,
         }
     }
 }
@@ -489,6 +630,7 @@ impl std::fmt::Debug for SharedBytes {
         f.debug_struct("SharedBytes")
             .field("ptr", &self.ptr)
             .field("len", &self.len)
+            .field("alignment", &self.alignment)
             .field(
                 "state",
                 &if state.is_static() {

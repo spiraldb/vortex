@@ -6,8 +6,8 @@
 //! Aligned, reference-counted byte regions.
 //!
 //! This is the untyped layer beneath [`vortex-buffer`]'s `Buffer<T>` and `BufferMut<T>`: it owns
-//! memory and nothing else. Every element type, length, and alignment decision belongs to the
-//! layer above; everything here is bytes.
+//! memory, and the alignment promised for it, and nothing else. Element types belong to the layer
+//! above, which is a `PhantomData` away from the types here; everything here is bytes.
 //!
 //! Two handle types divide the world by exclusivity, the way `Vec` and `RawVec` divide it by
 //! responsibility:
