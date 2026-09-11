@@ -41,6 +41,9 @@ impl CompareKernel for DecimalByteParts {
 
         // The MSP alone only determines the ordering when it holds the whole value. With
         // lower parts present, fall back to comparing the canonical decimal.
+        //
+        // TODO(mk): Compare the signed MSP and then the unsigned lower parts in significance
+        // order to avoid canonicalizing wide decimals.
         if !lhs.lower_parts().is_empty() {
             return Ok(None);
         }

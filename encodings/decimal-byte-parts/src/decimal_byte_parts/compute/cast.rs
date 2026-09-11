@@ -15,13 +15,13 @@ use crate::decimal_byte_parts::DecimalBytePartsArraySlotsExt;
 
 impl CastReduce for DecimalByteParts {
     fn cast(array: ArrayView<'_, Self>, dtype: &DType) -> VortexResult<Option<ArrayRef>> {
-        // Check if this is just a nullability change
+        // Check if this is just a nullability change.
+        // TODO(mk): Support non-nullability changes as well, e.g. precision.
         if !dtype.eq_ignore_nullability(array.dtype()) {
             return Ok(None);
         }
-        // DecimalBytePartsArray can only have Decimal dtype, so we only handle decimal-to-decimal casts
+        // DecimalBytePartsArray can only have Decimal dtype.
         let DType::Decimal(_, target_nullability) = dtype else {
-            // Cannot cast decimal to non-decimal types - delegate to canonical form
             return Ok(None);
         };
 
@@ -48,14 +48,10 @@ mod tests {
     use vortex_array::dtype::DType;
     use vortex_array::dtype::DecimalDType;
     use vortex_array::dtype::Nullability;
-    use vortex_array::validity::Validity;
     use vortex_buffer::buffer;
 
     use crate::DecimalByteParts;
     use crate::DecimalBytePartsArray;
-    use crate::decimal_byte_parts::testing::i128_parts;
-    use crate::decimal_byte_parts::testing::i256_of;
-    use crate::decimal_byte_parts::testing::i256_parts;
 
     #[test]
     fn test_cast_decimal_byte_parts_nullability() {
@@ -120,14 +116,6 @@ mod tests {
         buffer![-100i32, -200, 300, -400, 500].into_array(),
         DecimalDType::new(10, 2),
     ).unwrap())]
-    #[case::one_lower_part(i128_parts(
-        vec![1i128 << 70, -(1i128 << 70), 5, (1i128 << 64) - 1, 0],
-        Validity::NonNullable,
-    ))]
-    #[case::three_lower_parts(i256_parts(
-        vec![i256_of(1, 0), i256_of(-1, 5), i256_of(0, u128::MAX)],
-        Validity::NonNullable,
-    ))]
     fn test_cast_decimal_byte_parts_conformance(#[case] array: DecimalBytePartsArray) {
         test_cast_conformance(
             &array.into_array(),

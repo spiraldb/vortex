@@ -14,7 +14,6 @@ use vortex_array::dtype::i256;
 use vortex_array::match_each_signed_integer_ptype;
 use vortex_buffer::Buffer;
 use vortex_buffer::BufferMut;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
 use vortex_error::vortex_ensure;
@@ -99,7 +98,7 @@ pub fn assemble_decimal(
 /// A fixed part count lets the compiler unroll each call to [`assemble_wide_decimal_value`].
 fn assemble_wide_decimal<T, const K: usize>(msp: &PrimitiveArray, lower: [&[u64]; K]) -> Buffer<T>
 where
-    T: NativeDecimalType + Shl<usize, Output = T> + BitOr<Output = T>,
+    T: NativeDecimalType + From<i64> + From<u64> + Shl<usize, Output = T> + BitOr<Output = T>,
 {
     let mut out = BufferMut::<T>::with_capacity(msp.len());
     match_each_signed_integer_ptype!(msp.ptype(), |P| {
@@ -123,12 +122,11 @@ where
 #[inline]
 pub(crate) fn assemble_wide_decimal_value<T, const K: usize>(msp: i64, lower: [u64; K]) -> T
 where
-    T: NativeDecimalType + Shl<usize, Output = T> + BitOr<Output = T>,
+    T: NativeDecimalType + From<i64> + From<u64> + Shl<usize, Output = T> + BitOr<Output = T>,
 {
-    let mut value = T::from(msp).vortex_expect("MSP fits in the output type");
+    let mut value: T = msp.into();
     for part in lower {
-        value = (value << LOWER_PART_BITS)
-            | T::from(part).vortex_expect("lower word fits in the output type");
+        value = (value << LOWER_PART_BITS) | part.into();
     }
     value
 }
