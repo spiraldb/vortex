@@ -62,7 +62,7 @@ jobs:
         env:
           RUSTFLAGS: "-C target-cpu=native -C force-frame-pointers=yes"
         run: |
-          cargo build --bin ${{ matrix.benchmark.id }} --profile release_debug ${{ matrix.benchmark.build_args }} --features unstable_encodings
+          cargo build --bin ${{ matrix.benchmark.id }} --profile release_debug ${{ matrix.benchmark.build_args }}
       - name: Pre-upload benchmark debuginfo to Polar Signals
         uses: ./.github/actions/upload-parca-debuginfo
         continue-on-error: true
@@ -143,7 +143,6 @@ jobs:
         shell: bash
         env:
           RUST_BACKTRACE: full
-          VORTEX_EXPERIMENTAL_PATCHED_ARRAY: "1"
           FLAT_LAYOUT_INLINE_ARRAY_NODE: "1"
         run: |
           python3 scripts/random-access-split.py --emit-ingest-records
@@ -153,7 +152,6 @@ jobs:
         shell: bash
         env:
           RUST_BACKTRACE: full
-          VORTEX_EXPERIMENTAL_PATCHED_ARRAY: "1"
           FLAT_LAYOUT_INLINE_ARRAY_NODE: "1"
         run: |
           python3 scripts/compress-split.py --formats arrow-ipc,parquet,lance,vortex --emit-ingest-records
@@ -163,7 +161,6 @@ jobs:
         shell: bash
         env:
           RUST_BACKTRACE: full
-          VORTEX_EXPERIMENTAL_PATCHED_ARRAY: "1"
           FLAT_LAYOUT_INLINE_ARRAY_NODE: "1"
         run: |
           python3 scripts/string-split.py

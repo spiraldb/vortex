@@ -408,11 +408,12 @@ fn test_fsl_of_list() {
     let fsl_size = 3;
 
     // Create a ListBuilder for i32 values.
-    let mut list_builder = ListBuilder::<u64>::with_capacity(
+    let mut list_builder = ListBuilder::<u64>::with_capacity_in(
         Arc::new(DType::Primitive(PType::I32, Nullability::NonNullable)),
         Nullability::NonNullable,
         12,
         6,
+        vortex_buffer::BufferAllocatorRef::static_ref(),
     );
 
     // Add 6 lists (2 FSL * 3 lists each).
@@ -489,11 +490,12 @@ fn test_fsl_of_nullable_list() {
     let fsl_size = 2;
 
     // Create a ListBuilder with nullable lists.
-    let mut list_builder = ListBuilder::<u64>::with_capacity(
+    let mut list_builder = ListBuilder::<u64>::with_capacity_in(
         Arc::new(DType::Primitive(PType::U16, Nullability::NonNullable)),
         Nullability::Nullable,
         8,
         4,
+        vortex_buffer::BufferAllocatorRef::static_ref(),
     );
 
     // Add 4 lists (2 FSL * 2 lists each).

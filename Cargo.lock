@@ -7106,9 +7106,9 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "onpair"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e546e7cd983c9998a5a52e9c7eecaf38e518f2e6fc9c9ec649e8b53748a96bb0"
+checksum = "34272d1ea63266148a9a5b2b96db80a45245d034862302735f2f93413a6f9172"
 dependencies = [
  "hashbrown 0.16.1",
  "rand 0.9.5",
@@ -10749,6 +10749,7 @@ dependencies = [
  "vortex-compressor",
  "vortex-datetime-parts",
  "vortex-decimal-byte-parts",
+ "vortex-edition",
  "vortex-error",
  "vortex-fastlanes",
  "vortex-fsst",
@@ -10998,8 +10999,10 @@ dependencies = [
 name = "vortex-datetime-parts"
 version = "0.1.0"
 dependencies = [
+ "codspeed-divan-compat",
  "num-traits",
  "prost 0.14.4",
+ "rand 0.10.2",
  "rstest",
  "vortex-array",
  "vortex-buffer",
@@ -11647,6 +11650,7 @@ dependencies = [
  "datafusion 55.0.0",
  "datafusion-functions-nested 55.0.0",
  "datafusion-sqllogictest",
+ "futures",
  "indicatif",
  "regex",
  "rstest",

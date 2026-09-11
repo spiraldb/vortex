@@ -11,7 +11,7 @@ from pathlib import Path
 from support import CMakeTest, rust_toolchain_environment
 
 
-def production_function(path, name):
+def production_function(path: Path, name: str) -> str:
     source = path.read_text(encoding="utf-8")
     body = source[source.index(f"\nfn {name}(") + 1 :].split("\nfn ", 1)[0]
     # Drop any doc comments belonging to the next top-level function.
@@ -19,7 +19,7 @@ def production_function(path, name):
 
 
 class CudaCodegenTests(CMakeTest):
-    def setUp(self):
+    def setUp(self) -> None:
         super().setUp()
         self.output = self.work / "output's with spaces"
         self.output.mkdir()
@@ -72,7 +72,7 @@ class CudaCodegenTests(CMakeTest):
         self.harness = self.work / "harness"
         self.command("rustc", "--edition=2024", source, "-o", self.harness)
 
-    def test_architecture_flags_modes_and_reused_outputs(self):
+    def test_architecture_flags_modes_and_reused_outputs(self) -> None:
         explicit = [
             "--generate-code=arch=compute_80,code=[compute_80,sm_80]",
             "--generate-code=arch=compute_90,code=[compute_90]",
@@ -102,7 +102,7 @@ class CudaCodegenTests(CMakeTest):
                     # Reused outputs must contain this invocation, not the previous architecture flags.
                     self.assertEqual((self.output / name).read_bytes(), b"\x00\xff" + json.dumps(args).encode())
 
-    def test_binary_embedding_and_empty_table_exclude_stale_fatbins(self):
+    def test_binary_embedding_and_empty_table_exclude_stale_fatbins(self) -> None:
         stale = self.output / "stale.fatbin"
         stale.write_bytes(b"\x00\xfe")
         for empty in (False, True):

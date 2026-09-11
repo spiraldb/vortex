@@ -202,6 +202,19 @@ fn test_scan_function_registration() {
 }
 
 #[test]
+fn test_vortex_version() -> Result<()> {
+    let conn = database_connection();
+    let query = format!(
+        "SELECT (vortex_version() = '{}')::INT",
+        env!("VORTEX_VERSION")
+    );
+    let result = conn.query(&query)?;
+    let chunk = result.into_iter().next().unwrap();
+    assert_eq!(chunk.get_vector(0).as_slice_with_len::<i32>(1), [1]);
+    Ok(())
+}
+
+#[test]
 fn test_vortex_scan_strings() {
     let file = RUNTIME.block_on(async {
         let strings = VarBinArray::from(vec!["Hello", "Hi", "Hey"]);
@@ -983,8 +996,11 @@ fn test_geometry() {
         let mut wkb_binary: Vec<u8> = Vec::new();
         wkb::writer::write_polygon(&mut wkb_binary, &rect10, &WriteOptions::default())
             .expect("serializing WKB");
-        let mut geometry =
-            VarBinBuilder::<u32>::with_capacity(DType::Binary(Nullability::NonNullable), 10);
+        let mut geometry = VarBinBuilder::<u32>::with_capacity_in(
+            DType::Binary(Nullability::NonNullable),
+            10,
+            vortex::buffer::BufferAllocatorRef::static_ref(),
+        );
         for _ in 0..10 {
             geometry.append_value(wkb_binary.as_slice());
         }
