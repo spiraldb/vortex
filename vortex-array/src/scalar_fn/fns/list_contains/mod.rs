@@ -390,9 +390,10 @@ fn list_is_not_empty(
 
     let sizes = list_array.sizes().clone().execute::<PrimitiveArray>(ctx)?;
     let buffer = match_each_integer_ptype!(sizes.ptype(), |S| {
+        let sizes = sizes.as_slice::<S>();
         BitBuffer::collect_bool_in(
             sizes.len(),
-            |idx| sizes.as_slice::<S>()[idx] != S::zero(),
+            |idx| sizes[idx] != S::zero(),
             ctx.allocator().clone(),
         )
     });

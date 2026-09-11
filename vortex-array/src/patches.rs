@@ -8,6 +8,7 @@ use std::ops::Range;
 
 use num_traits::NumCast;
 use vortex_buffer::BitBuffer;
+use vortex_buffer::BufferAllocatorRef;
 use vortex_buffer::BufferMut;
 use vortex_error::VortexError;
 use vortex_error::VortexExpect as _;
@@ -1036,7 +1037,7 @@ fn take_map<I: NativePType + Hash + Eq + TryFrom<usize>, T: NativePType>(
     min_index: usize,
     max_index: usize,
     include_nulls: bool,
-    allocator: &vortex_buffer::BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<Option<(ArrayRef, ArrayRef)>>
 where
     usize: TryFrom<T>,
@@ -1105,7 +1106,7 @@ fn filter_patches_with_mask<T: IntegerPType>(
     offset: usize,
     patch_values: &ArrayRef,
     mask_indices: &[usize],
-    allocator: &vortex_buffer::BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
 ) -> VortexResult<Option<Patches>> {
     let true_count = mask_indices.len();
     let mut new_patch_indices = BufferMut::<u64>::with_capacity_in(true_count, allocator.clone());
@@ -1204,7 +1205,7 @@ fn take_indices_with_search_fn<
     take_indices: &[T],
     take_validity: Mask,
     include_nulls: bool,
-    allocator: &vortex_buffer::BufferAllocatorRef,
+    allocator: &BufferAllocatorRef,
     search_fn: F,
 ) -> VortexResult<(BufferMut<u64>, BufferMut<u64>)> {
     let mut values_indices = BufferMut::with_capacity_in(take_indices.len(), allocator.clone());

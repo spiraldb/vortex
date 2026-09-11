@@ -34,9 +34,12 @@ const MIN_SLICES_AVERAGE_RUN_LENGTH: usize = 8;
 /// Filter a [`Buffer<T>`] by [`MaskValues`], returning a new buffer.
 ///
 /// Dense uniquely owned buffers are compacted in place; other buffers allocate a new output.
-pub(crate) fn filter_buffer<T: Copy>(buffer: Buffer<T>, mask: &MaskValues) -> Buffer<T> {
+pub(crate) fn filter_buffer<T: Copy>(
+    buffer: Buffer<T>,
+    mask: &MaskValues,
+    allocator: &BufferAllocatorRef,
+) -> Buffer<T> {
     assert_eq!(buffer.len(), mask.len());
-    let allocator = buffer.allocator().clone();
 
     let buffer = if mask.density() >= IN_PLACE_MIN_DENSITY {
         match buffer.try_into_mut() {
@@ -51,7 +54,7 @@ pub(crate) fn filter_buffer<T: Copy>(buffer: Buffer<T>, mask: &MaskValues) -> Bu
         buffer
     };
 
-    filter_slice(buffer.as_slice(), mask, &allocator)
+    filter_slice(buffer.as_slice(), mask, allocator)
 }
 
 fn filter_slice<T: Copy>(
@@ -156,6 +159,10 @@ mod tests {
     use vortex_mask::Mask;
 
     use super::*;
+
+    fn filter_buffer<T: Copy>(buffer: Buffer<T>, mask: &MaskValues) -> Buffer<T> {
+        super::filter_buffer(buffer, mask, BufferAllocatorRef::static_ref())
+    }
 
     fn mask_values(mask: &Mask) -> &MaskValues {
         match mask {
