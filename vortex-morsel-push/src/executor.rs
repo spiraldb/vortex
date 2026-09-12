@@ -50,10 +50,9 @@ type PlanCacheKey = (Expression, Option<Expression>, ConjunctMode, u64);
 const SHARED_LOOKAHEAD_MORSELS: usize = 16;
 
 /// Production SQL defaults for grouped-I/O frontier scheduling. These mirror
-/// `MorselConfig::frontier_defaults`: resident morsels expose their own first frontier plus one
-/// additional down frontier per worker, with no speculative right traversal, and row frontiers
-/// refill in batches.
-const FRONTIER_LOOKAHEAD_PER_THREAD: usize = 1;
+/// `MorselConfig::frontier_defaults`: resident morsels expose their own first frontier, with no
+/// additional down lookahead or speculative right traversal, and row frontiers refill in batches.
+const FRONTIER_LOOKAHEAD_PER_THREAD: usize = 0;
 const FRONTIER_SPECULATIVE_RIGHT: usize = 0;
 const FRONTIER_REFILL_RANGES: usize = 32;
 
@@ -183,8 +182,8 @@ impl PushMorselScanExecutor {
 
     /// Select grouped-I/O frontier scheduling for this executor.
     ///
-    /// The frontier production defaults add one down frontier per worker, no speculative right
-    /// traversal, and refill up to 32 row ranges together. Disabling it preserves the established
+    /// The frontier production defaults add no down-frontier lookahead or speculative right
+    /// traversal and refill up to 32 row ranges together. Disabling it preserves the established
     /// eager-lookahead push policy.
     pub fn with_frontier_io(mut self, frontier_io: bool) -> Self {
         self.io_policy = ExecutorIoPolicy::from_frontier_io(frontier_io);
@@ -729,7 +728,7 @@ mod tests {
     use super::coalesce_ranges;
 
     #[test]
-    fn production_frontier_policy_is_one_zero_thirty_two_for_both_drivers() {
+    fn production_frontier_policy_is_explicit_and_uses_harness_defaults() {
         assert_eq!(
             ExecutorIoPolicy::from_frontier_io(false),
             ExecutorIoPolicy::EagerLookahead
@@ -738,20 +737,15 @@ mod tests {
             ExecutorIoPolicy::from_frontier_io(true),
             ExecutorIoPolicy::Frontier
         );
-        let expected = ExecutorIoSettings {
-            eager_lookahead: false,
-            lookahead_morsels: 0,
-            frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
-            speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
-            frontier_refill_ranges: FRONTIER_REFILL_RANGES,
-        };
         assert_eq!(
             ExecutorIoPolicy::Frontier.settings(ExecutorDriver::Internal),
-            expected
-        );
-        assert_eq!(
-            ExecutorIoPolicy::Frontier.settings(ExecutorDriver::External),
-            expected
+            ExecutorIoSettings {
+                eager_lookahead: false,
+                lookahead_morsels: 0,
+                frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
+                speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
+                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
+            }
         );
         assert_eq!(
             (
@@ -759,7 +753,11 @@ mod tests {
                 FRONTIER_SPECULATIVE_RIGHT,
                 FRONTIER_REFILL_RANGES,
             ),
-            (1, 0, 32)
+            (0, 0, 32)
+        );
+        assert_eq!(
+            ExecutorIoPolicy::Frontier.settings(ExecutorDriver::External),
+            ExecutorIoPolicy::Frontier.settings(ExecutorDriver::Internal)
         );
     }
 

@@ -18,9 +18,6 @@
 //!
 //! Run with:
 //! `cargo run --release -p vortex-morsel-push --features _test-harness --bin tpch-push-eval -- [scale]`
-//!
-//! Production frontier rows use one additional down frontier per thread. Set
-//! `TPCH_FRONTIERS_PER_THREAD=0` to retain the explicit zero-lookahead control.
 
 use std::fs::File;
 use std::io::Read;
@@ -95,10 +92,6 @@ use vortex_utils::parallelism::get_available_parallelism;
 
 const DEFAULT_ITERATIONS: usize = 5;
 const PRIMARY_MORSEL_ROWS: u64 = 131_072;
-
-fn frontier_lookahead_or_default(selected: Option<usize>) -> Option<usize> {
-    selected.or_else(|| MorselConfig::frontier_defaults().frontier_lookahead_per_thread)
-}
 
 #[derive(Clone, Copy)]
 enum Row {
@@ -1062,7 +1055,7 @@ fn main() -> VortexResult<()> {
         }
         if frontier_policy_compare {
             let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
-            let frontier_lookahead_per_thread = frontier_lookahead_or_default(selected_frontiers);
+            let frontier_lookahead_per_thread = Some(selected_frontiers.unwrap_or(0));
             return vec![
                 Row::V1Single,
                 Row::V1Tokio(threads),
@@ -1169,9 +1162,7 @@ fn main() -> VortexResult<()> {
                     morsel_rows,
                     lookahead_morsels: selected_lookahead,
                     resident_morsels_per_thread,
-                    frontier_lookahead_per_thread: frontier_lookahead_or_default(
-                        selected_frontiers,
-                    ),
+                    frontier_lookahead_per_thread: selected_frontiers.or(Some(0)),
                     speculative_frontiers,
                     adaptive_frontiers,
                     frontier_refill_ranges,
@@ -1216,7 +1207,7 @@ fn main() -> VortexResult<()> {
                 morsel_rows: selected_morsel_rows[0],
                 lookahead_morsels: selected_lookahead,
                 resident_morsels_per_thread,
-                frontier_lookahead_per_thread: frontier_lookahead_or_default(selected_frontiers),
+                frontier_lookahead_per_thread: selected_frontiers.or(Some(0)),
                 speculative_frontiers,
                 adaptive_frontiers,
                 frontier_refill_ranges,
@@ -2137,22 +2128,5 @@ fn blocked_per_morsel(
             total as f64 / morsels as f64
         ),
         _ => "—".to_string(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::MorselConfig;
-    use super::Row;
-    use super::frontier_lookahead_or_default;
-
-    #[test]
-    fn direct_harness_uses_production_frontier_default_and_preserves_zero_override() {
-        assert_eq!(frontier_lookahead_or_default(None), Some(1));
-        assert_eq!(frontier_lookahead_or_default(Some(0)), Some(0));
-        assert_eq!(
-            Row::Morsel(MorselConfig::frontier_defaults()).label(),
-            "D  push frontier (x1, splits, frontier+1/thread+0right, refill32ranges)"
-        );
     }
 }

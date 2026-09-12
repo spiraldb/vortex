@@ -72,7 +72,7 @@ selection/filter/scan-order values are defined by the two builders
 | Backend identity | `VORTEX_SCAN_BACKEND=v1` | `VORTEX_SCAN_BACKEND=push-frontier` | Capture env and emitted label with every artifact. |
 | Task concurrency | Without `--threads`: builder default `4 × available_parallelism`; with `--threads N`: `N` Tokio workers and builder factor `1` | Without `--threads`: builder default `4 × available_parallelism` and one push worker; with `--threads N`: the same `N` Tokio workers, builder factor `1`, and one push worker | Record the explicit `N`, DataFusion target partitions, Tokio workers, and host parallelism; use the same command for both backends. |
 | Work unit | Layout boundaries subdivided toward 100,000 rows | Physical morsels target 128 Ki rows | Record both, or add a common experimental setting before attributing differences. |
-| I/O scheduling | Current asynchronous LayoutReader path | Grouped frontier: one extra down frontier per worker, zero speculative right groups, one resident morsel per worker, 32-range refills | Preserve production defaults; record them. |
+| I/O scheduling | Current asynchronous LayoutReader path | Grouped frontier: zero extra down lookahead, zero speculative right groups, 32-range refills | Preserve production defaults; record them. |
 | Pruning | V1 layout scan pruning | Push performs a fresh bounded LayoutReader zone-pruning prepass, then runs the physical plan | Include prepass cost and memory in the frontier measurement. |
 | Supported layouts | General LayoutReader path | Physical root must be a non-null struct; columns must lower through zoned/legacy-stats, flat, or recursively chunked layouts | Verify every shared file; never generate a frontier-only substitute. |
 
@@ -475,6 +475,45 @@ its median; no RSS range exceeds 1.25 times its median. Strict three-sample incr
 as flags in `tpch-summary.json`: wall time for frontier Q1, V1 Q2/Q5/Q19, and both backends Q9/Q14;
 RSS for frontier Q2/Q5/Q10/Q14 and V1 Q8/Q19. Every sample is a fresh process, so these short
 sequences are not cumulative within-process memory growth.
+
+## TPC-H optimization trials
+
+### Q6: one additional down frontier per worker — REJECTED
+
+Candidate `121a0451eb446a618b00b87d786f7c7e34a7eb53` changed the production and direct-harness
+frontier policy from lookahead/right/refill `0/0/32` to `1/0/32`. Both variants were built from
+clean trees with the same command:
+`RUSTC_WRAPPER= cargo build -p datafusion-bench --profile release_debug --features unstable_encodings`.
+
+| Variant | Clean commit | Attested binary | Binary SHA-256 |
+|---|---|---|---|
+| Default `0/0/32` | `f102ab2065d334b69774276926d84bd77cfd9363` | `/private/tmp/datafusion-bench-frontier0-f102ab2065` | `24803a50c3e5be5109c4ed8868dedb605d2ad33aaea3dc933b5abccff50f5351` |
+| Candidate `1/0/32` | `121a0451eb446a618b00b87d786f7c7e34a7eb53` | `/private/tmp/datafusion-bench-frontier1-121a0451eb` | `57355158ad90baa046b807fbbc69f8be1ec57a6924c6d8cccf7d34b50dd8ff87` |
+
+The checked-in matrix runner executed 20 fresh serialized roots, ten per variant, alternating
+variant order while retaining its V1/frontier order inside each root. Each root used Q6, HOT
+prewarm, one measured sample, four timed threads/partitions, one correctness thread/partition, and
+the global exact gate. All 160 ledger records succeeded and linked manifests revalidated. The
+shared input-manifest SHA-256 was
+`57b06c2b942308afbb77805476e05e31f9029e69685936184d463bbe68f68d6a`; every exact-result
+artifact had SHA-256 `da3ce9016e952dbb8c8531851f30a793806744eb8c2ff7246f0ec4ceea16e2eb`.
+
+- Artifact root: `/private/tmp/tpch-q6-causal-ab-20260912-121a0451`
+- Frontier internal median: 12.132 ms (`0/0/32`) versus 11.671 ms (`1/0/32`), a raw 3.8%
+  reduction. The median per-root frontier/V1 ratio improved 4.3% when variants were aggregated
+  independently.
+- Exact pairwise normalization conflicted: the median candidate/baseline frontier/V1 ratio was
+  1.019 (1.013 after excluding one baseline V1 outlier), indicating a 1.9% (1.3%) regression.
+  The normalized effect was also order-sensitive: 0.948 when the candidate ran first and 0.997
+  when it ran second.
+- Supervisor wall regressed: the normalized frontier/V1 ratio was 1.091, while median raw
+  frontier wall rose from 44.980 ms to 47.882 ms and V1 remained stable at 48.406-48.492 ms.
+  Median frontier RSS rose from 59.65 MiB to 60.16 MiB; normalized RSS changed by about +0.5%.
+
+Decision: **REJECTED**. The internal-time signal was not robust to pair/order normalization and
+conflicted with supervisor wall time, so production and direct-harness defaults remain `0/0/32`.
+This records an optimization trial only and does not change any baseline V1, Frontier, Exact, RSS,
+or Time box above.
 
 ## FineWeb Q0-Q8
 

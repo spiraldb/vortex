@@ -92,7 +92,7 @@ benchmark integrations select one of three paths with `VORTEX_SCAN_BACKEND`:
 | --- | --- |
 | `v1` | Established asynchronous `LayoutReader` path and correctness reference. This remains the default. |
 | `push` | Physical push pipeline with its established eager-lookahead I/O policy. |
-| `push-frontier` | The same physical push pipeline with grouped-I/O frontier scheduling: one additional down frontier per worker, zero bounded-right speculation, one resident morsel per worker, and refills of 32 row ranges. The eager-lookahead policy is not active. |
+| `push-frontier` | The same physical push pipeline with grouped-I/O frontier scheduling: zero additional frontier lookahead, zero bounded-right speculation, and refills of 32 row ranges. The eager-lookahead policy is not active. |
 
 Use `push` and `push-frontier` as separate benchmark rows; neither label changes query semantics,
 projection defaults, or correctness APIs.
