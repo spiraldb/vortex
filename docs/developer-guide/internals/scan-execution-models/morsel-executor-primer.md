@@ -85,9 +85,17 @@ a producer retains its completed batch while capacity is unavailable. Stopping c
 cancels outstanding work and releases workers. `MorselScan::run` is the collecting adapter over
 this output path.
 
-`vortex-morsel-scan::MorselScanBuilder` adapts push scans to DataFusion and DuckDB. Set
-`VORTEX_SCAN_BACKEND=push` to select it. V1 remains the established backend and the correctness
-reference used by evaluation tools.
+`vortex-morsel-scan::MorselScanBuilder` adapts push scans to DataFusion and DuckDB. SQL and
+benchmark integrations select one of three paths with `VORTEX_SCAN_BACKEND`:
+
+| Value | Execution path |
+| --- | --- |
+| `v1` | Established asynchronous `LayoutReader` path and correctness reference. This remains the default. |
+| `push` | Physical push pipeline with its established eager-lookahead I/O policy. |
+| `push-frontier` | The same physical push pipeline with grouped-I/O frontier scheduling: zero additional frontier lookahead, zero bounded-right speculation, and refills of 32 row ranges. The eager-lookahead policy is not active. |
+
+Use `push` and `push-frontier` as separate benchmark rows; neither label changes query semantics,
+projection defaults, or correctness APIs.
 
 ## Reading the code
 

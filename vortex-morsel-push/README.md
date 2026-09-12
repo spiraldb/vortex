@@ -54,9 +54,13 @@ cargo run --release -p vortex-morsel-push --features _test-harness --bin tpch-pu
 The default comparison keeps query semantics identical: both paths receive the same projection
 and filter, scan the full row range with the default selection, preserve row order, use the same
 session, layout, and segment source, and consume timed output immediately. The V1 rows use the
-current `LayoutReader` `ScanBuilder` with its default split policy and per-worker concurrency. Push
-rows use the grouped-I/O frontier scheduler; `MorselConfig::frontier_defaults` changes only the
-path selector from `None` to `Some(0)`, adding no extra range-frontier lookahead. Explicit policy
-matrices retain a clearly labelled `push current` row when comparing the two push schedulers.
+current `LayoutReader` `ScanBuilder` with its default split policy and per-worker concurrency. The
+evaluator's default push rows use the grouped-I/O frontier scheduler;
+`MorselConfig::frontier_defaults` changes only the path selector from `None` to `Some(0)`, adding no
+extra range-frontier lookahead. Explicit policy matrices retain a clearly labelled `push current`
+row when comparing the two push schedulers.
 
-SQL integrations select this executor with `VORTEX_SCAN_BACKEND=push`.
+SQL integrations select this executor with `VORTEX_SCAN_BACKEND=push`. That label retains the
+established eager-lookahead policy. `VORTEX_SCAN_BACKEND=push-frontier` selects the grouped-I/O
+frontier scheduler with the production defaults: zero additional frontier lookahead, zero bounded
+right speculation, and row-frontier refills of 32 ranges.
