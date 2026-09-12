@@ -16,6 +16,7 @@ use std::num::NonZeroU32;
 use vortex_array::ArrayRef;
 use vortex_array::Columnar;
 use vortex_array::ExecutionCtx;
+use vortex_array::aggregate_fn::AggregateDTypesRef;
 use vortex_array::aggregate_fn::AggregateFnId;
 use vortex_array::aggregate_fn::AggregateFnVTable;
 use vortex_array::dtype::DType;
@@ -298,48 +299,79 @@ impl AggregateFnVTable for BloomFilter {
     }
 
     /// Returns an empty Bloom filter with all blocks zero-initialized.
-    fn empty_partial(&self, options: &Self::Options, _: &DType) -> VortexResult<Self::Partial> {
+    fn empty_partial(
+        &self,
+        options: &Self::Options,
+        _dtypes: AggregateDTypesRef<'_>,
+    ) -> VortexResult<Self::Partial> {
         Ok(BloomPartial::from(options))
     }
 
-    // Combination happens by doing an OR between both filters bits
-    fn combine_partials(&self, partial: &mut Self::Partial, other: Scalar) -> VortexResult<()> {
-        if other.is_null() {
-            return Ok(());
+    /// Parses a serialized filter into a partial with the configured block count.
+    ///
+    /// A null scalar is an empty filter. This assumes that `scalar` was created using the same
+    /// hash function as `options`. Ideally, an assertion here about which `hash_fn` was used to
+    /// create `scalar` would catch this invariant.
+    fn partial_from_scalar(
+        &self,
+        options: &Self::Options,
+        _dtypes: AggregateDTypesRef<'_>,
+        scalar: Scalar,
+    ) -> VortexResult<Self::Partial> {
+        let mut partial = BloomPartial::from(options);
+        if scalar.is_null() {
+            return Ok(partial);
         }
 
-        let other_as_bytes = other
+        let bytes = scalar
             .as_binary()
             .value()
             .ok_or_else(|| vortex_err!("non-null bloom partial has no bytes"))?;
+        partial.merge(bytes)?;
+        Ok(partial)
+    }
 
-        // This assumes that `other` was created using the same hash function as
-        // `partial`. Ideally, an assertion here about which `hash_fn` was used to create `other`
-        // would catch this invariant.
-        partial.merge(other_as_bytes)
+    /// Merges two filters by OR-ing their blocks together.
+    fn merge_partials(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypesRef<'_>,
+        mut first: Self::Partial,
+        second: Self::Partial,
+    ) -> VortexResult<Self::Partial> {
+        first.union(&second)?;
+        Ok(first)
     }
 
     /// Returns the non-nullable binary representation of a bloom filter
     ///
     /// Basically turns each block into a single byte sequence.
-    fn to_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
+    fn to_scalar(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypesRef<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
         let bytes: Vec<u8> = partial.serialize();
         Ok(Scalar::binary(bytes, Nullability::NonNullable))
-    }
-
-    fn reset(&self, partial: &mut Self::Partial) {
-        partial.reset();
     }
 
     /// Returns true if all the blocks are full.
     ///
     /// When a bloom filter is saturated, it cannot rule out any values.
-    fn is_saturated(&self, partial: &Self::Partial) -> bool {
+    fn is_saturated(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypesRef<'_>,
+        partial: &Self::Partial,
+    ) -> bool {
         partial.is_saturated()
     }
 
     fn accumulate(
         &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypesRef<'_>,
         partial: &mut Self::Partial,
         batch: &Columnar,
         ctx: &mut ExecutionCtx,
@@ -353,12 +385,22 @@ impl AggregateFnVTable for BloomFilter {
         Ok(())
     }
 
-    fn finalize(&self, partials: ArrayRef) -> VortexResult<ArrayRef> {
+    fn finalize(
+        &self,
+        _options: &Self::Options,
+        _dtypes: AggregateDTypesRef<'_>,
+        partials: ArrayRef,
+    ) -> VortexResult<ArrayRef> {
         Ok(partials)
     }
 
-    fn finalize_scalar(&self, partial: &Self::Partial) -> VortexResult<Scalar> {
-        self.to_scalar(partial)
+    fn finalize_scalar(
+        &self,
+        options: &Self::Options,
+        dtypes: AggregateDTypesRef<'_>,
+        partial: &Self::Partial,
+    ) -> VortexResult<Scalar> {
+        self.to_scalar(options, dtypes, partial)
     }
 }
 
@@ -381,9 +423,11 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
     use vortex_array::IntoArray;
     use vortex_array::VortexSessionExecute;
     use vortex_array::aggregate_fn::Accumulator;
+    use vortex_array::aggregate_fn::AggregateDTypes;
     use vortex_array::aggregate_fn::DynAccumulator;
     use vortex_array::test_harness::check_metadata;
 
+    use super::partial::BLOCK_SIZE;
     use super::*;
 
     pub fn setup() -> VortexResult<ExecutionCtx> {
@@ -417,78 +461,98 @@ pub(in crate::layouts::zoned::aggregates::bloom_filter) mod test_utils {
         Ok(bloom_filter)
     }
 
+    /// Aggregate dtypes for a binary input; the Bloom filter's dtypes do not depend on options.
+    fn binary_dtypes(options: &BloomOptions) -> VortexResult<AggregateDTypes> {
+        AggregateDTypes::try_new(
+            &BloomFilter,
+            options,
+            DType::Binary(Nullability::NonNullable),
+        )
+    }
+
     #[test]
     fn saturation_false_when_empty() -> VortexResult<()> {
         let options = BloomOptions::default();
-        let partial =
-            BloomFilter.empty_partial(&options, &DType::Binary(Nullability::NonNullable))?;
-        assert!(!BloomFilter.is_saturated(&partial));
+        let dtypes = binary_dtypes(&options)?;
+        let partial = BloomFilter.empty_partial(&options, dtypes.borrow())?;
+        assert!(!BloomFilter.is_saturated(&options, dtypes.borrow(), &partial));
         Ok(())
     }
 
     #[test]
-    fn saturation_true_when_every_block_is_full() {
-        let blocks = vec![[u32::MAX; 8]; 4];
-        let partial = BloomPartial::from(blocks);
+    fn saturation_true_when_every_block_is_full() -> VortexResult<()> {
+        let options = BloomOptions::default();
+        let dtypes = binary_dtypes(&options)?;
 
-        assert!(BloomFilter.is_saturated(&partial));
+        // Every bit of every block set - the only state the filter reports as saturated.
+        let full = vec![u8::MAX; options.blocks_count().get() as usize * BLOCK_SIZE];
+        let partial = BloomFilter.partial_from_scalar(
+            &options,
+            dtypes.borrow(),
+            Scalar::binary(full, Nullability::NonNullable),
+        )?;
+
+        assert!(BloomFilter.is_saturated(&options, dtypes.borrow(), &partial));
+        Ok(())
     }
 
     #[test]
-    fn combine_partials_rejects_mismatched_block_counts() -> VortexResult<()> {
-        let mut smaller = BloomFilter.empty_partial(
-            &BloomOptions::new(NonZeroU32::new(4).unwrap(), HashFn::XxHash3_64),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
-        let bigger = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+    fn mismatched_block_counts_are_rejected() -> VortexResult<()> {
+        let smaller = BloomOptions::new(NonZeroU32::new(4).unwrap(), HashFn::XxHash3_64);
+        let dtypes = binary_dtypes(&smaller)?;
+        let bigger = BloomFilter.empty_partial(&BloomOptions::default(), dtypes.borrow())?;
 
-        let bigger_scalar = BloomFilter.to_scalar(&bigger)?;
-        let result = BloomFilter.combine_partials(&mut smaller, bigger_scalar);
+        let bigger_scalar =
+            BloomFilter.to_scalar(&BloomOptions::default(), dtypes.borrow(), &bigger)?;
+        assert!(
+            BloomFilter
+                .partial_from_scalar(&smaller, dtypes.borrow(), bigger_scalar)
+                .is_err(),
+            "parsing a partial built with a different blocks_count must fail loudly, not corrupt state"
+        );
 
         assert!(
-            result.is_err(),
-            "combining partials built with different blocks_count must fail loudly, not corrupt state"
+            BloomFilter
+                .merge_partials(
+                    &smaller,
+                    dtypes.borrow(),
+                    BloomFilter.empty_partial(&smaller, dtypes.borrow())?,
+                    bigger
+                )
+                .is_err(),
+            "reducing partials built with different blocks_count must fail loudly, not corrupt state"
         );
         Ok(())
     }
 
     #[test]
-    fn combine_partials_unions_two_disjoint_partials() -> VortexResult<()> {
-        let mut partial = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+    fn merge_partials_unions_two_disjoint_partials() -> VortexResult<()> {
+        let options = BloomOptions::default();
+        let dtypes = binary_dtypes(&options)?;
+
+        let mut partial = BloomFilter.empty_partial(&options, dtypes.borrow())?;
         for i in 0..50i64 {
             partial.insert(i.to_le_bytes());
         }
 
-        let mut secondary_partial = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+        let mut secondary_partial = BloomFilter.empty_partial(&options, dtypes.borrow())?;
         for i in 50..100i64 {
             secondary_partial.insert(i.to_le_bytes());
         }
 
         // The following expected works because seed is equal for all.
         // If the seed is different for both partials, then this will fail.
-        let mut expected = BloomFilter.empty_partial(
-            &BloomOptions::default(),
-            &DType::Binary(Nullability::NonNullable),
-        )?;
+        let mut expected = BloomFilter.empty_partial(&options, dtypes.borrow())?;
         for i in 0..100i64 {
             expected.insert(i.to_le_bytes());
         }
 
-        let secondary_partial_as_scalar = BloomFilter.to_scalar(&secondary_partial)?;
-        BloomFilter.combine_partials(&mut partial, secondary_partial_as_scalar)?;
+        let partial =
+            BloomFilter.merge_partials(&options, dtypes.borrow(), partial, secondary_partial)?;
 
         assert!(
             partial == expected,
-            "merging via combine_partials should equal a single filter built from the union of inputs"
+            "reducing partials should equal a single filter built from the union of inputs"
         );
 
         for i in 0..100i64 {
