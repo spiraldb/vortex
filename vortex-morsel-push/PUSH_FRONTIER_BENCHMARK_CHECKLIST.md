@@ -554,6 +554,62 @@ scaling win.
 - Decision: **REJECTED**. Production push-frontier remains at 128 Ki-row morsels. This trial does
   not change any baseline V1, Frontier, Exact, RSS, or Time box.
 
+### TPC-H Q6 all-core I/O metrics isolation
+
+This was one position-controlled observability diagnostic at the host's 14 active cores, not a
+timing sample or speed claim. Source `f2822e7318cf1d3d922704e9568a0452e71d126e` was clean and
+built with
+`RUSTC_WRAPPER= cargo build -p datafusion-bench --profile release_debug --features unstable_encodings`.
+
+| Identity | SHA-256 |
+|---|---|
+| Preserved `datafusion-bench` binary | `7fadd19b08c383631550c90cfd1c671498b1065b9f2dae21e47a021f0dbb4ca7` |
+| Q6 SQL | `896340eecc214dd73cd411d71d9938e3138add1b49cb1d455d80416426f755b3` |
+| SF1 `lineitem.vortex` input | `8747d6a9e5b0db6f8c65000f4d3bf44dc47753b255ad12d3f1fee256edda76a9` |
+| Exact Arrow result | `da3ce9016e952dbb8c8531851f30a793806744eb8c2ff7246f0ec4ceea16e2eb` |
+
+Both backends used `--threads 14`, target partitions 14, `VORTEX_USE_SCAN_API` unset, and the same
+Q6 SQL/input/default fields. Execution order reversed the preceding diagnostic: push-frontier
+first, then V1. Each fresh `--show-metrics` process immediately followed one identical untimed HOT
+prewarm of its own backend. Push-frontier verified the canonical multiset/schema; V1 independently
+wrote the same 533-byte Arrow artifact and hash.
+
+| Scan evidence | V1 | Push-frontier |
+|---|---:|---:|
+| Individual + coalesced read requests | 11 + 14 | 169 + 14 |
+| Read observations | 25 | 183 |
+| Total read bytes | 36.74 MB | 37.83 MB |
+| Maximum read | 6.86 MB | 393.5 KB |
+| Planned / pruned / driven morsels | n/a | 46 / 46 / 46 |
+| Morsels blocked for I/O | n/a | 46 |
+| I/O suspensions / waits | n/a | 169 / 169 |
+| Cumulative I/O wait | n/a | 83.96 million ns |
+| Nonblocking attempts | n/a | 0 |
+| Output-credit blocks | n/a | 0 |
+| Lookahead refills | n/a | 32 |
+| Decode calls / reuses | n/a | 169 / 61 |
+
+The matched byte volume but 183 versus 25 reads, much smaller maximum read, and exact alignment of
+169 push executor requests with 169 individual requests support request fragmentation. All 46
+morsels suspending supports morsel-level I/O blocking. The 83.96 million ns is an overlapping
+cumulative wait counter, so it does not establish global device starvation or idle workers. All
+46 morsels surviving pruning falsifies effective morsel-level pruning in this execution, while
+zero output-credit blocks falsifies internal output backpressure. The result does not establish a
+performance difference.
+
+Ownership differs above the common file scan. DataFusion owns asynchronous execution partitions
+and assigns unopened file ranges through its shared queue; after a range is opened, the production
+push policy uses one internal worker, so that worker serializes the range's internal morsels.
+DuckDB instead claims adjacent morsels in ascending order, file by file. Once the last morsel of a
+file is claimed, another DuckDB thread can advance while that final claim drains, producing only
+last-claim tail overlap. These are ownership/scheduling invariants, not performance conclusions.
+
+The aggregate printer still omits per-partition and per-worker counters, actual metric-object
+cardinality, file/range coordinates, I/O queue depth and outstanding concurrency, worker occupancy
+and core placement, time to first batch, retained-byte/live-cell peaks, per-morsel distributions,
+and partial/coalesce/final aggregate metrics. Complete commands, units, logs, and hashes are in
+`/private/tmp/tpch-q6-published-scan-metrics-20260912-f2822e73/MANIFEST.md`.
+
 ## FineWeb Q0-Q8
 
 Source inventory: nine semicolon-delimited statements are enumerated from Q0 in file order
