@@ -113,8 +113,6 @@ pub struct ExecPlan {
     root: NodeId,
     output_dtype: DType,
     row_count: u64,
-    /// Whether this plan has multiple serial predicate groups that benefit from cohort admission.
-    predicate_frontier_cohort_eligible: bool,
     /// Root-coordinate boundaries at which every column starts a fresh chunk, used as the
     /// default morsel cut.
     natural_splits: Vec<u64>,
@@ -751,10 +749,6 @@ impl ExecPlan {
         )
     }
 
-    pub(crate) fn predicate_frontier_cohort_eligible(&self) -> bool {
-        self.predicate_frontier_cohort_eligible
-    }
-
     /// The union of every column's chunk boundaries, in root coordinates.
     pub fn natural_splits(&self) -> &[u64] {
         &self.natural_splits
@@ -901,8 +895,8 @@ pub(crate) fn build_plan_with_row_offset(
     };
 
     // The filter: one subtree per conjunct, each over just that conjunct's fields.
-    let (predicate, predicate_frontier_cohort_eligible) = match filter {
-        None => (None, false),
+    let predicate = match filter {
+        None => None,
         Some(filter) => {
             let filter = optimize_ordered_filter(filter, &root_dtype)?;
             let conjuncts = split_conjuncts(&filter);
@@ -912,11 +906,7 @@ pub(crate) fn build_plan_with_row_offset(
                     builder.build_scoped(&conjunct, PushBatching::Streaming, true)?;
                 slots.push((input, bound, push_predicate));
             }
-            let cohort_eligible = mode == ConjunctMode::Cascade && slots.len() >= 2;
-            (
-                Some(builder.push(NodeSpec::Conjunct { slots, mode })),
-                cohort_eligible,
-            )
+            Some(builder.push(NodeSpec::Conjunct { slots, mode }))
         }
     };
 
@@ -962,7 +952,6 @@ pub(crate) fn build_plan_with_row_offset(
         root,
         output_dtype,
         row_count,
-        predicate_frontier_cohort_eligible,
         natural_splits,
     })
 }

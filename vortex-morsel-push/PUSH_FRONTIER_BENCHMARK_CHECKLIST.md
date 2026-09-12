@@ -610,6 +610,64 @@ and core placement, time to first batch, retained-byte/live-cell peaks, per-mors
 and partial/coalesce/final aggregate metrics. Complete commands, units, logs, and hashes are in
 `/private/tmp/tpch-q6-published-scan-metrics-20260912-f2822e73/MANIFEST.md`.
 
+### Q6: same-morsel predicate frontier cohorts — REJECTED
+
+The all-core Q6 instrumentation above isolated fragmented predicate I/O: push-frontier produced
+169 segment requests and 183 read observations while V1 produced 25 read observations for nearly
+the same bytes. Candidate `c2af9d3185b852e89827de367ff399073ecaddc0` therefore exposed all
+same-morsel predicate groups to `register_reads` together while keeping projection gated. The
+matched mechanism diagnostic confirmed the intended change without changing physical work:
+range calls fell 183→106, multi-range calls rose 0→46, and scheduler batches/I/O suspensions fell
+169→92, while logical requests, physical observations, bytes, decodes, projection, and output were
+unchanged.
+
+The first targeted 20-root, 14-core Q6 A/B was promising: its adjacent-pair candidate/baseline
+frontier/V1 internal ratio was 0.937 with 8/10 wins, while paired RSS was 1.052. The broader
+six-root Q1-Q22 screen did not generalize that result: the per-query internal-ratio geometric mean
+was 1.015 with 10/22 wins, and Q3 regressed to 1.219 with 0/3 wins. Because each Q3 table scan has
+only one local pushed predicate even though the joined SQL has several predicates, candidate
+`d36cd719015a2151e14eb44a2cf2d682b372d7e9` restricted cohorting to cascade plans with at least
+two optimized predicate groups in the same scan.
+
+The d36 mechanism gate passed exactly. All deterministic batching, request, suspension, decode,
+byte, and output counters for all three Q3 scan objects matched baseline; Q6 retained 183→106
+range calls and 169→92 scheduler batches/suspensions with unchanged physical work. Both queries
+passed candidate and baseline exact public Arrow verification. The decisive timing gate then ran
+20 fresh Q3+Q6 roots as ten adjacent baseline/candidate pairs, alternating build order. Every root
+globally gated exact results at one thread/partition, then ran two reversed-backend-order samples
+at the host's 14 cores; every measured child had an immediate same-backend HOT prewarm and macOS
+`/usr/bin/time -l` RSS.
+
+| Decisive paired metric | Q3 | Q6 |
+|---|---:|---:|
+| Internal candidate/baseline frontier/V1 | 1.072; 4/10 wins | 1.012; 4/10 wins |
+| Internal IQR / range | 0.917-1.209 / 0.680-1.378 | 0.976-1.052 / 0.834-1.269 |
+| Candidate absolute frontier/V1 internal | 1.139 | 1.147 |
+| Paired peak RSS | 0.990 | 1.039 |
+
+Q3 remained noisy and backend-position-sensitive, while Q6 changed sign by build order and the
+earlier internal improvement did not reproduce. Q6 had one +10.9% RSS pair, although neither
+query's median RSS exceeded the 10% gate. Supervisor wall favored the candidate, but it includes
+startup noise and was secondary to internal query time.
+
+Evidence roots and immutable report hashes:
+
+- `/private/tmp/tpch-q6-predicate-cohort-metrics-20260912-33d889f7/MANIFEST.md`, SHA-256
+  `15f7796ee23c2122a2d363b56bbb4331330d002bb58f93ffdb9ebe3c5c190242`.
+- `/private/tmp/tpch-q6-predicate-cohort-allcore-ab-20260912-c2af9d31/MANIFEST.md`, SHA-256
+  `29017b74e80d5044558c764605433406ae3403c53585b3ac0470081b867d17b3`.
+- `/private/tmp/tpch-allqueries-predicate-cohort-allcore-screen-20260912-c2af9d31/MANIFEST.md`,
+  SHA-256 `d124f0956efcc4f15124ed86bd87ce911a4b0fb7fa84343d6deed6dba203d168`.
+- `/private/tmp/tpch-q3-q6-eligible-cohort-metrics-20260912-d36cd719/MANIFEST.md`, SHA-256
+  `7bf90f4e0fe89e8a1da0dfb6c4061415a5c3db64f81519021d025c078b4f9060`.
+- `/private/tmp/tpch-q3-q6-eligible-cohort-allcore-ab-20260912-d36cd719/MANIFEST.md`, SHA-256
+  `10d049f13433320594d3cb46c2eb0bbeec9ae9645de9af02f5a862242c61ff4f`.
+
+Decision: **REJECTED**. The mechanism and exactness were correct, but the required internal
+all-core Q6 improvement failed to reproduce and Q3 was not convincingly neutral. The inverse
+restores the four touched production/test files byte-for-byte to parent `7b0b2682`. This trial does
+not change any baseline V1, Frontier, Exact, RSS, or Time box.
+
 ## FineWeb Q0-Q8
 
 Source inventory: nine semicolon-delimited statements are enumerated from Q0 in file order

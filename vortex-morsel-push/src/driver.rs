@@ -134,7 +134,6 @@ pub struct MorselScan {
     resident_morsels_per_thread: usize,
     frontier_lookahead_per_thread: Option<usize>,
     frontier_speculation: FrontierSpeculation,
-    predicate_frontier_cohort: bool,
     frontier_refill_ranges: usize,
     output_rows: usize,
     output_bytes: u64,
@@ -268,7 +267,6 @@ struct WorkerRun {
     resident_morsels_per_thread: usize,
     frontier_lookahead_per_thread: Option<usize>,
     frontier_speculation: FrontierSpeculation,
-    predicate_frontier_cohort: bool,
     frontier_refill_ranges: usize,
     output_rows: usize,
     output_bytes: u64,
@@ -2389,46 +2387,6 @@ impl Scheduler {
             return;
         }
         if self.run.frontier_lookahead_per_thread.is_some() && self.run.plan.has_filter() {
-            if self.run.predicate_frontier_cohort {
-                let mut keys = Vec::new();
-                let mut frontier: Option<crate::IoFrontierCursor> = None;
-                for range in &self.run.morsels[start..end] {
-                    let frontier = match frontier.as_mut() {
-                        Some(frontier) => {
-                            frontier.down(range.clone());
-                            frontier
-                        }
-                        None => frontier.insert(self.run.plan.execution_frontier(range.clone())),
-                    };
-                    loop {
-                        let batch = match frontier.next_io(crate::node::PLAN_BUDGET) {
-                            Ok(batch) => batch,
-                            Err(err) => {
-                                self.fail(err);
-                                return;
-                            }
-                        };
-                        if batch.kind() != crate::IoGroupKind::Conjunct {
-                            break;
-                        }
-                        keys.extend_from_slice(batch.io());
-                        if !batch.is_complete() {
-                            continue;
-                        }
-                        match frontier.right() {
-                            Ok(true) => {}
-                            Ok(false) => break,
-                            Err(err) => {
-                                self.fail(err);
-                                return;
-                            }
-                        }
-                    }
-                }
-                let reads = self.run.io.register_reads(keys, IoPriority::Speculative);
-                self.submit_reads(reads);
-                return;
-            }
             let mut batches = Vec::<Vec<IoRead>>::new();
             let speculation = self.run.frontier_speculation;
             let projection_likely = self.projection_likely();
@@ -3821,7 +3779,6 @@ impl MorselScan {
             resident_morsels_per_thread: 1,
             frontier_lookahead_per_thread: None,
             frontier_speculation: FrontierSpeculation::Adaptive,
-            predicate_frontier_cohort: false,
             frontier_refill_ranges: 32,
             output_rows: usize::MAX,
             output_bytes: u64::MAX,
@@ -4038,18 +3995,6 @@ impl MorselScan {
         self
     }
 
-    /// Admit every predicate group in one storage-visible batch while leaving projection gated.
-    /// Plans without at least two cascaded predicate groups retain bounded frontier admission.
-    pub(crate) fn with_predicate_frontier_cohort(mut self) -> Self {
-        self.predicate_frontier_cohort = self.plan.predicate_frontier_cohort_eligible();
-        self
-    }
-
-    #[cfg(test)]
-    pub(crate) fn predicate_frontier_cohort_enabled(&self) -> bool {
-        self.predicate_frontier_cohort
-    }
-
     /// Submit at most this many new row-range frontiers in one lookahead refill batch.
     ///
     /// Refilling in chunks preserves each range's logical group order while exposing same-depth
@@ -4143,7 +4088,6 @@ impl MorselScan {
             resident_morsels_per_thread: self.resident_morsels_per_thread,
             frontier_lookahead_per_thread: self.frontier_lookahead_per_thread,
             frontier_speculation: self.frontier_speculation,
-            predicate_frontier_cohort: self.predicate_frontier_cohort,
             frontier_refill_ranges: self.frontier_refill_ranges,
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
@@ -4296,7 +4240,6 @@ impl MorselScan {
             resident_morsels_per_thread: self.resident_morsels_per_thread,
             frontier_lookahead_per_thread: self.frontier_lookahead_per_thread,
             frontier_speculation: self.frontier_speculation,
-            predicate_frontier_cohort: self.predicate_frontier_cohort,
             frontier_refill_ranges: self.frontier_refill_ranges,
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
