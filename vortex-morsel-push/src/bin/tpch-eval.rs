@@ -103,8 +103,8 @@ enum Row {
 impl Row {
     fn label(&self) -> String {
         match self {
-            Row::V1Single => "A  V1 (1 thread)".to_string(),
-            Row::V1Tokio(threads) => format!("A' V1 (tokio x{threads})"),
+            Row::V1Single => "A  V1 current scan (1 thread)".to_string(),
+            Row::V1Tokio(threads) => format!("A' V1 current scan (tokio x{threads})"),
             Row::Morsel(config) => {
                 let mode = match config.mode {
                     ConjunctMode::Cascade => "",
@@ -142,8 +142,13 @@ impl Row {
                                 refill.unwrap_or_default()
                             )
                         });
+                let path = if config.frontier_lookahead_per_thread.is_some() {
+                    "push frontier"
+                } else {
+                    "push current"
+                };
                 format!(
-                    "D  morsel-push (x{}, {morsel}{mode}{reuse}{resident}{frontier})",
+                    "D  {path} (x{}, {morsel}{mode}{reuse}{resident}{frontier})",
                     config.threads
                 )
             }
@@ -1157,11 +1162,11 @@ fn main() -> VortexResult<()> {
                     morsel_rows,
                     lookahead_morsels: selected_lookahead,
                     resident_morsels_per_thread,
-                    frontier_lookahead_per_thread: selected_frontiers,
+                    frontier_lookahead_per_thread: selected_frontiers.or(Some(0)),
                     speculative_frontiers,
                     adaptive_frontiers,
                     frontier_refill_ranges,
-                    ..Default::default()
+                    ..MorselConfig::frontier_defaults()
                 })
             }));
             return rows;
@@ -1171,21 +1176,21 @@ fn main() -> VortexResult<()> {
             Row::V1Tokio(threads),
             Row::Morsel(MorselConfig {
                 threads: 1,
-                ..Default::default()
+                ..MorselConfig::frontier_defaults()
             }),
             Row::Morsel(MorselConfig {
                 threads: 1,
                 share_decodes: false,
-                ..Default::default()
+                ..MorselConfig::frontier_defaults()
             }),
             Row::Morsel(MorselConfig {
                 threads,
-                ..Default::default()
+                ..MorselConfig::frontier_defaults()
             }),
             Row::Morsel(MorselConfig {
                 threads,
                 morsel_rows: PRIMARY_MORSEL_ROWS,
-                ..Default::default()
+                ..MorselConfig::frontier_defaults()
             }),
         ]
     };
@@ -1202,11 +1207,11 @@ fn main() -> VortexResult<()> {
                 morsel_rows: selected_morsel_rows[0],
                 lookahead_morsels: selected_lookahead,
                 resident_morsels_per_thread,
-                frontier_lookahead_per_thread: selected_frontiers,
+                frontier_lookahead_per_thread: selected_frontiers.or(Some(0)),
                 speculative_frontiers,
                 adaptive_frontiers,
                 frontier_refill_ranges,
-                ..Default::default()
+                ..MorselConfig::frontier_defaults()
             }),
             value => vortex_bail!(
                 "TPCH_MEMORY_ROW must be `v1-single`, `v1-tokio`, or `morsel`, got `{value}`"
@@ -1532,7 +1537,7 @@ fn sweep(
                     query,
                     MorselConfig {
                         threads: n,
-                        ..Default::default()
+                        ..MorselConfig::frontier_defaults()
                     },
                 )
             })?);
@@ -1604,7 +1609,7 @@ fn sweep(
             let config = MorselConfig {
                 threads: available_cpus,
                 morsel_rows: size,
-                ..Default::default()
+                ..MorselConfig::frontier_defaults()
             };
             if size == 0 {
                 morsel_count = run_morsel(session, &fixture.layout, segments, query, config)?

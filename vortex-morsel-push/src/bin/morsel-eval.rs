@@ -55,8 +55,8 @@ enum Row {
 impl Row {
     fn label(&self) -> String {
         match self {
-            Row::V1Single => "A  V1 (1 thread)".to_string(),
-            Row::V1Tokio(threads) => format!("A' V1 (tokio x{threads})"),
+            Row::V1Single => "A  V1 current scan (1 thread)".to_string(),
+            Row::V1Tokio(threads) => format!("A' V1 current scan (tokio x{threads})"),
             Row::Morsel(config) => {
                 let mode = match config.mode {
                     ConjunctMode::Cascade => "",
@@ -94,8 +94,13 @@ impl Row {
                                 refill.unwrap_or_default()
                             )
                         });
+                let path = if config.frontier_lookahead_per_thread.is_some() {
+                    "push frontier"
+                } else {
+                    "push current"
+                };
                 format!(
-                    "D  morsel (x{}, {morsel}{mode}{reuse}{resident}{frontier})",
+                    "D  {path} (x{}, {morsel}{mode}{reuse}{resident}{frontier})",
                     config.threads
                 )
             }
@@ -202,7 +207,7 @@ fn main() -> VortexResult<()> {
                         Row::Morsel(MorselConfig {
                             threads,
                             morsel_rows,
-                            ..Default::default()
+                            ..MorselConfig::frontier_defaults()
                         })
                     })
                     .collect(),
@@ -211,26 +216,26 @@ fn main() -> VortexResult<()> {
                     Row::V1Tokio(threads),
                     Row::Morsel(MorselConfig {
                         threads: 1,
-                        ..Default::default()
+                        ..MorselConfig::frontier_defaults()
                     }),
                     Row::Morsel(MorselConfig {
                         threads: 1,
                         share_decodes: false,
-                        ..Default::default()
+                        ..MorselConfig::frontier_defaults()
                     }),
                     Row::Morsel(MorselConfig {
                         threads,
-                        ..Default::default()
+                        ..MorselConfig::frontier_defaults()
                     }),
                     Row::Morsel(MorselConfig {
                         threads,
                         morsel_rows: 65_536,
-                        ..Default::default()
+                        ..MorselConfig::frontier_defaults()
                     }),
                     Row::Morsel(MorselConfig {
                         threads,
                         mode: ConjunctMode::Parallel,
-                        ..Default::default()
+                        ..MorselConfig::frontier_defaults()
                     }),
                 ],
             };

@@ -290,7 +290,7 @@ fn run_v1_tokio_with_output(
 }
 
 /// How to configure one morsel-executor run.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MorselConfig {
     /// Driving threads.
     pub threads: usize,
@@ -332,6 +332,16 @@ impl Default for MorselConfig {
             adaptive_frontiers: false,
             frontier_refill_ranges: 32,
             demand_hints: DemandHintDelivery::Immediate,
+        }
+    }
+}
+
+impl MorselConfig {
+    /// Select the grouped-I/O frontier scheduler while preserving every other benchmark default.
+    pub fn frontier_defaults() -> Self {
+        Self {
+            frontier_lookahead_per_thread: Some(0),
+            ..Default::default()
         }
     }
 }
@@ -529,5 +539,20 @@ pub fn concat(batches: &[ArrayRef], dtype: &DType) -> VortexResult<ArrayRef> {
         0 => Ok(vortex_array::Canonical::empty(dtype).into_array()),
         1 => Ok(batches[0].clone()),
         _ => Ok(ChunkedArray::try_new(batches.to_vec(), dtype.clone())?.into_array()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MorselConfig;
+
+    #[test]
+    fn frontier_defaults_change_only_the_scan_path() {
+        let expected = MorselConfig {
+            frontier_lookahead_per_thread: Some(0),
+            ..Default::default()
+        };
+
+        assert_eq!(MorselConfig::frontier_defaults(), expected);
     }
 }
