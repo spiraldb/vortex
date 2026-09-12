@@ -418,6 +418,19 @@ impl ExpressionConvertor for DefaultExpressionConvertor {
         let mut leftover_projection: Vec<ProjectionExpr> = vec![];
 
         for projection_expr in source_projection.iter() {
+            // DataFusion can place runtime expressions such as scalar subqueries in a file
+            // source projection. Leave any expression the Vortex converter does not fully
+            // support above the scan instead of failing while opening the file.
+            if !can_be_pushed_down_impl(&projection_expr.expr, input_schema) {
+                scan_projection.extend(
+                    collect_columns(&projection_expr.expr)
+                        .into_iter()
+                        .map(|c| (c.name().to_string(), get_item(c.name(), root()))),
+                );
+                leftover_projection.push(projection_expr.clone());
+                continue;
+            }
+
             let r = projection_expr.expr.apply(|node| {
                 // We only pull column children of scalar functions that we can't push into the scan.
                 if let Some(scalar_fn_expr) = node.downcast_ref::<ScalarFunctionExpr>()
@@ -732,7 +745,11 @@ mod tests {
     use datafusion_common::config::ConfigOptions;
     use datafusion_expr::Operator as DFOperator;
     use datafusion_expr::ScalarUDF;
+    use datafusion_expr::physical_planning_context::ScalarSubqueryResults;
+    use datafusion_expr::physical_planning_context::SubqueryIndex;
     use datafusion_physical_expr::PhysicalExpr;
+    use datafusion_physical_expr::projection::ProjectionExpr;
+    use datafusion_physical_expr::scalar_subquery::ScalarSubqueryExpr;
     use datafusion_physical_plan::expressions as df_expr;
     use insta::assert_snapshot;
     use rstest::rstest;
@@ -810,6 +827,39 @@ mod tests {
         let result = make_vortex_predicate(&expr_convertor, &[col1, col2]).unwrap();
         assert!(result.is_some());
         // Result should be an AND expression combining the two columns
+    }
+
+    #[test]
+    fn split_projection_leaves_case_with_scalar_subquery_above_scan() -> DFResult<()> {
+        let input_schema = Schema::empty();
+        let output_schema = Schema::new(vec![Field::new("value", DataType::Int32, false)]);
+        let scalar_subquery = Arc::new(ScalarSubqueryExpr::new(
+            DataType::Int32,
+            false,
+            SubqueryIndex::new(0),
+            ScalarSubqueryResults::new(1),
+        )) as Arc<dyn PhysicalExpr>;
+        let condition = Arc::new(df_expr::Literal::new(ScalarValue::Boolean(Some(true))))
+            as Arc<dyn PhysicalExpr>;
+        let fallback =
+            Arc::new(df_expr::Literal::new(ScalarValue::Int32(Some(0)))) as Arc<dyn PhysicalExpr>;
+        let case = Arc::new(df_expr::CaseExpr::try_new(
+            None,
+            vec![(condition, scalar_subquery)],
+            Some(fallback),
+        )?) as Arc<dyn PhysicalExpr>;
+        let projection = ProjectionExprs::new([ProjectionExpr::new(case, "value")]);
+
+        let processed = DefaultExpressionConvertor::default().split_projection(
+            projection,
+            &input_schema,
+            &output_schema,
+        )?;
+
+        let leftover = processed.leftover_projection.as_ref();
+        assert_eq!(leftover.len(), 1);
+        assert_eq!(leftover[0].alias, "value");
+        Ok(())
     }
 
     #[rstest]
