@@ -2,8 +2,8 @@
 
 Status as of 2026-09-12. This is the authoritative completion matrix for comparing the established
 V1 scan path with the grouped-I/O push-frontier path through the public DataFusion benchmark
-integration. It records source inventory separately from execution evidence. It contains no claimed
-timings.
+integration. It records source inventory separately from execution evidence. Timing is claimed only
+for rows with a fresh, reproducible measurement artifact recorded below.
 
 Legend: `[x]` means the source inventory is present and was inspected. `[ ]` means that a fresh,
 reproducible artifact satisfying the contract below has not yet been attached. A row is complete
@@ -283,28 +283,28 @@ Source inventory: `tpch_queries()` maps Q1-Q22 to `q1.sql` through `q22.sql`
 
 | Query | Source | V1 | Frontier | Exact | RSS | Time |
 |---|---:|---:|---:|---:|---:|---:|
-| Q1 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q2 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q3 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q4 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q5 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q6 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q7 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q8 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q9 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q10 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q11 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q12 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q13 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q14 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q15 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q16 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q17 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q18 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q19 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q20 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q21 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q22 | [x] | [x] | [x] | [x] | [ ] | [ ] |
+| Q1 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q2 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q3 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q4 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q5 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q6 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q7 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q8 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q9 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q10 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q11 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q12 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q13 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q14 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q15 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q16 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q17 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q18 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q19 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q20 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q21 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q22 | [x] | [x] | [x] | [x] | [x] | [x] |
 
 Evidence for all TPC-H Q1-Q22 V1/Frontier/Exact checks:
 
@@ -315,6 +315,67 @@ Evidence for all TPC-H Q1-Q22 V1/Frontier/Exact checks:
 - Protocol: canonical format v3, explicit `multiset` policy, `--threads 4`, target partitions 4,
   `VORTEX_USE_SCAN_API` unset, and one fresh V1 write plus push-frontier verify process per query.
   This evidence contains no RSS or timing measurements.
+
+Performance and RSS evidence for all TPC-H Q1-Q22 checks:
+
+- Matrix root: `/private/tmp/push-frontier-tpch-matrix-20260912-10e61356`
+- Machine-readable ledger: `matrix.jsonl`; SHA-256
+  `67ded13603a9f5bfe40eb8bea3d24ff9daa87b28de8cca986d22f3ae8d5c5759`
+- Immutable run manifest: `run-manifest.json`; SHA-256
+  `b75ef28ae6511c5cfd57f908dd0c8d1b154e67fe4b3eb342241a932ab2eca9ea`
+- Derived per-query statistics and explicit flag thresholds: `tpch-summary.json`; SHA-256
+  `8a0925cc02210053b155a366ab245fa608b0bcd16a547634ae3a99f8da3efabf`
+- Input identity: 9 files, 275,408,140 bytes, aggregate manifest SHA-256
+  `57b06c2b942308afbb77805476e05e31f9029e69685936184d463bbe68f68d6a`.
+  The benchmark executable SHA-256 is
+  `24803a50c3e5be5109c4ed8868dedb605d2ad33aaea3dc933b5abccff50f5351`.
+  The clean Git identity is `10e6135698d31d8fe83639b6239d2b821ed572c8`, with working-tree identity
+  SHA-256 `4ec04ed05ae9904a6af02d83aa7147912dfd810bb51c53fd5d40ac435201b864`.
+  All input, binary, and Git identities were independently recomputed after the run and matched the
+  manifest.
+- Protocol: global correctness gate first at one thread/partition, followed by three measured
+  samples per backend/query at four threads/partitions. The ledger contains one config record,
+  44 successful correctness children, the `all-correctness-succeeded` marker at sequence 44,
+  132 successful symmetric HOT-cache prewarms, and 132 successful measured children. Every
+  measured child has positive whole-process peak RSS from macOS `/usr/bin/time -l`; no cache drop
+  was attempted.
+
+Supervisor-observed wall time is the median of three fresh measured processes. RSS columns are the
+minimum-maximum whole-process peaks across those processes. Ratios are push-frontier divided by V1.
+
+| Query | V1 median ms | Frontier median ms | F/V time | V1 RSS MiB range | Frontier RSS MiB range | F/V RSS median |
+|---|---:|---:|---:|---:|---:|---:|
+| Q1 | 144.83 | 131.74 | 0.910 | 224.6-262.4 | 189.7-220.8 | 0.860 |
+| Q2 | 48.50 | 46.80 | 0.965 | 94.4-101.3 | 117.5-123.3 | 1.278 |
+| Q3 | 84.57 | 88.13 | 1.042 | 195.2-200.4 | 156.2-166.2 | 0.807 |
+| Q4 | 46.86 | 46.20 | 0.986 | 98.2-104.5 | 82.6-87.3 | 0.842 |
+| Q5 | 82.36 | 87.17 | 1.058 | 308.1-313.3 | 337.0-354.3 | 1.108 |
+| Q6 | 40.44 | 48.15 | 1.191 | 74.8-78.3 | 57.9-61.4 | 0.770 |
+| Q7 | 85.31 | 81.73 | 0.958 | 280.0-291.5 | 227.6-240.6 | 0.858 |
+| Q8 | 82.64 | 81.46 | 0.986 | 216.3-269.3 | 170.1-193.3 | 0.680 |
+| Q9 | 90.61 | 89.97 | 0.993 | 403.5-499.7 | 297.9-313.9 | 0.654 |
+| Q10 | 82.07 | 85.42 | 1.041 | 170.9-190.1 | 176.1-179.8 | 1.011 |
+| Q11 | 47.46 | 48.12 | 1.014 | 76.0-86.2 | 102.1-104.6 | 1.201 |
+| Q12 | 46.98 | 45.77 | 0.974 | 120.5-123.7 | 120.5-127.1 | 1.022 |
+| Q13 | 85.74 | 82.41 | 0.961 | 94.2-96.7 | 97.0-103.2 | 1.061 |
+| Q14 | 45.05 | 48.17 | 1.069 | 106.4-109.8 | 89.2-90.1 | 0.841 |
+| Q15 | 46.79 | 44.35 | 0.948 | 117.1-121.9 | 84.3-85.5 | 0.695 |
+| Q16 | 46.81 | 41.91 | 0.895 | 102.3-107.8 | 110.3-113.4 | 1.085 |
+| Q17 | 146.42 | 138.38 | 0.945 | 219.3-234.0 | 180.6-191.6 | 0.829 |
+| Q18 | 190.17 | 138.84 | 0.730 | 478.2-490.2 | 492.6-521.4 | 1.065 |
+| Q19 | 82.90 | 41.68 | 0.503 | 91.9-94.0 | 63.0-65.2 | 0.696 |
+| Q20 | 83.56 | 79.13 | 0.947 | 176.8-180.5 | 170.5-179.0 | 0.954 |
+| Q21 | 143.14 | 142.30 | 0.994 | 206.7-222.4 | 191.8-217.3 | 0.892 |
+| Q22 | 40.75 | 47.54 | 1.167 | 63.6-69.5 | 76.6-77.9 | 1.144 |
+
+The median frontier/V1 time ratio across queries is 0.980 (range 0.503-1.191); the median RSS ratio
+is 0.876 (range 0.654-1.278). Time regressions occur on Q3, Q5, Q6, Q10, Q11, Q14, and Q22; only Q6
+and Q22 exceed 10%. RSS regressions occur on Q2, Q5, Q10-Q13, Q16, Q18, and Q22; Q2, Q5, Q11, and
+Q22 exceed 10%. The explicit outlier rule flags only Q9 V1 wall time, whose maximum is 1.566 times
+its median; no RSS range exceeds 1.25 times its median. Strict three-sample increases are retained
+as flags in `tpch-summary.json`: wall time for frontier Q1, V1 Q2/Q5/Q19, and both backends Q9/Q14;
+RSS for frontier Q2/Q5/Q10/Q14 and V1 Q8/Q19. Every sample is a fresh process, so these short
+sequences are not cumulative within-process memory growth.
 
 ## FineWeb Q0-Q8
 
