@@ -8,7 +8,6 @@ use vortex_array::arrays::BoolArray;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::list_contains::ListContainsElementReduce;
-use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 
 use crate::array::Sequence;
@@ -24,10 +23,12 @@ impl ListContainsElementReduce for Sequence {
             return Ok(None);
         };
 
-        let list_elements = list_scalar
-            .as_list()
-            .elements()
-            .vortex_expect("non-null element (checked in entry)");
+        // A null list scalar has no elements to intersect with. Nothing checks this before the
+        // reduce rule runs, so fall back to the generic kernel, which resolves a null haystack to
+        // all-null rather than panicking here.
+        let Some(list_elements) = list_scalar.as_list().elements() else {
+            return Ok(None);
+        };
 
         let nullability = list.dtype().nullability() | element.dtype().nullability();
 
@@ -69,6 +70,7 @@ mod tests {
     use vortex_array::VortexSessionExecute;
     use vortex_array::arrays::BoolArray;
     use vortex_array::assert_arrays_eq;
+    use vortex_array::dtype::DType;
     use vortex_array::dtype::Nullability;
     use vortex_array::dtype::PType::I32;
     use vortex_array::expr::list_contains;
@@ -120,6 +122,21 @@ mod tests {
             let expected = BoolArray::from_iter([Some(true), Some(true), Some(false)]);
             assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
         }
+    }
+
+    #[test]
+    fn test_list_contains_null_list() {
+        // A null haystack resolves to null for every row. The reduce rule used to assume the list
+        // scalar was non-null and panicked instead of declining the reduction.
+        let array = Sequence::try_new_typed(1, 1, Nullability::NonNullable, 3)
+            .unwrap()
+            .into_array();
+
+        let null_list = Scalar::null(DType::List(Arc::new(I32.into()), Nullability::Nullable));
+        let expr = list_contains(lit(null_list), root());
+        let result = array.apply(&expr).unwrap();
+        let expected = BoolArray::from_iter([None::<bool>, None, None]);
+        assert_arrays_eq!(result, expected, &mut SESSION.create_execution_ctx());
     }
 
     #[test]
