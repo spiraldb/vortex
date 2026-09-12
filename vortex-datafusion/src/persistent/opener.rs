@@ -3,6 +3,7 @@
 
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::Weak;
 
 use arrow_array::RecordBatchOptions;
@@ -54,6 +55,7 @@ use vortex::scan::selection::Selection;
 use vortex::session::VortexSession;
 use vortex_arrow::ArrowSessionExt;
 use vortex_morsel_scan::MorselScanBuilder;
+use vortex_morsel_scan::MorselScanMetrics;
 use vortex_morsel_scan::ScanBackend;
 use vortex_morsel_scan::ScanExecutorOptions;
 use vortex_morsel_scan::scan_backend_from_env;
@@ -153,10 +155,14 @@ impl<A: 'static + Send> FileScanBuilder<A> {
         }
     }
 
-    fn with_metrics_registry(self, metrics: Arc<dyn MetricsRegistry>) -> Self {
+    fn with_metrics_registry(
+        self,
+        metrics: Arc<dyn MetricsRegistry>,
+        morsel_metrics: Arc<MorselScanMetrics>,
+    ) -> Self {
         match self {
             Self::V1(builder) => Self::V1(builder.with_metrics_registry(metrics)),
-            Self::Morsel(builder) => Self::Morsel(builder.with_metrics_registry(metrics)),
+            Self::Morsel(builder) => Self::Morsel(builder.with_scan_metrics(morsel_metrics)),
         }
     }
 
@@ -218,6 +224,8 @@ pub(crate) struct VortexOpener {
     pub limit: Option<u64>,
     /// A metrics object for tracking performance of the scan.
     pub metrics_registry: Arc<dyn MetricsRegistry>,
+    /// Lazily registered push counters shared by every file/range opened for this partition.
+    pub morsel_scan_metrics: Arc<OnceLock<Arc<MorselScanMetrics>>>,
     /// DataFusion-native metrics exposed through `DataSourceExec`.
     pub df_metrics: ExecutionPlanMetricsSet,
     /// A shared cache of file readers.
@@ -237,6 +245,17 @@ pub(crate) struct VortexOpener {
     pub scan_concurrency: Option<usize>,
 }
 
+impl VortexOpener {
+    fn morsel_scan_metrics(&self) -> Arc<MorselScanMetrics> {
+        Arc::clone(self.morsel_scan_metrics.get_or_init(|| {
+            Arc::new(MorselScanMetrics::new(
+                Arc::clone(&self.metrics_registry),
+                vec![Label::new(PARTITION_LABEL, self.partition.to_string())],
+            ))
+        }))
+    }
+}
+
 impl FileOpener for VortexOpener {
     fn open(&self, file: PartitionedFile) -> DFResult<FileOpenFuture> {
         // Calculate the output schema before replacing partition columns with literals so it
@@ -247,11 +266,11 @@ impl FileOpener for VortexOpener {
         );
         let session = self.session.clone();
         let metrics_registry = Arc::clone(&self.metrics_registry);
+        let morsel_scan_metrics = self.morsel_scan_metrics();
         let labels = vec![
             Label::new(PATH_LABEL, file.path().to_string()),
             Label::new(PARTITION_LABEL, self.partition.to_string()),
         ];
-
         let mut projection = self.projection.clone();
         let mut filter = self.filter.clone();
 
@@ -342,7 +361,7 @@ impl FileOpener for VortexOpener {
                 .open_options()
                 .with_file_size(file.object_meta.size)
                 .with_metrics_registry(Arc::clone(&metrics_registry))
-                .with_labels(labels);
+                .with_labels(labels.clone());
 
             let cached_footer = file_metadata_cache
                 .as_ref()
@@ -609,7 +628,7 @@ impl FileOpener for VortexOpener {
 
             let stream_target_field = Field::new_struct("", stream_schema.fields().clone(), false);
             let stream = scan_builder
-                .with_metrics_registry(metrics_registry)
+                .with_metrics_registry(metrics_registry, morsel_scan_metrics)
                 .with_ordered(has_output_ordering)
                 .map(move |chunk| {
                     let mut ctx = session.create_execution_ctx();
@@ -1052,6 +1071,7 @@ mod tests {
             table_schema,
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
+            morsel_scan_metrics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1061,6 +1081,26 @@ mod tests {
             projection_pushdown: false,
             scan_concurrency: None,
         }
+    }
+
+    #[test]
+    fn morsel_scan_metrics_are_shared_by_opener_clones() {
+        let table_schema = TableSchema::from(Arc::new(Schema::new(vec![Field::new(
+            "a",
+            DataType::Int32,
+            false,
+        )])));
+        let opener = make_opener(Arc::new(InMemory::new()), table_schema.clone(), None);
+        let opener_clone = opener.clone();
+        let first = opener.morsel_scan_metrics();
+        let cloned = opener_clone.morsel_scan_metrics();
+
+        assert!(Arc::ptr_eq(&first, &cloned));
+
+        let mut other_partition = make_opener(Arc::new(InMemory::new()), table_schema, None);
+        other_partition.partition = 2;
+        let other = other_partition.morsel_scan_metrics();
+        assert!(!Arc::ptr_eq(&first, &other));
     }
 
     #[tokio::test]
@@ -1377,6 +1417,7 @@ mod tests {
             table_schema: table_schema.clone(),
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
+            morsel_scan_metrics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1464,6 +1505,7 @@ mod tests {
             table_schema: TableSchema::from(Arc::clone(&table_schema)),
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
+            morsel_scan_metrics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1619,6 +1661,7 @@ mod tests {
             table_schema: table_schema.clone(),
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
+            morsel_scan_metrics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1679,6 +1722,7 @@ mod tests {
             table_schema: TableSchema::from(schema),
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
+            morsel_scan_metrics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1886,6 +1930,7 @@ mod tests {
             table_schema,
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
+            morsel_scan_metrics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),

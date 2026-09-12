@@ -42,8 +42,33 @@ use crate::driver::morsels;
 use crate::io::IoService;
 use crate::nodes::ConjunctMode;
 use crate::source::SegmentSourceDriver;
+use crate::stats::ScanStats;
 
 type PlanCacheKey = (Expression, Option<Expression>, ConjunctMode, u64);
+/// One independently awaitable output unit returned by [`PushMorselScanExecutor`].
+pub type MorselOutputTask = BoxFuture<'static, VortexResult<Option<ArrayRef>>>;
+/// Resolves to the final executor counters after an internally driven scan finishes.
+pub type ScanStatsCompletion = BoxFuture<'static, VortexResult<ScanStats>>;
+#[derive(Clone, Copy)]
+struct ScanShape {
+    morsels_in_row_range: u64,
+    morsels_after_selection: u64,
+    ranges_after_selection: u64,
+    morsels_after_limit: u64,
+    ranges_after_limit: u64,
+}
+
+impl ScanShape {
+    fn apply(self, stats: &mut ScanStats, morsels_after_pruning: u64, ranges_after_pruning: u64) {
+        stats.morsels_in_row_range = self.morsels_in_row_range;
+        stats.morsels_after_selection = self.morsels_after_selection;
+        stats.ranges_after_selection = self.ranges_after_selection;
+        stats.morsels_after_limit = self.morsels_after_limit;
+        stats.ranges_after_limit = self.ranges_after_limit;
+        stats.morsels_after_pruning = morsels_after_pruning;
+        stats.ranges_after_pruning = ranges_after_pruning;
+    }
+}
 
 /// Morsels kept visible to background I/O ahead of the active workers in shared scans, so the
 /// file driver sees enough adjacent segments to coalesce and cold reads overlap execution.
@@ -229,15 +254,84 @@ impl PushMorselScanExecutor {
         selection: vortex_scan::selection::Selection,
         limit: Option<u64>,
         row_offset: u64,
-    ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
-        if limit == Some(0) {
-            return Ok(Vec::new());
+    ) -> VortexResult<Vec<MorselOutputTask>> {
+        let (outputs, completion) = self.build_inner(
+            session, projection, filter, row_range, selection, limit, row_offset, false,
+        )?;
+        debug_assert!(completion.is_none());
+        Ok(outputs)
+    }
+
+    /// Build output tasks plus one future that resolves to final internal executor statistics.
+    ///
+    /// The completion future resolves only after the internally driven scan has finished. It must
+    /// be retained and polled by the consumer; dropping all output tasks still cancels the scan.
+    /// Externally driven scans have no single scan-wide completion point and are rejected.
+    #[expect(clippy::too_many_arguments)]
+    pub fn build_with_stats(
+        &self,
+        session: VortexSession,
+        projection: BoundExpression,
+        filter: Option<BoundExpression>,
+        row_range: Option<Range<u64>>,
+        selection: vortex_scan::selection::Selection,
+        limit: Option<u64>,
+        row_offset: u64,
+    ) -> VortexResult<(Vec<MorselOutputTask>, ScanStatsCompletion)> {
+        if self.external_driver.is_some() {
+            return Err(vortex_err!(
+                "scan-wide statistics are unavailable for externally driven scans"
+            ));
+        }
+        let (outputs, completion) = self.build_inner(
+            session, projection, filter, row_range, selection, limit, row_offset, true,
+        )?;
+        Ok((
+            outputs,
+            completion.ok_or_else(|| vortex_err!("missing scan statistics completion future"))?,
+        ))
+    }
+
+    #[expect(clippy::too_many_arguments)]
+    fn build_inner(
+        &self,
+        session: VortexSession,
+        projection: BoundExpression,
+        filter: Option<BoundExpression>,
+        row_range: Option<Range<u64>>,
+        selection: vortex_scan::selection::Selection,
+        limit: Option<u64>,
+        row_offset: u64,
+        collect_stats: bool,
+    ) -> VortexResult<(Vec<MorselOutputTask>, Option<ScanStatsCompletion>)> {
+        if limit == Some(0) && !collect_stats {
+            return Ok((Vec::new(), None));
         }
 
         let plan = self.plan(&projection, filter.as_ref(), row_offset)?;
         let full_range = row_range.unwrap_or_else(|| 0..plan.row_count());
-        let mut morsels =
-            selected_morsels(morsels(&plan, self.target_rows), &full_range, &selection);
+        let natural_morsels = morsels(&plan, self.target_rows);
+        let morsels_in_row_range = if collect_stats {
+            count_intersecting_morsels(&natural_morsels, &full_range)
+        } else {
+            0
+        };
+        let mut morsels = selected_morsels(natural_morsels, &full_range, &selection);
+        let mut scan_shape = collect_stats.then(|| ScanShape {
+            morsels_in_row_range,
+            morsels_after_selection: count_nonempty_morsels(&morsels),
+            ranges_after_selection: count_ranges(&morsels),
+            morsels_after_limit: 0,
+            ranges_after_limit: 0,
+        });
+        if limit == Some(0) {
+            let completion = scan_shape.map(|shape| {
+                let mut stats = ScanStats::default();
+                shape.apply(&mut stats, 0, 0);
+                Box::pin(async move { Ok(stats) }) as ScanStatsCompletion
+            });
+            return Ok((Vec::new(), completion));
+        }
         // Without a filter every selected row is an output row, so the morsels past the limit
         // can be dropped before any I/O and the last one capped exactly. A filtered scan cannot
         // know where the limit falls.
@@ -261,6 +355,10 @@ impl PushMorselScanExecutor {
             }
             morsels.truncate(caps.len());
             row_caps = Some(caps);
+        }
+        if let Some(shape) = &mut scan_shape {
+            shape.morsels_after_limit = count_nonempty_morsels(&morsels);
+            shape.ranges_after_limit = count_ranges(&morsels);
         }
 
         // Build a fresh pruning reader for this scan. Its zone-map state is shared only by the
@@ -294,8 +392,21 @@ impl PushMorselScanExecutor {
                 Arc::clone(driver),
                 pruner,
                 self.io_policy,
-            );
+            )
+            .map(|outputs| (outputs, None));
         }
+
+        let (mut stats_sender, stats_completion) = if collect_stats {
+            let (sender, receiver) = oneshot::channel();
+            let completion = Box::pin(async move {
+                receiver
+                    .await
+                    .map_err(|_| vortex_err!("shared morsel scan coordinator stopped"))?
+            }) as ScanStatsCompletion;
+            (Some(sender), Some(completion))
+        } else {
+            (None, None)
+        };
 
         // Each output future carries a guard; when the last guard drops, whether because its
         // future was consumed or discarded, there is nobody left to deliver to and the scan is
@@ -333,9 +444,16 @@ impl PushMorselScanExecutor {
                     Err(err) => {
                         let message = err.to_string();
                         fail_senders(senders, &message);
+                        if let Some(sender) = stats_sender.take() {
+                            drop(sender.send(Err(vortex_err!(
+                                "shared morsel scan pruning failed: {message}"
+                            ))));
+                        }
                         return;
                     }
                 };
+                let morsels_after_pruning = count_nonempty_morsels(&morsels);
+                let ranges_after_pruning = count_ranges(&morsels);
 
                 let mut ranges = Vec::new();
                 let mut targets = Vec::new();
@@ -363,6 +481,11 @@ impl PushMorselScanExecutor {
                 }
 
                 if ranges.is_empty() {
+                    if let (Some(sender), Some(scan_shape)) = (stats_sender.take(), scan_shape) {
+                        let mut stats = ScanStats::default();
+                        scan_shape.apply(&mut stats, morsels_after_pruning, ranges_after_pruning);
+                        drop(sender.send(Ok(stats)));
+                    }
                     return;
                 }
                 let threads = ranges.len().min(max_threads);
@@ -377,19 +500,41 @@ impl PushMorselScanExecutor {
                                 targets[index].complete(batch);
                             });
                         let scan = io_policy.configure(scan, ExecutorDriver::Internal);
-                        driver.connect(scan, &driver_handle)?.run().map(|_| ())
+                        driver
+                            .connect(scan, &driver_handle)?
+                            .run()
+                            .map(|(_, stats)| stats)
                     })
                     .await;
-                if let Err(err) = result {
-                    let message = err.to_string();
-                    for group in groups {
-                        group.fail(&message);
+                match result {
+                    Ok(mut stats) => {
+                        if let (Some(sender), Some(scan_shape)) = (stats_sender.take(), scan_shape)
+                        {
+                            scan_shape.apply(
+                                &mut stats,
+                                morsels_after_pruning,
+                                ranges_after_pruning,
+                            );
+                            drop(sender.send(Ok(stats)));
+                        }
+                    }
+                    Err(err) => {
+                        let message = err.to_string();
+                        for group in groups {
+                            group.fail(&message);
+                        }
+                        if let Some(sender) = stats_sender.take() {
+                            drop(
+                                sender
+                                    .send(Err(vortex_err!("shared morsel scan failed: {message}"))),
+                            );
+                        }
                     }
                 }
             })
             .detach();
 
-        Ok(outputs)
+        Ok((outputs, stats_completion))
     }
 
     fn plan(
@@ -693,6 +838,33 @@ fn unbind(expr: &BoundExpression) -> VortexResult<Expression> {
 
 struct SelectedMorsel {
     selected_ranges: Vec<Range<u64>>,
+}
+
+fn count_intersecting_morsels(morsels: &[Range<u64>], row_range: &Range<u64>) -> u64 {
+    u64::try_from(
+        morsels
+            .iter()
+            .filter(|range| range.start < row_range.end && row_range.start < range.end)
+            .count(),
+    )
+    .unwrap_or(u64::MAX)
+}
+
+fn count_nonempty_morsels(morsels: &[SelectedMorsel]) -> u64 {
+    u64::try_from(
+        morsels
+            .iter()
+            .filter(|morsel| !morsel.selected_ranges.is_empty())
+            .count(),
+    )
+    .unwrap_or(u64::MAX)
+}
+
+fn count_ranges(morsels: &[SelectedMorsel]) -> u64 {
+    morsels
+        .iter()
+        .map(|morsel| u64::try_from(morsel.selected_ranges.len()).unwrap_or(u64::MAX))
+        .sum()
 }
 
 fn selected_morsels(

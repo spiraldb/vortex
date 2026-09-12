@@ -15,6 +15,7 @@ use vortex_error::vortex_bail;
 mod scan_builder;
 
 pub use scan_builder::MorselScanBuilder;
+pub use scan_builder::MorselScanMetrics;
 
 const DEFAULT_THREADS: usize = 4;
 

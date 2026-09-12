@@ -352,6 +352,7 @@ impl VortexSource {
             table_schema: self.table_schema.clone(),
             limit: base_config.limit.map(|l| l as u64),
             metrics_registry: Arc::clone(&self.vx_metrics_registry),
+            morsel_scan_metrics: Default::default(),
             df_metrics: self.df_metrics.clone(),
             layout_readers: Arc::clone(&self.layout_readers),
             natural_splits: Arc::clone(&self.natural_splits),

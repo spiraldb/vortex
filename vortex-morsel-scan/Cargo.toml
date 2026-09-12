@@ -15,6 +15,7 @@ version = { workspace = true }
 
 [dependencies]
 futures = { workspace = true }
+parking_lot = { workspace = true }
 vortex-array = { workspace = true }
 vortex-error = { workspace = true }
 vortex-io = { workspace = true }
@@ -24,6 +25,9 @@ vortex-morsel-push = { workspace = true }
 vortex-scan = { workspace = true }
 vortex-session = { workspace = true }
 vortex-utils = { workspace = true }
+
+[dev-dependencies]
+vortex-morsel-push = { workspace = true, features = ["_test-harness"] }
 
 [lints]
 workspace = true

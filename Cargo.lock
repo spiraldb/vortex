@@ -11338,6 +11338,7 @@ name = "vortex-morsel-scan"
 version = "0.1.0"
 dependencies = [
  "futures",
+ "parking_lot",
  "vortex-array",
  "vortex-error",
  "vortex-io",

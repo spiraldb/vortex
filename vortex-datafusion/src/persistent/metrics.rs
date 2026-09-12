@@ -36,6 +36,11 @@ pub(crate) static PATH_LABEL: &str = "file_path";
 ///
 /// This helper exists because the Vortex read path records most scan metrics in
 /// a Vortex [`MetricsRegistry`] rather than in DataFusion's native metrics set.
+/// Push-morsel scan metrics exported through that shared registry are additive
+/// counters, so DataFusion's name-based aggregation is well-defined. Per-scan
+/// peaks, final gauges, and time-to-first-batch are not exported there. Each
+/// execution-partition opener lazily registers one counter-handle set and reuses
+/// it across every file and range it completes.
 ///
 /// # Example
 ///
@@ -125,6 +130,8 @@ fn labels_to_datafusion(tags: &[Label]) -> (Option<usize>, Vec<DatafusionLabel>)
 }
 
 fn metric_value_to_datafusion(name: &str, metric: &MetricValue) -> Vec<DatafusionMetricValue> {
+    // DataFusion stores integer metrics as usize. On 32-bit targets values outside that range are
+    // omitted rather than truncated; the Vortex registry retains the original value.
     match metric {
         MetricValue::Counter(counter) => counter
             .value()
@@ -176,8 +183,10 @@ fn metric_value_to_datafusion(name: &str, metric: &MetricValue) -> Vec<Datafusio
 
             res
         }
-        // TODO(os): add more metric types when added to VortexMetrics
-        _ => vec![],
+        MetricValue::Gauge(gauge) => f_to_u(gauge.value())
+            .into_iter()
+            .map(|value| df_gauge(name.to_string(), value))
+            .collect(),
     }
 }
 
@@ -220,16 +229,78 @@ fn f_to_u(f: f64) -> Option<usize> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
 
     use datafusion_datasource::source::DataSourceExec;
     use datafusion_physical_plan::ExecutionPlanVisitor;
     use datafusion_physical_plan::accept;
+    use datafusion_physical_plan::metrics::MetricValue as DatafusionMetricValue;
+    use datafusion_physical_plan::metrics::MetricsSet;
+    use vortex::metrics::DefaultMetricsRegistry;
+    use vortex::metrics::MetricBuilder as VortexMetricBuilder;
+    use vortex::metrics::MetricsRegistry;
 
     use super::VortexMetricsFinder;
+    use super::metric_to_datafusion;
     use crate::common_tests::TestSessionContext;
 
     /// Counts the number of DataSourceExec nodes in a plan.
     struct DataSourceExecCounter(usize);
+
+    #[test]
+    fn converts_vortex_gauge_without_counter_semantics() {
+        let registry = DefaultMetricsRegistry::default();
+        VortexMetricBuilder::new(&registry)
+            .gauge("retained_bytes_peak")
+            .set(42.0);
+        let metric = registry
+            .snapshot()
+            .into_iter()
+            .next()
+            .expect("registered gauge must be present");
+        let converted = metric_to_datafusion(&metric).collect::<Vec<_>>();
+        assert_eq!(converted.len(), 1);
+        assert!(matches!(
+            converted[0].value(),
+            DatafusionMetricValue::Gauge { name, gauge }
+                if name.as_ref() == "retained_bytes_peak" && gauge.value() == 42
+        ));
+    }
+
+    #[test]
+    fn same_partition_scan_counters_remain_visible_and_aggregate_by_sum() {
+        let registry = DefaultMetricsRegistry::default();
+        for value in [3, 5] {
+            VortexMetricBuilder::new(&registry)
+                .add_label("partition", "2")
+                .counter("morsel_scan.output.rows_before_map")
+                .add(value);
+        }
+
+        let converted = registry
+            .snapshot()
+            .iter()
+            .flat_map(metric_to_datafusion)
+            .collect::<Vec<_>>();
+        assert_eq!(converted.len(), 2);
+        assert!(converted.iter().all(|metric| metric.partition() == Some(2)));
+        assert!(converted.iter().all(|metric| matches!(
+            metric.value(),
+            DatafusionMetricValue::Count { name, .. }
+                if name.as_ref() == "morsel_scan.output.rows_before_map"
+        )));
+
+        let mut set = MetricsSet::new();
+        for metric in converted {
+            set.push(Arc::new(metric));
+        }
+        let aggregated = set.aggregate_by_name();
+        assert!(aggregated.iter().any(|metric| matches!(
+            metric.value(),
+            DatafusionMetricValue::Count { name, count }
+                if name.as_ref() == "morsel_scan.output.rows_before_map" && count.value() == 8
+        )));
+    }
 
     impl ExecutionPlanVisitor for DataSourceExecCounter {
         type Error = std::convert::Infallible;

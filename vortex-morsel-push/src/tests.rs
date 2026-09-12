@@ -952,6 +952,14 @@ impl SegmentSource for NeverReadySource {
     }
 }
 
+struct AlwaysFailSource;
+
+impl SegmentSource for AlwaysFailSource {
+    fn request(&self, _id: SegmentId) -> SegmentFuture {
+        futures::future::ready(Err(vortex_err!("injected segment read failure"))).boxed()
+    }
+}
+
 #[test]
 fn dropping_stream_cancels_never_ready_io() -> VortexResult<()> {
     let session = session();
@@ -1469,6 +1477,142 @@ fn executor_projects_row_idx_with_offset() -> VortexResult<()> {
     )?
     .into_array();
     assert_arrays_eq!(output, expected, &mut session.create_execution_ctx());
+    Ok(())
+}
+
+#[test]
+fn executor_returns_stats_after_successful_completion() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, 12)?;
+    let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
+    let executor =
+        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments))
+            .with_target_rows(4)
+            .with_threads(1);
+
+    let runtime_session = session;
+    let (outputs, stats) = block_on(|handle| async move {
+        let (tasks, stats) = executor.build_with_stats(
+            runtime_session.with_handle(handle),
+            projection,
+            None,
+            None,
+            vortex_scan::selection::Selection::All,
+            None,
+            0,
+        )?;
+        Ok::<_, vortex_error::VortexError>((try_join_all(tasks).await?, stats.await?))
+    })?;
+
+    assert_eq!(stats.morsels_in_row_range, 3);
+    assert_eq!(stats.morsels_after_selection, 3);
+    assert_eq!(stats.ranges_after_selection, 3);
+    assert_eq!(stats.morsels_after_limit, 3);
+    assert_eq!(stats.ranges_after_limit, 3);
+    assert_eq!(stats.morsels_after_pruning, 3);
+    assert_eq!(stats.ranges_after_pruning, 3);
+    assert_eq!(
+        outputs
+            .iter()
+            .flatten()
+            .map(|array| array.len())
+            .sum::<usize>(),
+        12
+    );
+    Ok(())
+}
+
+#[test]
+fn executor_stats_completion_reports_failed_scan() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, 12)?;
+    let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
+    let executor =
+        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::new(AlwaysFailSource))
+            .with_target_rows(4)
+            .with_threads(1);
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(2)
+        .build()
+        .map_err(|err| vortex_err!("failed to build test runtime: {err}"))?;
+    let result = runtime.block_on(async move {
+        let (tasks, stats) = executor.build_with_stats(
+            session.with_tokio(),
+            projection,
+            None,
+            None,
+            vortex_scan::selection::Selection::All,
+            None,
+            0,
+        )?;
+        let outputs = try_join_all(tasks).await;
+        let stats = stats.await;
+        assert!(outputs.is_err());
+        stats
+    });
+    assert!(result.is_err());
+    Ok(())
+}
+
+#[test]
+fn executor_returns_completed_empty_scan_stats() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, 12)?;
+    let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
+    let executor =
+        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments));
+
+    let stats = block_on(|handle| async move {
+        let (tasks, stats) = executor.build_with_stats(
+            session.with_handle(handle),
+            projection,
+            None,
+            Some(0..0),
+            vortex_scan::selection::Selection::All,
+            None,
+            0,
+        )?;
+        assert!(tasks.is_empty());
+        stats.await
+    })?;
+
+    assert_eq!(stats.morsels_in_row_range, 0);
+    assert_eq!(stats.morsels_after_selection, 0);
+    assert_eq!(stats.ranges_after_pruning, 0);
+    Ok(())
+}
+
+#[test]
+fn zero_limit_stats_preserve_pre_limit_phase_boundaries() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, 12)?;
+    let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
+    let executor =
+        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments))
+            .with_target_rows(4);
+
+    let stats = block_on(|handle| async move {
+        let (tasks, stats) = executor.build_with_stats(
+            session.with_handle(handle),
+            projection,
+            None,
+            None,
+            vortex_scan::selection::Selection::All,
+            Some(0),
+            0,
+        )?;
+        assert!(tasks.is_empty());
+        stats.await
+    })?;
+
+    assert_eq!(stats.morsels_in_row_range, 3);
+    assert_eq!(stats.morsels_after_selection, 3);
+    assert_eq!(stats.ranges_after_selection, 3);
+    assert_eq!(stats.morsels_after_limit, 0);
+    assert_eq!(stats.ranges_after_limit, 0);
+    assert_eq!(stats.morsels_after_pruning, 0);
+    assert_eq!(stats.ranges_after_pruning, 0);
     Ok(())
 }
 

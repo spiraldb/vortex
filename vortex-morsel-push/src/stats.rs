@@ -15,9 +15,29 @@ pub(crate) fn push_profile_enabled() -> bool {
         })
 }
 
-/// Counters accumulated by one driving thread, summed across threads at the end of a run.
+/// Counters accumulated across one executor run.
+///
+/// Driving-thread counters are summed at the end of the run. The owning executor then fills the
+/// row-range, selection, limit, and pruning shape fields exactly once.
 #[derive(Clone, Debug, Default)]
 pub struct ScanStats {
+    /// Natural morsels intersecting the scan's configured row range before row selection.
+    pub morsels_in_row_range: u64,
+    /// Logical morsels retaining at least one range after row selection and before static pruning.
+    pub morsels_after_selection: u64,
+    /// Disjoint row ranges retained after row selection and before static pruning.
+    pub ranges_after_selection: u64,
+    /// Logical morsels remaining after the executor's unfiltered limit optimization.
+    ///
+    /// Filtered limits are applied by the caller after filtering, so this equals
+    /// [`Self::morsels_after_selection`] for filtered scans.
+    pub morsels_after_limit: u64,
+    /// Disjoint row ranges remaining after the executor's unfiltered limit optimization.
+    pub ranges_after_limit: u64,
+    /// Logical morsels retaining at least one range after static pruning.
+    pub morsels_after_pruning: u64,
+    /// Disjoint row ranges retained after static pruning.
+    pub ranges_after_pruning: u64,
     /// Push-node events consumed by worker-local pipelines.
     pub push_node_transitions: u64,
     /// Child batches routed directly through a parent edge in the current push trampoline.
@@ -197,6 +217,13 @@ pub struct ScanStats {
 impl ScanStats {
     /// Fold another thread's counters into this one.
     pub fn merge(&mut self, other: &ScanStats) {
+        self.morsels_in_row_range += other.morsels_in_row_range;
+        self.morsels_after_selection += other.morsels_after_selection;
+        self.ranges_after_selection += other.ranges_after_selection;
+        self.morsels_after_limit += other.morsels_after_limit;
+        self.ranges_after_limit += other.ranges_after_limit;
+        self.morsels_after_pruning += other.morsels_after_pruning;
+        self.ranges_after_pruning += other.ranges_after_pruning;
         self.push_node_transitions += other.push_node_transitions;
         self.push_inline_transfers += other.push_inline_transfers;
         self.push_dispatch_spills += other.push_dispatch_spills;
