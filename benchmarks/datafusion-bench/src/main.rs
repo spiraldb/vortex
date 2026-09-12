@@ -2,10 +2,12 @@
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
 use std::num::NonZeroUsize;
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 
+use anyhow::Context;
 use clap::Parser;
 use clap::value_parser;
 use custom_labels::asynchronous::Label;
@@ -19,6 +21,12 @@ use datafusion::datasource::listing::ListingTableUrl;
 use datafusion::prelude::SessionContext;
 use datafusion_bench::format_to_df_format;
 use datafusion_bench::metrics::MetricsSetExt;
+use datafusion_bench::result_artifacts::ResultArtifactOperation;
+use datafusion_bench::result_artifacts::ResultOrderPolicy;
+use datafusion_bench::result_artifacts::effective_scan_backend;
+use datafusion_bench::result_artifacts::validate_result_artifact_execution;
+use datafusion_bench::result_artifacts::verify_result_artifact;
+use datafusion_bench::result_artifacts::write_result_artifact;
 use datafusion_bench::tracer::get_labelset_from_global;
 use datafusion_bench::tracer::get_static_tracer;
 use datafusion_bench::tracer::set_labels;
@@ -122,6 +130,28 @@ struct Args {
 
     #[arg(long = "opt", value_delimiter = ',', value_parser = value_parser!(Opt))]
     options: Vec<Opt>,
+
+    /// Write one canonical Arrow result artifact per selected query and format, then exit.
+    #[arg(
+        long,
+        value_name = "DIRECTORY",
+        conflicts_with = "verify_result_artifacts",
+        conflicts_with = "explain"
+    )]
+    write_result_artifacts: Option<PathBuf>,
+
+    /// Verify each selected query and format against canonical result artifacts, then exit.
+    #[arg(
+        long,
+        value_name = "DIRECTORY",
+        conflicts_with = "write_result_artifacts",
+        conflicts_with = "explain"
+    )]
+    verify_result_artifacts: Option<PathBuf>,
+
+    /// Result equality policy. Ordered additionally checks the exact final row sequence.
+    #[arg(long, value_enum, default_value = "multiset")]
+    result_order: ResultOrderPolicy,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -152,6 +182,32 @@ async fn run(args: Args, threads: Option<usize>) -> anyhow::Result<()> {
     }
 
     require_prepared_data(&*benchmark, &args.formats)?;
+
+    if let Some(directory) = args.write_result_artifacts.as_deref() {
+        run_result_artifacts(
+            &*benchmark,
+            &args.formats,
+            &filtered_queries,
+            threads,
+            ResultArtifactMode::Write(directory),
+            args.result_order,
+        )
+        .await?;
+        return Ok(());
+    }
+
+    if let Some(directory) = args.verify_result_artifacts.as_deref() {
+        run_result_artifacts(
+            &*benchmark,
+            &args.formats,
+            &filtered_queries,
+            threads,
+            ResultArtifactMode::Verify(directory),
+            args.result_order,
+        )
+        .await?;
+        return Ok(());
+    }
 
     let benchmark_name = benchmark.dataset().to_string();
 
@@ -239,6 +295,71 @@ async fn run(args: Args, threads: Option<usize>) -> anyhow::Result<()> {
         let benchmark_id = format!("datafusion-{}", benchmark.dataset_name());
         let writer = create_output_writer(&args.display_format, args.output_path, &benchmark_id)?;
         runner.export_to(&args.display_format, writer)?;
+    }
+
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum ResultArtifactMode<'a> {
+    Write(&'a Path),
+    Verify(&'a Path),
+}
+
+async fn run_result_artifacts<B: Benchmark + ?Sized>(
+    benchmark: &B,
+    formats: &[Format],
+    queries: &[(usize, String)],
+    threads: Option<usize>,
+    mode: ResultArtifactMode<'_>,
+    order_policy: ResultOrderPolicy,
+) -> anyhow::Result<()> {
+    let backend_value = match std::env::var("VORTEX_SCAN_BACKEND") {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(error) => anyhow::bail!("VORTEX_SCAN_BACKEND is not valid Unicode: {error}"),
+    };
+    let backend = effective_scan_backend(backend_value.as_deref())?;
+    let operation = match mode {
+        ResultArtifactMode::Write(_) => ResultArtifactOperation::Write,
+        ResultArtifactMode::Verify(_) => ResultArtifactOperation::Verify,
+    };
+    validate_result_artifact_execution(operation, backend, use_scan_api())?;
+
+    for format in formats {
+        let session = datafusion_bench::get_session_context(threads);
+        datafusion_bench::make_object_store(&session, benchmark.data_url())?;
+        register_benchmark_tables(&session, benchmark, *format, threads).await?;
+
+        for (query_idx, query) in queries {
+            let (batches, plan) = execute_query(&session, query)
+                .await
+                .with_context(|| format!("failed to execute Q{query_idx} [{format}]"))?;
+            let directory = match mode {
+                ResultArtifactMode::Write(directory) => directory,
+                ResultArtifactMode::Verify(directory) => directory,
+            };
+            let path = directory.join(format!("q{query_idx:02}-{}.arrow", format.name()));
+
+            match mode {
+                ResultArtifactMode::Write(_) => {
+                    write_result_artifact(&path, plan.schema(), &batches).with_context(|| {
+                        format!("failed to write result for Q{query_idx} [{format}]")
+                    })?;
+                    println!("wrote Q{query_idx} [{format}] to {}", path.display());
+                }
+                ResultArtifactMode::Verify(_) => {
+                    verify_result_artifact(&path, plan.schema(), &batches, order_policy)
+                        .with_context(|| {
+                            format!("failed to verify result for Q{query_idx} [{format}]")
+                        })?;
+                    println!(
+                        "verified Q{query_idx} [{format}] against {}",
+                        path.display()
+                    );
+                }
+            }
+        }
     }
 
     Ok(())

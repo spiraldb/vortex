@@ -2382,6 +2382,7 @@ name = "datafusion-bench"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "arrow-row 59.2.0",
  "clap",
  "custom-labels",
  "datafusion 55.0.0",
@@ -2394,6 +2395,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "parking_lot",
+ "tempfile",
  "tokio",
  "url",
  "vortex",

@@ -171,3 +171,92 @@ impl Benchmark for ClickBenchSortedBenchmark {
 fn clickbench_flavor(flavor: Flavor) -> String {
     format!("clickbench_{flavor}")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const CORRECTNESS_QUERIES: &str = "sql/clickbench_correctness_queries.sql";
+
+    #[test]
+    fn correctness_query_file_preserves_all_query_indices() -> Result<()> {
+        let canonical = read_clickbench_queries(None)?;
+        let correctness_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(CORRECTNESS_QUERIES);
+        let correctness = read_clickbench_queries(Some(&correctness_path.to_string_lossy()))?;
+
+        assert_eq!(canonical.len(), 43);
+        assert_eq!(correctness.len(), canonical.len());
+        let differing_indices = canonical
+            .iter()
+            .zip(&correctness)
+            .filter_map(|((idx, canonical_sql), (_, correctness_sql))| {
+                (canonical_sql != correctness_sql).then_some(*idx)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            differing_indices,
+            [17, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41]
+        );
+        for ((canonical_idx, canonical_sql), (correctness_idx, correctness_sql)) in
+            canonical.iter().zip(&correctness)
+        {
+            assert_eq!(canonical_idx, correctness_idx);
+            if !differing_indices.contains(canonical_idx) {
+                assert_eq!(canonical_sql, correctness_sql);
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn correctness_query_file_gives_q17_a_total_order() -> Result<()> {
+        let correctness_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(CORRECTNESS_QUERIES);
+        let correctness = read_clickbench_queries(Some(&correctness_path.to_string_lossy()))?;
+
+        assert_eq!(
+            correctness[17],
+            (
+                17,
+                "SELECT \"UserID\", \"SearchPhrase\", COUNT(*) FROM hits GROUP BY \"UserID\", \
+                 \"SearchPhrase\" ORDER BY \"UserID\", \"SearchPhrase\" LIMIT 10"
+                    .to_string()
+            )
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn correctness_query_file_gives_topk_queries_total_tie_breakers() -> Result<()> {
+        let correctness_path = Path::new(env!("CARGO_MANIFEST_DIR")).join(CORRECTNESS_QUERIES);
+        let correctness = read_clickbench_queries(Some(&correctness_path.to_string_lossy()))?;
+
+        let expected_order_suffixes = [
+            (31, "ORDER BY c DESC, \"WatchID\", \"ClientIP\" LIMIT 10"),
+            (32, "ORDER BY c DESC, \"WatchID\", \"ClientIP\" LIMIT 10"),
+            (33, "ORDER BY c DESC, \"URL\" LIMIT 10"),
+            (34, "ORDER BY c DESC, \"URL\" LIMIT 10"),
+            (35, "ORDER BY c DESC, \"ClientIP\" LIMIT 10"),
+            (36, "ORDER BY PageViews DESC, \"URL\" LIMIT 10"),
+            (37, "ORDER BY PageViews DESC, \"Title\" LIMIT 10"),
+            (38, "ORDER BY PageViews DESC, \"URL\" LIMIT 10 OFFSET 1000"),
+            (
+                39,
+                "ORDER BY PageViews DESC, \"TraficSourceID\", \"SearchEngineID\", \
+                 \"AdvEngineID\", Src, Dst LIMIT 10 OFFSET 1000",
+            ),
+            (
+                40,
+                "ORDER BY PageViews DESC, \"URLHash\", \"EventDate\" LIMIT 10 OFFSET 100",
+            ),
+            (
+                41,
+                "ORDER BY PageViews DESC, \"WindowClientWidth\", \"WindowClientHeight\" \
+                 LIMIT 10 OFFSET 10000",
+            ),
+        ];
+        for (query_idx, expected_suffix) in expected_order_suffixes {
+            assert!(correctness[query_idx].1.contains(expected_suffix));
+        }
+        Ok(())
+    }
+}

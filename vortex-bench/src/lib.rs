@@ -407,6 +407,7 @@ const DEFAULT_SCALE_FACTOR: &str = "1.0";
 
 const SCALE_FACTOR_KEY: &str = "scale-factor";
 const REMOTE_DATA_KEY: &str = "remote-data-dir";
+const QUERIES_FILE_KEY: &str = "queries-file";
 
 /// Factory function to create a benchmark instance from CLI arguments.
 pub fn create_benchmark(b: BenchmarkArg, opts: &Opts) -> anyhow::Result<Box<dyn Benchmark>> {
@@ -419,7 +420,8 @@ pub fn create_benchmark(b: BenchmarkArg, opts: &Opts) -> anyhow::Result<Box<dyn 
         BenchmarkArg::ClickBench => {
             let flavor = opts.get_as::<Flavor>("flavor").unwrap_or_default();
             let remote_data_dir = opts.get_as::<String>(REMOTE_DATA_KEY);
-            let benchmark = ClickBenchBenchmark::new(flavor, None, remote_data_dir)?;
+            let queries_file = opts.get_as::<String>(QUERIES_FILE_KEY);
+            let benchmark = ClickBenchBenchmark::new(flavor, queries_file, remote_data_dir)?;
             Ok(Box::new(benchmark) as _)
         }
         BenchmarkArg::ClickBenchSorted => {
@@ -591,4 +593,34 @@ where
     }
 
     sql_statements
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    #[test]
+    fn clickbench_factory_accepts_queries_file_option() -> anyhow::Result<()> {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("sql")
+            .join("clickbench_correctness_queries.sql");
+        let option = format!("queries-file={}", path.display()).parse::<Opt>()?;
+        let benchmark = create_benchmark(BenchmarkArg::ClickBench, &Opts::from(vec![option]))?;
+        let queries = benchmark.queries()?;
+
+        assert_eq!(queries.len(), 43);
+        assert!(
+            queries[17]
+                .1
+                .contains("ORDER BY \"UserID\", \"SearchPhrase\" LIMIT 10")
+        );
+        assert!(
+            queries[31]
+                .1
+                .contains("ORDER BY c DESC, \"WatchID\", \"ClientIP\" LIMIT 10")
+        );
+        Ok(())
+    }
 }

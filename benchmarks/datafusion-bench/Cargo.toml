@@ -27,6 +27,7 @@ test = false
 
 [dependencies]
 anyhow = { workspace = true }
+arrow-row = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 custom-labels = { workspace = true }
 datafusion = { workspace = true, features = [
@@ -52,6 +53,9 @@ vortex-bench = { workspace = true }
 vortex-cuda = { workspace = true, optional = true }
 vortex-datafusion = { workspace = true }
 vortex-metrics = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [build-dependencies]
 custom-labels = { workspace = true }
