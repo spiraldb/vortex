@@ -483,15 +483,15 @@ Source inventory: nine semicolon-delimited statements are enumerated from Q0 in 
 
 | Query | Source | V1 | Frontier | Exact | RSS | Time |
 |---|---:|---:|---:|---:|---:|---:|
-| Q0 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q1 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q2 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q3 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q4 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q5 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q6 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q7 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q8 | [x] | [x] | [x] | [x] | [ ] | [ ] |
+| Q0 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q1 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q2 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q3 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q4 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q5 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q6 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q7 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q8 | [x] | [x] | [x] | [x] | [x] | [x] |
 
 Evidence for all FineWeb Q0-Q8 V1/Frontier/Exact checks:
 
@@ -506,6 +506,64 @@ Evidence for all FineWeb Q0-Q8 V1/Frontier/Exact checks:
   `VORTEX_USE_SCAN_API` unset, and one fresh V1 write plus push-frontier verify process per query.
   All 18 processes exited zero and all verifier stderr logs are empty. The polled RSS values are
   safety diagnostics only, so `RSS` and `Time` remain unchecked.
+
+Performance and RSS evidence for all FineWeb Q0-Q8 checks:
+
+- Matrix root: `/private/tmp/push-frontier-fineweb-matrix-20260912-568fcb50`
+- Machine-readable ledger: `matrix.jsonl`; SHA-256
+  `fd2f283cc4c57535173cbd3af944c18087a43e6403cebefc9ceb51d8985272ec`
+- Immutable run manifest: `run-manifest.json`; SHA-256
+  `b853a981656afa28eb0b6cc9a2d4d95e4e66dc020a138b347a02ee52edc34b6d`
+- Derived per-query statistics and explicit flag thresholds: `fineweb-summary.json`; SHA-256
+  `4a9b7a4c5a15ec107720194bc814cc8415ed5b33a9ecb2953f85dadf62b206dd`
+- Input identity: 1 file, 1,526,591,156 bytes, aggregate manifest SHA-256
+  `9396b928e4ae3f77c575c34354c8135a1e781913003fe2983339a1f09edcc067`.
+  The benchmark executable SHA-256 is
+  `24803a50c3e5be5109c4ed8868dedb605d2ad33aaea3dc933b5abccff50f5351`.
+  The clean Git identity is `568fcb50531d1b634811d7fa9c8fb308bd6dc99c`, with working-tree identity
+  SHA-256 `4ec04ed05ae9904a6af02d83aa7147912dfd810bb51c53fd5d40ac435201b864`.
+  All input, binary, and Git identities were independently recomputed after the run and matched the
+  manifest.
+- Protocol: global correctness gate first at one thread/partition, followed by three measured
+  samples per backend/query at four threads/partitions. Neither policy uses benchmark options. The
+  ledger contains one config record, 18 successful correctness children, the
+  `all-correctness-succeeded` marker at sequence 18, 54 successful symmetric HOT-cache prewarms,
+  and 54 successful measured children. Every measured child has positive whole-process peak RSS
+  from macOS `/usr/bin/time -l`; no cache drop was attempted. All 9 canonical artifacts are
+  retained. Free space remained above the 4 GiB guard.
+
+Exact matrix command:
+
+```bash
+python3 benchmarks/datafusion-bench/scripts/run_push_frontier_matrix.py fineweb \
+  --binary target/release_debug/datafusion-bench \
+  --output-dir /private/tmp/push-frontier-fineweb-matrix-20260912-568fcb50 \
+  --input-root vortex-bench/data/fineweb/vortex-file-compressed \
+  --samples 3 --partitions 4 --correctness-partitions 1
+```
+
+Supervisor-observed wall time is the median of three fresh measured processes. RSS columns are the
+minimum-maximum whole-process peaks across those processes. Ratios are push-frontier divided by V1.
+
+| Query | V1 median ms | Frontier median ms | F/V time | V1 RSS MiB range | Frontier RSS MiB range | F/V RSS median |
+|---|---:|---:|---:|---:|---:|---:|
+| Q0 | 48.00 | 48.29 | 1.006 | 50.8-55.1 | 71.5-77.2 | 1.365 |
+| Q1 | 79.43 | 76.31 | 0.961 | 378.1-410.2 | 382.5-417.0 | 1.012 |
+| Q2 | 86.99 | 81.02 | 0.931 | 403.8-451.6 | 431.4-435.7 | 1.044 |
+| Q3 | 144.80 | 142.24 | 0.982 | 928.4-935.4 | 932.5-957.2 | 1.006 |
+| Q4 | 320.72 | 322.56 | 1.006 | 1230.2-1297.4 | 1515.3-1650.5 | 1.227 |
+| Q5 | 267.77 | 267.22 | 0.998 | 1210.0-1285.4 | 1330.4-1364.6 | 1.092 |
+| Q6 | 152.95 | 150.85 | 0.986 | 871.2-990.7 | 869.0-915.3 | 0.930 |
+| Q7 | 147.82 | 147.94 | 1.001 | 861.8-962.4 | 831.5-913.2 | 0.958 |
+| Q8 | 48.46 | 48.09 | 0.992 | 115.8-119.0 | 55.2-57.6 | 0.485 |
+
+The median frontier/V1 time ratio across queries is 0.992 (range 0.931-1.006); the median RSS ratio
+is 1.012 (range 0.485-1.365). Time regressions occur on Q0, Q4, and Q7, none exceeding 10%. RSS
+regressions occur on Q0-Q5; Q0 and Q4 exceed 10%. Neither wall-time maximum exceeds 1.5 times its
+median and no RSS maximum exceeds 1.25 times its median. Strict three-sample increases are retained
+as flags in `fineweb-summary.json`: wall time for frontier Q1, V1 Q6, and both backends Q7; RSS for
+both backends Q0, frontier Q1, and V1 Q6/Q7. Every sample is a fresh process, so these short
+sequences are not cumulative within-process memory growth.
 
 ## TPC-DS Q01-Q99
 
