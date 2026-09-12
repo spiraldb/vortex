@@ -14,6 +14,8 @@
 //!
 //! Run with:
 //! `cargo run --release -p vortex-morsel-push --features _test-harness --bin morsel-push-eval`
+//!
+//! Default push-frontier rows admit one additional down frontier per worker.
 
 use std::sync::Arc;
 use std::time::Duration;

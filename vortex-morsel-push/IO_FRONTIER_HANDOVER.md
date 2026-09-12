@@ -40,6 +40,13 @@ The intended model is:
 Do not replace this with a materialized range-by-group matrix or make frontier discovery
 authoritative for query correctness.
 
+## Current production policy
+
+`push-frontier` uses one additional down frontier per worker, zero bounded-right speculation, one
+resident morsel per worker, and 32-range refills. Eager lookahead is disabled for both the internal
+DataFusion driver and external drivers such as DuckDB. Explicit zero-lookahead benchmark controls
+remain available and are labelled separately from this production policy.
+
 ## Final core API
 
 ### Execution nodes

@@ -337,10 +337,10 @@ impl Default for MorselConfig {
 }
 
 impl MorselConfig {
-    /// Select the grouped-I/O frontier scheduler while preserving every other benchmark default.
+    /// Select the grouped-I/O frontier scheduler with its production lookahead policy.
     pub fn frontier_defaults() -> Self {
         Self {
-            frontier_lookahead_per_thread: Some(0),
+            frontier_lookahead_per_thread: Some(1),
             ..Default::default()
         }
     }
@@ -547,12 +547,15 @@ mod tests {
     use super::MorselConfig;
 
     #[test]
-    fn frontier_defaults_change_only_the_scan_path() {
+    fn frontier_defaults_select_the_production_policy() {
         let expected = MorselConfig {
-            frontier_lookahead_per_thread: Some(0),
+            frontier_lookahead_per_thread: Some(1),
             ..Default::default()
         };
 
         assert_eq!(MorselConfig::frontier_defaults(), expected);
+        assert_eq!(expected.resident_morsels_per_thread, 1);
+        assert_eq!(expected.speculative_frontiers, 0);
+        assert_eq!(expected.frontier_refill_ranges, 32);
     }
 }
