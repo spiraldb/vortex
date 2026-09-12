@@ -19,6 +19,8 @@ use crate::io::IoTicket;
 use crate::io::ProducerId;
 use crate::node::ActivationRows;
 use crate::node::ExecNode;
+use crate::node::IoPrewalkCx;
+use crate::node::IoPrewalkPoll;
 use crate::node::NodeState;
 use crate::node::PlanCx;
 use crate::node::PlanPoll;
@@ -225,6 +227,19 @@ impl ExecNode for FlatExec {
         Ok(PlanPoll::Continue)
     }
 
+    fn next_io(&mut self, cx: &mut IoPrewalkCx<'_>) -> VortexResult<IoPrewalkPoll> {
+        while self.planned < self.active.len() && !cx.out_of_budget() {
+            let segment = &self.segments[self.active.start + self.planned];
+            cx.read(IoKey::Segment(segment.layout.segment_id()))?;
+            self.planned += 1;
+        }
+        Ok(if self.planned == self.active.len() {
+            IoPrewalkPoll::Complete
+        } else {
+            IoPrewalkPoll::Yield
+        })
+    }
+
     fn push_start(
         &mut self,
         span: Range<u64>,
@@ -291,7 +306,9 @@ impl ExecNode for FlatExec {
     }
 
     fn retire(&mut self, cx: &mut RetireCx<'_>) {
-        for segment in &self.segments[self.active.start..self.active.start + self.planned] {
+        // Every overlap contributed one lease before lookahead began. Release all of them even
+        // when cancellation or an all-false upstream gate stopped planning early.
+        for segment in &self.segments[self.active.clone()] {
             cx.release_use(IoKey::Segment(segment.layout.segment_id()));
         }
         self.tickets.clear();

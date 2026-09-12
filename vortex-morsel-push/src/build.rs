@@ -47,6 +47,7 @@ use vortex_layout::layouts::row_idx::row_idx;
 use vortex_layout::layouts::struct_::Struct;
 use vortex_layout::layouts::zoned::LegacyStats;
 use vortex_layout::layouts::zoned::Zoned;
+use vortex_utils::aliases::hash_set::HashSet;
 
 use crate::io::IoKey;
 use crate::io::ProducerId;
@@ -106,6 +107,7 @@ pub struct ExecPlan {
     /// Every push source and the root-coordinate rows it can produce.
     sources: Vec<SourceActivation>,
     source_catalog: SourceCatalog,
+    pruning_uses: Arc<[(IoKey, Range<u64>)]>,
     /// Push-only physical pipelines, indexed by their stable pipeline ID.
     topology: Arc<PhysicalTopology>,
     root: NodeId,
@@ -114,6 +116,134 @@ pub struct ExecPlan {
     /// Root-coordinate boundaries at which every column starts a fresh chunk, used as the
     /// default morsel cut.
     natural_splits: Vec<u64>,
+}
+
+/// The logical task completed by one ordered I/O group.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IoGroupKind {
+    /// Auxiliary statistics I/O used to produce the pruning mask.
+    Pruning,
+    /// I/O used to evaluate one cascaded conjunct or all parallel conjuncts.
+    Conjunct,
+    /// I/O used to materialize the selected projection.
+    Projection,
+}
+
+/// One bounded piece of a logical I/O frontier.
+pub struct IoFrontierBatch<'a> {
+    kind: IoGroupKind,
+    io: &'a [IoKey],
+    complete: bool,
+}
+
+impl IoFrontierBatch<'_> {
+    /// The logical task whose I/O this batch helps complete.
+    pub fn kind(&self) -> IoGroupKind {
+        self.kind
+    }
+
+    /// Newly discovered stored keys, in execution-node order.
+    pub fn io(&self) -> &[IoKey] {
+        self.io
+    }
+
+    /// Whether the group ended in this batch.
+    pub fn is_complete(&self) -> bool {
+        self.complete
+    }
+}
+
+/// A cursor at one logical I/O group for one root-coordinate range.
+///
+/// The cursor owns a pre-walk arena for this row range. [`Self::next_io`] advances it by a bounded
+/// number of stored keys; [`Self::right`] moves to the next group and [`Self::down`] reuses the
+/// arena for another range without constructing the full range-by-group frontier rectangle.
+pub struct IoFrontierCursor {
+    arena: Arena,
+    root: NodeId,
+    range: Range<u64>,
+    group: usize,
+    state: crate::node::IoPrewalkState,
+    group_complete: bool,
+    walk_complete: bool,
+}
+
+impl IoFrontierCursor {
+    /// The root-coordinate coverage represented by this cursor.
+    pub fn range(&self) -> &Range<u64> {
+        &self.range
+    }
+
+    /// The zero-based logical group position within this range.
+    pub fn group(&self) -> usize {
+        self.group
+    }
+
+    /// Discover at most `budget` more stored keys from this range and logical group.
+    pub fn next_io(&mut self, budget: u32) -> VortexResult<IoFrontierBatch<'_>> {
+        if budget == 0 {
+            vortex_bail!("an I/O frontier poll requires a non-zero budget");
+        }
+        if self.group_complete {
+            vortex_bail!("I/O frontier group {} is already complete", self.group);
+        }
+        self.state.begin_poll();
+        let mut cx = crate::node::IoPrewalkCx::new(&mut self.arena, &mut self.state, budget);
+        let poll = cx.prewalk_root(self.root)?;
+        match poll {
+            crate::node::IoPrewalkPoll::Yield => {
+                if !self.state.group_is_open() {
+                    vortex_bail!("I/O pre-walk yielded without an open group");
+                }
+            }
+            crate::node::IoPrewalkPoll::GroupEnd { subtree_complete } => {
+                if self.state.group_is_open() {
+                    vortex_bail!("I/O pre-walk ended a frontier with an open group");
+                }
+                self.group_complete = true;
+                self.walk_complete = subtree_complete;
+            }
+            crate::node::IoPrewalkPoll::Complete => {
+                vortex_bail!("I/O pre-walk completed without ending a frontier group");
+            }
+        }
+        let header = self
+            .state
+            .kind()
+            .ok_or_else(|| vortex_err!("I/O pre-walk did not begin a frontier group"))?;
+        Ok(IoFrontierBatch {
+            kind: header,
+            io: self.state.reads(),
+            complete: self.group_complete,
+        })
+    }
+
+    /// Move right after fully enumerating this group, returning whether another group exists.
+    pub fn right(&mut self) -> VortexResult<bool> {
+        if !self.group_complete {
+            vortex_bail!(
+                "I/O frontier group {} must be enumerated before moving right",
+                self.group
+            );
+        }
+        if self.walk_complete {
+            return Ok(false);
+        }
+        self.group += 1;
+        self.group_complete = false;
+        self.state.advance_group();
+        Ok(true)
+    }
+
+    /// Move down to the first group for another row range, reusing this cursor's arena.
+    pub fn down(&mut self, range: Range<u64>) {
+        self.arena.reset_subtree(self.root, range.clone());
+        self.range = range;
+        self.group = 0;
+        self.state.reset();
+        self.group_complete = false;
+        self.walk_complete = false;
+    }
 }
 
 #[derive(Debug)]
@@ -506,6 +636,29 @@ impl ExecPlan {
         &self.sources
     }
 
+    /// Return a cursor at the first plan-defined I/O group for `range`.
+    pub fn frontier(&self, range: Range<u64>) -> IoFrontierCursor {
+        self.frontier_cursor(range, true)
+    }
+
+    fn frontier_cursor(&self, range: Range<u64>, include_pruning: bool) -> IoFrontierCursor {
+        let (mut arena, root) = self.instantiate_frontier(include_pruning);
+        arena.reset_subtree(root, range.clone());
+        IoFrontierCursor {
+            arena,
+            root,
+            range,
+            group: 0,
+            state: crate::node::IoPrewalkState::new(),
+            group_complete: false,
+            walk_complete: false,
+        }
+    }
+
+    pub(crate) fn execution_frontier(&self, range: Range<u64>) -> IoFrontierCursor {
+        self.frontier_cursor(range, false)
+    }
+
     pub(crate) fn overlapping_source_indices(
         &self,
         target: ActivationTarget,
@@ -684,6 +837,16 @@ impl ExecPlan {
         arena.prepare_push_sidebands(self.input_widths.iter().copied());
         arena
     }
+
+    fn instantiate_frontier(&self, include_pruning: bool) -> (Arena, NodeId) {
+        let mut arena = self.instantiate();
+        let root = arena.push_node(Node::IoRoot(Box::new(crate::nodes::IoRootExec::new(
+            Arc::clone(&self.pruning_uses),
+            self.root,
+            include_pruning,
+        ))));
+        (arena, root)
+    }
 }
 
 /// Build an execution plan for `layout` under `projection` and `filter`.
@@ -727,6 +890,7 @@ pub(crate) fn build_plan_with_row_offset(
         layout: LayoutRef::clone(layout),
         root_fields,
         splits: Vec::new(),
+        pruning_uses: Vec::new(),
         row_offset,
     };
 
@@ -765,6 +929,11 @@ pub(crate) fn build_plan_with_row_offset(
     natural_splits.dedup();
     natural_splits.retain(|&split| split > 0 && split <= row_count);
 
+    let mut seen_pruning = HashSet::<IoKey>::new();
+    builder
+        .pruning_uses
+        .retain(|(key, _)| seen_pruning.insert(*key));
+    let pruning_uses = builder.pruning_uses;
     let nodes = builder.nodes;
     let routes = reverse_routes(&nodes, root)?;
     let inputs = forward_inputs(nodes.len(), &routes)?;
@@ -778,6 +947,7 @@ pub(crate) fn build_plan_with_row_offset(
         input_widths: inputs.iter().map(Vec::len).collect(),
         sources,
         source_catalog,
+        pruning_uses: Arc::from(pruning_uses),
         topology,
         root,
         output_dtype,
@@ -1099,7 +1269,62 @@ struct Builder {
     layout: LayoutRef,
     root_fields: StructFields,
     splits: Vec<u64>,
+    pruning_uses: Vec<(IoKey, Range<u64>)>,
     row_offset: u64,
+}
+
+/// Collect the auxiliary zone-map units on every transparent data path in a predicate field.
+///
+/// A zone map is currently evaluated as one cached array by `ZonedReader`, so the pruning group
+/// names its complete stored child rather than pretending that individual data-row morsels can
+/// select a subset of the statistics segments.
+fn collect_pruning_uses(
+    layout: &LayoutRef,
+    root_offset: u64,
+    out: &mut Vec<(IoKey, Range<u64>)>,
+) -> VortexResult<()> {
+    if layout.is::<Zoned>() || layout.is::<LegacyStats>() {
+        let data = layout
+            .slot(0)?
+            .ok_or_else(|| vortex_err!("zoned layout has no data child"))?;
+        let zones = layout
+            .slot(1)?
+            .ok_or_else(|| vortex_err!("zoned layout has no zones child"))?;
+        let mut keys = Vec::new();
+        collect_stored_keys(&zones, &mut keys)?;
+        let range = root_offset..root_offset + layout.row_count();
+        out.extend(keys.into_iter().map(|key| (key, range.clone())));
+        return collect_pruning_uses(&data, root_offset, out);
+    }
+    if layout.is::<Chunked>() {
+        let mut child_offset = root_offset;
+        for slot in 0..layout.nchildren() {
+            if let Some(child) = layout.slot(slot)? {
+                collect_pruning_uses(&child, child_offset, out)?;
+                child_offset += child.row_count();
+            }
+        }
+        return Ok(());
+    }
+    for slot in 0..layout.nchildren() {
+        if let Some(child) = layout.slot(slot)? {
+            collect_pruning_uses(&child, root_offset, out)?;
+        }
+    }
+    Ok(())
+}
+
+fn collect_stored_keys(layout: &LayoutRef, out: &mut Vec<IoKey>) -> VortexResult<()> {
+    if layout.is::<Flat>() {
+        out.push(IoKey::Segment(layout.as_::<Flat>().segment_id()));
+        return Ok(());
+    }
+    for slot in 0..layout.nchildren() {
+        if let Some(child) = layout.slot(slot)? {
+            collect_stored_keys(&child, out)?;
+        }
+    }
+    Ok(())
 }
 
 impl Builder {
@@ -1153,6 +1378,9 @@ impl Builder {
                 .find(name)
                 .ok_or_else(|| vortex_err!("field {name} not found in the scan dtype"))?;
             let field_layout = self.field_layout(idx)?;
+            if allow_predicate_passthrough {
+                collect_pruning_uses(&field_layout, 0, &mut self.pruning_uses)?;
+            }
             children.push(self.build_layout(&field_layout, 0)?);
         }
         if uses_row_idx {

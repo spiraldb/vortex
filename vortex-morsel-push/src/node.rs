@@ -15,6 +15,7 @@ use vortex_error::vortex_panic;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
+use crate::build::IoGroupKind;
 use crate::cells::SharedCells;
 use crate::io::IoKey;
 use crate::io::IoPlane;
@@ -453,6 +454,19 @@ pub enum PlanPoll {
     Complete,
 }
 
+/// Result of one bounded [`ExecNode::next_io`] pre-walk poll.
+pub enum IoPrewalkPoll {
+    /// The current group still has undiscovered I/O; resume the retained node cursors.
+    Yield,
+    /// A group ended. `subtree_complete` reports whether the polled subtree ended with it.
+    GroupEnd {
+        /// Whether the polled subtree has no later group.
+        subtree_complete: bool,
+    },
+    /// This subtree has no group boundary or I/O left to discover.
+    Complete,
+}
+
 /// Something a node can park on.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Wait {
@@ -510,6 +524,14 @@ pub trait ExecNode: Send {
     /// Planning only names IO; it never reads. A node that has more planning to do than its
     /// budget allows returns [`PlanPoll::Yield`] and resumes from its own cursor.
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll>;
+
+    /// Advance this node's bounded, group-aware I/O pre-walk.
+    ///
+    /// Unlike [`Self::next_plan`], this only discovers keys for the scheduler: it neither creates
+    /// tickets nor mutates a worker that will execute the morsel.
+    fn next_io(&mut self, _cx: &mut IoPrewalkCx<'_>) -> VortexResult<IoPrewalkPoll> {
+        Ok(IoPrewalkPoll::Complete)
+    }
 
     /// Activate a push source for one root-coordinate span.
     fn push_start(
@@ -599,6 +621,7 @@ pub(crate) enum Node {
     Struct(Box<crate::nodes::StructExec>),
     Conjunct(Box<crate::nodes::ConjunctExec>),
     Filter(Box<crate::nodes::FilterExec>),
+    IoRoot(Box<crate::nodes::IoRootExec>),
     #[cfg(test)]
     Dynamic(Box<Box<dyn ExecNode>>),
 }
@@ -614,6 +637,7 @@ macro_rules! dispatch_node {
             Node::Struct($inner) => $call,
             Node::Conjunct($inner) => $call,
             Node::Filter($inner) => $call,
+            Node::IoRoot($inner) => $call,
             #[cfg(test)]
             Node::Dynamic($inner) => $call,
         }
@@ -654,6 +678,11 @@ impl ExecNode for Node {
     #[inline]
     fn next_plan(&mut self, cx: &mut PlanCx<'_>) -> VortexResult<PlanPoll> {
         dispatch_node!(self, node => node.next_plan(cx))
+    }
+
+    #[inline]
+    fn next_io(&mut self, cx: &mut IoPrewalkCx<'_>) -> VortexResult<IoPrewalkPoll> {
+        dispatch_node!(self, node => node.next_io(cx))
     }
 
     #[inline]
@@ -792,6 +821,13 @@ impl Arena {
         assert_eq!(self.push_sidebands.len(), self.nodes.len());
     }
 
+    pub(crate) fn push_node(&mut self, node: Node) -> NodeId {
+        let id = NodeId::try_from(self.nodes.len()).unwrap_or(u32::MAX);
+        self.nodes.push(Some(node));
+        self.push_sidebands.push(VecDeque::new());
+        id
+    }
+
     /// The number of nodes in the arena.
     pub fn len(&self) -> usize {
         self.nodes.len()
@@ -839,6 +875,143 @@ impl Arena {
         let mut node = self.take(id);
         node.reset(range);
         self.put(id, node);
+    }
+}
+
+pub(crate) struct IoPrewalkState {
+    open: bool,
+    kind: Option<IoGroupKind>,
+    reads: Vec<IoKey>,
+}
+
+impl IoPrewalkState {
+    pub(crate) fn new() -> Self {
+        Self {
+            open: false,
+            kind: None,
+            reads: Vec::new(),
+        }
+    }
+
+    pub(crate) fn kind(&self) -> Option<IoGroupKind> {
+        self.kind
+    }
+
+    pub(crate) fn reads(&self) -> &[IoKey] {
+        &self.reads
+    }
+
+    pub(crate) fn begin_poll(&mut self) {
+        self.reads.clear();
+    }
+
+    pub(crate) fn group_is_open(&self) -> bool {
+        self.open
+    }
+
+    pub(crate) fn advance_group(&mut self) {
+        debug_assert!(!self.open);
+        self.kind = None;
+        self.reads.clear();
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.open = false;
+        self.kind = None;
+        self.reads.clear();
+    }
+}
+
+/// Context handed to [`ExecNode::next_io`].
+///
+/// Group owners call [`Self::group_begin`] and [`Self::group_end`]. Stored leaves call
+/// [`Self::read`]. Child traversal shares the same small budget and retained group state.
+pub struct IoPrewalkCx<'a> {
+    arena: &'a mut Arena,
+    state: &'a mut IoPrewalkState,
+    budget: u32,
+}
+
+impl<'a> IoPrewalkCx<'a> {
+    pub(crate) fn new(arena: &'a mut Arena, state: &'a mut IoPrewalkState, budget: u32) -> Self {
+        Self {
+            arena,
+            state,
+            budget,
+        }
+    }
+
+    pub(crate) fn prewalk_root(&mut self, id: NodeId) -> VortexResult<IoPrewalkPoll> {
+        let mut node = self.arena.take(id);
+        let result = node.next_io(self);
+        self.arena.put(id, node);
+        result
+    }
+
+    /// The remaining number of I/O uses this poll may name.
+    pub fn budget(&self) -> u32 {
+        self.budget
+    }
+
+    /// Whether this bounded pre-walk poll must yield.
+    pub fn out_of_budget(&self) -> bool {
+        self.budget == 0
+    }
+
+    /// Begin one non-nested logical I/O group.
+    pub fn group_begin(&mut self, kind: IoGroupKind) -> VortexResult<()> {
+        if self.state.open {
+            return Err(vortex_err!("I/O pre-walk cannot nest logical groups"));
+        }
+        if self.state.kind.is_some() {
+            return Err(vortex_err!(
+                "I/O pre-walk began a second group before advancing the frontier"
+            ));
+        }
+        self.state.kind = Some(kind);
+        self.state.open = true;
+        Ok(())
+    }
+
+    /// Name one stored key in the currently open group.
+    pub fn read(&mut self, key: IoKey) -> VortexResult<()> {
+        if self.out_of_budget() {
+            return Err(vortex_err!("I/O pre-walk read exceeded its poll budget"));
+        }
+        if !self.state.open {
+            return Err(vortex_err!("I/O was read outside a logical group"));
+        }
+        self.state.reads.push(key);
+        self.budget -= 1;
+        Ok(())
+    }
+
+    /// End the currently open logical group.
+    pub fn group_end(&mut self) -> VortexResult<()> {
+        if !std::mem::take(&mut self.state.open) {
+            return Err(vortex_err!(
+                "I/O pre-walk ended a group without beginning one"
+            ));
+        }
+        Ok(())
+    }
+
+    /// Poll one child without allocating an execution ticket.
+    pub fn prewalk_child(
+        &mut self,
+        id: NodeId,
+        range: Range<u64>,
+        fresh: bool,
+    ) -> VortexResult<IoPrewalkPoll> {
+        let mut node = self.arena.take(id);
+        let result = {
+            if fresh {
+                node.reset(range);
+            }
+            node.next_io(self)
+        };
+        self.arena.put(id, node);
+        result
     }
 }
 
@@ -922,6 +1095,7 @@ impl<'a> PlanCx<'a> {
 pub struct RetireCx<'a> {
     arena: &'a mut Arena,
     cells: &'a SharedCells,
+    io: &'a IoPlane,
 }
 
 impl<'a> RetireCx<'a> {
@@ -935,6 +1109,7 @@ impl<'a> RetireCx<'a> {
     /// Release this morsel's lease on a unit, dropping the shared cell at the last release.
     pub fn release_use(&mut self, key: IoKey) {
         self.cells.release(key);
+        self.io.release_use(key);
     }
 }
 
@@ -968,9 +1143,9 @@ pub(crate) fn poll_plan_morsel(
     poll
 }
 
-/// Retire a completed morsel and release its decoded-cell leases.
-pub(crate) fn retire_morsel(arena: &mut Arena, root: NodeId, cells: &SharedCells) {
-    let mut cx = RetireCx { arena, cells };
+/// Retire a completed morsel and release its decoded and raw-I/O leases.
+pub(crate) fn retire_morsel(arena: &mut Arena, root: NodeId, cells: &SharedCells, io: &IoPlane) {
+    let mut cx = RetireCx { arena, cells, io };
     cx.retire_child(root);
 }
 

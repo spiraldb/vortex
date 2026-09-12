@@ -7,6 +7,7 @@ mod chunked;
 mod conjunct;
 mod filter;
 mod flat;
+mod io_root;
 mod row_idx;
 mod struct_;
 
@@ -17,6 +18,7 @@ pub use conjunct::ConjunctSlot;
 pub use filter::FilterExec;
 pub use flat::FlatExec;
 pub(crate) use flat::FlatSegment;
+pub(crate) use io_root::IoRootExec;
 pub use row_idx::RowIdxExec;
 pub use struct_::StructExec;
 

@@ -10,6 +10,8 @@ use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 
 use crate::node::ExecNode;
+use crate::node::IoPrewalkCx;
+use crate::node::IoPrewalkPoll;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
@@ -198,6 +200,38 @@ impl ExecNode for ChunkedExec {
             }
         }
         Ok(PlanPoll::Complete)
+    }
+
+    fn next_io(&mut self, cx: &mut IoPrewalkCx<'_>) -> VortexResult<IoPrewalkPoll> {
+        while self.plan_cursor < self.cuts.len() {
+            if cx.out_of_budget() {
+                return Ok(IoPrewalkPoll::Yield);
+            }
+            let cut = self.cuts[self.plan_cursor].clone();
+            let poll = cx.prewalk_child(
+                self.children[cut.chunk],
+                cut.chunk_range,
+                !self.plan_started,
+            )?;
+            self.plan_started = true;
+            match poll {
+                IoPrewalkPoll::Complete => {
+                    self.plan_cursor += 1;
+                    self.plan_started = false;
+                }
+                IoPrewalkPoll::Yield => return Ok(IoPrewalkPoll::Yield),
+                IoPrewalkPoll::GroupEnd { subtree_complete } => {
+                    if subtree_complete {
+                        self.plan_cursor += 1;
+                        self.plan_started = false;
+                    }
+                    return Ok(IoPrewalkPoll::GroupEnd {
+                        subtree_complete: self.plan_cursor == self.cuts.len(),
+                    });
+                }
+            }
+        }
+        Ok(IoPrewalkPoll::Complete)
     }
 
     #[inline]

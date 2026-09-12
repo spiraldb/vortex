@@ -10,9 +10,12 @@
 //! authoritative row selections; sources produce [`PushBatch`] values and pass them through
 //! downstream stages inline. Multi-input operators align batches at pipeline boundaries.
 //!
-//! [`ExecNode::next_plan`] names I/O before execution. [`ExecNode::push_start`] activates a
-//! source, [`ExecNode::push_input`] accepts an upstream batch, and [`ExecNode::push_end`] closes
-//! an input. [`ExecNode::push_resume`] continues a stage after an exact dependency is ready;
+//! [`ExecNode::next_io`] incrementally discovers ordered I/O groups through an
+//! [`IoFrontierCursor`], while [`ExecNode::next_plan`] allocates execution tickets. The cursor
+//! returns borrowed key batches and moves [`IoFrontierCursor::right`] across groups or
+//! [`IoFrontierCursor::down`] across row ranges. [`ExecNode::push_start`] activates a
+//! source, [`ExecNode::push_input`] accepts an upstream batch, and [`ExecNode::push_end`] closes an
+//! input. [`ExecNode::push_resume`] continues a stage after an exact dependency is ready;
 //! [`ExecNode::push_credit`] returns downstream capacity to a producer. Operators retain state
 //! across these calls, and [`ExecNode::retire`] releases it when the morsel finishes.
 //!
@@ -50,10 +53,14 @@ pub mod tpch;
 pub mod workloads;
 
 pub use build::ExecPlan;
+pub use build::IoFrontierBatch;
+pub use build::IoFrontierCursor;
+pub use build::IoGroupKind;
 pub use build::SourceActivation;
 pub use build::SourceRole;
 pub use build::build_plan;
 pub use driver::DemandHintDelivery;
+pub use driver::FrontierSpeculation;
 pub use driver::MorselScan;
 pub use driver::MorselStream;
 pub use driver::morsels;
@@ -70,6 +77,8 @@ pub use node::ActivationTarget;
 pub use node::DemandTarget;
 pub use node::ExecNode;
 pub use node::InputPort;
+pub use node::IoPrewalkCx;
+pub use node::IoPrewalkPoll;
 pub use node::NodeState;
 pub use node::PlanCx;
 pub use node::PlanPoll;

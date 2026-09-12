@@ -14,6 +14,8 @@ use crate::io::IoPriority;
 use crate::node::ActivationRows;
 use crate::node::ActivationTarget;
 use crate::node::ExecNode;
+use crate::node::IoPrewalkCx;
+use crate::node::IoPrewalkPoll;
 use crate::node::NodeId;
 use crate::node::NodeState;
 use crate::node::PlanCx;
@@ -36,6 +38,7 @@ pub struct FilterExec {
     range: Range<u64>,
     plan_stage: u8,
     plan_started: bool,
+    io_group_open: bool,
     done: bool,
     push_cursor: u64,
     /// Authoritative mask fragments awaiting projection. Unlike general input batches, these are
@@ -91,6 +94,7 @@ impl FilterExec {
             range: 0..0,
             plan_stage: 0,
             plan_started: false,
+            io_group_open: false,
             done: false,
             push_cursor: 0,
             push_predicate: VecDeque::new(),
@@ -114,6 +118,7 @@ impl ExecNode for FilterExec {
         self.range = range;
         self.plan_stage = 0;
         self.plan_started = false;
+        self.io_group_open = false;
         self.done = false;
         self.push_cursor = self.range.start;
         self.push_predicate.clear();
@@ -153,6 +158,65 @@ impl ExecNode for FilterExec {
             } else {
                 return Ok(PlanPoll::Yield);
             }
+        }
+    }
+
+    fn next_io(&mut self, cx: &mut IoPrewalkCx<'_>) -> VortexResult<IoPrewalkPoll> {
+        if self.plan_stage == 0
+            && let Some(predicate) = self.predicate
+        {
+            if cx.out_of_budget() {
+                return Ok(IoPrewalkPoll::Yield);
+            }
+            match cx.prewalk_child(predicate, self.range.clone(), !self.plan_started)? {
+                IoPrewalkPoll::Complete => {
+                    self.plan_stage = 1;
+                    self.plan_started = false;
+                }
+                IoPrewalkPoll::Yield => {
+                    self.plan_started = true;
+                    return Ok(IoPrewalkPoll::Yield);
+                }
+                IoPrewalkPoll::GroupEnd { subtree_complete } => {
+                    self.plan_started = !subtree_complete;
+                    if subtree_complete {
+                        self.plan_stage = 1;
+                    }
+                    return Ok(IoPrewalkPoll::GroupEnd {
+                        subtree_complete: false,
+                    });
+                }
+            }
+        }
+
+        if self.plan_stage <= 1 {
+            if !self.io_group_open {
+                cx.group_begin(crate::IoGroupKind::Projection)?;
+                self.io_group_open = true;
+            }
+            if cx.out_of_budget() {
+                return Ok(IoPrewalkPoll::Yield);
+            }
+            match cx.prewalk_child(self.projection, self.range.clone(), !self.plan_started)? {
+                IoPrewalkPoll::Complete => {
+                    cx.group_end()?;
+                    self.plan_stage = 2;
+                    self.plan_started = false;
+                    self.io_group_open = false;
+                    Ok(IoPrewalkPoll::GroupEnd {
+                        subtree_complete: true,
+                    })
+                }
+                IoPrewalkPoll::Yield => {
+                    self.plan_started = true;
+                    Ok(IoPrewalkPoll::Yield)
+                }
+                IoPrewalkPoll::GroupEnd { .. } => Err(vortex_err!(
+                    "a projection input cannot begin a nested I/O group"
+                )),
+            }
+        } else {
+            Ok(IoPrewalkPoll::Complete)
         }
     }
 
