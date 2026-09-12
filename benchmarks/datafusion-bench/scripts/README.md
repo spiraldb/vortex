@@ -4,12 +4,14 @@
 process. It supports `clickbench`, `tpch`, `fineweb`, and `tpcds` and never prepares or deletes
 datasets.
 
-The protocol is correctness-first. For each query, V1 writes a canonical Arrow result artifact and
-push-frontier verifies its complete public result against it. Timing starts only after both commands
-succeed. Every measured process is immediately preceded by an identical, untimed process for the
-same query and backend. Measurement order alternates across query position and sample number. This
-is an explicit symmetric **HOT-cache** protocol. The runner never attempts cache eviction and its
-output provides no cold-cache evidence.
+The protocol has two global phases. First, for every selected query, V1 writes a canonical Arrow
+result artifact and push-frontier verifies its complete public result against it. The runner aborts
+on the first failure and does not start any prewarm or measurement child until every correctness
+pair succeeds. It then writes an `all-correctness-succeeded` JSONL marker and starts the measurement
+phase. Every measured process is immediately preceded by an identical, untimed process for the same
+query and backend. Measurement order alternates across query position and sample number. This is an
+explicit symmetric **HOT-cache** protocol. The runner never attempts cache eviction and its output
+provides no cold-cache evidence.
 
 Build the binary first, then inspect the complete plan without running queries:
 
@@ -80,7 +82,11 @@ Reading all input bytes for this identity step may itself warm the OS page cache
 with the explicit symmetric **HOT-cache** protocol and must not be interpreted as cold-cache
 evidence. Input hashing is performed once per matrix, before any child process.
 
-`matrix.jsonl` contains the configuration and one record per child, including argv, environment
+`matrix.jsonl` contains the configuration, one record per child, and the global correctness success
+marker. Configuration records declare the phase order and the marker required before measurement;
+child records identify both their global phase and specific action. The success marker is emitted
+only after the final verification exits zero, so its position proves that no measurement record
+preceded completion of the global correctness gate. Child records include argv, environment
 overrides, exit status, supervisor-observed wall time, and log paths. On macOS, measured children
 are wrapped with `/usr/bin/time -l` and its whole-process maximum resident set size is recorded in
 bytes. Other platforms report RSS as unavailable rather than substituting a different estimate.

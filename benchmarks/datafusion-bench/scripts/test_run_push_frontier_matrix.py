@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 import unittest
+from unittest import mock
 
 import run_push_frontier_matrix as matrix
 
@@ -134,16 +135,29 @@ class MatrixRunnerTests(unittest.TestCase):
 
     def test_each_measurement_has_identical_fresh_prewarm(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
-            specs = list(
-                matrix.query_specs(
-                    config(Path(temporary) / "matrix", samples=2), 6, 0
-                )
+            cfg = config(Path(temporary) / "matrix", samples=2)
+            exact_specs = list(matrix.correctness_specs(cfg, 6))
+            timed_specs = list(
+                matrix.measurement_specs(cfg, 6, 0)
             )
-        self.assertEqual([spec.phase for spec in specs[:2]], ["exact-write", "exact-verify"])
-        self.assertEqual([spec.partitions for spec in specs[:2]], [1, 1])
-        timed_specs = specs[2:]
+        self.assertEqual(
+            [spec.phase for spec in exact_specs], ["exact-write", "exact-verify"]
+        )
+        self.assertEqual([spec.partitions for spec in exact_specs], [1, 1])
+        self.assertTrue(
+            all(
+                spec.global_phase == matrix.GLOBAL_PHASE_CORRECTNESS
+                for spec in exact_specs
+            )
+        )
         self.assertEqual(len(timed_specs), 8)
         self.assertTrue(all(spec.partitions == 8 for spec in timed_specs))
+        self.assertTrue(
+            all(
+                spec.global_phase == matrix.GLOBAL_PHASE_MEASUREMENT
+                for spec in timed_specs
+            )
+        )
         for prewarm, measured in zip(timed_specs[::2], timed_specs[1::2]):
             self.assertEqual(prewarm.phase, "hot-prewarm")
             self.assertEqual(measured.phase, "measure")
@@ -308,8 +322,18 @@ class MatrixRunnerTests(unittest.TestCase):
         self.assertEqual(records[0]["policies"]["measurement"]["threads"], 8)
         self.assertEqual(records[0]["policies"]["correctness"]["threads"], 1)
         self.assertIsNone(records[0]["environment"]["VORTEX_USE_SCAN_API"])
+        planned_children = [
+            record for record in records if record["record_type"] == "planned-child"
+        ]
+        marker = next(
+            record
+            for record in records
+            if record["record_type"] == "planned-phase-marker"
+        )
+        self.assertEqual(marker["marker"], matrix.CORRECTNESS_SUCCESS_MARKER)
+        self.assertEqual(marker["status"], "planned")
         self.assertEqual(
-            [(record["phase"], record["backend"]) for record in records[1:]],
+            [(record["phase"], record["backend"]) for record in planned_children],
             [
                 ("exact-write", "v1"),
                 ("exact-verify", "push-frontier"),
@@ -322,11 +346,184 @@ class MatrixRunnerTests(unittest.TestCase):
         self.assertTrue(
             all(
                 record["environment"]["VORTEX_USE_SCAN_API"] is None
-                for record in records[1:]
+                for record in planned_children
             )
         )
-        self.assertEqual([record["partitions"] for record in records[1:3]], [1, 1])
-        self.assertTrue(all(record["partitions"] == 8 for record in records[3:]))
+        self.assertEqual(
+            [record["partitions"] for record in planned_children[:2]], [1, 1]
+        )
+        self.assertTrue(
+            all(record["partitions"] == 8 for record in planned_children[2:])
+        )
+
+    def test_dry_run_orders_all_correctness_before_measurement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            records = list(
+                matrix.dry_run_records(
+                    config(Path(temporary) / "matrix", samples=1), [1, 2]
+                )
+            )
+        planned = records[1:]
+        marker_index = next(
+            index
+            for index, record in enumerate(planned)
+            if record["record_type"] == "planned-phase-marker"
+        )
+        before = planned[:marker_index]
+        after = planned[marker_index + 1 :]
+        self.assertEqual(
+            [(record["query_id"], record["phase"]) for record in before],
+            [
+                (1, "exact-write"),
+                (1, "exact-verify"),
+                (2, "exact-write"),
+                (2, "exact-verify"),
+            ],
+        )
+        self.assertTrue(
+            all(record["global_phase"] == "correctness" for record in before)
+        )
+        self.assertTrue(
+            all(record["global_phase"] == "measurement" for record in after)
+        )
+        self.assertEqual(planned[marker_index]["completed_query_ids"], [1, 2])
+        self.assertEqual(planned[marker_index]["sequence"], 4)
+        self.assertGreater(min(record["sequence"] for record in after), 4)
+
+    def test_correctness_failure_aborts_before_marker_or_measurement(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            input_root = root / "input"
+            input_root.mkdir()
+            (input_root / "data.vortex").write_bytes(b"input")
+            cfg = dataclasses.replace(
+                config(root / "matrix", samples=1),
+                input_root=input_root,
+                dry_run=False,
+            )
+            seen: list[matrix.ChildSpec] = []
+
+            def fake_run_child(
+                _config: matrix.MatrixConfig,
+                spec: matrix.ChildSpec,
+                sequence: int,
+                _identity_ref: dict[str, str],
+            ) -> dict[str, object]:
+                seen.append(spec)
+                failed = spec.query_id == 2 and spec.phase == "exact-verify"
+                return {
+                    "record_type": "child",
+                    "sequence": sequence,
+                    "query_id": spec.query_id,
+                    "phase": spec.phase,
+                    "global_phase": spec.global_phase,
+                    "backend": spec.backend,
+                    "timed_out": False,
+                    "exit_status": 1 if failed else 0,
+                    "stderr_path": "fake.stderr.log",
+                }
+
+            manifest = {
+                "schema_version": 1,
+                "input": {"manifest_sha256": "a" * 64},
+            }
+            with mock.patch.object(
+                matrix, "collect_run_manifest", return_value=manifest
+            ), mock.patch.object(matrix, "run_child", side_effect=fake_run_child):
+                with self.assertRaisesRegex(matrix.MatrixError, "exact-verify failed"):
+                    matrix.execute_matrix(cfg, [1, 2], [1, 2])
+
+            self.assertEqual(
+                [(spec.query_id, spec.phase) for spec in seen],
+                [
+                    (1, "exact-write"),
+                    (1, "exact-verify"),
+                    (2, "exact-write"),
+                    (2, "exact-verify"),
+                ],
+            )
+            jsonl_records = [
+                json.loads(line)
+                for line in (cfg.output_dir / matrix.JSONL_NAME)
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            self.assertFalse(
+                any(record["record_type"] == "phase-marker" for record in jsonl_records)
+            )
+            self.assertFalse(
+                any(
+                    record.get("global_phase") == matrix.GLOBAL_PHASE_MEASUREMENT
+                    for record in jsonl_records
+                )
+            )
+
+    def test_success_marker_precedes_every_measurement_record(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            input_root = root / "input"
+            input_root.mkdir()
+            (input_root / "data.vortex").write_bytes(b"input")
+            cfg = dataclasses.replace(
+                config(root / "matrix", samples=1),
+                input_root=input_root,
+                dry_run=False,
+            )
+
+            def fake_run_child(
+                _config: matrix.MatrixConfig,
+                spec: matrix.ChildSpec,
+                sequence: int,
+                _identity_ref: dict[str, str],
+            ) -> dict[str, object]:
+                return {
+                    "record_type": "child",
+                    "sequence": sequence,
+                    "query_id": spec.query_id,
+                    "phase": spec.phase,
+                    "global_phase": spec.global_phase,
+                    "backend": spec.backend,
+                    "timed_out": False,
+                    "exit_status": 0,
+                    "stderr_path": "fake.stderr.log",
+                }
+
+            manifest = {
+                "schema_version": 1,
+                "input": {"manifest_sha256": "a" * 64},
+            }
+            with mock.patch.object(
+                matrix, "collect_run_manifest", return_value=manifest
+            ), mock.patch.object(matrix, "run_child", side_effect=fake_run_child):
+                matrix.execute_matrix(cfg, [1, 2], [1, 2])
+
+            records = [
+                json.loads(line)
+                for line in (cfg.output_dir / matrix.JSONL_NAME)
+                .read_text(encoding="utf-8")
+                .splitlines()
+            ]
+            marker_index = next(
+                index
+                for index, record in enumerate(records)
+                if record["record_type"] == "phase-marker"
+            )
+            marker = records[marker_index]
+            self.assertEqual(marker["marker"], matrix.CORRECTNESS_SUCCESS_MARKER)
+            self.assertEqual(marker["status"], "succeeded")
+            self.assertEqual(marker["completed_query_ids"], [1, 2])
+            self.assertTrue(
+                all(
+                    record.get("global_phase") != matrix.GLOBAL_PHASE_MEASUREMENT
+                    for record in records[:marker_index]
+                )
+            )
+            self.assertTrue(
+                all(
+                    record.get("global_phase") == matrix.GLOBAL_PHASE_MEASUREMENT
+                    for record in records[marker_index + 1 :]
+                )
+            )
 
     def test_query_id_mismatch_fails_before_output_or_query_runs(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

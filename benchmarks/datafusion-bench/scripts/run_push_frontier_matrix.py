@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Run a correctness-first V1 versus push-frontier benchmark matrix.
+"""Run a globally correctness-gated V1 versus push-frontier benchmark matrix.
 
-The runner deliberately launches one query and one backend per child process. Measured
-children use an explicit symmetric HOT-cache protocol: an identical, untimed child is run
-immediately before each measured child. No dataset generation, deletion, or OS cache eviction
-is performed, and the output is not cold-cache evidence.
+The runner verifies every selected query before starting any measurement. It deliberately
+launches one query and one backend per child process. Measured children use an explicit symmetric
+HOT-cache protocol: an identical, untimed child is run immediately before each measured child.
+No dataset generation, deletion, or OS cache eviction is performed, and the output is not
+cold-cache evidence.
 """
 
 from __future__ import annotations
@@ -31,6 +32,9 @@ SUPPORTED_SUITES = ("clickbench", "tpch", "fineweb", "tpcds")
 BACKEND_V1 = "v1"
 BACKEND_FRONTIER = "push-frontier"
 BACKENDS = (BACKEND_V1, BACKEND_FRONTIER)
+GLOBAL_PHASE_CORRECTNESS = "correctness"
+GLOBAL_PHASE_MEASUREMENT = "measurement"
+CORRECTNESS_SUCCESS_MARKER = "all-correctness-succeeded"
 FORMAT = "vortex"
 JSONL_NAME = "matrix.jsonl"
 RUN_MANIFEST_NAME = "run-manifest.json"
@@ -77,6 +81,7 @@ class MatrixConfig:
 
 @dataclasses.dataclass(frozen=True)
 class ChildSpec:
+    global_phase: str
     phase: str
     query_id: int
     backend: str
@@ -596,6 +601,11 @@ def collect_git_identity(repository_hint: Path) -> dict[str, object]:
 
 def matrix_policy(config: MatrixConfig) -> dict[str, object]:
     return {
+        "global_phase_order": [
+            GLOBAL_PHASE_CORRECTNESS,
+            GLOBAL_PHASE_MEASUREMENT,
+        ],
+        "measurement_requires_marker": CORRECTNESS_SUCCESS_MARKER,
         "measurement": {
             "partitions": config.partitions,
             "threads": config.partitions,
@@ -647,13 +657,12 @@ def write_run_manifest(root: Path, manifest: dict[str, object]) -> dict[str, str
     }
 
 
-def query_specs(
-    config: MatrixConfig, query_id: int, query_position: int
-) -> Iterable[ChildSpec]:
+def correctness_specs(config: MatrixConfig, query_id: int) -> Iterable[ChildSpec]:
     artifact_dir = safe_output_path(
         config.output_dir, "results", f"q{query_id:06d}"
     )
     yield ChildSpec(
+        global_phase=GLOBAL_PHASE_CORRECTNESS,
         phase="exact-write",
         query_id=query_id,
         backend=BACKEND_V1,
@@ -664,6 +673,7 @@ def query_specs(
         collect_peak_rss=False,
     )
     yield ChildSpec(
+        global_phase=GLOBAL_PHASE_CORRECTNESS,
         phase="exact-verify",
         query_id=query_id,
         backend=BACKEND_FRONTIER,
@@ -674,10 +684,15 @@ def query_specs(
         collect_peak_rss=False,
     )
 
+
+def measurement_specs(
+    config: MatrixConfig, query_id: int, query_position: int
+) -> Iterable[ChildSpec]:
     for sample in range(config.samples):
         for backend in measurement_order(query_position, sample):
             argv = measured_argv(config, query_id, sample, backend)
             yield ChildSpec(
+                global_phase=GLOBAL_PHASE_MEASUREMENT,
                 phase="hot-prewarm",
                 query_id=query_id,
                 backend=backend,
@@ -688,6 +703,7 @@ def query_specs(
                 collect_peak_rss=False,
             )
             yield ChildSpec(
+                global_phase=GLOBAL_PHASE_MEASUREMENT,
                 phase="measure",
                 query_id=query_id,
                 backend=backend,
@@ -697,6 +713,30 @@ def query_specs(
                 included_in_measurements=True,
                 collect_peak_rss=True,
             )
+
+
+def correctness_success_marker(
+    sequence: int,
+    query_ids: Sequence[int],
+    identity_ref: dict[str, str] | None = None,
+    *,
+    planned: bool = False,
+) -> dict[str, object]:
+    record: dict[str, object] = {
+        "record_type": "planned-phase-marker" if planned else "phase-marker",
+        "schema_version": 1,
+        "sequence": sequence,
+        "global_phase": GLOBAL_PHASE_CORRECTNESS,
+        "marker": CORRECTNESS_SUCCESS_MARKER,
+        "status": "planned" if planned else "succeeded",
+        "completed_query_ids": list(query_ids),
+        "completed_query_count": len(query_ids),
+        "completed_child_count": 2 * len(query_ids),
+        "next_global_phase": GLOBAL_PHASE_MEASUREMENT,
+    }
+    if identity_ref is not None:
+        record.update(identity_ref)
+    return record
 
 
 def child_environment(base: dict[str, str], backend: str, partitions: int) -> dict[str, str]:
@@ -916,6 +956,7 @@ def run_child(
         "suite": config.suite,
         "query_id": spec.query_id,
         "sample": spec.sample,
+        "global_phase": spec.global_phase,
         "phase": spec.phase,
         "backend": spec.backend,
         "partitions": spec.partitions,
@@ -969,6 +1010,11 @@ def config_record(
         ),
         "correctness_only_bench_options": list(config.correctness_bench_options),
         "policies": matrix_policy(config),
+        "global_phase_order": [
+            GLOBAL_PHASE_CORRECTNESS,
+            GLOBAL_PHASE_MEASUREMENT,
+        ],
+        "measurement_requires_marker": CORRECTNESS_SUCCESS_MARKER,
         "cache_protocol": "HOT:symmetric-same-query-same-backend-fresh-process-prewarm",
         "measurement_order": "alternating by query position plus sample index",
         "correctness_protocol": "v1-write-then-push-frontier-verify-canonical-artifact",
@@ -1007,8 +1053,8 @@ def dry_run_records(
         config, query_ids, correctness_query_ids=correctness_query_ids
     ) | {"dry_run": True}
     sequence = 0
-    for query_position, query_id in enumerate(query_ids):
-        for spec in query_specs(config, query_id, query_position):
+    for query_id in query_ids:
+        for spec in correctness_specs(config, query_id):
             command, rss_source = resource_wrapped_argv(
                 spec.argv, spec.collect_peak_rss
             )
@@ -1019,6 +1065,33 @@ def dry_run_records(
                 "suite": config.suite,
                 "query_id": query_id,
                 "sample": spec.sample,
+                "global_phase": spec.global_phase,
+                "phase": spec.phase,
+                "backend": spec.backend,
+                "partitions": spec.partitions,
+                "threads": spec.partitions,
+                "included_in_measurements": spec.included_in_measurements,
+                "command": list(command),
+                "benchmark_argv": list(spec.argv),
+                "environment": environment_changes(spec.backend, spec.partitions),
+                "rss_source": rss_source,
+            }
+            sequence += 1
+    yield correctness_success_marker(sequence, query_ids, planned=True)
+    sequence += 1
+    for query_position, query_id in enumerate(query_ids):
+        for spec in measurement_specs(config, query_id, query_position):
+            command, rss_source = resource_wrapped_argv(
+                spec.argv, spec.collect_peak_rss
+            )
+            yield {
+                "record_type": "planned-child",
+                "schema_version": 1,
+                "sequence": sequence,
+                "suite": config.suite,
+                "query_id": query_id,
+                "sample": spec.sample,
+                "global_phase": spec.global_phase,
                 "phase": spec.phase,
                 "backend": spec.backend,
                 "partitions": spec.partitions,
@@ -1077,22 +1150,42 @@ def execute_matrix(
         )
         jsonl.flush()
         sequence = 0
-        for query_position, query_id in enumerate(query_ids):
-            for spec in query_specs(config, query_id, query_position):
+
+        def run_specs(specs: Iterable[ChildSpec], sequence: int) -> int:
+            for spec in specs:
                 record = run_child(config, spec, sequence, identity_ref)
                 jsonl.write(json.dumps(record, sort_keys=True) + "\n")
                 jsonl.flush()
                 if record["timed_out"]:
                     raise MatrixError(
-                        f"Q{query_id} {spec.backend} {spec.phase} timed out; see "
+                        f"Q{spec.query_id} {spec.backend} {spec.phase} timed out; see "
                         f"{record['stderr_path']}"
                     )
                 if record["exit_status"] != 0:
                     raise MatrixError(
-                        f"Q{query_id} {spec.backend} {spec.phase} failed with exit status "
+                        f"Q{spec.query_id} {spec.backend} {spec.phase} failed with exit status "
                         f"{record['exit_status']}; see {record['stderr_path']}"
                     )
                 sequence += 1
+            return sequence
+
+        for query_id in query_ids:
+            sequence = run_specs(correctness_specs(config, query_id), sequence)
+
+        jsonl.write(
+            json.dumps(
+                correctness_success_marker(sequence, query_ids, identity_ref),
+                sort_keys=True,
+            )
+            + "\n"
+        )
+        jsonl.flush()
+        sequence += 1
+
+        for query_position, query_id in enumerate(query_ids):
+            sequence = run_specs(
+                measurement_specs(config, query_id, query_position), sequence
+            )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
