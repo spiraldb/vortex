@@ -71,7 +71,7 @@ selection/filter/scan-order values are defined by the two builders
 | Scan implementation | Cached `LayoutReader` plus current `ScanBuilder` | Raw footer layout plus physical `MorselScanBuilder`/`ExecPlan` | Preserve this intended path difference. |
 | Backend identity | `VORTEX_SCAN_BACKEND=v1` | `VORTEX_SCAN_BACKEND=push-frontier` | Capture env and emitted label with every artifact. |
 | Task concurrency | Without `--threads`: builder default `4 × available_parallelism`; with `--threads N`: `N` Tokio workers and builder factor `1` | Without `--threads`: builder default `4 × available_parallelism` and one push worker; with `--threads N`: the same `N` Tokio workers, builder factor `1`, and one push worker | Record the explicit `N`, DataFusion target partitions, Tokio workers, and host parallelism; use the same command for both backends. |
-| Work unit | Layout boundaries subdivided toward 100,000 rows | Physical morsels target 512 Ki rows | Record both, or add a common experimental setting before attributing differences. |
+| Work unit | Layout boundaries subdivided toward 100,000 rows | Physical morsels target 128 Ki rows | Record both, or add a common experimental setting before attributing differences. |
 | I/O scheduling | Current asynchronous LayoutReader path | Grouped frontier: zero extra down lookahead, zero speculative right groups, 32-range refills | Preserve production defaults; record them. |
 | Pruning | V1 layout scan pruning | Push performs a fresh bounded LayoutReader zone-pruning prepass, then runs the physical plan | Include prepass cost and memory in the frontier measurement. |
 | Supported layouts | General LayoutReader path | Physical root must be a non-null struct; columns must lower through zoned/legacy-stats, flat, or recursively chunked layouts | Verify every shared file; never generate a frontier-only substitute. |
@@ -514,6 +514,45 @@ Decision: **REJECTED**. The internal-time signal was not robust to pair/order no
 conflicted with supervisor wall time, so production and direct-harness defaults remain `0/0/32`.
 This records an optimization trial only and does not change any baseline V1, Frontier, Exact, RSS,
 or Time box above.
+
+### Q6: 512 Ki-row production frontier morsels — REJECTED
+
+Candidate `d25daa1cef9ca70037102dbd6f71580ca5e120a6` changed only the production
+push-frontier target from 128 Ki rows to 512 Ki rows; V1 and plain push remained unchanged. The
+host exposes 14 active cores (10 performance plus 4 efficiency), so the earlier four-thread
+full-suite results above are diagnostic rather than all-core acceptance evidence. Baseline
+`761ff9ff8da14c2e81412504f7a9126b72e42920` and the candidate were built from clean trees with
+`RUSTC_WRAPPER= cargo build -p datafusion-bench --profile release_debug --features unstable_encodings`.
+Their binary SHA-256 values were respectively
+`24803a50c3e5be5109c4ed8868dedb605d2ad33aaea3dc933b5abccff50f5351` and
+`8e7e0faaf9022381d07dc8c1f1b57b309f2c964be6a6e1105f515d90b76b299b`; the shared input-manifest
+SHA-256 was `57b06c2b942308afbb77805476e05e31f9029e69685936184d463bbe68f68d6a`.
+
+The checked-in matrix runner executed 20 fresh serialized roots, ten per binary, alternating
+variant order across pairs. Each root globally gated exact public Arrow results at one
+thread/partition before measurement, then used two samples at 14 threads/partitions so V1/frontier
+order alternated inside the root. Every measured child had an immediate same-backend/query HOT
+prewarm and macOS `/usr/bin/time -l` RSS. All 20 exact gates and 80 measured children succeeded;
+the public-result artifacts were byte-identical with SHA-256
+`da3ce9016e952dbb8c8531851f30a793806744eb8c2ff7246f0ec4ceea16e2eb`.
+
+| Metric | 128 Ki V1 median | 128 Ki frontier median | 512 Ki V1 median | 512 Ki frontier median | Paired 512/128 of frontier/V1 |
+|---|---:|---:|---:|---:|---:|
+| Internal query | 8.426 ms | 9.725 ms | 8.706 ms | 9.982 ms | 0.980; 6/10 wins |
+| Supervisor wall | 47.859 ms | 48.080 ms | 47.045 ms | 47.442 ms | 0.942; 6/10 wins |
+| Peak RSS | 89.36 MiB | 93.47 MiB | 90.28 MiB | 107.66 MiB | 1.152; 0/10 wins |
+
+The normalized internal-time result was order-confounded: 1.040 with 1/5 wins when the candidate
+root ran first, versus 0.924 with 5/5 wins when it ran second. The candidate consistently reduced
+retired instructions by about 1.2%, but raw frontier time was essentially unchanged and raw
+frontier RSS rose about 17%. A coarse `(user + system) / wall` proxy rose only from about 1.9 to
+2.1 utilized cores despite 14 execution threads, so larger morsels did not produce an all-core
+scaling win.
+
+- Artifact root: `/private/tmp/tpch-q6-targetrows-allcore-ab-20260912-d25daa1c`
+- Top-level manifest SHA-256: `54c91d75e966bdc838a575548d6a297209014bb930345b4656a719e3b601c950`
+- Decision: **REJECTED**. Production push-frontier remains at 128 Ki-row morsels. This trial does
+  not change any baseline V1, Frontier, Exact, RSS, or Time box.
 
 ## FineWeb Q0-Q8
 

@@ -28,12 +28,6 @@ use vortex_utils::parallelism::get_available_parallelism;
 use crate::ScanBackend;
 use crate::ScanExecutorOptions;
 
-const PUSH_FRONTIER_TARGET_ROWS: u64 = 512 * 1024;
-
-fn target_rows_override(backend: ScanBackend) -> Option<u64> {
-    (backend == ScanBackend::PushFrontier).then_some(PUSH_FRONTIER_TARGET_ROWS)
-}
-
 /// Builder for push scans over a raw layout and segment source.
 ///
 /// Unlike [`vortex_layout::scan::scan_builder::ScanBuilder`], this builder never constructs or
@@ -72,9 +66,6 @@ impl MorselScanBuilder<ArrayRef> {
                 let mut executor = PushMorselScanExecutor::new(layout, segments)
                     .with_threads(options.threads)
                     .with_frontier_io(backend == ScanBackend::PushFrontier);
-                if let Some(target_rows) = target_rows_override(backend) {
-                    executor = executor.with_target_rows(target_rows);
-                }
                 if let Some(driver) = &options.external_driver {
                     executor = executor.with_external_threads(Arc::clone(driver));
                 }
@@ -293,16 +284,6 @@ mod tests {
     use vortex_error::vortex_err;
 
     use super::*;
-
-    #[test]
-    fn production_target_rows_expand_only_frontier_backend() {
-        assert_eq!(target_rows_override(ScanBackend::V1), None);
-        assert_eq!(target_rows_override(ScanBackend::Push), None);
-        assert_eq!(
-            target_rows_override(ScanBackend::PushFrontier),
-            Some(512 * 1024)
-        );
-    }
 
     #[test]
     fn limit_spans_ordered_output_tasks() -> VortexResult<()> {
