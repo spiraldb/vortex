@@ -438,6 +438,166 @@ fn q6_ranges_build_three_predicate_sources_and_match_v1() -> VortexResult<()> {
 }
 
 #[test]
+fn cascade_frontier_cursor_moves_down_rows_and_right_groups() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let projection = select(vec!["a", "b"], root());
+    let filter = and(
+        gt(get_item("a", root()), lit(100i32)),
+        lt(get_item("b", root()), lit(80i32)),
+    );
+    let cascade = crate::build_plan(
+        &fixture.layout,
+        &projection,
+        Some(&filter),
+        ConjunctMode::Cascade,
+    )?;
+    let ranges = crate::morsels(&cascade, 128);
+    let mut first = cascade.frontier(ranges[0].clone());
+    assert_eq!(first.range(), &ranges[0]);
+    let first_batch = first.next_io(1)?;
+    assert_eq!(first_batch.kind(), crate::IoGroupKind::Conjunct);
+    assert_eq!(first_batch.io().len(), 1);
+    assert!(first_batch.is_complete());
+    assert!(first.right()?);
+    assert_eq!(first.range(), &ranges[0]);
+    let second_batch = first.next_io(1)?;
+    assert_eq!(second_batch.kind(), crate::IoGroupKind::Conjunct);
+    assert_eq!(second_batch.io().len(), 1);
+    assert!(second_batch.is_complete());
+    assert!(first.right()?);
+    let mut projection_io = Vec::new();
+    let projection_kind = loop {
+        let batch = first.next_io(1)?;
+        projection_io.extend_from_slice(batch.io());
+        if batch.is_complete() {
+            break batch.kind();
+        }
+    };
+    assert_eq!(projection_kind, crate::IoGroupKind::Projection);
+    assert!(!projection_io.is_empty());
+    assert!(!first.right()?);
+    first.down(ranges[1].clone());
+    assert_eq!(first.range(), &ranges[1]);
+    assert_eq!(first.group(), 0);
+    assert_eq!(first.next_io(1)?.kind(), crate::IoGroupKind::Conjunct);
+    Ok(())
+}
+
+#[test]
+fn parallel_frontier_groups_all_conjuncts_and_resumes_in_bits() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let filter = and(
+        gt(get_item("a", root()), lit(100i32)),
+        lt(get_item("b", root()), lit(80i32)),
+    );
+    let parallel = crate::build_plan(
+        &fixture.layout,
+        &select(vec!["a", "b"], root()),
+        Some(&filter),
+        ConjunctMode::Parallel,
+    )?;
+    let ranges = crate::morsels(&parallel, 128);
+    let mut first = parallel.frontier(ranges[0].clone());
+    let first_piece = first.next_io(1)?;
+    assert_eq!(first_piece.kind(), crate::IoGroupKind::Conjunct);
+    assert_eq!(first_piece.io().len(), 1);
+    assert!(!first_piece.is_complete());
+    assert!(first.right().is_err());
+    let second_piece = first.next_io(1)?;
+    assert_eq!(second_piece.io().len(), 1);
+    assert!(second_piece.is_complete());
+    assert!(first.right()?);
+    assert_eq!(first.next_io(1)?.kind(), crate::IoGroupKind::Projection);
+    Ok(())
+}
+
+#[test]
+fn frontier_scheduler_depths_match_v1() -> VortexResult<()> {
+    let session = session();
+    let fixture = misaligned_fixture(&session, ROWS)?;
+    let query = Query {
+        name: "frontier-depths",
+        projection: select(vec!["a", "c"], root()),
+        filter: Some(and(
+            gt(get_item("a", root()), lit(100i32)),
+            lt(get_item("b", root()), lit(80i32)),
+        )),
+    };
+    let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
+    let oracle = run_v1(&session, &fixture.layout, &segments, &query)?;
+
+    for mode in [ConjunctMode::Cascade, ConjunctMode::Parallel] {
+        for resident in [1, 2, 3] {
+            for (depth, speculative, adaptive) in [
+                (None, 0, false),
+                (Some(0), 0, false),
+                (Some(1), 0, false),
+                (Some(1), 1, false),
+                (Some(1), 2, false),
+                (Some(1), 0, true),
+            ] {
+                let refill_widths: &[usize] = if depth.is_some() { &[1, 4] } else { &[1] };
+                for &frontier_refill_ranges in refill_widths {
+                    let actual = run_morsel(
+                        &session,
+                        &fixture.layout,
+                        &segments,
+                        &query,
+                        MorselConfig {
+                            threads: 2,
+                            morsel_rows: 64,
+                            mode,
+                            resident_morsels_per_thread: resident,
+                            frontier_lookahead_per_thread: depth,
+                            speculative_frontiers: speculative,
+                            adaptive_frontiers: adaptive,
+                            frontier_refill_ranges,
+                            ..Default::default()
+                        },
+                    )?;
+                    assert_same_rows(
+                        &session,
+                        &v1_dtype(&fixture.layout, &query)?,
+                        &oracle,
+                        &actual,
+                    )?;
+                }
+            }
+        }
+    }
+
+    let projection = Query {
+        name: "frontier-projection",
+        projection: select(vec!["a", "c"], root()),
+        filter: None,
+    };
+    let oracle = run_v1(&session, &fixture.layout, &segments, &projection)?;
+    let actual = run_morsel(
+        &session,
+        &fixture.layout,
+        &segments,
+        &projection,
+        MorselConfig {
+            threads: 2,
+            morsel_rows: 64,
+            resident_morsels_per_thread: 3,
+            frontier_lookahead_per_thread: Some(1),
+            speculative_frontiers: 2,
+            ..Default::default()
+        },
+    )?;
+    assert_same_rows(
+        &session,
+        &v1_dtype(&fixture.layout, &projection)?,
+        &oracle,
+        &actual,
+    )?;
+    Ok(())
+}
+
+#[test]
 fn null_range_bound_matches_v1() -> VortexResult<()> {
     let session = session();
     let fixture = aligned_fixture(&session, ROWS)?;
@@ -1184,13 +1344,56 @@ fn executor_prunes_zones_before_registering_data_io() -> VortexResult<()> {
         stats_ids.push(stats.as_::<Flat>().segment_id());
     }
 
+    let projection_expr = select(vec!["a"], root());
+    let filter_expr = gt(get_item("a", root()), lit(100i32));
+    let plan = crate::build_plan(
+        &fixture.layout,
+        &projection_expr,
+        Some(&filter_expr),
+        ConjunctMode::Cascade,
+    )?;
+    let frontier_range = 0..4;
+    let mut pruning = plan.frontier(frontier_range);
+    let mut pruning_ids = Vec::new();
+    let mut pruning_polls = 0;
+    loop {
+        let batch = pruning.next_io(1)?;
+        pruning_polls += 1;
+        assert_eq!(batch.kind(), crate::IoGroupKind::Pruning);
+        pruning_ids.extend(batch.io().iter().map(|key| {
+            let crate::IoKey::Segment(id) = *key;
+            id
+        }));
+        if batch.is_complete() {
+            break;
+        }
+    }
+    assert_eq!(pruning_polls, 1);
+    assert_eq!(pruning_ids, stats_ids[..1]);
+
+    let second_pruning_range = 4..8;
+    let mut second_pruning = plan.frontier(second_pruning_range);
+    let second_pruning_batch = second_pruning.next_io(1)?;
+    assert_eq!(second_pruning_batch.kind(), crate::IoGroupKind::Pruning);
+    assert!(second_pruning_batch.is_complete());
+    assert_eq!(
+        second_pruning_batch.io().to_vec(),
+        [crate::IoKey::Segment(stats_ids[1])]
+    );
+    assert!(pruning.right()?);
+    let conjunct_batch = pruning.next_io(1)?;
+    assert_eq!(conjunct_batch.kind(), crate::IoGroupKind::Conjunct);
+    assert!(conjunct_batch.is_complete());
+    assert!(pruning.right()?);
+    assert_eq!(pruning.next_io(1)?.kind(), crate::IoGroupKind::Projection);
+
     let requests = Arc::new(Mutex::new(Vec::new()));
     let source: Arc<dyn SegmentSource> = Arc::new(RecordingSegmentSource {
         inner: Arc::clone(&fixture.segments),
         requests: Arc::clone(&requests),
     });
-    let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
-    let filter = gt(get_item("a", root()), lit(100i32)).bind(fixture.layout.dtype())?;
+    let projection = projection_expr.bind(fixture.layout.dtype())?;
+    let filter = filter_expr.bind(fixture.layout.dtype())?;
     let executor = PushMorselScanExecutor::new(Arc::clone(&fixture.layout), source)
         .with_target_rows(4)
         .with_threads(2);
@@ -1488,6 +1691,10 @@ fn scan_wide_io_cells_deduplicate_straddled_chunks() -> VortexResult<()> {
     assert_eq!(requests.load(Ordering::Relaxed), 15);
     assert_eq!(stats.io_requests, 15);
     assert!(stats.io_uses > stats.io_requests);
+    assert!(stats.io_cells_live_max > 0);
+    assert!(stats.io_retained_bytes_max > 0);
+    assert_eq!(stats.io_cells_live, 0);
+    assert_eq!(stats.io_retained_bytes, 0);
     Ok(())
 }
 
