@@ -3,10 +3,10 @@
 
 //! Affinity-owned morsel execution over one shared I/O service.
 //!
-//! Each worker owns one arena and at most one active morsel. The arena never crosses a thread
-//! boundary. Planning names segment reads; the scheduler hands them out through the service's
-//! demand stream, and whoever answers that demand completes the cells. A suspended worker waits
-//! for a signal rather than polling anything; exact ticket completion wakes only the worker whose
+//! Each worker owns one arena per resident morsel. Arenas never cross a thread boundary. Planning
+//! names segment reads; the scheduler hands them out through the service's demand stream, and
+//! whoever answers that demand completes the cells. A worker rotates fairly across its resident
+//! morsels and only waits when every one is blocked. Exact ticket completion wakes only the local
 //! continuation parked on that ticket. Completed morsels are delivered in index order as output
 //! capacity becomes available.
 
@@ -86,6 +86,35 @@ pub fn morsels(plan: &ExecPlan, target_rows: u64) -> Vec<Range<u64>> {
     cut_morsels(plan.natural_splits(), target_rows)
 }
 
+/// How the frontier scheduler moves right through later logical I/O groups.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FrontierSpeculation {
+    /// Admit the current group plus at most this many later groups.
+    Bounded(usize),
+    /// Admit every conjunct, then admit projection only when completed ranges show it is likely
+    /// to be needed. Pruning is completed before execution frontiers are scheduled.
+    Adaptive,
+}
+
+impl FrontierSpeculation {
+    fn admits(self, kind: crate::IoGroupKind, group: usize, projection_likely: bool) -> bool {
+        match self {
+            Self::Bounded(right) => group <= right,
+            Self::Adaptive => {
+                kind == crate::IoGroupKind::Conjunct
+                    || (kind == crate::IoGroupKind::Projection && projection_likely)
+            }
+        }
+    }
+}
+
+const ADAPTIVE_PROJECTION_MIN_MORSELS: usize = 8;
+
+fn projection_is_likely(completed: usize, non_empty: usize) -> bool {
+    completed >= ADAPTIVE_PROJECTION_MIN_MORSELS
+        && non_empty.saturating_mul(4) >= completed.saturating_mul(3)
+}
+
 fn overlapping_morsels(morsels: &[Range<u64>], range: &Range<u64>) -> usize {
     let first = morsels.partition_point(|morsel| morsel.end <= range.start);
     let end = morsels.partition_point(|morsel| morsel.start < range.end);
@@ -102,6 +131,10 @@ pub struct MorselScan {
     threads: usize,
     share_decodes: bool,
     lookahead_morsels: usize,
+    resident_morsels_per_thread: usize,
+    frontier_lookahead_per_thread: Option<usize>,
+    frontier_speculation: FrontierSpeculation,
+    frontier_refill_ranges: usize,
     output_rows: usize,
     output_bytes: u64,
     demand_hints: DemandHintDelivery,
@@ -112,6 +145,8 @@ pub struct MorselScan {
     io_round_robin: bool,
     external_driver: Option<ExternalDriver>,
     cancellation: Option<Arc<StreamCancellation>>,
+    io_driver: Mutex<Option<JoinHandle<()>>>,
+    shutdown_io_on_drop: bool,
 }
 
 type CompletionSink = Arc<dyn Fn(usize, VortexResult<Option<ArrayRef>>) + Send + Sync>;
@@ -122,7 +157,7 @@ const EXTERNAL_IDLE_PARK: Duration = Duration::from_micros(20);
 type ExternalDriver = Arc<dyn Fn() -> bool + Send + Sync>;
 
 thread_local! {
-    static EXTERNAL_ARENA: RefCell<Option<(Arc<ExecPlan>, Arena)>> = const { RefCell::new(None) };
+    static EXTERNAL_ARENAS: RefCell<Option<(Arc<ExecPlan>, Vec<Arena>)>> = const { RefCell::new(None) };
 }
 
 /// Delivery policy for optional scheduler-only demand hints.
@@ -229,6 +264,10 @@ struct WorkerRun {
     start: Instant,
 
     lookahead_morsels: usize,
+    resident_morsels_per_thread: usize,
+    frontier_lookahead_per_thread: Option<usize>,
+    frontier_speculation: FrontierSpeculation,
+    frontier_refill_ranges: usize,
     output_rows: usize,
     output_bytes: u64,
     demand_hints: DemandHintDelivery,
@@ -1450,6 +1489,7 @@ struct PipelineStage {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct PipelineWaitToken {
+    slot: usize,
     generation: usize,
     continuation_epoch: usize,
     pipeline: PipelineId,
@@ -1462,6 +1502,7 @@ struct PipelineContinuation {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct OutputWaitToken {
+    slot: usize,
     generation: usize,
     epoch: usize,
 }
@@ -1549,6 +1590,7 @@ fn refine_demand_spans(
 }
 
 struct LocalMorsel<'a> {
+    slot: usize,
     arena: &'a mut Arena,
     physical: Option<PhysicalRuntime>,
     io: IoPlane,
@@ -1797,8 +1839,9 @@ impl PushHost<'_> {
                 .ok_or_else(|| vortex_err!("gate control requires a scheduler host"))?
                 .run
                 .plan;
-            // Demand and activation target the same compiled source group. Resolve it once, then
-            // publish the side information before making any source runnable.
+            // A gate is the coverage-scoped completion credit for the preceding pushed work; no
+            // global pipeline-idle test is involved. Group discovery belongs to the ExecNode
+            // pre-walk, while this static catalog only resolves the sources the gate activates.
             plan.overlapping_source_indices(target, &coverage, &mut self.control.source_matches);
             self.control.source_nodes.clear();
             self.control.source_nodes.extend(
@@ -1920,11 +1963,46 @@ fn claim_lookahead_extension(
     (target > previous).then_some(previous..target)
 }
 
-fn assignment_lookahead_target(index: usize, workers: usize, lookahead: usize) -> usize {
+fn claim_lookahead_refill(
+    cursor: &AtomicUsize,
+    target: usize,
+    refill_ranges: usize,
+    limit: usize,
+) -> Option<Range<usize>> {
+    let target = target.min(limit);
+    loop {
+        let current = cursor.load(Ordering::Acquire);
+        if target <= current {
+            return None;
+        }
+        let end = current
+            .saturating_add(refill_ranges.max(1))
+            .min(target)
+            .min(limit);
+        if cursor
+            .compare_exchange_weak(current, end, Ordering::AcqRel, Ordering::Acquire)
+            .is_ok()
+        {
+            return Some(current..end);
+        }
+    }
+}
+
+fn assignment_lookahead_target(index: usize, active_morsels: usize, lookahead: usize) -> usize {
     index
         .saturating_add(1)
-        .saturating_add(workers)
+        .saturating_add(active_morsels)
         .saturating_add(lookahead)
+}
+
+fn frontier_refill_target(
+    current: usize,
+    assigned_end: usize,
+    capacity: usize,
+    limit: usize,
+) -> Option<usize> {
+    let remaining = current.saturating_sub(assigned_end);
+    (remaining == 0).then(|| assigned_end.saturating_add(capacity).min(limit))
 }
 
 fn round_robin<T>(groups: Vec<Vec<T>>) -> Vec<T> {
@@ -1965,7 +2043,11 @@ struct Scheduler {
     remaining: AtomicUsize,
     stopped: AtomicBool,
     lookahead_cursor: AtomicUsize,
+    frontier_ready_cursor: AtomicUsize,
+    frontier_refill: Mutex<()>,
     lookahead_refills: AtomicU64,
+    completed_morsels: AtomicUsize,
+    non_empty_morsels: AtomicUsize,
 }
 
 enum WorkerMessage {
@@ -1989,7 +2071,11 @@ struct MorselWorkerPool {
 }
 
 impl MorselWorkerPool {
-    fn new(threads: usize, plan: Arc<ExecPlan>) -> VortexResult<Self> {
+    fn new(
+        threads: usize,
+        resident_morsels_per_thread: usize,
+        plan: Arc<ExecPlan>,
+    ) -> VortexResult<Self> {
         let (ready_tx, ready_rx) = mpsc::channel();
         let mut workers = Vec::with_capacity(threads);
 
@@ -2000,7 +2086,9 @@ impl MorselWorkerPool {
             let handle = std::thread::Builder::new()
                 .name(format!("vortex-morsel-{idx}"))
                 .spawn(move || {
-                    let mut arena = plan.instantiate();
+                    let mut arenas = (0..resident_morsels_per_thread)
+                        .map(|_| plan.instantiate())
+                        .collect::<Vec<_>>();
                     if ready_tx.send(()).is_err() {
                         return;
                     }
@@ -2013,7 +2101,7 @@ impl MorselWorkerPool {
                                 done,
                             } => {
                                 let stats =
-                                    scheduler.worker_loop(worker, &signals, &mut arena, None);
+                                    scheduler.worker_loop(worker, &signals, &mut arenas, None);
                                 let _ = done.send(stats);
                             }
                             WorkerMessage::Shutdown => break,
@@ -2163,6 +2251,24 @@ impl OutputCredits {
 }
 
 impl Scheduler {
+    fn observe_morsel(&self, non_empty: bool) {
+        if non_empty {
+            self.non_empty_morsels.fetch_add(1, Ordering::Relaxed);
+        }
+        self.completed_morsels.fetch_add(1, Ordering::Release);
+    }
+
+    fn projection_likely(&self) -> bool {
+        let completed = self.completed_morsels.load(Ordering::Acquire);
+        projection_is_likely(completed, self.non_empty_morsels.load(Ordering::Relaxed))
+    }
+
+    fn active_morsels(&self) -> usize {
+        self.worker_tx
+            .len()
+            .saturating_mul(self.run.resident_morsels_per_thread)
+    }
+
     fn acquire_output(
         &self,
         index: usize,
@@ -2204,7 +2310,11 @@ impl Scheduler {
             next_morsel: AtomicUsize::new(0),
             stopped: AtomicBool::new(false),
             lookahead_cursor: AtomicUsize::new(0),
+            frontier_ready_cursor: AtomicUsize::new(0),
+            frontier_refill: Mutex::new(()),
             lookahead_refills: AtomicU64::new(0),
+            completed_morsels: AtomicUsize::new(0),
+            non_empty_morsels: AtomicUsize::new(0),
         });
         if scheduler.run.morsels.is_empty() {
             scheduler.stop();
@@ -2217,8 +2327,10 @@ impl Scheduler {
     }
 
     fn submit_required_reads(&self, reads: &mut Vec<IoRead>) -> (u64, u64) {
-        self.run.io.sort_reads(reads);
-        reads.dedup_by_key(|read| read.key());
+        if self.run.frontier_lookahead_per_thread.is_none() {
+            self.run.io.sort_reads(reads);
+            reads.dedup_by_key(|read| read.key());
+        }
         for read in reads.iter() {
             read.require();
         }
@@ -2256,21 +2368,113 @@ impl Scheduler {
         if self.stopped.load(Ordering::Acquire) || !self.run.io.background_reads() {
             return;
         }
-        let end = if self.run.plan.has_filter() {
-            (self.worker_tx.len() + self.run.lookahead_morsels).min(self.run.morsels.len())
-        } else {
-            self.run.morsels.len()
-        };
+        let extra = self
+            .run
+            .frontier_lookahead_per_thread
+            .map_or(self.run.lookahead_morsels, |subsequent| {
+                self.worker_tx.len().saturating_mul(subsequent)
+            });
+        let end = self
+            .active_morsels()
+            .saturating_add(extra)
+            .min(self.run.morsels.len());
         self.advance_lookahead(end);
+        self.frontier_ready_cursor.store(end, Ordering::Release);
     }
 
     fn submit_lookahead_slice(self: &Arc<Self>, start: usize, end: usize) {
         if start >= end {
             return;
         }
+        if self.run.frontier_lookahead_per_thread.is_some() && self.run.plan.has_filter() {
+            let mut batches = Vec::<Vec<IoRead>>::new();
+            let speculation = self.run.frontier_speculation;
+            let projection_likely = self.projection_likely();
+            // `MorselScan` receives ranges after the executor's pruning prelude, so its first
+            // runnable group is the first conjunct (or projection for an unfiltered scan).
+            let mut frontier: Option<crate::IoFrontierCursor> = None;
+            for range in &self.run.morsels[start..end] {
+                let frontier = match frontier.as_mut() {
+                    Some(frontier) => {
+                        frontier.down(range.clone());
+                        frontier
+                    }
+                    None => frontier.insert(self.run.plan.execution_frontier(range.clone())),
+                };
+                let mut group = 0;
+                loop {
+                    if matches!(speculation, FrontierSpeculation::Bounded(right) if group > right) {
+                        break;
+                    }
+                    let mut admitted = None;
+                    loop {
+                        let batch = match frontier.next_io(crate::node::PLAN_BUDGET) {
+                            Ok(batch) => batch,
+                            Err(err) => {
+                                self.fail(err);
+                                return;
+                            }
+                        };
+                        let admit = *admitted.get_or_insert_with(|| {
+                            speculation.admits(batch.kind(), group, projection_likely)
+                        });
+                        debug_assert_eq!(
+                            admit,
+                            speculation.admits(batch.kind(), group, projection_likely),
+                            "one frontier group changed kind between bounded pieces"
+                        );
+                        if !admit {
+                            break;
+                        }
+                        if batches.len() == group {
+                            batches.push(Vec::new());
+                        }
+                        let reads = self
+                            .run
+                            .io
+                            .register_reads(batch.io().iter().copied(), IoPriority::Speculative);
+                        batches[group].extend(reads);
+                        if batch.is_complete() {
+                            break;
+                        }
+                    }
+                    if admitted == Some(false) {
+                        break;
+                    }
+                    let has_next = match frontier.right() {
+                        Ok(has_next) => has_next,
+                        Err(err) => {
+                            self.fail(err);
+                            return;
+                        }
+                    };
+                    if !has_next {
+                        break;
+                    }
+                    group += 1;
+                }
+            }
+            // Preserve the group order while batching row-subsequent frontiers at the same depth.
+            // The storage driver can coalesce adjacent segments without moving any range right
+            // ahead of an earlier logical group.
+            for reads in batches {
+                self.submit_ordered_reads(reads);
+            }
+            return;
+        }
+        self.submit_catalog_lookahead_slice(start, end);
+    }
+
+    fn submit_catalog_lookahead_slice(self: &Arc<Self>, start: usize, end: usize) {
         let filtered = self.run.plan.has_filter();
         let mut admission: HashMap<IoKey, bool> = HashMap::default();
         let mut source_indices = Vec::new();
+        // An unfiltered scan knows every read is required. Collect one bounded refill wave before
+        // submitting so the storage driver can coalesce across row-range boundaries without
+        // materializing a scan-sized request vector. Filtered scans retain per-range/group
+        // admission unless round-robin was requested.
+        let mut unfiltered_reads = (!filtered).then(Vec::new);
+        let mut unfiltered_ranges = 0usize;
         let mut eager_groups = self.run.io_round_robin.then(Vec::new);
         let priority = if filtered {
             IoPriority::Speculative
@@ -2315,12 +2519,24 @@ impl Scheduler {
             let (eager, deferred): (Vec<_>, Vec<_>) = reads
                 .into_iter()
                 .partition(|read| admission.get(&read.key()).copied().unwrap_or(false));
-            if let Some(groups) = eager_groups.as_mut() {
+            if let Some(reads) = unfiltered_reads.as_mut() {
+                reads.extend(eager);
+                unfiltered_ranges += 1;
+                if unfiltered_ranges == self.run.frontier_refill_ranges {
+                    self.submit_reads(std::mem::take(reads));
+                    unfiltered_ranges = 0;
+                }
+            } else if let Some(groups) = eager_groups.as_mut() {
                 groups.push(eager);
             } else {
                 self.submit_ordered_reads(eager);
             }
             self.submit_io_batch(deferred, false, false);
+        }
+        if let Some(reads) = unfiltered_reads
+            && !reads.is_empty()
+        {
+            self.submit_reads(reads);
         }
         if let Some(groups) = eager_groups {
             self.submit_ordered_reads(round_robin(groups));
@@ -2342,17 +2558,79 @@ impl Scheduler {
         self.submit_lookahead_slice(extension.start, extension.end);
     }
 
-    fn refill_lookahead(self: &Arc<Self>, retired: usize) {
-        if !self.run.plan.has_filter() {
+    fn advance_frontier_lookahead(self: &Arc<Self>, target: usize) {
+        if self.stopped.load(Ordering::Acquire) || !self.run.io.background_reads() {
             return;
         }
-        let target = (retired + self.worker_tx.len() + self.run.lookahead_morsels)
+        while let Some(extension) = claim_lookahead_refill(
+            &self.lookahead_cursor,
+            target,
+            self.run.frontier_refill_ranges,
+            self.run.morsels.len(),
+        ) {
+            if extension.start > 0 {
+                self.lookahead_refills.fetch_add(1, Ordering::Relaxed);
+            }
+            self.submit_lookahead_slice(extension.start, extension.end);
+        }
+    }
+
+    fn refill_lookahead(self: &Arc<Self>, retired: usize) {
+        if self.run.frontier_lookahead_per_thread.is_some() {
+            // Frontier lookahead follows assignment rather than ordered retirement. A slow head
+            // cannot otherwise prevent other workers from keeping their bounded I/O window full.
+            return;
+        }
+        let extra = self
+            .run
+            .frontier_lookahead_per_thread
+            .map_or(self.run.lookahead_morsels, |subsequent| {
+                self.worker_tx.len().saturating_mul(subsequent)
+            });
+        let target = retired
+            .saturating_add(self.active_morsels())
+            .saturating_add(extra)
             .min(self.run.morsels.len());
-        self.advance_lookahead(target);
+        self.advance_frontier_lookahead(target);
+    }
+
+    fn refill_frontier_if_low(self: &Arc<Self>, assigned_end: usize, subsequent: usize) {
+        if self.stopped.load(Ordering::Acquire) || !self.run.io.background_reads() {
+            return;
+        }
+        let capacity = self.worker_tx.len().saturating_mul(subsequent);
+        let current = self.frontier_ready_cursor.load(Ordering::Acquire);
+        // Refill the full down window when its admitted cursor is consumed. Previously submitted
+        // futures are still draining at this point, so this creates large atomic coalescing waves
+        // without an I/O gap. The target is never wider than `capacity` beyond the newest
+        // assigned range.
+        if frontier_refill_target(current, assigned_end, capacity, self.run.morsels.len()).is_none()
+        {
+            return;
+        }
+        let _refill = self.frontier_refill.lock();
+        let current = self.frontier_ready_cursor.load(Ordering::Acquire);
+        if let Some(target) =
+            frontier_refill_target(current, assigned_end, capacity, self.run.morsels.len())
+        {
+            self.advance_frontier_lookahead(target);
+            self.frontier_ready_cursor.store(
+                self.lookahead_cursor.load(Ordering::Acquire),
+                Ordering::Release,
+            );
+        }
     }
 
     fn submit_io_batch(self: &Arc<Self>, reads: Vec<IoRead>, required: bool, enqueue: bool) {
         if reads.is_empty() {
+            return;
+        }
+        // Background drivers have already received every admitted read through `issue_batch`.
+        // Their shared IoCell is the authoritative state, so retaining the same read in a second
+        // scan-wide map only adds lock traffic and memory. Pull/nowait execution still needs the
+        // map to find and start the exact unissued work exposed by a gate.
+        if self.run.io.background_reads() {
+            debug_assert!(!enqueue || reads.iter().all(|read| !read.is_unissued()));
             return;
         }
         let work = {
@@ -2460,14 +2738,13 @@ impl Scheduler {
         Ok(parked)
     }
 
-    fn drive_external_idle(
+    fn receive_external_signal(
         driver: &ExternalDriver,
         signals: &Receiver<WorkerSignal>,
-        morsel: &mut LocalMorsel<'_>,
-    ) -> Option<bool> {
+    ) -> Result<WorkerSignal, crossbeam_channel::TryRecvError> {
         // Park briefly when the runtime had nothing to run: a waiting thread that spins through
         // the executor competes with the threads doing I/O completion and decode.
-        let signal = if driver() {
+        if driver() {
             signals.try_recv()
         } else {
             signals
@@ -2480,26 +2757,39 @@ impl Scheduler {
                         crossbeam_channel::TryRecvError::Disconnected
                     }
                 })
-        };
-        morsel.handle_external_signal(signal)
+        }
     }
 
     fn worker_loop(
         self: &Arc<Self>,
         worker: usize,
         signals: &Receiver<WorkerSignal>,
-        arena: &mut Arena,
+        arenas: &mut [Arena],
         completion: Option<&CompletionSink>,
     ) -> ScanStats {
-        let mut morsel = LocalMorsel::new(&self.run, arena);
-        let mut runnable = morsel.assign_next(self);
+        let mut morsels = arenas
+            .iter_mut()
+            .enumerate()
+            .map(|(slot, arena)| LocalMorsel::new(&self.run, slot, arena))
+            .collect::<Vec<_>>();
+        let mut runnable = morsels
+            .iter_mut()
+            .map(|morsel| morsel.assign_next(self))
+            .collect::<Vec<_>>();
+        let slot_count = morsels.len();
+        let mut next_slot = 0;
 
         loop {
             if self.stopped.load(Ordering::Acquire) {
                 break;
             }
 
-            if runnable {
+            let ready_slot = (0..slot_count)
+                .map(|offset| (next_slot + offset) % slot_count)
+                .find(|&slot| runnable[slot]);
+            if let Some(slot) = ready_slot {
+                next_slot = slot;
+                let morsel = &mut morsels[slot];
                 let poll = match morsel.pending_output.take() {
                     Some((index, batch)) => Ok(LocalPoll::Complete {
                         index,
@@ -2508,8 +2798,11 @@ impl Scheduler {
                     None => morsel.run(self),
                 };
                 match poll {
-                    Ok(LocalPoll::Runnable) => runnable = true,
-                    Ok(LocalPoll::Idle) => runnable = false,
+                    Ok(LocalPoll::Runnable) => runnable[slot] = true,
+                    Ok(LocalPoll::Idle) => {
+                        runnable[slot] = false;
+                        next_slot = (slot + 1) % slot_count;
+                    }
                     Ok(LocalPoll::PushBlocked {
                         pipeline,
                         stage,
@@ -2522,7 +2815,7 @@ impl Scheduler {
                                     PipelineStage { pipeline, stage },
                                     PipelineContinuation { token },
                                 );
-                                runnable = morsel
+                                runnable[slot] = morsel
                                     .physical
                                     .as_ref()
                                     .is_some_and(|runtime| !runtime.is_idle());
@@ -2531,7 +2824,7 @@ impl Scheduler {
                                 if let Some(runtime) = morsel.physical.as_mut() {
                                     runtime.enqueue_resume(pipeline, stage);
                                     morsel.stats.push_pipeline_boundary_resumes += 1;
-                                    runnable = true;
+                                    runnable[slot] = true;
                                 } else {
                                     self.fail(vortex_err!(
                                         "pipeline wait lost its physical runtime"
@@ -2544,12 +2837,16 @@ impl Scheduler {
                                 break;
                             }
                         }
+                        if !runnable[slot] {
+                            next_slot = (slot + 1) % slot_count;
+                        }
                     }
                     Ok(LocalPoll::Complete { index, batch }) => {
+                        next_slot = (slot + 1) % slot_count;
                         if let Some(completion) = completion {
                             completion(index, Ok(batch));
                             self.complete(index);
-                            runnable =
+                            runnable[slot] =
                                 !self.stopped.load(Ordering::Acquire) && morsel.assign_next(self);
                         } else if let Some(batch) = batch {
                             let rows = batch.len();
@@ -2564,16 +2861,16 @@ impl Scheduler {
                             ) {
                                 self.emit(index, morsel.range.start, batch, head_bypass);
                                 self.complete(index);
-                                runnable = !self.stopped.load(Ordering::Acquire)
+                                runnable[slot] = !self.stopped.load(Ordering::Acquire)
                                     && morsel.assign_next(self);
                             } else {
                                 morsel.pending_output = Some((index, batch));
                                 morsel.credit_waiting = Some(token);
-                                runnable = false;
+                                runnable[slot] = false;
                             }
                         } else {
                             self.complete(index);
-                            runnable =
+                            runnable[slot] =
                                 !self.stopped.load(Ordering::Acquire) && morsel.assign_next(self);
                         }
                     }
@@ -2586,38 +2883,60 @@ impl Scheduler {
                 continue;
             }
 
-            if let Some(driver) = &self.run.external_driver {
-                let Some(wake) = Self::drive_external_idle(driver, signals, &mut morsel) else {
-                    break;
-                };
-                runnable = wake;
-                continue;
-            }
-
-            match signals.recv() {
-                Ok(WorkerSignal::PushWake(token)) => {
-                    runnable = morsel.wake_pipeline(token);
+            let signal = if let Some(driver) = &self.run.external_driver {
+                match Self::receive_external_signal(driver, signals) {
+                    Ok(signal) => signal,
+                    Err(crossbeam_channel::TryRecvError::Empty) => continue,
+                    Err(crossbeam_channel::TryRecvError::Disconnected) => break,
                 }
-                Ok(WorkerSignal::Credit(token)) if morsel.credit_waiting == Some(token) => {
-                    morsel.credit_waiting = None;
-                    runnable = true;
+            } else {
+                match signals.recv() {
+                    Ok(signal) => signal,
+                    Err(_) => break,
                 }
-                Ok(WorkerSignal::Credit(_)) => {
-                    morsel.stats.push_stale_wakes += 1;
+            };
+            match signal {
+                WorkerSignal::PushWake(token) => {
+                    let Some(morsel) = morsels.get_mut(token.slot) else {
+                        self.fail(vortex_err!("pipeline wake named an unknown resident slot"));
+                        break;
+                    };
+                    runnable[token.slot] |= morsel.wake_pipeline(token);
                 }
-                Ok(WorkerSignal::Shutdown) | Err(_) => break,
+                WorkerSignal::Credit(token) => {
+                    let Some(morsel) = morsels.get_mut(token.slot) else {
+                        self.fail(vortex_err!("output wake named an unknown resident slot"));
+                        break;
+                    };
+                    if morsel.credit_waiting == Some(token) {
+                        morsel.credit_waiting = None;
+                        runnable[token.slot] = true;
+                    } else {
+                        morsel.stats.push_stale_wakes += 1;
+                    }
+                }
+                WorkerSignal::Shutdown => break,
             }
         }
-        if morsel.active {
-            if let Some(physical) = morsel.physical.as_mut() {
-                physical.reset(morsel.range.clone());
+        let mut stats = ScanStats::default();
+        for morsel in &mut morsels {
+            if morsel.active {
+                if let Some(physical) = morsel.physical.as_mut() {
+                    physical.reset(morsel.range.clone());
+                }
+                retire_morsel(
+                    morsel.arena,
+                    self.run.plan.root(),
+                    &self.run.cells,
+                    &morsel.io,
+                );
+                morsel.io.clear();
+                morsel.active = false;
             }
-            retire_morsel(morsel.arena, self.run.plan.root(), &self.run.cells);
-            morsel.io.clear();
-            morsel.active = false;
+            morsel.restore_physical();
+            stats.merge(&morsel.stats);
         }
-        morsel.restore_physical();
-        morsel.stats
+        stats
     }
 
     fn complete(self: &Arc<Self>, index: usize) {
@@ -2757,6 +3076,11 @@ impl Scheduler {
         stats.io_batches = self.run.io.io_start_batches();
         stats.io_waits = self.run.io.io_waits();
         stats.io_wait_time = self.run.io.io_wait_time();
+        stats.io_cells_live = self.run.io.live_cells();
+        stats.io_cells_live_max = self.run.io.peak_live_cells();
+        stats.io_retained_bytes = self.run.io.retained_bytes();
+        stats.io_retained_bytes_max = self.run.io.peak_retained_bytes();
+        stats.io_cancellations = self.run.io.io_cancellations();
         stats.lookahead_refills += self.lookahead_refills.load(Ordering::Relaxed);
         let output = self.output_credits.state.lock();
         stats.output_rows_max = stats
@@ -2790,34 +3114,16 @@ enum LocalPoll {
 }
 
 impl<'a> LocalMorsel<'a> {
-    fn handle_external_signal(
-        &mut self,
-        signal: Result<WorkerSignal, crossbeam_channel::TryRecvError>,
-    ) -> Option<bool> {
-        match signal {
-            Err(crossbeam_channel::TryRecvError::Empty) => Some(false),
-            Ok(WorkerSignal::PushWake(token)) => Some(self.wake_pipeline(token)),
-            Ok(WorkerSignal::Credit(token)) if self.credit_waiting == Some(token) => {
-                self.credit_waiting = None;
-                Some(true)
-            }
-            Ok(WorkerSignal::Credit(_)) => {
-                self.stats.push_stale_wakes += 1;
-                Some(false)
-            }
-            Ok(WorkerSignal::Shutdown) | Err(crossbeam_channel::TryRecvError::Disconnected) => None,
-        }
-    }
-
     fn restore_physical(&mut self) {
         if let Some(physical) = self.physical.take() {
             self.arena.restore_push_sidebands(physical.into_sidebands());
         }
     }
 
-    fn new(run: &WorkerRun, arena: &'a mut Arena) -> Self {
+    fn new(run: &WorkerRun, slot: usize, arena: &'a mut Arena) -> Self {
         let physical = Some(PhysicalRuntime::new(&run.plan, arena.take_push_sidebands()));
         Self {
+            slot,
             arena,
             physical,
             io: IoPlane::new(Arc::clone(&run.io)),
@@ -2846,12 +3152,15 @@ impl<'a> LocalMorsel<'a> {
             self.active = false;
             return false;
         };
-        if scheduler.run.plan.has_filter() {
-            scheduler.advance_lookahead(assignment_lookahead_target(
+        match scheduler.run.frontier_lookahead_per_thread {
+            Some(subsequent) => {
+                scheduler.refill_frontier_if_low(index.saturating_add(1), subsequent);
+            }
+            None => scheduler.advance_lookahead(assignment_lookahead_target(
                 index,
-                scheduler.worker_tx.len(),
+                scheduler.active_morsels(),
                 scheduler.run.lookahead_morsels,
-            ));
+            )),
         }
 
         self.index = index;
@@ -2908,6 +3217,7 @@ impl<'a> LocalMorsel<'a> {
     ) -> PipelineWaitToken {
         self.wait_epoch = self.wait_epoch.wrapping_add(1);
         PipelineWaitToken {
+            slot: self.slot,
             generation: self.generation,
             continuation_epoch: self.wait_epoch,
             pipeline,
@@ -2918,6 +3228,7 @@ impl<'a> LocalMorsel<'a> {
     fn next_output_wait_token(&mut self) -> OutputWaitToken {
         self.wait_epoch = self.wait_epoch.wrapping_add(1);
         OutputWaitToken {
+            slot: self.slot,
             generation: self.generation,
             epoch: self.wait_epoch,
         }
@@ -2958,7 +3269,14 @@ impl<'a> LocalMorsel<'a> {
                     &scheduler.run.cells,
                     &mut self.stats,
                 )?;
-                let (started, batches) = scheduler.submit_reads(self.io.take_reads());
+                let (started, batches) = if scheduler.run.frontier_lookahead_per_thread.is_some() {
+                    // The plan cursor, rather than planning-poll timing, owns I/O admission in
+                    // frontier mode. Keep these local cells available for execution and let gates
+                    // promote later groups with their exact coverage.
+                    (0, 0)
+                } else {
+                    scheduler.submit_reads(self.io.take_reads())
+                };
                 self.stats.io_requests += started;
                 self.stats.io_batches += batches;
                 match poll {
@@ -2994,7 +3312,8 @@ impl<'a> LocalMorsel<'a> {
             } => false,
         };
         {
-            let mut io_work = scheduler.io_work.lock();
+            let mut io_work =
+                (!scheduler.run.io.background_reads()).then(|| scheduler.io_work.lock());
             for &source_index in &self.push_control.source_matches {
                 let source = &plan.sources()[source_index];
                 if !is_deferred(source.role) {
@@ -3005,16 +3324,35 @@ impl<'a> LocalMorsel<'a> {
                     plan.source_io_uses_at(source_index, self.range.clone())
                 {
                     debug_assert_eq!(role, source.role);
-                    let work = if let Some(work) = io_work.get(&key) {
-                        Arc::clone(work)
-                    } else {
-                        let read = scheduler.run.io.read_key(key).ok_or_else(|| {
-                            vortex_err!("planned push source IO work {key:?} is not registered")
-                        })?;
-                        let required = read.priority() == IoPriority::Required;
-                        let work = new_io_work(read, required);
-                        io_work.insert(key, Arc::clone(&work));
-                        work
+                    let work = match io_work.as_mut() {
+                        Some(io_work) => {
+                            if let Some(work) = io_work.get(&key) {
+                                Arc::clone(work)
+                            } else {
+                                let read = scheduler.run.io.read_key(key).ok_or_else(|| {
+                                    vortex_err!(
+                                        "planned push source IO work {key:?} is not registered"
+                                    )
+                                })?;
+                                // Planning can name a later cascade group as required before its
+                                // gate has established demand. Only an already-issued required
+                                // read is actually on the critical path; an unissued cell remains
+                                // eligible for gate promotion.
+                                let required =
+                                    !read.is_unissued() && read.priority() == IoPriority::Required;
+                                let work = new_io_work(read, required);
+                                io_work.insert(key, Arc::clone(&work));
+                                work
+                            }
+                        }
+                        None => {
+                            let read = scheduler.run.io.read_key(key).ok_or_else(|| {
+                                vortex_err!("planned push source IO work {key:?} is not registered")
+                            })?;
+                            let required =
+                                !read.is_unissued() && read.priority() == IoPriority::Required;
+                            new_io_work(read, required)
+                        }
                     };
                     bindings.push(BoundDemandIo {
                         key,
@@ -3274,16 +3612,23 @@ impl<'a> LocalMorsel<'a> {
         scheduler: &Scheduler,
         batch: Option<ArrayRef>,
     ) -> VortexResult<LocalPoll> {
-        if batch.is_none() {
+        let non_empty = batch.as_ref().is_some_and(|batch| !batch.is_empty());
+        if !non_empty {
             self.stats.morsels_empty += 1;
         }
+        scheduler.observe_morsel(non_empty);
         self.stats.demand_hints_dropped +=
             u64::try_from(self.push_control.demand_hints.len()).unwrap_or(u64::MAX);
         self.push_control.demand_hints.clear();
         if let Some(physical) = self.physical.as_mut() {
             physical.reset(self.range.clone());
         }
-        retire_morsel(self.arena, scheduler.run.plan.root(), &scheduler.run.cells);
+        retire_morsel(
+            self.arena,
+            scheduler.run.plan.root(),
+            &scheduler.run.cells,
+            &self.io,
+        );
         self.io.clear();
         if batch.is_some() && self.stats.time_to_first_batch.is_none() {
             self.stats.time_to_first_batch = Some(scheduler.run.start.elapsed());
@@ -3431,6 +3776,10 @@ impl MorselScan {
             threads: 1,
             share_decodes: true,
             lookahead_morsels: 0,
+            resident_morsels_per_thread: 1,
+            frontier_lookahead_per_thread: None,
+            frontier_speculation: FrontierSpeculation::Adaptive,
+            frontier_refill_ranges: 32,
             output_rows: usize::MAX,
             output_bytes: u64::MAX,
             demand_hints: DemandHintDelivery::Immediate,
@@ -3440,6 +3789,8 @@ impl MorselScan {
             io_round_robin: false,
             external_driver: None,
             cancellation: None,
+            io_driver: Mutex::new(None),
+            shutdown_io_on_drop: true,
         }
     }
 
@@ -3473,6 +3824,16 @@ impl MorselScan {
     /// Set the number of driving threads and affinity-owned active morsels.
     pub fn with_threads(mut self, threads: usize) -> Self {
         self.threads = threads.max(1);
+        self
+    }
+
+    /// Keep this many morsel execution contexts resident on each driving thread.
+    ///
+    /// A worker rotates to another resident morsel whenever the current one blocks on an exact
+    /// dependency. This can fill storage concurrency with non-speculative work at the cost of one
+    /// arena and one in-progress filter mask per additional resident morsel.
+    pub fn with_resident_morsels_per_thread(mut self, morsels: usize) -> Self {
+        self.resident_morsels_per_thread = morsels.max(1);
         self
     }
 
@@ -3581,6 +3942,12 @@ impl MorselScan {
     pub(crate) fn with_io_service(mut self, io: Arc<IoService>) -> Self {
         self.io = io;
         self.demand = Mutex::new(None);
+        self.shutdown_io_on_drop = false;
+        self
+    }
+
+    pub(crate) fn with_io_driver(self, driver: JoinHandle<()>) -> Self {
+        *self.io_driver.lock() = Some(driver);
         self
     }
 
@@ -3589,10 +3956,52 @@ impl MorselScan {
         self
     }
 
-    /// Keep this many future morsels visible to filtered background I/O in addition to the
-    /// worker-active window. Unfiltered scans retain whole-plan lookahead.
+    /// Keep this many future morsels visible to background I/O in addition to the worker-active
+    /// window.
     pub fn with_lookahead_morsels(mut self, morsels: usize) -> Self {
         self.lookahead_morsels = morsels;
+        self
+    }
+
+    /// Use plan-defined I/O frontiers and keep this many additional range frontiers visible per
+    /// worker beyond its resident morsels.
+    ///
+    /// The first logical group of each visible range moves down into background I/O. Later groups
+    /// move right only within the configured speculation bound or when a pushed gate supplies
+    /// their authoritative coverage. Calling this method selects the frontier scheduler; without
+    /// it the existing push lookahead policy is retained for direct comparison.
+    pub fn with_frontier_lookahead_per_thread(mut self, frontiers: usize) -> Self {
+        self.frontier_lookahead_per_thread = Some(frontiers);
+        self
+    }
+
+    /// Speculatively move right through at most this many later groups for every visible range.
+    ///
+    /// This is only active with [`Self::with_frontier_lookahead_per_thread`]. Each group remains a
+    /// separate ordered I/O batch, and a later correctness-bearing gate promotes the same cells
+    /// instead of submitting them again.
+    pub fn with_speculative_frontiers(mut self, frontiers: usize) -> Self {
+        self.frontier_speculation = FrontierSpeculation::Bounded(frontiers);
+        self
+    }
+
+    /// Follow every conjunct frontier, then conditionally prefetch projection for later ranges.
+    ///
+    /// Projection becomes eligible after at least eight completed morsels when at least three
+    /// quarters of them produced output. This keeps sparse scans demand-driven while allowing
+    /// dense scans to coalesce projection with their predicate I/O.
+    pub fn with_adaptive_frontier_speculation(mut self) -> Self {
+        self.frontier_speculation = FrontierSpeculation::Adaptive;
+        self
+    }
+
+    /// Submit at most this many new row-range frontiers in one lookahead refill batch.
+    ///
+    /// Refilling in chunks preserves each range's logical group order while exposing same-depth
+    /// reads from several ranges to the storage coalescer in one atomic submission. It never
+    /// widens the configured resident-plus-subsequent admission window.
+    pub fn with_frontier_refill_ranges(mut self, ranges: usize) -> Self {
+        self.frontier_refill_ranges = ranges.max(1);
         self
     }
 
@@ -3661,8 +4070,10 @@ impl MorselScan {
         );
 
         let start = Instant::now();
+        let lease_counts = self.lease_counts();
+        self.io.add_leases(&lease_counts);
         let cells = if self.share_decodes {
-            SharedCells::with_leases(self.lease_counts())
+            SharedCells::with_leases(lease_counts)
         } else {
             SharedCells::disabled()
         };
@@ -3674,6 +4085,10 @@ impl MorselScan {
             cells,
             start,
             lookahead_morsels: self.lookahead_morsels,
+            resident_morsels_per_thread: self.resident_morsels_per_thread,
+            frontier_lookahead_per_thread: self.frontier_lookahead_per_thread,
+            frontier_speculation: self.frontier_speculation,
+            frontier_refill_ranges: self.frontier_refill_ranges,
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
             demand_hints: self.demand_hints,
@@ -3688,17 +4103,18 @@ impl MorselScan {
             .next()
             .ok_or_else(|| vortex_err!("external morsel worker signal channel is missing"))?;
         let plan = Arc::clone(&self.plan);
-        let worker_stats = EXTERNAL_ARENA.with_borrow_mut(|slot| {
-            if slot
-                .as_ref()
-                .is_none_or(|(cached, _)| !Arc::ptr_eq(cached, &plan))
-            {
-                *slot = Some((Arc::clone(&plan), plan.instantiate()));
+        let resident_morsels = self.resident_morsels_per_thread;
+        let worker_stats = EXTERNAL_ARENAS.with_borrow_mut(|slot| {
+            if slot.as_ref().is_none_or(|(cached, arenas)| {
+                !Arc::ptr_eq(cached, &plan) || arenas.len() != resident_morsels
+            }) {
+                let arenas = (0..resident_morsels).map(|_| plan.instantiate()).collect();
+                *slot = Some((Arc::clone(&plan), arenas));
             }
-            let Some((_, arena)) = slot.as_mut() else {
-                unreachable!("external arena was initialized above")
+            let Some((_, arenas)) = slot.as_mut() else {
+                unreachable!("external arenas were initialized above")
             };
-            scheduler.worker_loop(0, &signals, arena, None)
+            scheduler.worker_loop(0, &signals, arenas, None)
         });
         let stats = scheduler.finish(vec![worker_stats])?;
         let batches = scheduler.take_ordered_batches();
@@ -3739,28 +4155,49 @@ impl MorselScan {
 
     /// Run the scan with worker creation and shutdown outside the measured interval.
     pub(crate) fn run_timed(&self) -> VortexResult<(Vec<ArrayRef>, ScanStats, Duration)> {
+        let (batches, _, stats, wall) = self.run_timed_with_output(true)?;
+        Ok((batches, stats, wall))
+    }
+
+    /// Run the scan while consuming output immediately instead of retaining every result array.
+    #[cfg(any(test, feature = "_test-harness"))]
+    pub(crate) fn run_timed_discard(&self) -> VortexResult<(usize, ScanStats, Duration)> {
+        let (_, rows, stats, wall) = self.run_timed_with_output(false)?;
+        Ok((rows, stats, wall))
+    }
+
+    fn run_timed_with_output(
+        &self,
+        retain_output: bool,
+    ) -> VortexResult<(Vec<ArrayRef>, usize, ScanStats, Duration)> {
         self.validate_morsels()?;
         self.ensure_io_taken()?;
         let (output_tx, output_rx) = bounded::<CreditedBatch>(self.threads.max(1));
         let collector = self.completion.is_none().then(|| {
             std::thread::spawn(move || {
-                output_rx
-                    .into_iter()
-                    .map(CreditedBatch::receive)
-                    .collect::<Vec<_>>()
+                let mut batches = Vec::new();
+                let mut rows = 0usize;
+                for batch in output_rx {
+                    let batch = batch.receive();
+                    rows = rows.saturating_add(batch.len());
+                    if retain_output {
+                        batches.push(batch);
+                    }
+                }
+                (batches, rows)
             })
         });
         let (mut stats, wall) = self.run_timed_to(output_tx, self.cancellation.as_ref())?;
-        let batches = match collector {
+        let (batches, rows) = match collector {
             Some(collector) => collector
                 .join()
                 .map_err(|_| vortex_err!("output collector panicked"))?,
-            None => Vec::new(),
+            None => (Vec::new(), 0),
         };
         if let Some(oracle) = self.io.oracle_snapshot() {
             oracle.apply_to(&mut stats);
         }
-        Ok((batches, stats, wall))
+        Ok((batches, rows, stats, wall))
     }
 
     fn run_timed_to(
@@ -3771,12 +4208,24 @@ impl MorselScan {
         // A single worker runs on the calling thread: engines already give each scan a thread
         // of its own, and spawning another per partition only adds scheduler contention.
         let workers = (self.threads > 1)
-            .then(|| MorselWorkerPool::new(self.threads, Arc::clone(&self.plan)))
+            .then(|| {
+                MorselWorkerPool::new(
+                    self.threads,
+                    self.resident_morsels_per_thread,
+                    Arc::clone(&self.plan),
+                )
+            })
             .transpose()?;
-        let mut inline_arena = workers.is_none().then(|| self.plan.instantiate());
+        let mut inline_arenas = workers.is_none().then(|| {
+            (0..self.resident_morsels_per_thread)
+                .map(|_| self.plan.instantiate())
+                .collect::<Vec<_>>()
+        });
         let start = Instant::now();
+        let lease_counts = self.lease_counts();
+        self.io.add_leases(&lease_counts);
         let cells = if self.share_decodes {
-            SharedCells::with_leases(self.lease_counts())
+            SharedCells::with_leases(lease_counts)
         } else {
             SharedCells::disabled()
         };
@@ -3788,6 +4237,10 @@ impl MorselScan {
             cells,
             start,
             lookahead_morsels: self.lookahead_morsels,
+            resident_morsels_per_thread: self.resident_morsels_per_thread,
+            frontier_lookahead_per_thread: self.frontier_lookahead_per_thread,
+            frontier_speculation: self.frontier_speculation,
+            frontier_refill_ranges: self.frontier_refill_ranges,
             output_rows: self.output_rows,
             output_bytes: self.output_bytes,
             demand_hints: self.demand_hints,
@@ -3814,16 +4267,16 @@ impl MorselScan {
             })
         });
         scheduler.submit_exact_lookahead();
-        let worker_stats = match (&workers, inline_arena.as_mut()) {
+        let worker_stats = match (&workers, inline_arenas.as_mut()) {
             (Some(workers), _) => workers.run(Arc::clone(&scheduler), signals)?,
-            (None, Some(arena)) => {
+            (None, Some(arenas)) => {
                 let signals = signals
                     .into_iter()
                     .next()
                     .ok_or_else(|| vortex_err!("inline morsel worker signal channel is missing"))?;
-                vec![scheduler.worker_loop(0, &signals, arena, inline_completion)]
+                vec![scheduler.worker_loop(0, &signals, arenas, inline_completion)]
             }
-            (None, None) => unreachable!("inline arena exists whenever the pool does not"),
+            (None, None) => unreachable!("inline arenas exist whenever the pool does not"),
         };
         let stats = scheduler.finish(worker_stats)?;
         if let Some(coordinator) = coordinator {
@@ -3847,6 +4300,17 @@ impl MorselScan {
     }
 }
 
+impl Drop for MorselScan {
+    fn drop(&mut self) {
+        if self.shutdown_io_on_drop {
+            self.io.shutdown();
+        }
+        if let Some(driver) = self.io_driver.get_mut().take() {
+            drop(driver.join());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
@@ -3867,6 +4331,7 @@ mod tests {
     use super::BoundDemandIo;
     use super::DemandIoAction;
     use super::DemandObservationScratch;
+    use super::FrontierSpeculation;
     use super::GateTrace;
     use super::IoWork;
     use super::OutputCredits;
@@ -3890,12 +4355,16 @@ mod tests {
     use super::apply_unissued_demand;
     use super::assignment_lookahead_target;
     use super::claim_lookahead_extension;
+    use super::claim_lookahead_refill;
     use super::current_pipeline_wait;
+    use super::frontier_refill_target;
     use super::observe_prebound_demand;
     use super::overlapping_morsels;
+    use super::projection_is_likely;
     use super::refine_demand_spans;
     use super::round_robin;
     use super::take_ordered_output;
+    use crate::IoGroupKind;
     use crate::build::PhysicalTopology;
     use crate::build::SourceRole;
     use crate::build::TestPipelineDefinition;
@@ -3940,6 +4409,24 @@ mod tests {
     }
 
     #[test]
+    fn adaptive_frontier_policy_follows_conjuncts_and_guards_projection() {
+        let adaptive = FrontierSpeculation::Adaptive;
+        assert!(adaptive.admits(IoGroupKind::Conjunct, 0, false));
+        assert!(adaptive.admits(IoGroupKind::Conjunct, 17, false));
+        assert!(!adaptive.admits(IoGroupKind::Projection, 3, false));
+        assert!(adaptive.admits(IoGroupKind::Projection, 3, true));
+        assert!(!adaptive.admits(IoGroupKind::Pruning, 0, true));
+
+        let bounded = FrontierSpeculation::Bounded(2);
+        assert!(bounded.admits(IoGroupKind::Projection, 2, false));
+        assert!(!bounded.admits(IoGroupKind::Conjunct, 3, true));
+
+        assert!(!projection_is_likely(7, 7));
+        assert!(projection_is_likely(8, 6));
+        assert!(!projection_is_likely(8, 5));
+    }
+
+    #[test]
     fn compiled_outgoing_marks_cross_pipeline_boundary() -> VortexResult<()> {
         let port = InputPort::new(0)?;
         let topology = PhysicalTopology::for_test(
@@ -3973,6 +4460,7 @@ mod tests {
         let credits = OutputCredits::new(10, 10);
         let (tx, _rx) = crossbeam_channel::unbounded();
         let token = OutputWaitToken {
+            slot: 0,
             generation: 1,
             epoch: 1,
         };
@@ -4023,6 +4511,32 @@ mod tests {
     }
 
     #[test]
+    fn frontier_refills_never_expand_the_admission_target() {
+        let cursor = AtomicUsize::new(4);
+
+        assert_eq!(claim_lookahead_refill(&cursor, 5, 2, 16), Some(4..5));
+        assert_eq!(claim_lookahead_refill(&cursor, 5, 2, 16), None);
+        assert_eq!(claim_lookahead_refill(&cursor, 7, 2, 16), Some(5..7));
+        assert_eq!(claim_lookahead_refill(&cursor, 12, 2, 16), Some(7..9));
+        assert_eq!(claim_lookahead_refill(&cursor, 12, 2, 16), Some(9..11));
+        assert_eq!(claim_lookahead_refill(&cursor, 12, 2, 16), Some(11..12));
+        assert_eq!(claim_lookahead_refill(&cursor, 13, 8, 16), Some(12..13));
+        assert_eq!(claim_lookahead_refill(&cursor, 17, 8, 16), Some(13..16));
+        assert_eq!(claim_lookahead_refill(&cursor, 17, 8, 16), None);
+    }
+
+    #[test]
+    fn frontier_refills_between_bounded_low_and_high_watermarks() {
+        // A 256-range down window remains untouched while any future range is still visible.
+        assert_eq!(frontier_refill_target(400, 300, 256, 1_000), None);
+        assert_eq!(frontier_refill_target(301, 300, 256, 1_000), None);
+        // Once consumed, refill to exactly 256 ranges beyond the newest assignment.
+        assert_eq!(frontier_refill_target(300, 300, 256, 1_000), Some(556));
+        // The scan limit truncates the final refill instead of widening the configured bound.
+        assert_eq!(frontier_refill_target(900, 900, 256, 1_000), Some(1_000));
+    }
+
+    #[test]
     fn round_robin_preserves_each_morsel_order() {
         assert_eq!(
             round_robin(vec![vec![0, 1, 2], vec![10, 11], vec![], vec![20]]),
@@ -4035,6 +4549,7 @@ mod tests {
         let credits = OutputCredits::new(8, 8);
         let (tx, _rx) = crossbeam_channel::unbounded();
         let token = OutputWaitToken {
+            slot: 0,
             generation: 1,
             epoch: 1,
         };
@@ -4607,6 +5122,7 @@ mod tests {
     #[test]
     fn rejects_stale_and_duplicate_pipeline_wakes() {
         let current = PipelineWaitToken {
+            slot: 0,
             generation: 7,
             continuation_epoch: 3,
             pipeline: 11,

@@ -104,6 +104,17 @@ pub struct ScanStats {
     pub io_registered: u64,
     /// Bytes returned by the segment source.
     pub io_bytes: u64,
+    /// Raw I/O cells still registered when execution finished. A successful complete scan must
+    /// report zero.
+    pub io_cells_live: u64,
+    /// Largest number of simultaneously registered raw I/O cells.
+    pub io_cells_live_max: u64,
+    /// Raw bytes still retained by ready I/O cells when execution finished.
+    pub io_retained_bytes: u64,
+    /// Largest logical byte total simultaneously retained by ready I/O cells.
+    pub io_retained_bytes_max: u64,
+    /// Queued or in-flight speculative reads cancelled at their final logical use.
+    pub io_cancellations: u64,
     /// Reads handed out through the demand stream and answered by a completion, rather than
     /// resolved inline through the probe.
     pub io_waits: u64,
@@ -235,6 +246,11 @@ impl ScanStats {
         self.io_cell_hits += other.io_cell_hits;
         self.io_registered += other.io_registered;
         self.io_bytes += other.io_bytes;
+        self.io_cells_live += other.io_cells_live;
+        self.io_cells_live_max = self.io_cells_live_max.max(other.io_cells_live_max);
+        self.io_retained_bytes += other.io_retained_bytes;
+        self.io_retained_bytes_max = self.io_retained_bytes_max.max(other.io_retained_bytes_max);
+        self.io_cancellations += other.io_cancellations;
         self.io_waits += other.io_waits;
         self.nowait_attempts += other.nowait_attempts;
         self.nowait_hits += other.nowait_hits;

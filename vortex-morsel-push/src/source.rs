@@ -13,6 +13,8 @@ use std::sync::Arc;
 
 use futures::FutureExt;
 use futures::StreamExt;
+use futures::future::AbortHandle;
+use futures::future::Abortable;
 use futures::future::BoxFuture;
 use futures::stream::FuturesUnordered;
 use vortex_array::buffer::BufferHandle;
@@ -23,6 +25,7 @@ use vortex_layout::segments::ReadAtNowait;
 use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
+use vortex_utils::aliases::hash_map::HashMap;
 use vortex_utils::aliases::hash_set::HashSet;
 
 use crate::MorselScan;
@@ -36,8 +39,14 @@ use crate::io::NowaitProbe;
 /// How many speculative reads are polled at once. Required and promoted reads are always polled.
 const DEFAULT_BACKGROUND_WINDOW: usize = 16;
 
-/// A read being polled: its key, whether it counts against the speculative window, its result.
-type TaggedRead = BoxFuture<'static, (IoKey, bool, VortexResult<BufferHandle>)>;
+enum TaggedCompletion {
+    Read(IoKey, bool, VortexResult<BufferHandle>),
+    Cancelled(IoKey, bool),
+}
+
+/// A cancellable read being polled: its key, whether it counts against the speculative window,
+/// and either its source result or final-use cancellation.
+type TaggedRead = BoxFuture<'static, TaggedCompletion>;
 
 /// Serves a scan's I/O demand from a [`SegmentSource`].
 ///
@@ -110,13 +119,14 @@ impl SegmentSourceDriver {
     pub fn connect_on_thread(&self, scan: MorselScan) -> VortexResult<MorselScan> {
         let (demand, completions) = scan.take_io()?;
         let drive = self.drive(demand, completions);
-        std::thread::Builder::new()
+        let driver = std::thread::Builder::new()
             .name("vortex-morsel-io".into())
             .spawn(move || futures::executor::block_on(drive))
             .map_err(|err| vortex_err!("failed to spawn the segment source driver: {err}"))?;
         Ok(scan
             .with_background_reads(self.prefers_background_reads())
-            .with_nowait_probe(self.nowait_probe()))
+            .with_nowait_probe(self.nowait_probe())
+            .with_io_driver(driver))
     }
 
     /// Serve `demand` until the scan drops its end of the stream.
@@ -134,6 +144,7 @@ impl SegmentSourceDriver {
             let mut polled = FuturesUnordered::<TaggedRead>::new();
             // Keys currently being polled, and how many of those are speculative.
             let mut in_flight = HashSet::<IoKey>::default();
+            let mut aborts = HashMap::<IoKey, AbortHandle>::default();
             let mut speculative_in_flight = 0usize;
             let mut background = VecDeque::<(IoKey, SegmentFuture)>::new();
             // A worker can block on a read between another worker starting it and that start
@@ -145,7 +156,9 @@ impl SegmentSourceDriver {
                 {
                     in_flight.insert(key);
                     speculative_in_flight += 1;
-                    polled.push(tag(key, future, true));
+                    let (abort, future) = tag(key, future, true);
+                    aborts.insert(key, abort);
+                    polled.push(future);
                 }
                 futures::select_biased! {
                     next = demand.next() => match next {
@@ -164,11 +177,13 @@ impl SegmentSourceDriver {
                                         Ok(ReadAtNowait::Ready(handle)) => {
                                             early_promotions.remove(&request.key);
                                             in_flight.insert(request.key);
-                                            polled.push(tag(
+                                            let (abort, future) = tag(
                                                 request.key,
                                                 futures::future::ready(Ok(handle)).boxed(),
                                                 false,
-                                            ));
+                                            );
+                                            aborts.insert(request.key, abort);
+                                            polled.push(future);
                                         }
                                         Ok(ReadAtNowait::WouldBlock | ReadAtNowait::Unsupported) => {
                                             pending.push(request);
@@ -208,7 +223,9 @@ impl SegmentSourceDriver {
                                 let promoted = early_promotions.remove(&request.key);
                                 if promoted || request.priority == IoPriority::Required {
                                     in_flight.insert(request.key);
-                                    polled.push(tag(request.key, future, false));
+                                    let (abort, future) = tag(request.key, future, false);
+                                    aborts.insert(request.key, abort);
+                                    polled.push(future);
                                 } else {
                                     background.push_back((request.key, future));
                                 }
@@ -220,21 +237,45 @@ impl SegmentSourceDriver {
                                 && let Some((key, future)) = background.remove(position)
                             {
                                 in_flight.insert(key);
-                                polled.push(tag(key, future, false));
+                                let (abort, future) = tag(key, future, false);
+                                aborts.insert(key, abort);
+                                polled.push(future);
                             } else if !in_flight.contains(&key) {
                                 early_promotions.insert(key);
                             }
                         }
+                        Some(IoDemand::Cancel(key)) => {
+                            early_promotions.remove(&key);
+                            if let Some(position) =
+                                background.iter().position(|(queued, _)| *queued == key)
+                            {
+                                drop(background.remove(position));
+                            } else if let Some(abort) = aborts.get(&key) {
+                                abort.abort();
+                            }
+                        }
+                        Some(IoDemand::Shutdown) => return,
                         None => return,
                     },
                     completed = polled.select_next_some() => {
-                        let (key, speculative, result) = completed;
-                        in_flight.remove(&key);
-                        if speculative {
-                            speculative_in_flight -= 1;
-                        }
-                        if !completions.complete(key, result) {
-                            return;
+                        match completed {
+                            TaggedCompletion::Read(key, speculative, result) => {
+                                in_flight.remove(&key);
+                                aborts.remove(&key);
+                                if speculative {
+                                    speculative_in_flight -= 1;
+                                }
+                                if !completions.complete(key, result) {
+                                    return;
+                                }
+                            }
+                            TaggedCompletion::Cancelled(key, speculative) => {
+                                in_flight.remove(&key);
+                                aborts.remove(&key);
+                                if speculative {
+                                    speculative_in_flight -= 1;
+                                }
+                            }
                         }
                     }
                 }
@@ -244,8 +285,11 @@ impl SegmentSourceDriver {
 }
 
 /// Attach the key to a segment future and settle device buffers on the host.
-fn tag(key: IoKey, future: SegmentFuture, speculative: bool) -> TaggedRead {
-    async move {
+fn tag(key: IoKey, future: SegmentFuture, speculative: bool) -> (AbortHandle, TaggedRead) {
+    let (abort, registration) = AbortHandle::new_pair();
+    let cancelled_key = key;
+    let cancelled_speculative = speculative;
+    let future = async move {
         let result = match future.await {
             Ok(handle) if handle.is_on_device() => match handle.try_into_host() {
                 Ok(copy) => copy.await.map(BufferHandle::new_host),
@@ -254,6 +298,88 @@ fn tag(key: IoKey, future: SegmentFuture, speculative: bool) -> TaggedRead {
             result => result,
         };
         (key, speculative, result)
+    };
+    let tagged = async move {
+        match Abortable::new(future, registration).await {
+            Ok((key, speculative, result)) => TaggedCompletion::Read(key, speculative, result),
+            Err(_) => TaggedCompletion::Cancelled(cancelled_key, cancelled_speculative),
+        }
     }
-    .boxed()
+    .boxed();
+    (abort, tagged)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use vortex_layout::segments::SegmentFuture;
+
+    use super::*;
+    use crate::io::IoPriority;
+    use crate::io::IoService;
+
+    struct DropSignal(Option<mpsc::Sender<()>>);
+
+    impl Drop for DropSignal {
+        fn drop(&mut self) {
+            if let Some(sender) = self.0.take() {
+                let _ = sender.send(());
+            }
+        }
+    }
+
+    struct PendingSource {
+        created: mpsc::Sender<()>,
+        dropped: mpsc::Sender<()>,
+    }
+
+    impl SegmentSource for PendingSource {
+        fn request(&self, _id: SegmentId) -> SegmentFuture {
+            let _ = self.created.send(());
+            let guard = DropSignal(Some(self.dropped.clone()));
+            async move {
+                let _guard = guard;
+                futures::future::pending::<VortexResult<BufferHandle>>().await
+            }
+            .boxed()
+        }
+
+        fn prefers_background_reads(&self) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn final_use_cancels_and_drops_source_future() -> VortexResult<()> {
+        let (created_tx, created_rx) = mpsc::channel();
+        let (dropped_tx, dropped_rx) = mpsc::channel();
+        let source: Arc<dyn SegmentSource> = Arc::new(PendingSource {
+            created: created_tx,
+            dropped: dropped_tx,
+        });
+        let driver = SegmentSourceDriver::new(source);
+        let (service, demand) = IoService::new();
+        let key = IoKey::Segment(SegmentId::from(0));
+        service.add_leases(&[(key, 1)].into_iter().collect());
+        let reads = service.register_reads([key], IoPriority::Speculative);
+        assert_eq!(service.start(&reads), 1);
+
+        let drive = driver.drive(demand, service.completions());
+        let thread = std::thread::spawn(move || futures::executor::block_on(drive));
+        created_rx
+            .recv_timeout(Duration::from_secs(1))
+            .map_err(|err| vortex_err!("source future was not created: {err}"))?;
+
+        service.release_use(key);
+        dropped_rx
+            .recv_timeout(Duration::from_secs(1))
+            .map_err(|err| vortex_err!("cancelled source future was not dropped: {err}"))?;
+        service.shutdown();
+        thread
+            .join()
+            .map_err(|_| vortex_err!("source driver panicked"))?;
+        Ok(())
+    }
 }

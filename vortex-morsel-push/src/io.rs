@@ -21,6 +21,7 @@ use std::sync::Weak;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::task::Waker;
 use std::time::Duration;
@@ -86,6 +87,10 @@ pub enum IoDemand {
     Start(Vec<IoRequest>),
     /// Execution is blocked on this read; finish it ahead of speculative work.
     Promote(IoKey),
+    /// No remaining execution use can observe this read. Drop a queued or in-flight future.
+    Cancel(IoKey),
+    /// The owning scan is finished. Drop every remaining source future and stop the driver.
+    Shutdown,
 }
 
 /// The stream of [`IoDemand`] a scan emits. It ends when the scan is dropped.
@@ -122,14 +127,40 @@ enum CellState {
     Requested { started: Instant },
     Ready(BufferHandle),
     Failed(Arc<str>),
+    Released,
+}
+
+struct IoCellSync {
+    state: CellState,
+    waiters: Vec<Waker>,
 }
 
 struct IoCell {
     key: IoKey,
-    state: Mutex<CellState>,
-    waiters: Mutex<Vec<Waker>>,
+    sync: Mutex<IoCellSync>,
     required: AtomicBool,
     submitted: AtomicBool,
+    remaining_uses: AtomicUsize,
+}
+
+/// Planning registers thousands of segment cells concurrently with completion delivery. Segment
+/// ids are already dense and scan-local, so use their low bits to keep unrelated cells off one
+/// global lock. Uses on a registered cell retire through an atomic counter; a shard lock is only
+/// needed to look a cell up or remove its final use. The side map holds counts for keys whose
+/// cells have not been admitted yet.
+const IO_CELL_SHARDS: usize = 16;
+
+#[derive(Default)]
+struct IoCellShardState {
+    cells: HashMap<IoKey, Arc<IoCell>>,
+    pending_leases: HashMap<IoKey, usize>,
+}
+
+type IoCellShard = Mutex<IoCellShardState>;
+
+fn io_cell_shard(key: IoKey) -> usize {
+    let IoKey::Segment(id) = key;
+    usize::try_from(*id).unwrap_or(0) % IO_CELL_SHARDS
 }
 
 #[derive(Clone, Copy)]
@@ -461,8 +492,8 @@ impl IoCell {
         }
     }
 
-    fn wake_waiters(&self) {
-        for waiter in std::mem::take(&mut *self.waiters.lock()) {
+    fn wake_waiters(waiters: Vec<Waker>) {
+        for waiter in waiters {
             waiter.wake();
         }
     }
@@ -479,7 +510,7 @@ const PROBE_UNSUPPORTED: u8 = 2;
 /// service never performs a read itself: it emits [`IoDemand`] and waits for [`IoCompletions`].
 pub(crate) struct IoService {
     demand: mpsc::UnboundedSender<IoDemand>,
-    cells: Mutex<HashMap<IoKey, Arc<IoCell>>>,
+    cells: Box<[IoCellShard]>,
     probe: Mutex<Option<NowaitProbe>>,
     probe_support: AtomicU8,
     background_reads: AtomicBool,
@@ -488,6 +519,11 @@ pub(crate) struct IoService {
     io_wait_nanos: AtomicU64,
     io_starts: AtomicU64,
     io_start_batches: AtomicU64,
+    live_cells: AtomicU64,
+    peak_live_cells: AtomicU64,
+    retained_bytes: AtomicU64,
+    peak_retained_bytes: AtomicU64,
+    io_cancellations: AtomicU64,
     oracle: OnceLock<IoOracle>,
 }
 
@@ -497,7 +533,9 @@ impl IoService {
         let (demand, stream) = mpsc::unbounded();
         let service = Arc::new(Self {
             demand,
-            cells: Mutex::new(HashMap::default()),
+            cells: (0..IO_CELL_SHARDS)
+                .map(|_| Mutex::new(IoCellShardState::default()))
+                .collect(),
             probe: Mutex::new(None),
             probe_support: AtomicU8::new(PROBE_UNKNOWN),
             background_reads: AtomicBool::new(true),
@@ -506,6 +544,11 @@ impl IoService {
             io_wait_nanos: AtomicU64::new(0),
             io_starts: AtomicU64::new(0),
             io_start_batches: AtomicU64::new(0),
+            live_cells: AtomicU64::new(0),
+            peak_live_cells: AtomicU64::new(0),
+            retained_bytes: AtomicU64::new(0),
+            peak_retained_bytes: AtomicU64::new(0),
+            io_cancellations: AtomicU64::new(0),
             oracle: OnceLock::new(),
         });
         (service, stream)
@@ -558,23 +601,134 @@ impl IoService {
         }
     }
 
+    /// Add one scan's exact flat-source use counts before any of its I/O is admitted.
+    ///
+    /// Counts may be added to a shared service by overlapping scans. A later scan that starts
+    /// after an earlier cell was retired simply creates a fresh cell and read.
+    pub(crate) fn add_leases(&self, counts: &HashMap<IoKey, usize>) {
+        for (&key, &count) in counts {
+            if count == 0 {
+                continue;
+            }
+            let mut shard = self.cells[io_cell_shard(key)].lock();
+            if let Some(cell) = shard.cells.get(&key) {
+                cell.remaining_uses.fetch_add(count, Ordering::Relaxed);
+            } else {
+                let leases = shard.pending_leases.entry(key).or_default();
+                *leases = leases.saturating_add(count);
+            }
+        }
+    }
+
+    /// Release one flat-source use. The final release drops ready bytes synchronously and asks the
+    /// source driver to discard any request that has not completed.
+    pub(crate) fn release_use(&self, key: IoKey) {
+        let cell = {
+            let mut shard = self.cells[io_cell_shard(key)].lock();
+            if let Some(cell) = shard.cells.get(&key) {
+                Some(Arc::clone(cell))
+            } else if let Some(leases) = shard.pending_leases.get_mut(&key) {
+                debug_assert!(
+                    *leases > 0,
+                    "released a raw I/O lease past zero for {key:?}"
+                );
+                *leases = leases.saturating_sub(1);
+                if *leases == 0 {
+                    shard.pending_leases.remove(&key);
+                }
+                None
+            } else {
+                debug_assert!(false, "released an untracked raw I/O use for {key:?}");
+                return;
+            }
+        };
+        if let Some(cell) = cell {
+            self.release_cell_use(&cell);
+        }
+    }
+
+    /// Retire a use through the morsel's local cell reference. Non-final releases require no
+    /// registry lock, which keeps common-path retirement out of the contended shard maps.
+    fn release_cell_use(&self, cell: &Arc<IoCell>) {
+        let previous = cell.remaining_uses.fetch_sub(1, Ordering::AcqRel);
+        debug_assert!(
+            previous > 0,
+            "released a raw I/O lease past zero for {:?}",
+            cell.key
+        );
+        if previous != 1 {
+            return;
+        }
+        let removed = {
+            let mut shard = self.cells[io_cell_shard(cell.key)].lock();
+            if cell.remaining_uses.load(Ordering::Acquire) != 0
+                || !shard
+                    .cells
+                    .get(&cell.key)
+                    .is_some_and(|registered| Arc::ptr_eq(registered, cell))
+            {
+                false
+            } else {
+                shard.cells.remove(&cell.key);
+                true
+            }
+        };
+        if !removed {
+            return;
+        }
+        self.live_cells.fetch_sub(1, Ordering::Relaxed);
+        let (cancel, retained, waiters) = {
+            let mut sync = cell.sync.lock();
+            let cancel = matches!(sync.state, CellState::Requested { .. });
+            let retained = match &sync.state {
+                CellState::Ready(handle) => u64::try_from(handle.len()).unwrap_or(u64::MAX),
+                _ => 0,
+            };
+            sync.state = CellState::Released;
+            (cancel, retained, std::mem::take(&mut sync.waiters))
+        };
+        if retained > 0 {
+            self.retained_bytes.fetch_sub(retained, Ordering::Relaxed);
+        }
+        debug_assert!(waiters.is_empty(), "final raw I/O use still had waiters");
+        IoCell::wake_waiters(waiters);
+        if cancel {
+            self.io_cancellations.fetch_add(1, Ordering::Relaxed);
+            drop(self.demand.unbounded_send(IoDemand::Cancel(cell.key)));
+        }
+    }
+
+    pub(crate) fn shutdown(&self) {
+        drop(self.demand.unbounded_send(IoDemand::Shutdown));
+    }
+
     fn register(&self, key: IoKey, priority: IoPriority) -> (Arc<IoCell>, bool) {
-        let mut cells = self.cells.lock();
-        if let Some(cell) = cells.get(&key) {
+        let mut shard = self.cells[io_cell_shard(key)].lock();
+        if let Some(cell) = shard.cells.get(&key) {
             if priority == IoPriority::Required {
                 cell.required.store(true, Ordering::Release);
             }
             return (Arc::clone(cell), false);
         }
 
+        debug_assert!(
+            shard.pending_leases.contains_key(&key) || cfg!(test),
+            "registered raw I/O without a planned lease for {key:?}"
+        );
+        let remaining_uses = shard.pending_leases.remove(&key).unwrap_or_default();
         let cell = Arc::new(IoCell {
             key,
-            state: Mutex::new(CellState::Unissued),
-            waiters: Mutex::new(Vec::new()),
+            sync: Mutex::new(IoCellSync {
+                state: CellState::Unissued,
+                waiters: Vec::new(),
+            }),
             required: AtomicBool::new(priority == IoPriority::Required),
             submitted: AtomicBool::new(false),
+            remaining_uses: AtomicUsize::new(remaining_uses),
         });
-        cells.insert(key, Arc::clone(&cell));
+        shard.cells.insert(key, Arc::clone(&cell));
+        let live = self.live_cells.fetch_add(1, Ordering::Relaxed) + 1;
+        self.peak_live_cells.fetch_max(live, Ordering::Relaxed);
         (cell, true)
     }
 
@@ -601,11 +755,11 @@ impl IoService {
         let mut requests = Vec::with_capacity(reads.len());
         let mut cells = Vec::with_capacity(reads.len());
         for read in reads {
-            let mut state = read.cell.state.lock();
-            if !matches!(*state, CellState::Unissued) {
+            let mut sync = read.cell.sync.lock();
+            if !matches!(sync.state, CellState::Unissued) {
                 continue;
             }
-            *state = CellState::Requested {
+            sync.state = CellState::Requested {
                 started: Instant::now(),
             };
             requests.push(IoRequest {
@@ -655,13 +809,18 @@ impl IoService {
 
     /// Settle a cell as failed because its demand can no longer be answered.
     fn fail_cell(&self, cell: &IoCell) {
-        let mut state = cell.state.lock();
-        if matches!(*state, CellState::Ready(_) | CellState::Failed(_)) {
-            return;
-        }
-        *state = CellState::Failed("the scan's I/O demand stream is closed".into());
-        drop(state);
-        cell.wake_waiters();
+        let waiters = {
+            let mut sync = cell.sync.lock();
+            if matches!(
+                sync.state,
+                CellState::Ready(_) | CellState::Failed(_) | CellState::Released
+            ) {
+                return;
+            }
+            sync.state = CellState::Failed("the scan's I/O demand stream is closed".into());
+            std::mem::take(&mut sync.waiters)
+        };
+        IoCell::wake_waiters(waiters);
     }
 
     pub(crate) fn read(&self, ticket: IoTicket) -> Option<IoRead> {
@@ -669,35 +828,44 @@ impl IoService {
     }
 
     pub(crate) fn read_key(&self, key: IoKey) -> Option<IoRead> {
-        self.cells
+        self.cells[io_cell_shard(key)]
             .lock()
+            .cells
             .get(&key)
             .cloned()
             .map(|cell| IoRead { cell })
     }
 
     fn complete(&self, key: IoKey, result: VortexResult<BufferHandle>) {
-        let Some(cell) = self.cells.lock().get(&key).cloned() else {
+        let Some(cell) = self.cells[io_cell_shard(key)]
+            .lock()
+            .cells
+            .get(&key)
+            .cloned()
+        else {
             return;
         };
-        let mut state = cell.state.lock();
-        let started = match &*state {
-            CellState::Ready(_) | CellState::Failed(_) => return,
+        let mut sync = cell.sync.lock();
+        let started = match &sync.state {
+            CellState::Ready(_) | CellState::Failed(_) | CellState::Released => return,
             CellState::Requested { started } => Some(*started),
             CellState::Unissued => None,
         };
         if let Some(oracle) = self.oracle.get() {
             oracle.observe_complete(key);
         }
-        *state = match result {
+        sync.state = match result {
             Ok(handle) => {
-                self.io_bytes
-                    .fetch_add(handle.len() as u64, Ordering::Relaxed);
+                let retained = u64::try_from(handle.len()).unwrap_or(u64::MAX);
+                self.io_bytes.fetch_add(retained, Ordering::Relaxed);
+                let live = self.retained_bytes.fetch_add(retained, Ordering::Relaxed) + retained;
+                self.peak_retained_bytes.fetch_max(live, Ordering::Relaxed);
                 CellState::Ready(handle)
             }
             Err(err) => CellState::Failed(err.to_string().into()),
         };
-        drop(state);
+        let waiters = std::mem::take(&mut sync.waiters);
+        drop(sync);
         if let Some(started) = started {
             self.io_waits.fetch_add(1, Ordering::Relaxed);
             self.io_wait_nanos.fetch_add(
@@ -705,7 +873,7 @@ impl IoService {
                 Ordering::Relaxed,
             );
         }
-        cell.wake_waiters();
+        IoCell::wake_waiters(waiters);
     }
 
     /// Reads handed out so far.
@@ -716,6 +884,26 @@ impl IoService {
     /// Demand batches handed out so far.
     pub(crate) fn io_start_batches(&self) -> u64 {
         self.io_start_batches.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn live_cells(&self) -> u64 {
+        self.live_cells.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn peak_live_cells(&self) -> u64 {
+        self.peak_live_cells.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn retained_bytes(&self) -> u64 {
+        self.retained_bytes.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn peak_retained_bytes(&self) -> u64 {
+        self.peak_retained_bytes.load(Ordering::Relaxed)
+    }
+
+    pub(crate) fn io_cancellations(&self) -> u64 {
+        self.io_cancellations.load(Ordering::Relaxed)
     }
 
     /// Bytes delivered through completions so far.
@@ -755,14 +943,14 @@ impl IoRead {
     }
 
     pub(crate) fn is_unissued(&self) -> bool {
-        matches!(*self.cell.state.lock(), CellState::Unissued)
+        matches!(self.cell.sync.lock().state, CellState::Unissued)
     }
 
     /// Whether the read has reached a terminal state.
     pub(crate) fn is_settled(&self) -> bool {
         matches!(
-            *self.cell.state.lock(),
-            CellState::Ready(_) | CellState::Failed(_)
+            self.cell.sync.lock().state,
+            CellState::Ready(_) | CellState::Failed(_) | CellState::Released
         )
     }
 
@@ -771,13 +959,15 @@ impl IoRead {
     /// Returns `true` when the continuation was parked. The state lock closes the completion race:
     /// a completion either drains this waker or is observed here before insertion.
     pub(crate) fn park(&self, waker: Waker) -> bool {
-        let state = self.cell.state.lock();
-        if matches!(*state, CellState::Ready(_) | CellState::Failed(_)) {
+        let mut sync = self.cell.sync.lock();
+        if matches!(
+            sync.state,
+            CellState::Ready(_) | CellState::Failed(_) | CellState::Released
+        ) {
             return false;
         }
-        let mut waiters = self.cell.waiters.lock();
-        if !waiters.iter().any(|waiter| waiter.will_wake(&waker)) {
-            waiters.push(waker);
+        if !sync.waiters.iter().any(|waiter| waiter.will_wake(&waker)) {
+            sync.waiters.push(waker);
         }
         true
     }
@@ -844,8 +1034,10 @@ impl IoPlane {
         std::mem::take(&mut *self.unsubmitted.borrow_mut())
             .into_iter()
             .filter(|cell| {
-                !matches!(*cell.state.lock(), CellState::Ready(_))
-                    && !cell.submitted.swap(true, Ordering::AcqRel)
+                !matches!(
+                    cell.sync.lock().state,
+                    CellState::Ready(_) | CellState::Released
+                ) && !cell.submitted.swap(true, Ordering::AcqRel)
             })
             .map(|cell| IoRead { cell })
             .collect()
@@ -869,22 +1061,28 @@ impl IoPlane {
             .get(&ticket.key())
             .cloned()
             .ok_or_else(|| vortex_err!("IO ticket was accessed without registration"))?;
-        let mut state = cell.state.lock();
+        let mut sync = cell.sync.lock();
         if let Some(oracle) = self.service.oracle.get() {
-            let first_need_state = match &*state {
+            let first_need_state = match &sync.state {
                 CellState::Ready(_) | CellState::Failed(_) => FirstNeedState::Ready,
                 CellState::Requested { .. } => FirstNeedState::Requested,
                 CellState::Unissued => FirstNeedState::Unissued,
+                CellState::Released => {
+                    return Err(vortex_err!("IO ticket was accessed after its final use"));
+                }
             };
             oracle.observe_need(cell.key, first_need_state);
         }
-        match &*state {
+        match &sync.state {
             CellState::Ready(handle) => return Ok(Some(handle.clone())),
             CellState::Requested { .. } => return Ok(None),
             CellState::Failed(error) => {
                 return Err(vortex_err!("segment read failed: {error}"));
             }
             CellState::Unissued => {}
+            CellState::Released => {
+                return Err(vortex_err!("IO ticket was accessed after its final use"));
+            }
         }
 
         if let Some(probe) = &self.probe
@@ -898,9 +1096,19 @@ impl IoPlane {
                         .store(PROBE_SUPPORTED, Ordering::Release);
                     stats.nowait_hits += 1;
                     stats.io_bytes += handle.len() as u64;
-                    *state = CellState::Ready(handle.clone());
-                    drop(state);
-                    cell.wake_waiters();
+                    let retained = u64::try_from(handle.len()).unwrap_or(u64::MAX);
+                    let live = self
+                        .service
+                        .retained_bytes
+                        .fetch_add(retained, Ordering::Relaxed)
+                        + retained;
+                    self.service
+                        .peak_retained_bytes
+                        .fetch_max(live, Ordering::Relaxed);
+                    sync.state = CellState::Ready(handle.clone());
+                    let waiters = std::mem::take(&mut sync.waiters);
+                    drop(sync);
+                    IoCell::wake_waiters(waiters);
                     return Ok(Some(handle));
                 }
                 ReadAtNowait::WouldBlock => {
@@ -923,7 +1131,7 @@ impl IoPlane {
         if cell.submitted.load(Ordering::Acquire) {
             return Ok(None);
         }
-        drop(state);
+        drop(sync);
         self.service.promote(&IoRead {
             cell: Arc::clone(&cell),
         });
@@ -940,6 +1148,15 @@ impl IoPlane {
     pub fn release(&self, key: IoKey) {
         self.cells.borrow_mut().remove(&key);
     }
+
+    /// Release one planned raw use, using the local cell reference when the frontier admitted it.
+    pub(crate) fn release_use(&self, key: IoKey) {
+        if let Some(cell) = self.cells.borrow().get(&key) {
+            self.service.release_cell_use(cell);
+        } else {
+            self.service.release_use(key);
+        }
+    }
 }
 
 /// Error helper for a ticket consumed without ever having been planned.
@@ -955,12 +1172,15 @@ mod tests {
     use std::time::Duration;
     use std::time::Instant;
 
+    use vortex_array::buffer::BufferHandle;
+    use vortex_buffer::ByteBuffer;
     use vortex_error::VortexResult;
     use vortex_error::vortex_err;
     use vortex_layout::segments::SegmentId;
     use vortex_utils::aliases::hash_map::HashMap;
 
     use super::FirstNeedState;
+    use super::IoDemand;
     use super::IoKey;
     use super::IoOracleTrace;
     use super::IoPriority;
@@ -970,6 +1190,46 @@ mod tests {
 
     fn key(id: u32) -> IoKey {
         IoKey::Segment(SegmentId::from(id))
+    }
+
+    #[test]
+    fn final_lease_removes_ready_cell_and_drops_retained_bytes() -> VortexResult<()> {
+        let (service, mut demand) = IoService::new();
+        service.add_leases(&[(key(7), 1)].into_iter().collect());
+        let reads = service.register_reads([key(7)], IoPriority::Required);
+        assert_eq!(service.start(&reads), 1);
+        assert!(matches!(demand.try_recv(), Ok(IoDemand::Start(_))));
+
+        assert!(service.completions().complete(
+            key(7),
+            Ok(BufferHandle::new_host(ByteBuffer::from(vec![1, 2, 3, 4])))
+        ));
+        assert_eq!(service.live_cells(), 1);
+        assert_eq!(service.retained_bytes(), 4);
+
+        service.release_use(key(7));
+        assert_eq!(service.live_cells(), 0);
+        assert_eq!(service.retained_bytes(), 0);
+        assert!(service.read_key(key(7)).is_none());
+        assert!(demand.try_recv().is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn final_lease_cancels_an_outstanding_read() {
+        let (service, mut demand) = IoService::new();
+        service.add_leases(&[(key(8), 1)].into_iter().collect());
+        let reads = service.register_reads([key(8)], IoPriority::Speculative);
+        assert_eq!(service.start(&reads), 1);
+        assert!(matches!(demand.try_recv(), Ok(IoDemand::Start(_))));
+
+        service.release_use(key(8));
+        assert!(
+            matches!(demand.try_recv(), Ok(IoDemand::Cancel(cancelled)) if cancelled == key(8))
+        );
+        assert_eq!(service.io_cancellations(), 1);
+        assert_eq!(service.live_cells(), 0);
+        assert_eq!(service.retained_bytes(), 0);
     }
 
     #[test]
