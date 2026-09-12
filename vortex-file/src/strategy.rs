@@ -126,6 +126,15 @@ impl WriteStrategyBuilder {
     /// cross-chunk dictionary layer is omitted (dictionary state shared across chunks would
     /// couple a chunk's bytes to data outside it), and BtrBlocks' per-chunk dictionary
     /// schemes still apply.
+    ///
+    /// Enabling this means handing the built strategy to `WriteOptions::with_strategy`, and
+    /// those options only restrict the compressor to the enabled editions for the strategy they
+    /// build themselves. Writing an encoding outside those editions then fails, so pass a
+    /// compressor narrowed to them with
+    /// [`with_btrblocks_builder`](Self::with_btrblocks_builder) —
+    /// `BtrBlocksCompressorBuilder::default().retain_allowed_encodings(&allowed)`, over the
+    /// array ids the session reports as enabled — or turn the check off with
+    /// `WriteOptions::disable_editions`.
     pub fn with_content_defined_chunking(mut self, options: ContentDefinedChunkingOptions) -> Self {
         self.content_defined_chunking = Some(options);
         self

@@ -122,6 +122,12 @@ async fn write_file(
     let mut buf = ByteBufferMut::empty();
     let summary = session
         .write_options()
+        // `write_options` only restricts the compressor to the enabled editions when it builds
+        // the strategy itself; a strategy passed in here keeps the full set of BtrBlocks
+        // schemes, and serializing one outside those editions is rejected. Both writers below
+        // supply their own strategy, so both opt out of the edition check rather than measure
+        // dedupe on a narrower set of encodings than the compressor actually picks.
+        .disable_editions()
         .with_strategy(strategy)
         .write(
             &mut buf,
