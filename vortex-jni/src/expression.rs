@@ -46,6 +46,7 @@ use vortex::expr::pack;
 use vortex::expr::root;
 use vortex::expr::select;
 use vortex::extension::datetime::Date;
+use vortex::extension::datetime::Time;
 use vortex::extension::datetime::TimeUnit;
 use vortex::extension::datetime::Timestamp;
 use vortex::extension::uuid::Uuid;
@@ -557,6 +558,43 @@ pub extern "system" fn Java_dev_vortex_jni_NativeExpression_literalDate(
             ),
             TimeUnit::Milliseconds => ScalarValue::from(value),
             other => throw_runtime!("date does not support time unit {other}"),
+        };
+        Ok(into_raw(lit(Scalar::try_new(dtype, Some(storage_value))?)))
+    })
+}
+
+/// Build a Time literal holding `value` units since midnight.
+///
+/// `Time` stores seconds and milliseconds as `i32` and microseconds and nanoseconds as `i64`; it
+/// has no day-resolution form, so `TimeUnit::Days` is rejected. A time-of-day has no timezone —
+/// use [`Java_dev_vortex_jni_NativeExpression_literalTimestamp`] for a zoned instant.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_vortex_jni_NativeExpression_literalTime(
+    mut env: EnvUnowned,
+    _class: JClass,
+    value: jlong,
+    time_unit_tag: jbyte,
+    is_null_flag: jboolean,
+) -> jlong {
+    try_or_throw(&mut env, |_| {
+        let unit = parse_time_unit(time_unit_tag)?;
+        let nullability = if is_null_flag {
+            Nullability::Nullable
+        } else {
+            Nullability::NonNullable
+        };
+        let ext = Time::try_new(unit, nullability)?;
+        let dtype = DType::Extension(ext.erased());
+        if is_null_flag {
+            return Ok(into_raw(lit(Scalar::null(dtype))));
+        }
+        let storage_value = match unit {
+            TimeUnit::Seconds | TimeUnit::Milliseconds => ScalarValue::from(
+                i32::try_from(value)
+                    .map_err(|_| vortex_err!("time value does not fit in i32 {unit}: {value}"))?,
+            ),
+            TimeUnit::Microseconds | TimeUnit::Nanoseconds => ScalarValue::from(value),
+            TimeUnit::Days => throw_runtime!("time does not support time unit {unit}"),
         };
         Ok(into_raw(lit(Scalar::try_new(dtype, Some(storage_value))?)))
     })

@@ -29,10 +29,10 @@ import org.junit.jupiter.api.Test;
  * expression that reads valid.
  *
  * <p>So each table is pinned twice: the constants against the bytes Rust matches, and every constant against the native
- * call that consumes it. Both temporal types are exercised because between them they reject enough units to tell the
- * five {@code TimeUnit} tags apart — Timestamp takes everything but {@code DAYS}, Date only {@code DAYS} and
- * {@code MILLISECONDS} — and Date names the unit it rejected, so a swapped tag reports the wrong name here instead of
- * reading a value at the wrong scale.
+ * call that consumes it. All three temporal types are exercised because between them they reject enough units to tell
+ * the five {@code TimeUnit} tags apart — Timestamp and Time take everything but {@code DAYS}, Date only {@code DAYS}
+ * and {@code MILLISECONDS} — and Date and Time name the unit they rejected, so a swapped tag reports the wrong name
+ * here instead of reading a value at the wrong scale.
  */
 public final class ExpressionTagParityTest {
     @BeforeAll
@@ -138,6 +138,30 @@ public final class ExpressionTagParityTest {
         assertDateRejects(TimeUnit.NANOSECONDS);
         assertDateRejects(TimeUnit.MICROSECONDS);
         assertDateRejects(TimeUnit.SECONDS);
+    }
+
+    @Test
+    public void timeAcceptsEveryUnitExceptDays() {
+        for (TimeUnit unit :
+                new TimeUnit[] {TimeUnit.NANOSECONDS, TimeUnit.MICROSECONDS, TimeUnit.MILLISECONDS, TimeUnit.SECONDS}) {
+            assertNotNull(Expression.literalTime(0L, unit), unit::name);
+            assertNotNull(Expression.nullLiteralTime(unit), unit::name);
+        }
+        RuntimeException exception =
+                assertThrows(RuntimeException.class, () -> Expression.literalTime(0L, TimeUnit.DAYS));
+        assertTrue(
+                exception.getMessage().contains("Time type does not support time unit"),
+                () -> "unexpected message: " + exception.getMessage());
+    }
+
+    @Test
+    public void timeRejectsASecondsValueTooWideForItsStorage() {
+        // Seconds and milliseconds are stored as i32, so the JNI layer narrows and has to say so rather than wrap.
+        RuntimeException exception = assertThrows(
+                RuntimeException.class, () -> Expression.literalTime(Integer.MAX_VALUE + 1L, TimeUnit.SECONDS));
+        assertTrue(
+                exception.getMessage().contains("time value does not fit in i32"),
+                () -> "unexpected message: " + exception.getMessage());
     }
 
     @Test

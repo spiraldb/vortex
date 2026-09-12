@@ -62,6 +62,8 @@ public final class NativeExpression {
 
     public static native long literalDate(long value, byte timeUnitTag, boolean isNull);
 
+    public static native long literalTime(long value, byte timeUnitTag, boolean isNull);
+
     public static native long literalTimestamp(long value, byte timeUnitTag, String timezone, boolean isNull);
 
     public static native long literalUuid(byte[] bigEndianBytes, boolean isNull);

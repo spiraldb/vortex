@@ -224,6 +224,24 @@ public final class Expression {
     }
 
     /**
+     * Create a Time literal: a time of day, as {@code value} {@code unit} units since midnight.
+     *
+     * <p>A Time has no date and no timezone; use {@link #literalTimestamp(long, TimeUnit, String)} for an instant. The
+     * storage width follows the unit, so the value must fit in an {@code int} for {@link TimeUnit#SECONDS} and
+     * {@link TimeUnit#MILLISECONDS}.
+     *
+     * @param unit {@link TimeUnit#DAYS} is not a time of day and is rejected; every other unit is valid.
+     */
+    public static Expression literalTime(long value, TimeUnit unit) {
+        return new Expression(NativeExpression.literalTime(value, unit.tag(), false));
+    }
+
+    /** Null Time literal. See {@link #literalTime(long, TimeUnit)} for the {@code unit} constraints. */
+    public static Expression nullLiteralTime(TimeUnit unit) {
+        return new Expression(NativeExpression.literalTime(0L, unit.tag(), true));
+    }
+
+    /**
      * Create a Timestamp literal. The {@code value} is the number of {@code unit} units since the Unix epoch.
      *
      * @param timezone optional IANA timezone identifier (e.g. {@code "UTC"}, {@code "America/Los_Angeles"}). Pass
