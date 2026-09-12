@@ -491,20 +491,40 @@ pub async fn execute_query(
     Ok((result, plan))
 }
 
-/// Print Vortex metrics from execution plans.
+/// Print raw and aggregate metrics for every execution node, plus Vortex-augmented scan metrics.
 fn print_metrics(plans: &[(usize, Format, Arc<dyn ExecutionPlan>)]) {
     for (query_idx, format, plan) in plans {
-        let metric_sets = VortexMetricsFinder::find_all(plan.as_ref());
-        if metric_sets.is_empty() {
-            continue;
-        }
-
         eprintln!("metrics for query={query_idx}, {format}:");
+        print_execution_node_metrics(plan.as_ref(), "0");
+
+        let metric_sets = VortexMetricsFinder::find_vortex_registry(plan.as_ref());
         for (scan_idx, metrics_set) in metric_sets.iter().enumerate() {
-            eprintln!("\tscan[{scan_idx}]:");
+            eprintln!("\tvortex_registry[{scan_idx}].raw:");
+            for metric in metrics_set.clone().sorted_for_display().iter() {
+                eprintln!("\t\t{metric}");
+            }
+            eprintln!("\tvortex_registry[{scan_idx}].aggregate:");
             for metric in metrics_set.aggregate().sorted_for_display().iter() {
                 eprintln!("\t\t{metric}");
             }
         }
+    }
+}
+
+fn print_execution_node_metrics(plan: &dyn ExecutionPlan, path: &str) {
+    eprintln!("\tnode[{path}] {}:", plan.name());
+    if let Some(metrics) = plan.metrics() {
+        eprintln!("\t\traw:");
+        for metric in metrics.clone().sorted_for_display().iter() {
+            // Metric's Display includes its raw partition and arbitrary labels.
+            eprintln!("\t\t\t{metric}");
+        }
+        eprintln!("\t\taggregate:");
+        for metric in metrics.aggregate().sorted_for_display().iter() {
+            eprintln!("\t\t\t{metric}");
+        }
+    }
+    for (child_idx, child) in plan.children().iter().enumerate() {
+        print_execution_node_metrics(child.as_ref(), &format!("{path}.{child_idx}"));
     }
 }

@@ -4,15 +4,117 @@
 //! Per-run counters. The eval matrix in the prototype plan records these per row.
 
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 use std::time::Duration;
+use std::time::Instant;
+
+use parking_lot::Mutex;
+use parking_lot::MutexGuard;
 
 static PUSH_PROFILE_ENABLED: OnceLock<bool> = OnceLock::new();
+static SCAN_DIAGNOSTICS_ENABLED: OnceLock<bool> = OnceLock::new();
 
 pub(crate) fn push_profile_enabled() -> bool {
     cfg!(feature = "_test-harness")
         && *PUSH_PROFILE_ENABLED.get_or_init(|| {
             std::env::var_os("VORTEX_MORSEL_PUSH_PROFILE").is_some_and(|value| value != "0")
         })
+}
+
+/// Whether diagnostic-only scan probes are enabled for this process.
+pub(crate) fn scan_diagnostics_enabled() -> bool {
+    *SCAN_DIAGNOSTICS_ENABLED.get_or_init(|| {
+        std::env::var_os("VORTEX_SCAN_DIAGNOSTICS").is_some_and(|value| value != "0")
+    })
+}
+
+/// Aggregate acquisition and wait measurements for one lock site.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct LockContentionStats {
+    /// Lock acquisitions attempted.
+    pub acquisitions: u64,
+    /// Acquisitions that could not take the lock immediately.
+    pub contended_acquisitions: u64,
+    /// Total time spent waiting after a failed immediate acquisition.
+    pub wait_time: Duration,
+    /// Longest wait after a failed immediate acquisition.
+    pub wait_time_max: Duration,
+}
+
+impl LockContentionStats {
+    pub(crate) fn merge(&mut self, other: Self) {
+        self.acquisitions += other.acquisitions;
+        self.contended_acquisitions += other.contended_acquisitions;
+        self.wait_time += other.wait_time;
+        self.wait_time_max = self.wait_time_max.max(other.wait_time_max);
+    }
+}
+
+/// Diagnostic contention measurements for the scan scheduler's instrumented lock classes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ScanLockContentionStats {
+    /// Scan-wide I/O cell shard locks.
+    pub io_cell_shard: LockContentionStats,
+    /// Individual I/O cell state locks.
+    pub io_cell_state: LockContentionStats,
+    /// Frontier refill critical section.
+    pub frontier_refill: LockContentionStats,
+}
+
+impl ScanLockContentionStats {
+    fn merge(&mut self, other: Self) {
+        self.io_cell_shard.merge(other.io_cell_shard);
+        self.io_cell_state.merge(other.io_cell_state);
+        self.frontier_refill.merge(other.frontier_refill);
+    }
+}
+
+/// Diagnostic lock counters. Callers omit this object entirely when diagnostics are disabled.
+pub(crate) struct LockContentionProbe {
+    acquisitions: AtomicU64,
+    contended_acquisitions: AtomicU64,
+    wait_nanoseconds: AtomicU64,
+    wait_nanoseconds_max: AtomicU64,
+}
+
+impl Default for LockContentionProbe {
+    fn default() -> Self {
+        Self {
+            acquisitions: AtomicU64::new(0),
+            contended_acquisitions: AtomicU64::new(0),
+            wait_nanoseconds: AtomicU64::new(0),
+            wait_nanoseconds_max: AtomicU64::new(0),
+        }
+    }
+}
+
+impl LockContentionProbe {
+    pub(crate) fn lock<'a, T>(&self, mutex: &'a Mutex<T>) -> MutexGuard<'a, T> {
+        self.acquisitions.fetch_add(1, Ordering::Relaxed);
+        if let Some(guard) = mutex.try_lock() {
+            return guard;
+        }
+        self.contended_acquisitions.fetch_add(1, Ordering::Relaxed);
+        // This is acquisition wall time and can include time descheduled by the OS. It is not
+        // mutex hold time.
+        let started = Instant::now();
+        let guard = mutex.lock();
+        let elapsed = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        self.wait_nanoseconds.fetch_add(elapsed, Ordering::Relaxed);
+        self.wait_nanoseconds_max
+            .fetch_max(elapsed, Ordering::Relaxed);
+        guard
+    }
+
+    pub(crate) fn snapshot(&self) -> LockContentionStats {
+        LockContentionStats {
+            acquisitions: self.acquisitions.load(Ordering::Relaxed),
+            contended_acquisitions: self.contended_acquisitions.load(Ordering::Relaxed),
+            wait_time: Duration::from_nanos(self.wait_nanoseconds.load(Ordering::Relaxed)),
+            wait_time_max: Duration::from_nanos(self.wait_nanoseconds_max.load(Ordering::Relaxed)),
+        }
+    }
 }
 
 /// Counters accumulated across one executor run.
@@ -88,6 +190,8 @@ pub struct ScanStats {
     pub push_stale_wakes: u64,
     /// Largest worker-local ready event deque observed.
     pub push_ready_events_max: u64,
+    /// Diagnostic lock measurements, absent when scan diagnostics are disabled.
+    pub lock_contention: Option<Box<ScanLockContentionStats>>,
     /// Sliding filtered-lookahead window refills after morsel completion.
     pub lookahead_refills: u64,
     /// Optional demand hints published by push operators.
@@ -255,6 +359,11 @@ impl ScanStats {
         self.push_root_batches += other.push_root_batches;
         self.push_stale_wakes += other.push_stale_wakes;
         self.push_ready_events_max = self.push_ready_events_max.max(other.push_ready_events_max);
+        if let Some(other_contention) = &other.lock_contention {
+            self.lock_contention
+                .get_or_insert_with(Default::default)
+                .merge(**other_contention);
+        }
         self.lookahead_refills += other.lookahead_refills;
         self.demand_hints_emitted += other.demand_hints_emitted;
         self.demand_hints_observed += other.demand_hints_observed;
@@ -362,5 +471,41 @@ fn min_option(left: Option<u64>, right: Option<u64>) -> Option<u64> {
     match (left, right) {
         (Some(left), Some(right)) => Some(left.min(right)),
         (left, right) => left.or(right),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::sync::mpsc;
+
+    use parking_lot::Mutex;
+
+    use super::LockContentionProbe;
+
+    #[test]
+    fn lock_probe_preserves_the_contended_acquisition() {
+        let probe = Arc::new(LockContentionProbe::default());
+        let mutex = Arc::new(Mutex::new(()));
+        let held = mutex.lock();
+        let (attempting, attempted) = mpsc::channel();
+        let waiter = {
+            let probe = Arc::clone(&probe);
+            let mutex = Arc::clone(&mutex);
+            std::thread::spawn(move || {
+                attempting.send(()).expect("receiver remains alive");
+                drop(probe.lock(&mutex));
+            })
+        };
+        attempted.recv().expect("waiter reports its attempt");
+        while probe.snapshot().contended_acquisitions == 0 {
+            std::thread::yield_now();
+        }
+        drop(held);
+        waiter.join().expect("waiter does not panic");
+
+        let snapshot = probe.snapshot();
+        assert_eq!(snapshot.acquisitions, 1);
+        assert_eq!(snapshot.contended_acquisitions, 1);
     }
 }

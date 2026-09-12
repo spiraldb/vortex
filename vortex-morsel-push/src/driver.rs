@@ -74,8 +74,11 @@ use crate::node::WaitSet;
 use crate::node::begin_morsel;
 use crate::node::poll_plan_morsel;
 use crate::node::retire_morsel;
+use crate::stats::LockContentionProbe;
+use crate::stats::ScanLockContentionStats;
 use crate::stats::ScanStats;
 use crate::stats::push_profile_enabled;
+use crate::stats::scan_diagnostics_enabled;
 
 /// The morsel row ranges for a plan.
 ///
@@ -2045,6 +2048,7 @@ struct Scheduler {
     lookahead_cursor: AtomicUsize,
     frontier_ready_cursor: AtomicUsize,
     frontier_refill: Mutex<()>,
+    frontier_refill_contention: Option<LockContentionProbe>,
     lookahead_refills: AtomicU64,
     completed_morsels: AtomicUsize,
     non_empty_morsels: AtomicUsize,
@@ -2102,7 +2106,7 @@ impl MorselWorkerPool {
                             } => {
                                 let stats =
                                     scheduler.worker_loop(worker, &signals, &mut arenas, None);
-                                let _ = done.send(stats);
+                                drop(done.send(stats));
                             }
                             WorkerMessage::Shutdown => break,
                         }
@@ -2312,6 +2316,8 @@ impl Scheduler {
             lookahead_cursor: AtomicUsize::new(0),
             frontier_ready_cursor: AtomicUsize::new(0),
             frontier_refill: Mutex::new(()),
+            frontier_refill_contention: scan_diagnostics_enabled()
+                .then(LockContentionProbe::default),
             lookahead_refills: AtomicU64::new(0),
             completed_morsels: AtomicUsize::new(0),
             non_empty_morsels: AtomicUsize::new(0),
@@ -2608,7 +2614,10 @@ impl Scheduler {
         {
             return;
         }
-        let _refill = self.frontier_refill.lock();
+        let _refill = match &self.frontier_refill_contention {
+            Some(probe) => probe.lock(&self.frontier_refill),
+            None => self.frontier_refill.lock(),
+        };
         let current = self.frontier_ready_cursor.load(Ordering::Acquire);
         if let Some(target) =
             frontier_refill_target(current, assigned_end, capacity, self.run.morsels.len())
@@ -3081,6 +3090,17 @@ impl Scheduler {
         stats.io_retained_bytes = self.run.io.retained_bytes();
         stats.io_retained_bytes_max = self.run.io.peak_retained_bytes();
         stats.io_cancellations = self.run.io.io_cancellations();
+        if let Some(frontier_refill) = self
+            .frontier_refill_contention
+            .as_ref()
+            .map(LockContentionProbe::snapshot)
+        {
+            stats.lock_contention = Some(Box::new(ScanLockContentionStats {
+                io_cell_shard: self.run.io.cell_shard_contention(),
+                io_cell_state: self.run.io.cell_state_contention(),
+                frontier_refill,
+            }));
+        }
         stats.lookahead_refills += self.lookahead_refills.load(Ordering::Relaxed);
         let output = self.output_credits.state.lock();
         stats.output_rows_max = stats

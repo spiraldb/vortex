@@ -6,6 +6,8 @@ use std::collections::VecDeque;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::OnceLock;
+use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::task::Context;
@@ -40,6 +42,7 @@ use vortex_layout::segments::SegmentFuture;
 use vortex_layout::segments::SegmentId;
 use vortex_layout::segments::SegmentSource;
 use vortex_metrics::Counter;
+use vortex_metrics::Gauge;
 use vortex_metrics::Histogram;
 use vortex_metrics::Label;
 use vortex_metrics::MetricBuilder;
@@ -50,6 +53,15 @@ use crate::read::IoRequest;
 use crate::read::IoRequestStream;
 use crate::read::ReadRequest;
 use crate::read::RequestId;
+
+static NEXT_SOURCE_INSTANCE: AtomicU64 = AtomicU64::new(0);
+static SCAN_DIAGNOSTICS_ENABLED: OnceLock<bool> = OnceLock::new();
+
+fn scan_diagnostics_enabled() -> bool {
+    *SCAN_DIAGNOSTICS_ENABLED.get_or_init(|| {
+        std::env::var_os("VORTEX_SCAN_DIAGNOSTICS").is_some_and(|value| value != "0")
+    })
+}
 
 #[derive(Debug)]
 /// Events sent from segment futures to the coalescing read driver.
@@ -215,25 +227,56 @@ impl<R: VortexReadAt> ReadDriver<R> {
             let batch_len = (self.concurrency - self.num_active).min(self.pending.len());
             let reqs = self.pending.drain(..batch_len).collect::<Vec<_>>();
             self.num_active += batch_len;
-
             self.metrics.read_ranges_calls.add(1);
             self.metrics.read_ranges_num_ranges.update(batch_len as f64);
             if batch_len > 1 {
                 self.metrics.read_ranges_multi.add(1);
             }
-            tracing::trace!(
-                target: "vortex_file::read_ranges",
-                num_ranges = batch_len,
-                num_active = self.num_active,
-                "submitting positional read batch"
-            );
-            for req in &reqs {
+            let batch_id = if let Some(in_flight_max) = &self.metrics.read_ranges_in_flight_max {
+                let batch_id = self.metrics.read_ranges_calls.value().saturating_sub(1);
+                in_flight_max.set_max(self.num_active as f64);
                 tracing::trace!(
-                    target: "vortex_file::physical_read",
-                    offset = req.offset(),
-                    length = req.len(),
-                    "submitting physical byte range"
+                    target: "vortex_file::read_ranges",
+                    num_ranges = batch_len,
+                    num_active = self.num_active,
+                    source_instance = self.metrics.source_instance.unwrap_or_default(),
+                    file_path = self.metrics.file_path.as_deref().unwrap_or(""),
+                    partition = self.metrics.partition.as_deref().unwrap_or(""),
+                    batch_id,
+                    "submitting positional read batch"
                 );
+                Some(batch_id)
+            } else {
+                tracing::trace!(
+                    target: "vortex_file::read_ranges",
+                    num_ranges = batch_len,
+                    num_active = self.num_active,
+                    "submitting positional read batch"
+                );
+                None
+            };
+            for req in &reqs {
+                if let Some(request_size) = &self.metrics.read_ranges_request_size {
+                    request_size.update(req.len() as f64);
+                    tracing::trace!(
+                        target: "vortex_file::physical_read",
+                        offset = req.offset(),
+                        length = req.len(),
+                        source_instance = self.metrics.source_instance.unwrap_or_default(),
+                        file_path = self.metrics.file_path.as_deref().unwrap_or(""),
+                        partition = self.metrics.partition.as_deref().unwrap_or(""),
+                        batch_id = batch_id.unwrap_or_default(),
+                        request_ids = ?req.request_ids(),
+                        "submitting physical byte range"
+                    );
+                } else {
+                    tracing::trace!(
+                        target: "vortex_file::physical_read",
+                        offset = req.offset(),
+                        length = req.len(),
+                        "submitting physical byte range"
+                    );
+                }
             }
 
             let requests = reqs
@@ -566,11 +609,38 @@ pub struct RequestMetrics {
     pub read_ranges_multi: Counter,
     /// Distribution of physical range counts submitted per `read_ranges` call.
     pub read_ranges_num_ranges: Histogram,
+    /// Distribution of physical request sizes submitted through `read_ranges`.
+    read_ranges_request_size: Option<Histogram>,
+    /// Maximum number of ranges in flight in this source driver.
+    read_ranges_in_flight_max: Option<Gauge>,
+    source_instance: Option<u64>,
+    file_path: Option<Arc<str>>,
+    partition: Option<Arc<str>>,
 }
 
 impl RequestMetrics {
     /// Create request metrics in `metrics_registry` with shared labels.
     pub fn new(metrics_registry: &dyn MetricsRegistry, labels: Vec<Label>) -> Self {
+        Self::new_with_diagnostics(metrics_registry, labels, scan_diagnostics_enabled())
+    }
+
+    fn new_with_diagnostics(
+        metrics_registry: &dyn MetricsRegistry,
+        labels: Vec<Label>,
+        diagnostics: bool,
+    ) -> Self {
+        let file_path = diagnostics.then(|| {
+            labels
+                .iter()
+                .find(|label| label.key() == "file_path")
+                .map_or_else(|| Arc::from(""), |label| Arc::from(label.value()))
+        });
+        let partition = diagnostics.then(|| {
+            labels
+                .iter()
+                .find(|label| label.key() == "partition")
+                .map_or_else(|| Arc::from(""), |label| Arc::from(label.value()))
+        });
         Self {
             individual_requests: MetricBuilder::new(metrics_registry)
                 .add_labels(labels.clone())
@@ -588,8 +658,22 @@ impl RequestMetrics {
                 .add_labels(labels.clone())
                 .counter("io.read_ranges.multi_range_calls"),
             read_ranges_num_ranges: MetricBuilder::new(metrics_registry)
-                .add_labels(labels)
+                .add_labels(labels.clone())
                 .histogram("io.read_ranges.num_ranges"),
+            read_ranges_request_size: diagnostics.then(|| {
+                MetricBuilder::new(metrics_registry)
+                    .add_labels(labels.clone())
+                    .histogram("io.read_ranges.request_size")
+            }),
+            read_ranges_in_flight_max: diagnostics.then(|| {
+                MetricBuilder::new(metrics_registry)
+                    .add_labels(labels)
+                    .gauge("io.read_ranges.in_flight_max")
+            }),
+            source_instance: diagnostics
+                .then(|| NEXT_SOURCE_INSTANCE.fetch_add(1, Ordering::Relaxed)),
+            file_path,
+            partition,
         }
     }
 }
@@ -851,7 +935,7 @@ mod tests {
             })
             .collect();
         let metrics = DefaultMetricsRegistry::default();
-        let request_metrics = RequestMetrics::new(&metrics, vec![]);
+        let request_metrics = RequestMetrics::new_with_diagnostics(&metrics, vec![], true);
         let source = FileSegmentSource::open(
             segments,
             ReadRangesOnly {
@@ -871,7 +955,32 @@ mod tests {
         assert_eq!(request_metrics.read_ranges_multi.value(), 1);
         assert_eq!(request_metrics.read_ranges_num_ranges.count(), 1);
         assert_eq!(request_metrics.read_ranges_num_ranges.total(), 4.0);
+        let request_size = request_metrics
+            .read_ranges_request_size
+            .as_ref()
+            .vortex_expect("diagnostic request-size histogram must be registered");
+        assert_eq!(request_size.count(), 4);
+        assert_eq!(request_size.total(), 16.0);
+        assert_eq!(
+            request_metrics
+                .read_ranges_in_flight_max
+                .as_ref()
+                .vortex_expect("diagnostic in-flight gauge must be registered")
+                .value(),
+            4.0
+        );
         Ok(())
+    }
+
+    #[test]
+    fn request_diagnostics_are_opt_in_and_fixed_cardinality() {
+        let registry = DefaultMetricsRegistry::default();
+        let _metrics = RequestMetrics::new_with_diagnostics(&registry, vec![], false);
+        assert_eq!(registry.snapshot().len(), 6);
+
+        let registry = DefaultMetricsRegistry::default();
+        let _metrics = RequestMetrics::new_with_diagnostics(&registry, vec![], true);
+        assert_eq!(registry.snapshot().len(), 8);
     }
 
     #[derive(Clone)]

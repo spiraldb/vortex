@@ -37,7 +37,10 @@ use vortex_layout::segments::SegmentId;
 use vortex_utils::aliases::hash_map::HashMap;
 use vortex_utils::aliases::hash_set::HashSet;
 
+use crate::stats::LockContentionProbe;
+use crate::stats::LockContentionStats;
 use crate::stats::ScanStats;
+use crate::stats::scan_diagnostics_enabled;
 
 /// The scan-wide key of one whole stored unit.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -138,6 +141,7 @@ struct IoCellSync {
 struct IoCell {
     key: IoKey,
     sync: Mutex<IoCellSync>,
+    sync_contention: Option<Arc<LockContentionProbe>>,
     required: AtomicBool,
     submitted: AtomicBool,
     remaining_uses: AtomicUsize,
@@ -484,6 +488,13 @@ fn fenwick_add(tree: &mut [u64], mut index: usize) {
 }
 
 impl IoCell {
+    fn lock_sync(&self) -> parking_lot::MutexGuard<'_, IoCellSync> {
+        match &self.sync_contention {
+            Some(probe) => probe.lock(&self.sync),
+            None => self.sync.lock(),
+        }
+    }
+
     fn priority(&self) -> IoPriority {
         if self.required.load(Ordering::Acquire) {
             IoPriority::Required
@@ -511,6 +522,8 @@ const PROBE_UNSUPPORTED: u8 = 2;
 pub(crate) struct IoService {
     demand: mpsc::UnboundedSender<IoDemand>,
     cells: Box<[IoCellShard]>,
+    cell_shard_contention: Option<Box<[LockContentionProbe]>>,
+    cell_state_contention: Option<Box<[Arc<LockContentionProbe>]>>,
     probe: Mutex<Option<NowaitProbe>>,
     probe_support: AtomicU8,
     background_reads: AtomicBool,
@@ -531,11 +544,22 @@ impl IoService {
     /// Create a service and the demand stream it will emit reads on.
     pub(crate) fn new() -> (Arc<Self>, IoDemandStream) {
         let (demand, stream) = mpsc::unbounded();
+        let diagnostics = scan_diagnostics_enabled();
         let service = Arc::new(Self {
             demand,
             cells: (0..IO_CELL_SHARDS)
                 .map(|_| Mutex::new(IoCellShardState::default()))
                 .collect(),
+            cell_shard_contention: diagnostics.then(|| {
+                (0..IO_CELL_SHARDS)
+                    .map(|_| LockContentionProbe::default())
+                    .collect()
+            }),
+            cell_state_contention: diagnostics.then(|| {
+                (0..IO_CELL_SHARDS)
+                    .map(|_| Arc::new(LockContentionProbe::default()))
+                    .collect()
+            }),
             probe: Mutex::new(None),
             probe_support: AtomicU8::new(PROBE_UNKNOWN),
             background_reads: AtomicBool::new(true),
@@ -552,6 +576,14 @@ impl IoService {
             oracle: OnceLock::new(),
         });
         (service, stream)
+    }
+
+    fn lock_cell_shard(&self, key: IoKey) -> parking_lot::MutexGuard<'_, IoCellShardState> {
+        let shard = io_cell_shard(key);
+        match &self.cell_shard_contention {
+            Some(probes) => probes[shard].lock(&self.cells[shard]),
+            None => self.cells[shard].lock(),
+        }
     }
 
     pub(crate) fn completions(self: &Arc<Self>) -> IoCompletions {
@@ -610,7 +642,7 @@ impl IoService {
             if count == 0 {
                 continue;
             }
-            let mut shard = self.cells[io_cell_shard(key)].lock();
+            let mut shard = self.lock_cell_shard(key);
             if let Some(cell) = shard.cells.get(&key) {
                 cell.remaining_uses.fetch_add(count, Ordering::Relaxed);
             } else {
@@ -624,7 +656,7 @@ impl IoService {
     /// source driver to discard any request that has not completed.
     pub(crate) fn release_use(&self, key: IoKey) {
         let cell = {
-            let mut shard = self.cells[io_cell_shard(key)].lock();
+            let mut shard = self.lock_cell_shard(key);
             if let Some(cell) = shard.cells.get(&key) {
                 Some(Arc::clone(cell))
             } else if let Some(leases) = shard.pending_leases.get_mut(&key) {
@@ -660,7 +692,7 @@ impl IoService {
             return;
         }
         let removed = {
-            let mut shard = self.cells[io_cell_shard(cell.key)].lock();
+            let mut shard = self.lock_cell_shard(cell.key);
             if cell.remaining_uses.load(Ordering::Acquire) != 0
                 || !shard
                     .cells
@@ -678,7 +710,7 @@ impl IoService {
         }
         self.live_cells.fetch_sub(1, Ordering::Relaxed);
         let (cancel, retained, waiters) = {
-            let mut sync = cell.sync.lock();
+            let mut sync = cell.lock_sync();
             let cancel = matches!(sync.state, CellState::Requested { .. });
             let retained = match &sync.state {
                 CellState::Ready(handle) => u64::try_from(handle.len()).unwrap_or(u64::MAX),
@@ -703,7 +735,8 @@ impl IoService {
     }
 
     fn register(&self, key: IoKey, priority: IoPriority) -> (Arc<IoCell>, bool) {
-        let mut shard = self.cells[io_cell_shard(key)].lock();
+        let shard_idx = io_cell_shard(key);
+        let mut shard = self.lock_cell_shard(key);
         if let Some(cell) = shard.cells.get(&key) {
             if priority == IoPriority::Required {
                 cell.required.store(true, Ordering::Release);
@@ -722,6 +755,10 @@ impl IoService {
                 state: CellState::Unissued,
                 waiters: Vec::new(),
             }),
+            sync_contention: self
+                .cell_state_contention
+                .as_ref()
+                .map(|probes| Arc::clone(&probes[shard_idx])),
             required: AtomicBool::new(priority == IoPriority::Required),
             submitted: AtomicBool::new(false),
             remaining_uses: AtomicUsize::new(remaining_uses),
@@ -755,7 +792,7 @@ impl IoService {
         let mut requests = Vec::with_capacity(reads.len());
         let mut cells = Vec::with_capacity(reads.len());
         for read in reads {
-            let mut sync = read.cell.sync.lock();
+            let mut sync = read.cell.lock_sync();
             if !matches!(sync.state, CellState::Unissued) {
                 continue;
             }
@@ -810,7 +847,7 @@ impl IoService {
     /// Settle a cell as failed because its demand can no longer be answered.
     fn fail_cell(&self, cell: &IoCell) {
         let waiters = {
-            let mut sync = cell.sync.lock();
+            let mut sync = cell.lock_sync();
             if matches!(
                 sync.state,
                 CellState::Ready(_) | CellState::Failed(_) | CellState::Released
@@ -828,8 +865,7 @@ impl IoService {
     }
 
     pub(crate) fn read_key(&self, key: IoKey) -> Option<IoRead> {
-        self.cells[io_cell_shard(key)]
-            .lock()
+        self.lock_cell_shard(key)
             .cells
             .get(&key)
             .cloned()
@@ -837,15 +873,10 @@ impl IoService {
     }
 
     fn complete(&self, key: IoKey, result: VortexResult<BufferHandle>) {
-        let Some(cell) = self.cells[io_cell_shard(key)]
-            .lock()
-            .cells
-            .get(&key)
-            .cloned()
-        else {
+        let Some(cell) = self.lock_cell_shard(key).cells.get(&key).cloned() else {
             return;
         };
-        let mut sync = cell.sync.lock();
+        let mut sync = cell.lock_sync();
         let started = match &sync.state {
             CellState::Ready(_) | CellState::Failed(_) | CellState::Released => return,
             CellState::Requested { started } => Some(*started),
@@ -920,6 +951,26 @@ impl IoService {
     pub(crate) fn io_wait_time(&self) -> Duration {
         Duration::from_nanos(self.io_wait_nanos.load(Ordering::Relaxed))
     }
+
+    pub(crate) fn cell_shard_contention(&self) -> LockContentionStats {
+        let mut stats = LockContentionStats::default();
+        if let Some(probes) = &self.cell_shard_contention {
+            for probe in probes {
+                stats.merge(probe.snapshot());
+            }
+        }
+        stats
+    }
+
+    pub(crate) fn cell_state_contention(&self) -> LockContentionStats {
+        let mut stats = LockContentionStats::default();
+        if let Some(probes) = &self.cell_state_contention {
+            for probe in probes {
+                stats.merge(probe.snapshot());
+            }
+        }
+        stats
+    }
 }
 
 /// One registered read the scheduler can start, promote, or park on.
@@ -943,13 +994,13 @@ impl IoRead {
     }
 
     pub(crate) fn is_unissued(&self) -> bool {
-        matches!(self.cell.sync.lock().state, CellState::Unissued)
+        matches!(self.cell.lock_sync().state, CellState::Unissued)
     }
 
     /// Whether the read has reached a terminal state.
     pub(crate) fn is_settled(&self) -> bool {
         matches!(
-            self.cell.sync.lock().state,
+            self.cell.lock_sync().state,
             CellState::Ready(_) | CellState::Failed(_) | CellState::Released
         )
     }
@@ -959,7 +1010,7 @@ impl IoRead {
     /// Returns `true` when the continuation was parked. The state lock closes the completion race:
     /// a completion either drains this waker or is observed here before insertion.
     pub(crate) fn park(&self, waker: Waker) -> bool {
-        let mut sync = self.cell.sync.lock();
+        let mut sync = self.cell.lock_sync();
         if matches!(
             sync.state,
             CellState::Ready(_) | CellState::Failed(_) | CellState::Released
@@ -1035,7 +1086,7 @@ impl IoPlane {
             .into_iter()
             .filter(|cell| {
                 !matches!(
-                    cell.sync.lock().state,
+                    cell.lock_sync().state,
                     CellState::Ready(_) | CellState::Released
                 ) && !cell.submitted.swap(true, Ordering::AcqRel)
             })
@@ -1061,7 +1112,7 @@ impl IoPlane {
             .get(&ticket.key())
             .cloned()
             .ok_or_else(|| vortex_err!("IO ticket was accessed without registration"))?;
-        let mut sync = cell.sync.lock();
+        let mut sync = cell.lock_sync();
         if let Some(oracle) = self.service.oracle.get() {
             let first_need_state = match &sync.state {
                 CellState::Ready(_) | CellState::Failed(_) => FirstNeedState::Ready,

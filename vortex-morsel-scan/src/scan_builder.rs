@@ -27,6 +27,7 @@ use vortex_io::session::RuntimeSessionExt;
 use vortex_layout::LayoutRef;
 use vortex_layout::segments::SegmentSource;
 use vortex_metrics::Counter;
+use vortex_metrics::Gauge;
 use vortex_metrics::Label;
 use vortex_metrics::MetricBuilder;
 use vortex_metrics::MetricsRegistry;
@@ -42,6 +43,14 @@ use crate::ScanExecutorOptions;
 type OutputTask<A> = BoxFuture<'static, VortexResult<Option<A>>>;
 type MetricsCompletion = BoxFuture<'static, VortexResult<()>>;
 type InstrumentedBuild<A> = (Vec<OutputTask<A>>, Option<MetricsCompletion>);
+
+static SCAN_DIAGNOSTICS_ENABLED: OnceLock<bool> = OnceLock::new();
+
+fn scan_diagnostics_enabled() -> bool {
+    *SCAN_DIAGNOSTICS_ENABLED.get_or_init(|| {
+        std::env::var_os("VORTEX_SCAN_DIAGNOSTICS").is_some_and(|value| value != "0")
+    })
+}
 
 const SCAN_COUNTER_NAMES: [&str; 31] = [
     "morsel_scan.plan.morsels_in_row_range",
@@ -75,6 +84,33 @@ const SCAN_COUNTER_NAMES: [&str; 31] = [
     "morsel_scan.decode.calls",
     "morsel_scan.decode.reuses",
     "morsel_scan.io.wait_nanoseconds",
+];
+
+const SCAN_DIAGNOSTIC_COUNTER_NAMES: [&str; 11] = [
+    "morsel_scan.scheduler.boundary_resumes",
+    "morsel_scan.scheduler.stale_wakes",
+    "morsel_scan.lock.io_cell_shard.acquisitions",
+    "morsel_scan.lock.io_cell_shard.contended_acquisitions",
+    "morsel_scan.lock.io_cell_shard.wait_nanoseconds",
+    "morsel_scan.lock.io_cell_state.acquisitions",
+    "morsel_scan.lock.io_cell_state.contended_acquisitions",
+    "morsel_scan.lock.io_cell_state.wait_nanoseconds",
+    "morsel_scan.lock.frontier_refill.acquisitions",
+    "morsel_scan.lock.frontier_refill.contended_acquisitions",
+    "morsel_scan.lock.frontier_refill.wait_nanoseconds",
+];
+
+const SCAN_MAX_GAUGE_NAMES: [&str; 10] = [
+    "morsel_scan.scheduler.ready_events_max",
+    "morsel_scan.demand.state_live_max",
+    "morsel_scan.output.rows_max",
+    "morsel_scan.output.bytes_max",
+    "morsel_scan.io.cells_live_max",
+    "morsel_scan.io.retained_bytes_max",
+    "morsel_scan.io.blocks_per_morsel_max",
+    "morsel_scan.lock.io_cell_shard.wait_nanoseconds_max",
+    "morsel_scan.lock.io_cell_state.wait_nanoseconds_max",
+    "morsel_scan.lock.frontier_refill.wait_nanoseconds_max",
 ];
 
 /// Builder for push scans over a raw layout and segment source.
@@ -205,10 +241,11 @@ impl<A: 'static + Send> MorselScanBuilder<A> {
     /// complete successfully. Failed or cancelled scans do not expose partial values. Selection,
     /// executor-limit, and pruning metrics describe executor phases; output rows and batches count
     /// arrays presented to the generic map callback after this builder applies its final limit.
-    /// Every published value is an additive counter, so scans with the same partition label can be
-    /// summed safely. Per-scan peaks, final gauges, and time-to-first-batch are omitted until the
-    /// shared registry can express max/min aggregation. Externally driven scans do not currently
-    /// publish these scan-wide metrics.
+    /// The always-on metrics are additive counters, so scans sharing one sink can be summed safely.
+    /// With `VORTEX_SCAN_DIAGNOSTICS=1`, the sink also publishes diagnostic additive counters and
+    /// max gauges; counters accumulate across successful scans and gauges retain their greatest
+    /// successful per-scan value. Externally driven scans do not currently publish these scan-wide
+    /// metrics.
     pub fn with_metrics_registry_and_labels(
         self,
         metrics: Arc<dyn MetricsRegistry>,
@@ -220,7 +257,7 @@ impl<A: 'static + Send> MorselScanBuilder<A> {
     /// Publish through a reusable scan-metrics sink.
     ///
     /// Integrations that scan multiple files or ranges in one partition should share this sink so
-    /// its lazily registered counter handles are reused across every completed scan.
+    /// its lazily registered metric handles are reused across every successfully completed scan.
     pub fn with_scan_metrics(mut self, metrics: Arc<MorselScanMetrics>) -> Self {
         if self.scan_stats_available {
             self.metrics = Some(metrics);
@@ -494,25 +531,40 @@ fn instrument_output_tasks<A: 'static + Send>(
     (outputs, completion)
 }
 
-/// Reusable additive scan-metrics sink.
+/// Reusable scan-metrics sink.
 ///
 /// Construction does not register metrics. The first successfully completed stream lazily
-/// registers one fixed counter set, after which every scan only fetches those handles and adds its
-/// final values. Sharing one sink across an execution partition therefore bounds registry objects
-/// independently of the number of files or ranges scanned.
+/// registers the baseline counter set, after which every scan only fetches those handles.
+/// Diagnostics additionally register fixed counter and peak-gauge sets. Sharing one sink across
+/// an execution partition therefore bounds registry objects independently of the number of files
+/// or ranges scanned.
 pub struct MorselScanMetrics {
     registry: Arc<dyn MetricsRegistry>,
     labels: Arc<[Label]>,
     counters: OnceLock<Box<[Counter]>>,
+    diagnostic_counters: OnceLock<Box<[Counter]>>,
+    diagnostic_max_gauges: OnceLock<Box<[Gauge]>>,
+    diagnostics: bool,
 }
 
 impl MorselScanMetrics {
     /// Create a lazily registered counter set with labels shared by every metric.
     pub fn new(registry: Arc<dyn MetricsRegistry>, labels: Vec<Label>) -> Self {
+        Self::new_with_diagnostics(registry, labels, scan_diagnostics_enabled())
+    }
+
+    fn new_with_diagnostics(
+        registry: Arc<dyn MetricsRegistry>,
+        labels: Vec<Label>,
+        diagnostics: bool,
+    ) -> Self {
         Self {
             registry,
             labels: labels.into(),
             counters: OnceLock::new(),
+            diagnostic_counters: OnceLock::new(),
+            diagnostic_max_gauges: OnceLock::new(),
+            diagnostics,
         }
     }
 
@@ -533,6 +585,38 @@ impl MorselScanMetrics {
                 .zip(scan_counter_values(stats, output_batches, output_rows))
         {
             counter.add(value);
+        }
+        if !self.diagnostics {
+            return;
+        }
+        let diagnostic_counters = self.diagnostic_counters.get_or_init(|| {
+            SCAN_DIAGNOSTIC_COUNTER_NAMES
+                .iter()
+                .map(|name| {
+                    MetricBuilder::new(self.registry.as_ref())
+                        .add_labels(self.labels.iter().cloned())
+                        .counter(*name)
+                })
+                .collect()
+        });
+        for (counter, value) in diagnostic_counters
+            .iter()
+            .zip(scan_diagnostic_counter_values(stats))
+        {
+            counter.add(value);
+        }
+        let max_gauges = self.diagnostic_max_gauges.get_or_init(|| {
+            SCAN_MAX_GAUGE_NAMES
+                .iter()
+                .map(|name| {
+                    MetricBuilder::new(self.registry.as_ref())
+                        .add_labels(self.labels.iter().cloned())
+                        .gauge(*name)
+                })
+                .collect()
+        });
+        for (gauge, value) in max_gauges.iter().zip(scan_max_gauge_values(stats)) {
+            gauge.set_max(value as f64);
         }
     }
 }
@@ -570,6 +654,47 @@ fn scan_counter_values(stats: &ScanStats, output_batches: u64, output_rows: u64)
         stats.decodes,
         stats.decode_reuses,
         u64::try_from(stats.io_wait_time.as_nanos()).unwrap_or(u64::MAX),
+    ]
+}
+
+fn scan_diagnostic_counter_values(stats: &ScanStats) -> [u64; 11] {
+    let contention = stats
+        .lock_contention
+        .as_deref()
+        .copied()
+        .unwrap_or_default();
+    [
+        stats.push_pipeline_boundary_resumes,
+        stats.push_stale_wakes,
+        contention.io_cell_shard.acquisitions,
+        contention.io_cell_shard.contended_acquisitions,
+        u64::try_from(contention.io_cell_shard.wait_time.as_nanos()).unwrap_or(u64::MAX),
+        contention.io_cell_state.acquisitions,
+        contention.io_cell_state.contended_acquisitions,
+        u64::try_from(contention.io_cell_state.wait_time.as_nanos()).unwrap_or(u64::MAX),
+        contention.frontier_refill.acquisitions,
+        contention.frontier_refill.contended_acquisitions,
+        u64::try_from(contention.frontier_refill.wait_time.as_nanos()).unwrap_or(u64::MAX),
+    ]
+}
+
+fn scan_max_gauge_values(stats: &ScanStats) -> [u64; 10] {
+    let contention = stats
+        .lock_contention
+        .as_deref()
+        .copied()
+        .unwrap_or_default();
+    [
+        stats.push_ready_events_max,
+        stats.demand_state_live_max,
+        stats.output_rows_max,
+        stats.output_bytes_max,
+        stats.io_cells_live_max,
+        stats.io_retained_bytes_max,
+        stats.io_blocks_per_morsel_max,
+        u64::try_from(contention.io_cell_shard.wait_time_max.as_nanos()).unwrap_or(u64::MAX),
+        u64::try_from(contention.io_cell_state.wait_time_max.as_nanos()).unwrap_or(u64::MAX),
+        u64::try_from(contention.frontier_refill.wait_time_max.as_nanos()).unwrap_or(u64::MAX),
     ]
 }
 
@@ -940,11 +1065,12 @@ mod tests {
     }
 
     #[test]
-    fn same_partition_scans_publish_only_safely_additive_metrics() -> VortexResult<()> {
+    fn same_partition_scans_keep_metric_cardinality_fixed() -> VortexResult<()> {
         let registry: Arc<dyn MetricsRegistry> = Arc::new(DefaultMetricsRegistry::default());
-        let metrics = Arc::new(MorselScanMetrics::new(
+        let metrics = Arc::new(MorselScanMetrics::new_with_diagnostics(
             Arc::clone(&registry),
             vec![Label::new("partition", "3")],
+            false,
         ));
         let mut metric_counts = Vec::new();
         for (io_bytes, io_wait) in [(5, Duration::from_nanos(7)), (11, Duration::from_nanos(13))] {
@@ -992,19 +1118,66 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_publish_fixed_handles_and_max_semantics() {
+        let registry: Arc<dyn MetricsRegistry> = Arc::new(DefaultMetricsRegistry::default());
+        let metrics = MorselScanMetrics::new_with_diagnostics(
+            Arc::clone(&registry),
+            vec![Label::new("partition", "3")],
+            true,
+        );
+        for ready_events_max in [99, 17] {
+            metrics.publish(
+                &ScanStats {
+                    push_pipeline_boundary_resumes: 2,
+                    push_ready_events_max: ready_events_max,
+                    ..ScanStats::default()
+                },
+                0,
+                0,
+            );
+        }
+
+        let snapshot = registry.snapshot();
+        assert_eq!(
+            snapshot.len(),
+            SCAN_COUNTER_NAMES.len()
+                + SCAN_DIAGNOSTIC_COUNTER_NAMES.len()
+                + SCAN_MAX_GAUGE_NAMES.len()
+        );
+        let ready_events_max = snapshot
+            .iter()
+            .find(|metric| metric.name().as_ref() == "morsel_scan.scheduler.ready_events_max")
+            .map(|metric| match metric.value() {
+                MetricValue::Gauge(gauge) => gauge.value(),
+                _ => 0.0,
+            });
+        assert_eq!(ready_events_max, Some(99.0));
+        let boundary_resumes = snapshot
+            .iter()
+            .find(|metric| metric.name().as_ref() == "morsel_scan.scheduler.boundary_resumes")
+            .map(|metric| match metric.value() {
+                MetricValue::Counter(counter) => counter.value(),
+                _ => 0,
+            });
+        assert_eq!(boundary_resumes, Some(4));
+    }
+
+    #[test]
     fn separate_partitions_register_separate_stable_counter_sets() {
         let registry: Arc<dyn MetricsRegistry> = Arc::new(DefaultMetricsRegistry::default());
         for partition in ["1", "2"] {
-            let metrics = Arc::new(MorselScanMetrics::new(
+            let metrics = Arc::new(MorselScanMetrics::new_with_diagnostics(
                 Arc::clone(&registry),
                 vec![Label::new("partition", partition)],
+                false,
             ));
             let mut stream =
                 instrumented_stream_with_metrics(Vec::new(), ScanStats::default(), metrics);
             assert!(block_on(stream.next()).is_none());
         }
         let snapshot = registry.snapshot();
-        assert_eq!(snapshot.len(), 2 * SCAN_COUNTER_NAMES.len());
+        let metrics_per_partition = SCAN_COUNTER_NAMES.len();
+        assert_eq!(snapshot.len(), 2 * metrics_per_partition);
         for partition in ["1", "2"] {
             assert_eq!(
                 snapshot
@@ -1014,7 +1187,7 @@ mod tests {
                         .iter()
                         .any(|label| { label.key() == "partition" && label.value() == partition }))
                     .count(),
-                SCAN_COUNTER_NAMES.len()
+                metrics_per_partition
             );
         }
     }

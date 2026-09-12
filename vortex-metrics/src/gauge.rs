@@ -59,9 +59,33 @@ impl Gauge {
         _ = self.0.swap(value.to_bits(), Ordering::AcqRel);
     }
 
+    /// Atomically set the gauge to `value` if it is greater than the current value.
+    pub fn set_max(&self, value: f64) {
+        _ = self
+            .0
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |current| {
+                (value > f64::from_bits(current)).then(|| value.to_bits())
+            });
+    }
+
     /// Returns the current value of the gauge.
     pub fn value(&self) -> f64 {
         let value = self.0.load(Ordering::Acquire);
         f64::from_bits(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Gauge;
+
+    #[test]
+    fn set_max_never_decreases_the_gauge() {
+        let gauge = Gauge::new();
+        gauge.set_max(7.0);
+        gauge.set_max(3.0);
+        assert_eq!(gauge.value(), 7.0);
+        gauge.set_max(11.0);
+        assert_eq!(gauge.value(), 11.0);
     }
 }

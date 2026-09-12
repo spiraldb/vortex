@@ -11,7 +11,7 @@ benchmark history and scheduler experiments.
 |---|---|
 | Repository | `spiraldb/vortex-7` |
 | Crate | `vortex-morsel-push` |
-| Current branch | `ji/morsel-io-groups` |
+| Current branch | `ji/push-frontier-all-bench` |
 | Starting comparison point | `f4ca2266da` — `wip(morsel): checkpoint I/O follow-ups` |
 | Branch contents | Grouped-I/O implementation, tests, benchmark tooling, and documentation |
 
@@ -283,6 +283,53 @@ The full per-query table and interpretation are at the end of
 [IO_FRONTIERS.md](IO_FRONTIERS.md). Earlier sections in that file are explicitly marked historical
 where their implementation retained raw cells or widened the admission bound.
 
+## Public DataFusion attribution checkpoint
+
+The 2026-09-12 Q6/Q22 checkpoint uses one frozen instrumented binary and the same SF1 files, SQL,
+default fields, filters, physical plans, 14 DataFusion partitions, and 14 runtime workers for V1 and
+push-frontier. `VORTEX_USE_SCAN_API` was unset. Each query passed exact public Arrow schema and row
+multiset verification; normalized plans are identical. Four fresh HOT pairs per query alternated
+backend order, and every measured child immediately followed its own same-query/backend prewarm.
+
+| Query / evidence | V1 | Push-frontier |
+|---|---:|---:|
+| Q6 scan max partition start/end span | 8.681 ms | 8.656 ms |
+| Q6 physical requests / batches | 17-32 / 11-20 | 183 / 183 |
+| Q6 physical union / total bytes | 34,564,816-34,564,820 B / 34.96-43.73 MB | 34,570,564 B / 37,830,972 B |
+| Q6 RSS median | 98.70 MB | 101.49 MB |
+| Q22 three scan spans | 1.448 / 3.649 / 2.424 ms | 2.797 / 5.221 / 4.112 ms |
+| Q22 physical requests / batches | 9-14 / 8-13 | 85 / 68 |
+| Q22 physical union / total bytes | 5,165,108-5,165,112 B / 10.33-11.44 MB | 5,165,088 B / 20,821,060 B |
+| Q22 RSS median | 95.82 MB | 122.81 MB |
+
+`DataSourceExec.elapsed_compute` is not recorded; the scan values are the median maximum
+per-partition start/end span. In-flight gauges are per source driver. Histogram minima are not used
+because empty partitions contribute zero minima. Q22's union coverage is equal within 24 bytes, so
+its extra frontier bytes are overlapping coverage rather than a wider scan.
+
+All measured push-frontier I/O-cell-shard, I/O-cell-state, and frontier-refill contention counters
+were zero. Natural-split acquisition-wall wait occurred on both backends and stayed below 2.50 ms
+per run; it is an upper bound including descheduling, not lock hold time. Q22's HashJoin and Filter
+compute are comparable while all three frontier scan spans are longer. This supports fragmented,
+duplicated physical reads as the next mechanism to change and provides no evidence that these push
+locks cause the regression.
+
+Timing is diagnostic-only because raw trace cost scales with request count. Whole-process RSS is a
+valid bounded high-water mark; instructions, cycles, and context-switch counts are retained but
+also include asymmetric trace work.
+
+Evidence root: `/private/tmp/tpch-q6-q22-diagnostics-20260912-RTO222`. `MANIFEST.md` SHA-256 is
+`ac3b547534484d7f5da68bb6840055c4a097293ece993c5ed8e4184b981f3ddf`; `SHA256SUMS` SHA-256 is
+`d6def0fd4bb5b0ec76b08f8f5be7efce94aba112c5344fc1d394755181198f2f`. The frozen binary SHA-256
+is `5562f6cf22bd409f162089a8f03dc12a5103cf5a3a63178de1a15202afa6ead9`.
+
+Decision: the next candidate is bounded full-identity `SegmentSource` sharing for push-frontier so
+adjacent DataFusion partition requests can enter one source driver and coalesce. The sharing key
+must preserve complete store/file-version identity, its retention must be constant rather than
+linear in data size, and the acceptance gate must recheck exact output, plan/resource symmetry,
+request overlap, RSS, and diagnostics-off 14-core timing. Do not alter V1 or plain Push, and do not
+implement general decoded retention as part of this candidate.
+
 ## Changed-file map
 
 | Files | Purpose |
@@ -310,22 +357,25 @@ where their implementation retained raw cells or widened the admission bound.
 
 ## Recommended next steps
 
-1. Review the small core API first. Decide whether `IoGroupKind` and the caller-provided `budget`
+1. Implement and review bounded full-identity `SegmentSource` sharing only for push-frontier. Keep
+   V1 and plain Push unchanged, and measure request union/overlap before considering scheduler
+   policy changes.
+2. Review the small core API. Decide whether `IoGroupKind` and the caller-provided `budget`
    belong in the eventual public surface. The current recommendation is to keep both during the
    prototype: kind is semantic plan information, and budget makes incremental behavior explicit.
-2. Add direct unit tests for invalid `IoPrewalkCx` usage if the API will be used by more node types:
+3. Add direct unit tests for invalid `IoPrewalkCx` usage if the API will be used by more node types:
    nested begin, read outside a group, end without begin, and begin twice before moving right.
-3. Rerun at least a focused hot and latency smoke benchmark after the API simplification. Expect
+4. Rerun at least a focused hot and latency smoke benchmark after the API simplification. Expect
    no regression because the change removed allocations and record fields, but verify it.
-4. Review the signed-off commit stack. It is split into:
+5. Review the signed-off commit stack. It is split into:
    - grouped prewalk and cursor API;
    - scheduler integration, raw lifetime, cancellation, and driver teardown;
    - regression tests;
    - benchmark correctness tooling and evaluation matrices;
    - documentation.
-5. Rerun the full crate validation after any rebase or conflict resolution because either can
+6. Rerun the full crate validation after any rebase or conflict resolution because either can
    alter behavior.
-6. Do not implement general decoded retain/close or dictionary single-flight as part of cleanup;
+7. Do not implement general decoded retain/close or dictionary single-flight as part of cleanup;
    keep it as a separately reviewed design.
 
 All commits must include the repository-required signoff:
@@ -337,7 +387,7 @@ Signed-off-by: "COMMITTER" <COMMITTER_EMAIL>
 ## Resume commands
 
 ```bash
-git switch ji/morsel-io-groups
+git switch ji/push-frontier-all-bench
 git status --short
 git diff --stat
 
@@ -353,6 +403,7 @@ git diff --check
 For a context-free continuation, use:
 
 > Read `vortex-morsel-push/IO_FRONTIER_HANDOVER.md` and
-> `vortex-morsel-push/IO_FRONTIER_IMPLEMENTATION.md` on `ji/morsel-io-groups`. Review the core
-> grouped-I/O API before changing scheduler policy or benchmark configuration, then continue from
-> the recommended next steps.
+> `vortex-morsel-push/IO_FRONTIER_IMPLEMENTATION.md` on `ji/push-frontier-all-bench`. Review the
+> Q6/Q22 public DataFusion attribution checkpoint, then implement only bounded full-identity
+> push-frontier `SegmentSource` sharing. Keep V1 and plain Push unchanged and rerun the exact,
+> request-overlap, RSS, and diagnostics-off 14-core gates before changing scheduler policy.

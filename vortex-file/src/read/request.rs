@@ -56,6 +56,15 @@ impl IoRequest {
         }
     }
 
+    pub(crate) fn request_ids(&self) -> Vec<RequestId> {
+        match &self.0 {
+            IoRequestInner::Single(request) => vec![request.id],
+            IoRequestInner::Coalesced(request) => {
+                request.requests.iter().map(|request| request.id).collect()
+            }
+        }
+    }
+
     /// Resolves the request with the given result.
     pub fn resolve(self, result: VortexResult<BufferHandle>) {
         match self.0 {

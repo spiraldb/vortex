@@ -610,6 +610,60 @@ and core placement, time to first batch, retained-byte/live-cell peaks, per-mors
 and partial/coalesce/final aggregate metrics. Complete commands, units, logs, and hashes are in
 `/private/tmp/tpch-q6-published-scan-metrics-20260912-f2822e73/MANIFEST.md`.
 
+### Q6/Q22 all-core execution-node and I/O attribution
+
+The reviewed diagnostic instrumentation closes the preceding observability gaps without changing
+scheduling policy. One frozen `release_debug` binary ran Q6 and Q22 with `--threads 14`, target
+partitions 14, `VORTEX_USE_SCAN_API` unset, and the same SF1 Vortex files, SQL, default projected
+fields, filters, and DataFusion operators. V1 wrote and push-frontier verified each exact public
+Arrow schema and row multiset. Four fresh-process HOT pairs per query alternated order
+(V1/frontier, frontier/V1, V1/frontier, frontier/V1), with one measured iteration after an
+immediate same-query/backend prewarm. Logical and physical `EXPLAIN` output was byte-identical.
+
+| Query / evidence | V1 | Push-frontier |
+|---|---:|---:|
+| Q6 `DataSourceExec` max partition start/end span | 8.681 ms; 92 output batches | 8.656 ms; 46 output batches |
+| Q6 physical requests / read batches | 17-32 / 11-20 | 183 / 183 |
+| Q6 physical bytes / union | 34.96-43.73 MB / 34,564,816-34,564,820 B | 37,830,972 B / 34,570,564 B |
+| Q6 peak RSS median | 98.70 MB | 101.49 MB |
+| Q22 scan spans for 150K / 1.50M / 136K rows | 1.448 / 3.649 / 2.424 ms | 2.797 / 5.221 / 4.112 ms |
+| Q22 physical requests / read batches | 9-14 / 8-13 | 85 / 68 |
+| Q22 physical bytes / union | 10.33-11.44 MB / 5,165,108-5,165,112 B | 20,821,060 B / 5,165,088 B |
+| Q22 peak RSS median | 95.82 MB | 122.81 MB |
+
+`DataSourceExec.elapsed_compute` is not recorded, so scan time above is the median of each run's
+maximum per-partition start/end span. `io.read_ranges.in_flight_max` is a per-source-driver maximum,
+not a query-global outstanding-read count. Histogram minima are omitted because empty execution
+partitions publish zero-valued minima. Q22 union coverage is effectively equal (within 24 bytes),
+while push-frontier reads roughly twice the physical bytes through overlapping ranges.
+
+Push-frontier recorded zero contended acquisitions in every measured sample for the I/O-cell
+shard, I/O-cell state, and frontier-refill locks. Natural-split cache contention occurred on both
+backends, but aggregate acquisition-wall time stayed below 2.50 ms per run; this includes possible
+OS descheduling and is not mutex hold time. Q22 HashJoin and Filter compute were comparable, while
+all three push-frontier scan spans were longer. The direct evidence therefore isolates request
+fragmentation and repeated byte coverage, not push-lock contention.
+
+The measured runtime is diagnostic-only: raw request tracing has cost proportional to event count,
+which is strongly asymmetric here. `/usr/bin/time -l` nevertheless records bounded whole-process
+memory and shows Q6 frontier RSS +2.8% and Q22 +28.2% at the median. Retired instructions/cycles
+were +20.3%/+36.4% on Q6 and +31.8%/+51.6% on Q22, but tracing contributes to those totals.
+
+Immutable evidence:
+
+- Artifact root: `/private/tmp/tpch-q6-q22-diagnostics-20260912-RTO222`
+- `MANIFEST.md` SHA-256: `ac3b547534484d7f5da68bb6840055c4a097293ece993c5ed8e4184b981f3ddf`
+- `SHA256SUMS` SHA-256: `d6def0fd4bb5b0ec76b08f8f5be7efce94aba112c5344fc1d394755181198f2f`
+- Frozen binary SHA-256: `5562f6cf22bd409f162089a8f03dc12a5103cf5a3a63178de1a15202afa6ead9`
+- Instrumented source-diff SHA-256: `0c3cce4a1f8978c92ebbfc25720d8cb8adba9aea274092fbc11ddd645f32115f`
+
+Decision: the next candidate is bounded sharing of a push-frontier `SegmentSource` by complete file
+identity so DataFusion partitions can coalesce adjacent requests through one source driver. The
+cache/lifetime must remain bounded independently of data size, and identity must not collapse
+distinct stores or file versions. V1 and plain Push remain unchanged. Acceptance requires the same
+14-core exact/plan/resource gate, reduced request fragmentation/overlap, and a diagnostics-off
+timing confirmation. This checkpoint does not implement that candidate.
+
 ### Q6: same-morsel predicate frontier cohorts — REJECTED
 
 The all-core Q6 instrumentation above isolated fragmented predicate I/O: push-frontier produced

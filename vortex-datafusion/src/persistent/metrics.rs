@@ -37,10 +37,9 @@ pub(crate) static PATH_LABEL: &str = "file_path";
 /// This helper exists because the Vortex read path records most scan metrics in
 /// a Vortex [`MetricsRegistry`] rather than in DataFusion's native metrics set.
 /// Push-morsel scan metrics exported through that shared registry are additive
-/// counters, so DataFusion's name-based aggregation is well-defined. Per-scan
-/// peaks, final gauges, and time-to-first-batch are not exported there. Each
-/// execution-partition opener lazily registers one counter-handle set and reuses
-/// it across every file and range it completes.
+/// counters and, when diagnostics are enabled, max gauges, so DataFusion's name-based
+/// aggregation is well-defined. Each execution-partition opener lazily registers fixed
+/// handle sets and reuses them across every file and range it completes.
 ///
 /// # Example
 ///
@@ -60,16 +59,36 @@ pub(crate) static PATH_LABEL: &str = "file_path";
 /// [`DataSourceExec`]: datafusion_datasource::source::DataSourceExec
 /// [`VortexSource::metrics_registry`]: crate::VortexSource::metrics_registry
 /// [`MetricsRegistry`]: vortex::metrics::MetricsRegistry
-#[derive(Default)]
-pub struct VortexMetricsFinder(Vec<MetricsSet>);
+pub struct VortexMetricsFinder {
+    metric_sets: Vec<MetricsSet>,
+    include_native: bool,
+}
 
 impl VortexMetricsFinder {
     /// Collects metrics for each `DataSourceExec` in `plan`, augmenting any
     /// Vortex-backed scan with the attached Vortex registry snapshot.
     pub fn find_all(plan: &dyn ExecutionPlan) -> Vec<MetricsSet> {
-        let mut finder = Self::default();
+        let mut finder = Self {
+            metric_sets: Vec::new(),
+            include_native: true,
+        };
         match accept(plan, &mut finder) {
-            Ok(()) => finder.0,
+            Ok(()) => finder.metric_sets,
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Collect only Vortex registry metrics for each Vortex-backed `DataSourceExec`.
+    ///
+    /// Native execution metrics are intentionally excluded so callers that already walk the
+    /// execution tree do not report those metrics twice. Non-Vortex data sources are omitted.
+    pub fn find_vortex_registry(plan: &dyn ExecutionPlan) -> Vec<MetricsSet> {
+        let mut finder = Self {
+            metric_sets: Vec::new(),
+            include_native: false,
+        };
+        match accept(plan, &mut finder) {
+            Ok(()) => finder.metric_sets,
             Err(_) => Vec::new(),
         }
     }
@@ -79,13 +98,25 @@ impl ExecutionPlanVisitor for VortexMetricsFinder {
     type Error = std::convert::Infallible;
     fn pre_visit(&mut self, plan: &dyn ExecutionPlan) -> Result<bool, Self::Error> {
         if let Some(exec) = plan.downcast_ref::<DataSourceExec>() {
-            // Start with exec metrics or create a new set
-            let mut set = exec.metrics().unwrap_or_default();
-
-            // Include our own metrics from VortexSource
-            if let Some(file_scan) = exec.data_source().downcast_ref::<FileScanConfig>()
-                && let Some(scan) = file_scan.file_source.downcast_ref::<VortexSource>()
-            {
+            let vortex_source = exec
+                .data_source()
+                .downcast_ref::<FileScanConfig>()
+                .and_then(|file_scan| file_scan.file_source.downcast_ref::<VortexSource>());
+            if self.include_native {
+                let mut set = exec.metrics().unwrap_or_default();
+                if let Some(scan) = vortex_source {
+                    for metric in scan
+                        .metrics_registry()
+                        .snapshot()
+                        .iter()
+                        .flat_map(metric_to_datafusion)
+                    {
+                        set.push(Arc::new(metric));
+                    }
+                }
+                self.metric_sets.push(set);
+            } else if let Some(scan) = vortex_source {
+                let mut set = MetricsSet::new();
                 for metric in scan
                     .metrics_registry()
                     .snapshot()
@@ -94,9 +125,8 @@ impl ExecutionPlanVisitor for VortexMetricsFinder {
                 {
                     set.push(Arc::new(metric));
                 }
+                self.metric_sets.push(set);
             }
-
-            self.0.push(set);
 
             Ok(false)
         } else {
@@ -346,6 +376,7 @@ mod tests {
 
         // Get metrics sets
         let metrics_sets = VortexMetricsFinder::find_all(physical_plan.as_ref());
+        let registry_sets = VortexMetricsFinder::find_vortex_registry(physical_plan.as_ref());
 
         assert!(!metrics_sets.is_empty());
         assert_eq!(
@@ -355,6 +386,7 @@ mod tests {
             metrics_sets.len(),
             counter.0
         );
+        assert_eq!(registry_sets.len(), counter.0);
 
         Ok(())
     }

@@ -5,6 +5,8 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::Weak;
+use std::time::Duration;
+use std::time::Instant;
 
 use arrow_array::RecordBatchOptions;
 use arrow_schema::Field;
@@ -49,7 +51,10 @@ use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
+use vortex::metrics::Counter as VortexCounter;
+use vortex::metrics::Gauge as VortexGauge;
 use vortex::metrics::Label;
+use vortex::metrics::MetricBuilder as VortexMetricBuilder;
 use vortex::metrics::MetricsRegistry;
 use vortex::scan::selection::Selection;
 use vortex::session::VortexSession;
@@ -61,6 +66,85 @@ use vortex_morsel_scan::ScanExecutorOptions;
 use vortex_morsel_scan::scan_backend_from_env;
 use vortex_utils::aliases::dash_map::DashMap;
 use vortex_utils::aliases::dash_map::Entry;
+
+static SCAN_DIAGNOSTICS_ENABLED: OnceLock<bool> = OnceLock::new();
+
+fn scan_diagnostics_enabled() -> bool {
+    *SCAN_DIAGNOSTICS_ENABLED.get_or_init(|| {
+        std::env::var_os("VORTEX_SCAN_DIAGNOSTICS").is_some_and(|value| value != "0")
+    })
+}
+
+pub(crate) struct NaturalSplitDiagnostics {
+    calls: VortexCounter,
+    cache_reuses: VortexCounter,
+    lock_contended_acquisitions: VortexCounter,
+    lock_wait_nanoseconds: VortexCounter,
+    lock_wait_nanoseconds_max: VortexGauge,
+    successful_builds: VortexCounter,
+    failed_builds: VortexCounter,
+    build_nanoseconds: VortexCounter,
+    build_nanoseconds_max: VortexGauge,
+}
+
+impl NaturalSplitDiagnostics {
+    fn new(registry: &dyn MetricsRegistry, labels: &[Label]) -> Self {
+        let counter = |name| {
+            VortexMetricBuilder::new(registry)
+                .add_labels(labels.iter().cloned())
+                .counter(name)
+        };
+        let gauge = |name| {
+            VortexMetricBuilder::new(registry)
+                .add_labels(labels.iter().cloned())
+                .gauge(name)
+        };
+        Self {
+            calls: counter("vortex.scan.natural_splits.calls"),
+            cache_reuses: counter("vortex.scan.natural_splits.cache_reuses"),
+            lock_contended_acquisitions: counter(
+                "vortex.scan.natural_splits.lock_contended_acquisitions",
+            ),
+            lock_wait_nanoseconds: counter("vortex.scan.natural_splits.lock_wait_nanoseconds"),
+            lock_wait_nanoseconds_max: gauge(
+                "vortex.scan.natural_splits.lock_wait_nanoseconds_max",
+            ),
+            successful_builds: counter("vortex.scan.natural_splits.successful_builds"),
+            failed_builds: counter("vortex.scan.natural_splits.failed_builds"),
+            build_nanoseconds: counter("vortex.scan.natural_splits.build_nanoseconds"),
+            build_nanoseconds_max: gauge("vortex.scan.natural_splits.build_nanoseconds_max"),
+        }
+    }
+
+    fn record(
+        &self,
+        cache_reused: bool,
+        lock_wait: Option<Duration>,
+        build_time: Option<Duration>,
+        build_succeeded: Option<bool>,
+    ) {
+        self.calls.add(1);
+        if cache_reused {
+            self.cache_reuses.add(1);
+        }
+        if let Some(wait) = lock_wait {
+            let nanos = u64::try_from(wait.as_nanos()).unwrap_or(u64::MAX);
+            self.lock_contended_acquisitions.add(1);
+            self.lock_wait_nanoseconds.add(nanos);
+            self.lock_wait_nanoseconds_max.set_max(nanos as f64);
+        }
+        if let Some(build) = build_time {
+            let nanos = u64::try_from(build.as_nanos()).unwrap_or(u64::MAX);
+            self.build_nanoseconds.add(nanos);
+            self.build_nanoseconds_max.set_max(nanos as f64);
+        }
+        match build_succeeded {
+            Some(true) => self.successful_builds.add(1),
+            Some(false) => self.failed_builds.add(1),
+            None => {}
+        }
+    }
+}
 
 use crate::VortexAccessPlan;
 use crate::convert::exprs::ExpressionConvertor;
@@ -226,6 +310,8 @@ pub(crate) struct VortexOpener {
     pub metrics_registry: Arc<dyn MetricsRegistry>,
     /// Lazily registered push counters shared by every file/range opened for this partition.
     pub morsel_scan_metrics: Arc<OnceLock<Arc<MorselScanMetrics>>>,
+    /// Lazily registered diagnostic metrics shared by every open for this partition.
+    pub natural_split_diagnostics: Arc<OnceLock<Arc<NaturalSplitDiagnostics>>>,
     /// DataFusion-native metrics exposed through `DataSourceExec`.
     pub df_metrics: ExecutionPlanMetricsSet,
     /// A shared cache of file readers.
@@ -254,6 +340,18 @@ impl VortexOpener {
             ))
         }))
     }
+
+    fn natural_split_diagnostics(&self) -> Option<Arc<NaturalSplitDiagnostics>> {
+        scan_diagnostics_enabled().then(|| {
+            let labels = [Label::new(PARTITION_LABEL, self.partition.to_string())];
+            Arc::clone(self.natural_split_diagnostics.get_or_init(|| {
+                Arc::new(NaturalSplitDiagnostics::new(
+                    self.metrics_registry.as_ref(),
+                    &labels,
+                ))
+            }))
+        })
+    }
 }
 
 impl FileOpener for VortexOpener {
@@ -267,6 +365,7 @@ impl FileOpener for VortexOpener {
         let session = self.session.clone();
         let metrics_registry = Arc::clone(&self.metrics_registry);
         let morsel_scan_metrics = self.morsel_scan_metrics();
+        let natural_split_diagnostics = self.natural_split_diagnostics();
         let labels = vec![
             Label::new(PATH_LABEL, file.path().to_string()),
             Label::new(PARTITION_LABEL, self.partition.to_string()),
@@ -610,6 +709,7 @@ impl FileOpener for VortexOpener {
                         &file.object_meta.location,
                         &scan_builder,
                         file.object_meta.size,
+                        natural_split_diagnostics.as_deref(),
                     )?;
 
                     let Some(row_range) =
@@ -735,22 +835,58 @@ fn natural_splits_for_file<A: 'static + Send>(
     path: &Path,
     scan_builder: &FileScanBuilder<A>,
     total_size: u64,
+    diagnostics: Option<&NaturalSplitDiagnostics>,
 ) -> DFResult<Arc<NaturalSplits>> {
-    if let Some(splits) = natural_splits.get(path) {
-        return Ok(Arc::clone(splits.value()));
+    if diagnostics.is_none() {
+        if let Some(splits) = natural_splits.get(path) {
+            return Ok(Arc::clone(splits.value()));
+        }
+        return match natural_splits.entry(path.clone()) {
+            Entry::Occupied(entry) => Ok(Arc::clone(entry.get())),
+            Entry::Vacant(entry) => {
+                let splits = compute_natural_splits(scan_builder, total_size)?;
+                entry.insert(Arc::clone(&splits));
+                Ok(splits)
+            }
+        };
     }
 
-    // Compute while holding the entry so concurrent partitions opening the same file wait
-    // for the winner instead of all walking the layout tree; the redundant walks contend on
-    // the lazily-initialized layout children and dominate the cost of the computation itself.
-    match natural_splits.entry(path.clone()) {
-        Entry::Occupied(entry) => Ok(Arc::clone(entry.get())),
-        Entry::Vacant(entry) => {
-            let splits = compute_natural_splits(scan_builder, total_size)?;
-            entry.insert(Arc::clone(&splits));
-            Ok(splits)
-        }
+    let diagnostics = diagnostics.vortex_expect("diagnostics were checked above");
+    let initial = natural_splits.try_get(path);
+    let initially_locked = initial.is_locked();
+    if let Some(splits_ref) = initial.try_unwrap() {
+        let splits = Arc::clone(splits_ref.value());
+        drop(splits_ref);
+        diagnostics.record(true, None, None, None);
+        return Ok(splits);
     }
+
+    let (entry, wait_started) = if initially_locked {
+        let started = Instant::now();
+        (natural_splits.entry(path.clone()), Some(started))
+    } else if let Some(entry) = natural_splits.try_entry(path.clone()) {
+        (entry, None)
+    } else {
+        let started = Instant::now();
+        (natural_splits.entry(path.clone()), Some(started))
+    };
+    let lock_wait = wait_started.map(|started| started.elapsed());
+    let (result, cache_reused, build_time, build_succeeded) = match entry {
+        Entry::Occupied(entry) => (Ok(Arc::clone(entry.get())), true, None, None),
+        Entry::Vacant(entry) => {
+            let started = Instant::now();
+            match compute_natural_splits(scan_builder, total_size) {
+                Ok(splits) => {
+                    entry.insert(Arc::clone(&splits));
+                    (Ok(splits), false, Some(started.elapsed()), Some(true))
+                }
+                Err(error) => (Err(error), false, Some(started.elapsed()), Some(false)),
+            }
+        }
+    };
+    // Do not publish metrics while holding the DashMap shard guard.
+    diagnostics.record(cache_reused, lock_wait, build_time, build_succeeded);
+    result
 }
 
 /// Walk the layout tree to compute the file's full natural split boundaries for the fields
@@ -863,6 +999,7 @@ mod tests {
     use vortex::layout::layouts::flat::writer::FlatLayoutStrategy;
     use vortex::layout::layouts::table::TableStrategy;
     use vortex::metrics::DefaultMetricsRegistry;
+    use vortex::metrics::MetricValue;
     use vortex::scan::selection::Selection;
     use vortex::scan::strict_sorted_buffer::StrictSortedBuffer;
     use vortex::session::VortexSession;
@@ -894,6 +1031,62 @@ mod tests {
                 push_threads: expected_push_threads,
             }
         );
+    }
+
+    #[test]
+    fn natural_split_diagnostics_use_fixed_handles_and_max_semantics() {
+        let registry = DefaultMetricsRegistry::default();
+        let diagnostics = NaturalSplitDiagnostics::new(&registry, &[]);
+        diagnostics.record(
+            false,
+            Some(Duration::from_nanos(7)),
+            Some(Duration::from_nanos(11)),
+            Some(true),
+        );
+        diagnostics.record(true, Some(Duration::from_nanos(3)), None, None);
+        diagnostics.record(false, None, Some(Duration::from_nanos(5)), Some(false));
+
+        let snapshot = registry.snapshot();
+        assert_eq!(snapshot.len(), 9);
+        let counter = |name: &str| {
+            snapshot
+                .iter()
+                .find(|metric| metric.name().as_ref() == name)
+                .map(|metric| match metric.value() {
+                    MetricValue::Counter(counter) => counter.value(),
+                    _ => 0,
+                })
+        };
+        assert_eq!(counter("vortex.scan.natural_splits.calls"), Some(3));
+        assert_eq!(
+            counter("vortex.scan.natural_splits.lock_contended_acquisitions"),
+            Some(2)
+        );
+        assert_eq!(
+            counter("vortex.scan.natural_splits.successful_builds"),
+            Some(1)
+        );
+        assert_eq!(counter("vortex.scan.natural_splits.failed_builds"), Some(1));
+        let wait_max = snapshot
+            .iter()
+            .find(|metric| {
+                metric.name().as_ref() == "vortex.scan.natural_splits.lock_wait_nanoseconds_max"
+            })
+            .map(|metric| match metric.value() {
+                MetricValue::Gauge(gauge) => gauge.value(),
+                _ => 0.0,
+            });
+        assert_eq!(wait_max, Some(7.0));
+        let build_max = snapshot
+            .iter()
+            .find(|metric| {
+                metric.name().as_ref() == "vortex.scan.natural_splits.build_nanoseconds_max"
+            })
+            .map(|metric| match metric.value() {
+                MetricValue::Gauge(gauge) => gauge.value(),
+                _ => 0.0,
+            });
+        assert_eq!(build_max, Some(11.0));
     }
 
     /// Test-only expr used to test error reporting.
@@ -1072,6 +1265,7 @@ mod tests {
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             morsel_scan_metrics: Default::default(),
+            natural_split_diagnostics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1418,6 +1612,7 @@ mod tests {
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             morsel_scan_metrics: Default::default(),
+            natural_split_diagnostics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1506,6 +1701,7 @@ mod tests {
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             morsel_scan_metrics: Default::default(),
+            natural_split_diagnostics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1662,6 +1858,7 @@ mod tests {
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             morsel_scan_metrics: Default::default(),
+            natural_split_diagnostics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1723,6 +1920,7 @@ mod tests {
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             morsel_scan_metrics: Default::default(),
+            natural_split_diagnostics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
@@ -1931,6 +2129,7 @@ mod tests {
             limit: None,
             metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
             morsel_scan_metrics: Default::default(),
+            natural_split_diagnostics: Default::default(),
             df_metrics: ExecutionPlanMetricsSet::new(),
             layout_readers: Default::default(),
             natural_splits: Default::default(),
