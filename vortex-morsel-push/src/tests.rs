@@ -1472,8 +1472,10 @@ fn executor_projects_row_idx_with_offset() -> VortexResult<()> {
     Ok(())
 }
 
-#[test]
-fn executor_filters_on_row_idx_with_offset() -> VortexResult<()> {
+#[rstest]
+fn executor_filters_on_row_idx_with_offset(
+    #[values(false, true)] frontier_io: bool,
+) -> VortexResult<()> {
     let session = session();
     let values: Vec<i32> = (0..12).collect();
     let fixture = block_on(|handle| {
@@ -1489,7 +1491,8 @@ fn executor_filters_on_row_idx_with_offset() -> VortexResult<()> {
     let projection = select(vec!["a"], root()).bind(fixture.layout.dtype())?;
     let filter = gt_eq(row_idx(), lit(105u64)).bind(fixture.layout.dtype())?;
     let executor =
-        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments));
+        PushMorselScanExecutor::new(Arc::clone(&fixture.layout), Arc::clone(&fixture.segments))
+            .with_frontier_io(frontier_io);
     let runtime_session = session.clone();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)

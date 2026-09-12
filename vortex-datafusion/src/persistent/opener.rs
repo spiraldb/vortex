@@ -76,6 +76,32 @@ enum FileScanBuilder<A> {
     Morsel(MorselScanBuilder<A>),
 }
 
+#[derive(Debug, Eq, PartialEq)]
+struct ScanExecutionConfig {
+    builder_concurrency: Option<usize>,
+    push_threads: usize,
+}
+
+fn scan_execution_config(
+    _backend: ScanBackend,
+    requested_concurrency: Option<usize>,
+) -> ScanExecutionConfig {
+    if requested_concurrency.is_none() {
+        return ScanExecutionConfig {
+            builder_concurrency: None,
+            push_threads: 1,
+        };
+    }
+
+    // DataFusion already partitions the query across the requested number of Tokio workers. Keep
+    // each opened file at one unit of scan concurrency, rather than applying the same requested
+    // value again as the builders' per-worker multiplier or as extra push executor workers.
+    ScanExecutionConfig {
+        builder_concurrency: Some(1),
+        push_threads: 1,
+    }
+}
+
 impl<A: 'static + Send> FileScanBuilder<A> {
     fn with_projection(self, projection: BoundExpression) -> Self {
         match self {
@@ -433,7 +459,7 @@ impl FileOpener for VortexOpener {
 
             let backend = scan_backend_from_env()
                 .map_err(|err| exec_datafusion_err!("Invalid scan backend: {err}"))?;
-            let options = ScanExecutorOptions::default().with_threads(1);
+            let execution_config = scan_execution_config(backend, scan_concurrency);
             let mut scan_builder = match backend {
                 ScanBackend::V1 => {
                     // Only V1 constructs and caches a LayoutReader tree.
@@ -474,16 +500,22 @@ impl FileOpener for VortexOpener {
                     };
                     FileScanBuilder::V1(ScanBuilder::new(session.clone(), layout_reader))
                 }
-                ScanBackend::Push => FileScanBuilder::Morsel(
-                    MorselScanBuilder::new(
-                        session.clone(),
-                        backend,
-                        Arc::clone(vxf.footer().layout()),
-                        vxf.segment_source(),
-                        &options,
+                ScanBackend::Push | ScanBackend::PushFrontier => {
+                    let options =
+                        ScanExecutorOptions::default().with_threads(execution_config.push_threads);
+                    FileScanBuilder::Morsel(
+                        MorselScanBuilder::new(
+                            session.clone(),
+                            backend,
+                            Arc::clone(vxf.footer().layout()),
+                            vxf.segment_source(),
+                            &options,
+                        )
+                        .map_err(|err| {
+                            exec_datafusion_err!("Failed to create morsel scan: {err}")
+                        })?,
                     )
-                    .map_err(|err| exec_datafusion_err!("Failed to create morsel scan: {err}"))?,
-                ),
+                }
             };
 
             if let Some(vortex_plan) = file.extensions.get::<VortexAccessPlan>()
@@ -534,7 +566,7 @@ impl FileOpener for VortexOpener {
                 scan_builder = scan_builder.with_limit(limit);
             }
 
-            if let Some(concurrency) = scan_concurrency {
+            if let Some(concurrency) = execution_config.builder_concurrency {
                 scan_builder = scan_builder.with_concurrency(concurrency);
             }
 
@@ -822,6 +854,28 @@ mod tests {
     use crate::persistent::reader::DefaultVortexReaderFactory;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::default);
+
+    #[rstest]
+    #[case(ScanBackend::V1, None, None, 1)]
+    #[case(ScanBackend::Push, None, None, 1)]
+    #[case(ScanBackend::PushFrontier, None, None, 1)]
+    #[case(ScanBackend::V1, Some(7), Some(1), 1)]
+    #[case(ScanBackend::Push, Some(7), Some(1), 1)]
+    #[case(ScanBackend::PushFrontier, Some(7), Some(1), 1)]
+    fn scan_concurrency_reaches_each_backend(
+        #[case] backend: ScanBackend,
+        #[case] requested: Option<usize>,
+        #[case] expected_builder_concurrency: Option<usize>,
+        #[case] expected_push_threads: usize,
+    ) {
+        assert_eq!(
+            scan_execution_config(backend, requested),
+            ScanExecutionConfig {
+                builder_concurrency: expected_builder_concurrency,
+                push_threads: expected_push_threads,
+            }
+        );
+    }
 
     /// Test-only expr used to test error reporting.
     #[derive(Debug, Eq, Hash, PartialEq)]

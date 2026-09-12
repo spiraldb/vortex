@@ -27,8 +27,25 @@ use vortex_datafusion::VortexFormat;
 use vortex_datafusion::VortexFormatFactory;
 use vortex_datafusion::VortexTableOptions;
 
+/// Build the Tokio runtime used by the benchmark process.
+///
+/// An explicit worker count makes `--threads` the process-wide CPU worker budget. Leaving it
+/// unset preserves Tokio's default worker-count selection, including `TOKIO_WORKER_THREADS`.
+pub fn build_benchmark_runtime(threads: Option<usize>) -> anyhow::Result<tokio::runtime::Runtime> {
+    let mut builder = tokio::runtime::Builder::new_multi_thread();
+    builder.enable_all();
+    if let Some(threads) = threads {
+        anyhow::ensure!(
+            threads > 0,
+            "benchmark worker count must be greater than zero"
+        );
+        builder.worker_threads(threads);
+    }
+    Ok(builder.build()?)
+}
+
 #[expect(clippy::expect_used)]
-pub fn get_session_context() -> SessionContext {
+pub fn get_session_context(threads: Option<usize>) -> SessionContext {
     let mut rt_builder = RuntimeEnvBuilder::new();
 
     rt_builder = rt_builder.with_cache_manager(CacheManagerConfig::default());
@@ -37,10 +54,15 @@ pub fn get_session_context() -> SessionContext {
         .build_arc()
         .expect("could not build runtime environment");
 
-    let factory = VortexFormatFactory::new().with_options(vortex_table_options());
+    let factory = VortexFormatFactory::new().with_options(vortex_table_options(threads));
+
+    let mut session_config = SessionConfig::from_env().expect("shouldn't fail");
+    if let Some(threads) = threads {
+        session_config = session_config.with_target_partitions(threads);
+    }
 
     let mut session_state_builder = SessionStateBuilder::new()
-        .with_config(SessionConfig::from_env().expect("shouldn't fail"))
+        .with_config(session_config)
         .with_runtime_env(rt)
         .with_default_features();
 
@@ -98,12 +120,12 @@ pub fn make_object_store(
     }
 }
 
-pub fn format_to_df_format(format: Format) -> Arc<dyn FileFormat> {
+pub fn format_to_df_format(format: Format, scan_concurrency: Option<usize>) -> Arc<dyn FileFormat> {
     match format {
         Format::Csv => Arc::new(CsvFormat::default()) as _,
         Format::Parquet => Arc::new(ParquetFormat::new()),
         Format::OnDiskVortex | Format::VortexCompact | Format::VortexSpatialNative => Arc::new(
-            VortexFormat::new_with_options(SESSION.clone(), vortex_table_options()),
+            VortexFormat::new_with_options(SESSION.clone(), vortex_table_options(scan_concurrency)),
         ),
         Format::ArrowIpc | Format::OnDiskDuckDB | Format::Lance => {
             unimplemented!("Format {format} cannot be turned into a DataFusion `FileFormat`")
@@ -111,11 +133,12 @@ pub fn format_to_df_format(format: Format) -> Arc<dyn FileFormat> {
     }
 }
 
-fn vortex_table_options() -> VortexTableOptions {
+fn vortex_table_options(scan_concurrency: Option<usize>) -> VortexTableOptions {
     let mut opts = VortexTableOptions::default();
 
     opts.predicate_pushdown = true;
     opts.projection_pushdown = true;
+    opts.scan_concurrency = scan_concurrency;
 
     opts
 }

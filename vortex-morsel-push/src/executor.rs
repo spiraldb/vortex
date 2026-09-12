@@ -49,6 +49,85 @@ type PlanCacheKey = (Expression, Option<Expression>, ConjunctMode, u64);
 /// file driver sees enough adjacent segments to coalesce and cold reads overlap execution.
 const SHARED_LOOKAHEAD_MORSELS: usize = 16;
 
+/// Production SQL defaults for grouped-I/O frontier scheduling. These mirror
+/// `MorselConfig::frontier_defaults`: resident morsels expose their own first frontier, with no
+/// additional down lookahead or speculative right traversal, and row frontiers refill in batches.
+const FRONTIER_LOOKAHEAD_PER_THREAD: usize = 0;
+const FRONTIER_SPECULATIVE_RIGHT: usize = 0;
+const FRONTIER_REFILL_RANGES: usize = 32;
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+enum ExecutorIoPolicy {
+    #[default]
+    EagerLookahead,
+    Frontier,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ExecutorDriver {
+    Internal,
+    External,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ExecutorIoSettings {
+    eager_lookahead: bool,
+    lookahead_morsels: usize,
+    frontier_lookahead_per_thread: Option<usize>,
+    speculative_frontiers: usize,
+    frontier_refill_ranges: usize,
+}
+
+impl ExecutorIoPolicy {
+    const fn from_frontier_io(frontier_io: bool) -> Self {
+        if frontier_io {
+            Self::Frontier
+        } else {
+            Self::EagerLookahead
+        }
+    }
+
+    const fn settings(self, driver: ExecutorDriver) -> ExecutorIoSettings {
+        match (self, driver) {
+            (Self::EagerLookahead, ExecutorDriver::Internal) => ExecutorIoSettings {
+                eager_lookahead: true,
+                lookahead_morsels: SHARED_LOOKAHEAD_MORSELS,
+                frontier_lookahead_per_thread: None,
+                speculative_frontiers: 0,
+                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
+            },
+            (Self::EagerLookahead, ExecutorDriver::External) => ExecutorIoSettings {
+                eager_lookahead: true,
+                lookahead_morsels: 0,
+                frontier_lookahead_per_thread: None,
+                speculative_frontiers: 0,
+                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
+            },
+            (Self::Frontier, _) => ExecutorIoSettings {
+                eager_lookahead: false,
+                lookahead_morsels: 0,
+                frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
+                speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
+                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
+            },
+        }
+    }
+
+    fn configure(self, scan: MorselScan, driver: ExecutorDriver) -> MorselScan {
+        let settings = self.settings(driver);
+        let scan = scan
+            .with_lookahead_morsels(settings.lookahead_morsels)
+            .with_eager_lookahead(settings.eager_lookahead);
+        match settings.frontier_lookahead_per_thread {
+            Some(frontiers) => scan
+                .with_frontier_lookahead_per_thread(frontiers)
+                .with_speculative_frontiers(settings.speculative_frontiers)
+                .with_frontier_refill_ranges(settings.frontier_refill_ranges),
+            None => scan,
+        }
+    }
+}
+
 /// Keep stats evaluation bounded while exposing enough adjacent morsels for stats reads to batch.
 const PRUNING_LOOKAHEAD_MORSELS: usize = 16;
 
@@ -63,6 +142,7 @@ pub struct PushMorselScanExecutor {
     target_rows: u64,
     conjunct_mode: ConjunctMode,
     threads: usize,
+    io_policy: ExecutorIoPolicy,
     external_driver: Option<Arc<dyn Fn() -> bool + Send + Sync>>,
     plan_cache: Mutex<HashMap<PlanCacheKey, Arc<ExecPlan>>>,
 }
@@ -76,6 +156,7 @@ impl PushMorselScanExecutor {
             target_rows: 128 * 1024,
             conjunct_mode: ConjunctMode::Cascade,
             threads: 4,
+            io_policy: ExecutorIoPolicy::default(),
             external_driver: None,
             plan_cache: Mutex::default(),
         }
@@ -96,6 +177,16 @@ impl PushMorselScanExecutor {
     /// Set the number of affinity workers used by one shared scan run.
     pub fn with_threads(mut self, threads: usize) -> Self {
         self.threads = threads.max(1);
+        self
+    }
+
+    /// Select grouped-I/O frontier scheduling for this executor.
+    ///
+    /// The frontier production defaults add no down-frontier lookahead or speculative right
+    /// traversal and refill up to 32 row ranges together. Disabling it preserves the established
+    /// eager-lookahead push policy.
+    pub fn with_frontier_io(mut self, frontier_io: bool) -> Self {
+        self.io_policy = ExecutorIoPolicy::from_frontier_io(frontier_io);
         self
     }
 
@@ -202,6 +293,7 @@ impl PushMorselScanExecutor {
                 row_caps,
                 Arc::clone(driver),
                 pruner,
+                self.io_policy,
             );
         }
 
@@ -233,6 +325,7 @@ impl PushMorselScanExecutor {
         let coordinator_handle = handle.clone();
         let driver_handle = handle.clone();
         let max_threads = self.threads;
+        let io_policy = self.io_policy;
         handle
             .spawn(async move {
                 let morsels = match prune_morsels(pruner.as_ref(), morsels).await {
@@ -279,12 +372,11 @@ impl PushMorselScanExecutor {
                             .with_threads(threads)
                             .with_morsels(ranges)
                             .with_sparse_morsels(true)
-                            .with_lookahead_morsels(SHARED_LOOKAHEAD_MORSELS)
-                            .with_eager_lookahead(true)
                             .with_cancellation(cancellation)
                             .with_completion_sink(move |index, batch| {
                                 targets[index].complete(batch);
                             });
+                        let scan = io_policy.configure(scan, ExecutorDriver::Internal);
                         driver.connect(scan, &driver_handle)?.run().map(|_| ())
                     })
                     .await;
@@ -332,6 +424,7 @@ impl PushMorselScanExecutor {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn build_external_outputs(
     session: VortexSession,
     plan: Arc<ExecPlan>,
@@ -340,6 +433,7 @@ fn build_external_outputs(
     row_caps: Option<Vec<usize>>,
     driver: Arc<dyn Fn() -> bool + Send + Sync>,
     pruner: Option<StaticPruner>,
+    io_policy: ExecutorIoPolicy,
 ) -> VortexResult<Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>> {
     // One I/O service, and therefore one demand stream, spans every morsel of this file so
     // reads dedupe across them. The engine's threads advance the runtime the driver runs on.
@@ -364,12 +458,13 @@ fn build_external_outputs(
             if ranges.is_empty() {
                 return Ok(None);
             }
-            let (batches, _) = MorselScan::new_with_morsels(plan, session, ranges)
+            let scan = MorselScan::new_with_morsels(plan, session, ranges)
                 .with_io_service(io)
                 .with_external_driver(driver)
                 .with_share_decodes(false)
-                .with_sparse_morsels(true)
-                .with_eager_lookahead(true)
+                .with_sparse_morsels(true);
+            let (batches, _) = io_policy
+                .configure(scan, ExecutorDriver::External)
                 .run_on_current_thread()?;
             match (combine_batches(batches)?, row_cap) {
                 (Some(array), Some(cap)) if array.len() > cap => Ok(Some(array.slice(0..cap)?)),
@@ -623,7 +718,72 @@ fn selected_morsels(
 
 #[cfg(test)]
 mod tests {
+    use super::ExecutorDriver;
+    use super::ExecutorIoPolicy;
+    use super::ExecutorIoSettings;
+    use super::FRONTIER_LOOKAHEAD_PER_THREAD;
+    use super::FRONTIER_REFILL_RANGES;
+    use super::FRONTIER_SPECULATIVE_RIGHT;
+    use super::SHARED_LOOKAHEAD_MORSELS;
     use super::coalesce_ranges;
+
+    #[test]
+    fn production_frontier_policy_is_explicit_and_uses_harness_defaults() {
+        assert_eq!(
+            ExecutorIoPolicy::from_frontier_io(false),
+            ExecutorIoPolicy::EagerLookahead
+        );
+        assert_eq!(
+            ExecutorIoPolicy::from_frontier_io(true),
+            ExecutorIoPolicy::Frontier
+        );
+        assert_eq!(
+            ExecutorIoPolicy::Frontier.settings(ExecutorDriver::Internal),
+            ExecutorIoSettings {
+                eager_lookahead: false,
+                lookahead_morsels: 0,
+                frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
+                speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
+                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
+            }
+        );
+        assert_eq!(
+            (
+                FRONTIER_LOOKAHEAD_PER_THREAD,
+                FRONTIER_SPECULATIVE_RIGHT,
+                FRONTIER_REFILL_RANGES,
+            ),
+            (0, 0, 32)
+        );
+        assert_eq!(
+            ExecutorIoPolicy::Frontier.settings(ExecutorDriver::External),
+            ExecutorIoPolicy::Frontier.settings(ExecutorDriver::Internal)
+        );
+    }
+
+    #[test]
+    fn external_eager_policy_preserves_legacy_zero_morsel_window() {
+        assert_eq!(
+            ExecutorIoPolicy::EagerLookahead.settings(ExecutorDriver::External),
+            ExecutorIoSettings {
+                eager_lookahead: true,
+                lookahead_morsels: 0,
+                frontier_lookahead_per_thread: None,
+                speculative_frontiers: 0,
+                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
+            }
+        );
+        assert_eq!(
+            ExecutorIoPolicy::EagerLookahead.settings(ExecutorDriver::Internal),
+            ExecutorIoSettings {
+                eager_lookahead: true,
+                lookahead_morsels: SHARED_LOOKAHEAD_MORSELS,
+                frontier_lookahead_per_thread: None,
+                speculative_frontiers: 0,
+                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
+            }
+        );
+    }
 
     #[test]
     fn coalesces_only_small_gaps() {

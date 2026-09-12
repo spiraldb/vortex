@@ -62,9 +62,10 @@ impl MorselScanBuilder<ArrayRef> {
             ScanBackend::V1 => {
                 vortex_bail!("MorselScanBuilder only supports the push backend")
             }
-            ScanBackend::Push => {
-                let mut executor =
-                    PushMorselScanExecutor::new(layout, segments).with_threads(options.threads);
+            ScanBackend::Push | ScanBackend::PushFrontier => {
+                let mut executor = PushMorselScanExecutor::new(layout, segments)
+                    .with_threads(options.threads)
+                    .with_frontier_io(backend == ScanBackend::PushFrontier);
                 if let Some(driver) = &options.external_driver {
                     executor = executor.with_external_threads(Arc::clone(driver));
                 }

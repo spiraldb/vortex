@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -62,7 +63,7 @@ struct Args {
     iterations: usize,
 
     #[arg(short, long)]
-    threads: Option<usize>,
+    threads: Option<NonZeroUsize>,
 
     #[arg(short, long)]
     verbose: bool,
@@ -123,9 +124,13 @@ struct Args {
     options: Vec<Opt>,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     let args = Args::parse();
+    let threads = args.threads.map(NonZeroUsize::get);
+    datafusion_bench::build_benchmark_runtime(threads)?.block_on(run(args, threads))
+}
+
+async fn run(args: Args, threads: Option<usize>) -> anyhow::Result<()> {
     let opts = Opts::from(args.options);
 
     set_join_set_tracer(get_static_tracer())?;
@@ -181,9 +186,9 @@ async fn main() -> anyhow::Result<()> {
             |format| {
                 let benchmark = &*benchmark;
                 async move {
-                    let session = datafusion_bench::get_session_context();
+                    let session = datafusion_bench::get_session_context(threads);
                     datafusion_bench::make_object_store(&session, benchmark.data_url())?;
-                    register_benchmark_tables(&session, benchmark, format).await?;
+                    register_benchmark_tables(&session, benchmark, format, threads).await?;
                     Ok((session, format))
                 }
             },
@@ -247,12 +252,13 @@ async fn register_benchmark_tables<B: Benchmark + ?Sized>(
     session: &SessionContext,
     benchmark: &B,
     format: Format,
+    scan_concurrency: Option<usize>,
 ) -> anyhow::Result<()> {
     if use_scan_api() && matches!(format, Format::OnDiskVortex | Format::VortexCompact) {
         register_v2_tables(session, benchmark, format).await
     } else {
         let benchmark_base = benchmark.data_url().join(&format!("{}/", format.name()))?;
-        let file_format = format_to_df_format(format);
+        let file_format = format_to_df_format(format, scan_concurrency);
 
         for table in benchmark.table_specs().iter() {
             let pattern = benchmark.pattern(table.name, format);

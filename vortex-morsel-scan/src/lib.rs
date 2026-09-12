@@ -26,6 +26,8 @@ pub enum ScanBackend {
     V1,
     /// The physical push-pipeline implementation.
     Push,
+    /// The physical push-pipeline implementation with grouped-I/O frontier scheduling.
+    PushFrontier,
 }
 
 impl FromStr for ScanBackend {
@@ -35,7 +37,10 @@ impl FromStr for ScanBackend {
         match value {
             "v1" => Ok(Self::V1),
             "push" | "morsel-push" => Ok(Self::Push),
-            _ => vortex_bail!("scan backend must be v1 or push; received {value:?}"),
+            "push-frontier" | "morsel-push-frontier" => Ok(Self::PushFrontier),
+            _ => {
+                vortex_bail!("scan backend must be v1, push, or push-frontier; received {value:?}")
+            }
         }
     }
 }
@@ -105,6 +110,14 @@ mod tests {
         assert!(ScanBackend::from_str("morsel-pull").is_err());
         assert_eq!(ScanBackend::from_str("push")?, ScanBackend::Push);
         assert_eq!(ScanBackend::from_str("morsel-push")?, ScanBackend::Push);
+        assert_eq!(
+            ScanBackend::from_str("push-frontier")?,
+            ScanBackend::PushFrontier
+        );
+        assert_eq!(
+            ScanBackend::from_str("morsel-push-frontier")?,
+            ScanBackend::PushFrontier
+        );
         assert!(ScanBackend::from_str("other").is_err());
         Ok(())
     }
