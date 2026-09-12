@@ -29,12 +29,18 @@ are pending. All-false selections avoid unnecessary decode work.
 The executor does not poll storage futures. `SegmentSourceDriver` answers the scan's `IoDemand`
 stream on a separate runtime task or thread. `MorselScan::into_stream` provides ordered output,
 bounded capacity, and cancellation; `run` collects the output. Leased shared cells retain decoded
-chunks until the last overlapping morsel retires.
+chunks until the last overlapping morsel retires. Raw segment cells carry exact planned-use
+counts; their final use drops ready bytes or cancels the outstanding source future. A scan-owned
+driver is shut down and joined before the scan can leave a query run.
 
 The prototype supports flat, chunked, and non-nullable struct layouts, plus transparent zoned
 and legacy-statistics wrappers. Unsupported layouts are build errors. Import provenance is in
 [UPSTREAM.md](UPSTREAM.md); the [executor primer](../docs/developer-guide/internals/scan-execution-models/morsel-executor-primer.md)
-explains the current contracts.
+explains the current contracts. The grouped cursor implementation process and bug checklist are in
+[IO_FRONTIER_IMPLEMENTATION.md](IO_FRONTIER_IMPLEMENTATION.md); scheduling evidence and the
+decoded-sharing follow-up are recorded in [IO_FRONTIERS.md](IO_FRONTIERS.md). The current branch
+state and context-free continuation instructions are in
+[IO_FRONTIER_HANDOVER.md](IO_FRONTIER_HANDOVER.md).
 
 ## Evaluation
 
