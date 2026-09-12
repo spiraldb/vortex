@@ -28,6 +28,7 @@ use crate::scalar_fn::fns::binary::Binary;
 use crate::scalar_fn::fns::cast::Cast;
 use crate::scalar_fn::fns::fill_null::FillNull;
 use crate::scalar_fn::fns::get_item::GetItem;
+use crate::scalar_fn::fns::is_nan::IsNan;
 use crate::scalar_fn::fns::is_not_null::IsNotNull;
 use crate::scalar_fn::fns::is_null::IsNull;
 use crate::scalar_fn::fns::list_contains::ListContains;
@@ -49,6 +50,9 @@ pub trait ExprBuiltins: Sized {
 
     /// Is null check.
     fn is_null(&self) -> VortexResult<Expression>;
+
+    /// IEEE 754 NaN check. Requires a float expression; null rows yield null.
+    fn is_nan(&self) -> VortexResult<Expression>;
 
     /// Is not null check.
     fn is_not_null(&self) -> VortexResult<Expression>;
@@ -90,6 +94,10 @@ impl ExprBuiltins for Expression {
         IsNull.try_new_expr(EmptyOptions, [self.clone()])
     }
 
+    fn is_nan(&self) -> VortexResult<Expression> {
+        IsNan.try_new_expr(EmptyOptions, [self.clone()])
+    }
+
     fn is_not_null(&self) -> VortexResult<Expression> {
         IsNotNull.try_new_expr(EmptyOptions, [self.clone()])
     }
@@ -127,6 +135,9 @@ pub trait ArrayBuiltins: Sized {
 
     /// Is null check.
     fn is_null(&self) -> VortexResult<ArrayRef>;
+
+    /// IEEE 754 NaN check. Requires a float array; null rows yield null.
+    fn is_nan(&self) -> VortexResult<ArrayRef>;
 
     /// Is not null check.
     fn is_not_null(&self) -> VortexResult<ArrayRef>;
@@ -196,6 +207,10 @@ impl ArrayBuiltins for ArrayRef {
 
     fn is_null(&self) -> VortexResult<ArrayRef> {
         IsNull::new(self.clone()).into_array().optimize()
+    }
+
+    fn is_nan(&self) -> VortexResult<ArrayRef> {
+        IsNan::try_new(self.clone())?.into_array().optimize()
     }
 
     fn is_not_null(&self) -> VortexResult<ArrayRef> {

@@ -36,6 +36,7 @@ use vortex::expr::Expression;
 use vortex::expr::and_collect;
 use vortex::expr::between;
 use vortex::expr::get_item;
+use vortex::expr::is_nan;
 use vortex::expr::is_not_null;
 use vortex::expr::is_null;
 use vortex::expr::lit;
@@ -286,6 +287,21 @@ pub extern "system" fn Java_dev_vortex_jni_NativeExpression_not(
 ) -> jlong {
     let child = unsafe { expr_ref(child) }.clone();
     into_raw(not(child))
+}
+
+/// Build `is_nan(child)`.
+///
+/// `child` must be a float expression; that is checked when the expression is bound to a schema,
+/// not here, so an `is_nan` over an integer column builds and fails at scan time with a type
+/// error.
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_dev_vortex_jni_NativeExpression_isNan(
+    _env: EnvUnowned,
+    _class: JClass,
+    child: jlong,
+) -> jlong {
+    let child = unsafe { expr_ref(child) }.clone();
+    into_raw(is_nan(child))
 }
 
 #[unsafe(no_mangle)]

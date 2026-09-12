@@ -38,6 +38,7 @@ use crate::scalar_fn::fns::binary::Binary;
 use crate::scalar_fn::fns::cast::Cast;
 use crate::scalar_fn::fns::dynamic::DynamicComparison;
 use crate::scalar_fn::fns::dynamic::DynamicComparisonExpr;
+use crate::scalar_fn::fns::is_nan::IsNan;
 use crate::scalar_fn::fns::is_not_null::IsNotNull;
 use crate::scalar_fn::fns::is_null::IsNull;
 use crate::scalar_fn::fns::like::Like;
@@ -57,6 +58,8 @@ pub(crate) fn register_builtins(session: &StatsSession) {
     session.register_rewrite(BinaryNanCountStatsRewrite);
     session.register_rewrite(BinaryAllNonNanStatsRewrite);
     session.register_rewrite(BetweenStatsRewrite);
+    session.register_rewrite(IsNanNanCountStatsRewrite);
+    session.register_rewrite(IsNanAllNonNanStatsRewrite);
     session.register_rewrite(IsNullNullCountStatsRewrite);
     session.register_rewrite(IsNullAllNonNullStatsRewrite);
     session.register_rewrite(IsNullAllNullStatsRewrite);
@@ -206,6 +209,49 @@ impl StatsRewriteRule for BetweenStatsRewrite {
         let lhs = binary(options.lower_strict.to_operator(), lower, arr.clone());
         let rhs = binary(options.upper_strict.to_operator(), arr, upper);
         ctx.falsify(&and(lhs, rhs))
+    }
+}
+
+#[derive(Debug)]
+struct IsNanNanCountStatsRewrite;
+
+impl StatsRewriteRule for IsNanNanCountStatsRewrite {
+    fn scalar_fn_id(&self) -> ScalarFnId {
+        IsNan.id()
+    }
+
+    fn falsify(
+        &self,
+        expr: &BoundExpression,
+        ctx: &StatsRewriteCtx<'_>,
+    ) -> VortexResult<Option<BoundExpression>> {
+        Ok(nan_count(expr.child(0), ctx).map(|nan_count| eq(nan_count, lit(0u64))))
+    }
+
+    fn satisfy(
+        &self,
+        expr: &BoundExpression,
+        ctx: &StatsRewriteCtx<'_>,
+    ) -> VortexResult<Option<BoundExpression>> {
+        // Every row is NaN, which also means none is null, so the predicate holds outright.
+        Ok(nan_count(expr.child(0), ctx).map(|nan_count| eq(nan_count, row_count())))
+    }
+}
+
+#[derive(Debug)]
+struct IsNanAllNonNanStatsRewrite;
+
+impl StatsRewriteRule for IsNanAllNonNanStatsRewrite {
+    fn scalar_fn_id(&self) -> ScalarFnId {
+        IsNan.id()
+    }
+
+    fn falsify(
+        &self,
+        expr: &BoundExpression,
+        _ctx: &StatsRewriteCtx<'_>,
+    ) -> VortexResult<Option<BoundExpression>> {
+        Ok(Some(all_non_nan(expr.child(0))))
     }
 }
 
@@ -528,6 +574,14 @@ fn max(expr: &BoundExpression, ctx: &StatsRewriteCtx<'_>) -> Option<BoundExpress
 
 fn null_count(expr: &BoundExpression, ctx: &StatsRewriteCtx<'_>) -> Option<BoundExpression> {
     stat_expr(expr, Stat::NullCount, ctx)
+}
+
+fn nan_count(expr: &BoundExpression, ctx: &StatsRewriteCtx<'_>) -> Option<BoundExpression> {
+    stat_expr(expr, Stat::NaNCount, ctx)
+}
+
+fn all_non_nan(expr: &BoundExpression) -> BoundExpression {
+    stat_fn(expr.clone(), AllNonNan.bind(AggregateEmptyOptions))
 }
 
 fn all_null(expr: &BoundExpression) -> BoundExpression {

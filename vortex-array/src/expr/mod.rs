@@ -92,6 +92,7 @@ pub use exprs::get_item;
 pub use exprs::gt;
 pub use exprs::gt_eq;
 pub use exprs::ilike;
+pub use exprs::is_nan;
 pub use exprs::is_not_null;
 pub use exprs::is_null;
 pub use exprs::is_root;

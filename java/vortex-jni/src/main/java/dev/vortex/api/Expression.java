@@ -132,6 +132,28 @@ public final class Expression {
     }
 
     /**
+     * IEEE 754 NaN check.
+     *
+     * <p>No combination of comparison operators can stand in for this. Vortex compares floats with a total ordering
+     * under which {@code NaN} equals itself, so {@code f == f} matches every non-null row including the NaN ones and
+     * {@code f != f} matches none.
+     *
+     * <p>{@code child} must be a float expression; a non-float is a type error raised when the expression is bound to a
+     * schema, which for a scan filter means at scan time. A null row yields null, not false.
+     */
+    public static Expression isNan(Expression child) {
+        return new Expression(NativeExpression.isNan(child.nativePointer()));
+    }
+
+    /**
+     * The negation of {@link #isNan(Expression)}, and so subject to the same rules: a null row yields null and is
+     * filtered out, which is what a {@code NOT_NAN} predicate wants.
+     */
+    public static Expression isNotNan(Expression child) {
+        return not(isNan(child));
+    }
+
+    /**
      * SQL {@code LIKE} pattern match.
      *
      * @param negated whether to invert the result (i.e. {@code NOT LIKE})

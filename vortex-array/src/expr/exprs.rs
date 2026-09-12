@@ -34,6 +34,7 @@ use crate::scalar_fn::fns::dynamic::Rhs;
 use crate::scalar_fn::fns::ext_storage::ExtStorage;
 use crate::scalar_fn::fns::fill_null::FillNull;
 use crate::scalar_fn::fns::get_item::GetItem;
+use crate::scalar_fn::fns::is_nan::IsNan;
 use crate::scalar_fn::fns::is_not_null::IsNotNull;
 use crate::scalar_fn::fns::is_null::IsNull;
 use crate::scalar_fn::fns::like::Like;
@@ -834,6 +835,37 @@ pub fn bound_fill_null(child: BoundExpression, fill_value: BoundExpression) -> B
         .vortex_expect("fill-null expressions require compatible child and fill dtypes")
 }
 
+// ---- IsNan ----
+
+/// Creates an expression that checks for IEEE 754 NaN values.
+///
+/// Vortex compares floats with a total ordering, under which `NaN` equals itself, so no
+/// combination of comparison operators isolates NaN: `x = x` is true for every non-null row and
+/// `x != x` for none. This is the operator that asks the question.
+///
+/// The child must be a float expression. The result is strict — a null row yields null, not
+/// false — so `NOT NaN` is `not(is_nan(x))`.
+///
+/// ```rust
+/// # use vortex_array::expr::{is_nan, root};
+/// let expr = is_nan(root());
+/// ```
+pub fn is_nan(child: Expression) -> Expression {
+    IsNan.new_expr(EmptyOptions, vec![child])
+}
+
+/// Creates a bound expression that checks for IEEE 754 NaN values.
+///
+/// # Panics
+///
+/// Panics if `child` is not a float expression. Use [`is_nan`] and bind it to surface the type
+/// error as an error.
+pub fn bound_is_nan(child: BoundExpression) -> BoundExpression {
+    IsNan
+        .try_new_bound_expr(EmptyOptions, [child])
+        .vortex_expect("is-nan expressions require a float child")
+}
+
 // ---- IsNull ----
 
 /// Creates an expression that checks for null values.
@@ -1242,6 +1274,7 @@ pub mod bound {
     pub use super::bound_gt as gt;
     pub use super::bound_gt_eq as gt_eq;
     pub use super::bound_ilike as ilike;
+    pub use super::bound_is_nan as is_nan;
     pub use super::bound_is_not_null as is_not_null;
     pub use super::bound_is_null as is_null;
     pub use super::bound_like as like;
