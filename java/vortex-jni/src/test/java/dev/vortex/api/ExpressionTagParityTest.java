@@ -158,7 +158,9 @@ public final class ExpressionTagParityTest {
         assertEquals(6, DType.F64.tag());
         assertEquals(7, DType.UTF8.tag());
         assertEquals(8, DType.BINARY.tag());
-        assertEquals(9, DType.values().length);
+        assertEquals(9, DType.NULL.tag());
+        assertEquals(10, DType.VARIANT.tag());
+        assertEquals(11, DType.values().length);
     }
 
     @Test
@@ -173,7 +175,7 @@ public final class ExpressionTagParityTest {
         RuntimeException exception =
                 assertThrows(RuntimeException.class, () -> NativeExpression.literalNull((byte) DType.values().length));
         assertTrue(
-                exception.getMessage().contains("unknown null dtype tag: 9"),
+                exception.getMessage().contains("unknown null dtype tag: 11"),
                 () -> "unexpected message: " + exception.getMessage());
     }
 

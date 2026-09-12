@@ -66,7 +66,13 @@ public final class NativeExpression {
 
     public static native long literalUuid(byte[] bigEndianBytes, boolean isNull);
 
+    public static native long literalVariant(long valuePointer);
+
+    public static native long literalGeometry(byte[] wkb, String crs, boolean isNull);
+
     public static native long literalNull(byte dtypeTag);
+
+    public static native String display(long pointer);
 
     public static native void free(long pointer);
 }

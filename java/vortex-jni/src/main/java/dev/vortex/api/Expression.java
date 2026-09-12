@@ -276,9 +276,54 @@ public final class Expression {
                 .array();
     }
 
+    /**
+     * Create a Variant literal holding the value of {@code value}, which must itself be a literal.
+     *
+     * <p>A Variant scalar wraps a nested, row-specific value, so a variant literal is spelled as a literal of the
+     * wrapped type. That makes the two flavours of "null variant" distinguishable, as Variant requires:
+     * {@code nullLiteral(DType.VARIANT)} is a variant that is absent, while
+     * {@code literalVariant(nullLiteral(DType.NULL))} is a variant that is present and holds null.
+     */
+    public static Expression literalVariant(Expression value) {
+        return new Expression(NativeExpression.literalVariant(value.nativePointer()));
+    }
+
+    /**
+     * Create a geometry literal from an OGC Well-Known Binary payload, enabling predicate pushdown over geometry
+     * columns. The payload is validated as WKB here rather than at scan time.
+     *
+     * <p>Vortex models geography with the same {@code vortex.st.wkb} extension type, so a geography value is also
+     * spelled as a geometry literal — but the extension records only a CRS, not an edge interpolation, so the spherical
+     * edge semantics of a geography are not carried by the literal.
+     *
+     * @param wkb the WKB bytes; use {@link #nullLiteralGeometry(String)} for a null literal
+     * @param crs the coordinate reference system identifier, stored verbatim and compared verbatim against the column's
+     *     — pass {@code null} for an unreferenced geometry
+     */
+    public static Expression literalGeometry(byte[] wkb, String crs) {
+        Preconditions.checkArgument(wkb != null, "use nullLiteralGeometry(crs) for a null geometry literal");
+        return new Expression(NativeExpression.literalGeometry(wkb, crs, false));
+    }
+
+    /** Create a null geometry literal. See {@link #literalGeometry(byte[], String)} for the {@code crs} semantics. */
+    public static Expression nullLiteralGeometry(String crs) {
+        return new Expression(NativeExpression.literalGeometry(null, crs, true));
+    }
+
     /** Create a typed null literal of the given primitive {@link DType}. */
     public static Expression nullLiteral(DType dtype) {
         return new Expression(NativeExpression.literalNull(dtype.tag()));
+    }
+
+    /**
+     * The expression as Vortex renders it: {@code $.name} for a column, the value for a literal. Every null literal
+     * renders as {@code null} whatever its type, but a wrapped value keeps its wrapper, so a null Variant
+     * ({@code null}) and a Variant holding null ({@code variant(null)}) are still distinguishable. The rendering is for
+     * diagnostics and is not a stable format.
+     */
+    @Override
+    public String toString() {
+        return NativeExpression.display(pointer);
     }
 
     private static long[] nativePointers(Expression[] exprs) {
@@ -351,7 +396,11 @@ public final class Expression {
         }
     }
 
-    /** Primitive {@link DType}s that can be used to construct typed null literals via {@link #nullLiteral(DType)}. */
+    /**
+     * {@link DType}s that need no parameters and so can be used to construct typed null literals via
+     * {@link #nullLiteral(DType)}. Parameterized types — decimals, temporals, UUIDs, geometries — have their own
+     * {@code nullLiteral*} factories instead.
+     */
     public enum DType {
         BOOL((byte) 0),
         I8((byte) 1),
@@ -361,7 +410,14 @@ public final class Expression {
         F32((byte) 5),
         F64((byte) 6),
         UTF8((byte) 7),
-        BINARY((byte) 8);
+        BINARY((byte) 8),
+        /**
+         * The type whose only value is null, i.e. a column that holds nothing else. This is what an Iceberg
+         * {@code unknown} column is, and what a variant-null wraps.
+         */
+        NULL((byte) 9),
+        /** A self-describing value whose type varies row by row. See {@link #literalVariant(Expression)}. */
+        VARIANT((byte) 10);
 
         private final byte tag;
 
