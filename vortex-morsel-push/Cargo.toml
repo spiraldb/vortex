@@ -47,7 +47,7 @@ crossbeam-channel = { workspace = true }
 vortex-io = { workspace = true }
 vortex-btrblocks = { workspace = true, optional = true }
 vortex-arrow = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, optional = true, features = ["rt-multi-thread", "time"] }
 arrow-schema = { workspace = true, optional = true }
 tpchgen = { workspace = true, optional = true }
 tpchgen-arrow = { workspace = true, optional = true }
@@ -68,7 +68,7 @@ tpchgen-arrow = { workspace = true }
 vortex = { workspace = true, features = ["files"] }
 vortex-scan = { workspace = true }
 rstest = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "time"] }
 
 [[bin]]
 name = "morsel-push-eval"

@@ -107,6 +107,26 @@ pub fn run_v1(
     segments: &Arc<dyn SegmentSource>,
     query: &Query,
 ) -> VortexResult<RunOutcome> {
+    run_v1_with_output(session, layout, segments, query, true)
+}
+
+/// Run V1 while consuming output batches immediately.
+pub fn run_v1_discard(
+    session: &VortexSession,
+    layout: &LayoutRef,
+    segments: &Arc<dyn SegmentSource>,
+    query: &Query,
+) -> VortexResult<RunOutcome> {
+    run_v1_with_output(session, layout, segments, query, false)
+}
+
+fn run_v1_with_output(
+    session: &VortexSession,
+    layout: &LayoutRef,
+    segments: &Arc<dyn SegmentSource>,
+    query: &Query,
+    retain_output: bool,
+) -> VortexResult<RunOutcome> {
     let reader = layout.new_reader(
         "morsel-harness".into(),
         Arc::clone(segments),
@@ -122,7 +142,7 @@ pub fn run_v1(
 
     let session = session.clone();
     let start = Instant::now();
-    let (batches, first) = block_on(move |handle| {
+    let (batches, rows, first) = block_on(move |handle| {
         let session = session.with_handle(handle);
         async move {
             let stream = ScanBuilder::new(session, reader)
@@ -133,19 +153,22 @@ pub fn run_v1(
             futures::pin_mut!(stream);
 
             let mut batches: Vec<ArrayRef> = Vec::new();
+            let mut rows = 0usize;
             let mut first: Option<Duration> = None;
             while let Some(batch) = stream.try_next().await? {
                 if first.is_none() {
                     first = Some(start.elapsed());
                 }
-                batches.push(batch);
+                rows = rows.saturating_add(batch.len());
+                if retain_output {
+                    batches.push(batch);
+                }
             }
-            VortexResult::Ok((batches, first))
+            VortexResult::Ok((batches, rows, first))
         }
     })?;
     let wall = start.elapsed();
 
-    let rows = batches.iter().map(|b| b.len()).sum();
     Ok(RunOutcome {
         batches,
         rows,
@@ -174,6 +197,17 @@ pub fn run_v1_tokio(
     run_v1_tokio_with(runtime, session, layout, segments, query, None)
 }
 
+/// Run multi-threaded V1 while consuming output batches immediately.
+pub fn run_v1_tokio_discard(
+    runtime: &tokio::runtime::Runtime,
+    session: &VortexSession,
+    layout: &LayoutRef,
+    segments: &Arc<dyn SegmentSource>,
+    query: &Query,
+) -> VortexResult<RunOutcome> {
+    run_v1_tokio_with_output(runtime, session, layout, segments, query, None, false)
+}
+
 /// Run V1 on Tokio with an explicit per-worker split concurrency.
 ///
 /// V1's parallelism has two knobs: the runtime's worker count, and how many splits each worker
@@ -186,6 +220,18 @@ pub fn run_v1_tokio_with(
     segments: &Arc<dyn SegmentSource>,
     query: &Query,
     concurrency: Option<usize>,
+) -> VortexResult<RunOutcome> {
+    run_v1_tokio_with_output(runtime, session, layout, segments, query, concurrency, true)
+}
+
+fn run_v1_tokio_with_output(
+    runtime: &tokio::runtime::Runtime,
+    session: &VortexSession,
+    layout: &LayoutRef,
+    segments: &Arc<dyn SegmentSource>,
+    query: &Query,
+    concurrency: Option<usize>,
+    retain_output: bool,
 ) -> VortexResult<RunOutcome> {
     let reader = layout.new_reader(
         "morsel-harness".into(),
@@ -202,7 +248,7 @@ pub fn run_v1_tokio_with(
 
     let session = session.clone();
     let start = Instant::now();
-    let (batches, first) = runtime.block_on(async move {
+    let (batches, rows, first) = runtime.block_on(async move {
         let session = session.with_handle(TokioRuntime::current());
         let mut builder = ScanBuilder::new(session, reader)
             .with_projection(projection)
@@ -215,18 +261,21 @@ pub fn run_v1_tokio_with(
         futures::pin_mut!(stream);
 
         let mut batches: Vec<ArrayRef> = Vec::new();
+        let mut rows = 0usize;
         let mut first: Option<Duration> = None;
         while let Some(batch) = stream.try_next().await? {
             if first.is_none() {
                 first = Some(start.elapsed());
             }
-            batches.push(batch);
+            rows = rows.saturating_add(batch.len());
+            if retain_output {
+                batches.push(batch);
+            }
         }
-        VortexResult::Ok((batches, first))
+        VortexResult::Ok((batches, rows, first))
     })?;
     let wall = start.elapsed();
 
-    let rows = batches.iter().map(|b| b.len()).sum();
     Ok(RunOutcome {
         batches,
         rows,
@@ -253,6 +302,18 @@ pub struct MorselConfig {
     pub share_decodes: bool,
     /// Future morsels admitted to filtered background I/O beyond active workers.
     pub lookahead_morsels: usize,
+    /// Execution contexts resident on each worker thread.
+    pub resident_morsels_per_thread: usize,
+    /// Plan-frontier scheduler and additional range frontiers beyond resident morsels per thread.
+    pub frontier_lookahead_per_thread: Option<usize>,
+    /// Later groups admitted speculatively to the right of each visible range frontier when
+    /// `adaptive_frontiers` is false.
+    pub speculative_frontiers: usize,
+    /// Follow every conjunct and conditionally admit projection from observed morsel survival,
+    /// ignoring `speculative_frontiers`.
+    pub adaptive_frontiers: bool,
+    /// Minimum number of new row ranges claimed by a steady-state frontier refill.
+    pub frontier_refill_ranges: usize,
     /// Optional demand-hint delivery policy.
     pub demand_hints: DemandHintDelivery,
 }
@@ -265,6 +326,11 @@ impl Default for MorselConfig {
             mode: ConjunctMode::Cascade,
             share_decodes: true,
             lookahead_morsels: 0,
+            resident_morsels_per_thread: 1,
+            frontier_lookahead_per_thread: None,
+            speculative_frontiers: 0,
+            adaptive_frontiers: false,
+            frontier_refill_ranges: 32,
             demand_hints: DemandHintDelivery::Immediate,
         }
     }
@@ -282,6 +348,28 @@ pub fn run_morsel(
     segments: &Arc<dyn SegmentSource>,
     query: &Query,
     config: MorselConfig,
+) -> VortexResult<RunOutcome> {
+    run_morsel_with_output(session, layout, segments, query, config, true)
+}
+
+/// Run the morsel executor while consuming output batches immediately.
+pub fn run_morsel_discard(
+    session: &VortexSession,
+    layout: &LayoutRef,
+    segments: &Arc<dyn SegmentSource>,
+    query: &Query,
+    config: MorselConfig,
+) -> VortexResult<RunOutcome> {
+    run_morsel_with_output(session, layout, segments, query, config, false)
+}
+
+fn run_morsel_with_output(
+    session: &VortexSession,
+    layout: &LayoutRef,
+    segments: &Arc<dyn SegmentSource>,
+    query: &Query,
+    config: MorselConfig,
+    retain_output: bool,
 ) -> VortexResult<RunOutcome> {
     let capture_path = std::env::var_os("VORTEX_MORSEL_IO_ORACLE_CAPTURE").map(PathBuf::from);
     let replay_path = std::env::var_os("VORTEX_MORSEL_IO_ORACLE_REPLAY").map(PathBuf::from);
@@ -314,8 +402,22 @@ pub fn run_morsel(
         .with_morsels(cut)
         .with_share_decodes(config.share_decodes)
         .with_lookahead_morsels(config.lookahead_morsels)
+        .with_resident_morsels_per_thread(config.resident_morsels_per_thread)
         .with_demand_hints(config.demand_hints)
         .with_io_round_robin(round_robin);
+    let scan = match config.frontier_lookahead_per_thread {
+        Some(frontiers) => {
+            let scan = scan
+                .with_frontier_lookahead_per_thread(frontiers)
+                .with_frontier_refill_ranges(config.frontier_refill_ranges);
+            if config.adaptive_frontiers {
+                scan.with_adaptive_frontier_speculation()
+            } else {
+                scan.with_speculative_frontiers(config.speculative_frontiers)
+            }
+        }
+        None => scan,
+    };
     let scan = if oracle_enabled {
         scan.with_io_oracle(replay_order)
     } else {
@@ -327,7 +429,14 @@ pub fn run_morsel(
         .with_submission_nowait(submission_nowait)
         .connect_on_thread(scan)?;
 
-    let (batches, stats, wall) = scan.run_timed()?;
+    let (batches, rows, stats, wall) = if retain_output {
+        let (batches, stats, wall) = scan.run_timed()?;
+        let rows = batches.iter().map(|batch| batch.len()).sum();
+        (batches, rows, stats, wall)
+    } else {
+        let (rows, stats, wall) = scan.run_timed_discard()?;
+        (Vec::new(), rows, stats, wall)
+    };
     if let Some(path) = capture_path {
         let snapshot = scan
             .io_oracle_snapshot()
@@ -335,7 +444,6 @@ pub fn run_morsel(
         write_io_oracle(&path, &snapshot.learned_order)?;
     }
 
-    let rows = batches.iter().map(|b| b.len()).sum();
     Ok(RunOutcome {
         rows,
         time_to_first_batch: stats.time_to_first_batch,

@@ -72,7 +72,32 @@ impl Row {
                 } else {
                     ", no-reuse"
                 };
-                format!("D  morsel (x{}, {morsel}{mode}{reuse})", config.threads)
+                let resident = if config.resident_morsels_per_thread > 1 {
+                    format!(", {}resident/thread", config.resident_morsels_per_thread)
+                } else {
+                    String::new()
+                };
+                let frontier =
+                    config
+                        .frontier_lookahead_per_thread
+                        .map_or_else(String::new, |depth| {
+                            let refill = (config.frontier_refill_ranges > 1).then(|| {
+                                format!(", refill{}ranges", config.frontier_refill_ranges)
+                            });
+                            let right = if config.adaptive_frontiers {
+                                "adaptive-right".to_owned()
+                            } else {
+                                format!("{}right", config.speculative_frontiers)
+                            };
+                            format!(
+                                ", frontier+{depth}/thread+{right}{}",
+                                refill.unwrap_or_default()
+                            )
+                        });
+                format!(
+                    "D  morsel (x{}, {morsel}{mode}{reuse}{resident}{frontier})",
+                    config.threads
+                )
             }
         }
     }

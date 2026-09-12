@@ -20,6 +20,7 @@
 //! `cargo run --release -p vortex-morsel-push --features _test-harness --bin tpch-push-eval -- [scale]`
 
 use std::fs::File;
+use std::io::Read;
 use std::io::Seek;
 use std::io::SeekFrom;
 use std::io::Write;
@@ -56,6 +57,7 @@ use vortex_buffer::Alignment;
 use vortex_buffer::ByteBuffer;
 use vortex_error::VortexResult;
 use vortex_error::vortex_bail;
+use vortex_error::vortex_ensure;
 use vortex_io::CoalesceConfig;
 use vortex_io::ReadAtNowait;
 use vortex_io::ReadAtRequest;
@@ -69,6 +71,7 @@ use vortex_io::std_file::FileReadAt;
 use vortex_layout::LayoutRef;
 use vortex_layout::segments::SegmentSource;
 use vortex_layout::segments::SharedSegmentSource;
+use vortex_layout::segments::TestSegments;
 use vortex_morsel_push::fixtures::write_streaming_fixture_no_table;
 use vortex_morsel_push::harness::MorselConfig;
 use vortex_morsel_push::harness::Query;
@@ -76,8 +79,11 @@ use vortex_morsel_push::harness::RunOutcome;
 use vortex_morsel_push::harness::SourceIoOccupancy;
 use vortex_morsel_push::harness::assert_same_rows;
 use vortex_morsel_push::harness::run_morsel;
+use vortex_morsel_push::harness::run_morsel_discard;
 use vortex_morsel_push::harness::run_v1;
+use vortex_morsel_push::harness::run_v1_discard;
 use vortex_morsel_push::harness::run_v1_tokio;
+use vortex_morsel_push::harness::run_v1_tokio_discard;
 use vortex_morsel_push::harness::run_v1_tokio_with;
 use vortex_morsel_push::nodes::ConjunctMode;
 use vortex_morsel_push::tpch;
@@ -114,8 +120,30 @@ impl Row {
                 } else {
                     ", no-reuse"
                 };
+                let resident = if config.resident_morsels_per_thread > 1 {
+                    format!(", {}resident/thread", config.resident_morsels_per_thread)
+                } else {
+                    String::new()
+                };
+                let frontier =
+                    config
+                        .frontier_lookahead_per_thread
+                        .map_or_else(String::new, |depth| {
+                            let refill = (config.frontier_refill_ranges > 1).then(|| {
+                                format!(", refill{}ranges", config.frontier_refill_ranges)
+                            });
+                            let right = if config.adaptive_frontiers {
+                                "adaptive-right".to_owned()
+                            } else {
+                                format!("{}right", config.speculative_frontiers)
+                            };
+                            format!(
+                                ", frontier+{depth}/thread+{right}{}",
+                                refill.unwrap_or_default()
+                            )
+                        });
                 format!(
-                    "D  morsel-push (x{}, {morsel}{mode}{reuse})",
+                    "D  morsel-push (x{}, {morsel}{mode}{reuse}{resident}{frontier})",
                     config.threads
                 )
             }
@@ -151,6 +179,12 @@ struct Timing {
     io_uses: Option<u64>,
     logical_requests: Option<u64>,
     io_batches: Option<u64>,
+    lookahead_refills: Option<u64>,
+    io_cells_live: Option<u64>,
+    io_cells_live_max: Option<u64>,
+    io_retained_bytes: Option<u64>,
+    io_retained_bytes_max: Option<u64>,
+    io_cancellations: Option<u64>,
     execute_io_blocks: Option<u64>,
     morsels_blocked_for_io: Option<u64>,
     io_uses_per_morsel_min: Option<u64>,
@@ -290,6 +324,7 @@ struct CountingReadAt {
     inner: Arc<dyn VortexReadAt>,
     inline_reader: Option<Arc<FileReadAt>>,
     inline_max_bytes: Option<usize>,
+    latency: Duration,
     counters: Arc<PhysicalIoCounters>,
     coalesce_override: Option<CoalesceConfig>,
     concurrency_override: Option<usize>,
@@ -327,8 +362,12 @@ impl VortexReadAt for CountingReadAt {
         let read = self.inner.read_at(offset, length, alignment);
         let counters = Arc::clone(&self.counters);
         let capacity = self.concurrency();
+        let latency = self.latency;
         Box::pin(async move {
             counters.submit(1, capacity);
+            if !latency.is_zero() {
+                tokio::time::sleep(latency).await;
+            }
             let result = read.await;
             counters.complete();
             result
@@ -346,6 +385,7 @@ impl VortexReadAt for CountingReadAt {
         let capacity = self.concurrency();
         let inner = Arc::clone(&self.inner);
         let counters = Arc::clone(&self.counters);
+        let latency = self.latency;
         let reads = requests
             .iter()
             .copied()
@@ -354,6 +394,9 @@ impl VortexReadAt for CountingReadAt {
                 let counters = Arc::clone(&counters);
                 async move {
                     counters.submit(1, capacity);
+                    if !latency.is_zero() {
+                        tokio::time::sleep(latency).await;
+                    }
                     let result = read.await;
                     counters.complete();
                     (request, result)
@@ -406,10 +449,12 @@ struct DiskBackend {
     path: PathBuf,
     specs: Arc<[SegmentSpec]>,
     runtime: Handle,
+    reused_pack: bool,
     evict_before_run: bool,
     coalesce_override: Option<CoalesceConfig>,
     io_depth: Option<usize>,
     inline_max_bytes: Option<usize>,
+    io_latency: Duration,
 }
 
 enum SegmentBackend {
@@ -450,6 +495,7 @@ impl SegmentBackend {
                     inner: read,
                     inline_reader,
                     inline_max_bytes: disk.inline_max_bytes,
+                    latency: disk.io_latency,
                     counters: Arc::clone(&counters),
                     coalesce_override: disk.coalesce_override,
                     concurrency_override: disk.io_depth,
@@ -473,20 +519,28 @@ fn write_segment_pack(
     buffers: &[ByteBuffer],
     _uncached: bool,
 ) -> VortexResult<Arc<[SegmentSpec]>> {
+    let (specs, _) = segment_pack_specs(buffers)?;
     let mut file = File::create(path)?;
     #[cfg(target_vendor = "apple")]
     if _uncached {
         rustix::fs::fcntl_nocache(&file, true).map_err(std::io::Error::from)?;
     }
+    for (buffer, spec) in buffers.iter().zip(specs.iter()) {
+        if spec.offset > file.stream_position()? {
+            file.seek(SeekFrom::Start(spec.offset))?;
+        }
+        file.write_all(buffer.as_ref())?;
+    }
+    file.sync_all()?;
+    Ok(specs)
+}
+
+fn segment_pack_specs(buffers: &[ByteBuffer]) -> VortexResult<(Arc<[SegmentSpec]>, u64)> {
     let mut offset = 0u64;
     let mut specs = Vec::with_capacity(buffers.len());
     for buffer in buffers {
         let alignment = buffer.alignment();
         let aligned = offset.next_multiple_of(*alignment as u64);
-        if aligned > offset {
-            file.seek(SeekFrom::Start(aligned))?;
-        }
-        file.write_all(buffer.as_ref())?;
         let length = u32::try_from(buffer.len())
             .map_err(|_| vortex_error::vortex_err!("segment exceeds u32 length"))?;
         specs.push(SegmentSpec {
@@ -496,15 +550,51 @@ fn write_segment_pack(
         });
         offset = aligned + u64::from(length);
     }
-    file.sync_all()?;
-    Ok(specs.into())
+    Ok((specs.into(), offset))
+}
+
+fn reuse_segment_pack(path: &Path, buffers: &[ByteBuffer]) -> VortexResult<Arc<[SegmentSpec]>> {
+    let (specs, expected_len) = segment_pack_specs(buffers)?;
+    let mut file = File::open(path)?;
+    vortex_ensure!(
+        file.metadata()?.len() == expected_len,
+        "existing segment pack {} has the wrong length",
+        path.display()
+    );
+    if buffers.is_empty() {
+        return Ok(specs);
+    }
+    let mut sample_indices = vec![0, buffers.len() / 2, buffers.len() - 1];
+    sample_indices.sort_unstable();
+    sample_indices.dedup();
+    for index in sample_indices {
+        let spec = specs[index];
+        let mut actual = vec![0; spec.length as usize];
+        file.seek(SeekFrom::Start(spec.offset))?;
+        file.read_exact(&mut actual)?;
+        vortex_ensure!(
+            actual == buffers[index].as_ref(),
+            "existing segment pack {} does not match generated segment {index}",
+            path.display()
+        );
+    }
+    Ok(specs)
 }
 
 fn main() -> VortexResult<()> {
     // The full session: every encoding plugin registered, so the compressing writer can
     // serialise what btrblocks produces and the readers can decode it.
     let session = VortexSession::default();
-    let threads = get_available_parallelism().unwrap_or(4);
+    let threads = std::env::var("TPCH_THREADS")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<usize>()
+                .map_err(|err| vortex_error::vortex_err!("invalid TPCH_THREADS: {err}"))
+        })
+        .transpose()?
+        .unwrap_or_else(|| get_available_parallelism().unwrap_or(4))
+        .max(1);
     let iterations: usize = std::env::var("TPCH_ITERATIONS")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -552,7 +642,7 @@ fn main() -> VortexResult<()> {
     // The generated struct batches are no longer needed once split into columns.
     drop(table);
     // The compressing pipeline spawns CPU work, so the writing session needs a runtime handle.
-    let fixture = {
+    let mut fixture = {
         let session = session.clone();
         block_on(move |handle| {
             let session = session.with_handle(handle);
@@ -567,6 +657,10 @@ fn main() -> VortexResult<()> {
     let write_elapsed = write_start.elapsed();
     let segments: Arc<dyn SegmentSource> = Arc::clone(&fixture.segments);
     let disk_path = std::env::var_os("TPCH_DISK_PATH").map(PathBuf::from);
+    let reuse_disk_pack = std::env::var("TPCH_REUSE_DISK_PACK").is_ok_and(|value| value == "1");
+    if reuse_disk_pack && disk_path.is_none() {
+        vortex_bail!("TPCH_REUSE_DISK_PACK requires TPCH_DISK_PATH");
+    }
     let disk_cache_mode = std::env::var("TPCH_CACHE_MODE").unwrap_or_else(|_| "cold".to_string());
     let evict_before_run = match disk_cache_mode.as_str() {
         "cold" => true,
@@ -590,8 +684,21 @@ fn main() -> VortexResult<()> {
             })
         })
         .transpose()?;
+    let io_latency = std::env::var("TPCH_IO_LATENCY_US")
+        .ok()
+        .map(|value| {
+            value
+                .parse::<u64>()
+                .map(Duration::from_micros)
+                .map_err(|err| vortex_error::vortex_err!("invalid TPCH_IO_LATENCY_US: {err}"))
+        })
+        .transpose()?
+        .unwrap_or_default();
     if inline_max_bytes.is_some() && evict_before_run {
         vortex_bail!("TPCH_HOT_INLINE_MAX_BYTES is only valid with TPCH_CACHE_MODE=hot");
+    }
+    if inline_max_bytes.is_some() && !io_latency.is_zero() {
+        vortex_bail!("TPCH_HOT_INLINE_MAX_BYTES cannot bypass injected I/O latency");
     }
     let coalesce_override = match (
         std::env::var("TPCH_COALESCE_DISTANCE").ok(),
@@ -616,12 +723,18 @@ fn main() -> VortexResult<()> {
     let backend = match disk_path.as_ref() {
         Some(path) => SegmentBackend::Disk(DiskBackend {
             path: path.clone(),
-            specs: write_segment_pack(path, &fixture.segment_buffers, evict_before_run)?,
+            specs: if reuse_disk_pack {
+                reuse_segment_pack(path, &fixture.segment_buffers)?
+            } else {
+                write_segment_pack(path, &fixture.segment_buffers, evict_before_run)?
+            },
             runtime: Handle::new(Arc::downgrade(&io_executor)),
+            reused_pack: reuse_disk_pack,
             evict_before_run,
             coalesce_override,
             io_depth,
             inline_max_bytes,
+            io_latency,
         }),
         None => SegmentBackend::Memory(Arc::clone(&segments)),
     };
@@ -690,6 +803,9 @@ fn main() -> VortexResult<()> {
         ),
     }
     if let SegmentBackend::Disk(disk) = &backend {
+        if disk.reused_pack {
+            println!("segment pack reuse: read-only validation; existing file was not rewritten");
+        }
         println!(
             "physical I/O depth: {}; morsel I/O order: {}",
             disk.io_depth.unwrap_or(16),
@@ -702,6 +818,12 @@ fn main() -> VortexResult<()> {
         if let Some(max_bytes) = disk.inline_max_bytes {
             println!(
                 "hot inline reads: synchronously probe submitted ranges up to {max_bytes} bytes"
+            );
+        }
+        if !disk.io_latency.is_zero() {
+            println!(
+                "injected physical I/O latency: {} us per coalesced request",
+                disk.io_latency.as_micros()
             );
         }
     }
@@ -737,6 +859,14 @@ fn main() -> VortexResult<()> {
         );
     }
 
+    // File-backed rows must not keep the generated in-memory segment payloads beside the file.
+    // Preserve only the layout and pack specifications needed by the benchmark.
+    drop(segments);
+    if matches!(&backend, SegmentBackend::Disk(_)) {
+        fixture.segment_buffers.clear();
+        fixture.segments = Arc::new(TestSegments::default());
+    }
+
     let selected_morsel_rows = std::env::var("TPCH_MORSEL_ROWS")
         .ok()
         .map(|value| parse_row_sizes("TPCH_MORSEL_ROWS", &value))
@@ -751,10 +881,271 @@ fn main() -> VortexResult<()> {
         })
         .transpose()?
         .unwrap_or(0);
+    let resident_morsels_per_thread = std::env::var("TPCH_RESIDENT_MORSELS_PER_THREAD")
+        .ok()
+        .map(|value| {
+            value.parse::<usize>().map_err(|err| {
+                vortex_error::vortex_err!("invalid TPCH_RESIDENT_MORSELS_PER_THREAD: {err}")
+            })
+        })
+        .transpose()?
+        .unwrap_or(1)
+        .max(1);
+    let selected_frontiers = std::env::var("TPCH_FRONTIERS_PER_THREAD")
+        .ok()
+        .map(|value| {
+            value.parse::<usize>().map_err(|err| {
+                vortex_error::vortex_err!("invalid TPCH_FRONTIERS_PER_THREAD: {err}")
+            })
+        })
+        .transpose()?;
+    let speculative_frontiers = std::env::var("TPCH_SPECULATIVE_FRONTIERS")
+        .ok()
+        .map(|value| {
+            value.parse::<usize>().map_err(|err| {
+                vortex_error::vortex_err!("invalid TPCH_SPECULATIVE_FRONTIERS: {err}")
+            })
+        })
+        .transpose()?
+        .unwrap_or(0);
+    let adaptive_frontiers =
+        std::env::var("TPCH_ADAPTIVE_FRONTIERS").is_ok_and(|value| value == "1");
+    let frontier_refill_ranges = std::env::var("TPCH_FRONTIER_REFILL_RANGES")
+        .ok()
+        .map(|value| {
+            value.parse::<usize>().map_err(|err| {
+                vortex_error::vortex_err!("invalid TPCH_FRONTIER_REFILL_RANGES: {err}")
+            })
+        })
+        .transpose()?
+        .unwrap_or(32)
+        .max(1);
     let morsel_only = std::env::var("TPCH_MORSEL_ONLY").is_ok_and(|value| value == "1")
         || std::env::var_os("TPCH_MORSEL_ROWS").is_some();
     let include_v1 = std::env::var("TPCH_INCLUDE_V1").is_ok_and(|value| value == "1");
+    let frontier_matrix = std::env::var("TPCH_FRONTIER_MATRIX").is_ok_and(|value| value == "1");
+    let frontier_refill_matrix =
+        std::env::var("TPCH_FRONTIER_REFILL_MATRIX").is_ok_and(|value| value == "1");
+    let frontier_policy_compare =
+        std::env::var("TPCH_FRONTIER_POLICY_COMPARE").is_ok_and(|value| value == "1");
+    let frontier_shape_compare =
+        std::env::var("TPCH_FRONTIER_SHAPE_COMPARE").is_ok_and(|value| value == "1");
+    let frontier_speculation_matrix =
+        std::env::var("TPCH_FRONTIER_SPECULATION_MATRIX").is_ok_and(|value| value == "1");
+    let frontier_down_matrix =
+        std::env::var("TPCH_FRONTIER_DOWN_MATRIX").is_ok_and(|value| value == "1");
+    let frontier_resident_matrix =
+        std::env::var("TPCH_FRONTIER_RESIDENT_MATRIX").is_ok_and(|value| value == "1");
+    let frontier_adaptive_compare =
+        std::env::var("TPCH_FRONTIER_ADAPTIVE_COMPARE").is_ok_and(|value| value == "1");
     let configs = |threads: usize| {
+        if frontier_adaptive_compare {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let fixed = |speculative_frontiers| {
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread: 3,
+                    frontier_lookahead_per_thread: Some(0),
+                    speculative_frontiers,
+                    frontier_refill_ranges,
+                    ..Default::default()
+                })
+            };
+            return vec![
+                Row::V1Single,
+                Row::V1Tokio(threads),
+                fixed(2),
+                fixed(3),
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread: 3,
+                    frontier_lookahead_per_thread: Some(0),
+                    adaptive_frontiers: true,
+                    frontier_refill_ranges,
+                    ..Default::default()
+                }),
+            ];
+        }
+        if frontier_speculation_matrix {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let mut rows = vec![Row::V1Single, Row::V1Tokio(threads)];
+            for speculative_frontiers in 0..=4 {
+                rows.push(Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread: 3,
+                    frontier_lookahead_per_thread: Some(0),
+                    speculative_frontiers,
+                    frontier_refill_ranges,
+                    ..Default::default()
+                }));
+            }
+            rows.push(Row::Morsel(MorselConfig {
+                threads,
+                morsel_rows,
+                resident_morsels_per_thread: 3,
+                frontier_lookahead_per_thread: Some(0),
+                adaptive_frontiers: true,
+                frontier_refill_ranges,
+                ..Default::default()
+            }));
+            return rows;
+        }
+        if frontier_resident_matrix {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let frontier_lookahead_per_thread = Some(selected_frontiers.unwrap_or(0));
+            let mut rows = vec![Row::V1Single, Row::V1Tokio(threads)];
+            rows.extend([1, 2, 3, 4, 6, 8, 12].map(|resident_morsels_per_thread| {
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread,
+                    frontier_lookahead_per_thread,
+                    speculative_frontiers,
+                    frontier_refill_ranges,
+                    ..Default::default()
+                })
+            }));
+            return rows;
+        }
+        if frontier_down_matrix {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let mut rows = vec![Row::V1Single, Row::V1Tokio(threads)];
+            rows.extend([0, 2, 8, 24, 64].map(|frontier_lookahead_per_thread| {
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread,
+                    frontier_lookahead_per_thread: Some(frontier_lookahead_per_thread),
+                    speculative_frontiers,
+                    adaptive_frontiers,
+                    frontier_refill_ranges,
+                    ..Default::default()
+                })
+            }));
+            return rows;
+        }
+        if frontier_shape_compare {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let frontier = |resident_morsels_per_thread, speculative_frontiers| {
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread,
+                    frontier_lookahead_per_thread: Some(0),
+                    speculative_frontiers,
+                    frontier_refill_ranges,
+                    ..Default::default()
+                })
+            };
+            return vec![
+                Row::V1Single,
+                Row::V1Tokio(threads),
+                frontier(1, 0),
+                frontier(3, 0),
+                frontier(3, 2),
+            ];
+        }
+        if frontier_policy_compare {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let frontier_lookahead_per_thread = Some(selected_frontiers.unwrap_or(0));
+            return vec![
+                Row::V1Single,
+                Row::V1Tokio(threads),
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    ..Default::default()
+                }),
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread,
+                    frontier_lookahead_per_thread,
+                    speculative_frontiers,
+                    frontier_refill_ranges: 1,
+                    ..Default::default()
+                }),
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread,
+                    frontier_lookahead_per_thread,
+                    speculative_frontiers,
+                    frontier_refill_ranges,
+                    ..Default::default()
+                }),
+            ];
+        }
+        if frontier_refill_matrix {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let mut rows = vec![
+                Row::V1Single,
+                Row::V1Tokio(threads),
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    ..Default::default()
+                }),
+            ];
+            for (resident_morsels_per_thread, speculative_frontiers) in [(1, 0), (3, 2)] {
+                for frontier_refill_ranges in [1, 2, 4, 8, 16, 32] {
+                    rows.push(Row::Morsel(MorselConfig {
+                        threads,
+                        morsel_rows,
+                        resident_morsels_per_thread,
+                        frontier_lookahead_per_thread: Some(0),
+                        speculative_frontiers,
+                        frontier_refill_ranges,
+                        ..Default::default()
+                    }));
+                }
+            }
+            return rows;
+        }
+        if frontier_matrix {
+            let morsel_rows = selected_morsel_rows.first().copied().unwrap_or_default();
+            let mut rows = vec![
+                Row::V1Single,
+                Row::V1Tokio(threads),
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    ..Default::default()
+                }),
+            ];
+            for resident_morsels_per_thread in 1..=3 {
+                for speculative_frontiers in 0..=2 {
+                    rows.push(Row::Morsel(MorselConfig {
+                        threads,
+                        morsel_rows,
+                        resident_morsels_per_thread,
+                        frontier_lookahead_per_thread: Some(0),
+                        speculative_frontiers,
+                        ..Default::default()
+                    }));
+                }
+            }
+            rows.extend([
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread: 3,
+                    frontier_lookahead_per_thread: Some(1),
+                    ..Default::default()
+                }),
+                Row::Morsel(MorselConfig {
+                    threads,
+                    morsel_rows,
+                    resident_morsels_per_thread: 4,
+                    frontier_lookahead_per_thread: Some(0),
+                    ..Default::default()
+                }),
+            ]);
+            return rows;
+        }
         if morsel_only {
             let mut rows = Vec::new();
             if include_v1 {
@@ -765,6 +1156,11 @@ fn main() -> VortexResult<()> {
                     threads,
                     morsel_rows,
                     lookahead_morsels: selected_lookahead,
+                    resident_morsels_per_thread,
+                    frontier_lookahead_per_thread: selected_frontiers,
+                    speculative_frontiers,
+                    adaptive_frontiers,
+                    frontier_refill_ranges,
                     ..Default::default()
                 })
             }));
@@ -805,6 +1201,11 @@ fn main() -> VortexResult<()> {
                 threads,
                 morsel_rows: selected_morsel_rows[0],
                 lookahead_morsels: selected_lookahead,
+                resident_morsels_per_thread,
+                frontier_lookahead_per_thread: selected_frontiers,
+                speculative_frontiers,
+                adaptive_frontiers,
+                frontier_refill_ranges,
                 ..Default::default()
             }),
             value => vortex_bail!(
@@ -813,7 +1214,7 @@ fn main() -> VortexResult<()> {
         };
         let query = &queries[0];
         let (outcome, baseline_rss, peak_rss) = measure_peak_rss(|| {
-            run_once(&runtime, &session, &fixture.layout, &backend, query, row)
+            run_once_discard(&runtime, &session, &fixture.layout, &backend, query, row)
         })?;
         println!("## Peak RSS — {} / {}", query.name, row.label());
         println!();
@@ -830,6 +1231,16 @@ fn main() -> VortexResult<()> {
                 mib(stats.output_bytes_max)
             );
             println!("peak credited output rows: {}", stats.output_rows_max);
+            println!(
+                "raw I/O cells (end/peak): {}/{}",
+                stats.io_cells_live, stats.io_cells_live_max
+            );
+            println!(
+                "raw I/O bytes (end/peak): {}/{}",
+                mib(stats.io_retained_bytes),
+                mib(stats.io_retained_bytes_max)
+            );
+            println!("cancelled source futures: {}", stats.io_cancellations);
         }
         return Ok(());
     }
@@ -874,7 +1285,7 @@ fn main() -> VortexResult<()> {
                 // A serial configuration otherwise leaves most cores idle immediately before the
                 // next parallel configuration. Warm and sample each in-memory executor as an
                 // independent steady-state compute benchmark.
-                drop(run_once(
+                drop(run_once_discard(
                     &runtime,
                     &session,
                     &fixture.layout,
@@ -883,18 +1294,28 @@ fn main() -> VortexResult<()> {
                     *row,
                 )?);
                 for _ in 0..iterations {
-                    let mut outcome =
-                        run_once(&runtime, &session, &fixture.layout, &backend, query, *row)?;
-                    outcome.batches.clear();
+                    let outcome = run_once_discard(
+                        &runtime,
+                        &session,
+                        &fixture.layout,
+                        &backend,
+                        query,
+                        *row,
+                    )?;
                     samples[idx].push(outcome);
                 }
             }
         } else {
             for _ in 0..iterations {
                 for (idx, row) in validated.iter().enumerate() {
-                    let mut outcome =
-                        run_once(&runtime, &session, &fixture.layout, &backend, query, *row)?;
-                    outcome.batches.clear();
+                    let outcome = run_once_discard(
+                        &runtime,
+                        &session,
+                        &fixture.layout,
+                        &backend,
+                        query,
+                        *row,
+                    )?;
                     samples[idx].push(outcome);
                 }
             }
@@ -958,6 +1379,12 @@ fn main() -> VortexResult<()> {
                     io_uses: median.stats.as_ref().map(|s| s.io_uses),
                     logical_requests: median.stats.as_ref().map(|s| s.io_requests),
                     io_batches: median.stats.as_ref().map(|s| s.io_batches),
+                    lookahead_refills: median.stats.as_ref().map(|s| s.lookahead_refills),
+                    io_cells_live: median.stats.as_ref().map(|s| s.io_cells_live),
+                    io_cells_live_max: median.stats.as_ref().map(|s| s.io_cells_live_max),
+                    io_retained_bytes: median.stats.as_ref().map(|s| s.io_retained_bytes),
+                    io_retained_bytes_max: median.stats.as_ref().map(|s| s.io_retained_bytes_max),
+                    io_cancellations: median.stats.as_ref().map(|s| s.io_cancellations),
                     execute_io_blocks: median.stats.as_ref().map(|s| s.execute_io_blocks),
                     morsels_blocked_for_io: median.stats.as_ref().map(|s| s.morsels_blocked_for_io),
                     io_uses_per_morsel_min: median
@@ -1264,16 +1691,46 @@ fn run_once(
     query: &Query,
     row: Row,
 ) -> VortexResult<RunOutcome> {
+    run_once_with_output(runtime, session, layout, backend, query, row, true)
+}
+
+fn run_once_discard(
+    runtime: &tokio::runtime::Runtime,
+    session: &VortexSession,
+    layout: &LayoutRef,
+    backend: &SegmentBackend,
+    query: &Query,
+    row: Row,
+) -> VortexResult<RunOutcome> {
+    run_once_with_output(runtime, session, layout, backend, query, row, false)
+}
+
+fn run_once_with_output(
+    runtime: &tokio::runtime::Runtime,
+    session: &VortexSession,
+    layout: &LayoutRef,
+    backend: &SegmentBackend,
+    query: &Query,
+    row: Row,
+    retain_output: bool,
+) -> VortexResult<RunOutcome> {
     let run_session = match backend {
         SegmentBackend::Memory(_) => session.clone(),
         SegmentBackend::Disk(disk) => session.clone().with_handle(disk.runtime.clone()),
     };
     let (segments, counters) = backend.source(&run_session)?;
 
-    let mut outcome = match row {
-        Row::V1Single => run_v1(&run_session, layout, &segments, query),
-        Row::V1Tokio(_) => run_v1_tokio(runtime, &run_session, layout, &segments, query),
-        Row::Morsel(config) => run_morsel(&run_session, layout, &segments, query, config),
+    let mut outcome = match (row, retain_output) {
+        (Row::V1Single, true) => run_v1(&run_session, layout, &segments, query),
+        (Row::V1Single, false) => run_v1_discard(&run_session, layout, &segments, query),
+        (Row::V1Tokio(_), true) => run_v1_tokio(runtime, &run_session, layout, &segments, query),
+        (Row::V1Tokio(_), false) => {
+            run_v1_tokio_discard(runtime, &run_session, layout, &segments, query)
+        }
+        (Row::Morsel(config), true) => run_morsel(&run_session, layout, &segments, query, config),
+        (Row::Morsel(config), false) => {
+            run_morsel_discard(&run_session, layout, &segments, query, config)
+        }
     }?;
     if let Some(counters) = counters {
         outcome.source_io_requests = Some(counters.ranges.load(Ordering::Relaxed));
@@ -1373,8 +1830,68 @@ fn report(query: &Query, timings: &[Timing], total_rows: u64) {
     }
     println!();
     report_io_occupancy(timings);
+    report_refill_metrics(timings);
+    report_retention_metrics(timings);
     report_io_oracle(timings);
     report_push_profile(timings);
+}
+
+fn report_retention_metrics(timings: &[Timing]) {
+    if !timings
+        .iter()
+        .any(|timing| timing.io_cells_live_max.is_some())
+    {
+        return;
+    }
+    println!("| executor | raw cells end/peak | raw bytes end/peak | cancelled source futures |");
+    println!("|---|--:|--:|--:|");
+    for timing in timings {
+        let cells = timing
+            .io_cells_live
+            .zip(timing.io_cells_live_max)
+            .map(|(end, peak)| format!("{end}/{peak}"))
+            .unwrap_or_else(|| "—".to_string());
+        let bytes = timing
+            .io_retained_bytes
+            .zip(timing.io_retained_bytes_max)
+            .map(|(end, peak)| format!("{}/{}", mib(end), mib(peak)))
+            .unwrap_or_else(|| "—".to_string());
+        println!(
+            "| {} | {} | {} | {} |",
+            timing.label,
+            cells,
+            bytes,
+            opt(timing.io_cancellations)
+        );
+    }
+    println!();
+}
+
+fn report_refill_metrics(timings: &[Timing]) {
+    if !timings
+        .iter()
+        .any(|timing| timing.lookahead_refills.is_some())
+    {
+        return;
+    }
+    println!("| executor | lookahead refills | IO start batches | average physical read |");
+    println!("|---|--:|--:|--:|");
+    for timing in timings {
+        let average = timing
+            .bytes
+            .zip(timing.requests)
+            .filter(|(_, requests)| *requests > 0)
+            .map(|(bytes, requests)| format!("{:.1} KiB", bytes as f64 / requests as f64 / 1024.0))
+            .unwrap_or_else(|| "—".to_string());
+        println!(
+            "| {} | {} | {} | {} |",
+            timing.label,
+            opt(timing.lookahead_refills),
+            opt(timing.io_batches),
+            average
+        );
+    }
+    println!();
 }
 
 fn report_io_occupancy(timings: &[Timing]) {
