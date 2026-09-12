@@ -74,9 +74,9 @@ impl ScanShape {
 /// file driver sees enough adjacent segments to coalesce and cold reads overlap execution.
 const SHARED_LOOKAHEAD_MORSELS: usize = 16;
 
-/// Production SQL defaults for grouped-I/O frontier scheduling. These mirror
-/// `MorselConfig::frontier_defaults`: resident morsels expose their own first frontier, with no
-/// additional down lookahead or speculative right traversal, and row frontiers refill in batches.
+/// Production SQL defaults for grouped-I/O frontier scheduling. Resident morsels expose their
+/// predicate frontier cohort with no additional down lookahead, and row frontiers refill in
+/// batches.
 const FRONTIER_LOOKAHEAD_PER_THREAD: usize = 0;
 const FRONTIER_SPECULATIVE_RIGHT: usize = 0;
 const FRONTIER_REFILL_RANGES: usize = 32;
@@ -99,6 +99,7 @@ struct ExecutorIoSettings {
     eager_lookahead: bool,
     lookahead_morsels: usize,
     frontier_lookahead_per_thread: Option<usize>,
+    predicate_frontier_cohort: bool,
     speculative_frontiers: usize,
     frontier_refill_ranges: usize,
 }
@@ -118,6 +119,7 @@ impl ExecutorIoPolicy {
                 eager_lookahead: true,
                 lookahead_morsels: SHARED_LOOKAHEAD_MORSELS,
                 frontier_lookahead_per_thread: None,
+                predicate_frontier_cohort: false,
                 speculative_frontiers: 0,
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             },
@@ -125,6 +127,7 @@ impl ExecutorIoPolicy {
                 eager_lookahead: true,
                 lookahead_morsels: 0,
                 frontier_lookahead_per_thread: None,
+                predicate_frontier_cohort: false,
                 speculative_frontiers: 0,
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             },
@@ -132,6 +135,7 @@ impl ExecutorIoPolicy {
                 eager_lookahead: false,
                 lookahead_morsels: 0,
                 frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
+                predicate_frontier_cohort: true,
                 speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             },
@@ -144,10 +148,17 @@ impl ExecutorIoPolicy {
             .with_lookahead_morsels(settings.lookahead_morsels)
             .with_eager_lookahead(settings.eager_lookahead);
         match settings.frontier_lookahead_per_thread {
-            Some(frontiers) => scan
-                .with_frontier_lookahead_per_thread(frontiers)
-                .with_speculative_frontiers(settings.speculative_frontiers)
-                .with_frontier_refill_ranges(settings.frontier_refill_ranges),
+            Some(frontiers) => {
+                let scan = scan
+                    .with_frontier_lookahead_per_thread(frontiers)
+                    .with_speculative_frontiers(settings.speculative_frontiers)
+                    .with_frontier_refill_ranges(settings.frontier_refill_ranges);
+                if settings.predicate_frontier_cohort {
+                    scan.with_predicate_frontier_cohort()
+                } else {
+                    scan
+                }
+            }
             None => scan,
         }
     }
@@ -207,9 +218,9 @@ impl PushMorselScanExecutor {
 
     /// Select grouped-I/O frontier scheduling for this executor.
     ///
-    /// The frontier production defaults add no down-frontier lookahead or speculative right
-    /// traversal and refill up to 32 row ranges together. Disabling it preserves the established
-    /// eager-lookahead push policy.
+    /// The frontier production defaults add no down-frontier lookahead, expose each admitted
+    /// range's predicate groups as one cohort, and leave projection demand-gated. Disabling it
+    /// preserves the established eager-lookahead push policy.
     pub fn with_frontier_io(mut self, frontier_io: bool) -> Self {
         self.io_policy = ExecutorIoPolicy::from_frontier_io(frontier_io);
         self
@@ -900,7 +911,7 @@ mod tests {
     use super::coalesce_ranges;
 
     #[test]
-    fn production_frontier_policy_is_explicit_and_uses_harness_defaults() {
+    fn production_frontier_policy_is_explicit() {
         assert_eq!(
             ExecutorIoPolicy::from_frontier_io(false),
             ExecutorIoPolicy::EagerLookahead
@@ -915,6 +926,7 @@ mod tests {
                 eager_lookahead: false,
                 lookahead_morsels: 0,
                 frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
+                predicate_frontier_cohort: true,
                 speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             }
@@ -941,6 +953,7 @@ mod tests {
                 eager_lookahead: true,
                 lookahead_morsels: 0,
                 frontier_lookahead_per_thread: None,
+                predicate_frontier_cohort: false,
                 speculative_frontiers: 0,
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             }
@@ -951,6 +964,7 @@ mod tests {
                 eager_lookahead: true,
                 lookahead_morsels: SHARED_LOOKAHEAD_MORSELS,
                 frontier_lookahead_per_thread: None,
+                predicate_frontier_cohort: false,
                 speculative_frontiers: 0,
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             }
