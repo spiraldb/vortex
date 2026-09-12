@@ -205,49 +205,49 @@ Source inventory: 43 semicolon-delimited statements are enumerated from Q0 in fi
 
 | Query | Source | V1 | Frontier | Exact | RSS | Time |
 |---|---:|---:|---:|---:|---:|---:|
-| Q0 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q1 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q2 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q3 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q4 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q5 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q6 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q7 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q8 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q9 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q10 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q11 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q12 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q13 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q14 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q15 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q16 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q17† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q18 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q19 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q20 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q21 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q22 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q23 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q24 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q25 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q26 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q27 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q28 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q29 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q30 | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q31† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q32† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q33† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q34† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q35† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q36† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q37† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q38† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q39† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q40† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q41† | [x] | [x] | [x] | [x] | [ ] | [ ] |
-| Q42 | [x] | [x] | [x] | [x] | [ ] | [ ] |
+| Q0 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q1 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q2 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q3 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q4 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q5 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q6 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q7 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q8 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q9 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q10 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q11 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q12 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q13 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q14 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q15 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q16 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q17† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q18 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q19 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q20 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q21 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q22 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q23 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q24 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q25 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q26 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q27 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q28 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q29 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q30 | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q31† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q32† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q33† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q34† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q35† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q36† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q37† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q38† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q39† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q40† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q41† | [x] | [x] | [x] | [x] | [x] | [x] |
+| Q42 | [x] | [x] | [x] | [x] | [x] | [x] |
 
 Rows marked † use the checked-in correctness-only total-order query source for `Exact`: Q17 adds its
 group keys to an otherwise unordered `LIMIT`, and Q31-Q41 append group-key tie-breakers after
@@ -275,6 +275,105 @@ Evidence for all ClickBench Q0-Q42 V1/Frontier/Exact checks:
 - Protocol: canonical format v3, explicit `multiset` policy, one worker/partition,
   `VORTEX_USE_SCAN_API` unset, and one fresh V1 write plus push-frontier verify process per
   strict query. This evidence contains no RSS or timing measurements.
+
+Performance and RSS evidence for all ClickBench Q0-Q42 checks:
+
+- Matrix root: `/private/tmp/push-frontier-clickbench-matrix-20260912-ae8c6384`
+- Machine-readable ledger: `matrix.jsonl`; SHA-256
+  `7f65f2740fd2a17631a39fb7f9ffeae6ae9504705305cc10ba98fde0a7b34358`
+- Immutable run manifest: `run-manifest.json`; SHA-256
+  `6a378bc0ebe00953973b301f3d70d93d70721c380475ec83a6d32dde5294fc93`
+- Derived per-query statistics and explicit flag thresholds: `clickbench-summary.json`; SHA-256
+  `a0787bc6870398772938a7e24a87016c76f3e2b7615bc8f012a8872c48115271`
+- Input identity: 101 files, 11,616,963,496 bytes, aggregate manifest SHA-256
+  `ee8afa12cca731baff218f078e17cedb1fcb5506592e64a17b3117f2274a3581`.
+  The benchmark executable SHA-256 is
+  `24803a50c3e5be5109c4ed8868dedb605d2ad33aaea3dc933b5abccff50f5351`.
+  The clean Git identity is `ae8c638427a6bae88949a65f6492ac4f51761ac8`, with working-tree identity
+  SHA-256 `4ec04ed05ae9904a6af02d83aa7147912dfd810bb51c53fd5d40ac435201b864`.
+  All input, binary, and Git identities were independently recomputed after the run and matched the
+  manifest.
+- Protocol: global correctness gate first at one thread/partition, followed by three measured
+  samples per backend/query at four threads/partitions. Correctness alone appends
+  `queries-file=vortex-bench/sql/clickbench_correctness_queries.sql`; canonical prewarm/timing uses
+  only `flavor=partitioned`. The ledger contains one config record, 86 successful correctness
+  children, the `all-correctness-succeeded` marker at sequence 86, 258 successful symmetric
+  HOT-cache prewarms, and 258 successful measured children. Every measured child has positive
+  whole-process peak RSS from macOS `/usr/bin/time -l`; no cache drop was attempted. All 43
+  canonical artifacts are retained.
+
+Exact matrix command:
+
+```bash
+python3 benchmarks/datafusion-bench/scripts/run_push_frontier_matrix.py clickbench \
+  --binary target/release_debug/datafusion-bench \
+  --output-dir /private/tmp/push-frontier-clickbench-matrix-20260912-ae8c6384 \
+  --input-root vortex-bench/data/clickbench_partitioned/vortex-file-compressed \
+  --samples 3 --partitions 4 --correctness-partitions 1 \
+  --opt flavor=partitioned \
+  --correctness-opt queries-file=vortex-bench/sql/clickbench_correctness_queries.sql
+```
+
+Supervisor-observed wall time is the median of three fresh measured processes. RSS columns are the
+minimum-maximum whole-process peaks across those processes. Ratios are push-frontier divided by V1.
+
+| Query | V1 median ms | Frontier median ms | F/V time | V1 RSS MiB range | Frontier RSS MiB range | F/V RSS median |
+|---|---:|---:|---:|---:|---:|---:|
+| Q0 | 48.12 | 47.35 | 0.984 | 59.8-62.7 | 60.8-61.5 | 0.993 |
+| Q1 | 80.47 | 80.44 | 1.000 | 74.2-76.5 | 121.9-134.6 | 1.726 |
+| Q2 | 137.36 | 140.50 | 1.023 | 119.1-127.4 | 157.5-188.7 | 1.458 |
+| Q3 | 136.42 | 148.10 | 1.086 | 141.3-165.0 | 184.5-196.4 | 1.279 |
+| Q4 | 722.85 | 709.53 | 0.982 | 1761.1-1800.8 | 1886.1-1904.8 | 1.067 |
+| Q5 | 665.71 | 702.34 | 1.055 | 1620.9-1641.4 | 1619.6-1785.4 | 1.088 |
+| Q6 | 48.45 | 40.56 | 0.837 | 61.0-62.3 | 60.0-62.7 | 0.994 |
+| Q7 | 81.37 | 86.55 | 1.064 | 79.6-80.8 | 130.8-144.8 | 1.696 |
+| Q8 | 882.15 | 896.97 | 1.017 | 2018.3-2054.3 | 2084.2-2259.0 | 1.094 |
+| Q9 | 1006.36 | 1000.53 | 0.994 | 1248.4-1275.5 | 1339.5-1383.8 | 1.056 |
+| Q10 | 196.84 | 189.06 | 0.960 | 305.4-327.9 | 364.5-419.1 | 1.259 |
+| Q11 | 310.20 | 246.76 | 0.795 | 331.4-335.1 | 415.3-438.8 | 1.282 |
+| Q12 | 580.33 | 547.70 | 0.944 | 1712.5-1800.1 | 1860.1-1879.4 | 1.068 |
+| Q13 | 907.36 | 777.23 | 0.857 | 2103.0-2383.8 | 2300.0-2346.5 | 1.068 |
+| Q14 | 654.34 | 602.86 | 0.921 | 1589.9-1616.5 | 1744.6-1801.2 | 1.101 |
+| Q15 | 813.60 | 812.40 | 0.999 | 2123.2-2259.3 | 2215.4-2326.6 | 1.076 |
+| Q16 | 1497.23 | 1492.38 | 0.997 | 4309.2-4448.5 | 4400.1-4632.8 | 1.022 |
+| Q17 | 1497.54 | 1459.59 | 0.975 | 4309.1-4382.3 | 4412.0-4661.2 | 1.038 |
+| Q18 | 2802.71 | 2750.63 | 0.981 | 8420.6-8645.8 | 8527.3-8791.2 | 1.019 |
+| Q19 | 84.15 | 82.42 | 0.979 | 120.0-131.0 | 173.6-183.7 | 1.412 |
+| Q20 | 437.96 | 488.70 | 1.116 | 243.4-272.0 | 452.2-524.7 | 2.061 |
+| Q21 | 587.28 | 474.07 | 0.807 | 245.3-274.2 | 526.0-659.2 | 2.448 |
+| Q22 | 936.84 | 596.30 | 0.637 | 338.7-366.7 | 675.5-702.2 | 1.957 |
+| Q23 | 1130.53 | 532.44 | 0.471 | 903.5-966.4 | 878.8-950.1 | 1.001 |
+| Q24 | 137.86 | 90.90 | 0.659 | 174.3-188.6 | 205.9-219.5 | 1.191 |
+| Q25 | 145.86 | 139.25 | 0.955 | 213.5-227.4 | 279.4-307.5 | 1.405 |
+| Q26 | 138.11 | 86.30 | 0.625 | 177.7-190.6 | 205.6-220.3 | 1.124 |
+| Q27 | 604.49 | 546.89 | 0.905 | 317.8-341.5 | 480.5-542.1 | 1.595 |
+| Q28 | 4885.40 | 4784.63 | 0.979 | 2424.8-2539.0 | 2495.5-2645.6 | 1.055 |
+| Q29 | 139.00 | 147.15 | 1.059 | 151.1-153.7 | 323.0-345.5 | 2.260 |
+| Q30 | 695.79 | 539.84 | 0.776 | 1087.2-1125.4 | 1424.8-1499.5 | 1.311 |
+| Q31 | 592.40 | 424.12 | 0.716 | 1458.7-1548.7 | 1706.0-1720.3 | 1.150 |
+| Q32 | 2024.20 | 1984.27 | 0.980 | 9350.3-9967.4 | 9631.6-10011.9 | 1.056 |
+| Q33 | 2735.27 | 2747.29 | 1.004 | 9472.1-9784.5 | 9566.5-9729.6 | 1.008 |
+| Q34 | 2750.07 | 2697.36 | 0.981 | 9496.3-9708.9 | 9506.3-9816.4 | 0.999 |
+| Q35 | 715.77 | 720.58 | 1.007 | 1043.2-1129.8 | 1163.3-1259.7 | 1.092 |
+| Q36 | 85.66 | 76.86 | 0.897 | 223.6-225.4 | 229.1-232.1 | 1.025 |
+| Q37 | 83.55 | 47.32 | 0.566 | 105.0-109.0 | 110.8-115.4 | 1.071 |
+| Q38 | 47.54 | 47.32 | 0.995 | 101.3-111.6 | 119.7-125.1 | 1.225 |
+| Q39 | 145.76 | 147.35 | 1.011 | 346.2-359.4 | 356.7-373.5 | 1.037 |
+| Q40 | 46.05 | 45.91 | 0.997 | 92.2-96.7 | 87.4-90.4 | 0.949 |
+| Q41 | 46.80 | 48.21 | 1.030 | 83.4-84.6 | 87.0-89.2 | 1.054 |
+| Q42 | 46.22 | 41.92 | 0.907 | 80.4-81.4 | 85.8-87.9 | 1.079 |
+
+The median frontier/V1 time ratio across queries is 0.980 (range 0.471-1.116); the median RSS ratio
+is 1.088 (range 0.949-2.448). Time regressions occur on Q2, Q3, Q5, Q7, Q8, Q20, Q29, Q33, Q35,
+Q39, and Q41; only Q20 exceeds 10%. RSS regressions occur on Q1-Q5, Q7-Q33, Q35-Q39, and Q41-Q42;
+Q1, Q2, Q3, Q7, Q10, Q11, Q14, Q19-Q22, Q24-Q27, Q29-Q31, and Q38 exceed 10%.
+
+The explicit wall-outlier rule flags frontier Q19, Q24, and Q37 plus V1 Q38; no RSS range exceeds
+1.25 times its median. Strict three-sample increases are retained as flags in
+`clickbench-summary.json`: wall time for V1 Q2/Q7/Q15/Q28/Q30/Q35/Q38 and frontier
+Q2/Q3/Q4/Q8/Q14/Q18/Q21/Q27/Q28/Q30/Q38/Q42; RSS for V1 Q4/Q9/Q19/Q35/Q40 and frontier
+Q13/Q25/Q28/Q31/Q34/Q38/Q39. Every sample is a fresh process, so these short sequences are not
+cumulative within-process memory growth.
 
 ## TPC-H Q1-Q22
 
