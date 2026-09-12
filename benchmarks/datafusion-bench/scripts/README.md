@@ -20,7 +20,8 @@ python3 benchmarks/datafusion-bench/scripts/run_push_frontier_matrix.py tpch \
   --binary target/release_debug/datafusion-bench \
   --input-root vortex-bench/data/tpch/1.0 \
   --output-dir /private/tmp/push-frontier-tpch \
-  --partitions 8 \
+  --partitions 4 \
+  --correctness-partitions 1 \
   --samples 5 \
   --queries 1,6 \
   --opt scale-factor=1.0 \
@@ -31,8 +32,14 @@ python3 benchmarks/datafusion-bench/scripts/run_push_frontier_matrix.py tpch \
 `--dry-run` to execute the matrix; an `--input-root` is then required. It must be the existing local
 dataset directory actually consumed by the selected suite and options, must be disjoint from the
 output directory, and must contain only regular files and directories. Symlinks and special files
-are rejected. Use repeated `--opt KEY=VALUE` arguments for the options accepted by the benchmark
-binary. Typical values are:
+are rejected. The runner discovers query IDs for both policies and fails before creating output or
+running queries unless their ID sets are identical.
+
+Use repeated `--opt KEY=VALUE` arguments for normal suite options. They are used by canonical query
+discovery and all timed/prewarm children and form the base option set for correctness. Repeated
+`--correctness-opt KEY=VALUE` arguments are appended only for correctness query discovery, V1
+artifact writes, and push-frontier verification. This supports a deterministic correctness query
+without changing the canonical SQL that is measured. Typical values are:
 
 - ClickBench: `--opt flavor=partitioned`
 - TPC-H/TPC-DS: `--opt scale-factor=1.0`
@@ -40,21 +47,34 @@ binary. Typical values are:
   manifest still covers only the explicitly supplied local `--input-root`)
 - FineWeb needs no option for its default local data directory.
 
+For ClickBench Q17 and Q31-Q41, keep timed runs on the canonical SQL and use the checked-in
+total-order variants only for exactness:
+
+```bash
+--opt flavor=partitioned \
+--correctness-opt queries-file=vortex-bench/sql/clickbench_correctness_queries.sql
+```
+
+The correctness query file preserves all 43 IDs, which satisfies the runner's query-ID set gate.
+
 The runner always passes `--formats vortex`, removes `VORTEX_USE_SCAN_API` from every child
 environment, sets `VORTEX_SCAN_BACKEND` explicitly to `v1` or `push-frontier`, and uses the
-`--partitions N` runner argument for both the benchmark binary's `--threads N` option and
-`DATAFUSION_EXECUTION_TARGET_PARTITIONS=N`. `--threads N` fixes both DataFusion target partitions
-and Tokio worker threads to `N`; each opened Vortex file uses one builder concurrency unit and one
-push worker so neither backend multiplies that process budget. It discovers the selected IDs from
-the binary's `--print-queries` output. JSON environment records use `null` to mean the variable was
-explicitly unset.
+`--partitions N` runner argument only for timed/prewarm children. It defaults to `4` and controls
+both the benchmark binary's `--threads N` option and
+`DATAFUSION_EXECUTION_TARGET_PARTITIONS=N`. Correctness children use the independent
+`--correctness-partitions N`, which defaults to `1`, for both values. `--threads N` fixes both
+DataFusion target partitions and Tokio worker threads to `N`; each opened Vortex file uses one
+builder concurrency unit and one push worker so neither backend multiplies that process budget.
+JSON environment records use `null` to mean the variable was explicitly unset.
 
 Before any correctness or measurement child, the runner recursively hashes `--input-root` once in
 deterministic path order. `run-manifest.json` records every relative input path, byte size, and
 SHA-256; an aggregate input-manifest SHA-256; the benchmark executable's absolute path, size, and
 SHA-256; Git HEAD; and hashes of whole-repository (`.`) porcelain status and binary working-tree
 diff. Dirty trees are allowed and explicitly recorded. The exact run-manifest file SHA-256 and its
-relative path are linked from the `matrix.jsonl` header and every child record.
+relative path are linked from the `matrix.jsonl` header and every child record. Both query-policy
+option sets, discovery commands, and thread/partition budgets are recorded in the manifest and
+JSONL configuration record.
 
 Reading all input bytes for this identity step may itself warm the OS page cache. That is consistent
 with the explicit symmetric **HOT-cache** protocol and must not be interpreted as cold-cache

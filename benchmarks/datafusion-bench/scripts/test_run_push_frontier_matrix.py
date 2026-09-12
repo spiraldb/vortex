@@ -22,9 +22,11 @@ def config(output_dir: Path, *, samples: int = 2) -> matrix.MatrixConfig:
         input_root=None,
         samples=samples,
         partitions=8,
+        correctness_partitions=1,
         queries="1,6",
         exclude_queries=None,
         bench_options=("scale-factor=1.0", "remote-data-dir=s3://bench/"),
+        correctness_bench_options=("queries-file=correctness.sql",),
         runner_prefix="test-matrix",
         timeout_seconds=60.0,
         max_log_bytes=1024,
@@ -41,18 +43,26 @@ class MatrixRunnerTests(unittest.TestCase):
             )
         self.assertIn("--input-root is required", stderr.getvalue())
 
+    def test_partition_defaults_split_correctness_from_measurement(self) -> None:
+        cfg = matrix.parse_args(
+            ["tpch", "--output-dir", "matrix", "--dry-run"]
+        )
+        self.assertEqual(cfg.partitions, 4)
+        self.assertEqual(cfg.correctness_partitions, 1)
+
     def test_parses_print_queries_strictly(self) -> None:
         self.assertEqual(matrix.parse_query_ids("0\n7\n99\n"), [0, 7, 99])
         for invalid in ("", "1\nQ2\n", "1\n1\n", "-1\n"):
             with self.subTest(invalid=invalid), self.assertRaises(matrix.MatrixError):
                 matrix.parse_query_ids(invalid)
 
-    def test_current_cli_flags_and_options_are_constructed_as_argv(self) -> None:
+    def test_correctness_and_measurement_argv_are_separate(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             cfg = config(Path(temporary) / "matrix")
             artifact_dir = cfg.output_dir / "results" / "q000006"
             write = matrix.result_argv(cfg, 6, artifact_dir, verify=False)
             verify = matrix.result_argv(cfg, 6, artifact_dir, verify=True)
+            measured = matrix.measured_argv(cfg, 6, 0, "v1")
             self.assertEqual(
                 write[:8],
                 (
@@ -63,12 +73,16 @@ class MatrixRunnerTests(unittest.TestCase):
                     "--queries",
                     "6",
                     "--threads",
-                    "8",
+                    "1",
                 ),
             )
+            self.assertEqual(measured[7], "8")
             self.assertIn("--write-result-artifacts", write)
             self.assertIn("--verify-result-artifacts", verify)
-            self.assertEqual(write.count("--opt"), 2)
+            self.assertEqual(write.count("--opt"), 3)
+            self.assertIn("queries-file=correctness.sql", write)
+            self.assertNotIn("queries-file=correctness.sql", measured)
+            self.assertEqual(measured.count("--opt"), 2)
             self.assertEqual(
                 matrix.discovery_argv(cfg),
                 (
@@ -81,6 +95,22 @@ class MatrixRunnerTests(unittest.TestCase):
                     "scale-factor=1.0",
                     "--opt",
                     "remote-data-dir=s3://bench/",
+                ),
+            )
+            self.assertEqual(
+                matrix.discovery_argv(cfg, correctness=True),
+                (
+                    str(cfg.binary),
+                    "tpch",
+                    "--print-queries",
+                    "--queries",
+                    "1,6",
+                    "--opt",
+                    "scale-factor=1.0",
+                    "--opt",
+                    "remote-data-dir=s3://bench/",
+                    "--opt",
+                    "queries-file=correctness.sql",
                 ),
             )
 
@@ -110,8 +140,10 @@ class MatrixRunnerTests(unittest.TestCase):
                 )
             )
         self.assertEqual([spec.phase for spec in specs[:2]], ["exact-write", "exact-verify"])
+        self.assertEqual([spec.partitions for spec in specs[:2]], [1, 1])
         timed_specs = specs[2:]
         self.assertEqual(len(timed_specs), 8)
+        self.assertTrue(all(spec.partitions == 8 for spec in timed_specs))
         for prewarm, measured in zip(timed_specs[::2], timed_specs[1::2]):
             self.assertEqual(prewarm.phase, "hot-prewarm")
             self.assertEqual(measured.phase, "measure")
@@ -235,6 +267,16 @@ class MatrixRunnerTests(unittest.TestCase):
             self.assertTrue(manifest["git"]["dirty"])
             self.assertEqual(len(manifest["git"]["head"]), 40)
             self.assertEqual(len(manifest["git"]["working_tree_sha256"]), 64)
+            self.assertEqual(manifest["matrix_policy"]["measurement"]["threads"], 8)
+            self.assertEqual(manifest["matrix_policy"]["correctness"]["threads"], 1)
+            self.assertEqual(
+                manifest["matrix_policy"]["correctness"]["bench_options"],
+                [
+                    "scale-factor=1.0",
+                    "remote-data-dir=s3://bench/",
+                    "queries-file=correctness.sql",
+                ],
+            )
 
             output_root.mkdir()
             reference = matrix.write_run_manifest(output_root, manifest)
@@ -261,6 +303,10 @@ class MatrixRunnerTests(unittest.TestCase):
             records = list(matrix.dry_run_records(cfg, [1]))
             self.assertFalse(cfg.output_dir.exists())
         self.assertTrue(records[0]["dry_run"])
+        self.assertEqual(records[0]["measurement_query_ids"], [1])
+        self.assertEqual(records[0]["correctness_query_ids"], [1])
+        self.assertEqual(records[0]["policies"]["measurement"]["threads"], 8)
+        self.assertEqual(records[0]["policies"]["correctness"]["threads"], 1)
         self.assertIsNone(records[0]["environment"]["VORTEX_USE_SCAN_API"])
         self.assertEqual(
             [(record["phase"], record["backend"]) for record in records[1:]],
@@ -279,6 +325,47 @@ class MatrixRunnerTests(unittest.TestCase):
                 for record in records[1:]
             )
         )
+        self.assertEqual([record["partitions"] for record in records[1:3]], [1, 1])
+        self.assertTrue(all(record["partitions"] == 8 for record in records[3:]))
+
+    def test_query_id_mismatch_fails_before_output_or_query_runs(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_binary = root / "fake-datafusion-bench"
+            fake_binary.write_text(
+                "#!/usr/bin/env python3\n"
+                "import sys\n"
+                "if '--print-queries' not in sys.argv:\n"
+                "    raise SystemExit('query execution was attempted')\n"
+                "if 'queries-file=correctness.sql' in sys.argv:\n"
+                "    print('2')\n"
+                "else:\n"
+                "    print('1')\n",
+                encoding="utf-8",
+            )
+            fake_binary.chmod(0o755)
+            input_root = root / "input"
+            input_root.mkdir()
+            (input_root / "data.vortex").write_bytes(b"not hashed")
+            output_dir = root / "matrix"
+            stderr = io.StringIO()
+            with contextlib.redirect_stderr(stderr):
+                exit_status = matrix.main(
+                    [
+                        "clickbench",
+                        "--binary",
+                        str(fake_binary),
+                        "--output-dir",
+                        str(output_dir),
+                        "--input-root",
+                        str(input_root),
+                        "--correctness-opt",
+                        "queries-file=correctness.sql",
+                    ]
+                )
+            self.assertEqual(exit_status, 1)
+            self.assertFalse(output_dir.exists())
+            self.assertIn("query ID sets differ", stderr.getvalue())
 
     def test_main_dry_run_only_executes_query_discovery(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

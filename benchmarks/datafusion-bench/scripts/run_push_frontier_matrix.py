@@ -64,9 +64,11 @@ class MatrixConfig:
     input_root: Path | None
     samples: int
     partitions: int
+    correctness_partitions: int
     queries: str | None
     exclude_queries: str | None
     bench_options: tuple[str, ...]
+    correctness_bench_options: tuple[str, ...]
     runner_prefix: str
     timeout_seconds: float
     max_log_bytes: int
@@ -80,6 +82,7 @@ class ChildSpec:
     backend: str
     sample: int | None
     argv: tuple[str, ...]
+    partitions: int
     included_in_measurements: bool
     collect_peak_rss: bool
 
@@ -155,10 +158,19 @@ def parse_args(argv: Sequence[str] | None = None) -> MatrixConfig:
     parser.add_argument(
         "--partitions",
         type=positive_int,
-        required=True,
+        default=4,
         help=(
-            "worker count passed as --threads N and fixed in "
-            "DATAFUSION_EXECUTION_TARGET_PARTITIONS"
+            "timed/prewarm worker count passed as --threads N and fixed in "
+            "DATAFUSION_EXECUTION_TARGET_PARTITIONS (default: 4)"
+        ),
+    )
+    parser.add_argument(
+        "--correctness-partitions",
+        type=positive_int,
+        default=1,
+        help=(
+            "correctness write/verify worker count passed as --threads N and fixed in "
+            "DATAFUSION_EXECUTION_TARGET_PARTITIONS (default: 1)"
         ),
     )
     parser.add_argument(
@@ -183,6 +195,18 @@ def parse_args(argv: Sequence[str] | None = None) -> MatrixConfig:
             "ClickBench flavor, TPC scale factor, or remote-data-dir"
         ),
     )
+    parser.add_argument(
+        "--correctness-opt",
+        dest="correctness_bench_options",
+        action="append",
+        type=bench_option,
+        default=[],
+        metavar="KEY=VALUE",
+        help=(
+            "additional benchmark option appended only for correctness discovery, "
+            "V1 writes, and push-frontier verification; repeat as needed"
+        ),
+    )
     parser.add_argument("--runner-prefix", default="push-frontier-matrix")
     parser.add_argument("--timeout-seconds", type=float, default=3_600.0)
     parser.add_argument(
@@ -200,8 +224,11 @@ def parse_args(argv: Sequence[str] | None = None) -> MatrixConfig:
 
     if not math.isfinite(args.timeout_seconds) or args.timeout_seconds <= 0:
         parser.error("--timeout-seconds must be greater than zero")
-    if len(args.bench_options) > MAX_OPTIONS:
-        parser.error(f"at most {MAX_OPTIONS} --opt arguments are supported")
+    if len(args.bench_options) + len(args.correctness_bench_options) > MAX_OPTIONS:
+        parser.error(
+            f"at most {MAX_OPTIONS} combined --opt and --correctness-opt arguments "
+            "are supported"
+        )
     if not args.runner_prefix or len(args.runner_prefix) > 128:
         parser.error("--runner-prefix must contain 1 to 128 characters")
     if any(ord(char) < 32 for char in args.runner_prefix):
@@ -216,9 +243,11 @@ def parse_args(argv: Sequence[str] | None = None) -> MatrixConfig:
         input_root=args.input_root,
         samples=args.samples,
         partitions=args.partitions,
+        correctness_partitions=args.correctness_partitions,
         queries=args.queries,
         exclude_queries=args.exclude_queries,
         bench_options=tuple(args.bench_options),
+        correctness_bench_options=tuple(args.correctness_bench_options),
         runner_prefix=args.runner_prefix,
         timeout_seconds=args.timeout_seconds,
         max_log_bytes=args.max_log_bytes,
@@ -226,27 +255,42 @@ def parse_args(argv: Sequence[str] | None = None) -> MatrixConfig:
     )
 
 
-def selection_argv(config: MatrixConfig) -> list[str]:
+def benchmark_options(
+    config: MatrixConfig, *, correctness: bool
+) -> tuple[str, ...]:
+    if correctness:
+        return config.bench_options + config.correctness_bench_options
+    return config.bench_options
+
+
+def selection_argv(config: MatrixConfig, *, correctness: bool = False) -> list[str]:
     argv: list[str] = []
     if config.queries is not None:
         argv.extend(("--queries", config.queries))
     if config.exclude_queries is not None:
         argv.extend(("--exclude-queries", config.exclude_queries))
-    for option in config.bench_options:
+    for option in benchmark_options(config, correctness=correctness):
         argv.extend(("--opt", option))
     return argv
 
 
-def discovery_argv(config: MatrixConfig) -> tuple[str, ...]:
+def discovery_argv(
+    config: MatrixConfig, *, correctness: bool = False
+) -> tuple[str, ...]:
     return (
         str(config.binary),
         config.suite,
         "--print-queries",
-        *selection_argv(config),
+        *selection_argv(config, correctness=correctness),
     )
 
 
-def benchmark_argv(config: MatrixConfig, query_id: int) -> list[str]:
+def benchmark_argv(
+    config: MatrixConfig, query_id: int, *, correctness: bool = False
+) -> list[str]:
+    partitions = (
+        config.correctness_partitions if correctness else config.partitions
+    )
     argv = [
         str(config.binary),
         config.suite,
@@ -255,9 +299,9 @@ def benchmark_argv(config: MatrixConfig, query_id: int) -> list[str]:
         "--queries",
         str(query_id),
         "--threads",
-        str(config.partitions),
+        str(partitions),
     ]
-    for option in config.bench_options:
+    for option in benchmark_options(config, correctness=correctness):
         argv.extend(("--opt", option))
     return argv
 
@@ -270,7 +314,11 @@ def result_argv(
     verify: bool,
 ) -> tuple[str, ...]:
     flag = "--verify-result-artifacts" if verify else "--write-result-artifacts"
-    return (*benchmark_argv(config, query_id), flag, str(artifact_dir))
+    return (
+        *benchmark_argv(config, query_id, correctness=True),
+        flag,
+        str(artifact_dir),
+    )
 
 
 def measured_argv(
@@ -546,6 +594,30 @@ def collect_git_identity(repository_hint: Path) -> dict[str, object]:
     }
 
 
+def matrix_policy(config: MatrixConfig) -> dict[str, object]:
+    return {
+        "measurement": {
+            "partitions": config.partitions,
+            "threads": config.partitions,
+            "bench_options": list(config.bench_options),
+            "discovery_command": list(discovery_argv(config)),
+        },
+        "correctness": {
+            "partitions": config.correctness_partitions,
+            "threads": config.correctness_partitions,
+            "bench_options": list(
+                benchmark_options(config, correctness=True)
+            ),
+            "correctness_only_bench_options": list(
+                config.correctness_bench_options
+            ),
+            "discovery_command": list(
+                discovery_argv(config, correctness=True)
+            ),
+        },
+    }
+
+
 def collect_run_manifest(
     config: MatrixConfig, *, repository_hint: Path | None = None
 ) -> dict[str, object]:
@@ -555,6 +627,7 @@ def collect_run_manifest(
         "input": collect_input_identity(input_root),
         "benchmark_executable": collect_file_identity(config.binary),
         "git": collect_git_identity(repository_hint or Path.cwd()),
+        "matrix_policy": matrix_policy(config),
     }
 
 
@@ -586,6 +659,7 @@ def query_specs(
         backend=BACKEND_V1,
         sample=None,
         argv=result_argv(config, query_id, artifact_dir, verify=False),
+        partitions=config.correctness_partitions,
         included_in_measurements=False,
         collect_peak_rss=False,
     )
@@ -595,6 +669,7 @@ def query_specs(
         backend=BACKEND_FRONTIER,
         sample=None,
         argv=result_argv(config, query_id, artifact_dir, verify=True),
+        partitions=config.correctness_partitions,
         included_in_measurements=False,
         collect_peak_rss=False,
     )
@@ -608,6 +683,7 @@ def query_specs(
                 backend=backend,
                 sample=sample,
                 argv=argv,
+                partitions=config.partitions,
                 included_in_measurements=False,
                 collect_peak_rss=False,
             )
@@ -617,6 +693,7 @@ def query_specs(
                 backend=backend,
                 sample=sample,
                 argv=argv,
+                partitions=config.partitions,
                 included_in_measurements=True,
                 collect_peak_rss=True,
             )
@@ -666,11 +743,14 @@ def parse_query_ids(stdout: str) -> list[int]:
     return query_ids
 
 
-def discover_query_ids(config: MatrixConfig) -> list[int]:
+def discover_query_ids(
+    config: MatrixConfig, *, correctness: bool = False
+) -> list[int]:
     env = child_environment(os.environ.copy(), BACKEND_V1, config.partitions)
+    mode = "correctness" if correctness else "measurement"
     try:
         completed = subprocess.run(
-            discovery_argv(config),
+            discovery_argv(config, correctness=correctness),
             shell=False,
             check=False,
             capture_output=True,
@@ -681,17 +761,31 @@ def discover_query_ids(config: MatrixConfig) -> list[int]:
             timeout=min(config.timeout_seconds, 60.0),
         )
     except subprocess.TimeoutExpired as err:
-        raise MatrixError("--print-queries timed out") from err
+        raise MatrixError(f"{mode} --print-queries timed out") from err
     except OSError as err:
-        raise MatrixError(f"failed to run --print-queries: {err}") from err
+        raise MatrixError(f"failed to run {mode} --print-queries: {err}") from err
     if completed.returncode != 0:
         stderr = completed.stderr[-4_096:].strip()
         raise MatrixError(
-            f"--print-queries failed with exit status {completed.returncode}: {stderr}"
+            f"{mode} --print-queries failed with exit status "
+            f"{completed.returncode}: {stderr}"
         )
     if len(completed.stdout.encode("utf-8")) > 1_048_576:
-        raise MatrixError("--print-queries output exceeded 1 MiB")
+        raise MatrixError(f"{mode} --print-queries output exceeded 1 MiB")
     return parse_query_ids(completed.stdout)
+
+
+def validate_query_id_sets(
+    measurement_query_ids: Sequence[int], correctness_query_ids: Sequence[int]
+) -> None:
+    measurement = set(measurement_query_ids)
+    correctness = set(correctness_query_ids)
+    if measurement != correctness:
+        raise MatrixError(
+            "measurement and correctness query ID sets differ: "
+            f"measurement_only={sorted(measurement - correctness)}, "
+            f"correctness_only={sorted(correctness - measurement)}"
+        )
 
 
 def parse_macos_peak_rss(stderr: str) -> int | None:
@@ -763,8 +857,8 @@ def run_child(
     stdout_path = safe_output_path(query_dir, f"{stem}.stdout.log")
     stderr_path = safe_output_path(query_dir, f"{stem}.stderr.log")
     command, rss_source = resource_wrapped_argv(spec.argv, spec.collect_peak_rss)
-    env_overrides = environment_changes(spec.backend, config.partitions)
-    env = child_environment(os.environ.copy(), spec.backend, config.partitions)
+    env_overrides = environment_changes(spec.backend, spec.partitions)
+    env = child_environment(os.environ.copy(), spec.backend, spec.partitions)
     started_at = dt.datetime.now(dt.timezone.utc).isoformat()
     start = time.monotonic_ns()
     try:
@@ -824,6 +918,8 @@ def run_child(
         "sample": spec.sample,
         "phase": spec.phase,
         "backend": spec.backend,
+        "partitions": spec.partitions,
+        "threads": spec.partitions,
         "cache_protocol": "HOT:symmetric-same-query-same-backend-fresh-process-prewarm",
         "included_in_measurements": spec.included_in_measurements,
         "command": list(command),
@@ -847,12 +943,17 @@ def config_record(
     config: MatrixConfig,
     query_ids: Sequence[int],
     identity_ref: dict[str, str] | None = None,
+    correctness_query_ids: Sequence[int] | None = None,
 ) -> dict[str, object]:
+    if correctness_query_ids is None:
+        correctness_query_ids = query_ids
     record: dict[str, object] = {
         "record_type": "matrix-config",
         "schema_version": 1,
         "suite": config.suite,
         "query_ids": list(query_ids),
+        "measurement_query_ids": list(query_ids),
+        "correctness_query_ids": list(correctness_query_ids),
         "samples_per_backend": config.samples,
         "format": FORMAT,
         "input_root_argument": (
@@ -860,7 +961,14 @@ def config_record(
         ),
         "partitions": config.partitions,
         "threads": config.partitions,
+        "correctness_partitions": config.correctness_partitions,
+        "correctness_threads": config.correctness_partitions,
         "bench_options": list(config.bench_options),
+        "correctness_bench_options": list(
+            benchmark_options(config, correctness=True)
+        ),
+        "correctness_only_bench_options": list(config.correctness_bench_options),
+        "policies": matrix_policy(config),
         "cache_protocol": "HOT:symmetric-same-query-same-backend-fresh-process-prewarm",
         "measurement_order": "alternating by query position plus sample index",
         "correctness_protocol": "v1-write-then-push-frontier-verify-canonical-artifact",
@@ -868,6 +976,9 @@ def config_record(
         "cache_eviction": "none",
         "cold_cache_evidence": False,
         "discovery_command": list(discovery_argv(config)),
+        "correctness_discovery_command": list(
+            discovery_argv(config, correctness=True)
+        ),
         "environment": {
             "VORTEX_USE_SCAN_API": None,
             "DATAFUSION_EXECUTION_TARGET_PARTITIONS": str(config.partitions),
@@ -888,9 +999,13 @@ def validate_plan_size(config: MatrixConfig, query_ids: Sequence[int]) -> None:
 
 
 def dry_run_records(
-    config: MatrixConfig, query_ids: Sequence[int]
+    config: MatrixConfig,
+    query_ids: Sequence[int],
+    correctness_query_ids: Sequence[int] | None = None,
 ) -> Iterable[dict[str, object]]:
-    yield config_record(config, query_ids) | {"dry_run": True}
+    yield config_record(
+        config, query_ids, correctness_query_ids=correctness_query_ids
+    ) | {"dry_run": True}
     sequence = 0
     for query_position, query_id in enumerate(query_ids):
         for spec in query_specs(config, query_id, query_position):
@@ -906,10 +1021,12 @@ def dry_run_records(
                 "sample": spec.sample,
                 "phase": spec.phase,
                 "backend": spec.backend,
+                "partitions": spec.partitions,
+                "threads": spec.partitions,
                 "included_in_measurements": spec.included_in_measurements,
                 "command": list(command),
                 "benchmark_argv": list(spec.argv),
-                "environment": environment_changes(spec.backend, config.partitions),
+                "environment": environment_changes(spec.backend, spec.partitions),
                 "rss_source": rss_source,
             }
             sequence += 1
@@ -935,7 +1052,11 @@ def validate_binary(binary: Path) -> None:
         raise MatrixError(f"datafusion-bench binary is not executable: {binary}")
 
 
-def execute_matrix(config: MatrixConfig, query_ids: Sequence[int]) -> None:
+def execute_matrix(
+    config: MatrixConfig,
+    query_ids: Sequence[int],
+    correctness_query_ids: Sequence[int],
+) -> None:
     validate_input_output_separation(config)
     root = prepare_output_dir(config)
     manifest = collect_run_manifest(config)
@@ -944,7 +1065,13 @@ def execute_matrix(config: MatrixConfig, query_ids: Sequence[int]) -> None:
     with jsonl_path.open("x", encoding="utf-8") as jsonl:
         jsonl.write(
             json.dumps(
-                config_record(config, query_ids, identity_ref), sort_keys=True
+                config_record(
+                    config,
+                    query_ids,
+                    identity_ref,
+                    correctness_query_ids,
+                ),
+                sort_keys=True,
             )
             + "\n"
         )
@@ -975,12 +1102,16 @@ def main(argv: Sequence[str] | None = None) -> int:
         if not config.dry_run:
             validate_input_output_separation(config)
         query_ids = discover_query_ids(config)
+        correctness_query_ids = discover_query_ids(config, correctness=True)
+        validate_query_id_sets(query_ids, correctness_query_ids)
         validate_plan_size(config, query_ids)
         if config.dry_run:
-            for record in dry_run_records(config, query_ids):
+            for record in dry_run_records(
+                config, query_ids, correctness_query_ids
+            ):
                 print(json.dumps(record, sort_keys=True))
             return 0
-        execute_matrix(config, query_ids)
+        execute_matrix(config, query_ids, correctness_query_ids)
         return 0
     except MatrixError as err:
         print(f"error: {err}", file=sys.stderr)
