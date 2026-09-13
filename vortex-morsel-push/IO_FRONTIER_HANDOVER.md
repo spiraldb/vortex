@@ -420,6 +420,29 @@ passed
 This checkpoint is intentionally a WIP: finish the focused tests and rerun the bounded mechanism
 and acceptance gates before making any speed claim.
 
+## SF10 DataFusion execution-shape checkpoint
+
+The push-frontier DataFusion path now runs its single worker as a future on the partition's own
+runtime task (`MorselScan::run_async` with `AsyncWorker`/`WorkerState` in `driver.rs`), converts
+each morsel on that task (`OutputMap` in `executor.rs`, used by `MorselScanBuilder` whenever no
+limit trims afterwards), and assigns morsels only after their output has been polled
+(`DemandGate`). The production frontier defaults are two resident morsels, two lookahead
+frontiers, adaptive right traversal, and 32-range refills, all overridable through
+`VORTEX_PF_RESIDENT`, `VORTEX_PF_LOOKAHEAD`, `VORTEX_PF_RIGHT`, and `VORTEX_PF_REFILL`.
+`VORTEX_PF_SOURCE_SHARING=0` and `VORTEX_PF_FILE_PROMOTION=0` disable the DataFusion-only source
+pool and persistent file reader so the backends can be compared on identical I/O paths.
+
+On TPC-H SF10 with four threads this moved push-frontier from 1.051x to 0.928x V1 wall time
+(0.914x CPU) with every query's exact result verified; the full table, protocol, and the
+rejected output-shape experiments are recorded in
+[PUSH_FRONTIER_BENCHMARK_CHECKLIST.md](PUSH_FRONTIER_BENCHMARK_CHECKLIST.md). The remaining
+Q1/Q18 gap is the builder concatenation of dictionary string columns whose segments are smaller
+than a morsel; a chunk-of-structs output or slice-under-filter both cost more than they saved.
+
+The thread-driven paths (`run`, `into_stream`, `run_on_current_thread`, DuckDB) share the same
+`WorkerState` loop and are otherwise unchanged; the DuckDB extension does not use the demand gate
+or the task-driven worker.
+
 ## DuckDB scan and local-I/O findings
 
 DuckDB and DataFusion do not expose all-core scan work in the same shape. The DuckDB extension is

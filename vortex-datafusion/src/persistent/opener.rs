@@ -47,10 +47,13 @@ use object_store::path::Path;
 use parking_lot::Mutex;
 use tracing::Instrument;
 use vortex::array::VortexSessionExecute;
+use vortex::array::arrays::Chunked;
+use vortex::array::arrays::chunked::ChunkedArrayExt;
 #[cfg(any(unix, windows))]
 use vortex::array::memory::MemorySessionExt;
 use vortex::error::VortexError;
 use vortex::error::VortexExpect;
+use vortex::error::VortexResult;
 use vortex::expr::BoundExpression;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
@@ -123,10 +126,12 @@ struct SharedFileSourceEntry {
 }
 
 impl PushFrontierSegmentSourcePool {
+    /// Return the live source for `identity`, constructing one with `source` only on a miss so
+    /// partitions that join an existing source never materialize their own segment specs.
     fn get_or_insert(
         &self,
         identity: SegmentSourceIdentity,
-        source: Arc<dyn SegmentSource>,
+        source: impl FnOnce() -> Arc<dyn SegmentSource>,
         max_entries: usize,
     ) -> Arc<dyn SegmentSource> {
         let mut entries = self.entries.lock();
@@ -137,6 +142,7 @@ impl PushFrontierSegmentSourcePool {
             return shared;
         }
 
+        let source = source();
         entries.remove(&identity);
         let max_entries = max_entries.max(1);
         if entries.len() >= max_entries {
@@ -203,7 +209,7 @@ impl PushFrontierSourceSharing {
     fn share(
         &self,
         metadata: &ObjectMeta,
-        source: Arc<dyn SegmentSource>,
+        source: impl FnOnce() -> Arc<dyn SegmentSource>,
     ) -> Arc<dyn SegmentSource> {
         self.pool
             .get_or_insert(self.identity(metadata), source, self.max_entries)
@@ -343,6 +349,24 @@ fn scan_execution_config(
     }
 }
 
+fn env_flag_enabled(cell: &'static OnceLock<bool>, name: &str) -> bool {
+    *cell.get_or_init(|| std::env::var_os(name).is_none_or(|value| value != "0"))
+}
+
+/// `VORTEX_PF_SOURCE_SHARING=0` disables push-frontier raw source sharing, and everything gated
+/// on it, so the backend can be compared with V1 under identical per-partition I/O paths.
+fn push_frontier_source_sharing_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    env_flag_enabled(&ENABLED, "VORTEX_PF_SOURCE_SHARING")
+}
+
+/// `VORTEX_PF_FILE_PROMOTION=0` keeps source sharing but disables the persistent local
+/// file-payload reader, which V1 does not use.
+fn push_frontier_file_promotion_enabled() -> bool {
+    static ENABLED: OnceLock<bool> = OnceLock::new();
+    env_flag_enabled(&ENABLED, "VORTEX_PF_FILE_PROMOTION")
+}
+
 fn use_bounded_coalescing_gap(backend: ScanBackend, source_sharing_configured: bool) -> bool {
     backend == ScanBackend::PushFrontier && source_sharing_configured
 }
@@ -420,7 +444,7 @@ impl<A: 'static + Send> FileScanBuilder<A> {
         }
     }
 
-    fn full_file_splits(&self) -> vortex::error::VortexResult<Vec<u64>> {
+    fn full_file_splits(&self) -> VortexResult<Vec<u64>> {
         match self {
             Self::V1(builder) => builder.full_file_splits(),
             Self::Morsel(builder) => builder.full_file_splits(),
@@ -429,7 +453,7 @@ impl<A: 'static + Send> FileScanBuilder<A> {
 
     fn map<B: 'static + Send>(
         self,
-        map_fn: impl Fn(A) -> vortex::error::VortexResult<B> + 'static + Send + Sync,
+        map_fn: impl Fn(A) -> VortexResult<B> + 'static + Send + Sync,
     ) -> FileScanBuilder<B> {
         match self {
             Self::V1(builder) => FileScanBuilder::V1(builder.map(map_fn)),
@@ -437,9 +461,7 @@ impl<A: 'static + Send> FileScanBuilder<A> {
         }
     }
 
-    fn into_stream(
-        self,
-    ) -> vortex::error::VortexResult<BoxStream<'static, vortex::error::VortexResult<A>>> {
+    fn into_stream(self) -> VortexResult<BoxStream<'static, VortexResult<A>>> {
         match self {
             Self::V1(builder) => Ok(builder.into_stream()?.boxed()),
             Self::Morsel(builder) => builder.into_stream(),
@@ -528,12 +550,16 @@ impl VortexOpener {
     ) -> DFResult<FileOpenFuture> {
         #[cfg(any(unix, windows))]
         let diagnostics_enabled = scan_diagnostics_enabled();
-        let bounded_coalescing_gap =
-            use_bounded_coalescing_gap(backend, self.push_frontier_source_sharing.is_some());
+        let source_sharing_configured =
+            self.push_frontier_source_sharing.is_some() && push_frontier_source_sharing_enabled();
+        let bounded_coalescing_gap = use_bounded_coalescing_gap(backend, source_sharing_configured);
         let push_frontier_source_sharing =
-            use_file_payload_promotion(backend, self.push_frontier_source_sharing.is_some())
+            use_file_payload_promotion(backend, source_sharing_configured)
                 .then(|| self.push_frontier_source_sharing.clone())
                 .flatten();
+        #[cfg(any(unix, windows))]
+        let file_payload_promotion =
+            push_frontier_source_sharing.is_some() && push_frontier_file_promotion_enabled();
 
         // Calculate the output schema before replacing partition columns with literals so it
         // retains the table and partition-field metadata declared by the plan.
@@ -559,10 +585,10 @@ impl VortexOpener {
 
         #[cfg(any(unix, windows))]
         let reader = match &push_frontier_source_sharing {
-            Some(sharing) => {
+            Some(sharing) if file_payload_promotion => {
                 sharing.create_promoting_reader(&file, &session, diagnostics_enabled)?
             }
-            None => self.vortex_reader_factory.create_reader(&file, &session)?,
+            _ => self.vortex_reader_factory.create_reader(&file, &session)?,
         };
         #[cfg(not(any(unix, windows)))]
         let reader = self.vortex_reader_factory.create_reader(&file, &session)?;
@@ -695,7 +721,7 @@ impl VortexOpener {
                 .map_err(|e| exec_datafusion_err!("Failed to open Vortex file {e}"))?;
 
             let vxf = if let Some(sharing) = &push_frontier_source_sharing {
-                let segment_source = sharing.share(&file.object_meta, vxf.segment_source());
+                let segment_source = sharing.share(&file.object_meta, || vxf.segment_source());
                 vxf.with_segment_source(segment_source)
             } else {
                 vxf
@@ -957,15 +983,30 @@ impl VortexOpener {
                 .map(move |chunk| {
                     let mut ctx = session.create_execution_ctx();
                     let arrow_session = ctx.session().clone();
-                    let arrow = arrow_session.arrow().execute_arrow(
-                        chunk,
-                        Some(&stream_target_field),
-                        &mut ctx,
-                    )?;
-                    Ok(RecordBatch::from(arrow.as_struct().clone()))
+                    // A scan unit spanning several segments arrives as a chunked struct.
+                    // Converting each chunk on its own avoids re-concatenating every column
+                    // into one array before the Arrow conversion.
+                    let chunks = match chunk.as_opt::<Chunked>() {
+                        Some(chunked) => chunked.chunks(),
+                        None => vec![chunk],
+                    };
+                    chunks
+                        .into_iter()
+                        .filter(|chunk| !chunk.is_empty())
+                        .map(|chunk| {
+                            let arrow = arrow_session.arrow().execute_arrow(
+                                chunk,
+                                Some(&stream_target_field),
+                                &mut ctx,
+                            )?;
+                            Ok(RecordBatch::from(arrow.as_struct().clone()))
+                        })
+                        .collect::<VortexResult<Vec<_>>>()
                 })
                 .into_stream()
                 .map_err(|e| exec_datafusion_err!("Failed to create Vortex stream: {e}"))?
+                .map_ok(|batches| stream::iter(batches.into_iter().map(Ok::<_, VortexError>)))
+                .try_flatten()
                 .map_err(move |e: VortexError| {
                     DataFusionError::External(Box::new(e.with_context(format!(
                         "Failed to read Vortex file: {}",
@@ -1372,9 +1413,9 @@ mod tests {
         let pool = PushFrontierSegmentSourcePool::default();
         let identity = SegmentSourceIdentity::new(1, &test_object_meta()?);
         let first = Arc::new(StaticSegmentSource(7)) as Arc<dyn SegmentSource>;
-        let selected = pool.get_or_insert(identity.clone(), Arc::clone(&first), 2);
+        let selected = pool.get_or_insert(identity.clone(), || Arc::clone(&first), 2);
         let second = Arc::new(StaticSegmentSource(9)) as Arc<dyn SegmentSource>;
-        let selected_again = pool.get_or_insert(identity, second, 2);
+        let selected_again = pool.get_or_insert(identity, || second, 2);
 
         assert!(Arc::ptr_eq(&selected, &selected_again));
         let (left, right) = futures::join!(
@@ -1402,7 +1443,7 @@ mod tests {
                         let candidate =
                             Arc::new(StaticSegmentSource(value)) as Arc<dyn SegmentSource>;
                         barrier.wait();
-                        pool.get_or_insert(identity, candidate, 4)
+                        pool.get_or_insert(identity, || candidate, 4)
                     })
                 })
                 .collect::<Vec<_>>();
@@ -1437,19 +1478,25 @@ mod tests {
         third_metadata.location = Path::from("third.vortex");
         let third_identity = SegmentSourceIdentity::new(1, &third_metadata);
 
-        let first = pool.get_or_insert(first_identity, Arc::new(StaticSegmentSource(1)), 2);
-        let _second = pool.get_or_insert(second_identity, Arc::new(StaticSegmentSource(2)), 2);
-        let uncached =
-            pool.get_or_insert(third_identity.clone(), Arc::new(StaticSegmentSource(3)), 2);
+        let first = pool.get_or_insert(first_identity, || Arc::new(StaticSegmentSource(1)), 2);
+        let _second = pool.get_or_insert(second_identity, || Arc::new(StaticSegmentSource(2)), 2);
+        let uncached = pool.get_or_insert(
+            third_identity.clone(),
+            || Arc::new(StaticSegmentSource(3)),
+            2,
+        );
         assert_eq!(pool.len(), 2);
 
         drop(first);
-        let cached =
-            pool.get_or_insert(third_identity.clone(), Arc::new(StaticSegmentSource(4)), 2);
+        let cached = pool.get_or_insert(
+            third_identity.clone(),
+            || Arc::new(StaticSegmentSource(4)),
+            2,
+        );
         assert_eq!(pool.len(), 2);
         assert!(!Arc::ptr_eq(&uncached, &cached));
         let selected_again =
-            pool.get_or_insert(third_identity, Arc::new(StaticSegmentSource(5)), 2);
+            pool.get_or_insert(third_identity, || Arc::new(StaticSegmentSource(5)), 2);
         assert!(Arc::ptr_eq(&cached, &selected_again));
         Ok(())
     }

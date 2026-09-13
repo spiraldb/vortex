@@ -331,6 +331,45 @@ impl<A: 'static + Send> MorselScanBuilder<A> {
         }
         let limit = self.limit;
         let map_fn = Arc::clone(&self.map_fn);
+        if limit.is_none() {
+            // Without a limit to apply afterwards, the executor converts each morsel on the worker
+            // that decoded it. The map also reports the array row count for the output metrics.
+            let counting_map: Arc<dyn Fn(ArrayRef) -> VortexResult<(u64, A)> + Send + Sync> =
+                Arc::new(move |array| {
+                    let rows = u64::try_from(array.len()).unwrap_or(u64::MAX);
+                    map_fn(array).map(|output| (rows, output))
+                });
+            return match self.metrics {
+                Some(publisher) => {
+                    let (tasks, completion) = self.executor.build_mapped_with_stats(
+                        self.session,
+                        self.projection,
+                        self.filter,
+                        self.row_range,
+                        self.selection,
+                        limit,
+                        self.row_offset,
+                        counting_map,
+                    )?;
+                    let (tasks, completion) =
+                        instrument_counted_tasks(tasks, completion, publisher);
+                    Ok((tasks, Some(completion)))
+                }
+                None => {
+                    let tasks = self.executor.build_mapped(
+                        self.session,
+                        self.projection,
+                        self.filter,
+                        self.row_range,
+                        self.selection,
+                        limit,
+                        self.row_offset,
+                        counting_map,
+                    )?;
+                    Ok((strip_counts(tasks), None))
+                }
+            };
+        }
         let (tasks, stats_completion) = match &self.metrics {
             Some(_) => {
                 let (tasks, completion) = self.executor.build_with_stats(
@@ -485,6 +524,56 @@ impl Drop for OutputAccountingGuard {
             self.accounting.finish(OutputCompletion::Failed);
         }
     }
+}
+
+fn strip_counts<A: 'static + Send>(tasks: Vec<OutputTask<(u64, A)>>) -> Vec<OutputTask<A>> {
+    tasks
+        .into_iter()
+        .map(|task| {
+            Box::pin(async move { Ok(task.await?.map(|(_, output)| output)) })
+                as BoxFuture<'static, VortexResult<Option<A>>>
+        })
+        .collect()
+}
+
+/// Account for outputs already converted on the executor's worker.
+fn instrument_counted_tasks<A: 'static + Send>(
+    tasks: Vec<OutputTask<(u64, A)>>,
+    stats_completion: BoxFuture<'static, VortexResult<ScanStats>>,
+    publisher: Arc<MorselScanMetrics>,
+) -> (Vec<OutputTask<A>>, MetricsCompletion) {
+    let (accounting, done) = OutputAccounting::new(tasks.len());
+    let outputs = tasks
+        .into_iter()
+        .map(|task| {
+            let accounting = Arc::clone(&accounting);
+            Box::pin(async move {
+                let guard = OutputAccountingGuard {
+                    accounting,
+                    finished: false,
+                };
+                let output = task.await?;
+                let rows = output.as_ref().map(|(rows, _)| *rows);
+                guard.success(rows);
+                Ok(output.map(|(_, output)| output))
+            }) as BoxFuture<'static, VortexResult<Option<A>>>
+        })
+        .collect::<Vec<_>>();
+    let completion = Box::pin(async move {
+        done.await
+            .map_err(|_| vortex_error::vortex_err!("scan output accounting stopped"))?;
+        if accounting.failed.load(Ordering::Acquire) {
+            return Ok(());
+        }
+        let stats = stats_completion.await?;
+        publisher.publish(
+            &stats,
+            accounting.batches.load(Ordering::Acquire),
+            accounting.rows.load(Ordering::Acquire),
+        );
+        Ok(())
+    });
+    (outputs, completion)
 }
 
 fn instrument_output_tasks<A: 'static + Send>(

@@ -62,5 +62,14 @@ row when comparing the two push schedulers.
 
 SQL integrations select this executor with `VORTEX_SCAN_BACKEND=push`. That label retains the
 established eager-lookahead policy. `VORTEX_SCAN_BACKEND=push-frontier` selects the grouped-I/O
-frontier scheduler with the production defaults: zero additional frontier lookahead, zero bounded
-right speculation, and row-frontier refills of 32 ranges.
+frontier scheduler with the production defaults: two resident morsels per worker, two further
+row frontiers of I/O lookahead, adaptive right traversal, and row-frontier refills of 32 ranges.
+Together that keeps four morsels visible per worker, the same in-flight budget as V1's four
+concurrent splits per partition. `VORTEX_PF_RESIDENT`, `VORTEX_PF_LOOKAHEAD`,
+`VORTEX_PF_RIGHT` (`adaptive` or a bound), and `VORTEX_PF_REFILL` override those defaults for
+experiments.
+
+In DataFusion a single-worker push scan runs as a future on the partition's own runtime task
+(`MorselScan::run_async`) rather than on a blocking thread, converts each morsel on that task, and
+assigns morsels only as fast as the consumer polls for them, so the scan is as lazy and bounded
+as the V1 pull scan.

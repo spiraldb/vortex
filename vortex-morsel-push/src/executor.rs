@@ -5,6 +5,7 @@
 
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
@@ -37,6 +38,7 @@ use vortex_utils::aliases::hash_map::HashMap;
 use crate::MorselScan;
 use crate::build::ExecPlan;
 use crate::build::build_plan_with_row_offset;
+use crate::driver::DemandGate;
 use crate::driver::StreamCancellation;
 use crate::driver::morsels;
 use crate::io::IoService;
@@ -47,6 +49,10 @@ use crate::stats::ScanStats;
 type PlanCacheKey = (Expression, Option<Expression>, ConjunctMode, u64);
 /// One independently awaitable output unit returned by [`PushMorselScanExecutor`].
 pub type MorselOutputTask = BoxFuture<'static, VortexResult<Option<ArrayRef>>>;
+/// Converts a completed morsel's array on the worker that produced it.
+pub type OutputMap<A> = Arc<dyn Fn(ArrayRef) -> VortexResult<A> + Send + Sync>;
+/// One independently awaitable output unit already converted by an [`OutputMap`].
+pub type MappedOutputTask<A> = BoxFuture<'static, VortexResult<Option<A>>>;
 /// Resolves to the final executor counters after an internally driven scan finishes.
 pub type ScanStatsCompletion = BoxFuture<'static, VortexResult<ScanStats>>;
 #[derive(Clone, Copy)]
@@ -74,11 +80,16 @@ impl ScanShape {
 /// file driver sees enough adjacent segments to coalesce and cold reads overlap execution.
 const SHARED_LOOKAHEAD_MORSELS: usize = 16;
 
-/// Production SQL defaults for grouped-I/O frontier scheduling. These mirror
-/// `MorselConfig::frontier_defaults`: resident morsels expose their own first frontier, with no
-/// additional down lookahead or speculative right traversal, and row frontiers refill in batches.
-const FRONTIER_LOOKAHEAD_PER_THREAD: usize = 0;
-const FRONTIER_SPECULATIVE_RIGHT: usize = 0;
+/// Production SQL defaults for grouped-I/O frontier scheduling.
+///
+/// Two resident morsels let a worker decode one morsel while the other waits for its reads, and
+/// two further row frontiers keep the file coalescer fed. Together they expose four morsels per
+/// worker, the same in-flight budget as V1's four concurrent splits per partition. Right
+/// traversal is adaptive: every conjunct group is admitted and projection only once completed
+/// morsels show it is likely needed, which stays within V1's eager registration of every
+/// projection read. Row frontiers refill in batches of 32 ranges.
+const FRONTIER_LOOKAHEAD_PER_THREAD: usize = 2;
+const FRONTIER_RESIDENT_MORSELS: usize = 2;
 const FRONTIER_REFILL_RANGES: usize = 32;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -94,13 +105,57 @@ enum ExecutorDriver {
     External,
 }
 
+/// How the frontier scheduler moves right through later I/O groups of a visible range.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FrontierRight {
+    Bounded(usize),
+    Adaptive,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ExecutorIoSettings {
     eager_lookahead: bool,
     lookahead_morsels: usize,
+    resident_morsels_per_thread: usize,
     frontier_lookahead_per_thread: Option<usize>,
-    speculative_frontiers: usize,
+    frontier_right: FrontierRight,
     frontier_refill_ranges: usize,
+}
+
+/// Experimental frontier overrides read once from the environment:
+/// `VORTEX_PF_RESIDENT`, `VORTEX_PF_LOOKAHEAD`, `VORTEX_PF_RIGHT` (`adaptive` or a bound), and
+/// `VORTEX_PF_REFILL`. Unset variables keep the production defaults.
+#[derive(Clone, Copy, Debug, Default)]
+struct FrontierEnvOverrides {
+    resident: Option<usize>,
+    lookahead: Option<usize>,
+    right: Option<FrontierRight>,
+    refill: Option<usize>,
+}
+
+fn frontier_env_overrides() -> FrontierEnvOverrides {
+    static OVERRIDES: OnceLock<FrontierEnvOverrides> = OnceLock::new();
+    *OVERRIDES.get_or_init(|| {
+        let parse = |name: &str| {
+            std::env::var(name)
+                .ok()
+                .and_then(|value| value.trim().parse::<usize>().ok())
+        };
+        let right = std::env::var("VORTEX_PF_RIGHT").ok().and_then(|value| {
+            let value = value.trim();
+            if value.eq_ignore_ascii_case("adaptive") {
+                Some(FrontierRight::Adaptive)
+            } else {
+                value.parse::<usize>().ok().map(FrontierRight::Bounded)
+            }
+        });
+        FrontierEnvOverrides {
+            resident: parse("VORTEX_PF_RESIDENT"),
+            lookahead: parse("VORTEX_PF_LOOKAHEAD"),
+            right,
+            refill: parse("VORTEX_PF_REFILL"),
+        }
+    })
 }
 
 impl ExecutorIoPolicy {
@@ -112,29 +167,39 @@ impl ExecutorIoPolicy {
         }
     }
 
-    const fn settings(self, driver: ExecutorDriver) -> ExecutorIoSettings {
+    fn settings(self, driver: ExecutorDriver) -> ExecutorIoSettings {
         match (self, driver) {
             (Self::EagerLookahead, ExecutorDriver::Internal) => ExecutorIoSettings {
                 eager_lookahead: true,
                 lookahead_morsels: SHARED_LOOKAHEAD_MORSELS,
+                resident_morsels_per_thread: 1,
                 frontier_lookahead_per_thread: None,
-                speculative_frontiers: 0,
+                frontier_right: FrontierRight::Bounded(0),
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             },
             (Self::EagerLookahead, ExecutorDriver::External) => ExecutorIoSettings {
                 eager_lookahead: true,
                 lookahead_morsels: 0,
+                resident_morsels_per_thread: 1,
                 frontier_lookahead_per_thread: None,
-                speculative_frontiers: 0,
+                frontier_right: FrontierRight::Bounded(0),
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             },
-            (Self::Frontier, _) => ExecutorIoSettings {
-                eager_lookahead: false,
-                lookahead_morsels: 0,
-                frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
-                speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
-                frontier_refill_ranges: FRONTIER_REFILL_RANGES,
-            },
+            (Self::Frontier, _) => {
+                let overrides = frontier_env_overrides();
+                ExecutorIoSettings {
+                    eager_lookahead: false,
+                    lookahead_morsels: 0,
+                    resident_morsels_per_thread: overrides
+                        .resident
+                        .unwrap_or(FRONTIER_RESIDENT_MORSELS),
+                    frontier_lookahead_per_thread: Some(
+                        overrides.lookahead.unwrap_or(FRONTIER_LOOKAHEAD_PER_THREAD),
+                    ),
+                    frontier_right: overrides.right.unwrap_or(FrontierRight::Adaptive),
+                    frontier_refill_ranges: overrides.refill.unwrap_or(FRONTIER_REFILL_RANGES),
+                }
+            }
         }
     }
 
@@ -142,12 +207,18 @@ impl ExecutorIoPolicy {
         let settings = self.settings(driver);
         let scan = scan
             .with_lookahead_morsels(settings.lookahead_morsels)
-            .with_eager_lookahead(settings.eager_lookahead);
+            .with_eager_lookahead(settings.eager_lookahead)
+            .with_resident_morsels_per_thread(settings.resident_morsels_per_thread);
         match settings.frontier_lookahead_per_thread {
-            Some(frontiers) => scan
-                .with_frontier_lookahead_per_thread(frontiers)
-                .with_speculative_frontiers(settings.speculative_frontiers)
-                .with_frontier_refill_ranges(settings.frontier_refill_ranges),
+            Some(frontiers) => {
+                let scan = scan
+                    .with_frontier_lookahead_per_thread(frontiers)
+                    .with_frontier_refill_ranges(settings.frontier_refill_ranges);
+                match settings.frontier_right {
+                    FrontierRight::Bounded(right) => scan.with_speculative_frontiers(right),
+                    FrontierRight::Adaptive => scan.with_adaptive_frontier_speculation(),
+                }
+            }
             None => scan,
         }
     }
@@ -255,8 +326,34 @@ impl PushMorselScanExecutor {
         limit: Option<u64>,
         row_offset: u64,
     ) -> VortexResult<Vec<MorselOutputTask>> {
+        self.build_mapped(
+            session,
+            projection,
+            filter,
+            row_range,
+            selection,
+            limit,
+            row_offset,
+            Arc::new(Ok),
+        )
+    }
+
+    /// Like [`Self::build`], but `map` converts each completed morsel on the worker that decoded
+    /// it, so the decoded arrays are allocated and released on one thread.
+    #[expect(clippy::too_many_arguments)]
+    pub fn build_mapped<A: Send + 'static>(
+        &self,
+        session: VortexSession,
+        projection: BoundExpression,
+        filter: Option<BoundExpression>,
+        row_range: Option<Range<u64>>,
+        selection: vortex_scan::selection::Selection,
+        limit: Option<u64>,
+        row_offset: u64,
+        map: OutputMap<A>,
+    ) -> VortexResult<Vec<MappedOutputTask<A>>> {
         let (outputs, completion) = self.build_inner(
-            session, projection, filter, row_range, selection, limit, row_offset, false,
+            session, projection, filter, row_range, selection, limit, row_offset, map, false,
         )?;
         debug_assert!(completion.is_none());
         Ok(outputs)
@@ -278,22 +375,22 @@ impl PushMorselScanExecutor {
         limit: Option<u64>,
         row_offset: u64,
     ) -> VortexResult<(Vec<MorselOutputTask>, ScanStatsCompletion)> {
-        if self.external_driver.is_some() {
-            return Err(vortex_err!(
-                "scan-wide statistics are unavailable for externally driven scans"
-            ));
-        }
-        let (outputs, completion) = self.build_inner(
-            session, projection, filter, row_range, selection, limit, row_offset, true,
-        )?;
-        Ok((
-            outputs,
-            completion.ok_or_else(|| vortex_err!("missing scan statistics completion future"))?,
-        ))
+        self.build_mapped_with_stats(
+            session,
+            projection,
+            filter,
+            row_range,
+            selection,
+            limit,
+            row_offset,
+            Arc::new(Ok),
+        )
     }
 
+    /// Like [`Self::build_with_stats`], converting each morsel on its worker as
+    /// [`Self::build_mapped`] does.
     #[expect(clippy::too_many_arguments)]
-    fn build_inner(
+    pub fn build_mapped_with_stats<A: Send + 'static>(
         &self,
         session: VortexSession,
         projection: BoundExpression,
@@ -302,8 +399,35 @@ impl PushMorselScanExecutor {
         selection: vortex_scan::selection::Selection,
         limit: Option<u64>,
         row_offset: u64,
+        map: OutputMap<A>,
+    ) -> VortexResult<(Vec<MappedOutputTask<A>>, ScanStatsCompletion)> {
+        if self.external_driver.is_some() {
+            return Err(vortex_err!(
+                "scan-wide statistics are unavailable for externally driven scans"
+            ));
+        }
+        let (outputs, completion) = self.build_inner(
+            session, projection, filter, row_range, selection, limit, row_offset, map, true,
+        )?;
+        Ok((
+            outputs,
+            completion.ok_or_else(|| vortex_err!("missing scan statistics completion future"))?,
+        ))
+    }
+
+    #[expect(clippy::too_many_arguments)]
+    fn build_inner<A: Send + 'static>(
+        &self,
+        session: VortexSession,
+        projection: BoundExpression,
+        filter: Option<BoundExpression>,
+        row_range: Option<Range<u64>>,
+        selection: vortex_scan::selection::Selection,
+        limit: Option<u64>,
+        row_offset: u64,
+        map: OutputMap<A>,
         collect_stats: bool,
-    ) -> VortexResult<(Vec<MorselOutputTask>, Option<ScanStatsCompletion>)> {
+    ) -> VortexResult<(Vec<MappedOutputTask<A>>, Option<ScanStatsCompletion>)> {
         if limit == Some(0) && !collect_stats {
             return Ok((Vec::new(), None));
         }
@@ -393,7 +517,7 @@ impl PushMorselScanExecutor {
                 pruner,
                 self.io_policy,
             )
-            .map(|outputs| (outputs, None));
+            .map(|outputs| (map_output_futures(outputs, map), None));
         }
 
         let (mut stats_sender, stats_completion) = if collect_stats {
@@ -412,23 +536,28 @@ impl PushMorselScanExecutor {
         // future was consumed or discarded, there is nobody left to deliver to and the scan is
         // cancelled.
         let cancellation = StreamCancellation::new();
+        // Polling an output demands its morsel; the task-driven worker never runs ahead of the
+        // consumer's window, which is what keeps this scan as lazy and bounded as a pull scan.
+        let demand_gate = DemandGate::new();
         let undelivered = Arc::new(AtomicUsize::new(morsels.len()));
         let mut senders = Vec::with_capacity(morsels.len());
         let mut outputs = Vec::with_capacity(morsels.len());
-        for _ in 0..morsels.len() {
+        for index in 0..morsels.len() {
             let (sender, receiver) = oneshot::channel();
             senders.push(sender);
             let guard = DeliveryGuard {
                 undelivered: Arc::clone(&undelivered),
                 cancellation: Arc::clone(&cancellation),
             };
+            let demand_gate = Arc::clone(&demand_gate);
             outputs.push(Box::pin(async move {
                 let _guard = guard;
+                demand_gate.demand(index + 1);
                 receiver
                     .await
                     .map_err(|_| vortex_err!("shared morsel scan coordinator stopped"))?
             })
-                as BoxFuture<'static, VortexResult<Option<ArrayRef>>>);
+                as BoxFuture<'static, VortexResult<Option<A>>>);
         }
 
         let driver = SegmentSourceDriver::new(Arc::clone(&self.segments));
@@ -458,8 +587,11 @@ impl PushMorselScanExecutor {
                 let mut ranges = Vec::new();
                 let mut targets = Vec::new();
                 let mut groups = Vec::with_capacity(morsels.len());
+                let mut range_prefix = Vec::with_capacity(morsels.len() + 1);
+                range_prefix.push(0);
                 for (morsel_index, (morsel, sender)) in morsels.into_iter().zip(senders).enumerate()
                 {
+                    range_prefix.push(ranges.len() + morsel.selected_ranges.len());
                     if morsel.selected_ranges.is_empty() {
                         drop(sender.send(Ok(None)));
                         continue;
@@ -469,6 +601,7 @@ impl PushMorselScanExecutor {
                         plan.output_dtype().clone(),
                         sender,
                         row_caps.as_ref().map(|caps| caps[morsel_index]),
+                        Arc::clone(&map),
                     ));
                     for (local_index, range) in morsel.selected_ranges.into_iter().enumerate() {
                         ranges.push(range);
@@ -489,23 +622,37 @@ impl PushMorselScanExecutor {
                     return;
                 }
                 let threads = ranges.len().min(max_threads);
-                let result = coordinator_handle
-                    .spawn_blocking(move || {
-                        let scan = MorselScan::new(plan, session)
-                            .with_threads(threads)
-                            .with_morsels(ranges)
-                            .with_sparse_morsels(true)
-                            .with_cancellation(cancellation)
-                            .with_completion_sink(move |index, batch| {
-                                targets[index].complete(batch);
-                            });
-                        let scan = io_policy.configure(scan, ExecutorDriver::Internal);
-                        driver
-                            .connect(scan, &driver_handle)?
-                            .run()
-                            .map(|(_, stats)| stats)
-                    })
-                    .await;
+                let scan = MorselScan::new(plan, session)
+                    .with_threads(threads)
+                    .with_morsels(ranges)
+                    .with_sparse_morsels(true)
+                    .with_cancellation(cancellation)
+                    .with_completion_sink(move |index, batch| {
+                        targets[index].complete(batch);
+                    });
+                let scan = io_policy.configure(scan, ExecutorDriver::Internal);
+                // A single worker runs as a future on this task, like the V1 scan tasks, and
+                // only works on demanded morsels. Only a multi-worker scan needs its own threads.
+                let result = if threads == 1 {
+                    demand_gate.set_range_prefix(range_prefix);
+                    let scan = scan.with_demand_gate(demand_gate);
+                    match driver
+                        .connect(scan, &driver_handle)
+                        .and_then(MorselScan::run_async)
+                    {
+                        Ok(future) => future.await,
+                        Err(err) => Err(err),
+                    }
+                } else {
+                    coordinator_handle
+                        .spawn_blocking(move || {
+                            driver
+                                .connect(scan, &driver_handle)?
+                                .run()
+                                .map(|(_, stats)| stats)
+                        })
+                        .await
+                };
                 match result {
                     Ok(mut stats) => {
                         if let (Some(sender), Some(scan_shape)) = (stats_sender.take(), scan_shape)
@@ -693,12 +840,26 @@ fn static_conjuncts(filter: &BoundExpression) -> VortexResult<Vec<BoundExpressio
     Ok(conjuncts)
 }
 
-fn fail_senders(senders: Vec<oneshot::Sender<VortexResult<Option<ArrayRef>>>>, message: &str) {
+fn fail_senders<A>(senders: Vec<oneshot::Sender<VortexResult<Option<A>>>>, message: &str) {
     for sender in senders {
         drop(sender.send(Err(vortex_err!(
             "shared morsel scan pruning failed: {message}"
         ))));
     }
+}
+
+fn map_output_futures<A: Send + 'static>(
+    outputs: Vec<BoxFuture<'static, VortexResult<Option<ArrayRef>>>>,
+    map: OutputMap<A>,
+) -> Vec<MappedOutputTask<A>> {
+    outputs
+        .into_iter()
+        .map(|output| {
+            let map = Arc::clone(&map);
+            Box::pin(async move { output.await?.map(|array| map(array)).transpose() })
+                as MappedOutputTask<A>
+        })
+        .collect()
 }
 
 fn combine_batches(mut batches: Vec<ArrayRef>) -> VortexResult<Option<ArrayRef>> {
@@ -712,12 +873,12 @@ fn combine_batches(mut batches: Vec<ArrayRef>) -> VortexResult<Option<ArrayRef>>
     }
 }
 
-struct CompletionTarget {
-    group: Arc<OutputGroup>,
+struct CompletionTarget<A> {
+    group: Arc<OutputGroup<A>>,
     local_index: usize,
 }
 
-impl CompletionTarget {
+impl<A> CompletionTarget<A> {
     fn complete(&self, batch: VortexResult<Option<ArrayRef>>) {
         match batch {
             Ok(batch) => self.group.complete(self.local_index, batch),
@@ -726,21 +887,23 @@ impl CompletionTarget {
     }
 }
 
-struct OutputGroup {
+struct OutputGroup<A> {
     remaining: AtomicUsize,
     dtype: DType,
     batches: Mutex<Vec<(usize, ArrayRef)>>,
-    sender: Mutex<Option<oneshot::Sender<VortexResult<Option<ArrayRef>>>>>,
+    sender: Mutex<Option<oneshot::Sender<VortexResult<Option<A>>>>>,
     /// Exact output rows for this morsel under an unfiltered limit.
     row_cap: Option<usize>,
+    map: OutputMap<A>,
 }
 
-impl OutputGroup {
+impl<A> OutputGroup<A> {
     fn new(
         remaining: usize,
         dtype: DType,
-        sender: oneshot::Sender<VortexResult<Option<ArrayRef>>>,
+        sender: oneshot::Sender<VortexResult<Option<A>>>,
         row_cap: Option<usize>,
+        map: OutputMap<A>,
     ) -> Self {
         Self {
             remaining: AtomicUsize::new(remaining),
@@ -748,6 +911,7 @@ impl OutputGroup {
             batches: Mutex::new(Vec::new()),
             sender: Mutex::new(Some(sender)),
             row_cap,
+            map,
         }
     }
 
@@ -773,6 +937,8 @@ impl OutputGroup {
             (Ok(Some(array)), Some(cap)) if array.len() > cap => array.slice(0..cap).map(Some),
             (result, _) => result,
         };
+        // Convert here, on the worker that decoded the morsel, before the result crosses threads.
+        let result = result.and_then(|array| array.map(|array| (self.map)(array)).transpose());
         if let Some(sender) = self.sender.lock().take() {
             drop(sender.send(result));
         }
@@ -895,7 +1061,8 @@ mod tests {
     use super::ExecutorIoSettings;
     use super::FRONTIER_LOOKAHEAD_PER_THREAD;
     use super::FRONTIER_REFILL_RANGES;
-    use super::FRONTIER_SPECULATIVE_RIGHT;
+    use super::FRONTIER_RESIDENT_MORSELS;
+    use super::FrontierRight;
     use super::SHARED_LOOKAHEAD_MORSELS;
     use super::coalesce_ranges;
 
@@ -914,18 +1081,19 @@ mod tests {
             ExecutorIoSettings {
                 eager_lookahead: false,
                 lookahead_morsels: 0,
+                resident_morsels_per_thread: FRONTIER_RESIDENT_MORSELS,
                 frontier_lookahead_per_thread: Some(FRONTIER_LOOKAHEAD_PER_THREAD),
-                speculative_frontiers: FRONTIER_SPECULATIVE_RIGHT,
+                frontier_right: FrontierRight::Adaptive,
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             }
         );
         assert_eq!(
             (
+                FRONTIER_RESIDENT_MORSELS,
                 FRONTIER_LOOKAHEAD_PER_THREAD,
-                FRONTIER_SPECULATIVE_RIGHT,
                 FRONTIER_REFILL_RANGES,
             ),
-            (0, 0, 32)
+            (2, 2, 32)
         );
         assert_eq!(
             ExecutorIoPolicy::Frontier.settings(ExecutorDriver::External),
@@ -940,8 +1108,9 @@ mod tests {
             ExecutorIoSettings {
                 eager_lookahead: true,
                 lookahead_morsels: 0,
+                resident_morsels_per_thread: 1,
                 frontier_lookahead_per_thread: None,
-                speculative_frontiers: 0,
+                frontier_right: FrontierRight::Bounded(0),
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             }
         );
@@ -950,8 +1119,9 @@ mod tests {
             ExecutorIoSettings {
                 eager_lookahead: true,
                 lookahead_morsels: SHARED_LOOKAHEAD_MORSELS,
+                resident_morsels_per_thread: 1,
                 frontier_lookahead_per_thread: None,
-                speculative_frontiers: 0,
+                frontier_right: FrontierRight::Bounded(0),
                 frontier_refill_ranges: FRONTIER_REFILL_RANGES,
             }
         );

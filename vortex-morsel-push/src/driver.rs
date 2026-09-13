@@ -12,7 +12,9 @@
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::future::Future;
 use std::ops::Range;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::Weak;
 use std::sync::atomic::AtomicBool;
@@ -20,6 +22,8 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
+use std::task::Context;
+use std::task::Poll;
 use std::task::Wake;
 use std::task::Waker;
 use std::thread::JoinHandle;
@@ -30,12 +34,14 @@ use crossbeam_channel::Receiver;
 use crossbeam_channel::Sender;
 use crossbeam_channel::bounded;
 use crossbeam_channel::unbounded;
+use futures::task::AtomicWaker;
 use parking_lot::Condvar;
 use parking_lot::Mutex;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::arrays::ChunkedArray;
 use vortex_error::VortexError;
+use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_ensure;
 use vortex_error::vortex_err;
@@ -148,6 +154,7 @@ pub struct MorselScan {
     io_round_robin: bool,
     external_driver: Option<ExternalDriver>,
     cancellation: Option<Arc<StreamCancellation>>,
+    demand_gate: Option<Arc<DemandGate>>,
     io_driver: Mutex<Option<JoinHandle<()>>>,
     shutdown_io_on_drop: bool,
 }
@@ -277,6 +284,7 @@ struct WorkerRun {
     eager_lookahead: bool,
     io_round_robin: bool,
     external_driver: Option<ExternalDriver>,
+    demand_gate: Option<Arc<DemandGate>>,
 }
 
 #[derive(Clone, Copy)]
@@ -1592,9 +1600,9 @@ fn refine_demand_spans(
     true
 }
 
-struct LocalMorsel<'a> {
+struct LocalMorsel {
     slot: usize,
-    arena: &'a mut Arena,
+    arena: Arena,
     physical: Option<PhysicalRuntime>,
     io: IoPlane,
     phase: TaskPhase,
@@ -1898,7 +1906,7 @@ struct OutputCreditState {
     bytes_max: u64,
     blocks: u64,
     head_bypass: bool,
-    waiters: Vec<(Sender<WorkerSignal>, OutputWaitToken)>,
+    waiters: Vec<(WorkerTx, OutputWaitToken)>,
 }
 
 struct OutputCredits {
@@ -2035,7 +2043,7 @@ enum WorkerSignal {
 
 struct Scheduler {
     run: Arc<WorkerRun>,
-    worker_tx: Vec<Sender<WorkerSignal>>,
+    worker_tx: Vec<WorkerTx>,
     io_work: Mutex<HashMap<IoKey, Arc<IoWork>>>,
     results: Mutex<Vec<BufferedOutput>>,
     output_order: Mutex<OutputOrder>,
@@ -2104,8 +2112,13 @@ impl MorselWorkerPool {
                                 signals,
                                 done,
                             } => {
-                                let stats =
-                                    scheduler.worker_loop(worker, &signals, &mut arenas, None);
+                                let (stats, returned) = scheduler.worker_loop(
+                                    worker,
+                                    &signals,
+                                    std::mem::take(&mut arenas),
+                                    None,
+                                );
+                                arenas = returned;
                                 drop(done.send(stats));
                             }
                             WorkerMessage::Shutdown => break,
@@ -2172,18 +2185,87 @@ impl Drop for MorselWorkerPool {
     }
 }
 
-struct TaskWake {
+/// Consumer demand for a task-driven scan: how many leading morsels the consumer has asked for.
+///
+/// A task-driven worker only assigns row ranges that belong to demanded morsels, so the scan
+/// runs no further ahead of its consumer than the consumer's own output window, like a pull
+/// scan whose split tasks start when they are polled. Demand growth wakes the parked worker.
+pub(crate) struct DemandGate {
+    demanded_morsels: AtomicUsize,
+    /// `range_prefix[i]` is the number of scan row ranges in morsels `0..i`.
+    range_prefix: std::sync::OnceLock<Arc<[usize]>>,
+    waker: AtomicWaker,
+}
+
+impl DemandGate {
+    pub(crate) fn new() -> Arc<Self> {
+        Arc::new(Self {
+            demanded_morsels: AtomicUsize::new(0),
+            range_prefix: std::sync::OnceLock::new(),
+            waker: AtomicWaker::new(),
+        })
+    }
+
+    /// The consumer asked for the first `morsels` outputs.
+    pub(crate) fn demand(&self, morsels: usize) {
+        if self.demanded_morsels.fetch_max(morsels, Ordering::AcqRel) < morsels {
+            self.waker.wake();
+        }
+    }
+
+    /// Record how many row ranges each morsel contributes, once pruning has decided.
+    pub(crate) fn set_range_prefix(&self, prefix: Vec<usize>) {
+        drop(self.range_prefix.set(prefix.into()));
+    }
+
+    /// Row ranges the worker may assign so far.
+    fn allowed_ranges(&self) -> usize {
+        let Some(prefix) = self.range_prefix.get() else {
+            return 0;
+        };
+        let demanded = self.demanded_morsels.load(Ordering::Acquire);
+        prefix[demanded.min(prefix.len().saturating_sub(1))]
+    }
+}
+
+/// A worker's signal channel. A thread-driven worker blocks on the channel; a task-driven
+/// worker parks on the async waker, which every send also wakes.
+#[derive(Clone)]
+struct WorkerTx {
     tx: Sender<WorkerSignal>,
+    waker: Arc<AtomicWaker>,
+}
+
+impl WorkerTx {
+    fn new() -> (Self, Receiver<WorkerSignal>) {
+        let (tx, rx) = unbounded();
+        (
+            Self {
+                tx,
+                waker: Arc::new(AtomicWaker::new()),
+            },
+            rx,
+        )
+    }
+
+    fn send(&self, signal: WorkerSignal) {
+        drop(self.tx.send(signal));
+        self.waker.wake();
+    }
+}
+
+struct TaskWake {
+    tx: WorkerTx,
     signal: WorkerSignal,
 }
 
 impl Wake for TaskWake {
     fn wake(self: Arc<Self>) {
-        drop(self.tx.send(self.signal.clone()));
+        self.tx.send(self.signal.clone());
     }
 
     fn wake_by_ref(self: &Arc<Self>) {
-        drop(self.tx.send(self.signal.clone()));
+        self.tx.send(self.signal.clone());
     }
 }
 
@@ -2209,7 +2291,7 @@ impl OutputCredits {
         rows: usize,
         bytes: u64,
         ordered_head: bool,
-        tx: Sender<WorkerSignal>,
+        tx: WorkerTx,
         token: OutputWaitToken,
     ) -> Option<bool> {
         let mut state = self.state.lock();
@@ -2242,14 +2324,14 @@ impl OutputCredits {
             std::mem::take(&mut state.waiters)
         };
         for (tx, token) in waiters {
-            drop(tx.send(WorkerSignal::Credit(token)));
+            tx.send(WorkerSignal::Credit(token));
         }
     }
 
     fn wake_waiters(&self) {
         let waiters = std::mem::take(&mut self.state.lock().waiters);
         for (tx, token) in waiters {
-            drop(tx.send(WorkerSignal::Credit(token)));
+            tx.send(WorkerSignal::Credit(token));
         }
     }
 }
@@ -2278,7 +2360,7 @@ impl Scheduler {
         index: usize,
         rows: usize,
         bytes: u64,
-        tx: Sender<WorkerSignal>,
+        tx: WorkerTx,
         token: OutputWaitToken,
     ) -> Option<bool> {
         let order = self.output_order.lock();
@@ -2290,7 +2372,7 @@ impl Scheduler {
         let mut worker_tx = Vec::with_capacity(workers);
         let mut worker_rx = Vec::with_capacity(workers);
         for _ in 0..workers {
-            let (tx, rx) = unbounded();
+            let (tx, rx) = WorkerTx::new();
             worker_tx.push(tx);
             worker_rx.push(rx);
         }
@@ -2769,129 +2851,23 @@ impl Scheduler {
         }
     }
 
+    /// Drive one worker's resident morsels on the calling thread until the scan stops.
+    ///
+    /// Returns the worker's counters and hands the arenas back for reuse.
     fn worker_loop(
         self: &Arc<Self>,
         worker: usize,
         signals: &Receiver<WorkerSignal>,
-        arenas: &mut [Arena],
+        arenas: Vec<Arena>,
         completion: Option<&CompletionSink>,
-    ) -> ScanStats {
-        let mut morsels = arenas
-            .iter_mut()
-            .enumerate()
-            .map(|(slot, arena)| LocalMorsel::new(&self.run, slot, arena))
-            .collect::<Vec<_>>();
-        let mut runnable = morsels
-            .iter_mut()
-            .map(|morsel| morsel.assign_next(self))
-            .collect::<Vec<_>>();
-        let slot_count = morsels.len();
-        let mut next_slot = 0;
-
+    ) -> (ScanStats, Vec<Arena>) {
+        let mut state = WorkerState::new(self, worker, arenas);
         loop {
-            if self.stopped.load(Ordering::Acquire) {
-                break;
+            match state.step(self, completion) {
+                WorkerStep::Ran => continue,
+                WorkerStep::Stopped => break,
+                WorkerStep::NoReady => {}
             }
-
-            let ready_slot = (0..slot_count)
-                .map(|offset| (next_slot + offset) % slot_count)
-                .find(|&slot| runnable[slot]);
-            if let Some(slot) = ready_slot {
-                next_slot = slot;
-                let morsel = &mut morsels[slot];
-                let poll = match morsel.pending_output.take() {
-                    Some((index, batch)) => Ok(LocalPoll::Complete {
-                        index,
-                        batch: Some(batch),
-                    }),
-                    None => morsel.run(self),
-                };
-                match poll {
-                    Ok(LocalPoll::Runnable) => runnable[slot] = true,
-                    Ok(LocalPoll::Idle) => {
-                        runnable[slot] = false;
-                        next_slot = (slot + 1) % slot_count;
-                    }
-                    Ok(LocalPoll::PushBlocked {
-                        pipeline,
-                        stage,
-                        waits,
-                    }) => {
-                        let token = morsel.next_pipeline_wait_token(pipeline, stage);
-                        match self.park(worker, WorkerSignal::PushWake(token), &waits) {
-                            Ok(true) => {
-                                morsel.pipeline_waiting.insert(
-                                    PipelineStage { pipeline, stage },
-                                    PipelineContinuation { token },
-                                );
-                                runnable[slot] = morsel
-                                    .physical
-                                    .as_ref()
-                                    .is_some_and(|runtime| !runtime.is_idle());
-                            }
-                            Ok(false) => {
-                                if let Some(runtime) = morsel.physical.as_mut() {
-                                    runtime.enqueue_resume(pipeline, stage);
-                                    morsel.stats.push_pipeline_boundary_resumes += 1;
-                                    runnable[slot] = true;
-                                } else {
-                                    self.fail(vortex_err!(
-                                        "pipeline wait lost its physical runtime"
-                                    ));
-                                    break;
-                                }
-                            }
-                            Err(err) => {
-                                self.fail(err);
-                                break;
-                            }
-                        }
-                        if !runnable[slot] {
-                            next_slot = (slot + 1) % slot_count;
-                        }
-                    }
-                    Ok(LocalPoll::Complete { index, batch }) => {
-                        next_slot = (slot + 1) % slot_count;
-                        if let Some(completion) = completion {
-                            completion(index, Ok(batch));
-                            self.complete(index);
-                            runnable[slot] =
-                                !self.stopped.load(Ordering::Acquire) && morsel.assign_next(self);
-                        } else if let Some(batch) = batch {
-                            let rows = batch.len();
-                            let bytes = batch.nbytes();
-                            let token = morsel.next_output_wait_token();
-                            if let Some(head_bypass) = self.acquire_output(
-                                index,
-                                rows,
-                                bytes,
-                                self.worker_tx[worker].clone(),
-                                token,
-                            ) {
-                                self.emit(index, morsel.range.start, batch, head_bypass);
-                                self.complete(index);
-                                runnable[slot] = !self.stopped.load(Ordering::Acquire)
-                                    && morsel.assign_next(self);
-                            } else {
-                                morsel.pending_output = Some((index, batch));
-                                morsel.credit_waiting = Some(token);
-                                runnable[slot] = false;
-                            }
-                        } else {
-                            self.complete(index);
-                            runnable[slot] =
-                                !self.stopped.load(Ordering::Acquire) && morsel.assign_next(self);
-                        }
-                    }
-                    Err(err) => {
-                        self.fail(err);
-                        break;
-                    }
-                }
-
-                continue;
-            }
-
             let signal = if let Some(driver) = &self.run.external_driver {
                 match Self::receive_external_signal(driver, signals) {
                     Ok(signal) => signal,
@@ -2904,48 +2880,11 @@ impl Scheduler {
                     Err(_) => break,
                 }
             };
-            match signal {
-                WorkerSignal::PushWake(token) => {
-                    let Some(morsel) = morsels.get_mut(token.slot) else {
-                        self.fail(vortex_err!("pipeline wake named an unknown resident slot"));
-                        break;
-                    };
-                    runnable[token.slot] |= morsel.wake_pipeline(token);
-                }
-                WorkerSignal::Credit(token) => {
-                    let Some(morsel) = morsels.get_mut(token.slot) else {
-                        self.fail(vortex_err!("output wake named an unknown resident slot"));
-                        break;
-                    };
-                    if morsel.credit_waiting == Some(token) {
-                        morsel.credit_waiting = None;
-                        runnable[token.slot] = true;
-                    } else {
-                        morsel.stats.push_stale_wakes += 1;
-                    }
-                }
-                WorkerSignal::Shutdown => break,
+            if !state.handle_signal(self, signal) {
+                break;
             }
         }
-        let mut stats = ScanStats::default();
-        for morsel in &mut morsels {
-            if morsel.active {
-                if let Some(physical) = morsel.physical.as_mut() {
-                    physical.reset(morsel.range.clone());
-                }
-                retire_morsel(
-                    morsel.arena,
-                    self.run.plan.root(),
-                    &self.run.cells,
-                    &morsel.io,
-                );
-                morsel.io.clear();
-                morsel.active = false;
-            }
-            morsel.restore_physical();
-            stats.merge(&morsel.stats);
-        }
-        stats
+        state.finish(self)
     }
 
     fn complete(self: &Arc<Self>, index: usize) {
@@ -3065,7 +3004,7 @@ impl Scheduler {
 
     fn send_shutdown(&self) {
         for tx in &self.worker_tx {
-            drop(tx.send(WorkerSignal::Shutdown));
+            tx.send(WorkerSignal::Shutdown);
         }
     }
 
@@ -3133,14 +3072,308 @@ enum LocalPoll {
     },
 }
 
-impl<'a> LocalMorsel<'a> {
+/// Outcome of one scheduling step of a worker.
+enum WorkerStep {
+    /// A resident morsel made progress.
+    Ran,
+    /// Every resident morsel is blocked; the worker must wait for a signal.
+    NoReady,
+    /// The scan stopped or failed.
+    Stopped,
+}
+
+/// One worker's resident morsels and their round-robin state, shared by the thread-driven
+/// [`Scheduler::worker_loop`] and the task-driven [`AsyncWorker`].
+struct WorkerState {
+    worker: usize,
+    morsels: Vec<LocalMorsel>,
+    runnable: Vec<bool>,
+    next_slot: usize,
+}
+
+impl WorkerState {
+    fn new(scheduler: &Arc<Scheduler>, worker: usize, arenas: Vec<Arena>) -> Self {
+        let mut morsels = arenas
+            .into_iter()
+            .enumerate()
+            .map(|(slot, arena)| LocalMorsel::new(&scheduler.run, slot, arena))
+            .collect::<Vec<_>>();
+        let runnable = morsels
+            .iter_mut()
+            .map(|morsel| morsel.assign_next(scheduler))
+            .collect::<Vec<_>>();
+        Self {
+            worker,
+            morsels,
+            runnable,
+            next_slot: 0,
+        }
+    }
+
+    /// Run the next runnable resident morsel once.
+    fn step(
+        &mut self,
+        scheduler: &Arc<Scheduler>,
+        completion: Option<&CompletionSink>,
+    ) -> WorkerStep {
+        if scheduler.stopped.load(Ordering::Acquire) {
+            return WorkerStep::Stopped;
+        }
+        let slot_count = self.morsels.len();
+        let Some(slot) = (0..slot_count)
+            .map(|offset| (self.next_slot + offset) % slot_count)
+            .find(|&slot| self.runnable[slot])
+        else {
+            return WorkerStep::NoReady;
+        };
+        self.next_slot = slot;
+        let worker = self.worker;
+        let runnable = &mut self.runnable;
+        let morsel = &mut self.morsels[slot];
+        let poll = match morsel.pending_output.take() {
+            Some((index, batch)) => Ok(LocalPoll::Complete {
+                index,
+                batch: Some(batch),
+            }),
+            None => morsel.run(scheduler),
+        };
+        match poll {
+            Ok(LocalPoll::Runnable) => runnable[slot] = true,
+            Ok(LocalPoll::Idle) => {
+                runnable[slot] = false;
+                self.next_slot = (slot + 1) % slot_count;
+            }
+            Ok(LocalPoll::PushBlocked {
+                pipeline,
+                stage,
+                waits,
+            }) => {
+                let token = morsel.next_pipeline_wait_token(pipeline, stage);
+                match scheduler.park(worker, WorkerSignal::PushWake(token), &waits) {
+                    Ok(true) => {
+                        morsel.pipeline_waiting.insert(
+                            PipelineStage { pipeline, stage },
+                            PipelineContinuation { token },
+                        );
+                        runnable[slot] = morsel
+                            .physical
+                            .as_ref()
+                            .is_some_and(|runtime| !runtime.is_idle());
+                    }
+                    Ok(false) => {
+                        if let Some(runtime) = morsel.physical.as_mut() {
+                            runtime.enqueue_resume(pipeline, stage);
+                            morsel.stats.push_pipeline_boundary_resumes += 1;
+                            runnable[slot] = true;
+                        } else {
+                            scheduler.fail(vortex_err!("pipeline wait lost its physical runtime"));
+                            return WorkerStep::Stopped;
+                        }
+                    }
+                    Err(err) => {
+                        scheduler.fail(err);
+                        return WorkerStep::Stopped;
+                    }
+                }
+                if !runnable[slot] {
+                    self.next_slot = (slot + 1) % slot_count;
+                }
+            }
+            Ok(LocalPoll::Complete { index, batch }) => {
+                self.next_slot = (slot + 1) % slot_count;
+                if let Some(completion) = completion {
+                    completion(index, Ok(batch));
+                    scheduler.complete(index);
+                    runnable[slot] =
+                        !scheduler.stopped.load(Ordering::Acquire) && morsel.assign_next(scheduler);
+                } else if let Some(batch) = batch {
+                    let rows = batch.len();
+                    let bytes = batch.nbytes();
+                    let token = morsel.next_output_wait_token();
+                    if let Some(head_bypass) = scheduler.acquire_output(
+                        index,
+                        rows,
+                        bytes,
+                        scheduler.worker_tx[worker].clone(),
+                        token,
+                    ) {
+                        scheduler.emit(index, morsel.range.start, batch, head_bypass);
+                        scheduler.complete(index);
+                        runnable[slot] = !scheduler.stopped.load(Ordering::Acquire)
+                            && morsel.assign_next(scheduler);
+                    } else {
+                        morsel.pending_output = Some((index, batch));
+                        morsel.credit_waiting = Some(token);
+                        runnable[slot] = false;
+                    }
+                } else {
+                    scheduler.complete(index);
+                    runnable[slot] =
+                        !scheduler.stopped.load(Ordering::Acquire) && morsel.assign_next(scheduler);
+                }
+            }
+            Err(err) => {
+                scheduler.fail(err);
+                return WorkerStep::Stopped;
+            }
+        }
+        WorkerStep::Ran
+    }
+
+    /// Retry assignment for slots the demand gate left idle; returns whether any slot got work.
+    fn reassign_idle(&mut self, scheduler: &Arc<Scheduler>) -> bool {
+        let mut assigned = false;
+        for (slot, morsel) in self.morsels.iter_mut().enumerate() {
+            if !morsel.active
+                && !self.runnable[slot]
+                && morsel.pending_output.is_none()
+                && morsel.credit_waiting.is_none()
+                && morsel.assign_next(scheduler)
+            {
+                self.runnable[slot] = true;
+                assigned = true;
+            }
+        }
+        assigned
+    }
+
+    /// Apply a wake signal; returns `false` when the worker must stop.
+    fn handle_signal(&mut self, scheduler: &Arc<Scheduler>, signal: WorkerSignal) -> bool {
+        match signal {
+            WorkerSignal::PushWake(token) => {
+                let Some(morsel) = self.morsels.get_mut(token.slot) else {
+                    scheduler.fail(vortex_err!("pipeline wake named an unknown resident slot"));
+                    return false;
+                };
+                self.runnable[token.slot] |= morsel.wake_pipeline(token);
+            }
+            WorkerSignal::Credit(token) => {
+                let Some(morsel) = self.morsels.get_mut(token.slot) else {
+                    scheduler.fail(vortex_err!("output wake named an unknown resident slot"));
+                    return false;
+                };
+                if morsel.credit_waiting == Some(token) {
+                    morsel.credit_waiting = None;
+                    self.runnable[token.slot] = true;
+                } else {
+                    morsel.stats.push_stale_wakes += 1;
+                }
+            }
+            WorkerSignal::Shutdown => return false,
+        }
+        true
+    }
+
+    /// Retire any active morsel, merge the counters, and hand the arenas back.
+    fn finish(self, scheduler: &Arc<Scheduler>) -> (ScanStats, Vec<Arena>) {
+        let mut stats = ScanStats::default();
+        let mut arenas = Vec::with_capacity(self.morsels.len());
+        for mut morsel in self.morsels {
+            if morsel.active {
+                if let Some(physical) = morsel.physical.as_mut() {
+                    physical.reset(morsel.range.clone());
+                }
+                retire_morsel(
+                    &mut morsel.arena,
+                    scheduler.run.plan.root(),
+                    &scheduler.run.cells,
+                    &morsel.io,
+                );
+                morsel.io.clear();
+                morsel.active = false;
+            }
+            morsel.restore_physical();
+            stats.merge(&morsel.stats);
+            arenas.push(morsel.arena);
+        }
+        (stats, arenas)
+    }
+}
+
+/// Scheduling steps a task-driven worker runs before yielding to its runtime.
+const ASYNC_WORKER_BUDGET: usize = 32;
+
+/// A single worker driven as a future on the engine's own task.
+///
+/// Decode and predicate work run inline where the future is polled, exactly like the V1 scan
+/// tasks, and an I/O wait parks the task on its waker instead of a dedicated thread.
+struct AsyncWorker {
+    scheduler: Arc<Scheduler>,
+    signals: Receiver<WorkerSignal>,
+    completion: CompletionSink,
+    state: Option<WorkerState>,
+}
+
+impl Future for AsyncWorker {
+    type Output = ScanStats;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<ScanStats> {
+        let this = &mut *self;
+        let Some(state) = this.state.as_mut() else {
+            return Poll::Pending;
+        };
+        let mut budget = ASYNC_WORKER_BUDGET;
+        let gate = this.scheduler.run.demand_gate.as_ref();
+        let stopped = loop {
+            if gate.is_some() {
+                state.reassign_idle(&this.scheduler);
+            }
+            match state.step(&this.scheduler, Some(&this.completion)) {
+                WorkerStep::Ran => {
+                    budget -= 1;
+                    if budget == 0 {
+                        cx.waker().wake_by_ref();
+                        return Poll::Pending;
+                    }
+                    continue;
+                }
+                WorkerStep::Stopped => break true,
+                WorkerStep::NoReady => {}
+            }
+            if let Some(gate) = gate {
+                // Register before re-checking so demand raised in between is not lost.
+                gate.waker.register(cx.waker());
+                if state.reassign_idle(&this.scheduler) {
+                    continue;
+                }
+            }
+            let signal = match this.signals.try_recv() {
+                Ok(signal) => signal,
+                Err(crossbeam_channel::TryRecvError::Disconnected) => break true,
+                Err(crossbeam_channel::TryRecvError::Empty) => {
+                    // Register before re-checking so a signal sent in between is not lost.
+                    this.scheduler.worker_tx[state.worker]
+                        .waker
+                        .register(cx.waker());
+                    match this.signals.try_recv() {
+                        Ok(signal) => signal,
+                        Err(crossbeam_channel::TryRecvError::Disconnected) => break true,
+                        Err(crossbeam_channel::TryRecvError::Empty) => return Poll::Pending,
+                    }
+                }
+            };
+            if !state.handle_signal(&this.scheduler, signal) {
+                break true;
+            }
+        };
+        debug_assert!(stopped);
+        let state = this
+            .state
+            .take()
+            .vortex_expect("async worker state is present until it finishes");
+        let (stats, _arenas) = state.finish(&this.scheduler);
+        Poll::Ready(stats)
+    }
+}
+
+impl LocalMorsel {
     fn restore_physical(&mut self) {
         if let Some(physical) = self.physical.take() {
             self.arena.restore_push_sidebands(physical.into_sidebands());
         }
     }
 
-    fn new(run: &WorkerRun, slot: usize, arena: &'a mut Arena) -> Self {
+    fn new(run: &WorkerRun, slot: usize, mut arena: Arena) -> Self {
         let physical = Some(PhysicalRuntime::new(&run.plan, arena.take_push_sidebands()));
         Self {
             slot,
@@ -3167,7 +3400,29 @@ impl<'a> LocalMorsel<'a> {
     }
 
     fn assign_next(&mut self, scheduler: &Arc<Scheduler>) -> bool {
-        let index = scheduler.next_morsel.fetch_add(1, Ordering::Relaxed);
+        let index = match &scheduler.run.demand_gate {
+            None => scheduler.next_morsel.fetch_add(1, Ordering::Relaxed),
+            Some(gate) => {
+                // Only demanded ranges are assigned; the slot stays idle until demand grows.
+                let allowed = gate.allowed_ranges();
+                let mut current = scheduler.next_morsel.load(Ordering::Relaxed);
+                loop {
+                    if current >= allowed {
+                        self.active = false;
+                        return false;
+                    }
+                    match scheduler.next_morsel.compare_exchange_weak(
+                        current,
+                        current + 1,
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    ) {
+                        Ok(_) => break current,
+                        Err(now) => current = now,
+                    }
+                }
+            }
+        };
         let Some(range) = scheduler.run.morsels.get(index).cloned() else {
             self.active = false;
             return false;
@@ -3226,7 +3481,7 @@ impl<'a> LocalMorsel<'a> {
         self.morsel_io_batches_start = self.stats.io_batches;
         self.morsel_io_blocks_start = self.stats.execute_io_blocks;
         self.io.clear();
-        begin_morsel(self.arena, scheduler.run.plan.root(), range);
+        begin_morsel(&mut self.arena, scheduler.run.plan.root(), range);
         true
     }
 
@@ -3283,7 +3538,7 @@ impl<'a> LocalMorsel<'a> {
         match self.phase {
             TaskPhase::Plan => {
                 let poll = poll_plan_morsel(
-                    self.arena,
+                    &mut self.arena,
                     scheduler.run.plan.root(),
                     &self.io,
                     &scheduler.run.cells,
@@ -3547,7 +3802,7 @@ impl<'a> LocalMorsel<'a> {
                 control: &mut self.push_control,
             };
             let poll = physical.poll(
-                self.arena,
+                &mut self.arena,
                 &mut host,
                 &self.io,
                 &scheduler.run.cells,
@@ -3644,7 +3899,7 @@ impl<'a> LocalMorsel<'a> {
             physical.reset(self.range.clone());
         }
         retire_morsel(
-            self.arena,
+            &mut self.arena,
             scheduler.run.plan.root(),
             &scheduler.run.cells,
             &self.io,
@@ -3809,6 +4064,7 @@ impl MorselScan {
             io_round_robin: false,
             external_driver: None,
             cancellation: None,
+            demand_gate: None,
             io_driver: Mutex::new(None),
             shutdown_io_on_drop: true,
         }
@@ -3952,6 +4208,12 @@ impl MorselScan {
     /// output has gone away. Morsels already running finish normally.
     pub(crate) fn with_cancellation(mut self, cancellation: Arc<StreamCancellation>) -> Self {
         self.cancellation = Some(cancellation);
+        self
+    }
+
+    /// Let a task-driven scan assign only the morsels its consumer has demanded so far.
+    pub(crate) fn with_demand_gate(mut self, gate: Arc<DemandGate>) -> Self {
+        self.demand_gate = Some(gate);
         self
     }
 
@@ -4115,6 +4377,7 @@ impl MorselScan {
             eager_lookahead: self.eager_lookahead,
             io_round_robin: self.io_round_robin,
             external_driver: self.external_driver.clone(),
+            demand_gate: self.demand_gate.clone(),
         });
         let (scheduler, signals) = Scheduler::new(Arc::clone(&run), 1);
         scheduler.submit_exact_lookahead();
@@ -4124,18 +4387,16 @@ impl MorselScan {
             .ok_or_else(|| vortex_err!("external morsel worker signal channel is missing"))?;
         let plan = Arc::clone(&self.plan);
         let resident_morsels = self.resident_morsels_per_thread;
-        let worker_stats = EXTERNAL_ARENAS.with_borrow_mut(|slot| {
-            if slot.as_ref().is_none_or(|(cached, arenas)| {
-                !Arc::ptr_eq(cached, &plan) || arenas.len() != resident_morsels
-            }) {
-                let arenas = (0..resident_morsels).map(|_| plan.instantiate()).collect();
-                *slot = Some((Arc::clone(&plan), arenas));
+        let arenas = EXTERNAL_ARENAS.with_borrow_mut(|slot| match slot.take() {
+            Some((cached, arenas))
+                if Arc::ptr_eq(&cached, &plan) && arenas.len() == resident_morsels =>
+            {
+                arenas
             }
-            let Some((_, arenas)) = slot.as_mut() else {
-                unreachable!("external arenas were initialized above")
-            };
-            scheduler.worker_loop(0, &signals, arenas, None)
+            _ => (0..resident_morsels).map(|_| plan.instantiate()).collect(),
         });
+        let (worker_stats, arenas) = scheduler.worker_loop(0, &signals, arenas, None);
+        EXTERNAL_ARENAS.with_borrow_mut(|slot| *slot = Some((plan, arenas)));
         let stats = scheduler.finish(vec![worker_stats])?;
         let batches = scheduler.take_ordered_batches();
         if scheduler.remaining.load(Ordering::Acquire) == 0 {
@@ -4146,6 +4407,86 @@ impl MorselScan {
             );
         }
         Ok((batches, stats))
+    }
+
+    /// Run the scan as a future on the caller's async runtime with one task-driven worker.
+    ///
+    /// Every completed morsel is delivered through the configured completion sink from the
+    /// polling task. Decode and predicate work therefore run on the runtime's own workers, as V1
+    /// scan tasks do, and an I/O wait suspends the task instead of blocking a thread.
+    pub fn run_async(self) -> VortexResult<impl Future<Output = VortexResult<ScanStats>> + Send> {
+        self.validate_morsels()?;
+        self.ensure_io_taken()?;
+        vortex_ensure!(
+            self.output_rows == usize::MAX && self.output_bytes == u64::MAX,
+            "task-driven scans require unbounded output credit"
+        );
+        let completion = self
+            .completion
+            .clone()
+            .ok_or_else(|| vortex_err!("task-driven scans require a completion sink"))?;
+
+        let start = Instant::now();
+        let lease_counts = self.lease_counts();
+        self.io.add_leases(&lease_counts);
+        let cells = if self.share_decodes {
+            SharedCells::with_leases(lease_counts)
+        } else {
+            SharedCells::disabled()
+        };
+        let run = Arc::new(WorkerRun {
+            plan: Arc::clone(&self.plan),
+            session: self.session.clone(),
+            morsels: Arc::clone(&self.morsels),
+            io: Arc::clone(&self.io),
+            cells,
+            start,
+            lookahead_morsels: self.lookahead_morsels,
+            resident_morsels_per_thread: self.resident_morsels_per_thread,
+            frontier_lookahead_per_thread: self.frontier_lookahead_per_thread,
+            frontier_speculation: self.frontier_speculation,
+            frontier_refill_ranges: self.frontier_refill_ranges,
+            output_rows: self.output_rows,
+            output_bytes: self.output_bytes,
+            demand_hints: self.demand_hints,
+            eager_lookahead: self.eager_lookahead,
+            io_round_robin: self.io_round_robin,
+            external_driver: None,
+            demand_gate: self.demand_gate.clone(),
+        });
+        let (scheduler, signals) = Scheduler::new(Arc::clone(&run), 1);
+        if let Some(cancellation) = &self.cancellation {
+            cancellation.install(&scheduler);
+        }
+        scheduler.submit_exact_lookahead();
+        let signals = signals
+            .into_iter()
+            .next()
+            .ok_or_else(|| vortex_err!("async morsel worker signal channel is missing"))?;
+        let arenas = (0..self.resident_morsels_per_thread)
+            .map(|_| self.plan.instantiate())
+            .collect();
+        let worker = AsyncWorker {
+            scheduler: Arc::clone(&scheduler),
+            signals,
+            completion,
+            state: Some(WorkerState::new(&scheduler, 0, arenas)),
+        };
+        Ok(async move {
+            let worker_stats = worker.await;
+            let stats = scheduler.finish(vec![worker_stats])?;
+            if scheduler.remaining.load(Ordering::Acquire) == 0 {
+                debug_assert_eq!(
+                    run.cells.live(),
+                    0,
+                    "every lease must be released by the end of the scan"
+                );
+            }
+            drop(scheduler);
+            // The scan owns the I/O service; it must outlive the worker.
+            drop(self);
+            Ok(stats)
+        })
     }
 
     /// Start the scan and return an ordered blocking stream with the configured credited-output
@@ -4236,7 +4577,7 @@ impl MorselScan {
                 )
             })
             .transpose()?;
-        let mut inline_arenas = workers.is_none().then(|| {
+        let inline_arenas = workers.is_none().then(|| {
             (0..self.resident_morsels_per_thread)
                 .map(|_| self.plan.instantiate())
                 .collect::<Vec<_>>()
@@ -4267,6 +4608,7 @@ impl MorselScan {
             eager_lookahead: self.eager_lookahead,
             io_round_robin: self.io_round_robin,
             external_driver: self.external_driver.clone(),
+            demand_gate: self.demand_gate.clone(),
         });
 
         let (scheduler, signals) = Scheduler::new(Arc::clone(&run), self.threads);
@@ -4287,14 +4629,18 @@ impl MorselScan {
             })
         });
         scheduler.submit_exact_lookahead();
-        let worker_stats = match (&workers, inline_arenas.as_mut()) {
+        let worker_stats = match (&workers, inline_arenas) {
             (Some(workers), _) => workers.run(Arc::clone(&scheduler), signals)?,
             (None, Some(arenas)) => {
                 let signals = signals
                     .into_iter()
                     .next()
                     .ok_or_else(|| vortex_err!("inline morsel worker signal channel is missing"))?;
-                vec![scheduler.worker_loop(0, &signals, arenas, inline_completion)]
+                vec![
+                    scheduler
+                        .worker_loop(0, &signals, arenas, inline_completion)
+                        .0,
+                ]
             }
             (None, None) => unreachable!("inline arenas exist whenever the pool does not"),
         };
@@ -4478,7 +4824,7 @@ mod tests {
     #[test]
     fn out_of_order_output_credit_allows_dynamic_morsel_progress() {
         let credits = OutputCredits::new(10, 10);
-        let (tx, _rx) = crossbeam_channel::unbounded();
+        let (tx, _rx) = super::WorkerTx::new();
         let token = OutputWaitToken {
             slot: 0,
             generation: 1,
@@ -4567,7 +4913,7 @@ mod tests {
     #[test]
     fn ordered_head_bypasses_full_output_capacity_once() {
         let credits = OutputCredits::new(8, 8);
-        let (tx, _rx) = crossbeam_channel::unbounded();
+        let (tx, _rx) = super::WorkerTx::new();
         let token = OutputWaitToken {
             slot: 0,
             generation: 1,
