@@ -3,6 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
+use std::ops::Range;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
@@ -22,6 +23,95 @@ use crate::read::request::IoRequest;
 use crate::segments::ReadEvent;
 use crate::segments::RequestMetrics;
 
+const COALESCE_GAP_BASE_BYTES: u64 = 64 << 10;
+const COALESCE_GAP_MAX_BYTES: u64 = 256 << 10;
+const MAX_BOUNDED_COALESCE_REQUESTS: usize = 64;
+
+/// Bounds empty bytes introduced by one coalesced physical read.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct CoalesceGapBudget {
+    max_requests: usize,
+}
+
+impl CoalesceGapBudget {
+    pub(crate) fn for_reader_concurrency(concurrency: usize) -> Self {
+        Self {
+            max_requests: concurrency.clamp(1, MAX_BOUNDED_COALESCE_REQUESTS),
+        }
+    }
+
+    fn max_internal_gap(self, requested_union: u64) -> u64 {
+        COALESCE_GAP_MAX_BYTES.min(COALESCE_GAP_BASE_BYTES.saturating_add(requested_union / 4))
+    }
+
+    fn allows(self, raw_span: u64, requested_union: u64) -> bool {
+        raw_span.saturating_sub(requested_union) <= self.max_internal_gap(requested_union)
+    }
+}
+
+/// A sorted, disjoint union of requested byte ranges.
+#[derive(Debug)]
+struct RequestedRangeUnion {
+    ranges: Vec<Range<u64>>,
+    len: u64,
+}
+
+impl RequestedRangeUnion {
+    fn new(range: Range<u64>) -> Self {
+        let mut union = Self {
+            ranges: Vec::new(),
+            len: 0,
+        };
+        union.insert(range);
+        union
+    }
+
+    fn len_with(&self, range: &Range<u64>) -> u64 {
+        let range_len = range.end.saturating_sub(range.start);
+        let overlap = self
+            .ranges
+            .iter()
+            .skip_while(|existing| existing.end <= range.start)
+            .take_while(|existing| existing.start < range.end)
+            .fold(0_u64, |overlap, existing| {
+                let start = existing.start.max(range.start);
+                let end = existing.end.min(range.end);
+                overlap.saturating_add(end.saturating_sub(start))
+            });
+        self.len.saturating_add(range_len.saturating_sub(overlap))
+    }
+
+    fn insert(&mut self, range: Range<u64>) {
+        if range.start >= range.end {
+            return;
+        }
+
+        let first = self
+            .ranges
+            .partition_point(|existing| existing.end < range.start);
+        let mut last = first;
+        let mut merged_start = range.start;
+        let mut merged_end = range.end;
+        let mut removed_len = 0_u64;
+        while let Some(existing) = self.ranges.get(last) {
+            if existing.start > merged_end {
+                break;
+            }
+            merged_start = merged_start.min(existing.start);
+            merged_end = merged_end.max(existing.end);
+            removed_len = removed_len.saturating_add(existing.end - existing.start);
+            last += 1;
+        }
+
+        self.ranges.drain(first..last);
+        self.ranges.insert(first, merged_start..merged_end);
+        self.len = self
+            .len
+            .saturating_sub(removed_len)
+            .saturating_add(merged_end - merged_start);
+    }
+}
+
 pin_project! {
     /// Converts request lifecycle events into batches of physical reads.
     ///
@@ -35,6 +125,7 @@ pin_project! {
         // True after the event source closes; buffered requests may still remain.
         inner_done: bool,
         coalesce_window: Option<CoalesceConfig>,
+        coalesce_gap_budget: Option<CoalesceGapBudget>,
         // Maximum physical reads returned by one stream item.
         batch_size: usize,
         // A single cooperative turn lets concurrently registered neighbors join this batch.
@@ -49,6 +140,7 @@ impl<S> IoRequestStream<S> {
     pub(crate) fn new(
         events: S,
         coalesce_window: Option<CoalesceConfig>,
+        coalesce_gap_budget: Option<CoalesceGapBudget>,
         coalesced_buffer_alignment: Alignment,
         batch_size: usize,
         metrics: RequestMetrics,
@@ -61,6 +153,7 @@ impl<S> IoRequestStream<S> {
             events,
             inner_done: false,
             coalesce_window,
+            coalesce_gap_budget,
             batch_size,
             deferred_for_coalescing: false,
             state: State::new(metrics, coalesced_buffer_alignment),
@@ -106,7 +199,10 @@ where
         // Emit a partial batch immediately so the downstream driver can fill free I/O slots.
         let mut batch = Vec::with_capacity(*this.batch_size);
         while batch.len() < *this.batch_size {
-            let Some(request) = this.state.next(this.coalesce_window.as_ref()) else {
+            let Some(request) = this
+                .state
+                .next(this.coalesce_window.as_ref(), *this.coalesce_gap_budget)
+            else {
                 break;
             };
             batch.push(request);
@@ -228,24 +324,30 @@ impl State {
     }
 
     /// Get the next request, if any.
-    fn next(&mut self, coalesce_window: Option<&CoalesceConfig>) -> Option<IoRequest> {
+    fn next(
+        &mut self,
+        coalesce_window: Option<&CoalesceConfig>,
+        coalesce_gap_budget: Option<CoalesceGapBudget>,
+    ) -> Option<IoRequest> {
         match coalesce_window {
             None => self.next_uncoalesced().map(|request| {
                 self.metrics.individual_requests.add(1);
                 IoRequest::new_single(request)
             }),
-            Some(window) => self.next_coalesced(window).map(|request| {
-                match request.requests().len() {
-                    1 => self.metrics.individual_requests.add(1),
-                    num_requests => {
-                        self.metrics.coalesced_requests.add(1);
-                        self.metrics
-                            .num_requests_coalesced
-                            .update(num_requests as f64);
-                    }
-                };
-                IoRequest::new_coalesced(request)
-            }),
+            Some(window) => self
+                .next_coalesced(window, coalesce_gap_budget)
+                .map(|request| {
+                    match request.requests().len() {
+                        1 => self.metrics.individual_requests.add(1),
+                        num_requests => {
+                            self.metrics.coalesced_requests.add(1);
+                            self.metrics
+                                .num_requests_coalesced
+                                .update(num_requests as f64);
+                        }
+                    };
+                    IoRequest::new_coalesced(request)
+                }),
         }
     }
 
@@ -279,13 +381,21 @@ impl State {
     /// Coalesced range starts at 4, so the buffer is:
     /// [x, x, A, A, A, A, A, x, B]
     /// A stays 2-aligned, B stays 4-aligned
-    fn next_coalesced(&mut self, window: &CoalesceConfig) -> Option<CoalescedRequest> {
+    fn next_coalesced(
+        &mut self,
+        window: &CoalesceConfig,
+        gap_budget: Option<CoalesceGapBudget>,
+    ) -> Option<CoalescedRequest> {
         // Find the next valid request in priority order
         let first_req = self.next_uncoalesced()?;
 
         let mut requests = vec![first_req];
         let mut current_start = requests[0].offset;
-        let mut current_end = requests[0].offset + requests[0].length as u64;
+        let mut current_end = requests[0]
+            .offset
+            .saturating_add(u64::try_from(requests[0].length).unwrap_or(u64::MAX));
+        let mut requested_union =
+            gap_budget.map(|_| RequestedRangeUnion::new(current_start..current_end));
         let align = *self.coalesced_buffer_alignment as u64;
 
         // Track requests that we've already decided to remove (or that were cancelled) so that
@@ -295,7 +405,7 @@ impl State {
         let mut found_new_requests = true;
 
         // Keep expanding the window while we can find new requests within constraints
-        while found_new_requests {
+        'expand: while found_new_requests {
             found_new_requests = false;
 
             // Find the range we should scan for coalescing in this iteration
@@ -307,6 +417,9 @@ impl State {
                 .requests_by_offset
                 .range((scan_start, RequestId::MIN)..=(scan_end, RequestId::MAX))
             {
+                if gap_budget.is_some_and(|budget| requests.len() >= budget.max_requests) {
+                    break 'expand;
+                }
                 // Skip if we've already marked this request for removal
                 if ids_to_remove.contains(&req_id) {
                     continue;
@@ -328,9 +441,12 @@ impl State {
                 }
 
                 // Check if this request is within coalescing distance of our current range
-                let req_end = req_offset + req.length as u64;
-                if (req_offset <= current_end + window.distance && req_end >= current_start)
-                    || (req_end + window.distance >= current_start && req_offset <= current_end)
+                let req_end =
+                    req_offset.saturating_add(u64::try_from(req.length).unwrap_or(u64::MAX));
+                if (req_offset <= current_end.saturating_add(window.distance)
+                    && req_end >= current_start)
+                    || (req_end.saturating_add(window.distance) >= current_start
+                        && req_offset <= current_end)
                 {
                     // Calculate what the new range would be if we include this request
                     let new_start = current_start.min(req_offset);
@@ -343,8 +459,24 @@ impl State {
                         continue;
                     }
 
+                    let request_range = req_offset..req_end;
+                    if let Some(budget) = gap_budget {
+                        let prospective_union = requested_union
+                            .as_ref()
+                            .vortex_expect("gap budget always has requested-range accounting")
+                            .len_with(&request_range);
+                        let raw_span = new_end.saturating_sub(new_start);
+                        if !budget.allows(raw_span, prospective_union) {
+                            // Keep it available to initiate or join a later physical read.
+                            continue;
+                        }
+                    }
+
                     current_start = new_start;
                     current_end = new_end;
+                    if let Some(requested_union) = &mut requested_union {
+                        requested_union.insert(request_range);
+                    }
                     let req = self
                         .promoted_requests
                         .remove(&req_id)
@@ -433,12 +565,34 @@ mod tests {
         events: Vec<ReadEvent>,
         coalesce_window: Option<CoalesceConfig>,
     ) -> Vec<IoRequest> {
-        collect_outputs_with_alignment(events, coalesce_window, Alignment::none()).await
+        collect_outputs_with_policy(events, coalesce_window, None, Alignment::none()).await
     }
 
     async fn collect_outputs_with_alignment(
         events: Vec<ReadEvent>,
         coalesce_window: Option<CoalesceConfig>,
+        coalesced_buffer_alignment: Alignment,
+    ) -> Vec<IoRequest> {
+        collect_outputs_with_policy(events, coalesce_window, None, coalesced_buffer_alignment).await
+    }
+
+    async fn collect_outputs_with_gap_budget(
+        events: Vec<ReadEvent>,
+        coalesce_window: Option<CoalesceConfig>,
+    ) -> Vec<IoRequest> {
+        collect_outputs_with_policy(
+            events,
+            coalesce_window,
+            Some(CoalesceGapBudget::for_reader_concurrency(64)),
+            Alignment::none(),
+        )
+        .await
+    }
+
+    async fn collect_outputs_with_policy(
+        events: Vec<ReadEvent>,
+        coalesce_window: Option<CoalesceConfig>,
+        coalesce_gap_budget: Option<CoalesceGapBudget>,
         coalesced_buffer_alignment: Alignment,
     ) -> Vec<IoRequest> {
         let event_stream = stream::iter(events);
@@ -447,11 +601,61 @@ mod tests {
         let io_stream = IoRequestStream::new(
             event_stream,
             coalesce_window,
+            coalesce_gap_budget,
             coalesced_buffer_alignment,
             1024,
             metrics,
         );
         io_stream.concat().await
+    }
+
+    async fn collect_ranges_with_gap_budget(
+        ranges: &[Range<u64>],
+        promoted: Option<RequestId>,
+        coalesce_window: CoalesceConfig,
+    ) -> Vec<IoRequest> {
+        collect_ranges_with_gap_budget_for_concurrency(
+            ranges,
+            promoted,
+            coalesce_window,
+            MAX_BOUNDED_COALESCE_REQUESTS,
+        )
+        .await
+    }
+
+    async fn collect_ranges_with_gap_budget_for_concurrency(
+        ranges: &[Range<u64>],
+        promoted: Option<RequestId>,
+        coalesce_window: CoalesceConfig,
+        reader_concurrency: usize,
+    ) -> Vec<IoRequest> {
+        let mut events = Vec::with_capacity(ranges.len() * 2 + usize::from(promoted.is_some()));
+        let mut receivers = Vec::with_capacity(ranges.len());
+        for (id, range) in ranges.iter().enumerate() {
+            let length = usize::try_from(range.end - range.start)
+                .vortex_expect("test range length fits usize");
+            let (request, receiver) = create_request(id, range.start, length);
+            events.push(ReadEvent::Request(request));
+            receivers.push(receiver);
+        }
+        for id in 0..ranges.len() {
+            events.push(ReadEvent::Polled(id));
+        }
+        if let Some(id) = promoted {
+            events.push(ReadEvent::Promoted(id));
+        }
+
+        let outputs = collect_outputs_with_policy(
+            events,
+            Some(coalesce_window),
+            Some(CoalesceGapBudget::for_reader_concurrency(
+                reader_concurrency,
+            )),
+            Alignment::none(),
+        )
+        .await;
+        drop(receivers);
+        outputs
     }
 
     #[tokio::test]
@@ -526,10 +730,16 @@ mod tests {
 
         let metrics_registry = DefaultMetricsRegistry::default();
         let metrics = RequestMetrics::new(&metrics_registry, vec![]);
-        let batches =
-            IoRequestStream::new(stream::iter(events), None, Alignment::none(), 2, metrics)
-                .collect::<Vec<_>>()
-                .await;
+        let batches = IoRequestStream::new(
+            stream::iter(events),
+            None,
+            None,
+            Alignment::none(),
+            2,
+            metrics,
+        )
+        .collect::<Vec<_>>()
+        .await;
 
         assert_eq!(receivers.len(), 5);
         assert_eq!(batches.iter().map(Vec::len).collect::<Vec<_>>(), [2, 2, 1]);
@@ -554,6 +764,7 @@ mod tests {
         let metrics = RequestMetrics::new(&metrics_registry, vec![]);
         let mut batches = Box::pin(IoRequestStream::new(
             receiver,
+            None,
             None,
             Alignment::none(),
             32,
@@ -604,6 +815,257 @@ mod tests {
             }
             _ => panic!("Expected coalesced request"),
         }
+    }
+
+    #[tokio::test]
+    async fn test_zero_distance_keeps_gap_separate_but_batches_touching_ranges() {
+        let (first, _first_rx) = create_request(1, 0, 10);
+        let (overlapping, _overlapping_rx) = create_request(2, 5, 10);
+        let (adjacent, _adjacent_rx) = create_request(3, 15, 5);
+        let (gapped, _gapped_rx) = create_request(4, 21, 9);
+
+        let events = vec![
+            ReadEvent::Request(first),
+            ReadEvent::Request(overlapping),
+            ReadEvent::Request(adjacent),
+            ReadEvent::Request(gapped),
+            ReadEvent::Polled(1),
+            ReadEvent::Polled(2),
+            ReadEvent::Polled(3),
+            ReadEvent::Polled(4),
+        ];
+        let outputs = collect_outputs(events, Some(CoalesceConfig::new(0, 1024))).await;
+
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].range(), 0..20);
+        assert_eq!(outputs[0].request_ids(), vec![1, 2, 3]);
+        assert_eq!(outputs[1].range(), 21..30);
+        assert_eq!(outputs[1].request_ids(), vec![4]);
+    }
+
+    #[tokio::test]
+    async fn bounded_gap_rejects_exact_q6_cross_partition_pairs() {
+        let pairs = [
+            [144_417_904..144_811_356, 145_450_752..145_516_524],
+            [145_976_960..146_042_732, 146_832_048..146_897_820],
+            [146_503_168..146_568_940, 147_095_152..147_160_924],
+            [146_240_064..146_305_836, 146_700_496..146_766_268],
+        ];
+        let expected_gaps = [639_396, 789_316, 526_212, 394_660];
+
+        for (ranges, expected_gap) in pairs.into_iter().zip(expected_gaps) {
+            let requested_union = ranges
+                .iter()
+                .map(|range| range.end - range.start)
+                .sum::<u64>();
+            let raw_span = ranges[1].end - ranges[0].start;
+            assert_eq!(raw_span - requested_union, expected_gap);
+
+            let outputs =
+                collect_ranges_with_gap_budget(&ranges, None, CoalesceConfig::object_storage())
+                    .await;
+            assert_eq!(outputs.len(), 2, "gap {expected_gap} must not be read");
+            assert_eq!(outputs[0].range(), ranges[0]);
+            assert_eq!(outputs[1].range(), ranges[1]);
+        }
+    }
+
+    #[tokio::test]
+    async fn bounded_gap_keeps_q22_shaped_dense_ranges_coalesced() {
+        let customer = (0..14)
+            .map(|index| {
+                let start = 5_189_536 + index * 75_872;
+                start..start + 75_876
+            })
+            .collect::<Vec<_>>();
+        let orders = (0..12)
+            .map(|index| {
+                let start = 31_065_200 + index * 295_072;
+                start..start + 295_076
+            })
+            .collect::<Vec<_>>();
+
+        for ranges in [&customer, &orders] {
+            let outputs =
+                collect_ranges_with_gap_budget(ranges, None, CoalesceConfig::object_storage())
+                    .await;
+            assert_eq!(outputs.len(), 1);
+            assert_eq!(outputs[0].request_ids().len(), ranges.len());
+            assert_eq!(outputs[0].offset(), ranges[0].start);
+            assert_eq!(
+                outputs[0].len(),
+                usize::try_from(
+                    ranges.last().vortex_expect("non-empty ranges").end - ranges[0].start
+                )
+                .vortex_expect("coalesced test range fits usize")
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn bounded_gap_uses_requested_union_not_overlapping_payload_sum() {
+        let ranges = [
+            0..64 << 10,
+            0..64 << 10,
+            32 << 10..96 << 10,
+            204 << 10..268 << 10,
+        ];
+        let outputs =
+            collect_ranges_with_gap_budget(&ranges, None, CoalesceConfig::object_storage()).await;
+
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].range(), 0..96 << 10);
+        assert_eq!(outputs[0].request_ids(), [0, 1, 2]);
+        assert_eq!(outputs[1].range(), ranges[3]);
+    }
+
+    #[test]
+    fn requested_union_merges_a_range_bridging_multiple_existing_intervals() {
+        let mut requested_union = RequestedRangeUnion::new(0..64);
+        requested_union.insert(128..192);
+
+        assert_eq!(requested_union.len, 128);
+        assert_eq!(requested_union.len_with(&(32..160)), 192);
+        requested_union.insert(32..160);
+        assert_eq!(requested_union.ranges.len(), 1);
+        assert_eq!(requested_union.ranges[0], 0..192);
+        assert_eq!(requested_union.len, 192);
+    }
+
+    #[tokio::test]
+    async fn bounded_gap_stops_transitive_fixed_distance_amplification() {
+        let ranges = (0..8)
+            .map(|index| {
+                let start = (index * 65) << 10;
+                start..start + (1 << 10)
+            })
+            .collect::<Vec<_>>();
+        let outputs =
+            collect_ranges_with_gap_budget(&ranges, None, CoalesceConfig::new(64 << 10, 16 << 20))
+                .await;
+
+        assert_eq!(outputs.len(), 4);
+        assert!(
+            outputs
+                .iter()
+                .all(|request| request.request_ids().len() == 2)
+        );
+    }
+
+    #[tokio::test]
+    async fn bounded_gap_caps_union_work_by_reader_concurrency() {
+        let ranges = [0..10, 10..20, 20..30, 30..40, 40..50];
+        let outputs = collect_ranges_with_gap_budget_for_concurrency(
+            &ranges,
+            None,
+            CoalesceConfig::new(0, 1024),
+            2,
+        )
+        .await;
+
+        assert_eq!(
+            outputs
+                .iter()
+                .map(|request| request.request_ids().len())
+                .collect::<Vec<_>>(),
+            [2, 2, 1]
+        );
+    }
+
+    #[test]
+    fn bounded_gap_budget_has_exact_boundaries_cap_and_overflow_safety() {
+        let budget = CoalesceGapBudget::for_reader_concurrency(64);
+        let requested_union = 256 << 10;
+        let allowed_gap = 128 << 10;
+        assert_eq!(budget.max_internal_gap(requested_union), allowed_gap);
+        assert!(budget.allows(requested_union + allowed_gap, requested_union));
+        assert!(!budget.allows(requested_union + allowed_gap + 1, requested_union));
+
+        let capped_union = 1 << 20;
+        assert_eq!(budget.max_internal_gap(capped_union), 256 << 10);
+        assert!(budget.allows(capped_union + (256 << 10), capped_union));
+        assert!(!budget.allows(capped_union + (256 << 10) + 1, capped_union));
+
+        assert_eq!(budget.max_internal_gap(u64::MAX), 256 << 10);
+        assert!(budget.allows(u64::MAX, u64::MAX));
+    }
+
+    #[tokio::test]
+    async fn bounded_gap_preserves_alignment_and_max_size_limits() {
+        let requested_bytes = 256 << 10;
+        let allowed_gap = 128 << 10;
+        let raw_start = 4097;
+        let (first, _first_rx) = create_request(1, raw_start, requested_bytes / 2);
+        let second_start = raw_start + requested_bytes as u64 / 2 + allowed_gap;
+        let (second, _second_rx) = create_request(2, second_start, requested_bytes / 2);
+        let raw_end = second_start + requested_bytes as u64 / 2;
+        let aligned = collect_outputs_with_policy(
+            vec![
+                ReadEvent::Request(first),
+                ReadEvent::Request(second),
+                ReadEvent::Polled(1),
+                ReadEvent::Polled(2),
+            ],
+            Some(CoalesceConfig::new(allowed_gap, raw_end - (raw_start - 1))),
+            Some(CoalesceGapBudget::for_reader_concurrency(64)),
+            Alignment::new(4096),
+        )
+        .await;
+        assert_eq!(aligned.len(), 1);
+        assert_eq!(aligned[0].range(), raw_start - 1..raw_end);
+
+        let too_wide = [0..64 << 10, 64 << 10..128 << 10];
+        let outputs = collect_ranges_with_gap_budget(
+            &too_wide,
+            None,
+            CoalesceConfig::new(1 << 20, 100 << 10),
+        )
+        .await;
+        assert_eq!(outputs.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn bounded_gap_preserves_promoted_middle_anchor_in_both_insertion_orders() {
+        let far = 2 << 20..(2 << 20) + (64 << 10);
+        let left = 0..64 << 10;
+        let middle = 100 << 10..164 << 10;
+        let right = 200 << 10..264 << 10;
+        for ranges in [
+            [far.clone(), left.clone(), middle.clone(), right.clone()],
+            [far.clone(), right.clone(), middle.clone(), left.clone()],
+        ] {
+            let outputs =
+                collect_ranges_with_gap_budget(&ranges, Some(2), CoalesceConfig::object_storage())
+                    .await;
+            assert_eq!(outputs.len(), 2);
+            assert_eq!(outputs[0].range(), 0..264 << 10);
+            assert_eq!(outputs[0].request_ids().len(), 3);
+            assert_eq!(outputs[1].range(), far);
+        }
+    }
+
+    #[tokio::test]
+    async fn canceled_request_does_not_contribute_to_gap_budget() {
+        let (first, _first_rx) = create_request(1, 0, 64 << 10);
+        let (canceled, canceled_rx) = create_request(2, 64 << 10, 336 << 10);
+        let (last, _last_rx) = create_request(3, 400 << 10, 64 << 10);
+        drop(canceled_rx);
+        let outputs = collect_outputs_with_gap_budget(
+            vec![
+                ReadEvent::Request(first),
+                ReadEvent::Request(canceled),
+                ReadEvent::Request(last),
+                ReadEvent::Polled(1),
+                ReadEvent::Polled(2),
+                ReadEvent::Polled(3),
+            ],
+            Some(CoalesceConfig::object_storage()),
+        )
+        .await;
+
+        assert_eq!(outputs.len(), 2);
+        assert_eq!(outputs[0].range(), 0..64 << 10);
+        assert_eq!(outputs[1].range(), 400 << 10..464 << 10);
     }
 
     #[tokio::test]
@@ -915,6 +1377,7 @@ mod tests {
                 distance: 5,
                 max_size: 1024,
             }),
+            None,
             Alignment::none(),
             1024,
             metrics,
@@ -971,7 +1434,8 @@ mod tests {
         let metrics_registry = DefaultMetricsRegistry::default();
         let metrics = RequestMetrics::new(&metrics_registry, vec![]);
         // No coalescing window - should be individual requests
-        let io_stream = IoRequestStream::new(event_stream, None, Alignment::none(), 1024, metrics);
+        let io_stream =
+            IoRequestStream::new(event_stream, None, None, Alignment::none(), 1024, metrics);
 
         let outputs: Vec<IoRequest> = io_stream.concat().await;
         assert_eq!(outputs.len(), 2);

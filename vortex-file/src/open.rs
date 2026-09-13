@@ -75,6 +75,10 @@ pub struct VortexOpenOptions {
     labels: Vec<Label>,
     /// Whether to cache file's LayoutReader between scans
     cache_layout_reader: bool,
+    /// Optional bound for canceled entries retained by a source shared across scan consumers.
+    shared_source_max_stale_entries: Option<usize>,
+    /// Whether to bound aggregate empty bytes introduced by coalescing.
+    bounded_coalescing_gap: bool,
 }
 
 /// Extension trait for constructing [`VortexOpenOptions`] from a session.
@@ -94,6 +98,8 @@ pub trait OpenOptionsSessionExt:
             metrics_registry: None,
             labels: Vec::default(),
             cache_layout_reader: false,
+            shared_source_max_stale_entries: None,
+            bounded_coalescing_gap: false,
         }
     }
 }
@@ -124,6 +130,23 @@ impl VortexOpenOptions {
     /// cost of keeping reader state alive for the lifetime of the file handle.
     pub fn with_layout_reader_cache(mut self) -> Self {
         self.cache_layout_reader = true;
+        self
+    }
+
+    /// Bound canceled request bookkeeping when this file's segment source will be shared across
+    /// independent scan consumers. Completed requests always remove their own entries.
+    pub fn with_shared_source_max_stale_entries(mut self, max_stale_entries: usize) -> Self {
+        self.shared_source_max_stale_entries = Some(max_stale_entries.max(1));
+        self
+    }
+
+    /// Bound aggregate empty bytes introduced by each coalesced file-segment read.
+    ///
+    /// The bound uses the union of requested ranges: at most 256 KiB and no more than 64 KiB plus
+    /// one quarter of requested bytes. It preserves the reader's discovery distance and maximum
+    /// read size, and does not enable coalescing when the reader has it disabled.
+    pub fn with_bounded_coalescing_gap(mut self) -> Self {
+        self.bounded_coalescing_gap = true;
         self
     }
 
@@ -318,12 +341,22 @@ impl VortexOpenOptions {
         let metrics = RequestMetrics::new(metrics_registry.as_ref(), self.labels);
 
         // Create a segment source backed by the VortexRead implementation.
-        let segment_source = Arc::new(SharedSegmentSource::new(FileSegmentSource::open(
+        let segment_source = FileSegmentSource::open_with_coalesce_gap_budget(
             footer.segment_specs_with_metadata(),
             reader,
             self.session.handle(),
             metrics,
-        )));
+            self.bounded_coalescing_gap,
+        );
+        let segment_source: Arc<dyn SegmentSource> =
+            if let Some(max_stale_entries) = self.shared_source_max_stale_entries {
+                Arc::new(SharedSegmentSource::new_with_max_stale_entries(
+                    segment_source,
+                    max_stale_entries,
+                ))
+            } else {
+                Arc::new(SharedSegmentSource::new(segment_source))
+            };
 
         // Wrap up the segment source to first resolve segments from the initial read cache.
         let segment_source: Arc<dyn SegmentSource> = Arc::new(SegmentCacheSourceAdapter::new(

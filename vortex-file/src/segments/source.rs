@@ -32,6 +32,7 @@ use vortex_error::VortexExpect;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
 use vortex_error::vortex_panic;
+use vortex_io::CoalesceConfig;
 use vortex_io::ReadAtNowait;
 use vortex_io::ReadAtRequest;
 use vortex_io::ReadAtStream;
@@ -49,6 +50,7 @@ use vortex_metrics::MetricBuilder;
 use vortex_metrics::MetricsRegistry;
 
 use crate::SegmentSpec;
+use crate::read::CoalesceGapBudget;
 use crate::read::IoRequest;
 use crate::read::IoRequestStream;
 use crate::read::ReadRequest;
@@ -360,6 +362,17 @@ impl FileSegmentSource {
         handle: Handle,
         metrics: RequestMetrics,
     ) -> Self {
+        Self::open_with_coalesce_gap_budget(segments, reader, handle, metrics, false)
+    }
+
+    /// Open a source with an optional aggregate budget for empty bytes introduced by coalescing.
+    pub(crate) fn open_with_coalesce_gap_budget<R: VortexReadAt + Clone>(
+        segments: Arc<[SegmentSpec]>,
+        reader: R,
+        handle: Handle,
+        metrics: RequestMetrics,
+        bounded_coalescing_gap: bool,
+    ) -> Self {
         let (send, recv) = mpsc::unbounded();
         let nowait_reader: Arc<dyn VortexReadAt> = Arc::new(reader.clone());
 
@@ -368,13 +381,7 @@ impl FileSegmentSource {
             .map(|segment| segment.alignment)
             .max()
             .unwrap_or_else(Alignment::none);
-        let coalesce_config = reader.coalesce_config().map(|mut config| {
-            // Aligning the coalesced start down can add up to (alignment - 1) bytes.
-            // Increase max_size to keep the effective payload window consistent.
-            let extra = (*max_alignment as u64).saturating_sub(1);
-            config.max_size = config.max_size.saturating_add(extra);
-            config
-        });
+        let coalesce_config = effective_coalesce_config(reader.coalesce_config(), max_alignment);
         let concurrency = reader.concurrency();
         if concurrency == 0 {
             vortex_panic!(
@@ -382,10 +389,13 @@ impl FileSegmentSource {
                 reader.uri()
             );
         }
+        let coalesce_gap_budget =
+            bounded_coalescing_gap.then(|| CoalesceGapBudget::for_reader_concurrency(concurrency));
 
         let stream = IoRequestStream::new(
             StreamExt::boxed(recv),
             coalesce_config,
+            coalesce_gap_budget,
             max_alignment,
             1,
             metrics.clone(),
@@ -480,6 +490,19 @@ impl FileSegmentSource {
 
         future
     }
+}
+
+fn effective_coalesce_config(
+    configured: Option<CoalesceConfig>,
+    max_alignment: Alignment,
+) -> Option<CoalesceConfig> {
+    configured.map(|mut config| {
+        // Aligning the coalesced start down can add up to (alignment - 1) bytes. Increase max_size
+        // to keep the reader's effective payload window consistent.
+        let extra = (*max_alignment as u64).saturating_sub(1);
+        config.max_size = config.max_size.saturating_add(extra);
+        config
+    })
 }
 
 impl SegmentSource for FileSegmentSource {
@@ -742,6 +765,23 @@ mod tests {
             alignment: Alignment::none(),
             callback,
         })
+    }
+
+    #[test]
+    fn coalesce_config_preserves_reader_window_and_allows_alignment() {
+        let configured = CoalesceConfig::new(64 << 10, 16 << 20);
+
+        let unchanged = effective_coalesce_config(Some(configured), Alignment::none())
+            .vortex_expect("configured reader keeps coalescing enabled");
+        assert_eq!(unchanged.distance, configured.distance);
+        assert_eq!(unchanged.max_size, configured.max_size);
+
+        let aligned = effective_coalesce_config(Some(configured), Alignment::new(8))
+            .vortex_expect("configured reader keeps coalescing enabled");
+        assert_eq!(aligned.distance, configured.distance);
+        assert_eq!(aligned.max_size, configured.max_size + 7);
+
+        assert!(effective_coalesce_config(None, Alignment::none()).is_none());
     }
 
     #[tokio::test]

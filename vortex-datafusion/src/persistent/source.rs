@@ -37,6 +37,8 @@ use vortex::session::VortexSession;
 use vortex_utils::aliases::dash_map::DashMap;
 
 use super::opener::NaturalSplits;
+use super::opener::PushFrontierSegmentSourcePool;
+use super::opener::PushFrontierSourceSharing;
 use super::opener::VortexOpener;
 use crate::VortexTableOptions;
 use crate::convert::exprs::DefaultExpressionConvertor;
@@ -198,6 +200,9 @@ pub struct VortexSource {
     layout_readers: Arc<DashMap<Path, Weak<dyn LayoutReader>>>,
     /// Shared full-file natural splits keyed by path.
     natural_splits: Arc<DashMap<Path, Arc<NaturalSplits>>>,
+    /// Weak, concurrency-bounded raw source pool used only by push-frontier with the built-in
+    /// object-store reader.
+    push_frontier_segment_sources: Arc<PushFrontierSegmentSourcePool>,
     expression_convertor: Arc<dyn ExpressionConvertor>,
     pub(crate) vortex_reader_factory: Option<Arc<dyn VortexReaderFactory>>,
     pub(crate) ordered: bool,
@@ -231,6 +236,7 @@ impl VortexSource {
             df_metrics: Default::default(),
             layout_readers: Arc::new(DashMap::default()),
             natural_splits: Arc::new(DashMap::default()),
+            push_frontier_segment_sources: Arc::new(PushFrontierSegmentSourcePool::default()),
             expression_convertor,
             vortex_reader_factory: None,
             vx_metrics_registry: Arc::new(DefaultMetricsRegistry::default()),
@@ -336,6 +342,16 @@ impl VortexSource {
             .clone()
             .unwrap_or_else(|| Arc::new(DefaultPhysicalExprAdapterFactory));
 
+        // A custom factory may apply authentication, routing, caching, or memory-placement state
+        // that cannot be represented by ObjectMeta, so only the built-in factory can safely share
+        // its raw source.
+        let push_frontier_source_sharing = self.vortex_reader_factory.is_none().then(|| {
+            PushFrontierSourceSharing::new(
+                Arc::clone(&self.push_frontier_segment_sources),
+                &object_store,
+                base_config.file_groups.len(),
+            )
+        });
         let vortex_reader_factory = self
             .vortex_reader_factory
             .clone()
@@ -345,6 +361,7 @@ impl VortexSource {
             partition,
             session: self.session.clone(),
             vortex_reader_factory,
+            push_frontier_source_sharing,
             projection: self.projection.clone(),
             filter: self.vortex_predicate.clone(),
             file_pruning_predicate: self.full_predicate.clone(),
@@ -689,6 +706,16 @@ mod tests {
             &opener.expression_convertor,
             &expression_convertor
         ));
+        assert!(opener.push_frontier_source_sharing.is_some());
+
+        // Supplying even the default implementation explicitly makes it a custom factory: its
+        // identity and routing policy are opaque to VortexSource, so sharing must be disabled.
+        let custom_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let custom_source = source.with_vortex_reader_factory(Arc::new(
+            DefaultVortexReaderFactory::new(Arc::clone(&custom_store)),
+        ));
+        let custom_opener = custom_source.create_vortex_opener(custom_store, &config, 0)?;
+        assert!(custom_opener.push_frontier_source_sharing.is_none());
         Ok(())
     }
 

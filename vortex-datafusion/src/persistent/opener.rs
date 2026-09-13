@@ -41,16 +41,27 @@ use futures::StreamExt;
 use futures::TryStreamExt;
 use futures::stream;
 use futures::stream::BoxStream;
+use object_store::ObjectMeta;
+use object_store::ObjectStore;
 use object_store::path::Path;
+use parking_lot::Mutex;
 use tracing::Instrument;
 use vortex::array::VortexSessionExecute;
+#[cfg(any(unix, windows))]
+use vortex::array::memory::MemorySessionExt;
 use vortex::error::VortexError;
 use vortex::error::VortexExpect;
 use vortex::expr::BoundExpression;
 use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
+use vortex::io::VortexReadAt;
+#[cfg(any(unix, windows))]
+use vortex::io::object_store::ObjectStoreReadAt;
+#[cfg(any(unix, windows))]
+use vortex::io::session::RuntimeSessionExt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
+use vortex::layout::segments::SegmentSource;
 use vortex::metrics::Counter as VortexCounter;
 use vortex::metrics::Gauge as VortexGauge;
 use vortex::metrics::Label;
@@ -66,6 +77,7 @@ use vortex_morsel_scan::ScanExecutorOptions;
 use vortex_morsel_scan::scan_backend_from_env;
 use vortex_utils::aliases::dash_map::DashMap;
 use vortex_utils::aliases::dash_map::Entry;
+use vortex_utils::aliases::hash_map::HashMap;
 
 static SCAN_DIAGNOSTICS_ENABLED: OnceLock<bool> = OnceLock::new();
 
@@ -73,6 +85,149 @@ fn scan_diagnostics_enabled() -> bool {
     *SCAN_DIAGNOSTICS_ENABLED.get_or_init(|| {
         std::env::var_os("VORTEX_SCAN_DIAGNOSTICS").is_some_and(|value| value != "0")
     })
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct SegmentSourceIdentity {
+    object_store: usize,
+    location: Path,
+    size: u64,
+    last_modified_seconds: i64,
+    last_modified_nanoseconds: u32,
+    e_tag: Option<String>,
+    version: Option<String>,
+}
+
+impl SegmentSourceIdentity {
+    fn new(object_store: usize, metadata: &ObjectMeta) -> Self {
+        Self {
+            object_store,
+            location: metadata.location.clone(),
+            size: metadata.size,
+            last_modified_seconds: metadata.last_modified.timestamp(),
+            last_modified_nanoseconds: metadata.last_modified.timestamp_subsec_nanos(),
+            e_tag: metadata.e_tag.clone(),
+            version: metadata.version.clone(),
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct PushFrontierSegmentSourcePool {
+    entries: Mutex<HashMap<SegmentSourceIdentity, SharedFileSourceEntry>>,
+}
+
+struct SharedFileSourceEntry {
+    source: Weak<dyn SegmentSource>,
+    natural_splits: Arc<Mutex<Option<Arc<NaturalSplits>>>>,
+}
+
+impl PushFrontierSegmentSourcePool {
+    fn get_or_insert(
+        &self,
+        identity: SegmentSourceIdentity,
+        source: Arc<dyn SegmentSource>,
+        max_entries: usize,
+    ) -> Arc<dyn SegmentSource> {
+        let mut entries = self.entries.lock();
+        if let Some(shared) = entries
+            .get(&identity)
+            .and_then(|entry| entry.source.upgrade())
+        {
+            return shared;
+        }
+
+        entries.remove(&identity);
+        let max_entries = max_entries.max(1);
+        if entries.len() >= max_entries {
+            entries.retain(|_, entry| entry.source.strong_count() != 0);
+        }
+        if entries.len() < max_entries {
+            entries.insert(
+                identity,
+                SharedFileSourceEntry {
+                    source: Arc::downgrade(&source),
+                    natural_splits: Arc::new(Mutex::new(None)),
+                },
+            );
+        }
+        source
+    }
+
+    fn natural_split_slot(
+        &self,
+        identity: &SegmentSourceIdentity,
+    ) -> Option<Arc<Mutex<Option<Arc<NaturalSplits>>>>> {
+        self.entries
+            .lock()
+            .get(identity)
+            .filter(|entry| entry.source.strong_count() != 0)
+            .map(|entry| Arc::clone(&entry.natural_splits))
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.entries.lock().len()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct PushFrontierSourceSharing {
+    pool: Arc<PushFrontierSegmentSourcePool>,
+    /// Keeps pointer identity live for as long as a sharing context can create cache keys. Pool
+    /// entries also retain readers that own the same store while their weak source is upgradeable.
+    object_store: Arc<dyn ObjectStore>,
+    max_entries: usize,
+}
+
+impl PushFrontierSourceSharing {
+    pub(crate) fn new(
+        pool: Arc<PushFrontierSegmentSourcePool>,
+        object_store: &Arc<dyn ObjectStore>,
+        max_entries: usize,
+    ) -> Self {
+        Self {
+            pool,
+            object_store: Arc::clone(object_store),
+            max_entries: max_entries.max(1),
+        }
+    }
+
+    fn identity(&self, metadata: &ObjectMeta) -> SegmentSourceIdentity {
+        SegmentSourceIdentity::new(
+            Arc::as_ptr(&self.object_store) as *const () as usize,
+            metadata,
+        )
+    }
+
+    fn share(
+        &self,
+        metadata: &ObjectMeta,
+        source: Arc<dyn SegmentSource>,
+    ) -> Arc<dyn SegmentSource> {
+        self.pool
+            .get_or_insert(self.identity(metadata), source, self.max_entries)
+    }
+
+    #[cfg(any(unix, windows))]
+    fn create_promoting_reader(
+        &self,
+        file: &PartitionedFile,
+        session: &VortexSession,
+        diagnostics: bool,
+    ) -> DFResult<Arc<dyn VortexReadAt>> {
+        let reader = ObjectStoreReadAt::new_with_allocator(
+            Arc::clone(&self.object_store),
+            file.path().clone(),
+            session.handle(),
+            session.allocator(),
+        )
+        .with_file_payload_promotion(file.object_meta.clone(), diagnostics)
+        .map_err(|error| {
+            exec_datafusion_err!("Failed to configure persistent local file reader: {error}")
+        })?;
+        Ok(Arc::new(reader))
+    }
 }
 
 pub(crate) struct NaturalSplitDiagnostics {
@@ -188,6 +343,14 @@ fn scan_execution_config(
     }
 }
 
+fn use_bounded_coalescing_gap(backend: ScanBackend, source_sharing_configured: bool) -> bool {
+    backend == ScanBackend::PushFrontier && source_sharing_configured
+}
+
+fn use_file_payload_promotion(backend: ScanBackend, source_sharing_configured: bool) -> bool {
+    backend == ScanBackend::PushFrontier && source_sharing_configured
+}
+
 impl<A: 'static + Send> FileScanBuilder<A> {
     fn with_projection(self, projection: BoundExpression) -> Self {
         match self {
@@ -290,6 +453,9 @@ pub(crate) struct VortexOpener {
     pub partition: usize,
     pub session: VortexSession,
     pub vortex_reader_factory: Arc<dyn VortexReaderFactory>,
+    /// Raw segment sources shared only by push-frontier scans using the built-in object-store
+    /// reader. The weak pool owns neither decoded data nor scan/runtime state.
+    pub push_frontier_source_sharing: Option<PushFrontierSourceSharing>,
     /// Optional table schema projection. The indices are w.r.t. the `table_schema`, which is
     /// all fields in the final scan result not including the partition columns.
     pub projection: ProjectionExprs,
@@ -354,8 +520,21 @@ impl VortexOpener {
     }
 }
 
-impl FileOpener for VortexOpener {
-    fn open(&self, file: PartitionedFile) -> DFResult<FileOpenFuture> {
+impl VortexOpener {
+    fn open_with_backend(
+        &self,
+        file: PartitionedFile,
+        backend: ScanBackend,
+    ) -> DFResult<FileOpenFuture> {
+        #[cfg(any(unix, windows))]
+        let diagnostics_enabled = scan_diagnostics_enabled();
+        let bounded_coalescing_gap =
+            use_bounded_coalescing_gap(backend, self.push_frontier_source_sharing.is_some());
+        let push_frontier_source_sharing =
+            use_file_payload_promotion(backend, self.push_frontier_source_sharing.is_some())
+                .then(|| self.push_frontier_source_sharing.clone())
+                .flatten();
+
         // Calculate the output schema before replacing partition columns with literals so it
         // retains the table and partition-field metadata declared by the plan.
         let output_schema = Arc::new(
@@ -370,13 +549,32 @@ impl FileOpener for VortexOpener {
             Label::new(PATH_LABEL, file.path().to_string()),
             Label::new(PARTITION_LABEL, self.partition.to_string()),
         ];
+        let source_labels = if push_frontier_source_sharing.is_some() {
+            vec![Label::new(PATH_LABEL, file.path().to_string())]
+        } else {
+            labels
+        };
         let mut projection = self.projection.clone();
         let mut filter = self.filter.clone();
 
+        #[cfg(any(unix, windows))]
+        let reader = match &push_frontier_source_sharing {
+            Some(sharing) => {
+                sharing.create_promoting_reader(&file, &session, diagnostics_enabled)?
+            }
+            None => self.vortex_reader_factory.create_reader(&file, &session)?,
+        };
+        #[cfg(not(any(unix, windows)))]
         let reader = self.vortex_reader_factory.create_reader(&file, &session)?;
 
-        let reader =
-            InstrumentedReadAt::new_with_labels(reader, metrics_registry.as_ref(), labels.clone());
+        let reader = InstrumentedReadAt::new_with_labels(
+            reader,
+            metrics_registry.as_ref(),
+            source_labels.clone(),
+        );
+        let shared_source_max_stale_entries = push_frontier_source_sharing
+            .as_ref()
+            .map(|_| reader.concurrency().clamp(1, 256).saturating_mul(4).max(16));
 
         let mut file_pruning_predicate = self.file_pruning_predicate.clone();
         let expr_adapter_factory = Arc::clone(&self.expr_adapter_factory);
@@ -460,12 +658,24 @@ impl FileOpener for VortexOpener {
                 .open_options()
                 .with_file_size(file.object_meta.size)
                 .with_metrics_registry(Arc::clone(&metrics_registry))
-                .with_labels(labels.clone());
+                .with_labels(source_labels);
+            if let Some(max_stale_entries) = shared_source_max_stale_entries {
+                open_opts = open_opts.with_shared_source_max_stale_entries(max_stale_entries);
+            }
+            if bounded_coalescing_gap {
+                open_opts = open_opts.with_bounded_coalescing_gap();
+            }
 
             let cached_footer = file_metadata_cache
                 .as_ref()
                 .and_then(|cache| cache.get(file.path()))
-                .filter(|entry| entry.is_valid_for(&file.object_meta))
+                .filter(|entry| {
+                    if push_frontier_source_sharing.is_some() {
+                        entry.meta == file.object_meta
+                    } else {
+                        entry.is_valid_for(&file.object_meta)
+                    }
+                })
                 .and_then(|entry| {
                     entry
                         .file_metadata
@@ -483,6 +693,13 @@ impl FileOpener for VortexOpener {
                 .open_read(reader)
                 .await
                 .map_err(|e| exec_datafusion_err!("Failed to open Vortex file {e}"))?;
+
+            let vxf = if let Some(sharing) = &push_frontier_source_sharing {
+                let segment_source = sharing.share(&file.object_meta, vxf.segment_source());
+                vxf.with_segment_source(segment_source)
+            } else {
+                vxf
+            };
 
             // On a miss, cache the parsed footer so other partitions and later executions
             // skip the footer fetch and parse. `infer_schema`/`infer_stats` also populate
@@ -575,8 +792,6 @@ impl FileOpener for VortexOpener {
                 .try_map_exprs(|expr| reassign_expr_columns(expr, &stream_schema))?;
             let projector = leftover_projection.make_projector(&stream_schema)?;
 
-            let backend = scan_backend_from_env()
-                .map_err(|err| exec_datafusion_err!("Invalid scan backend: {err}"))?;
             let execution_config = scan_execution_config(backend, scan_concurrency);
             let mut scan_builder = match backend {
                 ScanBackend::V1 => {
@@ -704,13 +919,22 @@ impl FileOpener for VortexOpener {
                 if byte_range.start != 0 || byte_range.end != file.object_meta.size {
                     // Full-file scans already cover every natural split. Only translate the
                     // byte range back into row boundaries when DataFusion has trimmed the file.
-                    let natural_splits = natural_splits_for_file(
-                        natural_splits.as_ref(),
-                        &file.object_meta.location,
-                        &scan_builder,
-                        file.object_meta.size,
-                        natural_split_diagnostics.as_deref(),
-                    )?;
+                    let natural_splits = if let Some(sharing) = &push_frontier_source_sharing {
+                        push_frontier_natural_splits_for_file(
+                            sharing,
+                            &file.object_meta,
+                            &scan_builder,
+                            natural_split_diagnostics.as_deref(),
+                        )?
+                    } else {
+                        natural_splits_for_file(
+                            natural_splits.as_ref(),
+                            &file.object_meta.location,
+                            &scan_builder,
+                            file.object_meta.size,
+                            natural_split_diagnostics.as_deref(),
+                        )?
+                    };
 
                     let Some(row_range) =
                         split_aligned_row_range(byte_range, natural_splits.as_ref())
@@ -776,6 +1000,14 @@ impl FileOpener for VortexOpener {
     }
 }
 
+impl FileOpener for VortexOpener {
+    fn open(&self, file: PartitionedFile) -> DFResult<FileOpenFuture> {
+        let backend = scan_backend_from_env()
+            .map_err(|err| exec_datafusion_err!("Invalid scan backend: {err}"))?;
+        self.open_with_backend(file, backend)
+    }
+}
+
 /// A file's natural split boundaries plus the precomputed byte each split is assigned to,
 /// enabling [`split_aligned_row_range`] to translate a DataFusion byte range into row
 /// boundaries with a binary search instead of re-projecting every split per partition.
@@ -827,6 +1059,61 @@ impl NaturalSplits {
             assignment_bytes,
         }
     }
+}
+
+/// Return natural splits associated with the exact immutable object identity used by a pooled
+/// push-frontier source. The slot lives only in a concurrency-bounded pool entry.
+fn push_frontier_natural_splits_for_file<A: 'static + Send>(
+    sharing: &PushFrontierSourceSharing,
+    metadata: &ObjectMeta,
+    scan_builder: &FileScanBuilder<A>,
+    diagnostics: Option<&NaturalSplitDiagnostics>,
+) -> DFResult<Arc<NaturalSplits>> {
+    let identity = sharing.identity(metadata);
+    let Some(slot) = sharing.pool.natural_split_slot(&identity) else {
+        let started = Instant::now();
+        let result = compute_natural_splits(scan_builder, metadata.size);
+        if let Some(diagnostics) = diagnostics {
+            diagnostics.record(false, None, Some(started.elapsed()), Some(result.is_ok()));
+        }
+        return result;
+    };
+
+    if diagnostics.is_none() {
+        let mut cached = slot.lock();
+        if let Some(splits) = cached.as_ref() {
+            return Ok(Arc::clone(splits));
+        }
+        let splits = compute_natural_splits(scan_builder, metadata.size)?;
+        *cached = Some(Arc::clone(&splits));
+        return Ok(splits);
+    }
+
+    let diagnostics = diagnostics.vortex_expect("diagnostics were checked above");
+    let (mut cached, lock_wait) = match slot.try_lock() {
+        Some(cached) => (cached, None),
+        None => {
+            let started = Instant::now();
+            let cached = slot.lock();
+            (cached, Some(started.elapsed()))
+        }
+    };
+    if let Some(splits) = cached.as_ref() {
+        let splits = Arc::clone(splits);
+        drop(cached);
+        diagnostics.record(true, lock_wait, None, None);
+        return Ok(splits);
+    }
+
+    let started = Instant::now();
+    let result = compute_natural_splits(scan_builder, metadata.size);
+    let build_time = started.elapsed();
+    if let Ok(splits) = &result {
+        *cached = Some(Arc::clone(splits));
+    }
+    drop(cached);
+    diagnostics.record(false, lock_wait, Some(build_time), Some(result.is_ok()));
+    result
 }
 
 /// Return the cached [`NaturalSplits`] for `path`, computing and caching them on first use.
@@ -991,13 +1278,17 @@ mod tests {
     use object_store::memory::InMemory;
     use rstest::rstest;
     use vortex::VortexSessionDefault;
+    use vortex::array::buffer::BufferHandle;
     use vortex::buffer::Buffer;
+    use vortex::buffer::ByteBuffer;
     use vortex::file::WriteOptionsSessionExt;
     use vortex::io::VortexWrite;
     use vortex::io::object_store::ObjectStoreWrite;
     use vortex::layout::LayoutStrategy;
     use vortex::layout::layouts::flat::writer::FlatLayoutStrategy;
     use vortex::layout::layouts::table::TableStrategy;
+    use vortex::layout::segments::SegmentFuture;
+    use vortex::layout::segments::SegmentId;
     use vortex::metrics::DefaultMetricsRegistry;
     use vortex::metrics::MetricValue;
     use vortex::scan::selection::Selection;
@@ -1010,6 +1301,174 @@ mod tests {
     use crate::persistent::reader::DefaultVortexReaderFactory;
 
     static SESSION: LazyLock<VortexSession> = LazyLock::new(VortexSession::default);
+
+    struct StaticSegmentSource(u8);
+
+    impl SegmentSource for StaticSegmentSource {
+        fn request(&self, _id: SegmentId) -> SegmentFuture {
+            futures::future::ready(Ok(BufferHandle::new_host(ByteBuffer::from(vec![self.0]))))
+                .boxed()
+        }
+    }
+
+    fn test_object_meta() -> anyhow::Result<ObjectMeta> {
+        Ok(ObjectMeta {
+            location: Path::from("versioned.vortex"),
+            last_modified: "2026-09-12T12:34:56.123456789Z".parse()?,
+            size: 1234,
+            e_tag: Some("etag-a".to_owned()),
+            version: Some("version-a".to_owned()),
+        })
+    }
+
+    #[test]
+    fn segment_source_identity_includes_store_and_all_object_metadata() -> anyhow::Result<()> {
+        let first_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let second_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let first_store_id = Arc::as_ptr(&first_store) as *const () as usize;
+        let second_store_id = Arc::as_ptr(&second_store) as *const () as usize;
+        let metadata = test_object_meta()?;
+        let identity = SegmentSourceIdentity::new(first_store_id, &metadata);
+
+        assert_ne!(
+            identity,
+            SegmentSourceIdentity::new(second_store_id, &metadata)
+        );
+        let mut changed = metadata.clone();
+        changed.location = Path::from("other.vortex");
+        assert_ne!(
+            identity,
+            SegmentSourceIdentity::new(first_store_id, &changed)
+        );
+        let mut changed = metadata.clone();
+        changed.size += 1;
+        assert_ne!(
+            identity,
+            SegmentSourceIdentity::new(first_store_id, &changed)
+        );
+        let mut changed = metadata.clone();
+        changed.last_modified = "2026-09-12T12:34:56.123456790Z".parse()?;
+        assert_ne!(
+            identity,
+            SegmentSourceIdentity::new(first_store_id, &changed)
+        );
+        let mut changed = metadata.clone();
+        changed.e_tag = Some("etag-b".to_owned());
+        assert_ne!(
+            identity,
+            SegmentSourceIdentity::new(first_store_id, &changed)
+        );
+        let mut changed = metadata;
+        changed.version = Some("version-b".to_owned());
+        assert_ne!(
+            identity,
+            SegmentSourceIdentity::new(first_store_id, &changed)
+        );
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn source_pool_shares_exact_source_for_one_identity() -> anyhow::Result<()> {
+        let pool = PushFrontierSegmentSourcePool::default();
+        let identity = SegmentSourceIdentity::new(1, &test_object_meta()?);
+        let first = Arc::new(StaticSegmentSource(7)) as Arc<dyn SegmentSource>;
+        let selected = pool.get_or_insert(identity.clone(), Arc::clone(&first), 2);
+        let second = Arc::new(StaticSegmentSource(9)) as Arc<dyn SegmentSource>;
+        let selected_again = pool.get_or_insert(identity, second, 2);
+
+        assert!(Arc::ptr_eq(&selected, &selected_again));
+        let (left, right) = futures::join!(
+            selected.request(SegmentId::from(0)),
+            selected_again.request(SegmentId::from(0))
+        );
+        assert_eq!(left?.unwrap_host().as_ref(), &[7]);
+        assert_eq!(right?.unwrap_host().as_ref(), &[7]);
+        Ok(())
+    }
+
+    #[test]
+    fn source_pool_concurrently_selects_one_same_identity_source() -> anyhow::Result<()> {
+        let pool = Arc::new(PushFrontierSegmentSourcePool::default());
+        let identity = SegmentSourceIdentity::new(1, &test_object_meta()?);
+        let barrier = Arc::new(std::sync::Barrier::new(32));
+
+        let selected = std::thread::scope(|scope| {
+            let handles = (0..32)
+                .map(|value| {
+                    let pool = Arc::clone(&pool);
+                    let identity = identity.clone();
+                    let barrier = Arc::clone(&barrier);
+                    scope.spawn(move || {
+                        let candidate =
+                            Arc::new(StaticSegmentSource(value)) as Arc<dyn SegmentSource>;
+                        barrier.wait();
+                        pool.get_or_insert(identity, candidate, 4)
+                    })
+                })
+                .collect::<Vec<_>>();
+            handles
+                .into_iter()
+                .map(|handle| {
+                    handle
+                        .join()
+                        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+                })
+                .collect::<Vec<_>>()
+        });
+
+        assert_eq!(pool.len(), 1);
+        assert!(
+            selected[1..]
+                .iter()
+                .all(|source| Arc::ptr_eq(&selected[0], source))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn source_pool_cleans_dead_keys_and_respects_concurrency_bound() -> anyhow::Result<()> {
+        let pool = PushFrontierSegmentSourcePool::default();
+        let metadata = test_object_meta()?;
+        let first_identity = SegmentSourceIdentity::new(1, &metadata);
+        let mut second_metadata = metadata.clone();
+        second_metadata.location = Path::from("second.vortex");
+        let second_identity = SegmentSourceIdentity::new(1, &second_metadata);
+        let mut third_metadata = metadata;
+        third_metadata.location = Path::from("third.vortex");
+        let third_identity = SegmentSourceIdentity::new(1, &third_metadata);
+
+        let first = pool.get_or_insert(first_identity, Arc::new(StaticSegmentSource(1)), 2);
+        let _second = pool.get_or_insert(second_identity, Arc::new(StaticSegmentSource(2)), 2);
+        let uncached =
+            pool.get_or_insert(third_identity.clone(), Arc::new(StaticSegmentSource(3)), 2);
+        assert_eq!(pool.len(), 2);
+
+        drop(first);
+        let cached =
+            pool.get_or_insert(third_identity.clone(), Arc::new(StaticSegmentSource(4)), 2);
+        assert_eq!(pool.len(), 2);
+        assert!(!Arc::ptr_eq(&uncached, &cached));
+        let selected_again =
+            pool.get_or_insert(third_identity, Arc::new(StaticSegmentSource(5)), 2);
+        assert!(Arc::ptr_eq(&cached, &selected_again));
+        Ok(())
+    }
+
+    #[rstest]
+    #[case(ScanBackend::V1, true, false)]
+    #[case(ScanBackend::Push, true, false)]
+    #[case(ScanBackend::PushFrontier, false, false)]
+    #[case(ScanBackend::PushFrontier, true, true)]
+    fn bounded_coalescing_gap_is_isolated_to_shared_push_frontier(
+        #[case] backend: ScanBackend,
+        #[case] source_sharing_configured: bool,
+        #[case] expected: bool,
+    ) {
+        assert_eq!(
+            use_bounded_coalescing_gap(backend, source_sharing_configured),
+            expected
+        );
+    }
 
     #[rstest]
     #[case(ScanBackend::V1, None, None, 1)]
@@ -1248,6 +1707,54 @@ mod tests {
         Ok(summary.size())
     }
 
+    async fn scan_two_push_frontier_ranges(
+        opener: &VortexOpener,
+        metadata: &ObjectMeta,
+    ) -> anyhow::Result<Vec<i32>> {
+        let midpoint = metadata.size / 2;
+        let mut left = PartitionedFile::new_with_range(
+            metadata.location.to_string(),
+            metadata.size,
+            0,
+            midpoint as i64,
+        );
+        left.object_meta = metadata.clone();
+        let mut right = PartitionedFile::new_with_range(
+            metadata.location.to_string(),
+            metadata.size,
+            midpoint as i64,
+            metadata.size as i64,
+        );
+        right.object_meta = metadata.clone();
+
+        let left = opener
+            .open_with_backend(left, ScanBackend::PushFrontier)?
+            .await?;
+        let mut right_opener = opener.clone();
+        right_opener.partition += 1;
+        let right = right_opener
+            .open_with_backend(right, ScanBackend::PushFrontier)?
+            .await?;
+        let (left, right) =
+            futures::try_join!(left.try_collect::<Vec<_>>(), right.try_collect::<Vec<_>>())?;
+
+        let mut values = left
+            .into_iter()
+            .chain(right)
+            .flat_map(|batch| {
+                batch
+                    .column(0)
+                    .as_any()
+                    .downcast_ref::<Int32Array>()
+                    .vortex_expect("test file must contain Int32 values")
+                    .values()
+                    .to_vec()
+            })
+            .collect::<Vec<_>>();
+        values.sort_unstable();
+        Ok(values)
+    }
+
     fn make_opener(
         object_store: Arc<dyn ObjectStore>,
         table_schema: TableSchema,
@@ -1257,6 +1764,7 @@ mod tests {
             partition: 1,
             session: SESSION.clone(),
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(object_store)),
+            push_frontier_source_sharing: None,
             projection: ProjectionExprs::from_indices(&[0], table_schema.file_schema()),
             filter,
             file_pruning_predicate: None,
@@ -1570,6 +2078,112 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn push_frontier_isolates_same_path_object_versions_end_to_end() -> anyhow::Result<()> {
+        let object_store = Arc::new(InMemory::new()) as Arc<dyn ObjectStore>;
+        let file_path = "versioned/file.vortex";
+        let first_batch = record_batch!(("a", Int32, vec![Some(1), Some(2), Some(3), Some(4)]))?;
+        let first_size =
+            write_arrow_to_vortex(Arc::clone(&object_store), file_path, first_batch.clone())
+                .await?;
+        let fixed_timestamp = "2026-09-12T12:34:56.123456789Z".parse()?;
+        let first_metadata = ObjectMeta {
+            location: Path::from(file_path),
+            last_modified: fixed_timestamp,
+            size: first_size,
+            e_tag: Some("etag-v1".to_owned()),
+            version: Some("version-v1".to_owned()),
+        };
+
+        let cache: Arc<FileMetadataCache> = Arc::new(
+            DefaultCache::<Path, CachedFileMetadataEntry>::new(64 * 1024 * 1024),
+        );
+        let pool = Arc::new(PushFrontierSegmentSourcePool::default());
+        let mut opener = make_opener(
+            Arc::clone(&object_store),
+            TableSchema::from(first_batch.schema()),
+            None,
+        );
+        opener.file_metadata_cache = Some(Arc::clone(&cache));
+        opener.push_frontier_source_sharing = Some(PushFrontierSourceSharing::new(
+            Arc::clone(&pool),
+            &object_store,
+            2,
+        ));
+
+        assert_eq!(
+            scan_two_push_frontier_ranges(&opener, &first_metadata).await?,
+            vec![1, 2, 3, 4]
+        );
+        assert_eq!(
+            cache
+                .get(&first_metadata.location)
+                .vortex_expect("first footer must be cached")
+                .meta,
+            first_metadata
+        );
+
+        let second_batch = record_batch!(("a", Int32, vec![Some(5), Some(6), Some(7), Some(8)]))?;
+        let second_size =
+            write_arrow_to_vortex(Arc::clone(&object_store), file_path, second_batch).await?;
+        assert_eq!(
+            second_size, first_size,
+            "test versions must have equal size"
+        );
+        let second_metadata = ObjectMeta {
+            e_tag: Some("etag-v2".to_owned()),
+            version: Some("version-v2".to_owned()),
+            ..first_metadata.clone()
+        };
+
+        assert_eq!(
+            scan_two_push_frontier_ranges(&opener, &second_metadata).await?,
+            vec![5, 6, 7, 8]
+        );
+        assert_eq!(
+            cache
+                .get(&second_metadata.location)
+                .vortex_expect("second footer must replace the stale version")
+                .meta,
+            second_metadata
+        );
+
+        let physical_metrics = opener
+            .metrics_registry
+            .snapshot()
+            .into_iter()
+            .filter(|metric| {
+                metric.name().starts_with("vortex.io.read.")
+                    || metric.name().starts_with("io.read_ranges.")
+                    || metric.name().starts_with("io.requests.")
+            })
+            .collect::<Vec<_>>();
+        assert!(!physical_metrics.is_empty());
+        assert!(physical_metrics.iter().all(|metric| {
+            metric.labels().iter().any(|label| {
+                label.key() == PATH_LABEL && label.value() == first_metadata.location.as_ref()
+            }) && metric
+                .labels()
+                .iter()
+                .all(|label| label.key() != PARTITION_LABEL)
+        }));
+        let mut label_sets = physical_metrics
+            .iter()
+            .map(|metric| {
+                metric
+                    .labels()
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        label_sets.sort();
+        label_sets.dedup();
+        assert_eq!(label_sets.len(), 1);
+        assert!(pool.len() <= 2);
+        Ok(())
+    }
+
     #[rstest]
     #[tokio::test]
     async fn test_open_files_different_table_schema() -> anyhow::Result<()> {
@@ -1604,6 +2218,7 @@ mod tests {
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(Arc::clone(
                 &object_store,
             ))),
+            push_frontier_source_sharing: None,
             projection: ProjectionExprs::from_indices(&[0], table_schema.file_schema()),
             filter: Some(filter),
             file_pruning_predicate: None,
@@ -1693,6 +2308,7 @@ mod tests {
             partition: 1,
             session: SESSION.clone(),
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(object_store)),
+            push_frontier_source_sharing: None,
             projection: ProjectionExprs::from_indices(&[0, 1, 2], &table_schema),
             filter: None,
             file_pruning_predicate: None,
@@ -1847,6 +2463,7 @@ mod tests {
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(Arc::clone(
                 &object_store,
             ))),
+            push_frontier_source_sharing: None,
             projection: ProjectionExprs::from_indices(
                 projection.as_ref(),
                 table_schema.file_schema(),
@@ -1912,6 +2529,7 @@ mod tests {
             partition: 1,
             session: SESSION.clone(),
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(object_store)),
+            push_frontier_source_sharing: None,
             projection,
             filter: None,
             file_pruning_predicate: None,
@@ -2121,6 +2739,7 @@ mod tests {
             vortex_reader_factory: Arc::new(DefaultVortexReaderFactory::new(Arc::clone(
                 &object_store,
             ))),
+            push_frontier_source_sharing: None,
             projection,
             filter: None,
             file_pruning_predicate: None,

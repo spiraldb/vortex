@@ -4,6 +4,7 @@
 mod driver;
 mod request;
 
+pub(crate) use driver::CoalesceGapBudget;
 pub(crate) use driver::IoRequestStream;
 pub(crate) use request::IoRequest;
 pub(crate) use request::ReadRequest;
