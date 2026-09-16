@@ -142,6 +142,13 @@ impl ChildBuilder {
         }
     }
 
+    /// Reserves room for `additional` more chunks.
+    ///
+    /// See [`ArrayBuilder::reserve_chunks`].
+    pub fn reserve_chunks(&mut self, additional: usize) {
+        self.chunks.reserve(additional);
+    }
+
     /// Finishes the child, combining the accumulated chunks into a [`ChunkedArray`] when there is
     /// more than one of them.
     pub fn finish(&mut self) -> ArrayRef {
