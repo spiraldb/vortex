@@ -201,6 +201,7 @@ impl ChildBuilder {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
     use vortex_buffer::BufferAllocatorRef;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
@@ -366,7 +367,6 @@ mod tests {
 
     /// The debug assertion has to run before the empty check, so that a mismatched array is caught
     /// whether or not it would have become a chunk.
-    #[cfg(debug_assertions)]
     #[rstest]
     #[case::empty(0)]
     #[case::non_empty(CHUNK_LEN)]
