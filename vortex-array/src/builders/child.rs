@@ -201,7 +201,6 @@ impl ChildBuilder {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
     use vortex_buffer::BufferAllocatorRef;
     use vortex_buffer::buffer;
     use vortex_error::VortexResult;
