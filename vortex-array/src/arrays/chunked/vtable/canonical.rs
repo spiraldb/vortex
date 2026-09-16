@@ -108,10 +108,12 @@ mod tests {
     use vortex_error::vortex_err;
     use vortex_session::VortexSession;
 
+    use crate::ArrayRef;
     use crate::Canonical;
     use crate::ExecutionCtx;
     use crate::IntoArray;
     use crate::VortexSessionExecute;
+    use crate::array_session;
     use crate::arrays::ChunkedArray;
     use crate::arrays::ConstantArray;
     use crate::arrays::ListArray;
@@ -127,7 +129,6 @@ mod tests {
     use crate::dtype::PType::I32;
     use crate::scalar::Scalar;
     use crate::validity::Validity;
-    use crate::{ArrayRef, array_session};
 
     /// A shared session for these chunked-array tests, used to create execution contexts.
     static SESSION: LazyLock<VortexSession> = LazyLock::new(array_session);
@@ -136,7 +137,7 @@ mod tests {
         Scalar::variant(Scalar::primitive(value, NonNullable))
     }
 
-    fn variant_core(values: impl IntoIterator<Item=i32>) -> VortexResult<ArrayRef> {
+    fn variant_core(values: impl IntoIterator<Item = i32>) -> VortexResult<ArrayRef> {
         Ok(ChunkedArray::try_new(
             values
                 .into_iter()
