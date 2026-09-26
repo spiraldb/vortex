@@ -145,7 +145,7 @@ impl ScanAdaptor {
         self.next_id = self
             .next_id
             .checked_add(1)
-            .ok_or_else(|| vortex_err!("ScanAdaptor ran out of request ids"))?;
+            .ok_or_else(|| vortex_err!(Overflow: "ScanAdaptor ran out of request ids"))?;
         self.outstanding.insert(id, (read, segment_id));
         Ok(request::IoRequest {
             intent: IoIntent::Fetch,
@@ -159,10 +159,10 @@ impl ScanAdaptor {
     /// next compute.
     pub(super) fn set_io_result(&mut self, id: request::IoRequestId, result: IoResult) {
         let Some((read, segment_id)) = self.outstanding.remove(&id.0) else {
-            vortex_panic!("ScanAdaptor: delivery of {id:?}, which is not outstanding");
+            vortex_panic!(AssertionFailed: "ScanAdaptor: delivery of {id:?}, which is not outstanding");
         };
         let IoResult::Bytes(bytes) = result else {
-            vortex_panic!("ScanAdaptor: segment {segment_id} answered with a size");
+            vortex_panic!(AssertionFailed: "ScanAdaptor: segment {segment_id} answered with a size");
         };
         if let Err(error) = self.deliver(read, segment_id, bytes)
             && self.failed.is_none()
@@ -191,6 +191,6 @@ impl ScanAdaptor {
         self.locations
             .get(*id as usize)
             .copied()
-            .ok_or_else(|| vortex_err!("segment {id} has no known location"))
+            .ok_or_else(|| vortex_err!(NotFound: "segment {id} has no known location"))
     }
 }

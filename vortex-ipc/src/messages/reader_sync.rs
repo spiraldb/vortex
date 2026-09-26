@@ -51,7 +51,7 @@ impl<R: Read> Iterator for SyncMessageReader<R> {
                                     return None;
                                 }
                                 return Some(Err(vortex_err!(
-                                    "unexpected EOF during partial read: read {total_bytes_read} of {nbytes} expected bytes"
+                                    InvalidArgument: "unexpected EOF during partial read: read {total_bytes_read} of {nbytes} expected bytes"
                                 )));
                             }
                             Ok(n) => total_bytes_read += n,
@@ -117,7 +117,7 @@ mod tests {
         let DecoderMessage::Array((parts, ctx, row_count)) =
             messages.next().vortex_expect("expected a message")?
         else {
-            vortex_panic!("expected an array message");
+            vortex_panic!(AssertionFailed: "expected an array message");
         };
         let actual = parts.decode(array.dtype(), row_count, &ctx, &SESSION)?;
         assert_eq!(actual.len(), array.len());

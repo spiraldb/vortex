@@ -237,12 +237,12 @@ impl ListViewData {
         // Check that offsets and sizes are integer arrays and non-nullable.
         vortex_ensure!(
             offsets.dtype().is_int() && !offsets.dtype().is_nullable(),
-            "offsets must be non-nullable integer array, got {}",
+            MismatchedTypes: "offsets must be non-nullable integer array, got {}",
             offsets.dtype()
         );
         vortex_ensure!(
             sizes.dtype().is_int() && !sizes.dtype().is_nullable(),
-            "sizes must be non-nullable integer array, got {}",
+            MismatchedTypes: "sizes must be non-nullable integer array, got {}",
             sizes.dtype()
         );
 
@@ -250,7 +250,7 @@ impl ListViewData {
         vortex_ensure_eq!(
             offsets.len(),
             sizes.len(),
-            "offsets and sizes must have the same length",
+            InvalidArgument: "offsets and sizes must have the same length",
         );
 
         // If a validity array is present, it must be the same length as the `ListViewArray`.
@@ -258,7 +258,7 @@ impl ListViewData {
             vortex_ensure_eq!(
                 validity_len,
                 offsets.len(),
-                "validity length does not match array size",
+                InvalidArgument: "validity length does not match array size",
             );
         }
 
@@ -521,7 +521,7 @@ pub trait ListViewArrayExt: ListViewArraySlotsExt {
         let n_lists = self.len();
         vortex_ensure!(
             n_lists > 0,
-            "referenced_element_bounds requires a non-empty array"
+            InvalidArgument: "referenced_element_bounds requires a non-empty array"
         );
 
         if self.is_zero_copy_to_list() {
@@ -682,33 +682,33 @@ where
         let offset = offsets_slice[i];
         let size = sizes_slice[i];
 
-        vortex_ensure!(offset >= O::zero(), "cannot have negative offsets");
-        vortex_ensure!(size >= S::zero(), "cannot have negative size");
+        vortex_ensure!(offset >= O::zero(), InvalidArgument: "cannot have negative offsets");
+        vortex_ensure!(size >= S::zero(), InvalidArgument: "cannot have negative size");
 
-        let offset_u64 = offset
-            .to_u64()
-            .ok_or_else(|| vortex_err!("offset[{i}] = {offset:?} cannot be converted to u64"))?;
+        let offset_u64 = offset.to_u64().ok_or_else(
+            || vortex_err!(Overflow: "offset[{i}] = {offset:?} cannot be converted to u64"),
+        )?;
 
-        let size_u64 = size
-            .to_u64()
-            .ok_or_else(|| vortex_err!("size[{i}] = {size:?} cannot be converted to u64"))?;
+        let size_u64 = size.to_u64().ok_or_else(
+            || vortex_err!(Overflow: "size[{i}] = {size:?} cannot be converted to u64"),
+        )?;
 
         // Check for overflow when adding offset + size.
         let end = offset_u64.checked_add(size_u64).ok_or_else(|| {
-            vortex_err!("offset[{i}] ({offset_u64}) + size[{i}] ({size_u64}) would overflow u64")
+            vortex_err!(Overflow: "offset[{i}] ({offset_u64}) + size[{i}] ({size_u64}) would overflow u64")
         })?;
 
         if offset_u64 == elements_len {
             vortex_ensure_eq!(
                 size_u64,
                 0,
-                "views to the end of the elements array (length {elements_len}) must have size 0",
+                InvalidArgument: "views to the end of the elements array (length {elements_len}) must have size 0",
             );
         }
 
         vortex_ensure!(
             end <= elements_len,
-            "offset[{i}] + size[{i}] = {offset_u64} + {size_u64} = {end} \
+            OutOfBounds: "offset[{i}] + size[{i}] = {offset_u64} + {size_u64} = {end} \
             exceeds elements length {elements_len}",
         );
     }
@@ -728,7 +728,7 @@ fn validate_zctl(
     let offsets_sorted = match_each_integer_ptype!(offsets_primitive.ptype(), |P| {
         offsets_primitive.as_slice::<P>().is_sorted()
     });
-    vortex_ensure!(offsets_sorted, "offsets must be sorted");
+    vortex_ensure!(offsets_sorted, InvalidArgument: "offsets must be sorted");
 
     // Validate that offset[i] + size[i] <= offset[i+1] for all items
     // This ensures views are non-overlapping and properly ordered for zero-copy-to-list
@@ -746,7 +746,7 @@ fn validate_zctl(
             // Check that this view starts at or after the previous view ended
             vortex_ensure!(
                 offset >= max_end,
-                "Zero-copy-to-list requires views to be non-overlapping and ordered: \
+                InvalidArgument: "Zero-copy-to-list requires views to be non-overlapping and ordered: \
                  view[{}] starts at {} but previous views extend to {}",
                 i,
                 offset,
@@ -824,7 +824,7 @@ fn validate_zctl(
             element_references[first_ref..=last_ref]
                 .iter()
                 .all(|&references| references != 0),
-            "found gap in elements array between first and last referenced elements"
+            InvalidArgument: "found gap in elements array between first and last referenced elements"
         );
     }
 

@@ -911,14 +911,14 @@ impl ExtVTable for BytesExtension {
     }
 
     fn deserialize_metadata(&self, metadata: &[u8]) -> VortexResult<u8> {
-        vortex_ensure!(metadata.len() == 1, "expected one metadata byte");
+        vortex_ensure!(metadata.len() == 1, AssertionFailed: "expected one metadata byte");
         Ok(metadata[0])
     }
 
     fn validate_dtype(dtype: &ExtDType<Self>) -> VortexResult<()> {
         vortex_ensure!(
             matches!(dtype.storage_dtype(), DType::FixedSizeList(..)),
-            "expected fixed-size list storage"
+            AssertionFailed: "expected fixed-size list storage"
         );
         Ok(())
     }

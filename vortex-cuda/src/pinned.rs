@@ -54,24 +54,24 @@ impl PinnedByteBuffer {
     ) -> VortexResult<Self> {
         vortex_ensure!(
             capacity < isize::MAX as usize,
-            "pinned host buffer capacity is too large: {capacity}"
+            Overflow: "pinned host buffer capacity is too large: {capacity}"
         );
         vortex_ensure!(
             logical_len <= capacity,
-            "pinned host buffer length {logical_len} exceeds capacity {capacity}"
+            Overflow: "pinned host buffer length {logical_len} exceeds capacity {capacity}"
         );
         let event = ctx
             .new_event(Some(CUevent_flags::CU_EVENT_DISABLE_TIMING))
-            .map_err(|e| vortex_err!("failed to create pinned host buffer event: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "failed to create pinned host buffer event: {e}"))?;
         // Bind explicitly rather than relying on event creation to bind this worker thread.
         ctx.bind_to_thread()
-            .map_err(|e| vortex_err!("failed to bind pinned host buffer context: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "failed to bind pinned host buffer context: {e}"))?;
         // Keep file-I/O staging cacheable: cudarc's allocator uses write-combined memory,
         // which makes CPU reads expensive.
         let ptr = unsafe { result::malloc_host(capacity, 0) }
-            .map_err(|e| vortex_err!("failed to allocate pinned host buffer: {e}"))?
+            .map_err(|e| vortex_err!(Io: "failed to allocate pinned host buffer: {e}"))?
             .cast::<u8>();
-        vortex_ensure!(!ptr.is_null(), "CUDA returned a null pinned host buffer");
+        vortex_ensure!(!ptr.is_null(), Io: "CUDA returned a null pinned host buffer");
         Ok(Self {
             ptr,
             capacity,
@@ -84,7 +84,7 @@ impl PinnedByteBuffer {
     pub(crate) fn as_mut_slice(&mut self) -> VortexResult<&mut [u8]> {
         self.event
             .synchronize()
-            .map_err(|e| vortex_err!("failed to access pinned host buffer: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "failed to access pinned host buffer: {e}"))?;
         Ok(unsafe { std::slice::from_raw_parts_mut(self.ptr, self.logical_len) })
     }
 
@@ -255,7 +255,7 @@ impl PinnedByteBufferPool {
         }
         self.ctx
             .bind_to_thread()
-            .map_err(|e| vortex_err!("Failed to bind CUDA context: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "Failed to bind CUDA context: {e}"))?;
         let mut idx = 0usize;
         while idx < inflight.len() {
             if !inflight[idx].buffer.event.is_complete() {
@@ -365,27 +365,27 @@ impl PooledPinnedBuffer {
     ) -> VortexResult<()> {
         vortex_ensure!(
             &self.pool.ctx == stream.context(),
-            "pinned buffer and transfer stream must use the same CUDA context"
+            InvalidArgument: "pinned buffer and transfer stream must use the same CUDA context"
         );
         let pinned = self.inner.as_mut().vortex_expect("buffer already consumed");
         vortex_ensure!(
             range.start <= range.end && range.end <= pinned.logical_len,
-            "invalid pinned host buffer range {:?} for length {}",
+            InvalidArgument: "invalid pinned host buffer range {:?} for length {}",
             range,
             pinned.logical_len
         );
         vortex_ensure_eq!(
             range.len(),
             destination.len(),
-            "pinned host buffer range length does not match destination length"
+            InvalidArgument: "pinned host buffer range length does not match destination length"
         );
 
         // Chain the old transfer before this stream replaces the completion fence, even for
         // buffers returned directly to a bucket. Check the wait before creating a source guard:
         // on failure, preserve the old fence rather than recording over it on this stream.
-        stream
-            .wait(&pinned.event)
-            .map_err(|error| vortex_err!("Failed to wait for pinned source transfer: {error}"))?;
+        stream.wait(&pinned.event).map_err(
+            |error| vortex_err!(Io: "Failed to wait for pinned source transfer: {error}"),
+        )?;
         let source = PinnedByteBufferView {
             buffer: pinned,
             range,
@@ -411,10 +411,10 @@ impl PooledPinnedBuffer {
                 let _leaked =
                     ManuallyDrop::new(self.inner.take().vortex_expect("buffer already consumed"));
                 return Err(vortex_err!(
-                    "H2D transfer fence failed: {error}; stream synchronization failed: {sync_error}"
+                    Io: "H2D transfer fence failed: {error}; stream synchronization failed: {sync_error}"
                 ));
             }
-            return Err(vortex_err!("H2D transfer fence failed: {error}"));
+            return Err(vortex_err!(Io: "H2D transfer fence failed: {error}"));
         }
 
         let inner = self.inner.take().vortex_expect("buffer already consumed");
@@ -449,11 +449,12 @@ mod tests {
     use super::*;
 
     fn setup() -> VortexResult<(Arc<PinnedByteBufferPool>, VortexCudaStream)> {
-        let ctx = CudaContext::new(0).map_err(|e| vortex_err!("Failed to initialize CUDA: {e}"))?;
+        let ctx =
+            CudaContext::new(0).map_err(|e| vortex_err!(Io: "Failed to initialize CUDA: {e}"))?;
         let pool = Arc::new(PinnedByteBufferPool::new(Arc::clone(&ctx)));
         let stream = VortexCudaStream(
             ctx.new_stream()
-                .map_err(|e| vortex_err!("Failed to create stream: {e}"))?,
+                .map_err(|e| vortex_err!(Io: "Failed to create stream: {e}"))?,
         );
         Ok((pool, stream))
     }
@@ -512,7 +513,7 @@ mod tests {
         let mut expected = vec![0xA5u8; 12];
         let mut destination = stream
             .clone_htod(&expected)
-            .map_err(|e| vortex_err!("Failed to initialize destination: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "Failed to initialize destination: {e}"))?;
         let result = pinned.copy_to_device(
             &stream,
             start..end,
@@ -565,7 +566,7 @@ mod tests {
         }
         stream
             .synchronize()
-            .map_err(|e| vortex_err!("Failed to sync stream: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "Failed to sync stream: {e}"))?;
 
         let mut reused = pool.get(1024)?;
         assert_eq!(reused.as_mut_slice().as_ptr(), allocation);
@@ -583,7 +584,7 @@ mod tests {
             stream
                 .context()
                 .new_stream()
-                .map_err(|e| vortex_err!("Failed to create stream: {e}"))?,
+                .map_err(|e| vortex_err!(Io: "Failed to create stream: {e}"))?,
         );
         let second = reused.transfer_to_device(&other_stream)?;
         let host = second.copy_to_host_sync(Alignment::of::<u8>())?;
@@ -616,11 +617,11 @@ mod tests {
     )> {
         // Other tests synchronize the primary context. Keep the gated DMA independent of them.
         let ctx = CudaContext::new_non_primary(0, 0)
-            .map_err(|e| vortex_err!("Failed to initialize CUDA: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "Failed to initialize CUDA: {e}"))?;
         let pool = Arc::new(PinnedByteBufferPool::new(Arc::clone(&ctx)));
         let stream = VortexCudaStream(
             ctx.new_stream()
-                .map_err(|e| vortex_err!("Failed to create stream: {e}"))?,
+                .map_err(|e| vortex_err!(Io: "Failed to create stream: {e}"))?,
         );
         if !automatic_tracking {
             // SAFETY: Each destination stays on its allocation stream. The pool fences sources.
@@ -629,7 +630,7 @@ mod tests {
         let other = VortexCudaStream(
             pool.ctx
                 .new_stream()
-                .map_err(|error| vortex_err!("{error}"))?,
+                .map_err(|error| vortex_err!(AssertionFailed: "{error}"))?,
         );
         Ok((pool, stream, other))
     }
@@ -661,7 +662,7 @@ mod tests {
         stream
             .context()
             .bind_to_thread()
-            .map_err(|e| vortex_err!("{e}"))?;
+            .map_err(|e| vortex_err!(InvalidArgument: "{e}"))?;
         unsafe extern "C" fn wait(data: *mut std::ffi::c_void) {
             // SAFETY: Registration transfers sole ownership of the boxed receiver here.
             let receiver = unsafe { Box::from_raw(data.cast::<Receiver<()>>()) };
@@ -675,7 +676,7 @@ mod tests {
             result::stream::launch_host_function(stream.cu_stream(), wait, data.cast()).map_err(
                 |error| {
                     drop(Box::from_raw(data));
-                    vortex_err!("Failed to block test stream: {error}")
+                    vortex_err!(Io: "Failed to block test stream: {error}")
                 },
             )?;
         }
@@ -715,7 +716,9 @@ mod tests {
         pinned.as_mut_slice().fill(0x5A);
         let mut first = stream.device_alloc::<u8>(len)?;
         let mut second = other.device_alloc::<u8>(len)?;
-        pool.ctx.synchronize().map_err(|e| vortex_err!("{e}"))?;
+        pool.ctx
+            .synchronize()
+            .map_err(|e| vortex_err!(InvalidArgument: "{e}"))?;
         // Declare the gate last so unwinding releases it before CUDA allocations are dropped.
         let gate = block_stream(&stream)?;
         submit_to_bucket(pinned, &stream, &mut first)?;
@@ -723,7 +726,9 @@ mod tests {
         pinned.copy_to_device(&other, 0..len, &mut second.slice_mut(..))?;
         assert_source_retained(&pool)?;
         drop(gate);
-        other.synchronize().map_err(|e| vortex_err!("{e}"))?;
+        other
+            .synchronize()
+            .map_err(|e| vortex_err!(InvalidArgument: "{e}"))?;
         pool.reclaim_completed()?;
         assert!(pool.inflight.lock().is_empty());
         pool.get(len)?.as_mut_slice().fill(0xA5);
@@ -743,7 +748,7 @@ mod tests {
         let mut first = stream.device_alloc::<u8>(len)?;
         let mut second = other
             .clone_htod(&vec![0xCCu8; len])
-            .map_err(|e| vortex_err!("{e}"))?;
+            .map_err(|e| vortex_err!(InvalidArgument: "{e}"))?;
         submit_to_bucket(pinned, &stream, &mut first)?;
         let pinned = pool.get(len)?;
         // Consumed by wait -> bind_to_thread -> check_err; the error text checks that path.
@@ -806,11 +811,11 @@ mod tests {
     fn rejects_transfer_between_contexts() -> VortexResult<()> {
         let (pool, _) = setup()?;
         let context = CudaContext::new_non_primary(0, 0)
-            .map_err(|e| vortex_err!("Failed to create context: {e}"))?;
+            .map_err(|e| vortex_err!(Io: "Failed to create context: {e}"))?;
         let stream = VortexCudaStream(
             context
                 .new_stream()
-                .map_err(|e| vortex_err!("Failed to create stream: {e}"))?,
+                .map_err(|e| vortex_err!(Io: "Failed to create stream: {e}"))?,
         );
         let mut pinned = pool.get(1024)?;
         pinned.as_mut_slice().fill(0xFF);

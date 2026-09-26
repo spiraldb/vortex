@@ -131,12 +131,12 @@ impl Work {
     fn deliver(&mut self, request: IoRequestId, result: IoResult) -> VortexResult<()> {
         let Some(target) = self.outstanding.remove(&request) else {
             vortex_bail!(
-                "completion for {request:?} of {:?}, which is not outstanding",
+                AssertionFailed: "completion for {request:?} of {:?}, which is not outstanding",
                 self.id
             );
         };
         if !result.matches(&target) {
-            vortex_bail!("IO source answered {target:?} with {}", result.kind());
+            vortex_bail!(AssertionFailed: "IO source answered {target:?} with {}", result.kind());
         }
         self.consumer().set_io_result(request, result);
         Ok(())
@@ -279,7 +279,7 @@ impl Run {
             if let Some(limit) = self.step_limit
                 && self.steps > limit
             {
-                vortex_bail!("driver exceeded its step limit of {limit}");
+                vortex_bail!(AssertionFailed: "driver exceeded its step limit of {limit}");
             }
             self.visit(work)?;
         }
@@ -302,7 +302,7 @@ impl Run {
                 self.queue.insert(work);
             } else if work.outstanding.is_empty() {
                 vortex_bail!(
-                    "work for scope {:?} waits with no outstanding fetch",
+                    AssertionFailed: "work for scope {:?} waits with no outstanding fetch",
                     work.scope
                 );
             }
@@ -310,7 +310,7 @@ impl Run {
         }
         // An item that published fetches and had CPU work left is still in the run queue.
         let Some(work) = self.queue.work.get_mut(&owner) else {
-            vortex_bail!("completion for unknown work {owner:?}");
+            vortex_bail!(AssertionFailed: "completion for unknown work {owner:?}");
         };
         work.deliver(request, result)
     }
@@ -327,7 +327,7 @@ impl Run {
             .collect();
         if sources.is_empty() {
             return Poll::Ready(Err(vortex_err!(
-                "the run is waiting for IO with no live root"
+                AssertionFailed: "the run is waiting for IO with no live root"
             )));
         }
         let mut delivered = false;
@@ -410,7 +410,7 @@ impl Run {
     fn park(&mut self, work: Box<Work>) -> VortexResult<()> {
         if work.outstanding.is_empty() {
             vortex_bail!(
-                "work for scope {:?} waits with no outstanding fetch",
+                AssertionFailed: "work for scope {:?} waits with no outstanding fetch",
                 work.scope
             );
         }
@@ -464,7 +464,7 @@ impl Run {
             }
             Output::Morsel(MorselOutput::Batch(array)) => {
                 if array.is_empty() {
-                    vortex_bail!("morsel for scope {:?} returned an empty batch", work.scope);
+                    vortex_bail!(AssertionFailed: "morsel for scope {:?} returned an empty batch", work.scope);
                 }
                 self.events.push_back(Progress::Batch(Batch {
                     root: work.root,
@@ -480,7 +480,7 @@ impl Run {
     /// Registers the requests an item published with its root's session.
     fn submit(&mut self, work: &mut Work, batch: IoBatch) -> VortexResult<()> {
         if batch.is_empty() {
-            vortex_bail!("compute() published an empty batch");
+            vortex_bail!(AssertionFailed: "compute() published an empty batch");
         }
         for request in &batch {
             if request.intent == IoIntent::Fetch
@@ -490,14 +490,14 @@ impl Run {
                     .is_some()
             {
                 vortex_bail!(
-                    "fetch {:?} of {:?} was published while it is outstanding",
+                    AssertionFailed: "fetch {:?} of {:?} was published while it is outstanding",
                     request.request,
                     work.id
                 );
             }
         }
         let Some(root) = self.roots.get(&work.root) else {
-            vortex_bail!("work {:?} outlived its root {:?}", work.id, work.root);
+            vortex_bail!(AssertionFailed: "work {:?} outlived its root {:?}", work.id, work.root);
         };
         root.io.submit(work.id, batch)
     }

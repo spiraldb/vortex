@@ -149,7 +149,7 @@ fn partitioned_strategy(configs: Vec<IndexConfig>) -> IndexedStrategy {
 
 fn partitioned(config: IndexConfig, partition_len: u64) -> VortexResult<IndexConfig> {
     let partition_len = NonZeroU64::new(partition_len)
-        .ok_or_else(|| vortex_err!("partition length must be non-zero"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "partition length must be non-zero"))?;
     Ok(config.with_partition_len(partition_len))
 }
 
@@ -336,7 +336,7 @@ async fn layout_carries_one_auxiliary_child_per_index() -> VortexResult<()> {
     // Index content is an ordinary layout tree, so it inherits chunking and zone maps for free.
     let index_child = layout
         .slot(1)?
-        .ok_or_else(|| vortex_err!("an exact-value index was configured"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "an exact-value index was configured"))?;
     assert_eq!(
         index_child
             .dtype()
@@ -512,7 +512,7 @@ async fn writer_rejects_an_index_that_does_not_match_its_declared_dtype() -> Vor
     .await;
 
     let Err(err) = result else {
-        vortex_bail!("writing an index that does not match its declared dtype should fail");
+        vortex_bail!(AssertionFailed: "writing an index that does not match its declared dtype should fail");
     };
     assert!(err.to_string().contains("declared"), "{err}");
     Ok(())
@@ -551,10 +551,10 @@ async fn index_whose_stored_dtype_no_longer_matches_its_kind_is_skipped() -> Vor
     );
     let data = layout
         .slot(0)?
-        .ok_or_else(|| vortex_err!("indexed layout has a data child"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "indexed layout has a data child"))?;
     let index = layout
         .slot(1)?
-        .ok_or_else(|| vortex_err!("an index was configured"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "an index was configured"))?;
     let changed = IndexedLayout::try_new(data, vec![index], vec![changed])?.into_layout();
 
     let reader = text_reader(&session, &changed, segments)?;
@@ -578,7 +578,7 @@ fn exact_value_index_roundtrips(
     let vtable = ExactValueIndex::new_ref();
     let kind = vtable
         .as_opt::<ExactValueIndex>()
-        .ok_or_else(|| vortex_err!("new_ref makes an ExactValueIndex"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "new_ref makes an ExactValueIndex"))?;
     let mut ctx = new_session().create_execution_ctx();
     check_roundtrip(
         kind,
@@ -594,7 +594,7 @@ fn fixed_superset_index_roundtrips() -> VortexResult<()> {
     let vtable = FixedSupersetIndex::new_ref("test.idx.fixed", RoaringBitmap::new());
     let kind = vtable
         .as_opt::<FixedSupersetIndex>()
-        .ok_or_else(|| vortex_err!("new_ref makes a FixedSupersetIndex"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "new_ref makes a FixedSupersetIndex"))?;
     let mut ctx = new_session().create_execution_ctx();
     check_roundtrip(
         kind,
@@ -648,7 +648,7 @@ fn partitioning(layout: &LayoutRef) -> VortexResult<IndexPartitioning> {
     layout.as_::<Indexed>().indexes()[0]
         .partitioning()
         .cloned()
-        .ok_or_else(|| vortex_err!("index should be partitioned"))
+        .ok_or_else(|| vortex_err!(AssertionFailed: "index should be partitioned"))
 }
 
 /// Partitioning changes how the index is built and probed, never what it answers: every value
@@ -673,7 +673,7 @@ async fn partitioned_index_answers_like_an_unpartitioned_one(
     // One data chunk, several index partitions: the two widths really are independent.
     let data = layout
         .slot(0)?
-        .ok_or_else(|| vortex_err!("indexed layout has a data child"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "indexed layout has a data child"))?;
     assert!(data.as_opt::<Flat>().is_some());
     assert_eq!(
         partitioning(&layout)?.index_ends().len() as u64,
@@ -740,7 +740,7 @@ impl CountingFixture {
 
         let index = layout
             .slot(1)?
-            .ok_or_else(|| vortex_err!("an index was configured"))?;
+            .ok_or_else(|| vortex_err!(AssertionFailed: "an index was configured"))?;
         // Each partition is its own index-child chunk, so chunk `p` holds partition `p`.
         assert_eq!(index.nslots(), 3);
         let partitions = (0..index.nslots())
@@ -748,7 +748,7 @@ impl CountingFixture {
                 segment_ids(
                     &index
                         .slot(p)?
-                        .ok_or_else(|| vortex_err!("partition {p} has a chunk"))?,
+                        .ok_or_else(|| vortex_err!(AssertionFailed: "partition {p} has a chunk"))?,
                 )
             })
             .collect::<VortexResult<_>>()?;
@@ -857,7 +857,8 @@ async fn probing_loads_only_the_index_chunks_its_filter_cannot_prune() -> Vortex
             ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
             FlatLayoutStrategy::default(),
             ZonedLayoutOptions {
-                block_size: NonZeroUsize::new(2).ok_or_else(|| vortex_err!("non-zero"))?,
+                block_size: NonZeroUsize::new(2)
+                    .ok_or_else(|| vortex_err!(AssertionFailed: "non-zero"))?,
                 ..Default::default()
             },
         ),
@@ -885,10 +886,10 @@ async fn probing_loads_only_the_index_chunks_its_filter_cannot_prune() -> Vortex
 
     let index = layout
         .slot(1)?
-        .ok_or_else(|| vortex_err!("an index was configured"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "an index was configured"))?;
     let chunks = index
         .slot(0)?
-        .ok_or_else(|| vortex_err!("the zoned index child has data"))?;
+        .ok_or_else(|| vortex_err!(AssertionFailed: "the zoned index child has data"))?;
     let chunk_count = usize::try_from(INDEX_ROWS)? / 2;
     assert_eq!(chunks.nslots(), chunk_count);
     let chunk_segments = (0..chunk_count)
@@ -896,7 +897,7 @@ async fn probing_loads_only_the_index_chunks_its_filter_cannot_prune() -> Vortex
             segment_ids(
                 &chunks
                     .slot(chunk)?
-                    .ok_or_else(|| vortex_err!("chunk {chunk} exists"))?,
+                    .ok_or_else(|| vortex_err!(AssertionFailed: "chunk {chunk} exists"))?,
             )
         })
         .collect::<VortexResult<Vec<_>>>()?;
@@ -971,13 +972,13 @@ async fn probing_skips_partitions_the_selection_rules_out(
             let (send, recv) = oneshot::channel();
             let pending = MaskFuture::new(ROWS.len(), async move {
                 recv.await
-                    .map_err(|_| vortex_err!("selection sender dropped"))
+                    .map_err(|_| vortex_err!(AssertionFailed: "selection sender dropped"))
             });
             let evaluated = reader.filter_evaluation(&all, &filter, pending)?;
             // Nothing can be skipped before the selection is known, so nothing is probed yet.
             assert!(fixture.index_requested().is_empty());
             send.send(selection.clone())
-                .map_err(|_| vortex_err!("filter dropped the selection"))?;
+                .map_err(|_| vortex_err!(AssertionFailed: "filter dropped the selection"))?;
             evaluated.await?
         }
     };
@@ -1239,7 +1240,7 @@ mod exact_value {
                 let mut buffer = Vec::with_capacity(bitmap.serialized_size());
                 bitmap
                     .serialize_into(&mut buffer)
-                    .map_err(|err| vortex_err!("Failed to serialize postings: {err}"))?;
+                    .map_err(|err| vortex_err!(Serde: "Failed to serialize postings: {err}"))?;
                 lists.push(buffer);
             }
 
@@ -1280,8 +1281,9 @@ mod exact_value {
                     .keys
                     .push(String::from_utf8_lossy(keys.bytes_at(idx).as_slice()).into_owned());
                 decoded.postings.push(
-                    RoaringBitmap::deserialize_from(lists.bytes_at(idx).as_slice())
-                        .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))?,
+                    RoaringBitmap::deserialize_from(lists.bytes_at(idx).as_slice()).map_err(
+                        |err| vortex_err!(Serde: "Failed to deserialize postings: {err}"),
+                    )?,
                 );
             }
             Ok(decoded)
@@ -1419,7 +1421,7 @@ mod exact_value {
             _options: &(),
             _ctx: &mut ExecutionCtx,
         ) -> VortexResult<ArrayRef> {
-            vortex_bail!("a declining index never builds content to encode")
+            vortex_bail!(AssertionFailed: "a declining index never builds content to encode")
         }
 
         fn decode(

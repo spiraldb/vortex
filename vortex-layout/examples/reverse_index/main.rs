@@ -214,7 +214,7 @@ impl IndexVTable for ReverseIndex {
             let mut buffer = Vec::with_capacity(bitmap.serialized_size());
             bitmap
                 .serialize_into(&mut buffer)
-                .map_err(|err| vortex_err!("Failed to serialize postings: {err}"))?;
+                .map_err(|err| vortex_err!(Serde: "Failed to serialize postings: {err}"))?;
             lists.push(buffer);
         }
 
@@ -244,7 +244,7 @@ impl IndexVTable for ReverseIndex {
         let postings = (0..lists.len())
             .map(|idx| {
                 RoaringBitmap::deserialize_from(lists.bytes_at(idx).as_slice())
-                    .map_err(|err| vortex_err!("Failed to deserialize postings: {err}"))
+                    .map_err(|err| vortex_err!(Serde: "Failed to deserialize postings: {err}"))
             })
             .collect::<VortexResult<_>>()?;
         Ok(Entries {
@@ -391,10 +391,10 @@ fn demo_session() -> VortexResult<VortexSession> {
         .with::<EditionSession>();
     session
         .register_edition(&DEMO_EDITION_DECLARATION)
-        .map_err(|err| vortex_err!("{err}"))?;
+        .map_err(|err| vortex_err!(Io: "{err}"))?;
     session
         .enable_edition(DEMO_EDITION)
-        .map_err(|err| vortex_err!("{err}"))?;
+        .map_err(|err| vortex_err!(Io: "{err}"))?;
     session.indexes().register(ReverseIndex::new_ref());
     Ok(session)
 }

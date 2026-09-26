@@ -86,12 +86,12 @@ pub(super) fn deserialize(
     let metadata = BitPackedV2Metadata::decode(metadata)?;
     vortex_ensure!(
         buffers.len() == 1,
-        "Expected 1 buffer, got {}",
+        InvalidArgument: "Expected 1 buffer, got {}",
         buffers.len()
     );
     vortex_ensure!(
         usize::try_from(metadata.offset).is_ok_and(|offset| offset < FL_CHUNK_SIZE),
-        "BitPacked offset must be less than {FL_CHUNK_SIZE}, got {}",
+        InvalidArgument: "BitPacked offset must be less than {FL_CHUNK_SIZE}, got {}",
         metadata.offset
     );
     let offset = u16::try_from(metadata.offset)?;
@@ -108,7 +108,7 @@ pub(super) fn deserialize(
         Validity::Array(children.get(num_patch_children, &Validity::DTYPE, len)?)
     } else {
         vortex_bail!(
-            "Expected {} or {} children, got {}",
+            InvalidArgument: "Expected {} or {} children, got {}",
             num_patch_children + 1,
             num_patch_children + 2,
             children.len()

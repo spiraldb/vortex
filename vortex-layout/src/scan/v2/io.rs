@@ -110,14 +110,14 @@ impl IoSource for SegmentIoSource {
         for request in batch {
             let IoTarget::Range { offset, len, .. } = request.target else {
                 vortex_bail!(
-                    "SegmentIoSource only serves byte ranges, not {:?}",
+                    NotImplemented: "SegmentIoSource only serves byte ranges, not {:?}",
                     request.target
                 );
             };
             let segment = *self
                 .ranges
                 .get(&(offset, len))
-                .ok_or_else(|| vortex_err!("No segment at bytes {offset}+{len}"))?;
+                .ok_or_else(|| vortex_err!(NotFound: "No segment at bytes {offset}+{len}"))?;
             if request.intent == IoIntent::Announce {
                 self.announced
                     .lock()
@@ -149,7 +149,7 @@ impl IoSource for SegmentIoSource {
             let mut bytes = match prefetched.remove(&segment) {
                 Some(read) => read
                     .map_err(move |err| {
-                        vortex_err!("prefetched read of segment {segment} failed: {err}")
+                        vortex_err!(Io: "prefetched read of segment {segment} failed: {err}")
                     })
                     .boxed(),
                 None => self
@@ -204,14 +204,14 @@ impl IoSource for SegmentIoSource {
         match self.reads.lock().poll_next_unpin(cx) {
             Poll::Ready(Some(completion)) => Poll::Ready(Ok(completion)),
             Poll::Ready(None) => Poll::Ready(Err(vortex_err!(
-                "The split's driver is waiting with no reads in flight"
+                AssertionFailed: "The split's driver is waiting with no reads in flight"
             ))),
             Poll::Pending => Poll::Pending,
         }
     }
 
     fn wait(&self) -> VortexResult<Completion> {
-        vortex_bail!("SegmentIoSource is awaited through poll_completion, not waited on")
+        vortex_bail!(AssertionFailed: "SegmentIoSource is awaited through poll_completion, not waited on")
     }
 
     fn release(&self, _owner: IoOwnerId) {}
@@ -286,7 +286,7 @@ mod tests {
                 receiver
                     .await
                     .map(BufferHandle::new_host)
-                    .map_err(|err| vortex_err!("{err}"))
+                    .map_err(|err| vortex_err!(Io: "{err}"))
             }
             .boxed()
         }

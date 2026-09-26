@@ -89,7 +89,7 @@ impl LogicalType {
         };
 
         if struct_type_ptr.is_null() {
-            vortex_bail!("Failed to create struct logical type");
+            vortex_bail!(InvalidArgument: "Failed to create struct logical type");
         }
 
         Ok(unsafe { Self::own(struct_type_ptr) })
@@ -99,13 +99,13 @@ impl LogicalType {
     pub fn decimal_type(precision: u8, scale: u8) -> VortexResult<Self> {
         vortex_ensure!(
             precision <= DUCKDB_MAX_DECIMAL_PRECISION,
-            "DuckDB decimal type precision must be <= {DUCKDB_MAX_DECIMAL_PRECISION}. \
+            InvalidArgument: "DuckDB decimal type precision must be <= {DUCKDB_MAX_DECIMAL_PRECISION}. \
              precision: {precision}"
         );
 
         let ptr = unsafe { duckdb_create_decimal_type(precision, scale) };
         if ptr.is_null() {
-            vortex_bail!("Failed to create decimal type");
+            vortex_bail!(InvalidArgument: "Failed to create decimal type");
         }
         Ok(unsafe { Self::own(ptr) })
     }
@@ -115,7 +115,7 @@ impl LogicalType {
         let ptr = unsafe { duckdb_create_list_type(element_type.as_ptr()) };
 
         if ptr.is_null() {
-            vortex_bail!("Failed to create list type");
+            vortex_bail!(InvalidArgument: "Failed to create list type");
         }
         Ok(unsafe { Self::own(ptr) })
     }
@@ -128,7 +128,7 @@ impl LogicalType {
         let ptr = unsafe { duckdb_create_array_type(element_type.as_ptr(), list_size as idx_t) };
 
         if ptr.is_null() {
-            vortex_bail!("Failed to create fixed-size list (array) type");
+            vortex_bail!(InvalidArgument: "Failed to create fixed-size list (array) type");
         }
 
         // SAFETY: This pointer came directly from DuckDB, and we checked that it was not `NULL`.
@@ -140,7 +140,7 @@ impl LogicalType {
         let ptr = unsafe { duckdb_create_map_type(key_type.as_ptr(), value_type.as_ptr()) };
 
         if ptr.is_null() {
-            vortex_bail!("Failed to create map type");
+            vortex_bail!(InvalidArgument: "Failed to create map type");
         }
         Ok(unsafe { Self::own(ptr) })
     }
@@ -238,11 +238,11 @@ impl LogicalType {
     /// Pass `None` for a GEOMETRY with no associated CRS.
     pub fn geometry_type(crs: Option<&str>) -> VortexResult<Self> {
         let Ok(crs) = CString::new(crs.unwrap_or("")) else {
-            vortex_bail!("CRS must not contain NUL bytes");
+            vortex_bail!(InvalidArgument: "CRS must not contain NUL bytes");
         };
         let ptr = unsafe { duckdb_vx_create_geometry(crs.as_ptr()) };
         if ptr.is_null() {
-            vortex_bail!("Failed to create GEOMETRY logical type");
+            vortex_bail!(InvalidArgument: "Failed to create GEOMETRY logical type");
         }
         Ok(unsafe { Self::own(ptr) })
     }
@@ -456,7 +456,7 @@ macro_rules! match_each_primitive_type {
                 $body
             }
             _ => vortex::error::vortex_panic!(
-                "Unexpected type for match_each_primitive_type: {:?}",
+                MismatchedTypes: "Unexpected type for match_each_primitive_type: {:?}",
                 $self.as_type_id()
             ),
         }

@@ -73,12 +73,12 @@ impl Lambda {
     ) -> VortexResult<Self> {
         let params: FieldNames = params.into_iter().map(Into::into).collect();
         if let Some(param) = params.iter().duplicates().next() {
-            vortex_bail!("lambda parameter {param} is declared more than once");
+            vortex_bail!(InvalidArgument: "lambda parameter {param} is declared more than once");
         }
         pre_order_visit_down(&body, |node: &Expression| {
             vortex_ensure!(
                 !reads_outside_lambda(node, params.as_ref()),
-                "lambda ({}) can only read its parameters, not {node}; reading anything else is \
+                InvalidArgument: "lambda ({}) can only read its parameters, not {node}; reading anything else is \
                  not supported yet",
                 params.iter().format(", ")
             );
@@ -138,7 +138,7 @@ impl Lambda {
     fn param_fields(&self, param_dtypes: &[DType]) -> VortexResult<StructFields> {
         vortex_ensure!(
             param_dtypes.len() == self.params.len(),
-            "lambda {self} needs one dtype per parameter, got {}",
+            InvalidArgument: "lambda {self} needs one dtype per parameter, got {}",
             param_dtypes.len()
         );
         Ok(StructFields::new(
@@ -236,7 +236,7 @@ impl BoundLambda {
     pub fn evaluate(&self, args: Vec<ArrayRef>, len: usize) -> VortexResult<ArrayRef> {
         vortex_ensure!(
             args.len() == self.params.nfields(),
-            "lambda {self} needs one array per parameter, got {}",
+            InvalidArgument: "lambda {self} needs one array per parameter, got {}",
             args.len()
         );
         for ((name, dtype), arg) in self
@@ -248,7 +248,7 @@ impl BoundLambda {
         {
             vortex_ensure!(
                 arg.dtype() == &dtype,
-                "lambda {self}: parameter {name} is bound to {dtype}, not {}",
+                MismatchedTypes: "lambda {self}: parameter {name} is bound to {dtype}, not {}",
                 arg.dtype()
             );
         }

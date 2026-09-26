@@ -232,7 +232,7 @@ fn drive(
                     events.push(Event::Io(std::mem::take(&mut batch)));
                 }
                 if inflight.is_empty() {
-                    return Err(vortex_err!("scan waits with no reads in flight"));
+                    return Err(vortex_err!(AssertionFailed: "scan waits with no reads in flight"));
                 }
                 let read = inflight.remove(pick(&inflight));
                 events.push(Event::Delivered(*read.segment_id));
@@ -447,7 +447,7 @@ fn every_read_is_issued_before_any_is_delivered() -> VortexResult<()> {
         delivery(Delivery::Fifo),
     )?;
     let Some(Event::Io(first)) = run.events.first() else {
-        return Err(vortex_err!("first event must be a read batch"));
+        return Err(vortex_err!(AssertionFailed: "first event must be a read batch"));
     };
     assert_eq!(first.len(), store.segments.len());
     assert_eq!(reads(&run.events), store.segments.len());
@@ -592,7 +592,7 @@ fn scan_keeps_the_selection_with_or_without_a_filter(#[case] sel: Sel) -> Vortex
     let filtered = lower(&store.flat(&values)?)?;
     let scan = filtered
         .as_opt::<Filter>()
-        .ok_or_else(|| vortex_err!("A flat layout lowers to a filter"))?
+        .ok_or_else(|| vortex_err!(AssertionFailed: "A flat layout lowers to a filter"))?
         .child_plan()?;
     assert!(scan.is::<SegmentScan>());
 
@@ -807,7 +807,7 @@ fn pack_readiness_tracks_changes_and_consumption(
     assert_eq!(cx.touched.indices(), &[1]);
     let Step::Final(array) = pack.compute(Input::None, &mut cx)? else {
         return Err(vortex_err!(
-            "expected Pack's last currently available batch"
+            AssertionFailed: "expected Pack's last currently available batch"
         ));
     };
     let expected = StructArray::from_fields(&[
@@ -868,7 +868,7 @@ fn bound_selection_never_initializes_skipped_chunks() -> VortexResult<()> {
     let children = PlanChildren::lazy(4, move |index| match index {
         0 => Ok(first.clone()),
         3 => Ok(last.clone()),
-        _ => Err(vortex_err!("unselected chunk {index} was initialized")),
+        _ => Err(vortex_err!(AssertionFailed: "unselected chunk {index} was initialized")),
     });
     // SAFETY: All four logical chunks have five rows of the same primitive dtype. The two
     // unselected initializers deliberately fail to detect discovery as well as compilation.

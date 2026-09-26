@@ -64,7 +64,7 @@ impl VTable for Null {
         _len: usize,
         _slots: &[Option<ArrayRef>],
     ) -> VortexResult<()> {
-        vortex_ensure_eq!(*dtype, DType::Null, "NullArray dtype must be DType::Null");
+        vortex_ensure_eq!(*dtype, DType::Null, MismatchedTypes: "NullArray dtype must be DType::Null");
         Ok(())
     }
 
@@ -73,7 +73,7 @@ impl VTable for Null {
     }
 
     fn buffer(_array: ArrayView<'_, Self>, idx: usize) -> BufferHandle {
-        vortex_panic!("NullArray buffer index {idx} out of bounds")
+        vortex_panic!(OutOfBounds: "NullArray buffer index {idx} out of bounds")
     }
 
     fn buffer_name(_array: ArrayView<'_, Self>, _idx: usize) -> Option<String> {
@@ -89,7 +89,7 @@ impl VTable for Null {
     }
 
     fn slot_name(_array: ArrayView<'_, Self>, idx: usize) -> String {
-        vortex_panic!("NullArray slot_name index {idx} out of bounds")
+        vortex_panic!(OutOfBounds: "NullArray slot_name index {idx} out of bounds")
     }
 
     fn serialize(
@@ -111,7 +111,7 @@ impl VTable for Null {
     ) -> VortexResult<ArrayParts<Self>> {
         vortex_ensure!(
             metadata.is_empty(),
-            "NullArray expects empty metadata, got {} bytes",
+            Serde: "NullArray expects empty metadata, got {} bytes",
             metadata.len()
         );
         Ok(ArrayParts::new(
@@ -141,7 +141,7 @@ impl VTable for Null {
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<()> {
         let Some(builder) = builder.as_any_mut().downcast_mut::<NullBuilder>() else {
-            vortex_bail!("append_to_builder for Null requires a NullBuilder");
+            vortex_bail!(InvalidArgument: "append_to_builder for Null requires a NullBuilder");
         };
         builder.append_nulls(array.len());
         Ok(())

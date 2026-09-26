@@ -98,14 +98,14 @@ impl ScalarFnVTable for CaseWhen {
     fn serialize(&self, options: &Self::Options) -> VortexResult<Option<Vec<u8>>> {
         vortex_ensure!(
             options.num_when_then_pairs > 0,
-            "CaseWhen must have at least one WHEN/THEN pair"
+            InvalidArgument: "CaseWhen must have at least one WHEN/THEN pair"
         );
         let Some(num_children) = options
             .num_when_then_pairs
             .checked_mul(2)
             .and_then(|count| count.checked_add(u32::from(options.has_else)))
         else {
-            vortex_bail!("CaseWhen has too many children to serialize");
+            vortex_bail!(Overflow: "CaseWhen has too many children to serialize");
         };
         Ok(Some(pb::CaseWhenOpts { num_children }.encode_to_vec()))
     }
@@ -118,7 +118,7 @@ impl ScalarFnVTable for CaseWhen {
         let opts = pb::CaseWhenOpts::decode(metadata)?;
         if opts.num_children < 2 {
             vortex_bail!(
-                "CaseWhen expects at least 2 children, got {}",
+                InvalidArgument: "CaseWhen expects at least 2 children, got {}",
                 opts.num_children
             );
         }
@@ -172,13 +172,13 @@ impl ScalarFnVTable for CaseWhen {
 
     fn return_dtype(&self, options: &Self::Options, arg_dtypes: &[DType]) -> VortexResult<DType> {
         if options.num_when_then_pairs == 0 {
-            vortex_bail!("CaseWhen must have at least one WHEN/THEN pair");
+            vortex_bail!(InvalidArgument: "CaseWhen must have at least one WHEN/THEN pair");
         }
 
         let expected_len = options.num_children();
         if arg_dtypes.len() != expected_len {
             vortex_bail!(
-                "CaseWhen expects {expected_len} argument dtypes, got {}",
+                InvalidArgument: "CaseWhen expects {expected_len} argument dtypes, got {}",
                 arg_dtypes.len()
             );
         }
@@ -193,7 +193,7 @@ impl ScalarFnVTable for CaseWhen {
             let then_i = &arg_dtypes[i * 2 + 1];
             let Some(union) = zip_nullability_union(&result_dtype, then_i) else {
                 vortex_bail!(
-                    "CaseWhen THEN dtypes must match (ignoring nullability), got {} and {}",
+                    MismatchedTypes: "CaseWhen THEN dtypes must match (ignoring nullability), got {} and {}",
                     first_then,
                     then_i
                 );
@@ -205,7 +205,7 @@ impl ScalarFnVTable for CaseWhen {
             let else_dtype = &arg_dtypes[options.num_when_then_pairs as usize * 2];
             let Some(union) = zip_nullability_union(&result_dtype, else_dtype) else {
                 vortex_bail!(
-                    "CaseWhen THEN and ELSE dtypes must match (ignoring nullability), got {} and {}",
+                    MismatchedTypes: "CaseWhen THEN and ELSE dtypes must match (ignoring nullability), got {} and {}",
                     first_then,
                     else_dtype
                 );

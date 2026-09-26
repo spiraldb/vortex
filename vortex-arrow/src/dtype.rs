@@ -62,7 +62,7 @@ pub(crate) fn to_arrow_time_unit(value: TimeUnit) -> VortexResult<ArrowTimeUnit>
         TimeUnit::Milliseconds => ArrowTimeUnit::Millisecond,
         TimeUnit::Microseconds => ArrowTimeUnit::Microsecond,
         TimeUnit::Nanoseconds => ArrowTimeUnit::Nanosecond,
-        _ => vortex_bail!("Cannot convert {value} to Arrow TimeUnit"),
+        _ => vortex_bail!(MismatchedTypes: "Cannot convert {value} to Arrow TimeUnit"),
     })
 }
 
@@ -81,7 +81,7 @@ pub(crate) fn ptype_from_arrow(value: &DataType) -> VortexResult<PType> {
         DataType::Float32 => Ok(PType::F32),
         DataType::Float64 => Ok(PType::F64),
         _ => Err(vortex_err!(
-            "Arrow datatype {:?} cannot be converted to ptype",
+            InvalidArgument: "Arrow datatype {:?} cannot be converted to ptype",
             value
         )),
     }
@@ -138,11 +138,11 @@ pub(crate) fn from_arrow_data_type(
         DataType::Map(entries, keys_sorted) => {
             vortex_ensure!(
                 !entries.is_nullable(),
-                "Arrow map entries field must be non-nullable"
+                InvalidArgument: "Arrow map entries field must be non-nullable"
             );
             let DataType::Struct(fields) = entries.data_type() else {
                 vortex_bail!(
-                    "Arrow map entries field must have Struct type, got {:?}",
+                    MismatchedTypes: "Arrow map entries field must have Struct type, got {:?}",
                     entries.data_type()
                 );
             };
@@ -155,7 +155,7 @@ pub(crate) fn from_arrow_data_type(
             let value = &fields[1];
             vortex_ensure!(
                 !key.is_nullable(),
-                "Arrow map key field must be non-nullable"
+                InvalidArgument: "Arrow map key field must be non-nullable"
             );
             DType::map(
                 from_arrow_field_naive(key.as_ref())?,
@@ -170,7 +170,7 @@ pub(crate) fn from_arrow_data_type(
         DataType::RunEndEncoded(_, value_type) => {
             from_arrow_data_type(value_type.data_type(), nullability)?
         }
-        _ => vortex_bail!("Arrow data type not supported: {data_type:?}"),
+        _ => vortex_bail!(InvalidArgument: "Arrow data type not supported: {data_type:?}"),
     })
 }
 
@@ -274,9 +274,9 @@ pub(crate) fn to_data_type_naive(dtype: &DType) -> VortexResult<DataType> {
 
             DataType::Struct(Fields::from(fields))
         }
-        DType::Union(..) => vortex_bail!("TODO(connor)[Union]: unimplemented"),
+        DType::Union(..) => vortex_bail!(NotImplemented: "TODO(connor)[Union]: unimplemented"),
         DType::Variant(_) => vortex_bail!(
-            "DType::Variant requires Arrow Field metadata; use to_arrow_schema or a Field helper"
+            InvalidArgument: "DType::Variant requires Arrow Field metadata; use to_arrow_schema or a Field helper"
         ),
         DType::Extension(ext_dtype) => {
             // NOTE: Temporal are the only builtin and default-loaded extension types, and they map
@@ -307,7 +307,7 @@ pub(crate) fn to_data_type_naive(dtype: &DType) -> VortexResult<DataType> {
                 });
             };
 
-            vortex_bail!("Unsupported extension type \"{}\"", ext_dtype.id())
+            vortex_bail!(InvalidArgument: "Unsupported extension type \"{}\"", ext_dtype.id())
         }
     })
 }

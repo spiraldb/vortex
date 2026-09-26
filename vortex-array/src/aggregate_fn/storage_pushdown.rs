@@ -144,7 +144,7 @@ impl<A: AggregateFnVTable, E: ExtVTable> ExtensionStoragePushdown<A, E> {
     ) -> VortexResult<AggregateArgs<'a, A::Options>> {
         let dtype = self.storage_dtype(args.dtype).ok_or_else(|| {
             vortex_err!(
-                "Aggregate function {} expects extension type {}, got {}",
+                MismatchedTypes: "Aggregate function {} expects extension type {}, got {}",
                 self.id,
                 self.ext.id(),
                 args.dtype
@@ -288,7 +288,7 @@ impl<A: AggregateFnVTable, E: ExtVTable> AggregateFnVTable for ExtensionStorageP
             }
             Columnar::Canonical(_) => {
                 vortex_bail!(
-                    "Aggregate function {} expects an extension array, got {}",
+                    MismatchedTypes: "Aggregate function {} expects an extension array, got {}",
                     self.id,
                     batch.dtype()
                 )

@@ -29,17 +29,17 @@ pub fn check_roundtrip<V: IndexVTable>(
     let parsed = vtable.deserialize_options(&blob)?;
     vortex_ensure!(
         vtable.serialize_options(&parsed) == blob,
-        "Index {} options do not re-serialize to the same blob",
+        AssertionFailed: "Index {} options do not re-serialize to the same blob",
         vtable.id()
     );
 
-    let declared = vtable
-        .index_dtype(data_dtype, options)
-        .ok_or_else(|| vortex_err!("Index {} cannot index {data_dtype}", vtable.id()))?;
+    let declared = vtable.index_dtype(data_dtype, options).ok_or_else(
+        || vortex_err!(AssertionFailed: "Index {} cannot index {data_dtype}", vtable.id()),
+    )?;
     let encoded = vtable.encode(chunk, options, ctx)?;
     vortex_ensure!(
         encoded.dtype() == &declared,
-        "Index {} encoded dtype {}, but declared {declared}",
+        AssertionFailed: "Index {} encoded dtype {}, but declared {declared}",
         vtable.id(),
         encoded.dtype()
     );

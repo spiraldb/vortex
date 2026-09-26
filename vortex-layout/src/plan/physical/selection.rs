@@ -77,7 +77,7 @@ impl SelectedData {
     fn mask(&self, rows: &Range<u64>) -> VortexResult<Mask> {
         vortex_ensure!(
             rows.start >= self.rows.start && rows.end <= self.rows.end,
-            "Selected plan requested outside its bound row range"
+            OutOfBounds: "Selected plan requested outside its bound row range"
         );
         Ok(self.mask.slice(
             usize::try_from(rows.start - self.rows.start)?

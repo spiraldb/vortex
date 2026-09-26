@@ -184,14 +184,14 @@ fn collect_ranges(
         let length = usize::try_from(length)?;
         let end = start
             .checked_add(length)
-            .ok_or_else(|| vortex_err!("PiecewiseSequenceArray range overflows usize"))?;
+            .ok_or_else(|| vortex_err!(Overflow: "PiecewiseSequenceArray range overflows usize"))?;
         vortex_ensure!(
             end <= array_len,
-            "PiecewiseSequenceArray range exceeds array length"
+            OutOfBounds: "PiecewiseSequenceArray range exceeds array length"
         );
-        total_len = total_len
-            .checked_add(length)
-            .ok_or_else(|| vortex_err!("PiecewiseSequenceArray output length overflows usize"))?;
+        total_len = total_len.checked_add(length).ok_or_else(
+            || vortex_err!(Overflow: "PiecewiseSequenceArray output length overflows usize"),
+        )?;
         ranges.push(start..end);
     }
     vortex_ensure_eq!(total_len, output_len);

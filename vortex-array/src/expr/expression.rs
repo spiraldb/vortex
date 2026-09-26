@@ -63,7 +63,7 @@ impl Expression {
 
         vortex_ensure!(
             scalar_fn.signature().arity().matches(children.len()),
-            "Expression arity mismatch: expected {} children but got {}",
+            InvalidArgument: "Expression arity mismatch: expected {} children but got {}",
             scalar_fn.signature().arity(),
             children.len()
         );
@@ -130,7 +130,7 @@ impl Expression {
             Self::Root => {
                 vortex_ensure!(
                     children.is_empty(),
-                    "Expression arity mismatch: root expects 0 children but got {}",
+                    InvalidArgument: "Expression arity mismatch: root expects 0 children but got {}",
                     children.len()
                 );
                 Ok(Self::Root)
@@ -138,7 +138,7 @@ impl Expression {
             Self::Variable(name) => {
                 vortex_ensure!(
                     children.is_empty(),
-                    "Expression arity mismatch: variable expects 0 children but got {}",
+                    InvalidArgument: "Expression arity mismatch: variable expects 0 children but got {}",
                     children.len()
                 );
                 Ok(Self::Variable(name.clone()))
@@ -146,7 +146,7 @@ impl Expression {
             Self::Scalar { scalar_fn, .. } => {
                 vortex_ensure!(
                     scalar_fn.signature().arity().matches(children.len()),
-                    "Expression arity mismatch: expected {} children but got {}",
+                    InvalidArgument: "Expression arity mismatch: expected {} children but got {}",
                     scalar_fn.signature().arity(),
                     children.len()
                 );
@@ -271,7 +271,7 @@ impl Expression {
 
 /// The error for a variable that no enclosing lambda declares.
 pub(crate) fn unbound_variable(name: &FieldName) -> VortexError {
-    vortex_err!("variable @{name} is not a parameter of an enclosing lambda")
+    vortex_err!(NotFound: "variable @{name} is not a parameter of an enclosing lambda")
 }
 
 /// The default display implementation for expressions uses the 'SQL'-style format.

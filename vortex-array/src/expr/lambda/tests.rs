@@ -102,7 +102,7 @@ impl ScalarFnVTable for Apply {
             ApplyOptions::Bound(lambda) => {
                 vortex_ensure!(
                     lambda.is_bound_to(args),
-                    "{lambda} is bound to other dtypes"
+                    AssertionFailed: "{lambda} is bound to other dtypes"
                 );
                 Ok(None)
             }
@@ -116,7 +116,7 @@ impl ScalarFnVTable for Apply {
         _ctx: &mut ExecutionCtx,
     ) -> VortexResult<ArrayRef> {
         let ApplyOptions::Bound(lambda) = options else {
-            vortex_bail!("apply's lambda is not bound");
+            vortex_bail!(AssertionFailed: "apply's lambda is not bound");
         };
         lambda.evaluate(vec![args.get(0)?], args.row_count())
     }

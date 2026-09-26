@@ -160,7 +160,7 @@ impl Morsel for ProjectionMorsel {
 
     fn compute(&mut self) -> VortexResult<MorselOutput> {
         if self.done {
-            vortex_bail!("ProjectionMorsel: compute called after Done");
+            vortex_bail!(AssertionFailed: "ProjectionMorsel: compute called after Done");
         }
         let Some(adaptor) = self.adaptor.as_mut() else {
             let plans = self

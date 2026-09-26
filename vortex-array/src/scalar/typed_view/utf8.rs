@@ -63,7 +63,7 @@ impl<'a> Utf8Scalar<'a> {
     /// Returns an error if the data type is not a UTF-8 type.
     pub fn try_new(dtype: &'a DType, value: Option<&'a ScalarValue>) -> VortexResult<Self> {
         if !matches!(dtype, DType::Utf8(..)) {
-            vortex_bail!("Can only construct utf8 scalar from utf8 dtype, found {dtype}")
+            vortex_bail!(MismatchedTypes: "Can only construct utf8 scalar from utf8 dtype, found {dtype}")
         }
 
         Ok(Self {

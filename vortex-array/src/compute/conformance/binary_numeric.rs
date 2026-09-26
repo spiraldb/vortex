@@ -140,7 +140,7 @@ pub fn test_binary_numeric_array(array: &ArrayRef, ctx: &mut ExecutionCtx) {
             test_binary_numeric_conformance_decimal(array, *decimal_dtype, ctx)
         }
         dtype => vortex_panic!(
-            "Binary numeric tests are only supported for primitive and decimal types, got {dtype}",
+            NotImplemented: "Binary numeric tests are only supported for primitive and decimal types, got {dtype}",
         ),
     }
 }
@@ -327,8 +327,9 @@ fn assert_decimal_results(
 
     let result = result.unwrap_or_else(|err| {
         vortex_panic!(
+            err,
             "Decimal binary numeric operation unexpectedly failed for encoding {}: \
-             {operator:?} {scalar} (lhs_is_array: {lhs_is_array}): {err}",
+             {operator:?} {scalar} (lhs_is_array: {lhs_is_array})",
             array.encoding_id(),
         )
     });
@@ -376,7 +377,7 @@ fn test_binary_numeric_edge_cases(array: &ArrayRef, ctx: &mut ExecutionCtx) {
             PType::F64 => test_binary_numeric_edge_cases_float::<f64>(array, ctx),
         },
         dtype => vortex_panic!(
-            "Binary numeric edge case tests are only supported for primitive numeric types, got {dtype}"
+            NotImplemented: "Binary numeric edge case tests are only supported for primitive numeric types, got {dtype}"
         ),
     }
 }
