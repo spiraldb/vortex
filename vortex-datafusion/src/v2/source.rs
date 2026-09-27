@@ -108,7 +108,7 @@ use vortex::dtype::Nullability;
 use vortex::error::VortexResult;
 use vortex::error::vortex_bail;
 use vortex::expr::Expression;
-use vortex::expr::and as vx_and;
+use vortex::expr::and_collect;
 use vortex::expr::get_item;
 use vortex::expr::pack;
 use vortex::expr::root;
@@ -569,7 +569,7 @@ impl DataSource for VortexDataSource {
             projection
         );
 
-        let converter = DefaultExpressionConverter::default();
+        let converter = DefaultExpressionConverter::new(self.session.clone());
         let input_schema = self.initial_schema.as_ref();
         let projected_schema = projection.project_schema(input_schema)?;
 
@@ -627,7 +627,7 @@ impl DataSource for VortexDataSource {
             ));
         }
 
-        let converter = DefaultExpressionConverter::default();
+        let converter = DefaultExpressionConverter::new(self.session.clone());
         let filters = filters
             .into_iter()
             .map(|filter| {
@@ -663,20 +663,14 @@ impl DataSource for VortexDataSource {
             ));
         }
 
-        // Convert to Vortex conjunction.
-        let vortex_pred = vortex::expr::and_collect(converted.into_iter().flatten())
+        // Rewrite the pushed filters over the scan's source columns and conjoin them with any
+        // existing filter.
+        let pushed = converted
+            .into_iter()
+            .flatten()
             .map(|expr| replace(expr, &root(), self.projected_projection.clone()));
-
-        // Combine with existing filter.
-        let new_filter = match (&self.filter, vortex_pred) {
-            (Some(existing), Some(new_pred)) => Some(vx_and(existing.clone(), new_pred)),
-            (Some(existing), None) => Some(existing.clone()),
-            (None, Some(new_pred)) => Some(new_pred),
-            (None, None) => None,
-        };
-
         let mut this = self.clone();
-        this.filter = new_filter;
+        this.filter = and_collect(self.filter.iter().cloned().chain(pushed));
         Ok(
             FilterPushdownPropagation::with_parent_pushdown_result(pushdown_results)
                 .with_updated_node(Arc::new(this) as _),
