@@ -9,6 +9,7 @@ use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::Constant;
 use vortex_array::arrays::ConstantArray;
 use vortex_array::arrays::VarBinArray;
 use vortex_array::assert_arrays_eq;
@@ -233,6 +234,85 @@ fn empty_contains_preserves_nulls(
     assert_arrays_eq!(
         result,
         BoolArray::from_iter([Some(!negated), None, Some(!negated)]),
+        &mut SESSION.create_execution_ctx()
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("%zzz%", true)]
+#[case("zzz", false)]
+#[case("zzz%", false)]
+fn uniform_results_are_constant(
+    #[case] pattern: &str,
+    #[case] indexed: bool,
+    #[values(false, true)] negated: bool,
+) -> VortexResult<()> {
+    let array = encode(&[Some("alpha"), Some("beta"), Some("")], indexed)?;
+    let result = execute_kernel(
+        &array,
+        pattern,
+        LikeOptions {
+            negated,
+            case_insensitive: false,
+        },
+    )?
+    .ok_or_else(|| vortex_err!("pattern should be handled by the OnPair kernel"))?;
+    assert!(
+        result.is::<Constant>(),
+        "no-match result should be a constant, got {}",
+        result.encoding_id()
+    );
+    assert_arrays_eq!(
+        result,
+        BoolArray::from_iter([Some(negated); 3]),
+        &mut SESSION.create_execution_ctx()
+    );
+    Ok(())
+}
+
+#[rstest]
+fn empty_contains_is_constant(#[values(false, true)] negated: bool) -> VortexResult<()> {
+    let array = encode(&[Some(""), Some("alpha")], true)?;
+    let result = execute_kernel(
+        &array,
+        "%%",
+        LikeOptions {
+            negated,
+            case_insensitive: false,
+        },
+    )?
+    .ok_or_else(|| vortex_err!("empty contains should not need a scan"))?;
+    assert!(result.is::<Constant>());
+    assert_arrays_eq!(
+        result,
+        BoolArray::from_iter([Some(!negated); 2]),
+        &mut SESSION.create_execution_ctx()
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("%zzz%", true)]
+#[case("zzz", false)]
+fn no_match_preserves_nulls(
+    #[case] pattern: &str,
+    #[case] indexed: bool,
+    #[values(false, true)] negated: bool,
+) -> VortexResult<()> {
+    let array = encode(&[Some("alpha"), None, Some("beta")], indexed)?;
+    let result = execute_kernel(
+        &array,
+        pattern,
+        LikeOptions {
+            negated,
+            case_insensitive: false,
+        },
+    )?
+    .ok_or_else(|| vortex_err!("contains should be handled by the OnPair kernel"))?;
+    assert_arrays_eq!(
+        result,
+        BoolArray::from_iter([Some(negated), None, Some(negated)]),
         &mut SESSION.create_execution_ctx()
     );
     Ok(())

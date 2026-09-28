@@ -8,8 +8,13 @@ use vortex_array::ArrayView;
 use vortex_array::ExecutionCtx;
 use vortex_array::IntoArray;
 use vortex_array::arrays::BoolArray;
+use vortex_array::arrays::ConstantArray;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability;
+use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::like::LikeKernel;
 use vortex_array::scalar_fn::fns::like::LikeOptions;
+use vortex_array::validity::Validity;
 use vortex_buffer::BitBuffer;
 use vortex_error::VortexResult;
 use vortex_error::vortex_err;
@@ -24,6 +29,35 @@ enum SearchPattern {
     Exact(Vec<u8>),
     Prefix(Vec<u8>),
     Contains(Vec<u8>),
+}
+
+/// Rows matched by a pattern before negation and validity are applied.
+///
+/// The degenerate outcomes carry no bitmap so the kernel can hand back a
+/// constant array: downstream `take` and mask combination then run in constant
+/// time instead of expanding an all-false bitmap over every row of the chunk.
+enum Matches {
+    All,
+    None,
+    Rows(BitBuffer),
+}
+
+impl Matches {
+    fn from_rows(rows: BitBuffer) -> Self {
+        match rows.true_count() {
+            0 => Self::None,
+            n if n == rows.len() => Self::All,
+            _ => Self::Rows(rows),
+        }
+    }
+
+    fn negate(self) -> Self {
+        match self {
+            Self::All => Self::None,
+            Self::None => Self::All,
+            Self::Rows(rows) => Self::Rows(!rows),
+        }
+    }
 }
 
 impl LikeKernel for OnPair {
@@ -52,26 +86,26 @@ impl LikeKernel for OnPair {
             SearchPattern::Exact(needle) => {
                 let window = collect_codes_window(array, ctx)?;
                 let query = search::tokenize(&needle, dict);
-                Some(match &window {
+                Some(Matches::from_rows(match &window {
                     CodesWindow::U32(window) => BitBuffer::collect_bool(array.len(), |row| {
                         search::equals(window.row(row), &query)
                     }),
                     CodesWindow::U64(window) => BitBuffer::collect_bool(array.len(), |row| {
                         search::equals(window.row(row), &query)
                     }),
-                })
+                }))
             }
             SearchPattern::Prefix(prefix) => {
                 let window = collect_codes_window(array, ctx)?;
                 let query = search::PrefixQuery::new(&prefix, dict);
-                Some(match &window {
+                Some(Matches::from_rows(match &window {
                     CodesWindow::U32(window) => BitBuffer::collect_bool(array.len(), |row| {
                         search::starts_with(window.row(row), &query)
                     }),
                     CodesWindow::U64(window) => BitBuffer::collect_bool(array.len(), |row| {
                         search::starts_with(window.row(row), &query)
                     }),
-                })
+                }))
             }
             SearchPattern::Contains(needle) => contains(array, dict, &needle, ctx)?,
         };
@@ -79,12 +113,46 @@ impl LikeKernel for OnPair {
             return Ok(None);
         };
 
-        let matches = if options.negated { !matches } else { matches };
+        let matches = if options.negated {
+            matches.negate()
+        } else {
+            matches
+        };
         let validity = array
             .array()
             .validity()?
             .union_nullability(pattern_scalar.dtype().nullability());
-        Ok(Some(BoolArray::new(matches, validity).into_array()))
+        Ok(Some(match matches {
+            Matches::Rows(rows) => BoolArray::new(rows, validity).into_array(),
+            Matches::All => uniform_result(true, validity, array.len()),
+            Matches::None => uniform_result(false, validity, array.len()),
+        }))
+    }
+}
+
+/// Build the result for a pattern that matched every row or no row.
+///
+/// Only a per-row validity child forces a materialized bitmap; every other
+/// validity collapses to a constant.
+fn uniform_result(value: bool, validity: Validity, len: usize) -> ArrayRef {
+    match validity {
+        Validity::NonNullable => {
+            ConstantArray::new(Scalar::bool(value, Nullability::NonNullable), len).into_array()
+        }
+        Validity::AllValid => {
+            ConstantArray::new(Scalar::bool(value, Nullability::Nullable), len).into_array()
+        }
+        Validity::AllInvalid => {
+            ConstantArray::new(Scalar::null(DType::Bool(Nullability::Nullable)), len).into_array()
+        }
+        Validity::Array(_) => {
+            let rows = if value {
+                BitBuffer::new_set(len)
+            } else {
+                BitBuffer::new_unset(len)
+            };
+            BoolArray::new(rows, validity).into_array()
+        }
     }
 }
 
@@ -93,9 +161,9 @@ fn contains(
     dict: onpair::CompactDictionaryView<'_>,
     needle: &[u8],
     ctx: &mut ExecutionCtx,
-) -> VortexResult<Option<BitBuffer>> {
+) -> VortexResult<Option<Matches>> {
     if needle.is_empty() {
-        return Ok(Some(BitBuffer::new_set(array.len())));
+        return Ok(Some(Matches::All));
     }
 
     if needle.len() > ContainsScan::MAX_PATTERN_LEN {
@@ -112,7 +180,16 @@ fn contains(
         CodesWindow::U32(window) => scan_contains(window.as_column_view(dict), &scan),
         CodesWindow::U64(window) => scan_contains(window.as_column_view(dict), &scan),
     };
-    Ok(Some(BitBuffer::from_indices(array.len(), rows)))
+    if rows.is_empty() {
+        return Ok(Some(Matches::None));
+    }
+    if rows.len() == array.len() {
+        return Ok(Some(Matches::All));
+    }
+    Ok(Some(Matches::Rows(BitBuffer::from_indices(
+        array.len(),
+        rows,
+    ))))
 }
 
 fn scan_contains<O: onpair::Offset>(
