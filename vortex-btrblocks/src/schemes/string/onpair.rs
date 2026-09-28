@@ -16,12 +16,14 @@ use vortex_compressor::scheme::DeferredEstimate;
 use vortex_compressor::scheme::SchemeId;
 use vortex_error::VortexResult;
 use vortex_onpair::DEFAULT_CONFIG;
+use vortex_onpair::MaxDictBits;
 use vortex_onpair::OnPair;
 use vortex_onpair::OnPairArrayExt;
 use vortex_onpair::OnPairArraySlotsExt;
 use vortex_onpair::OnPairIndexChildren;
 use vortex_onpair::OnPairIndexSet;
 use vortex_onpair::OnPairSlots;
+use vortex_onpair::Threshold;
 use vortex_onpair::build_token_frequency_index;
 use vortex_onpair::onpair_compress;
 
@@ -141,7 +143,24 @@ fn compress_onpair_scheme(
     indexes: OnPairIndexSet,
 ) -> VortexResult<ArrayRef> {
     let utf8 = data.array_as_varbinview().into_owned();
-    let encoded = onpair_compress(utf8.as_array(), DEFAULT_CONFIG, exec_ctx)?;
+    // EXPERIMENT: `VORTEX_ONPAIR_DICT_BITS` / `VORTEX_ONPAIR_THRESHOLD` override the training
+    // config so denser dictionaries can be measured without a code change.
+    let mut config = DEFAULT_CONFIG;
+    if let Some(bits) = std::env::var("VORTEX_ONPAIR_DICT_BITS")
+        .ok()
+        .and_then(|v| v.parse::<u8>().ok())
+        .and_then(|bits| MaxDictBits::new(bits).ok())
+    {
+        config.max_dict_bits = bits;
+    }
+    if let Some(threshold) = std::env::var("VORTEX_ONPAIR_THRESHOLD")
+        .ok()
+        .and_then(|v| v.parse::<f64>().ok())
+        .and_then(|t| Threshold::new(t).ok())
+    {
+        config.threshold = threshold;
+    }
+    let encoded = onpair_compress(utf8.as_array(), config, exec_ctx)?;
     let mut onpair_array = match encoded.try_downcast::<OnPair>() {
         Ok(array) => array,
         Err(array) => return Ok(array),
@@ -158,14 +177,24 @@ fn compress_onpair_scheme(
         0,
         exec_ctx,
     )?;
-    let codes = compress_primitive_child(
-        compressor,
-        onpair_array.codes(),
-        &compress_ctx,
-        scheme_id,
-        1,
-        exec_ctx,
-    )?;
+    // EXPERIMENT: `VORTEX_ONPAIR_RAW_CODES=1` stores the codes as a plain u16 primitive so the
+    // substring scan reads them without a bit-unpack pass.
+    let codes = if std::env::var("VORTEX_ONPAIR_RAW_CODES").is_ok_and(|v| v == "1") {
+        onpair_array
+            .codes()
+            .clone()
+            .execute::<PrimitiveArray>(exec_ctx)?
+            .into_array()
+    } else {
+        compress_primitive_child(
+            compressor,
+            onpair_array.codes(),
+            &compress_ctx,
+            scheme_id,
+            1,
+            exec_ctx,
+        )?
+    };
     let codes_offsets = compress_primitive_child(
         compressor,
         onpair_array.codes_offsets(),

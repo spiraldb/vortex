@@ -85,8 +85,14 @@ impl From<DictLayoutConstraints> for DictConstraints {
 
 impl Default for DictLayoutConstraints {
     fn default() -> Self {
+        // EXPERIMENT: `VORTEX_DICT_MAX_BYTES_MB=<n>` overrides the 1 MiB dictionary cap that
+        // bounds how many rows share one dictionary chunk.
+        let max_bytes = std::env::var("VORTEX_DICT_MAX_BYTES_MB")
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .map_or(1024 * 1024, |mb| mb * 1024 * 1024);
         Self {
-            max_bytes: 1024 * 1024,
+            max_bytes,
             max_len: u16::MAX,
         }
     }

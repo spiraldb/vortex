@@ -4,6 +4,7 @@
 use std::future::ready;
 use std::ops::Range;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::Weak;
 
 use arrow_array::RecordBatchOptions;
@@ -52,6 +53,8 @@ use vortex::file::OpenOptionsSessionExt;
 use vortex::io::InstrumentedReadAt;
 use vortex::layout::LayoutReader;
 use vortex::layout::scan::scan_builder::ScanBuilder;
+use vortex::layout::segments::MokaSegmentCache;
+use vortex::layout::segments::SegmentCache;
 use vortex::metrics::Label;
 use vortex::metrics::MetricsRegistry;
 use vortex::session::VortexSession;
@@ -69,6 +72,26 @@ use crate::metrics::PATH_LABEL;
 use crate::persistent::cache::CachedVortexMetadata;
 use crate::persistent::reader::VortexReaderFactory;
 use crate::persistent::stream::PrunableStream;
+
+/// EXPERIMENT: `VORTEX_SEGMENT_CACHE_MB=<n>` keeps a per-file segment cache of `n` MiB across
+/// opens of the same path. Segment ids are only unique within a file, so caches must not be shared.
+static SEGMENT_CACHE_MB: LazyLock<Option<u64>> = LazyLock::new(|| {
+    std::env::var("VORTEX_SEGMENT_CACHE_MB")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+});
+static SEGMENT_CACHES: LazyLock<DashMap<String, Arc<dyn SegmentCache>>> =
+    LazyLock::new(DashMap::default);
+
+fn experiment_segment_cache(path: &str) -> Option<Arc<dyn SegmentCache>> {
+    let mib = (*SEGMENT_CACHE_MB)?;
+    Some(Arc::clone(
+        SEGMENT_CACHES
+            .entry(path.to_string())
+            .or_insert_with(|| Arc::new(MokaSegmentCache::new(mib << 20)) as Arc<dyn SegmentCache>)
+            .value(),
+    ))
+}
 
 #[derive(Clone)]
 pub(crate) struct VortexOpener {
@@ -203,6 +226,11 @@ impl FileOpener for VortexOpener {
                 .with_file_size(file.object_meta.size)
                 .with_metrics_registry(Arc::clone(&metrics_registry))
                 .with_labels(labels);
+
+            // EXPERIMENT: opt-in per-file segment cache, sized in MiB.
+            if let Some(cache) = experiment_segment_cache(file.path().as_ref()) {
+                open_opts = open_opts.with_segment_cache(cache);
+            }
 
             let cached_footer = file_metadata_cache
                 .as_ref()

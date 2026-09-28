@@ -18,6 +18,7 @@ use vortex_array::arrays::primitive::PrimitiveArrayExt;
 use vortex_array::arrays::varbin::VarBinArraySlotsExt;
 use vortex_compressor::scheme::CompressionEstimate;
 use vortex_compressor::scheme::DeferredEstimate;
+use vortex_compressor::scheme::EstimateVerdict;
 use vortex_error::VortexResult;
 use vortex_fsst::FSST;
 use vortex_fsst::FSSTArrayExt;
@@ -65,6 +66,13 @@ impl Scheme for FSSTScheme {
         _compress_ctx: CompressorContext,
         _exec_ctx: &mut ExecutionCtx,
     ) -> CompressionEstimate {
+        // EXPERIMENT: with raw OnPair codes, FSST would win the size race; skip it so OnPair is
+        // still chosen for dictionary values.
+        if std::env::var("VORTEX_ONPAIR_RAW_CODES").is_ok_and(|v| v == "1")
+            || std::env::var("VORTEX_SKIP_FSST").is_ok_and(|v| v == "1")
+        {
+            return CompressionEstimate::Verdict(EstimateVerdict::Skip);
+        }
         CompressionEstimate::Deferred(DeferredEstimate::Sample)
     }
 
