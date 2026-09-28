@@ -85,8 +85,10 @@ pub fn dict_row_mask(
         .bitand(selection))
 }
 
-/// A selection keeping fewer than one row in this many takes the sparse path.
-const SPARSE_SELECTION_DIVISOR: usize = 32;
+/// A selection keeping fewer than one row in this many takes the sparse path. Testing a selected
+/// row costs a few nanoseconds against a quarter of one for the dense gather, so the paths cross
+/// at roughly one row in six.
+const SPARSE_SELECTION_DIVISOR: usize = 6;
 
 /// Indices of the selected rows whose code maps to a set bit.
 ///
