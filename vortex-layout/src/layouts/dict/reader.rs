@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 // SPDX-FileCopyrightText: Copyright the Vortex contributors
 
-use std::ops::BitAnd;
 use std::ops::Range;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -18,6 +17,7 @@ use vortex_array::arrays::DictArray;
 use vortex_array::builtins::ArrayBuiltins;
 use crate::arrays::shared::SharedArraySlotsExt;
 use crate::arrays::shared::current_array_ref_for_dispatch;
+use vortex_array::arrays::dict::dict_row_mask;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldMask;
 use vortex_array::dtype::Nullability;
@@ -318,12 +318,7 @@ impl LayoutReader for DictReader {
             let mask = mask.await?;
 
             let mut ctx = session.create_execution_ctx();
-            let dict_mask = values
-                .take(codes)?
-                .fill_null(false)?
-                .execute::<Mask>(&mut ctx)?;
-
-            Ok(mask.bitand(&dict_mask))
+            dict_row_mask(values, codes, &mask, &mut ctx)
         }))
     }
 
@@ -597,6 +592,11 @@ mod tests {
         vec![Some("x"), None, Some("x")], // Dict values: ["x"]
         "", // Filter for empty string
         vec![false, false, false], // Expected: all false, no dict values match
+    )]
+    #[case::mixed_case(
+        vec![Some("x"), None, Some("")], // Dict values: ["x", ""]
+        "", // Filter for empty string
+        vec![false, false, true], // Expected: only the matching value's rows, nulls excluded
     )]
     fn shortpathes_filtering(
         #[case] data: Vec<Option<&str>>,

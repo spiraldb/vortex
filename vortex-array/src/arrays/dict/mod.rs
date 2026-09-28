@@ -17,6 +17,9 @@ pub use array::*;
 pub(crate) mod compute;
 mod execute;
 
+mod row_mask;
+pub use row_mask::*;
+
 mod take;
 pub use take::*;
 
