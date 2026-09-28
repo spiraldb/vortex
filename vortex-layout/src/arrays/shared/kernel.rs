@@ -36,7 +36,6 @@ impl LikeKernel for Shared {
 }
 
 pub(crate) fn initialize(session: &VortexSession) {
-    session
-        .kernels()
-        .register_execute_parent_kernel(Like.id(), Shared, LikeExecuteAdaptor(Shared));
+    let kernels = session.kernels();
+    kernels.register_execute_parent_kernel(Like.id(), Shared, LikeExecuteAdaptor(Shared));
 }
