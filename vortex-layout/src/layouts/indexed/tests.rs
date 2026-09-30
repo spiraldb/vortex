@@ -4,32 +4,42 @@
 //! `examples/reverse_index/`), so these exercise the machinery through a test-only
 //! [`exact_value::ExactValueIndex`] instead.
 
+use std::num::NonZeroU64;
+use std::ops::Range;
 use std::sync::Arc;
 
+use parking_lot::Mutex;
 use roaring::RoaringBitmap;
+use rstest::rstest;
 use vortex_array::ArrayContext;
 use vortex_array::ArrayRef;
 use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::expr::BoundExpression;
 use vortex_array::expr::eq;
 use vortex_array::expr::like;
 use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::stream::ArrayStreamExt;
 use vortex_error::VortexResult;
+use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
 
 use super::INDEXED_LAYOUT_ID;
 use super::IndexConfig;
+use super::IndexPartitioning;
 use super::IndexSessionExt;
+use super::Indexed;
 use super::IndexedStrategy;
 use crate::LayoutChildType;
+use crate::LayoutReaderRef;
 use crate::LayoutRef;
 use crate::LayoutStrategy;
 use crate::layouts::chunked::writer::ChunkedLayoutStrategy;
+use crate::layouts::flat::Flat;
 use crate::layouts::flat::writer::FlatLayoutStrategy;
 use crate::layouts::indexed::tests::exact_value::DecliningIndex;
 use crate::layouts::indexed::tests::exact_value::ExactValueIndex;
@@ -37,6 +47,9 @@ use crate::layouts::indexed::tests::fixed_superset::FixedSupersetIndex;
 use crate::layouts::repartition::RepartitionStrategy;
 use crate::layouts::repartition::RepartitionWriterOptions;
 use crate::scan::scan_builder::ScanBuilder;
+use crate::segments::SegmentFuture;
+use crate::segments::SegmentId;
+use crate::segments::SegmentSource;
 use crate::segments::TestSegments;
 use crate::sequence::SequenceId;
 use crate::sequence::SequentialArrayStreamExt;
@@ -102,16 +115,43 @@ fn strategy(configs: Vec<IndexConfig>) -> IndexedStrategy {
         .with_data_block_len(BLOCK_LEN as u64)
 }
 
+/// A write strategy whose data child is one 12-row chunk, far wider than the index partitions
+/// the tests configure, with each index partition written as its own index-child chunk.
+///
+/// That is the shape partitioning exists for: index granularity chosen independently of how the
+/// data is chunked.
+fn partitioned_strategy(configs: Vec<IndexConfig>) -> IndexedStrategy {
+    IndexedStrategy::new(
+        ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+        ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+        configs,
+    )
+    .with_data_block_len(BLOCK_LEN as u64)
+}
+
+fn partitioned(config: IndexConfig, partition_len: u64) -> VortexResult<IndexConfig> {
+    let partition_len = NonZeroU64::new(partition_len)
+        .ok_or_else(|| vortex_err!("partition length must be non-zero"))?;
+    Ok(config.with_partition_len(partition_len))
+}
+
 /// Writes the text column, returning the resulting layout and the segments backing it.
 async fn write(
     session: &VortexSession,
     configs: Vec<IndexConfig>,
 ) -> VortexResult<(LayoutRef, Arc<TestSegments>)> {
+    write_with(session, strategy(configs)).await
+}
+
+async fn write_with(
+    session: &VortexSession,
+    strategy: IndexedStrategy,
+) -> VortexResult<(LayoutRef, Arc<TestSegments>)> {
     let ctx = ArrayContext::empty();
     let segments = Arc::new(TestSegments::default());
     let (ptr, eof) = SequenceId::root().split();
 
-    let layout = strategy(configs)
+    let layout = strategy
         .write_stream(
             ctx.into(),
             Arc::<TestSegments>::clone(&segments),
@@ -127,7 +167,7 @@ fn text_reader(
     session: &VortexSession,
     layout: &LayoutRef,
     segments: Arc<TestSegments>,
-) -> VortexResult<crate::LayoutReaderRef> {
+) -> VortexResult<LayoutReaderRef> {
     layout.new_reader("text".into(), segments, session, &Default::default())
 }
 
@@ -278,7 +318,7 @@ async fn layout_carries_one_auxiliary_child_per_index() -> VortexResult<()> {
     // Index content is an ordinary layout tree, so it inherits chunking and zone maps for free.
     let index_child = layout
         .slot(1)?
-        .ok_or_else(|| vortex_error::vortex_err!("an exact-value index was configured"))?;
+        .ok_or_else(|| vortex_err!("an exact-value index was configured"))?;
     assert_eq!(
         index_child
             .dtype()
@@ -421,6 +461,229 @@ async fn exact_claim_discards_a_preceding_superset_claim() -> VortexResult<()> {
     Ok(())
 }
 
+/// Rows where `ROWS[row] == value`, over `row_range`.
+fn expected_rows(row_range: &Range<u64>, value: &str) -> VortexResult<Mask> {
+    let rows = usize::try_from(row_range.start)?..usize::try_from(row_range.end)?;
+    Ok(Mask::from_iter(rows.map(|row| ROWS[row] == value)))
+}
+
+fn eq_filter(reader: &LayoutReaderRef, value: &str) -> VortexResult<BoundExpression> {
+    eq(root(), lit(value)).bind(reader.dtype())
+}
+
+/// Index content and metadata for the first (only) index on `layout`.
+fn partitioning(layout: &LayoutRef) -> VortexResult<IndexPartitioning> {
+    layout.as_::<Indexed>().indexes()[0]
+        .partitioning()
+        .cloned()
+        .ok_or_else(|| vortex_err!("index should be partitioned"))
+}
+
+/// Partitioning changes how the index is built and probed, never what it answers: every value
+/// must resolve to exactly its rows over any range, including ranges that straddle partitions and
+/// a final partition shorter than the rest.
+#[rstest]
+#[tokio::test]
+async fn partitioned_index_answers_like_an_unpartitioned_one(
+    #[values(4, 8)] partition_len: u64,
+    #[values(0..12, 2..10, 5..6, 4..8, 9..12)] row_range: Range<u64>,
+) -> VortexResult<()> {
+    let session = session_with_exact_index();
+    let (layout, segments) = write_with(
+        &session,
+        partitioned_strategy(vec![partitioned(
+            IndexConfig::with_defaults(ExactValueIndex::new_ref()),
+            partition_len,
+        )?]),
+    )
+    .await?;
+
+    // One data chunk, several index partitions: the two widths really are independent.
+    let data = layout
+        .slot(0)?
+        .ok_or_else(|| vortex_err!("indexed layout has a data child"))?;
+    assert!(data.as_opt::<Flat>().is_some());
+    assert_eq!(
+        partitioning(&layout)?.index_ends().len() as u64,
+        (ROWS.len() as u64).div_ceil(partition_len)
+    );
+
+    let reader = text_reader(&session, &layout, segments)?;
+    let len = usize::try_from(row_range.end - row_range.start)?;
+    for value in [ROWS[1], ROWS[2], ROWS[9], ROWS[11], "absent"] {
+        let mask = reader
+            .filter_evaluation(
+                &row_range,
+                &eq_filter(&reader, value)?,
+                MaskFuture::new_true(len),
+            )?
+            .await?;
+        assert_eq!(mask, expected_rows(&row_range, value)?, "value {value:?}");
+    }
+    Ok(())
+}
+
+/// Records every segment requested, so a test can see which index bytes a probe touched.
+struct CountingSegments {
+    inner: Arc<TestSegments>,
+    requested: Mutex<Vec<SegmentId>>,
+}
+
+impl SegmentSource for CountingSegments {
+    fn request(&self, id: SegmentId) -> SegmentFuture {
+        self.requested.lock().push(id);
+        self.inner.request(id)
+    }
+}
+
+fn segment_ids(layout: &LayoutRef) -> VortexResult<Vec<SegmentId>> {
+    let mut ids = layout.segment_ids();
+    for slot in 0..layout.nslots() {
+        if let Some(child) = layout.slot(slot)? {
+            ids.extend(segment_ids(&child)?);
+        }
+    }
+    Ok(ids)
+}
+
+/// The point of partitioning: a split covering one partition probes only that partition's slice
+/// of the index child, not the whole index.
+#[tokio::test]
+async fn probing_a_range_reads_only_its_partitions_index() -> VortexResult<()> {
+    let session = session_with_exact_index();
+    let (layout, segments) = write_with(
+        &session,
+        partitioned_strategy(vec![partitioned(
+            IndexConfig::with_defaults(ExactValueIndex::new_ref()),
+            BLOCK_LEN as u64,
+        )?]),
+    )
+    .await?;
+
+    let index = layout
+        .slot(1)?
+        .ok_or_else(|| vortex_err!("an index was configured"))?;
+    // Each partition is its own index-child chunk, so chunk `p` holds partition `p`.
+    assert_eq!(index.nslots(), 3);
+    let partition_1 = segment_ids(
+        &index
+            .slot(1)?
+            .ok_or_else(|| vortex_err!("partition 1 has a chunk"))?,
+    )?;
+    let all_index = segment_ids(&index)?;
+
+    let counting = Arc::new(CountingSegments {
+        inner: segments,
+        requested: Mutex::new(Vec::new()),
+    });
+    let reader = layout.new_reader(
+        "text".into(),
+        Arc::<CountingSegments>::clone(&counting),
+        &session,
+        &Default::default(),
+    )?;
+
+    let row_range = 4..8;
+    let mask = reader
+        .filter_evaluation(
+            &row_range,
+            &eq_filter(&reader, ROWS[5])?,
+            MaskFuture::new_true(4),
+        )?
+        .await?;
+    assert_eq!(mask, expected_rows(&row_range, ROWS[5])?);
+
+    let mut index_requested: Vec<_> = counting
+        .requested
+        .lock()
+        .iter()
+        .copied()
+        .filter(|id| all_index.contains(id))
+        .collect();
+    index_requested.sort();
+    index_requested.dedup();
+    assert_eq!(index_requested, partition_1);
+    Ok(())
+}
+
+/// A partition whose builder declined knows nothing about its rows. Pruning must leave them all
+/// alive, and an exact claim must not answer a split overlapping it, so the data child filters
+/// those rows instead — while the built partitions keep pruning and answering exactly.
+#[tokio::test]
+async fn declined_partition_prunes_nothing_and_defers_to_the_data_child() -> VortexResult<()> {
+    let session = session_with_exact_index();
+    let (layout, segments) = write_with(
+        &session,
+        partitioned_strategy(vec![partitioned(
+            IndexConfig::with_defaults(ExactValueIndex::declining_partitions_containing(ROWS[5])),
+            BLOCK_LEN as u64,
+        )?]),
+    )
+    .await?;
+
+    let partitioning = partitioning(&layout)?;
+    assert_eq!(partitioning.declined(), &RoaringBitmap::from_iter([1u32]));
+    // The declined partition wrote no index rows, so its span is empty.
+    let ends = partitioning.index_ends();
+    assert_eq!(ends[0], ends[1]);
+
+    let reader = text_reader(&session, &layout, segments)?;
+    let all = 0..ROWS.len() as u64;
+
+    let pruned = reader
+        .pruning_evaluation(
+            &all,
+            &eq_filter(&reader, ROWS[2])?,
+            Mask::new_true(ROWS.len()),
+        )?
+        .await?;
+    assert_eq!(
+        pruned,
+        Mask::from_iter((0..ROWS.len()).map(|row| row == 2 || (4..8).contains(&row)))
+    );
+
+    // The value only the declined partition holds is still found, through the data child.
+    for value in [ROWS[5], ROWS[2]] {
+        let mask = reader
+            .filter_evaluation(
+                &all,
+                &eq_filter(&reader, value)?,
+                MaskFuture::new_true(ROWS.len()),
+            )?
+            .await?;
+        assert_eq!(mask, expected_rows(&all, value)?, "value {value:?}");
+    }
+    Ok(())
+}
+
+/// Partitions must never cut through a data block, so the writer rejects a partition length it
+/// cannot check against the block length, or one that is not a multiple of it.
+#[rstest]
+#[case::no_data_block_len(None, 4)]
+#[case::misaligned(Some(4), 6)]
+#[tokio::test]
+async fn partition_len_must_align_with_the_data_block_len(
+    #[case] data_block_len: Option<u64>,
+    #[case] partition_len: u64,
+) -> VortexResult<()> {
+    let session = session_with_exact_index();
+    let configs = vec![partitioned(
+        IndexConfig::with_defaults(ExactValueIndex::new_ref()),
+        partition_len,
+    )?];
+    let mut strategy = IndexedStrategy::new(
+        ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+        ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+        configs,
+    );
+    if let Some(block_len) = data_block_len {
+        strategy = strategy.with_data_block_len(block_len);
+    }
+
+    assert!(write_with(&session, strategy).await.is_err());
+    Ok(())
+}
+
 /// A test-only sorted value index, present to exercise the [`super::IndexExactness::Exact`] path
 /// that a real posting-list index kind (such as an n-gram index) would rarely reach for equality
 /// queries.
@@ -482,11 +745,23 @@ mod exact_value {
     }
 
     #[derive(Debug)]
-    pub struct ExactValueIndex;
+    pub struct ExactValueIndex {
+        /// Write-side only: decline any partition holding this value. Reading is unaffected, so a
+        /// session with the plain kind registered reads files written with this one.
+        decline_if_contains: Option<&'static str>,
+    }
 
     impl ExactValueIndex {
         pub fn new_ref() -> IndexVTableRef {
-            Arc::new(Self)
+            Arc::new(Self {
+                decline_if_contains: None,
+            })
+        }
+
+        pub fn declining_partitions_containing(value: &'static str) -> IndexVTableRef {
+            Arc::new(Self {
+                decline_if_contains: Some(value),
+            })
         }
     }
 
@@ -509,6 +784,7 @@ mod exact_value {
         ) -> VortexResult<Box<dyn IndexBuilder>> {
             Ok(Box::new(Builder {
                 postings: BTreeMap::new(),
+                decline_if_contains: self.decline_if_contains,
             }))
         }
 
@@ -541,6 +817,7 @@ mod exact_value {
     struct Builder {
         /// Sorted by construction, which is what gives the key column a useful zone map.
         postings: BTreeMap<String, RoaringBitmap>,
+        decline_if_contains: Option<&'static str>,
     }
 
     impl IndexBuilder for Builder {
@@ -569,6 +846,13 @@ mod exact_value {
         }
 
         fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>> {
+            if self
+                .decline_if_contains
+                .is_some_and(|value| self.postings.contains_key(value))
+            {
+                return Ok(None);
+            }
+
             let mut keys = Vec::with_capacity(self.postings.len());
             let mut lists = Vec::with_capacity(self.postings.len());
             for (key, bitmap) in self.postings {

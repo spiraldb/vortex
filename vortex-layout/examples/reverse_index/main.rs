@@ -88,7 +88,7 @@ use vortex_session::registry::CachedId;
 use vortex_utils::aliases::hash_map::HashMap;
 
 #[cfg(test)]
-mod datafusion_tests;
+mod pruning_tests;
 #[cfg(test)]
 mod tests;
 

@@ -1,48 +1,48 @@
-//! Test that DataFusion can query a file whose column uses the `vortex.indexed` layout, with
-//! [`ReverseIndex`] answering an equality filter.
+//! Verifies that a registered index actually skips reading pruned blocks, not just that it
+//! returns the right rows.
 //!
-//! This lives alongside the [`ReverseIndex`] example rather than in `vortex-datafusion` because
-//! `vortex-layout` sits below `vortex-datafusion` in the dependency graph: `vortex-datafusion`
-//! cannot depend on an example that lives in `vortex-layout`, but an example's `dev-dependencies`
-//! may freely depend on `vortex-datafusion`.
+//! This scans directly through [`vortex_layout`]'s `ScanBuilder` against an in-memory
+//! [`ObjectStore`], rather than through `vortex-datafusion`: DataFusion's own equality-pushdown
+//! behavior is already covered by `vortex-datafusion`'s own test suite, so re-proving it here only
+//! bought this crate's tests a `datafusion` dev-dependency and a much slower compile.
 
+use std::num::NonZeroU64;
 use std::sync::Arc;
 
+use arrow_array::RecordBatch;
 use arrow_array::record_batch;
-use datafusion::arrow::array::RecordBatch;
-use datafusion::assert_batches_sorted_eq;
-use datafusion::datasource::provider::DefaultTableFactory;
-use datafusion::execution::SessionStateBuilder;
-use datafusion::physical_plan::collect;
-use datafusion::prelude::SessionContext;
-use datafusion_catalog::TableProvider;
-use datafusion_common::DFSchema;
-use datafusion_common::GetExt;
-use datafusion_expr::CreateExternalTable;
-use datafusion_expr::col;
-use datafusion_expr::lit;
-use datafusion_physical_plan::metrics::MetricsSet;
 use object_store::ObjectStore;
 use object_store::memory::InMemory;
+use object_store::path::Path;
 use rstest::rstest;
-use url::Url;
+use vortex_array::VortexSessionExecute;
 use vortex_array::array_session;
+use vortex_array::arrays::PrimitiveArray;
+use vortex_array::arrays::StructArray;
+use vortex_array::arrays::struct_::StructArrayExt;
 use vortex_array::dtype::FieldPath;
+use vortex_array::expr::col;
+use vortex_array::expr::eq;
+use vortex_array::expr::lit;
+use vortex_array::expr::root;
+use vortex_array::expr::select;
+use vortex_array::stream::ArrayStreamExt;
 use vortex_arrow::ArrowSessionExt;
-use vortex_datafusion::VortexFormatFactory;
-use vortex_datafusion::VortexTableOptions;
-use vortex_datafusion::metrics::VortexMetricsFinder;
 use vortex_edition::Edition;
 use vortex_edition::EditionDeclaration;
 use vortex_edition::EditionId;
 use vortex_edition::EditionMember;
 use vortex_edition::EditionSession;
 use vortex_edition::EditionSessionExt;
+use vortex_file::OpenOptionsSessionExt;
 use vortex_file::WriteOptionsSessionExt;
 use vortex_file::WriteStrategyBuilder;
+use vortex_io::InstrumentedReadAt;
 use vortex_io::VortexWrite;
+use vortex_io::object_store::ObjectStoreReadAt;
 use vortex_io::object_store::ObjectStoreWrite;
 use vortex_io::session::RuntimeSession;
+use vortex_io::session::RuntimeSessionExt;
 use vortex_layout::LayoutStrategy;
 use vortex_layout::layouts::chunked::writer::ChunkedLayoutStrategy;
 use vortex_layout::layouts::flat::writer::FlatLayoutStrategy;
@@ -53,14 +53,14 @@ use vortex_layout::layouts::indexed::IndexedStrategy;
 use vortex_layout::layouts::repartition::RepartitionStrategy;
 use vortex_layout::layouts::repartition::RepartitionWriterOptions;
 use vortex_layout::session::LayoutSession;
+use vortex_metrics::DefaultMetricsRegistry;
+use vortex_metrics::MetricValue;
+use vortex_metrics::MetricsRegistry;
 use vortex_session::VortexSession;
 
 use crate::ReverseIndex;
 
 const VALUE_FIELD: &str = "value";
-/// Small enough that the 12-row batch spans three blocks under the indexed layout, leaving the
-/// index a real pruning decision to make instead of degenerating to a single block.
-const BLOCK_LEN: usize = 4;
 
 /// The array/layout encodings this test needs to write, converted from Arrow via
 /// [`vortex_arrow::ArrowSessionExt`].
@@ -70,7 +70,7 @@ const BLOCK_LEN: usize = 4;
 /// `vortex-layout` cannot depend on. Declaring and enabling a tiny edition here is the local
 /// equivalent.
 const INDEXED_TEST_EDITION: EditionId =
-    EditionId::new("vortex-layout-reverse-index-datafusion-test", 2026, 1, 0);
+    EditionId::new("vortex-layout-reverse-index-pruning-test", 2026, 1, 0);
 
 static INDEXED_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
@@ -133,7 +133,13 @@ fn session_without_reverse_index() -> VortexSession {
 
 /// A write strategy that attaches a [`ReverseIndex`] to the `value` field, chunked into blocks of
 /// `block_len` rows.
-fn indexed_write_strategy(block_len: usize) -> Arc<dyn LayoutStrategy> {
+///
+/// With a `partition_len`, the index is built per partition and each partition is written as its
+/// own index-child chunk, so a probe only fetches the partitions a split overlaps.
+fn indexed_write_strategy(
+    block_len: usize,
+    partition_len: Option<NonZeroU64>,
+) -> Arc<dyn LayoutStrategy> {
     let data = RepartitionStrategy::new(
         ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
         RepartitionWriterOptions {
@@ -143,10 +149,14 @@ fn indexed_write_strategy(block_len: usize) -> Arc<dyn LayoutStrategy> {
             canonicalize: false,
         },
     );
+    let mut config = IndexConfig::with_defaults(ReverseIndex::new_ref());
+    if let Some(partition_len) = partition_len {
+        config = config.with_partition_len(partition_len);
+    }
     let indexed = IndexedStrategy::new(
         data,
-        FlatLayoutStrategy::default(),
-        vec![IndexConfig::with_defaults(ReverseIndex::new_ref())],
+        ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
+        vec![config],
     )
     .with_data_block_len(block_len as u64);
 
@@ -154,158 +164,6 @@ fn indexed_write_strategy(block_len: usize) -> Arc<dyn LayoutStrategy> {
         .with_row_block_size(block_len)
         .with_field_writer(FieldPath::from_name(VALUE_FIELD), Arc::new(indexed))
         .build()
-}
-
-/// `20` repeats at rows 1 and 9; `999` never appears. With [`BLOCK_LEN`] of 4 those land in
-/// blocks 0 and 2, leaving block 1 fully prunable by an exact equality index.
-fn test_batch() -> anyhow::Result<RecordBatch> {
-    Ok(record_batch!((
-        "value",
-        Int32,
-        vec![
-            Some(10),
-            Some(20),
-            Some(30),
-            Some(40),
-            Some(50),
-            Some(60),
-            Some(70),
-            Some(80),
-            Some(90),
-            Some(20),
-            Some(100),
-            Some(110)
-        ]
-    ))?)
-}
-
-/// A minimal DataFusion harness over an in-memory [`ObjectStore`], built only from
-/// `vortex-datafusion`'s public API (the crate's own richer `TestSessionContext` is `#[cfg(test)]`
-/// only, so it isn't visible outside `vortex-datafusion` itself).
-struct TestSessionContext {
-    store: Arc<dyn ObjectStore>,
-    session: SessionContext,
-}
-
-impl TestSessionContext {
-    fn new_with_factory(factory: Arc<VortexFormatFactory>) -> Self {
-        let store = Arc::new(InMemory::new());
-        let mut session_state_builder = SessionStateBuilder::new()
-            .with_default_features()
-            .with_table_factory(
-                factory.get_ext().to_uppercase(),
-                Arc::new(DefaultTableFactory::new()),
-            )
-            .with_object_store(
-                &Url::try_from("file://").unwrap(),
-                Arc::<InMemory>::clone(&store),
-            );
-
-        if let Some(file_formats) = session_state_builder.file_formats() {
-            file_formats.push(factory as _);
-        }
-
-        let session =
-            SessionContext::new_with_state(session_state_builder.build()).enable_url_table();
-
-        Self { store, session }
-    }
-
-    async fn table_provider<S>(
-        &self,
-        name: &str,
-        location: impl Into<String>,
-        schema: S,
-    ) -> anyhow::Result<Arc<dyn TableProvider>>
-    where
-        DFSchema: TryFrom<S>,
-        anyhow::Error: From<<S as TryInto<DFSchema>>::Error>,
-    {
-        let factory = self.session.table_factory("VORTEX").unwrap();
-
-        let cmd = CreateExternalTable::builder(
-            name,
-            location.into(),
-            "vortex",
-            DFSchema::try_from(schema)?.into(),
-        )
-        .build();
-
-        let table = factory.create(&self.session.state(), &cmd).await?;
-
-        Ok(table)
-    }
-}
-
-async fn write_indexed_batch(
-    ctx: &TestSessionContext,
-    session: &VortexSession,
-    path: &str,
-    batch: &RecordBatch,
-    block_len: usize,
-) -> anyhow::Result<()> {
-    let array = session
-        .arrow()
-        .from_arrow_record_batch(batch.clone(), &batch.schema())?;
-    let mut write = ObjectStoreWrite::new(Arc::clone(&ctx.store), &path.into()).await?;
-    session
-        .write_options()
-        .with_strategy(indexed_write_strategy(block_len))
-        .write(&mut write, array.to_array_stream())
-        .await?;
-    write.shutdown().await?;
-    Ok(())
-}
-
-/// `20` repeats at rows 1 and 9; `999` never appears. An equality filter on `value` is exactly
-/// what [`ReverseIndex::plan`](vortex_layout::layouts::indexed::IndexVTable::plan) claims, so this
-/// exercises both "claimed and found" and "claimed but no match" through DataFusion's predicate
-/// pushdown into the indexed column.
-#[rstest]
-#[tokio::test]
-async fn test_query_over_indexed_column(
-    #[values(false, true)] projection_pushdown: bool,
-) -> anyhow::Result<()> {
-    let session = session_with_indexed_layout()?;
-
-    let mut opts = VortexTableOptions::default();
-    opts.projection_pushdown = projection_pushdown;
-    let factory = Arc::new(VortexFormatFactory::new_with_options(session.clone(), opts));
-    let ctx = TestSessionContext::new_with_factory(factory);
-
-    let batch = test_batch()?;
-    write_indexed_batch(&ctx, &session, "files/indexed.vortex", &batch, BLOCK_LEN).await?;
-
-    let schema = batch.schema();
-    let provider = ctx
-        .table_provider("indexed_tbl", "/files/", schema.as_ref().clone())
-        .await?;
-    let table = ctx.session.read_table(provider)?;
-
-    let matches = table
-        .clone()
-        .filter(col(VALUE_FIELD).eq(lit(20)))?
-        .collect()
-        .await?;
-    assert_batches_sorted_eq!(
-        [
-            "+-------+",
-            "| value |",
-            "+-------+",
-            "| 20    |",
-            "| 20    |",
-            "+-------+",
-        ],
-        &matches
-    );
-
-    let absent = table
-        .filter(col(VALUE_FIELD).eq(lit(999)))?
-        .collect()
-        .await?;
-    assert!(absent.iter().all(|batch| batch.num_rows() == 0));
-
-    Ok(())
 }
 
 /// Rows per block for [`pruning_test_batch`], and the number of blocks it spans.
@@ -316,8 +174,7 @@ const PAYLOAD_FIELD: &str = "payload";
 /// `value` is clustered by block: block `k` (rows `k * PRUNING_BLOCK_LEN` to
 /// `(k + 1) * PRUNING_BLOCK_LEN - 1`) holds nothing but the constant `k + 1`. Filtering on a
 /// single value therefore claims exactly one block as a match and leaves every other block fully
-/// prunable, unlike [`test_batch`]'s handful of rows, where the pruned savings are too small to
-/// stand out over the index's own storage overhead.
+/// prunable.
 ///
 /// `payload` carries the row index and is neither indexed nor filtered on — selecting it instead
 /// of `value` means the data child only needs the rows the index's mask actually claims, rather
@@ -339,64 +196,116 @@ fn pruning_test_batch() -> anyhow::Result<RecordBatch> {
     )?)
 }
 
-/// Total bytes read from storage across every Vortex-backed data source in the plan, per
-/// `InstrumentedReadAt`'s `vortex.io.read.total_size` counter.
-fn total_bytes_read(metrics_sets: &[MetricsSet]) -> usize {
-    metrics_sets
-        .iter()
-        .filter_map(|set| set.sum_by_name("vortex.io.read.total_size"))
-        .map(|value| value.as_usize())
+async fn write_indexed_batch(
+    store: &Arc<dyn ObjectStore>,
+    session: &VortexSession,
+    path: &Path,
+    batch: &RecordBatch,
+    block_len: usize,
+    partition_len: Option<NonZeroU64>,
+) -> anyhow::Result<()> {
+    let array = session
+        .arrow()
+        .from_arrow_record_batch(batch.clone(), &batch.schema())?;
+    let mut write = ObjectStoreWrite::new(Arc::clone(store), path).await?;
+    session
+        .write_options()
+        .with_strategy(indexed_write_strategy(block_len, partition_len))
+        .write(&mut write, array.to_array_stream())
+        .await?;
+    write.shutdown().await?;
+    Ok(())
+}
+
+/// Total bytes physically read from storage, per [`InstrumentedReadAt`]'s
+/// `vortex.io.read.total_size` counter.
+fn total_bytes_read(registry: &DefaultMetricsRegistry) -> u64 {
+    registry
+        .snapshot()
+        .into_iter()
+        .filter(|metric| metric.name().as_ref() == "vortex.io.read.total_size")
+        .filter_map(|metric| match metric.value() {
+            MetricValue::Counter(counter) => Some(counter.value()),
+            _ => None,
+        })
         .sum()
 }
 
-/// Runs `value = <target>` against a freshly written copy of `batch`, executing the physical plan
-/// directly (rather than through [`DataFrame::collect`]) so the same plan instance can be
-/// inspected for metrics afterward.
+/// Runs `value = <target>` against a freshly written copy of `batch`, projected down to
+/// `payload`, and returns the matching rows plus the total bytes read from storage while
+/// resolving them.
 ///
-/// [`DataFrame::collect`]: datafusion::dataframe::DataFrame::collect
+/// Writing to an in-memory [`ObjectStore`] and reading back through an
+/// [`InstrumentedReadAt`]-wrapped [`ObjectStoreReadAt`] (rather than [`VortexFile::open_buffer`],
+/// which [ignores metrics][open_buffer]) is what makes pruning observable: `object_store`'s byte-
+/// range reads only pull in what the scan actually requests.
+///
+/// [`VortexFile::open_buffer`]: vortex_file::VortexFile
+/// [open_buffer]: vortex_file::VortexOpenOptions::open_buffer
+///
+/// The footer is fetched once beforehand, outside the instrumented region: a real query engine
+/// parses a file's footer once during planning and reuses it for every query that follows, so a
+/// single query's pruning savings shouldn't be swamped by that one-time, query-independent cost —
+/// especially for a file this small, where the footer can otherwise dominate the byte count.
 async fn run_equality_filter(
+    store: &Arc<dyn ObjectStore>,
     write_session: &VortexSession,
     read_session: VortexSession,
-    projection_pushdown: bool,
     batch: &RecordBatch,
     block_len: usize,
+    partition_len: Option<NonZeroU64>,
     target: i32,
-) -> anyhow::Result<(Vec<RecordBatch>, usize)> {
-    let mut opts = VortexTableOptions::default();
-    opts.projection_pushdown = projection_pushdown;
-    let factory = Arc::new(VortexFormatFactory::new_with_options(read_session, opts));
-    let ctx = TestSessionContext::new_with_factory(factory);
+) -> anyhow::Result<(Vec<i32>, u64)> {
+    let path = Path::from("files/indexed.vortex");
+    write_indexed_batch(store, write_session, &path, batch, block_len, partition_len).await?;
 
-    write_indexed_batch(
-        &ctx,
-        write_session,
-        "files/indexed.vortex",
-        batch,
-        block_len,
-    )
-    .await?;
+    let footer = read_session
+        .open_options()
+        .open(Arc::new(ObjectStoreReadAt::new(
+            Arc::clone(store),
+            path.clone(),
+            read_session.handle(),
+        )))
+        .await?
+        .footer()
+        .clone();
 
-    let schema = batch.schema();
-    let provider = ctx
-        .table_provider("indexed_tbl", "/files/", schema.as_ref().clone())
+    let registry = Arc::new(DefaultMetricsRegistry::default());
+    let reader = Arc::new(InstrumentedReadAt::new(
+        Arc::new(ObjectStoreReadAt::new(
+            Arc::clone(store),
+            path,
+            read_session.handle(),
+        )),
+        registry.as_ref(),
+    ));
+    let file = read_session
+        .open_options()
+        .with_footer(footer)
+        .open(reader)
         .await?;
-    ctx.session.register_table("indexed_tbl", provider)?;
 
-    let df = ctx
-        .session
-        .sql(&format!(
-            "SELECT {PAYLOAD_FIELD} FROM indexed_tbl WHERE {VALUE_FIELD} = {target}"
-        ))
+    let filter = eq(col(VALUE_FIELD), lit(target)).bind(file.dtype())?;
+    let projection = select([PAYLOAD_FIELD], root()).bind(file.dtype())?;
+    let result = file
+        .scan()?
+        .with_filter(filter)
+        .with_projection(projection)
+        .into_array_stream()?
+        .read_all()
         .await?;
-    let physical_plan = ctx
-        .session
-        .state()
-        .create_physical_plan(df.logical_plan())
-        .await?;
-    let results = collect(Arc::clone(&physical_plan), ctx.session.task_ctx()).await?;
-    let bytes_read = total_bytes_read(&VortexMetricsFinder::find_all(physical_plan.as_ref()));
 
-    Ok((results, bytes_read))
+    let mut ctx = read_session.create_execution_ctx();
+    let payload = result
+        .execute::<StructArray>(&mut ctx)?
+        .unmasked_field_by_name(PAYLOAD_FIELD)?
+        .clone()
+        .execute::<PrimitiveArray>(&mut ctx)?;
+
+    Ok((
+        payload.as_slice::<i32>().to_vec(),
+        total_bytes_read(&registry),
+    ))
 }
 
 /// Correctness alone can't distinguish "the index answered the filter exactly" from "the index
@@ -407,11 +316,16 @@ async fn run_equality_filter(
 /// index kind's spec as inert). [`pruning_test_batch`] puts a single value in each block, so a
 /// real exact-index probe lets the scan skip every block but one, while the unregistered run must
 /// decode all of them to filter.
+///
+/// The partitioned case also round-trips the index's partitioning through the file footer.
 #[rstest]
+#[case::unpartitioned(None)]
+#[case::partitioned(NonZeroU64::new(2 * PRUNING_BLOCK_LEN as u64))]
 #[tokio::test]
 async fn test_index_avoids_reading_pruned_blocks(
-    #[values(false, true)] projection_pushdown: bool,
+    #[case] partition_len: Option<NonZeroU64>,
 ) -> anyhow::Result<()> {
+    let store: Arc<dyn ObjectStore> = Arc::new(InMemory::new());
     let write_session = session_with_indexed_layout()?;
     let batch = pruning_test_batch()?;
     // Block 0, not a middle block: object_store's read coalescing merges nearby byte ranges into
@@ -421,33 +335,53 @@ async fn test_index_avoids_reading_pruned_blocks(
     let target = 1;
 
     let (with_index_rows, with_index_bytes) = run_equality_filter(
+        &store,
         &write_session,
         session_with_indexed_layout()?,
-        projection_pushdown,
         &batch,
         PRUNING_BLOCK_LEN,
+        partition_len,
         target,
     )
     .await?;
     let (without_index_rows, without_index_bytes) = run_equality_filter(
+        &store,
         &write_session,
         session_without_reverse_index(),
-        projection_pushdown,
         &batch,
         PRUNING_BLOCK_LEN,
+        partition_len,
         target,
     )
     .await?;
 
     assert_eq!(with_index_rows, without_index_rows);
-    let matched_rows: usize = with_index_rows.iter().map(RecordBatch::num_rows).sum();
-    assert_eq!(matched_rows, PRUNING_BLOCK_LEN);
+    assert_eq!(with_index_rows.len(), PRUNING_BLOCK_LEN);
 
     assert!(
         with_index_bytes < without_index_bytes,
         "expected the registered index to skip the prunable blocks and read fewer bytes than the \
          unregistered fallback, got {with_index_bytes} (indexed) vs {without_index_bytes} \
          (fallback)"
+    );
+
+    // The last block sits in a later partition, whose postings are partition-local: they must
+    // still land on the right file rows.
+    let last = i32::try_from(PRUNING_BLOCK_COUNT)?;
+    let (rows, _) = run_equality_filter(
+        &store,
+        &write_session,
+        session_with_indexed_layout()?,
+        &batch,
+        PRUNING_BLOCK_LEN,
+        partition_len,
+        last,
+    )
+    .await?;
+    let first_row = (last - 1) * i32::try_from(PRUNING_BLOCK_LEN)?;
+    assert_eq!(
+        rows,
+        (first_row..first_row + i32::try_from(PRUNING_BLOCK_LEN)?).collect::<Vec<_>>()
     );
 
     Ok(())

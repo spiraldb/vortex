@@ -66,6 +66,7 @@ pub mod writer;
 use std::sync::Arc;
 
 use prost::Message;
+use roaring::RoaringBitmap;
 use vortex_array::DeserializeMetadata;
 use vortex_array::SerializeMetadata;
 use vortex_array::dtype::DType;
@@ -114,12 +115,84 @@ const INDEXED_METADATA_VERSION: u8 = 1;
 #[derive(Clone, Debug)]
 pub struct Indexed;
 
+/// How an index's rows are split into independently built and probed partitions.
+///
+/// Partition `p` covers data rows `p * partition_len .. (p + 1) * partition_len` (the last one
+/// clipped to the data row count) and index-child rows `index_ends[p - 1] .. index_ends[p]`. Its
+/// locators are local to the partition, so a probe restricted to one partition reads only that
+/// partition's slice of the index child.
+///
+/// This is what lets an index's granularity differ from the data child's chunking, the same way a
+/// zone map's `zone_len` does.
+#[derive(Clone, Debug)]
+pub struct IndexPartitioning {
+    partition_len: u64,
+    index_ends: Arc<[u64]>,
+    declined: RoaringBitmap,
+}
+
+impl IndexPartitioning {
+    /// Create a partitioning from each partition's exclusive end row in the index child, and the
+    /// partitions whose builder declined.
+    pub fn new(partition_len: u64, index_ends: Vec<u64>, declined: RoaringBitmap) -> Self {
+        Self {
+            partition_len,
+            index_ends: index_ends.into(),
+            declined,
+        }
+    }
+
+    /// Rows of the data child covered by each partition, except possibly the last.
+    pub fn partition_len(&self) -> u64 {
+        self.partition_len
+    }
+
+    /// Each partition's exclusive end row in the index child.
+    pub fn index_ends(&self) -> &[u64] {
+        &self.index_ends
+    }
+
+    /// Partitions whose builder declined. They hold no index rows and never prune.
+    pub fn declined(&self) -> &RoaringBitmap {
+        &self.declined
+    }
+
+    fn validate(&self, id: IndexId, data_row_count: u64, index_row_count: u64) -> VortexResult<()> {
+        vortex_ensure!(
+            self.partition_len > 0,
+            "Index {id} has a zero partition length"
+        );
+        let expected = data_row_count.div_ceil(self.partition_len);
+        vortex_ensure!(
+            self.index_ends.len() as u64 == expected,
+            "Index {id} has {} partitions, expected {expected} for {data_row_count} rows at {} rows each",
+            self.index_ends.len(),
+            self.partition_len
+        );
+        vortex_ensure!(
+            self.index_ends.is_sorted(),
+            "Index {id} partition ends must be non-decreasing"
+        );
+        vortex_ensure!(
+            self.index_ends.last().copied().unwrap_or(0) == index_row_count,
+            "Index {id} partition ends do not cover its {index_row_count}-row child"
+        );
+        vortex_ensure!(
+            self.declined.max().is_none_or(|p| u64::from(p) < expected),
+            "Index {id} declines a partition past its last"
+        );
+        Ok(())
+    }
+}
+
 /// One index attached to the data child.
 #[derive(Clone, Debug)]
 pub struct IndexSpec {
     id: IndexId,
     options: Arc<[u8]>,
     index_dtype: DType,
+    /// `None` means a single partition covering the whole data child.
+    partitioning: Option<IndexPartitioning>,
     /// The resolved kind, or `None` when it is not registered in this session. An unresolved spec
     /// is inert: its child is never probed and reads fall through to the data child.
     vtable: Option<IndexVTableRef>,
@@ -127,13 +200,24 @@ pub struct IndexSpec {
 
 impl IndexSpec {
     /// Create a spec for an index that was just built by `vtable`.
-    pub fn new(vtable: IndexVTableRef, options: Vec<u8>, index_dtype: DType) -> Self {
+    pub fn new(
+        vtable: IndexVTableRef,
+        options: Vec<u8>,
+        index_dtype: DType,
+        partitioning: Option<IndexPartitioning>,
+    ) -> Self {
         Self {
             id: vtable.id(),
             options: options.into(),
             index_dtype,
+            partitioning,
             vtable: Some(vtable),
         }
+    }
+
+    /// How this index is partitioned, or `None` for a single partition over the whole data child.
+    pub fn partitioning(&self) -> Option<&IndexPartitioning> {
+        self.partitioning.as_ref()
     }
 
     /// The registry id of this index's kind.
@@ -190,6 +274,9 @@ impl IndexedLayout {
                 spec.index_dtype,
                 spec.id
             );
+            if let Some(partitioning) = &spec.partitioning {
+                partitioning.validate(spec.id, data.row_count(), layout.row_count())?;
+            }
         }
 
         let dtype = data.dtype().clone();
@@ -238,6 +325,17 @@ impl VTable for Indexed {
                         pb::DType::try_from(&spec.index_dtype)
                             .vortex_expect("index child dtype should be serializable"),
                     ),
+                    partition_len: spec.partitioning.as_ref().map(|p| p.partition_len),
+                    partition_index_ends: spec
+                        .partitioning
+                        .as_ref()
+                        .map(|p| p.index_ends.to_vec())
+                        .unwrap_or_default(),
+                    declined_partitions: spec
+                        .partitioning
+                        .as_ref()
+                        .map(|p| p.declined.iter().collect())
+                        .unwrap_or_default(),
                 })
                 .collect::<Vec<_>>()
                 .into(),
@@ -261,7 +359,8 @@ impl VTable for Indexed {
         let indexes = metadata
             .indexes
             .iter()
-            .map(|spec| {
+            .enumerate()
+            .map(|(idx, spec)| {
                 let index_dtype = spec
                     .index_dtype
                     .as_ref()
@@ -270,6 +369,23 @@ impl VTable for Indexed {
                     .ok_or_else(|| vortex_err!("Index spec {} is missing its dtype", spec.id))?;
                 let id = IndexId::from(spec.id.as_str());
 
+                let partitioning = spec
+                    .partition_len
+                    .map(|partition_len| {
+                        let partitioning = IndexPartitioning::new(
+                            partition_len,
+                            spec.partition_index_ends.clone(),
+                            spec.declined_partitions.iter().copied().collect(),
+                        );
+                        partitioning.validate(
+                            id,
+                            args.row_count,
+                            args.children.child_row_count(idx + 1),
+                        )?;
+                        Ok::<_, vortex_error::VortexError>(partitioning)
+                    })
+                    .transpose()?;
+
                 // An unknown kind degrades to an inert spec rather than failing the read: the
                 // child stays addressable so child counts and dtypes still line up, but nothing
                 // ever probes it.
@@ -277,6 +393,7 @@ impl VTable for Indexed {
                     id,
                     options: spec.options.as_slice().into(),
                     index_dtype,
+                    partitioning,
                     vtable: registry.find(&id),
                 })
             })
@@ -355,6 +472,15 @@ struct IndexSpecProto {
     /// during deserialization — so an auxiliary child's dtype has to be recorded here.
     #[prost(message, optional, tag = "3")]
     index_dtype: Option<pb::DType>,
+    /// Data rows per partition; absent for a single partition over the whole data child.
+    #[prost(uint64, optional, tag = "4")]
+    partition_len: Option<u64>,
+    /// Each partition's exclusive end row in the index child.
+    #[prost(uint64, repeated, tag = "5")]
+    partition_index_ends: Vec<u64>,
+    /// Partitions whose builder declined.
+    #[prost(uint32, repeated, tag = "6")]
+    declined_partitions: Vec<u32>,
 }
 
 impl SerializeMetadata for IndexedMetadata {

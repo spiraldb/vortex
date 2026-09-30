@@ -42,6 +42,9 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
     /// `data_block_len` is the data child's repartition block size when known. Kinds that emit
     /// block-granular locators should default their block length to it so pruned blocks line up
     /// with chunk and segment boundaries.
+    ///
+    /// A partitioned index calls this once per partition, and each builder sees only its
+    /// partition's rows.
     fn builder(
         &self,
         dtype: &DType,
@@ -64,7 +67,8 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
 
 /// Accumulates index content while the data stream is written.
 pub trait IndexBuilder: Send {
-    /// Chunks arrive in stream order with their absolute row offset within this layout.
+    /// Chunks arrive in stream order with their row offset within this builder's partition, which
+    /// for an unpartitioned index is the whole layout.
     fn push(
         &mut self,
         chunk: &ArrayRef,
@@ -129,7 +133,12 @@ impl RowLocator {
     pub fn mask_for(&self, row_range: &Range<u64>) -> VortexResult<Mask> {
         let len = usize::try_from(row_range.end - row_range.start)?;
         let mut bits = BitBufferMut::with_capacity(len);
+        self.append_to(row_range, &mut bits)?;
+        Ok(Mask::from(bits.freeze()))
+    }
 
+    /// Append this locator's bits for `row_range` to `bits`, one per row.
+    pub fn append_to(&self, row_range: &Range<u64>, bits: &mut BitBufferMut) -> VortexResult<()> {
         match self {
             // Walk the set bits in ascending order, emitting the false run before each one. The
             // bitmap is sorted, so this is a single linear pass with no random access.
@@ -157,8 +166,7 @@ impl RowLocator {
                 }
             }
         }
-
-        Ok(Mask::from(bits.freeze()))
+        Ok(())
     }
 }
 
@@ -183,6 +191,9 @@ pub struct IndexQueryPlan {
 pub trait IndexResolve: 'static + Send + Sync {
     /// `postings` are the index-child rows that survived [`IndexQueryPlan::filter`], projected in
     /// the index child's own schema.
+    ///
+    /// For a partitioned index, `postings` come from a single partition, `data_row_count` is that
+    /// partition's row count, and the returned locator is local to the partition.
     fn resolve(
         &self,
         postings: &ArrayRef,
