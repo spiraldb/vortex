@@ -259,34 +259,81 @@ struct Claim {
     session: VortexSession,
 }
 
+/// One overlapping partition's contribution to [`Claim::mask`].
+enum Part {
+    /// Every row in the partition takes this value, without probing.
+    Fill(bool),
+    Probe(SharedProbe),
+    /// Probed only if the selection, once resolved, keeps any of its rows.
+    Deferred(usize),
+}
+
 impl Claim {
     /// This claim's mask over `row_range` of the data child, stitched from each overlapping
     /// partition's locator. A declined partition proves nothing, so its rows stay set.
     ///
-    /// Probes start here rather than when the future is polled, so a split registers its index IO
-    /// as early as its data IO.
-    fn mask(&self, row_range: &Range<u64>) -> VortexResult<BoxFuture<'static, VortexResult<Mask>>> {
+    /// A partition that `selection` rules out entirely is never probed, so its index is never
+    /// loaded; its rows come back unset, which callers intersecting with `selection` can't tell
+    /// apart from a real answer. Where `selection` has already resolved, as it has for pruning,
+    /// probes start here rather than when the future is polled, so a split registers its index IO
+    /// as early as its data IO. Otherwise only partitions already probed start now, and the rest
+    /// wait on `selection`.
+    fn mask(
+        self: &Arc<Self>,
+        row_range: &Range<u64>,
+        selection: MaskFuture,
+    ) -> VortexResult<BoxFuture<'static, VortexResult<Mask>>> {
+        let resolved = selection.clone().now_or_never().transpose()?;
+
         let mut parts = Vec::new();
         for partition in self.partitions.overlapping(row_range) {
             let rows = self.partitions.data_rows(partition);
-            let local = row_range.start.max(rows.start) - rows.start
-                ..row_range.end.min(rows.end) - rows.start;
-            let probe = if self.partitions.is_declined(partition) {
-                None
+            let overlap = row_range.start.max(rows.start)..row_range.end.min(rows.end);
+            let local = overlap.start - rows.start..overlap.end - rows.start;
+            let selected = usize::try_from(overlap.start - row_range.start)?
+                ..usize::try_from(overlap.end - row_range.start)?;
+
+            let part = if self.partitions.is_declined(partition) {
+                Part::Fill(true)
+            } else if let Some(probe) = self.probes.get(&partition) {
+                Part::Probe(probe.clone())
             } else {
-                Some(self.probe(partition)?)
+                match &resolved {
+                    Some(mask) if mask.slice(selected.clone()).all_false() => Part::Fill(false),
+                    Some(_) => Part::Probe(self.probe(partition)?),
+                    None => Part::Deferred(partition),
+                }
             };
-            parts.push((local, probe));
+            parts.push((local, selected, part));
         }
 
         let len = usize::try_from(row_range.end - row_range.start)?;
+        let claim = Arc::clone(self);
         Ok(async move {
+            let mut resolved = resolved;
             let mut bits = BitBufferMut::with_capacity(len);
-            for (local, probe) in parts {
-                match probe {
-                    Some(probe) => probe.await?.append_to(&local, &mut bits)?,
-                    None => bits.append_n(true, usize::try_from(local.end - local.start)?),
-                }
+            for (local, selected, part) in parts {
+                let probe = match part {
+                    Part::Fill(value) => {
+                        bits.append_n(value, usize::try_from(local.end - local.start)?);
+                        continue;
+                    }
+                    Part::Probe(probe) => probe,
+                    Part::Deferred(partition) => {
+                        let mask = match resolved.take() {
+                            Some(mask) => mask,
+                            None => selection.clone().await?,
+                        };
+                        let skip = mask.slice(selected).all_false();
+                        resolved = Some(mask);
+                        if skip {
+                            bits.append_n(false, usize::try_from(local.end - local.start)?);
+                            continue;
+                        }
+                        claim.probe(partition)?
+                    }
+                };
+                probe.await?.append_to(&local, &mut bits)?;
             }
             Ok(Mask::from(bits.freeze()))
         }
@@ -390,7 +437,7 @@ impl LayoutReader for IndexedReader {
         let masks = claims
             .pruning
             .iter()
-            .map(|claim| claim.mask(row_range))
+            .map(|claim| claim.mask(row_range, MaskFuture::ready(mask.clone())))
             .collect::<VortexResult<Vec<_>>>()?;
 
         let name = Arc::clone(&self.name);
@@ -432,7 +479,7 @@ impl LayoutReader for IndexedReader {
         if let Some(exact) = self.claims(expr)?.and_then(|claims| claims.exact)
             && exact.partitions.covers(row_range)
         {
-            let index_mask = exact.mask(row_range)?;
+            let index_mask = exact.mask(row_range, mask.clone())?;
             let len = mask.len();
             return Ok(MaskFuture::new(len, async move {
                 let index_mask = index_mask.await?;

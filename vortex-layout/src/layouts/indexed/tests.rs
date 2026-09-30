@@ -5,9 +5,11 @@
 //! [`exact_value::ExactValueIndex`] instead.
 
 use std::num::NonZeroU64;
+use std::ops::BitAnd;
 use std::ops::Range;
 use std::sync::Arc;
 
+use futures::channel::oneshot;
 use parking_lot::Mutex;
 use roaring::RoaringBitmap;
 use rstest::rstest;
@@ -546,63 +548,150 @@ fn segment_ids(layout: &LayoutRef) -> VortexResult<Vec<SegmentId>> {
     Ok(ids)
 }
 
+/// A reader over a file partitioned one block per index-child chunk, recording segment requests.
+struct CountingFixture {
+    reader: LayoutReaderRef,
+    counting: Arc<CountingSegments>,
+    /// Segments of each index partition, by partition.
+    partitions: Vec<Vec<SegmentId>>,
+}
+
+impl CountingFixture {
+    async fn new() -> VortexResult<Self> {
+        let session = session_with_exact_index();
+        let (layout, segments) = write_with(
+            &session,
+            partitioned_strategy(vec![partitioned(
+                IndexConfig::with_defaults(ExactValueIndex::new_ref()),
+                BLOCK_LEN as u64,
+            )?]),
+        )
+        .await?;
+
+        let index = layout
+            .slot(1)?
+            .ok_or_else(|| vortex_err!("an index was configured"))?;
+        // Each partition is its own index-child chunk, so chunk `p` holds partition `p`.
+        assert_eq!(index.nslots(), 3);
+        let partitions = (0..index.nslots())
+            .map(|p| {
+                segment_ids(
+                    &index
+                        .slot(p)?
+                        .ok_or_else(|| vortex_err!("partition {p} has a chunk"))?,
+                )
+            })
+            .collect::<VortexResult<_>>()?;
+
+        let counting = Arc::new(CountingSegments {
+            inner: segments,
+            requested: Mutex::new(Vec::new()),
+        });
+        let reader = layout.new_reader(
+            "text".into(),
+            Arc::<CountingSegments>::clone(&counting),
+            &session,
+            &Default::default(),
+        )?;
+        Ok(Self {
+            reader,
+            counting,
+            partitions,
+        })
+    }
+
+    /// The index segments requested so far, sorted and deduplicated.
+    fn index_requested(&self) -> Vec<SegmentId> {
+        let all_index: Vec<_> = self.partitions.iter().flatten().copied().collect();
+        let mut requested: Vec<_> = self
+            .counting
+            .requested
+            .lock()
+            .iter()
+            .copied()
+            .filter(|id| all_index.contains(id))
+            .collect();
+        requested.sort();
+        requested.dedup();
+        requested
+    }
+}
+
 /// The point of partitioning: a split covering one partition probes only that partition's slice
 /// of the index child, not the whole index.
 #[tokio::test]
 async fn probing_a_range_reads_only_its_partitions_index() -> VortexResult<()> {
-    let session = session_with_exact_index();
-    let (layout, segments) = write_with(
-        &session,
-        partitioned_strategy(vec![partitioned(
-            IndexConfig::with_defaults(ExactValueIndex::new_ref()),
-            BLOCK_LEN as u64,
-        )?]),
-    )
-    .await?;
-
-    let index = layout
-        .slot(1)?
-        .ok_or_else(|| vortex_err!("an index was configured"))?;
-    // Each partition is its own index-child chunk, so chunk `p` holds partition `p`.
-    assert_eq!(index.nslots(), 3);
-    let partition_1 = segment_ids(
-        &index
-            .slot(1)?
-            .ok_or_else(|| vortex_err!("partition 1 has a chunk"))?,
-    )?;
-    let all_index = segment_ids(&index)?;
-
-    let counting = Arc::new(CountingSegments {
-        inner: segments,
-        requested: Mutex::new(Vec::new()),
-    });
-    let reader = layout.new_reader(
-        "text".into(),
-        Arc::<CountingSegments>::clone(&counting),
-        &session,
-        &Default::default(),
-    )?;
+    let fixture = CountingFixture::new().await?;
+    let reader = &fixture.reader;
 
     let row_range = 4..8;
     let mask = reader
         .filter_evaluation(
             &row_range,
-            &eq_filter(&reader, ROWS[5])?,
+            &eq_filter(reader, ROWS[5])?,
             MaskFuture::new_true(4),
         )?
         .await?;
     assert_eq!(mask, expected_rows(&row_range, ROWS[5])?);
+    assert_eq!(fixture.index_requested(), fixture.partitions[1]);
+    Ok(())
+}
 
-    let mut index_requested: Vec<_> = counting
-        .requested
-        .lock()
-        .iter()
-        .copied()
-        .filter(|id| all_index.contains(id))
-        .collect();
-    index_requested.sort();
-    index_requested.dedup();
-    assert_eq!(index_requested, partition_1);
+#[derive(Debug, Clone, Copy)]
+enum Evaluation {
+    Pruning,
+    FilterReady,
+    /// The selection is still pending when the filter is planned, as it is behind real pruning.
+    FilterPending,
+}
+
+/// A split wider than a partition still skips the index of any partition its selection rules out
+/// entirely, whether the selection arrives resolved or has to be awaited first.
+#[rstest]
+#[tokio::test]
+async fn probing_skips_partitions_the_selection_rules_out(
+    #[values(
+        Evaluation::Pruning,
+        Evaluation::FilterReady,
+        Evaluation::FilterPending
+    )]
+    evaluation: Evaluation,
+) -> VortexResult<()> {
+    let fixture = CountingFixture::new().await?;
+    let reader = &fixture.reader;
+
+    let all = 0..ROWS.len() as u64;
+    let selection = Mask::from_iter((0..ROWS.len()).map(|row| (4..8).contains(&row)));
+    let filter = eq_filter(reader, ROWS[5])?;
+
+    let mask = match evaluation {
+        Evaluation::Pruning => {
+            reader
+                .pruning_evaluation(&all, &filter, selection.clone())?
+                .await?
+        }
+        Evaluation::FilterReady => {
+            reader
+                .filter_evaluation(&all, &filter, MaskFuture::ready(selection.clone()))?
+                .await?
+        }
+        Evaluation::FilterPending => {
+            let (send, recv) = oneshot::channel();
+            let pending = MaskFuture::new(ROWS.len(), async move {
+                recv.await
+                    .map_err(|_| vortex_err!("selection sender dropped"))
+            });
+            let evaluated = reader.filter_evaluation(&all, &filter, pending)?;
+            // Nothing can be skipped before the selection is known, so nothing is probed yet.
+            assert!(fixture.index_requested().is_empty());
+            send.send(selection.clone())
+                .map_err(|_| vortex_err!("filter dropped the selection"))?;
+            evaluated.await?
+        }
+    };
+
+    assert_eq!(mask, expected_rows(&all, ROWS[5])?.bitand(&selection));
+    assert_eq!(fixture.index_requested(), fixture.partitions[1]);
     Ok(())
 }
 
