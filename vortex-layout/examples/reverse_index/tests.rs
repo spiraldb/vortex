@@ -74,7 +74,7 @@ const TEST_EDITION: EditionId = EditionId::new("vortex-reverse-index-test", 2026
 static TEST_EDITION_DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
         id: TEST_EDITION,
-        min_vortex_version: None,
+        min_library_version: None,
     },
     added: &[
         EditionMember::array(&"vortex.struct"),
@@ -131,7 +131,7 @@ fn struct_column(value_column: ArrayRef) -> VortexResult<ArrayRef> {
 ///
 /// The indexed wrapper sits directly above repartitioning — the same slot `ZonedStrategy`
 /// occupies — so it sees whole chunks in row order and knows the data child's block size.
-fn strategy(configs: Vec<IndexConfig>) -> Arc<dyn LayoutStrategy> {
+fn strategy(session: &VortexSession, configs: Vec<IndexConfig>) -> Arc<dyn LayoutStrategy> {
     let data = RepartitionStrategy::new(
         ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
         RepartitionWriterOptions {
@@ -144,7 +144,7 @@ fn strategy(configs: Vec<IndexConfig>) -> Arc<dyn LayoutStrategy> {
     let indexed = IndexedStrategy::new(data, FlatLayoutStrategy::default(), configs)
         .with_data_block_len(BLOCK_LEN as u64);
 
-    WriteStrategyBuilder::default()
+    WriteStrategyBuilder::from_session(session)
         .with_row_block_size(BLOCK_LEN)
         .with_field_writer(FieldPath::from_name(VALUE_FIELD), Arc::new(indexed))
         .build()
@@ -165,7 +165,7 @@ async fn write_file_with_column(
     let mut bytes = ByteBufferMut::empty();
     session
         .write_options()
-        .with_strategy(strategy(configs))
+        .with_strategy(strategy(session, configs))
         .write(&mut bytes, column.to_array_stream())
         .await?;
     Ok(bytes.freeze())

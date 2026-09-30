@@ -75,7 +75,7 @@ const INDEXED_TEST_EDITION: EditionId =
 static INDEXED_TEST_DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
         id: INDEXED_TEST_EDITION,
-        min_vortex_version: None,
+        min_library_version: None,
     },
     added: &[
         EditionMember::array(&"vortex.struct"),
@@ -137,6 +137,7 @@ fn session_without_reverse_index() -> VortexSession {
 /// With a `partition_len`, the index is built per partition and each partition is written as its
 /// own index-child chunk, so a probe only fetches the partitions a split overlaps.
 fn indexed_write_strategy(
+    session: &VortexSession,
     block_len: usize,
     partition_len: Option<NonZeroU64>,
 ) -> Arc<dyn LayoutStrategy> {
@@ -160,7 +161,7 @@ fn indexed_write_strategy(
     )
     .with_data_block_len(block_len as u64);
 
-    WriteStrategyBuilder::default()
+    WriteStrategyBuilder::from_session(session)
         .with_row_block_size(block_len)
         .with_field_writer(FieldPath::from_name(VALUE_FIELD), Arc::new(indexed))
         .build()
@@ -210,7 +211,7 @@ async fn write_indexed_batch(
     let mut write = ObjectStoreWrite::new(Arc::clone(store), path).await?;
     session
         .write_options()
-        .with_strategy(indexed_write_strategy(block_len, partition_len))
+        .with_strategy(indexed_write_strategy(session, block_len, partition_len))
         .write(&mut write, array.to_array_stream())
         .await?;
     write.shutdown().await?;

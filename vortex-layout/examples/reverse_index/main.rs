@@ -32,7 +32,7 @@ use vortex_array::arrays::PrimitiveArray;
 use vortex_array::arrays::StructArray;
 use vortex_array::arrays::VarBinViewArray;
 use vortex_array::arrays::struct_::StructArrayExt;
-use vortex_array::builders::builder_with_capacity;
+use vortex_array::builders::builder_with_capacity_in;
 use vortex_array::dtype::DType;
 use vortex_array::dtype::FieldNames;
 use vortex_array::dtype::FieldPath;
@@ -42,6 +42,8 @@ use vortex_array::expr::BoundExpression;
 use vortex_array::expr::col;
 use vortex_array::expr::eq;
 use vortex_array::expr::lit;
+use vortex_array::memory::BufferAllocatorRef;
+use vortex_array::memory::MemorySessionExt;
 use vortex_array::scalar::Scalar;
 use vortex_array::scalar_fn::fns::binary::Binary;
 use vortex_array::scalar_fn::fns::literal::Literal;
@@ -132,11 +134,12 @@ impl IndexVTable for ReverseIndex {
         dtype: &DType,
         _options: &[u8],
         _data_block_len: Option<u64>,
-        _session: &VortexSession,
+        session: &VortexSession,
     ) -> VortexResult<Box<dyn IndexBuilder>> {
         Ok(Box::new(Builder {
             dtype: dtype.clone(),
             postings: HashMap::new(),
+            allocator: session.allocator(),
         }))
     }
 
@@ -185,6 +188,7 @@ struct Builder {
     /// Deduplicated by scalar equality; sorted into key order in `finish`, which is what gives
     /// the key column a useful zone map.
     postings: HashMap<Scalar, RoaringBitmap>,
+    allocator: BufferAllocatorRef,
 }
 
 impl IndexBuilder for Builder {
@@ -208,7 +212,11 @@ impl IndexBuilder for Builder {
     }
 
     fn finish(self: Box<Self>) -> VortexResult<Option<(SendableArrayStream, Vec<u8>)>> {
-        let Builder { dtype, postings } = *self;
+        let Builder {
+            dtype,
+            postings,
+            allocator,
+        } = *self;
 
         let mut entries: Vec<(Scalar, RoaringBitmap)> = postings.into_iter().collect();
         entries.sort_by(|(a, _), (b, _)| {
@@ -217,7 +225,7 @@ impl IndexBuilder for Builder {
         });
 
         let key_dtype = dtype.as_nonnullable();
-        let mut key_builder = builder_with_capacity(&key_dtype, entries.len());
+        let mut key_builder = builder_with_capacity_in(&key_dtype, entries.len(), &allocator);
         let mut lists = Vec::with_capacity(entries.len());
         for (key, bitmap) in &entries {
             // Keys are never null (`push` skips them), but may carry the source column's nullable
@@ -298,7 +306,7 @@ const DEMO_EDITION: EditionId = EditionId::new("vortex-layout-reverse-index-exam
 static DEMO_EDITION_DECLARATION: EditionDeclaration = EditionDeclaration {
     edition: Edition {
         id: DEMO_EDITION,
-        min_vortex_version: None,
+        min_library_version: None,
     },
     added: &[
         EditionMember::array(&"vortex.struct"),
@@ -330,7 +338,7 @@ fn demo_session() -> VortexResult<VortexSession> {
 
 /// A write strategy that attaches a [`ReverseIndex`] to the `value` field, chunked into blocks of
 /// 4 rows so the 12-row demo column spans three blocks.
-fn demo_write_strategy() -> Arc<dyn LayoutStrategy> {
+fn demo_write_strategy(session: &VortexSession) -> Arc<dyn LayoutStrategy> {
     const BLOCK_LEN: usize = 4;
     let data = RepartitionStrategy::new(
         ChunkedLayoutStrategy::new(FlatLayoutStrategy::default()),
@@ -348,7 +356,7 @@ fn demo_write_strategy() -> Arc<dyn LayoutStrategy> {
     )
     .with_data_block_len(BLOCK_LEN as u64);
 
-    WriteStrategyBuilder::default()
+    WriteStrategyBuilder::from_session(session)
         .with_row_block_size(BLOCK_LEN)
         .with_field_writer(FieldPath::from_name(VALUE_FIELD), Arc::new(indexed))
         .build()
@@ -365,7 +373,7 @@ async fn main() -> VortexResult<()> {
     let mut bytes = ByteBufferMut::empty();
     session
         .write_options()
-        .with_strategy(demo_write_strategy())
+        .with_strategy(demo_write_strategy(&session))
         .write(&mut bytes, column.to_array_stream())
         .await?;
     let bytes = bytes.freeze();
