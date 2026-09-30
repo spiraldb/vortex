@@ -23,8 +23,6 @@ use vortex_error::VortexError;
 use vortex_error::VortexExpect as _;
 use vortex_error::VortexResult;
 
-use crate::BitPacked;
-use crate::BitPackedArrayExt;
 use crate::FoR;
 use crate::FoRReferences;
 use crate::for_::array::FoRArrayExt;
@@ -64,7 +62,8 @@ impl CompareKernel for FoR {
 /// constant. Ordering needs `encoded = value - reference` to be exact. Encoding subtracts the
 /// minimum, so the encoded values are non-negative distances, which an unsigned type holds
 /// exactly. A signed type also needs the distances to stay non-negative in its own reading,
-/// which a bit-packed child guarantees; other children fall back to decoding.
+/// which the minimum of the encoded values proves; otherwise the comparison falls back to
+/// decoding.
 fn compare_constant<T>(
     lhs: ArrayView<'_, FoR>,
     rhs: T,
@@ -125,20 +124,13 @@ fn compare_encoded<T: NativePType + Into<PValue>>(
     )
 }
 
-/// Whether every valid encoded value is known to be non-negative in the signed reading of `T`.
+/// Whether every valid encoded value is non-negative in the signed reading of `T`.
 fn encoded_is_non_negative<T>(lhs: ArrayView<'_, FoR>, ctx: &mut ExecutionCtx) -> VortexResult<bool>
 where
     T: NativePType + for<'a> TryFrom<&'a Scalar, Error = VortexError>,
 {
-    let Some(bit_packed) = lhs.encoded().as_opt::<BitPacked>() else {
-        return Ok(false);
-    };
-    // Unpacked values hold at most `bit_width < T::BITS` bits, so only patches can be negative.
-    let Some(patches) = bit_packed.patches() else {
-        return Ok(true);
-    };
-    Ok(patches
-        .values()
+    Ok(lhs
+        .encoded()
         .statistics()
         .compute_min::<T>(ctx)
         .is_none_or(|min| min.is_ge(T::zero())))
@@ -232,7 +224,38 @@ mod tests {
             &mut SESSION.create_execution_ctx()
         );
 
-        // A primitive child gives no proof that the signed encoded values are non-negative.
+        // The minimum of the encoded values is non-negative, so ordering engages.
+        for (op, expected) in [
+            (CompareOperator::Lt, [true, false, true]),
+            (CompareOperator::Lte, [true, true, true]),
+            (CompareOperator::Gt, [false, false, false]),
+            (CompareOperator::Gte, [false, true, false]),
+        ] {
+            let result = compare_constant(
+                lhs.as_view(),
+                30i32,
+                Nullability::NonNullable,
+                op,
+                &mut SESSION.create_execution_ctx(),
+            )
+            .unwrap()
+            .unwrap();
+            assert_arrays_eq!(
+                result,
+                BoolArray::from_iter(expected.map(Some)),
+                &mut SESSION.create_execution_ctx()
+            );
+        }
+    }
+
+    #[test]
+    fn negative_signed_encoded_falls_back() {
+        // A negative encoded value breaks the order of the encoded domain.
+        let lhs = for_arr(
+            PrimitiveArray::new(buffer!(0i32, -5, 2), Validity::AllValid).into_array(),
+            Scalar::from(10),
+        );
+
         for op in [
             CompareOperator::Lt,
             CompareOperator::Lte,
