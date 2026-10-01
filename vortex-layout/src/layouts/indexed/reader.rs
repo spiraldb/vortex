@@ -35,6 +35,7 @@ use crate::LazyReaderChildren;
 use crate::RowSplits;
 use crate::SplitRange;
 use crate::layouts::indexed::IndexSpec;
+use crate::layouts::indexed::IndexVTableRef;
 use crate::layouts::indexed::IndexedLayout;
 use crate::layouts::indexed::index::IndexExactness;
 use crate::layouts::indexed::index::IndexResolve;
@@ -57,6 +58,8 @@ pub struct IndexedReader {
     name: Arc<str>,
     lazy_children: Arc<LazyReaderChildren>,
     session: VortexSession,
+    /// The indexes this session can probe, by position in `layout.indexes()`.
+    probeable: Vec<(usize, IndexVTableRef)>,
     /// Cached claims keyed by expression. `None` means no index claimed the expression, so the
     /// lookup is not retried.
     claims: DashMap<BoundExpression, Option<Claims>>,
@@ -89,6 +92,8 @@ impl IndexedReader {
             names.push(format!("{}.index:{}", name, spec.id()).into());
         }
 
+        let probeable = probeable_indexes(&layout)?;
+
         let lazy_children = Arc::new(LazyReaderChildren::new(
             Arc::clone(layout.children()),
             dtypes,
@@ -103,6 +108,7 @@ impl IndexedReader {
             name,
             lazy_children,
             session,
+            probeable,
             claims: DashMap::default(),
         })
     }
@@ -135,23 +141,17 @@ impl IndexedReader {
         let mut exact = None;
         let mut pruning = Vec::new();
 
-        for (idx, spec) in self.layout.indexes().iter().enumerate() {
-            // Unregistered kinds are inert: their child is never read.
-            let Some(vtable) = spec.vtable() else {
-                trace!(index = %spec.id(), "index kind not registered, skipping");
-                continue;
-            };
-
-            let Some(plan) = vtable.plan(expr, self.layout.dtype(), spec.options())? else {
+        for (idx, vtable) in &self.probeable {
+            let spec = &self.layout.indexes()[*idx];
+            let Some(plan) =
+                vtable.plan(expr, self.layout.dtype(), spec.index_dtype(), spec.options())?
+            else {
                 continue;
             };
 
             trace!(index = %spec.id(), %expr, filter = %plan.filter, "index claimed expression");
 
             let index_reader = Arc::clone(self.lazy_children.get(idx + 1)?);
-            // The index child's dtype is only known once its layout child is materialized, so the
-            // plan's filter is bound here rather than by the index kind that produced it.
-            let filter = plan.filter.bind(index_reader.dtype())?;
             let claim = Arc::new(Claim {
                 partitions: Partitions::new(
                     spec,
@@ -159,7 +159,7 @@ impl IndexedReader {
                     index_reader.row_count(),
                 ),
                 index_reader,
-                filter,
+                filter: plan.filter,
                 resolve: plan.resolve,
                 probes: DashMap::default(),
                 session: self.session.clone(),
@@ -185,6 +185,32 @@ impl IndexedReader {
         }
         Ok(Some(Claims { exact, pruning }))
     }
+}
+
+/// The indexes a reader may probe, decided once per reader rather than per expression.
+///
+/// Unregistered kinds are inert: their child is never read. So is an index whose stored dtype its
+/// kind no longer declares, say one written by an incompatible version of it, since its plans
+/// would be bound to a schema the child does not have.
+fn probeable_indexes(layout: &IndexedLayout) -> VortexResult<Vec<(usize, IndexVTableRef)>> {
+    let mut probeable = Vec::with_capacity(layout.indexes().len());
+    for (idx, spec) in layout.indexes().iter().enumerate() {
+        let Some(vtable) = spec.vtable() else {
+            trace!(index = %spec.id(), "index kind not registered, skipping");
+            continue;
+        };
+        let declared = vtable.index_dtype(layout.dtype(), spec.options())?;
+        if declared.as_ref() != Some(spec.index_dtype()) {
+            trace!(
+                index = %spec.id(),
+                stored = %spec.index_dtype(),
+                "index dtype does not match what its kind declares, skipping"
+            );
+            continue;
+        }
+        probeable.push((idx, Arc::clone(vtable)));
+    }
+    Ok(probeable)
 }
 
 /// Where each of an index's partitions lives, in the data child and in the index child.

@@ -135,6 +135,8 @@ struct IndexState {
     vtable: IndexVTableRef,
     /// The configured options, handed to every partition's builder.
     options: Vec<u8>,
+    /// What the kind declared it builds, which every partition's output must match.
+    index_dtype: DType,
     partition_len: Option<u64>,
     builder: Box<dyn IndexBuilder>,
     /// Rows the current builder has seen, which is also the next row's partition-local offset.
@@ -246,8 +248,11 @@ struct IndexContent {
 
 impl IndexContent {
     /// Concatenate the built partitions, or `None` if every partition declined.
+    ///
+    /// Every built partition must produce the `dtype` its kind declared.
     fn assemble(
         id: impl std::fmt::Display,
+        dtype: DType,
         partitions: Vec<PartitionOutput>,
     ) -> VortexResult<Option<Self>> {
         let mut declined = RoaringBitmap::new();
@@ -260,6 +265,11 @@ impl IndexContent {
                 declined.insert(u32::try_from(partition)?);
                 continue;
             };
+            vortex_ensure!(
+                content.dtype() == &dtype,
+                "Index {id} partition {partition} produced dtype {}, but the index kind declared {dtype}",
+                content.dtype()
+            );
             match &options {
                 None => options = Some(partition_options),
                 // One spec records one options blob, so partitions may not disagree about it.
@@ -271,18 +281,9 @@ impl IndexContent {
             built.push((partition, content));
         }
 
-        let (Some(options), Some((_, first))) = (options, built.first()) else {
+        let Some(options) = options else {
             return Ok(None);
         };
-        let dtype = first.dtype().clone();
-        for (partition, content) in &built {
-            if content.dtype() != &dtype {
-                vortex_bail!(
-                    "Index {id} partition {partition} has dtype {}, earlier partitions have {dtype}",
-                    content.dtype()
-                );
-            }
-        }
 
         let partition_rows = Arc::new(Mutex::new(vec![0u64; partition_count]));
         let counts = Arc::clone(&partition_rows);
@@ -362,11 +363,12 @@ impl LayoutStrategy for IndexedStrategy {
         };
         let mut indexes = Vec::with_capacity(self.configs.len());
         for config in self.configs.iter() {
-            if !config.vtable.supports_dtype(&dtype) {
+            let Some(index_dtype) = config.vtable.index_dtype(&dtype, &config.options)? else {
                 continue;
-            }
+            };
             indexes.push(IndexState {
                 builder: factory.builder(&config.vtable, &config.options)?,
+                index_dtype,
                 vtable: Arc::clone(&config.vtable),
                 options: config.options.clone(),
                 partition_len: config.partition_len.map(NonZeroU64::get),
@@ -431,6 +433,7 @@ impl LayoutStrategy for IndexedStrategy {
         for index in indexes {
             let vtable = Arc::clone(&index.vtable);
             let partition_len = index.partition_len;
+            let declared = index.index_dtype.clone();
             // An index whose every partition declined leaves no trace: no child, no spec, and no
             // sequence pointer, since the splits below are what allocate one.
             let Some(IndexContent {
@@ -439,7 +442,7 @@ impl LayoutStrategy for IndexedStrategy {
                 dtype: index_dtype,
                 partition_rows,
                 declined,
-            }) = IndexContent::assemble(vtable.id(), index.finish()?)?
+            }) = IndexContent::assemble(vtable.id(), declared, index.finish()?)?
             else {
                 trace!(index = %vtable.id(), "index builder declined, writing no child");
                 continue;

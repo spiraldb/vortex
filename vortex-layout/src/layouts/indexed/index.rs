@@ -10,7 +10,6 @@ use vortex_array::ArrayRef;
 use vortex_array::ExecutionCtx;
 use vortex_array::dtype::DType;
 use vortex_array::expr::BoundExpression;
-use vortex_array::expr::Expression;
 use vortex_array::stream::SendableArrayStream;
 use vortex_buffer::BitBufferMut;
 use vortex_error::VortexResult;
@@ -34,8 +33,12 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
     /// Stable string id, e.g. `vortex.idx.reverse_index`.
     fn id(&self) -> IndexId;
 
-    /// Whether this kind can build an index over values of `dtype`.
-    fn supports_dtype(&self, dtype: &DType) -> bool;
+    /// The dtype of the index child this kind builds over values of `dtype` with `options`, or
+    /// `None` if it cannot index them.
+    ///
+    /// This is the index's schema: the writer rejects a builder whose output differs from it, and
+    /// the reader skips an index whose stored dtype no longer matches it.
+    fn index_dtype(&self, dtype: &DType, options: &[u8]) -> VortexResult<Option<DType>>;
 
     /// Construct a builder for the write path.
     ///
@@ -54,13 +57,17 @@ pub trait IndexVTable: 'static + Send + Sync + Debug {
     ) -> VortexResult<Box<dyn IndexBuilder>>;
 
     /// Decide whether this index can serve `expr`, a single conjunct scoped to the data child's
-    /// dtype.
+    /// `dtype`.
+    ///
+    /// `index_dtype` is the index child's dtype, as returned by [`IndexVTable::index_dtype`], and
+    /// the scope the plan's filter must be bound to.
     ///
     /// `None` means "no claim" and is always safe: the scan falls back to the data child.
     fn plan(
         &self,
         expr: &BoundExpression,
         dtype: &DType,
+        index_dtype: &DType,
         options: &[u8],
     ) -> VortexResult<Option<IndexQueryPlan>>;
 }
@@ -178,11 +185,8 @@ impl RowLocator {
 pub struct IndexQueryPlan {
     /// Whether the resulting mask is exact or a superset.
     pub exactness: IndexExactness,
-    /// Predicate over the index child's dtype, selecting the posting rows this query needs.
-    ///
-    /// Unbound: the index child's dtype is only known once its layout child is materialized, so
-    /// the reader binds this against the index child's dtype right before scanning.
-    pub filter: Expression,
+    /// Predicate bound to the index child's dtype, selecting the posting rows this query needs.
+    pub filter: BoundExpression,
     /// Folds the selected posting rows into a locator over the data child's row space.
     pub resolve: Arc<dyn IndexResolve>,
 }

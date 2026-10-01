@@ -123,10 +123,16 @@ impl IndexVTable for ReverseIndex {
         *ID
     }
 
-    fn supports_dtype(&self, dtype: &DType) -> bool {
+    fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
         // Every other dtype decodes to a `Scalar` and has a canonical `ArrayBuilder`; `Union` and
         // `Variant` do not yet, so decline rather than panic building their key column.
-        !matches!(dtype, DType::Union(..) | DType::Variant(_))
+        if matches!(dtype, DType::Union(..) | DType::Variant(_)) {
+            return Ok(None);
+        }
+        Ok(Some(DType::Struct(
+            index_fields(dtype.as_nonnullable()),
+            NonNullable,
+        )))
     }
 
     fn builder(
@@ -147,6 +153,7 @@ impl IndexVTable for ReverseIndex {
         &self,
         expr: &BoundExpression,
         dtype: &DType,
+        index_dtype: &DType,
         _options: &[u8],
     ) -> VortexResult<Option<IndexQueryPlan>> {
         // Only `<column> == <literal>`.
@@ -172,7 +179,7 @@ impl IndexVTable for ReverseIndex {
 
         Ok(Some(IndexQueryPlan {
             exactness: IndexExactness::Exact,
-            filter: eq(col(KEY_FIELD), lit(target.clone())),
+            filter: eq(col(KEY_FIELD), lit(target.clone())).bind(index_dtype)?,
             resolve: Arc::new(Resolve { target }),
         }))
     }

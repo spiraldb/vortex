@@ -19,6 +19,9 @@ use vortex_array::IntoArray;
 use vortex_array::MaskFuture;
 use vortex_array::VortexSessionExecute;
 use vortex_array::arrays::VarBinViewArray;
+use vortex_array::dtype::DType;
+use vortex_array::dtype::Nullability;
+use vortex_array::dtype::PType;
 use vortex_array::expr::BoundExpression;
 use vortex_array::expr::eq;
 use vortex_array::expr::like;
@@ -26,6 +29,7 @@ use vortex_array::expr::lit;
 use vortex_array::expr::root;
 use vortex_array::stream::ArrayStreamExt;
 use vortex_error::VortexResult;
+use vortex_error::vortex_bail;
 use vortex_error::vortex_err;
 use vortex_mask::Mask;
 use vortex_session::VortexSession;
@@ -33,8 +37,10 @@ use vortex_session::VortexSession;
 use super::INDEXED_LAYOUT_ID;
 use super::IndexConfig;
 use super::IndexPartitioning;
+use super::IndexSpec;
 use super::IndexSessionExt;
 use super::Indexed;
+use super::IndexedLayout;
 use super::IndexedStrategy;
 use crate::LayoutChildType;
 use crate::LayoutReaderRef;
@@ -463,6 +469,89 @@ async fn exact_claim_discards_a_preceding_superset_claim() -> VortexResult<()> {
     Ok(())
 }
 
+fn i64_dtype() -> DType {
+    DType::Primitive(PType::I64, Nullability::NonNullable)
+}
+
+/// The pruning mask for a Utf8 conjunct `FixedSupersetIndex` claims unconditionally.
+async fn superset_prune_mask(reader: &LayoutReaderRef) -> VortexResult<Mask> {
+    let row_count = reader.row_count();
+    let filter = eq(root(), lit("irrelevant")).bind(reader.dtype())?;
+    reader
+        .pruning_evaluation(
+            &(0..row_count),
+            &filter,
+            Mask::new_true(usize::try_from(row_count)?),
+        )?
+        .await
+}
+
+/// A kind's declared index dtype is its schema, so the writer must refuse a builder whose output
+/// differs from it rather than record a spec readers would probe with the wrong filter.
+#[tokio::test]
+async fn writer_rejects_an_index_that_does_not_match_its_declared_dtype() -> VortexResult<()> {
+    let session = new_session();
+    let result = write(
+        &session,
+        vec![IndexConfig::with_defaults(FixedSupersetIndex::declaring(
+            "test.idx.misdeclared",
+            RoaringBitmap::from_iter([2u32]),
+            i64_dtype(),
+        ))],
+    )
+    .await;
+
+    let Err(err) = result else {
+        vortex_bail!("writing an index that does not match its declared dtype should fail");
+    };
+    assert!(err.to_string().contains("declared"), "{err}");
+    Ok(())
+}
+
+/// An index whose stored dtype its kind no longer declares, say one written before the kind's
+/// schema changed, is skipped rather than probed with a filter bound to the wrong schema.
+#[tokio::test]
+async fn index_whose_stored_dtype_no_longer_matches_its_kind_is_skipped() -> VortexResult<()> {
+    let session = new_session();
+    let id = "test.idx.fixed";
+    let rows = RoaringBitmap::from_iter([2u32]);
+    let (layout, segments) = write(
+        &session,
+        vec![IndexConfig::with_defaults(FixedSupersetIndex::new_ref(
+            id,
+            rows.clone(),
+        ))],
+    )
+    .await?;
+
+    // As written, the index prunes.
+    let reader = text_reader(&session, &layout, Arc::clone(&segments))?;
+    assert_eq!(
+        superset_prune_mask(&reader).await?,
+        Mask::from_iter((0..ROWS.len()).map(|row| row == 2))
+    );
+
+    // The same file, read by a kind that now declares a different schema.
+    let spec = &layout.as_::<Indexed>().indexes()[0];
+    let changed = IndexSpec::new(
+        FixedSupersetIndex::declaring(id, rows, i64_dtype()),
+        spec.options().to_vec(),
+        spec.index_dtype().clone(),
+        spec.partitioning().cloned(),
+    );
+    let data = layout
+        .slot(0)?
+        .ok_or_else(|| vortex_err!("indexed layout has a data child"))?;
+    let index = layout
+        .slot(1)?
+        .ok_or_else(|| vortex_err!("an index was configured"))?;
+    let changed = IndexedLayout::try_new(data, vec![index], vec![changed])?.into_layout();
+
+    let reader = text_reader(&session, &changed, segments)?;
+    assert!(superset_prune_mask(&reader).await?.all_true());
+    Ok(())
+}
+
 /// Rows where `ROWS[row] == value`, over `row_range`.
 fn expected_rows(row_range: &Range<u64>, value: &str) -> VortexResult<Mask> {
     let rows = usize::try_from(row_range.start)?..usize::try_from(row_range.end)?;
@@ -833,6 +922,10 @@ mod exact_value {
         )
     }
 
+    fn index_dtype() -> DType {
+        DType::Struct(index_fields(), NonNullable)
+    }
+
     #[derive(Debug)]
     pub struct ExactValueIndex {
         /// Write-side only: decline any partition holding this value. Reading is unaffected, so a
@@ -860,8 +953,8 @@ mod exact_value {
             *ID
         }
 
-        fn supports_dtype(&self, dtype: &DType) -> bool {
-            matches!(dtype, DType::Utf8(_))
+        fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
+            Ok(matches!(dtype, DType::Utf8(_)).then(index_dtype))
         }
 
         fn builder(
@@ -881,6 +974,7 @@ mod exact_value {
             &self,
             expr: &BoundExpression,
             _dtype: &DType,
+            index_dtype: &DType,
             _options: &[u8],
         ) -> VortexResult<Option<IndexQueryPlan>> {
             // Only `<column> == <utf8 literal>`.
@@ -897,7 +991,7 @@ mod exact_value {
 
             Ok(Some(IndexQueryPlan {
                 exactness: IndexExactness::Exact,
-                filter: eq(col(KEY_FIELD), lit(value.clone())),
+                filter: eq(col(KEY_FIELD), lit(value.clone())).bind(index_dtype)?,
                 resolve: Arc::new(Resolve { value }),
             }))
         }
@@ -994,8 +1088,8 @@ mod exact_value {
             *ID
         }
 
-        fn supports_dtype(&self, dtype: &DType) -> bool {
-            matches!(dtype, DType::Utf8(_))
+        fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
+            Ok(matches!(dtype, DType::Utf8(_)).then(index_dtype))
         }
 
         fn builder(
@@ -1012,6 +1106,7 @@ mod exact_value {
             &self,
             _expr: &BoundExpression,
             _dtype: &DType,
+            _index_dtype: &DType,
             _options: &[u8],
         ) -> VortexResult<Option<IndexQueryPlan>> {
             Ok(None)
@@ -1089,6 +1184,8 @@ mod fixed_superset {
     use vortex_array::IntoArray;
     use vortex_array::arrays::PrimitiveArray;
     use vortex_array::dtype::DType;
+    use vortex_array::dtype::Nullability;
+    use vortex_array::dtype::PType;
     use vortex_array::expr::BoundExpression;
     use vortex_array::expr::eq;
     use vortex_array::expr::lit;
@@ -1111,11 +1208,20 @@ mod fixed_superset {
     pub struct FixedSupersetIndex {
         id: &'static str,
         rows: RoaringBitmap,
+        /// What [`IndexVTable::index_dtype`] claims; the builder always writes `i32`s regardless.
+        declared: DType,
     }
 
     impl FixedSupersetIndex {
         pub fn new_ref(id: &'static str, rows: RoaringBitmap) -> IndexVTableRef {
-            Arc::new(Self { id, rows })
+            Self::declaring(id, rows, DType::Primitive(PType::I32, Nullability::NonNullable))
+        }
+
+        /// A kind that declares `declared` as its index dtype, standing in for a builder that
+        /// emits something other than it declared, or a newer version of a kind whose schema has
+        /// changed since a file was written.
+        pub fn declaring(id: &'static str, rows: RoaringBitmap, declared: DType) -> IndexVTableRef {
+            Arc::new(Self { id, rows, declared })
         }
     }
 
@@ -1124,8 +1230,8 @@ mod fixed_superset {
             IndexId::from(self.id)
         }
 
-        fn supports_dtype(&self, dtype: &DType) -> bool {
-            matches!(dtype, DType::Utf8(_))
+        fn index_dtype(&self, dtype: &DType, _options: &[u8]) -> VortexResult<Option<DType>> {
+            Ok(matches!(dtype, DType::Utf8(_)).then(|| self.declared.clone()))
         }
 
         fn builder(
@@ -1142,11 +1248,12 @@ mod fixed_superset {
             &self,
             _expr: &BoundExpression,
             _dtype: &DType,
+            index_dtype: &DType,
             _options: &[u8],
         ) -> VortexResult<Option<IndexQueryPlan>> {
             Ok(Some(IndexQueryPlan {
                 exactness: IndexExactness::Superset,
-                filter: eq(root(), lit(0i32)),
+                filter: eq(root(), lit(0i32)).bind(index_dtype)?,
                 resolve: Arc::new(Resolve {
                     rows: self.rows.clone(),
                 }),
