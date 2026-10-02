@@ -8,6 +8,7 @@ use vortex_array::vtable::OperationsVTable;
 use vortex_error::VortexResult;
 
 use crate::BitPacked;
+use crate::BitWidths;
 use crate::bitpack_decompress;
 use crate::bitpacking::array::BitPackedArrayExt;
 impl OperationsVTable<BitPacked> for BitPacked {
@@ -24,7 +25,12 @@ impl OperationsVTable<BitPacked> for BitPacked {
             {
                 patch
             } else {
-                bitpack_decompress::unpack_single(array, index)?
+                match array.bit_widths() {
+                    BitWidths::Global(_) => bitpack_decompress::unpack_single(array, index)?,
+                    BitWidths::Blocked(offsets) => {
+                        bitpack_decompress::unpack_single_blocked(array, &offsets, index, ctx)?
+                    }
+                }
             },
         )
     }
