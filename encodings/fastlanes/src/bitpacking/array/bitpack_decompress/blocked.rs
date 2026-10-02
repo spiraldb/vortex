@@ -16,10 +16,6 @@ use vortex_array::arrays::Primitive;
 use vortex_array::arrays::PrimitiveArray;
 use vortex_array::builders::ArrayBuilder;
 use vortex_array::builders::PrimitiveBuilder;
-use vortex_array::builtins::ArrayBuiltins;
-use vortex_array::dtype::DType;
-use vortex_array::dtype::Nullability;
-use vortex_array::dtype::PType;
 use vortex_array::dtype::PhysicalPType;
 use vortex_array::match_each_integer_ptype;
 use vortex_array::match_each_unsigned_integer_ptype;
@@ -118,10 +114,7 @@ pub(crate) fn execute_block_offsets(
     offsets: &ArrayRef,
     ctx: &mut ExecutionCtx,
 ) -> VortexResult<Buffer<u64>> {
-    // Decoding one offset type compiles the block loop once per value type.
-    let offsets = offsets
-        .cast(DType::Primitive(PType::U64, Nullability::NonNullable))?
-        .execute::<PrimitiveArray>(ctx)?;
+    let offsets = offsets.clone().execute::<PrimitiveArray>(ctx)?;
     let num_blocks = (array.len() + usize::from(array.offset())).div_ceil(FL_CHUNK_SIZE);
     vortex_ensure!(
         offsets.len() == num_blocks + 1,
@@ -129,7 +122,15 @@ pub(crate) fn execute_block_offsets(
         num_blocks + 1,
         offsets.len()
     );
-    let offsets = Buffer::<u64>::from_byte_buffer(offsets.buffer_handle().try_to_host_sync()?);
+    // Decoding one offset type compiles the block loop once per value type. Widening the few
+    // boundaries here is cheaper than executing a cast.
+    let host = offsets.buffer_handle().try_to_host_sync()?;
+    let offsets: Buffer<u64> = match_each_unsigned_integer_ptype!(offsets.ptype(), |I| {
+        Buffer::<I>::from_byte_buffer(host)
+            .iter()
+            .map(|&offset| AsPrimitive::<u64>::as_(offset))
+            .collect()
+    });
     validate_primitive_offsets(
         &offsets,
         array.dtype().as_ptype().bit_width() as u64,
